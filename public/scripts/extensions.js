@@ -77,6 +77,64 @@ export const isOfficialExtension = (url) => {
 let requiresReload = false;
 let stateChanged = false;
 let saveMetadataTimeout = null;
+let deferredExtensionLoader = null;
+let deferredExtensionLoaderState = 'idle';
+const EXTENSIONS_STARTUP_PLACEHOLDER_ID = 'extensions_startup_loading';
+
+export function setDeferredExtensionLoader(loader = null, { state } = {}) {
+    deferredExtensionLoader = typeof loader === 'function' ? loader : null;
+    deferredExtensionLoaderState = deferredExtensionLoader
+        ? (state ?? 'loading')
+        : 'idle';
+    renderDeferredExtensionPlaceholder();
+}
+
+async function ensureDeferredExtensionsReady() {
+    if (!deferredExtensionLoader) {
+        return;
+    }
+
+    if (deferredExtensionLoaderState === 'failed') {
+        setDeferredExtensionLoader(deferredExtensionLoader, { state: 'loading' });
+    }
+
+    await deferredExtensionLoader();
+}
+
+function renderDeferredExtensionPlaceholder() {
+    const container = $('#extensions_settings');
+    if (!container.length) {
+        return;
+    }
+
+    const existingPlaceholder = $(`#${EXTENSIONS_STARTUP_PLACEHOLDER_ID}`);
+    if (!deferredExtensionLoader) {
+        existingPlaceholder.remove();
+        return;
+    }
+
+    const isFailed = deferredExtensionLoaderState === 'failed';
+    const iconClass = isFailed ? 'fa-solid fa-triangle-exclamation' : 'fa-solid fa-spinner fa-spin';
+    const text = isFailed
+        ? t`Extensions failed to load. Open details to retry.`
+        : t`Loading extensions...`;
+
+    if (!existingPlaceholder.length) {
+        const placeholder = $(`
+            <div id="${EXTENSIONS_STARTUP_PLACEHOLDER_ID}" class="wide100p textAlignCenter marginTop10">
+                <i class="${iconClass}"></i>
+                <span>${text}</span>
+            </div>
+        `);
+        container.prepend(placeholder);
+        return;
+    }
+
+    existingPlaceholder.html(`
+        <i class="${iconClass}"></i>
+        <span>${text}</span>
+    `);
+}
 
 export function cancelDebouncedMetadataSave() {
     if (saveMetadataTimeout) {
@@ -1805,6 +1863,8 @@ export async function loadExtensionSettings(settings, versionChanged, enableAuto
     if (extension_settings.autoConnect && extension_settings.apiUrl) {
         connectToApi(extension_settings.apiUrl);
     }
+
+    setDeferredExtensionLoader(null);
 }
 
 export function doDailyExtensionUpdatesCheck() {
@@ -2293,10 +2353,21 @@ export function getAuthorFromUrl(url) {
 export async function initExtensions() {
     await addExtensionsButtonAndMenu();
     $('#extensionsMenuButton').css('display', 'flex');
+    renderDeferredExtensionPlaceholder();
 
     $('#extensions_connect').on('click', connectClickHandler);
     $('#extensions_autoconnect').on('input', autoConnectInputHandler);
-    $('#extensions_details').on('click', showExtensionsDetails);
+    $('#extensions_details').on('click', async () => {
+        try {
+            await ensureDeferredExtensionsReady();
+            await showExtensionsDetails();
+        } catch (error) {
+            console.error('Failed to open extensions details.', error);
+            if (!error?.__emberDeskDeferredExtensionToastShown) {
+                toastr.error(t`Extensions could not be loaded right now.`);
+            }
+        }
+    });
     $('#extensions_notify_updates').on('input', notifyUpdatesInputHandler);
     $(document).on('click', '.extensions_info .extension_block .toggle_disable', onDisableExtensionClick);
     $(document).on('click', '.extensions_info .extension_block .toggle_enable', onEnableExtensionClick);

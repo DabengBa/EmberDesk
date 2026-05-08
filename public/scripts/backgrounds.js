@@ -3,6 +3,7 @@ import { characters, chat_metadata, eventSource, event_types, generateQuietPromp
 import { openThirdPartyExtensionMenu, saveMetadataDebounced } from './extensions.js';
 import { SlashCommand } from './slash-commands/SlashCommand.js';
 import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
+import { createSingleFlightTask } from './startup-helpers.js';
 import { createThumbnail, flashHighlight, getBase64Async, stringFormat, debounce, setupScrollToTop, saveBase64AsFile, getFileExtension, sortIgnoreCaseAndAccents } from './utils.js';
 import { debounce_timeout } from './constants.js';
 import { t } from './i18n.js';
@@ -104,6 +105,8 @@ let lazyLoadObserver = null;
  * @type {Array<{filename: string, isAnimated: boolean}>}
  */
 let cachedSystemBackgrounds = [];
+const BACKGROUND_STARTUP_LOADING_ID = 'bg_startup_loading';
+const backgroundCatalogTask = createSingleFlightTask(loadBackgroundCatalog);
 
 export let background_settings = {
     name: '__transparent.png',
@@ -517,7 +520,7 @@ async function onRenameBackgroundClick(e) {
     });
 
     if (response.ok) {
-        await getBackgrounds();
+        await getBackgrounds({ force: true });
         highlightNewBackground(bgNames.newBg);
     } else {
         toastr.warning('Failed to rename background');
@@ -705,7 +708,14 @@ function renderChatBackgrounds(backgrounds) {
     activateLazyLoader();
 }
 
-export async function getBackgrounds() {
+export async function getBackgrounds({ force = false } = {}) {
+    return force ? backgroundCatalogTask.refresh() : backgroundCatalogTask.ensure();
+}
+
+async function loadBackgroundCatalog() {
+    setBackgroundCatalogLoading(true);
+
+    try {
     const response = await fetch('/api/backgrounds/all', {
         method: 'POST',
         headers: getRequestHeaders(),
@@ -731,6 +741,33 @@ export async function getBackgrounds() {
         renderSystemBackgrounds(getFilteredImages());
         highlightSelectedBackground();
     }
+    } finally {
+        setBackgroundCatalogLoading(false);
+    }
+}
+
+function setBackgroundCatalogLoading(isLoading) {
+    const container = $('#bg_menu_content');
+    if (!container.length) {
+        return;
+    }
+
+    const existingIndicator = $(`#${BACKGROUND_STARTUP_LOADING_ID}`);
+    if (isLoading) {
+        if (!existingIndicator.length) {
+            const loadingIndicator = $(`
+                <div id="${BACKGROUND_STARTUP_LOADING_ID}" class="wide100p textAlignCenter marginTop10">
+                    <i class="fa-solid fa-spinner fa-spin"></i>
+                    <span>${t`Loading backgrounds...`}</span>
+                </div>
+            `);
+            container.prepend(loadingIndicator);
+        }
+
+        return;
+    }
+
+    existingIndicator.remove();
 }
 
 /**
@@ -1564,7 +1601,7 @@ async function uploadBackground(formData) {
 
         const bg = await response.text();
         setBackground(bg, generateUrlParameter(bg, false));
-        await getBackgrounds();
+        await getBackgrounds({ force: true });
         highlightNewBackground(bg);
     } catch (error) {
         console.error('Error uploading background:', error);
@@ -1846,7 +1883,7 @@ export function initBackgrounds() {
         saveSettingsDebounced();
 
         // Refresh background thumbnails
-        await getBackgrounds();
+        await getBackgrounds({ force: true });
         await onChatChanged();
     });
 

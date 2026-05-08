@@ -74,6 +74,7 @@ import { redirectDeprecatedEndpoints, ServerStartup, setupPrivateEndpoints } fro
 import { diskCache } from './endpoints/characters.js';
 import { migrateFlatSecrets } from './endpoints/secrets.js';
 import { migrateGroupChatsMetadataFormat } from './endpoints/groups.js';
+import { createServerStartupProfiler } from './server-startup-profiler.js';
 
 // Work around a node v20.0.0, v20.1.0, and v20.2.0 bug. The issue was fixed in v20.3.0.
 // https://github.com/nodejs/node/issues/47822#issuecomment-1564708870
@@ -101,6 +102,7 @@ http.globalAgent = new http.Agent({ keepAlive: cliArgs.enableKeepAlive });
 https.globalAgent = new https.Agent({ keepAlive: cliArgs.enableKeepAlive });
 
 const app = express();
+const startupProfiler = createServerStartupProfiler(process.env.EMBERDESK_STARTUP_PROFILE);
 app.use(helmet({
     contentSecurityPolicy: false,
 }));
@@ -282,6 +284,7 @@ setupPrivateEndpoints(app);
  * @returns {Promise<void>}
  */
 async function preSetupTasks() {
+    startupProfiler.mark('preSetupTasks:start');
     const version = await getVersion();
 
     // Print formatted header
@@ -298,19 +301,19 @@ async function preSetupTasks() {
     }
     console.log();
 
-    const directories = await getUserDirectoriesList();
-    await migrateGroupChatsMetadataFormat(directories);
-    await checkForNewContent(directories);
-    await diskCache.verify(directories);
-    migrateFlatSecrets(directories);
-    cleanUploads();
-    migrateAccessLog();
+    const directories = await startupProfiler.measure('getUserDirectoriesList', () => getUserDirectoriesList());
+    await startupProfiler.measure('migrateGroupChatsMetadataFormat', () => migrateGroupChatsMetadataFormat(directories));
+    await startupProfiler.measure('checkForNewContent', () => checkForNewContent(directories));
+    await startupProfiler.measure('diskCache.verify', () => diskCache.verify(directories));
+    await startupProfiler.measure('migrateFlatSecrets', () => Promise.resolve(migrateFlatSecrets(directories)));
+    await startupProfiler.measure('cleanUploads', () => Promise.resolve(cleanUploads()));
+    await startupProfiler.measure('migrateAccessLog', () => Promise.resolve(migrateAccessLog()));
 
-    await settingsInit();
-    await statsInit();
+    await startupProfiler.measure('settingsInit', () => settingsInit());
+    await startupProfiler.measure('statsInit', () => statsInit());
 
     const pluginsDirectory = path.join(serverDirectory, 'plugins');
-    const cleanupPlugins = await loadPlugins(app, pluginsDirectory);
+    const cleanupPlugins = await startupProfiler.measure('loadPlugins', () => loadPlugins(app, pluginsDirectory));
     const consoleTitle = process.title;
 
     let isExiting = false;
@@ -344,13 +347,14 @@ async function preSetupTasks() {
         allowUnresolvedHosts: !!getConfigValue('privateAddressWhitelist.allowUnresolvedHosts', false, 'boolean'),
         enableKeepAlive: cliArgs.enableKeepAlive,
     };
-    initPrivateRequestFilter(requestFilterOptions);
+    await startupProfiler.measure('initPrivateRequestFilter', () => Promise.resolve(initPrivateRequestFilter(requestFilterOptions)));
 
     // Add request proxy.
-    initRequestProxy({ enabled: cliArgs.requestProxyEnabled, url: cliArgs.requestProxyUrl, bypass: cliArgs.requestProxyBypass, enableKeepAlive: cliArgs.enableKeepAlive, privateRequestFilterEnabled: requestFilterOptions.enabled });
+    await startupProfiler.measure('initRequestProxy', () => Promise.resolve(initRequestProxy({ enabled: cliArgs.requestProxyEnabled, url: cliArgs.requestProxyUrl, bypass: cliArgs.requestProxyBypass, enableKeepAlive: cliArgs.enableKeepAlive, privateRequestFilterEnabled: requestFilterOptions.enabled })));
 
     // Wait for frontend libs to compile
-    await webpackMiddleware.runWebpackCompiler({ pruneCache: true });
+    await startupProfiler.measure('webpackCompile', () => webpackMiddleware.runWebpackCompiler({ pruneCache: true }));
+    startupProfiler.mark('preSetupTasks:end');
 }
 
 /**
@@ -446,6 +450,12 @@ async function postSetupTasks(result) {
 
     setupLogLevel();
     serverEvents.emit(EVENT_NAMES.SERVER_STARTED, { url: browserLaunchUrl });
+    startupProfiler.mark('server:listening', {
+        url: browserLaunchUrl.toString(),
+    });
+    startupProfiler.flush({
+        browserLaunchUrl: browserLaunchUrl.toString(),
+    });
 }
 
 /**
@@ -476,14 +486,24 @@ function setDnsResolutionOrder() {
 }
 
 // User storage module needs to be initialized before starting the server
-initUserStorage(globalThis.DATA_ROOT)
-    .then(setDnsResolutionOrder)
-    .then(ensurePublicDirectoriesExist)
-    .then(migrateUserData)
-    .then(migrateSystemPrompts)
-    .then(migratePublicOverrides)
-    .then(verifySecuritySettings)
+startupProfiler.mark('bootstrap:start');
+startupProfiler.measure('initUserStorage', () => initUserStorage(globalThis.DATA_ROOT))
+    .then(() => startupProfiler.measure('setDnsResolutionOrder', () => Promise.resolve(setDnsResolutionOrder())))
+    .then(() => startupProfiler.measure('ensurePublicDirectoriesExist', () => ensurePublicDirectoriesExist()))
+    .then(() => startupProfiler.measure('migrateUserData', () => migrateUserData()))
+    .then(() => startupProfiler.measure('migrateSystemPrompts', () => migrateSystemPrompts()))
+    .then(() => startupProfiler.measure('migratePublicOverrides', () => migratePublicOverrides()))
+    .then(() => startupProfiler.measure('verifySecuritySettings', () => verifySecuritySettings()))
     .then(preSetupTasks)
-    .then(apply404Middleware)
-    .then(() => new ServerStartup(app, cliArgs).start())
-    .then(postSetupTasks);
+    .then(() => startupProfiler.measure('apply404Middleware', () => Promise.resolve(apply404Middleware())))
+    .then(() => startupProfiler.measure('serverStartup.start', () => new ServerStartup(app, cliArgs).start()))
+    .then(postSetupTasks)
+    .catch((error) => {
+        startupProfiler.mark('bootstrap:error', {
+            message: String(error?.message ?? error),
+        });
+        startupProfiler.flush({
+            error: String(error?.stack ?? error),
+        });
+        throw error;
+    });

@@ -120,6 +120,7 @@
         "init": "node src/server-init.js",
         "start": "node server.js",
         "debug": "node --inspect server.js",
+        "perf:startup": "node scripts/startup-performance-runner.mjs",
         "start:global": "node server.js --global",
         "start:electron": "cd ./src/electron && npm run start",
         "start:deno": "deno run --allow-run --allow-net --allow-read --allow-write --allow-sys --allow-env server.js",

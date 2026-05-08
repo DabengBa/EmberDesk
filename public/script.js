@@ -187,7 +187,7 @@ import {
 } from './scripts/utils.js';
 import { debounce_timeout, GENERATION_TYPE_TRIGGERS, IGNORE_SYMBOL, inject_ids, MEDIA_DISPLAY, MEDIA_SOURCE, MEDIA_TYPE, OVERSWIPE_BEHAVIOR, SCROLL_BEHAVIOR, SWIPE_DIRECTION, SWIPE_SOURCE, SWIPE_STATE } from './scripts/constants.js';
 
-import { cancelDebouncedMetadataSave, doDailyExtensionUpdatesCheck, extension_settings, initExtensions, loadExtensionSettings, runGenerationInterceptors } from './scripts/extensions.js';
+import { cancelDebouncedMetadataSave, doDailyExtensionUpdatesCheck, extension_settings, initExtensions, loadExtensionSettings, runGenerationInterceptors, setDeferredExtensionLoader } from './scripts/extensions.js';
 import { COMMENT_NAME_DEFAULT, CONNECT_API_MAP, executeSlashCommandsOnChatInput, initDefaultSlashCommands, initSlashCommandAutoComplete, isExecutingCommandsFromChatInput, pauseScriptExecution, stopScriptExecution, UNIQUE_APIS } from './scripts/slash-commands.js';
 import { initMacroAutoComplete } from './scripts/autocomplete/MacroAutoComplete.js';
 import {
@@ -245,6 +245,7 @@ import {
 } from './scripts/personas.js';
 import { getBackgrounds, initBackgrounds, loadBackgroundSettings, background_settings } from './scripts/backgrounds.js';
 import { loader } from './scripts/action-loader.js';
+import { createSingleFlightTask, resolvePersistedCurrentVersion, resolveStartupSettingsPlan } from './scripts/startup-helpers.js';
 import { BulkEditOverlay } from './scripts/BulkEditOverlay.js';
 import { initTextGenModels } from './scripts/textgen-models.js';
 import { appendFileContent, hasPendingFileAttachment, populateFileAttachment, decodeStyleTags, encodeStyleTags, isExternalMediaAllowed, preserveNeutralChat, restoreNeutralChat, formatCreatorNotes, initChatUtilities, addDOMPurifyHooks } from './scripts/chats.js';
@@ -294,6 +295,48 @@ globalThis.SillyTavern = {
     getContext,
 };
 
+const startupProfile = globalThis.__emberDeskStartup ??= {
+    stages: [],
+    marks: [],
+};
+startupProfile.scriptModuleStartMs = roundStartupTime(performance.now());
+markStartup('script:module-start');
+
+function roundStartupTime(value) {
+    return Math.round(value * 100) / 100;
+}
+
+function markStartup(name, details = {}) {
+    startupProfile.marks.push({
+        name,
+        timeMs: roundStartupTime(performance.now()),
+        ...details,
+    });
+}
+
+function pushStartupStage(name, startTimeMs, endTimeMs, error = null) {
+    startupProfile.stages.push({
+        name,
+        startTimeMs: roundStartupTime(startTimeMs),
+        endTimeMs: roundStartupTime(endTimeMs),
+        durationMs: roundStartupTime(endTimeMs - startTimeMs),
+        error,
+    });
+}
+
+async function measureStartupStage(name, fn) {
+    const startTimeMs = performance.now();
+
+    try {
+        const result = await fn();
+        pushStartupStage(name, startTimeMs, performance.now());
+        return result;
+    } catch (error) {
+        pushStartupStage(name, startTimeMs, performance.now(), String(error?.message ?? error));
+        throw error;
+    }
+}
+
 export {
     user_avatar,
     setUserAvatar,
@@ -335,6 +378,7 @@ export {
 /**
  * Wait for page to load before continuing the app initialization.
  */
+const waitForLoadStartedAtMs = performance.now();
 await new Promise((resolve) => {
     if (document.readyState === 'complete') {
         resolve();
@@ -342,6 +386,8 @@ await new Promise((resolve) => {
         window.addEventListener('load', resolve);
     }
 });
+pushStartupStage('awaitWindowLoad', waitForLoadStartedAtMs, performance.now());
+markStartup('window:load-ready');
 
 // Configure toast library:
 toastr.options = {
@@ -420,6 +466,9 @@ let firstRun = false;
 export let settingsReady = false;
 let currentVersion = '0.0.0';
 export let displayVersion = 'SillyTavern';
+let deferredExtensionTask = null;
+const deferredVersionTask = createSingleFlightTask(() => measureStartupStage('deferred.getClientVersion', () => getClientVersion()));
+const deferredBackgroundTask = createSingleFlightTask(() => measureStartupStage('deferred.getBackgrounds', () => getBackgrounds()));
 
 let generation_started = new Date();
 /** @type {Character[]} */
@@ -514,6 +563,52 @@ async function getClientVersion() {
         $('#version_display_welcome').text(displayVersion);
     } catch (err) {
         console.error('Couldn\'t get client version', err);
+    }
+}
+
+function configureDeferredStartupTasks(settingsPlan) {
+    deferredExtensionTask = null;
+    setDeferredExtensionLoader(null);
+
+    if (!settingsPlan?.extensionPlan?.shouldLoadDeferred) {
+        return;
+    }
+
+    deferredExtensionTask = createSingleFlightTask(async () => {
+        try {
+            await deferredVersionTask.ensure();
+
+            const isVersionChanged = settingsPlan.extensionPlan.savedVersion !== currentVersion;
+            await measureStartupStage('deferred.loadExtensionSettings', async () => {
+                await loadExtensionSettings(settingsPlan.settings, isVersionChanged, settingsPlan.extensionPlan.enableAutoUpdate);
+                await eventSource.emit(event_types.EXTENSION_SETTINGS_LOADED);
+            });
+
+            doDailyExtensionUpdatesCheck();
+            setDeferredExtensionLoader(null);
+        } catch (error) {
+            if (error && typeof error === 'object') {
+                error.__emberDeskDeferredExtensionToastShown = true;
+            }
+
+            setDeferredExtensionLoader(() => deferredExtensionTask.ensure(), { state: 'failed' });
+            toastr.error(
+                t`Extensions could not be loaded right now. Open the extensions panel to retry.`,
+                t`Extensions failed to load`,
+            );
+            throw error;
+        }
+    });
+
+    setDeferredExtensionLoader(() => deferredExtensionTask.ensure());
+}
+
+function startDeferredStartupTasks() {
+    void deferredVersionTask.ensure().catch(error => console.error('Deferred client version startup failed.', error));
+    void deferredBackgroundTask.ensure().catch(error => console.error('Deferred background startup failed.', error));
+
+    if (deferredExtensionTask) {
+        void deferredExtensionTask.ensure().catch(error => console.error('Deferred extension startup failed.', error));
     }
 }
 
@@ -690,10 +785,13 @@ export async function pingServer() {
 
 //MARK: firstLoadInit
 async function firstLoadInit() {
+    markStartup('firstLoadInit:start');
     try {
-        const tokenResponse = await fetch('/csrf-token');
-        const tokenData = await tokenResponse.json();
-        token = tokenData.token;
+        await measureStartupStage('csrfToken', async () => {
+            const tokenResponse = await fetch('/csrf-token');
+            const tokenData = await tokenResponse.json();
+            token = tokenData.token;
+        });
     } catch {
         toastr.error(t`Couldn't get CSRF token. Please refresh the page.`, t`Error`, { timeOut: 0, extendedTimeOut: 0, preventDuplicates: true });
         throw new Error('Initialization failed');
@@ -720,72 +818,86 @@ async function firstLoadInit() {
         slug: 'app-init',
         toastMode: loader.ToastMode.NONE,
         overlayContent: initLoaderOverlay,
+        overlayHideMode: 'immediate',
     });
 
-    registerPromptManagerMigration();
-    initDomHandlers();
-    initStandaloneMode();
-    initLibraryShims();
-    addShowdownPatch(showdown);
-    addDOMPurifyHooks();
-    reloadMarkdownProcessor();
-    applyBrowserFixes();
-    await getClientVersion();
-    await initSecrets();
-    await readSecretState();
-    await initLocales();
-    initChatUtilities();
-    initDefaultSlashCommands();
-    initTextGenModels();
-    initOpenAI();
-    initTextGenSettings();
-    initKoboldSettings();
-    initNovelAISettings();
-    initSystemPrompts();
-    await initExtensions();
-    initExtensionSlashCommands();
-    ToolManager.initToolSlashCommands();
-    await initPresetManager();
-    await initSystemMessages();
+    await measureStartupStage('bootstrapUi', () => Promise.resolve().then(() => {
+        registerPromptManagerMigration();
+        initDomHandlers();
+        initStandaloneMode();
+        initLibraryShims();
+        addShowdownPatch(showdown);
+        addDOMPurifyHooks();
+        reloadMarkdownProcessor();
+        applyBrowserFixes();
+    }));
+    await measureStartupStage('initSecrets', () => initSecrets());
+    await measureStartupStage('readSecretState', () => readSecretState());
+    await measureStartupStage('initLocales', () => initLocales());
+    await measureStartupStage('registerCoreModules', () => Promise.resolve().then(() => {
+        initChatUtilities();
+        initDefaultSlashCommands();
+        initTextGenModels();
+        initOpenAI();
+        initTextGenSettings();
+        initKoboldSettings();
+        initNovelAISettings();
+        initSystemPrompts();
+    }));
+    await measureStartupStage('initExtensions', () => initExtensions());
+    await measureStartupStage('registerExtensionSlashCommands', () => Promise.resolve().then(() => {
+        initExtensionSlashCommands();
+        ToolManager.initToolSlashCommands();
+    }));
+    await measureStartupStage('initPresetManager', () => initPresetManager());
+    await measureStartupStage('initSystemMessages', () => initSystemMessages());
     await getSettings(initLoaderHandle);
-    await checkOpenRouterAuth();
-    initKeyboard();
-    initDynamicStyles();
-    initTags();
-    initBookmarks();
-    await getUserAvatars(true, user_avatar);
-    await getCharacters();
-    await getBackgrounds();
-    await initTokenizers();
-    initBackgrounds();
-    initAuthorsNote();
-    await initPersonas();
-    await initSlashCommandAutoComplete();
-    initMacroAutoComplete();
-    initWorldInfo();
-    initHorde();
-    initRossMods();
-    initStats();
-    initCfg();
-    initLogprobs();
-    initInputMarkdown();
-    initServerHistory();
-    initSettingsSearch();
-    initBulkEdit();
-    initReasoning();
-    initWelcomeScreen();
-    await initScrapers();
-    initCustomSelectedSamplers();
-    initDataMaid();
-    initItemizedPrompts();
-    initAccessibility();
-    initSwipePicker();
-    addDebugFunctions();
-    doDailyExtensionUpdatesCheck();
-    await eventSource.emit(event_types.APP_INITIALIZED);
-    await initLoaderHandle.hide();
-    await fixViewport();
-    await eventSource.emit(event_types.APP_READY);
+    await measureStartupStage('checkOpenRouterAuth', () => checkOpenRouterAuth());
+    await measureStartupStage('bindPostSettingsUi', () => Promise.resolve().then(() => {
+        initKeyboard();
+        initDynamicStyles();
+        initTags();
+        initBookmarks();
+    }));
+    await measureStartupStage('getUserAvatars', () => getUserAvatars(true, user_avatar));
+    await measureStartupStage('getCharacters', () => getCharacters());
+    await measureStartupStage('initTokenizers', () => initTokenizers());
+    await measureStartupStage('hydrateFeatureModules', async () => {
+        initBackgrounds();
+        initAuthorsNote();
+        await initPersonas();
+        await initSlashCommandAutoComplete();
+        initMacroAutoComplete();
+        initWorldInfo();
+        initHorde();
+        initRossMods();
+        initStats();
+        initCfg();
+        initLogprobs();
+        initInputMarkdown();
+        initServerHistory();
+        initSettingsSearch();
+        initBulkEdit();
+        initReasoning();
+        initWelcomeScreen();
+    });
+    await measureStartupStage('initScrapers', () => initScrapers());
+    await measureStartupStage('lateFeatureInit', () => Promise.resolve().then(() => {
+        initCustomSelectedSamplers();
+        initDataMaid();
+        initItemizedPrompts();
+        initAccessibility();
+        initSwipePicker();
+        addDebugFunctions();
+    }));
+    await measureStartupStage('emitAppInitialized', () => eventSource.emit(event_types.APP_INITIALIZED));
+    markStartup('app:initialized');
+    await measureStartupStage('hideInitLoader', () => initLoaderHandle.hide());
+    await measureStartupStage('fixViewport', () => fixViewport());
+    await measureStartupStage('emitAppReady', () => eventSource.emit(event_types.APP_READY));
+    startupProfile.appReadyAtMs = roundStartupTime(performance.now());
+    markStartup('app:ready');
+    queueMicrotask(startDeferredStartupTasks);
 }
 
 async function fixViewport() {
@@ -7851,7 +7963,7 @@ function reloadLoop() {
 
 //MARK: getSettings()
 ///////////////////////////////////////////
-export async function getSettings(initLoaderHandle = null) {
+async function fetchStartupSettings() {
     const response = await fetch('/api/settings/get', {
         method: 'POST',
         headers: getRequestHeaders(),
@@ -7865,9 +7977,40 @@ export async function getSettings(initLoaderHandle = null) {
         throw new Error('Error getting settings');
     }
 
-    const data = await response.json();
-    if (data.result != 'file not find' && data.settings) {
-        settings = JSON.parse(data.settings);
+    return response.json();
+}
+
+function applyDeferredExtensionBootstrapState({ disableUi }) {
+    $('#extensions_url').val(extension_settings.apiUrl);
+    $('#extensions_api_key').val(extension_settings.apiKey);
+    $('#extensions_autoconnect').prop('checked', extension_settings.autoConnect);
+    $('#extensions_notify_updates').prop('checked', extension_settings.notifyUpdates);
+
+    if (disableUi) {
+        $('#third_party_extension_button').addClass('disabled');
+        $('#extensions_details').addClass('disabled');
+        $('#extensions_connect').addClass('disabled');
+        $('#extensions_notify_updates').attr('disabled', 'disabled');
+        $('#extensions_autoconnect').attr('disabled', 'disabled');
+        $('#extensions_url').attr('disabled', 'disabled');
+        $('#extensions_api_key').attr('disabled', 'disabled');
+        return;
+    }
+
+    $('#third_party_extension_button').removeClass('disabled');
+    $('#extensions_details').removeClass('disabled');
+    $('#extensions_connect').removeClass('disabled');
+    $('#extensions_notify_updates').removeAttr('disabled');
+    $('#extensions_autoconnect').removeAttr('disabled');
+    $('#extensions_url').removeAttr('disabled');
+    $('#extensions_api_key').removeAttr('disabled');
+}
+
+async function applyStartupSettingsCore(data, initLoaderHandle = null) {
+    const settingsPlan = resolveStartupSettingsPlan({ data });
+
+    if (settingsPlan.hasSettings && settingsPlan.settings) {
+        settings = settingsPlan.settings;
         if (settings.username !== undefined && settings.username !== '') {
             name1 = settings.username;
             $('#your_name').text(name1);
@@ -7959,21 +8102,10 @@ export async function getSettings(initLoaderHandle = null) {
         // power_user.experimental_macro_engine
         initMacros();
 
-        if (data.enable_extensions) {
-            const enableAutoUpdate = Boolean(data.enable_extensions_auto_update);
-            const isVersionChanged = settings.currentVersion !== currentVersion;
-            await loadExtensionSettings(settings, isVersionChanged, enableAutoUpdate);
-            await eventSource.emit(event_types.EXTENSION_SETTINGS_LOADED);
-        } else {
-            Object.assign(extension_settings, (settings.extension_settings ?? {}));
-            $('#third_party_extension_button').addClass('disabled');
-            $('#extensions_details').addClass('disabled');
-            $('#extensions_connect').addClass('disabled');
-            $('#extensions_notify_updates').attr('disabled', 'disabled');
-            $('#extensions_autoconnect').attr('disabled', 'disabled');
-            $('#extensions_url').attr('disabled', 'disabled');
-            $('#extensions_api_key').attr('disabled', 'disabled');
-        }
+        Object.assign(extension_settings, (settings.extension_settings ?? {}));
+        applyDeferredExtensionBootstrapState({
+            disableUi: settingsPlan.extensionPlan.disableUi,
+        });
 
         firstRun = !!settings.firstRun;
 
@@ -7983,9 +8115,20 @@ export async function getSettings(initLoaderHandle = null) {
             firstRun = false;
         }
     }
+
+    configureDeferredStartupTasks(settingsPlan);
     await validateDisabledSamplers();
     settingsReady = true;
     await eventSource.emit(event_types.SETTINGS_LOADED);
+
+    return settingsPlan;
+}
+
+export async function getSettings(initLoaderHandle = null) {
+    return measureStartupStage('getSettings', async () => {
+        const data = await measureStartupStage('getSettings.fetch', () => fetchStartupSettings());
+        return measureStartupStage('getSettings.applyCore', () => applyStartupSettingsCore(data, initLoaderHandle));
+    });
 }
 
 //MARK: saveSettings()
@@ -8007,10 +8150,23 @@ export async function saveSettings(loopCounter = 0) {
         TempResponseLength.restore(null);
     }
 
+    if (currentVersion === '0.0.0') {
+        try {
+            await deferredVersionTask.ensure();
+        } catch (error) {
+            console.warn('Saving settings before client version resolved.', error);
+        }
+    }
+
+    const persistedCurrentVersion = resolvePersistedCurrentVersion({
+        currentVersion,
+        settingsVersion: settings?.currentVersion ?? null,
+    });
+
     const payload = {
         firstRun: firstRun,
         accountStorage: accountStorage.getState(),
-        currentVersion: currentVersion,
+        currentVersion: persistedCurrentVersion ?? undefined,
         username: name1,
         active_character: active_character,
         active_group: active_group,
