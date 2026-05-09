@@ -288,6 +288,7 @@ import { addChatBackupsBrowser } from './scripts/chat-backups.js';
 import { onboardingExperimentalMacroEngine } from './scripts/macros/engine/MacroDiagnostics.js';
 import { compressRequest, setRequestCompressionConfig } from './scripts/request-compression.js';
 import { canJumpToSwipeForMessage, canOpenSwipePickerForMessage, initSwipePicker } from './scripts/swipe-picker.js';
+import { removeCharactersFromState } from './scripts/character-list-state.js';
 
 // API OBJECT FOR EXTERNAL WIRING
 globalThis.SillyTavern = {
@@ -10943,6 +10944,7 @@ export async function deleteCharacter(characterKey, { deleteChats = true } = {})
     }
 
     let deleted = false;
+    const deletedAvatars = [];
 
     for (const key of characterKey) {
         const character = characters.find(x => x.avatar == key);
@@ -10982,10 +10984,11 @@ export async function deleteCharacter(characterKey, { deleteChats = true } = {})
         }
 
         await eventSource.emit(event_types.CHARACTER_DELETED, { id: chid, character: character });
+        deletedAvatars.push(character.avatar);
         deleted = true;
     }
 
-    await removeCharacterFromUI();
+    await removeCharacterFromUI(deletedAvatars);
     return deleted;
 }
 
@@ -10993,17 +10996,19 @@ export async function deleteCharacter(characterKey, { deleteChats = true } = {})
  * Function to delete a character from UI after character deletion API success.
  * It manages necessary UI changes such as closing advanced editing popup, unsetting
  * character ID, resetting characters array and chat metadata, deselecting character's tab
- * panel, removing character name from navigation tabs, clearing chat, fetching updated list of characters.
+ * panel, removing deleted characters from the in-memory list, refreshing groups, and reprinting the list.
  * It also ensures to save the settings after all the operations.
  */
-async function removeCharacterFromUI() {
+async function removeCharacterFromUI(deletedAvatars = []) {
     preserveNeutralChat();
     await clearChat();
     $('#character_cross').trigger('click');
     resetChatState();
     $(document.getElementById('rm_button_selected_ch')).children('h2').text('');
     restoreNeutralChat();
-    await getCharacters();
+    removeCharactersFromState(characters, deletedAvatars);
+    await getGroups();
+    await printCharacters(true);
     await printMessages();
     saveSettingsDebounced();
     await eventSource.emit(event_types.CHAT_CHANGED, getCurrentChatId());

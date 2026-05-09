@@ -25,6 +25,12 @@ import { getChatInfo } from './chats.js';
 import { ByafParser } from '../byaf.js';
 import { CharXParser, persistCharXAssets } from '../charx.js';
 import cacheBuster from '../middleware/cacheBuster.js';
+import {
+    deleteCharacterIndexEntry,
+    isCharacterIndexSupported,
+    listIndexedCharacterPayloads,
+    upsertCharacterIndexEntry,
+} from './character-index.js';
 
 // With 100 MB limit it would take roughly 3000 characters to reach this limit
 const memoryCacheCapacity = getConfigValue('performance.memoryCacheCapacity', '100mb');
@@ -439,6 +445,114 @@ const processCharacter = async (item, directories, { shallow }) => {
         };
     }
 };
+
+/**
+ * @param {import('../users.js').UserDirectoryList} directories
+ * @param {string} avatar
+ * @returns {Promise<{
+ *   avatar: string,
+ *   fullPayload: object,
+ *   shallowPayload: object,
+ *   sourceMtimeMs: number,
+ *   sourceSize: number,
+ * }>}
+ */
+async function buildCharacterIndexRow(directories, avatar) {
+    const fullPayload = await processCharacter(avatar, directories, { shallow: false });
+
+    if (!fullPayload?.name) {
+        throw new Error(`Could not build character index row for ${avatar}`);
+    }
+
+    const filePath = path.join(directories.characters, avatar);
+    const stat = fs.statSync(filePath);
+
+    return {
+        avatar,
+        fullPayload,
+        shallowPayload: toShallow(fullPayload),
+        sourceMtimeMs: stat.mtimeMs,
+        sourceSize: stat.size,
+    };
+}
+
+/**
+ * @param {import('../users.js').UserDirectoryList} directories
+ * @param {string} avatar
+ * @returns {Promise<void>}
+ */
+async function refreshCharacterIndexEntry(directories, avatar) {
+    const row = await buildCharacterIndexRow(directories, avatar);
+    upsertCharacterIndexEntry(directories.root, avatar, row);
+}
+
+/**
+ * @param {import('../users.js').UserDirectoryList} directories
+ * @param {string} avatar
+ * @param {string} operation
+ * @returns {Promise<void>}
+ */
+async function refreshCharacterIndexEntrySafe(directories, avatar, operation) {
+    if (!isCharacterIndexSupported() || !avatar) {
+        return;
+    }
+
+    try {
+        await refreshCharacterIndexEntry(directories, avatar);
+    } catch (error) {
+        console.warn(`Character index refresh skipped after ${operation} for ${avatar}:`, error);
+    }
+}
+
+/**
+ * @param {import('../users.js').UserDirectoryList} directories
+ * @param {string[]} avatars
+ * @param {string} operation
+ * @returns {Promise<void>}
+ */
+async function refreshCharacterIndexEntriesSafe(directories, avatars, operation) {
+    const uniqueAvatars = [...new Set(avatars.filter(Boolean))];
+    if (!uniqueAvatars.length || !isCharacterIndexSupported()) {
+        return;
+    }
+
+    const results = await Promise.allSettled(uniqueAvatars.map(avatar => refreshCharacterIndexEntry(directories, avatar)));
+    for (let index = 0; index < results.length; index++) {
+        if (results[index].status === 'rejected') {
+            console.warn(`Character index refresh skipped after ${operation} for ${uniqueAvatars[index]}:`, results[index].reason);
+        }
+    }
+}
+
+/**
+ * @param {import('../users.js').UserDirectoryList} directories
+ * @param {string} avatar
+ * @param {string} operation
+ * @returns {void}
+ */
+function deleteCharacterIndexEntrySafe(directories, avatar, operation) {
+    if (!isCharacterIndexSupported() || !avatar) {
+        return;
+    }
+
+    try {
+        deleteCharacterIndexEntry(directories.root, avatar);
+    } catch (error) {
+        console.warn(`Character index delete skipped after ${operation} for ${avatar}:`, error);
+    }
+}
+
+/**
+ * @param {import('../users.js').UserDirectoryList} directories
+ * @param {boolean} shallow
+ * @returns {Promise<object[]>}
+ */
+async function listCharactersFromFiles(directories, shallow) {
+    const files = fs.readdirSync(directories.characters);
+    const pngFiles = files.filter(file => file.endsWith('.png'));
+    const processingPromises = pngFiles.map(file => processCharacter(file, directories, { shallow }));
+    return (await Promise.all(processingPromises)).filter(character => character.name);
+}
 
 /**
  * Convert a character object to Spec V2 format.
@@ -1036,12 +1150,14 @@ router.post('/create', getFileNameValidationFunction('file_name'), async functio
 
         if (!request.file) {
             await writeCharacterData(DEFAULT_AVATAR_PATH, char, internalName, request);
+            await refreshCharacterIndexEntrySafe(request.user.directories, avatarName, 'create');
             return response.send(avatarName);
         } else {
             const crop = tryParse(request.query.crop);
             const uploadPath = path.join(request.file.destination, request.file.filename);
             await writeCharacterData(uploadPath, char, internalName, request, crop);
             fs.unlinkSync(uploadPath);
+            await refreshCharacterIndexEntrySafe(request.user.directories, avatarName, 'create');
             return response.send(avatarName);
         }
     } catch (err) {
@@ -1088,6 +1204,9 @@ router.post('/rename', validateAvatarUrlMiddleware, async function (request, res
         // Remove the old character file
         fs.unlinkSync(oldAvatarPath);
 
+        deleteCharacterIndexEntrySafe(request.user.directories, oldAvatarName, 'rename');
+        await refreshCharacterIndexEntrySafe(request.user.directories, newAvatarName, 'rename');
+
         // Return new avatar name to ST
         return response.send({ avatar: newAvatarName });
     } catch (err) {
@@ -1130,6 +1249,7 @@ router.post('/edit', validateAvatarUrlMiddleware, async function (request, respo
             cacheBuster.bust(request, response);
         }
 
+        await refreshCharacterIndexEntrySafe(request.user.directories, request.body.avatar_url, 'edit');
         return response.sendStatus(200);
     } catch (err) {
         console.error('An error occurred, character edit invalidated.', err);
@@ -1171,6 +1291,7 @@ router.post('/edit-avatar', validateAvatarUrlMiddleware, async function (request
         cacheBuster.bust(request, response);
         invalidateThumbnail(request.user.directories, 'avatar', request.body.avatar_url);
 
+        await refreshCharacterIndexEntrySafe(request.user.directories, request.body.avatar_url, 'edit-avatar');
         return response.sendStatus(200);
     } catch (err) {
         console.error('An error occurred while editing avatar', err);
@@ -1222,6 +1343,7 @@ router.post('/edit-attribute', validateAvatarUrlMiddleware, async function (requ
         let newCharJSON = JSON.stringify(char);
         const targetFile = (request.body.avatar_url).replace('.png', '');
         await writeCharacterData(avatarPath, newCharJSON, targetFile, request);
+        await refreshCharacterIndexEntrySafe(request.user.directories, request.body.avatar_url, 'edit-attribute');
         return response.sendStatus(200);
     } catch (err) {
         console.error('An error occurred, character edit invalidated.', err);
@@ -1392,6 +1514,8 @@ router.post('/merge-attributes', getFileNameValidationFunction('avatar'), async 
                 await Promise.allSettled(batch.map(processOne));
             }
 
+            await refreshCharacterIndexEntriesSafe(request.user.directories, updated, 'merge-attributes bulk');
+
             return response.send({ updated, skipped, failed });
         }
 
@@ -1401,6 +1525,7 @@ router.post('/merge-attributes', getFileNameValidationFunction('avatar'), async 
 
         const result = await mergeCharacterUpdate(avatarPath, update.avatar, update, request);
         if (result.ok) {
+            await refreshCharacterIndexEntrySafe(request.user.directories, update.avatar, 'merge-attributes');
             response.sendStatus(200);
         } else {
             console.warn(result.error);
@@ -1444,6 +1569,7 @@ router.post('/delete', validateAvatarUrlMiddleware, async function (request, res
         }
     }
 
+    deleteCharacterIndexEntrySafe(request.user.directories, request.body.avatar_url, 'delete');
     return response.sendStatus(200);
 });
 
@@ -1463,10 +1589,27 @@ router.post('/delete', validateAvatarUrlMiddleware, async function (request, res
  */
 router.post('/all', async function (request, response) {
     try {
-        const files = fs.readdirSync(request.user.directories.characters);
-        const pngFiles = files.filter(file => file.endsWith('.png'));
-        const processingPromises = pngFiles.map(file => processCharacter(file, request.user.directories, { shallow: useShallowCharacters }));
-        const data = (await Promise.all(processingPromises)).filter(c => c.name);
+        let data = [];
+
+        if (isCharacterIndexSupported()) {
+            try {
+                const files = fs.readdirSync(request.user.directories.characters);
+                const pngFiles = files.filter(file => file.endsWith('.png')).sort((left, right) => left.localeCompare(right));
+                data = await listIndexedCharacterPayloads({
+                    userRoot: request.user.directories.root,
+                    directories: request.user.directories,
+                    avatarFiles: pngFiles,
+                    useShallowPayload: useShallowCharacters,
+                    buildRow: avatar => buildCharacterIndexRow(request.user.directories, avatar),
+                });
+            } catch (error) {
+                console.warn('Falling back to filesystem-backed character list after index read failure:', error);
+                data = await listCharactersFromFiles(request.user.directories, useShallowCharacters);
+            }
+        } else {
+            data = await listCharactersFromFiles(request.user.directories, useShallowCharacters);
+        }
+
         return response.send(data);
     } catch (err) {
         console.error(err);
@@ -1589,6 +1732,7 @@ router.post('/import', async function (request, response) {
             invalidateThumbnail(request.user.directories, 'avatar', `${preservedFileName}.png`);
         }
 
+        await refreshCharacterIndexEntrySafe(request.user.directories, fileName, 'import');
         response.send({ file_name: fileName });
     } catch (err) {
         console.error(err);
@@ -1634,6 +1778,7 @@ router.post('/duplicate', validateAvatarUrlMiddleware, async function (request, 
 
         fs.copyFileSync(filename, newFilename);
         console.info(`${filename} was copied to ${newFilename}`);
+        await refreshCharacterIndexEntrySafe(request.user.directories, path.parse(newFilename).base, 'duplicate');
         response.send({ path: path.parse(newFilename).base });
     } catch (error) {
         console.error(error);
