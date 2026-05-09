@@ -53,6 +53,14 @@ EmberDesk currently provides:
 - Docker-friendly deployment and browser access across devices
 - focused startup and interaction performance work for daily-use paths
 
+Current derived-cache scope is intentionally narrow:
+
+- canonical character cards and chats remain file-backed
+- `DiskCache` accelerates repeated PNG-to-JSON extraction
+- the SQLite character index accelerates the character-library list API and safe steady-state single-character full reads
+  - single-character indexed reuse still revalidates source PNG metadata, linked legacy world-info dependencies, and chat-derived aggregates before treating cached payloads as reusable
+- this slice does not introduce a database-first source of truth for chats, world info, or general workspace state
+
 ## Explicit Exclusions
 
 EmberDesk does not currently aim to:
@@ -69,6 +77,7 @@ EmberDesk does not currently aim to:
 - Separate user-facing product semantics from implementation notes.
 - Validate performance claims with repeatable tooling and browser evidence.
 - Do not let internal caches or indexes become the canonical user-data source by accident.
+- Keep derived caches scoped to proven hot paths; do not broaden them into general persistence without clear user-visible ROI.
 
 ## One-Line Summary
 

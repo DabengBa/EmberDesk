@@ -27,6 +27,7 @@ import { CharXParser, persistCharXAssets } from '../charx.js';
 import cacheBuster from '../middleware/cacheBuster.js';
 import {
     deleteCharacterIndexEntry,
+    getFreshIndexedCharacterFullPayload,
     isCharacterIndexSupported,
     listIndexedCharacterPayloads,
     upsertCharacterIndexEntry,
@@ -450,6 +451,74 @@ const processCharacter = async (item, directories, { shallow }) => {
 
 /**
  * @param {import('../users.js').UserDirectoryList} directories
+ * @param {object} fullPayload
+ * @returns {{
+ *   sourceWorldName: string,
+ *   sourceWorldMtimeMs: number,
+ *   sourceWorldSize: number,
+ * }}
+ */
+function getCharacterIndexWorldMetadata(directories, fullPayload) {
+    let sourceWorldName = '';
+    let sourceWorldMtimeMs = -1;
+    let sourceWorldSize = -1;
+    let rawCard;
+
+    try {
+        rawCard = JSON.parse(fullPayload.json_data);
+    } catch (error) {
+        console.warn(`Character index world metadata skipped for ${fullPayload.avatar ?? '(unknown avatar)'}:`, error);
+        return {
+            sourceWorldName,
+            sourceWorldMtimeMs,
+            sourceWorldSize,
+        };
+    }
+
+    if (!rawCard?.spec && typeof rawCard?.world === 'string' && rawCard.world) {
+        sourceWorldName = sanitize(rawCard.world);
+        if (!sourceWorldName) {
+            return {
+                sourceWorldName: '',
+                sourceWorldMtimeMs,
+                sourceWorldSize,
+            };
+        }
+
+        try {
+            const worldFileName = `${sourceWorldName}.json`;
+            const worldFilePath = path.join(directories.worlds, worldFileName);
+            const worldStat = fs.statSync(worldFilePath);
+            sourceWorldMtimeMs = worldStat.mtimeMs;
+            sourceWorldSize = worldStat.size;
+        } catch (error) {
+            if (error?.code !== 'ENOENT') {
+                console.warn(`Character index world metadata skipped for ${fullPayload.avatar ?? '(unknown avatar)'}:`, error);
+            }
+        }
+    }
+
+    return {
+        sourceWorldName,
+        sourceWorldMtimeMs,
+        sourceWorldSize,
+    };
+}
+
+/**
+ * @param {string} filePath
+ * @returns {{ mtimeMs: number, size: number }}
+ */
+function statCharacterFile(filePath) {
+    const fileStat = fs.statSync(filePath);
+    return {
+        mtimeMs: fileStat.mtimeMs,
+        size: fileStat.size,
+    };
+}
+
+/**
+ * @param {import('../users.js').UserDirectoryList} directories
  * @param {string} avatar
  * @returns {Promise<{
  *   avatar: string,
@@ -457,6 +526,9 @@ const processCharacter = async (item, directories, { shallow }) => {
  *   shallowPayload: object,
  *   sourceMtimeMs: number,
  *   sourceSize: number,
+ *   sourceWorldName: string,
+ *   sourceWorldMtimeMs: number,
+ *   sourceWorldSize: number,
  * }>}
  */
 async function buildCharacterIndexRow(directories, avatar) {
@@ -467,7 +539,8 @@ async function buildCharacterIndexRow(directories, avatar) {
     }
 
     const filePath = path.join(directories.characters, avatar);
-    const stat = fs.statSync(filePath);
+    const stat = statCharacterFile(filePath);
+    const worldMetadata = getCharacterIndexWorldMetadata(directories, fullPayload);
 
     return {
         avatar,
@@ -475,6 +548,7 @@ async function buildCharacterIndexRow(directories, avatar) {
         shallowPayload: toShallow(fullPayload),
         sourceMtimeMs: stat.mtimeMs,
         sourceSize: stat.size,
+        ...worldMetadata,
     };
 }
 
@@ -601,6 +675,7 @@ function convertToV2(char, directories) {
         fav: char.fav,
         creator: char.creator,
         tags: char.tags,
+        world: char.world,
         depth_prompt_prompt: char.depth_prompt_prompt,
         depth_prompt_depth: char.depth_prompt_depth,
         depth_prompt_role: char.depth_prompt_role,
@@ -1630,11 +1705,52 @@ router.post('/get', validateAvatarUrlMiddleware, async function (request, respon
         const item = request.body.avatar_url;
         const filePath = path.join(request.user.directories.characters, item);
 
-        if (!fs.existsSync(filePath)) {
-            return response.sendStatus(404);
+        let fileStat;
+        try {
+            fileStat = statCharacterFile(filePath);
+        } catch (error) {
+            if (error?.code === 'ENOENT') {
+                return response.sendStatus(404);
+            }
+            throw error;
+        }
+
+        if (isCharacterIndexSupported()) {
+            try {
+                const indexedPayload = getFreshIndexedCharacterFullPayload(
+                    request.user.directories.root,
+                    request.user.directories,
+                    item,
+                    fileStat,
+                );
+
+                if (indexedPayload) {
+                    return response.send(indexedPayload);
+                }
+            } catch (error) {
+                console.warn(`Character index lookup skipped for ${item}:`, error);
+            }
         }
 
         const data = await processCharacter(item, request.user.directories, { shallow: false });
+
+        if (isCharacterIndexSupported() && data?.name) {
+            try {
+                fileStat = statCharacterFile(filePath);
+                upsertCharacterIndexEntry(request.user.directories.root, item, {
+                    avatar: item,
+                    fullPayload: data,
+                    shallowPayload: toShallow(data),
+                    sourceMtimeMs: fileStat.mtimeMs,
+                    sourceSize: fileStat.size,
+                    ...getCharacterIndexWorldMetadata(request.user.directories, data),
+                });
+            } catch (error) {
+                if (error?.code !== 'ENOENT') {
+                    console.warn(`Character index refresh skipped after get for ${item}:`, error);
+                }
+            }
+        }
 
         return response.send(data);
     } catch (err) {

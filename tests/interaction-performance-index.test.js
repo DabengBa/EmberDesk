@@ -1,16 +1,24 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-import { afterEach, describe, expect, test } from '@jest/globals';
+import { afterAll, afterEach, beforeAll, describe, expect, jest, test } from '@jest/globals';
+import extract from 'png-chunks-extract';
+import PNGtext from 'png-chunk-text';
+import sanitize from 'sanitize-filename';
 
 import {
     deleteCharacterIndexEntry,
     disposeCharacterIndexDatabases,
+    getFreshIndexedCharacterFullPayload,
     getCharacterIndexPath,
     listIndexedCharacterPayloads,
     markCharacterChatStatsDirty,
 } from '../src/endpoints/character-index.js';
+import { write as writeCharacterCardPngData } from '../src/character-card-parser.js';
+import encodePngChunks from '../src/png/encode.js';
+import { setConfigFilePath } from '../src/util.js';
 import { removeCharactersFromState } from '../public/scripts/character-list-state.js';
 
 /**
@@ -21,9 +29,11 @@ function makeDirectories(prefix) {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
     const characters = path.join(root, 'characters');
     const chats = path.join(root, 'chats');
+    const worlds = path.join(root, 'worlds');
     fs.mkdirSync(characters, { recursive: true });
     fs.mkdirSync(chats, { recursive: true });
-    return { root, characters, chats };
+    fs.mkdirSync(worlds, { recursive: true });
+    return { root, characters, chats, worlds };
 }
 
 /**
@@ -33,6 +43,78 @@ function makeDirectories(prefix) {
  */
 function writeAvatarFile(directories, avatar, contents = 'avatar') {
     fs.writeFileSync(path.join(directories.characters, avatar), contents, 'utf8');
+}
+
+/**
+ * @param {{characters: string}} directories
+ * @param {string} avatar
+ * @param {string} name
+ */
+function writeCharacterCardFile(directories, avatar, name) {
+    const payload = JSON.stringify({
+        spec: 'chara_card_v2',
+        spec_version: '2.0',
+        data: {
+            name,
+            description: `Description ${name}`,
+            personality: `Personality ${name}`,
+            scenario: `Scenario ${name}`,
+            first_mes: `First ${name}`,
+            mes_example: `Example ${name}`,
+            creator_notes: `Creator notes ${name}`,
+            tags: [],
+            creator: 'tester',
+            character_version: '2.0',
+            extensions: {
+                talkativeness: 0.5,
+                fav: false,
+                world: '',
+            },
+        },
+    });
+    const pngBuffer = writeCharacterCardPngData(DEFAULT_AVATAR_BUFFER, payload);
+    fs.writeFileSync(path.join(directories.characters, avatar), pngBuffer);
+}
+
+/**
+ * @param {{characters: string}} directories
+ * @param {string} avatar
+ * @param {string} name
+ * @param {string} world
+ */
+function writeLegacyCharacterCardFile(directories, avatar, name, world) {
+    const payload = JSON.stringify({
+        name,
+        description: `Description ${name}`,
+        personality: `Personality ${name}`,
+        scenario: `Scenario ${name}`,
+        first_mes: `First ${name}`,
+        mes_example: `Example ${name}`,
+        creatorcomment: `Creator notes ${name}`,
+        talkativeness: 0.5,
+        fav: false,
+        tags: [],
+        world,
+    });
+    const pngBuffer = writeCharacterCardPngData(DEFAULT_AVATAR_BUFFER, payload);
+    const chunks = extract(new Uint8Array(pngBuffer));
+    const v1Chunks = chunks.filter((chunk) => {
+        if (chunk.name !== 'tEXt') {
+            return true;
+        }
+        const decoded = PNGtext.decode(chunk.data);
+        return decoded.keyword.toLowerCase() !== 'ccv3';
+    });
+    fs.writeFileSync(path.join(directories.characters, avatar), Buffer.from(encodePngChunks(v1Chunks)));
+}
+
+/**
+ * @param {{worlds: string}} directories
+ * @param {string} worldName
+ * @param {object} data
+ */
+function writeWorldInfoFile(directories, worldName, data) {
+    fs.writeFileSync(path.join(directories.worlds, `${worldName}.json`), JSON.stringify(data, null, 4));
 }
 
 /**
@@ -147,13 +229,89 @@ async function openRawIndexDatabase(userRoot) {
     return new DatabaseSync(getCharacterIndexPath(userRoot));
 }
 
+/**
+ * @param {number} [statusCode]
+ * @returns {{
+ *   statusCode: number,
+ *   body: any,
+ *   send: (payload: any) => any,
+ *   sendStatus: (code: number) => any,
+ *   status: (code: number) => any,
+ * }}
+ */
+function createMockResponse(statusCode = 200) {
+    return {
+        statusCode,
+        body: undefined,
+        send(payload) {
+            this.body = payload;
+            return this;
+        },
+        sendStatus(code) {
+            this.statusCode = code;
+            return this;
+        },
+        status(code) {
+            this.statusCode = code;
+            return this;
+        },
+    };
+}
+
+/**
+ * @returns {(request: any, response: any) => Promise<void>}
+ */
+function getCharacterRouteHandler() {
+    const layer = charactersRouter.stack.find(entry => entry.route?.path === '/get');
+    if (!layer?.route?.stack?.length) {
+        throw new Error('Could not locate /api/characters/get route handler');
+    }
+
+    return layer.route.stack[layer.route.stack.length - 1].handle;
+}
+
+/**
+ * @param {{ root: string, characters: string, chats: string }} directories
+ * @param {string} avatar
+ * @returns {Promise<ReturnType<typeof createMockResponse>>}
+ */
+async function invokeCharacterGet(directories, avatar) {
+    const handler = getCharacterRouteHandler();
+    const request = {
+        body: { avatar_url: avatar },
+        user: { directories },
+    };
+    const response = createMockResponse();
+    await handler(request, response);
+    return response;
+}
+
 const tempRoots = [];
+let sharedDataRoot = '';
+const DEFAULT_AVATAR_BUFFER = fs.readFileSync(new URL('../public/img/ai4.png', import.meta.url));
+const sharedGlobal = global;
+let diskCache;
+let charactersRouter;
+
+beforeAll(async () => {
+    sharedDataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-character-route-cache-'));
+    sharedGlobal.DATA_ROOT = sharedDataRoot;
+    setConfigFilePath(fileURLToPath(new URL('../default/config.yaml', import.meta.url)));
+    ({ diskCache, router: charactersRouter } = await import('../src/endpoints/characters.js'));
+});
 
 afterEach(() => {
     disposeCharacterIndexDatabases();
+    diskCache?.dispose();
 
     for (const root of tempRoots.splice(0, tempRoots.length)) {
         fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+afterAll(() => {
+    if (sharedDataRoot) {
+        fs.rmSync(sharedDataRoot, { recursive: true, force: true });
     }
 });
 
@@ -418,5 +576,392 @@ describe('character index', () => {
             { avatar: 'alpha.png', name: 'Alpha' },
             { avatar: 'gamma.png', name: 'Gamma' },
         ]);
+    });
+
+    test('serves /api/characters/get from a fresh indexed full payload without reparsing the avatar file', async () => {
+        const directories = makeDirectories('emberdesk-character-index-route-');
+        tempRoots.push(directories.root);
+        writeAvatarFile(directories, 'alpha.png', 'not-a-real-png');
+
+        await listIndexedCharacterPayloads({
+            userRoot: directories.root,
+            directories,
+            avatarFiles: ['alpha.png'],
+            useShallowPayload: false,
+            buildRow: createBuildRow([]),
+        });
+
+        const response = await invokeCharacterGet(directories, 'alpha.png');
+
+        expect(response.statusCode).toBe(200);
+        expect(response.body).toEqual(expect.objectContaining({
+            avatar: 'alpha.png',
+            name: 'Full alpha',
+            json_data: 'json:alpha',
+        }));
+    });
+
+    test('refreshes dirty chat stats before serving /api/characters/get from a fresh indexed row', async () => {
+        const directories = makeDirectories('emberdesk-character-index-route-');
+        tempRoots.push(directories.root);
+        writeAvatarFile(directories, 'alpha.png', 'not-a-real-png');
+
+        await listIndexedCharacterPayloads({
+            userRoot: directories.root,
+            directories,
+            avatarFiles: ['alpha.png'],
+            useShallowPayload: false,
+            buildRow: createBuildRow([]),
+        });
+
+        writeChatFile(directories.root, 'alpha.png', 'alpha.jsonl', 'hello');
+        markCharacterChatStatsDirty(directories.root, 'alpha.png');
+
+        const response = await invokeCharacterGet(directories, 'alpha.png');
+
+        expect(response.statusCode).toBe(200);
+        expect(response.body).toEqual(expect.objectContaining({
+            avatar: 'alpha.png',
+            name: 'Full alpha',
+            chat_size: 5,
+        }));
+    });
+
+    test('recomputes chat stats before serving /api/characters/get after out-of-band chat cleanup', async () => {
+        const directories = makeDirectories('emberdesk-character-index-route-');
+        tempRoots.push(directories.root);
+        writeAvatarFile(directories, 'alpha.png', 'not-a-real-png');
+        writeChatFile(directories.root, 'alpha.png', 'alpha.jsonl', 'hello');
+
+        await listIndexedCharacterPayloads({
+            userRoot: directories.root,
+            directories,
+            avatarFiles: ['alpha.png'],
+            useShallowPayload: false,
+            buildRow: createBuildRow([]),
+        });
+
+        fs.rmSync(path.join(directories.chats, 'alpha'), { recursive: true, force: true });
+
+        const response = await invokeCharacterGet(directories, 'alpha.png');
+
+        expect(response.statusCode).toBe(200);
+        expect(response.body).toEqual(expect.objectContaining({
+            avatar: 'alpha.png',
+            name: 'Full alpha',
+            chat_size: 0,
+            date_last_chat: 0,
+        }));
+
+        const database = await openRawIndexDatabase(directories.root);
+        try {
+            const row = database.prepare('SELECT full_json FROM characters WHERE avatar = ?').get('alpha.png');
+            expect(JSON.parse(row.full_json)).toEqual(expect.objectContaining({
+                chat_size: 0,
+                date_last_chat: 0,
+            }));
+        } finally {
+            database.close();
+        }
+    });
+
+    test('falls back to file-backed rebuild for /api/characters/get when the indexed row is stale', async () => {
+        const directories = makeDirectories('emberdesk-character-index-route-');
+        tempRoots.push(directories.root);
+        writeAvatarFile(directories, 'alpha.png', 'stale-row-seed');
+
+        await listIndexedCharacterPayloads({
+            userRoot: directories.root,
+            directories,
+            avatarFiles: ['alpha.png'],
+            useShallowPayload: false,
+            buildRow: createBuildRow([]),
+        });
+
+        writeCharacterCardFile(directories, 'alpha.png', 'Alpha Live');
+
+        const response = await invokeCharacterGet(directories, 'alpha.png');
+
+        expect(response.statusCode).toBe(200);
+        expect(response.body).toEqual(expect.objectContaining({
+            avatar: 'alpha.png',
+            name: 'Alpha Live',
+        }));
+        expect(response.body.json_data).toContain('"name":"Alpha Live"');
+
+        const database = await openRawIndexDatabase(directories.root);
+        try {
+            const row = database.prepare('SELECT full_json FROM characters WHERE avatar = ?').get('alpha.png');
+            expect(JSON.parse(row.full_json)).toEqual(expect.objectContaining({
+                avatar: 'alpha.png',
+                name: 'Alpha Live',
+            }));
+        } finally {
+            database.close();
+        }
+    });
+
+    test('falls back to file-backed rebuild for /api/characters/get when the indexed full payload is corrupt', async () => {
+        const directories = makeDirectories('emberdesk-character-index-route-');
+        tempRoots.push(directories.root);
+        writeCharacterCardFile(directories, 'alpha.png', 'Alpha Live');
+
+        await listIndexedCharacterPayloads({
+            userRoot: directories.root,
+            directories,
+            avatarFiles: ['alpha.png'],
+            useShallowPayload: false,
+            buildRow: createBuildRow([]),
+        });
+
+        const database = await openRawIndexDatabase(directories.root);
+        try {
+            database.prepare('UPDATE characters SET full_json = ? WHERE avatar = ?').run('not-json', 'alpha.png');
+        } finally {
+            database.close();
+        }
+
+        const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+        try {
+            const response = await invokeCharacterGet(directories, 'alpha.png');
+
+            expect(response.statusCode).toBe(200);
+            expect(response.body).toEqual(expect.objectContaining({
+                avatar: 'alpha.png',
+                name: 'Alpha Live',
+            }));
+
+            const verificationDb = await openRawIndexDatabase(directories.root);
+            try {
+                const row = verificationDb.prepare('SELECT full_json FROM characters WHERE avatar = ?').get('alpha.png');
+                expect(JSON.parse(row.full_json)).toEqual(expect.objectContaining({
+                    avatar: 'alpha.png',
+                    name: 'Alpha Live',
+                }));
+            } finally {
+                verificationDb.close();
+            }
+        } finally {
+            warnSpy.mockRestore();
+        }
+    });
+
+    test('rebuilds legacy world-linked cards when the referenced world info file changes', async () => {
+        const directories = makeDirectories('emberdesk-character-index-route-');
+        tempRoots.push(directories.root);
+        writeLegacyCharacterCardFile(directories, 'legacy.png', 'Legacy Hero', 'lorebook');
+        writeWorldInfoFile(directories, 'lorebook', {
+            entries: {
+                1: {
+                    uid: 1,
+                    key: 'first',
+                    content: 'old lore',
+                    order: 0,
+                    position: 0,
+                    disable: false,
+                    selective: false,
+                },
+            },
+        });
+
+        const initialResponse = await invokeCharacterGet(directories, 'legacy.png');
+        expect(initialResponse.statusCode).toBe(200);
+        expect(initialResponse.body.data.character_book.entries[0].content).toBe('old lore');
+
+        writeWorldInfoFile(directories, 'lorebook', {
+            entries: {
+                1: {
+                    uid: 1,
+                    key: 'first',
+                    content: 'new lore',
+                    order: 0,
+                    position: 0,
+                    disable: false,
+                    selective: false,
+                },
+            },
+        });
+
+        const refreshedResponse = await invokeCharacterGet(directories, 'legacy.png');
+
+        expect(refreshedResponse.statusCode).toBe(200);
+        expect(refreshedResponse.body.data.character_book.entries[0].content).toBe('new lore');
+    });
+
+    test('stores sanitized world names in the index for legacy world-linked cards', async () => {
+        const directories = makeDirectories('emberdesk-character-index-route-');
+        tempRoots.push(directories.root);
+        const rawWorldName = '../lorebook';
+        const sanitizedWorldName = sanitize(rawWorldName);
+
+        writeLegacyCharacterCardFile(directories, 'legacy.png', 'Legacy Hero', rawWorldName);
+        writeWorldInfoFile(directories, sanitizedWorldName, {
+            entries: {
+                1: {
+                    uid: 1,
+                    key: 'first',
+                    content: 'safe lore',
+                    order: 0,
+                    position: 0,
+                    disable: false,
+                    selective: false,
+                },
+            },
+        });
+
+        const response = await invokeCharacterGet(directories, 'legacy.png');
+        expect(response.statusCode).toBe(200);
+        expect(response.body.data.character_book.entries[0].content).toBe('safe lore');
+
+        const database = await openRawIndexDatabase(directories.root);
+        try {
+            const row = database.prepare('SELECT source_world_name FROM characters WHERE avatar = ?').get('legacy.png');
+            expect(row.source_world_name).toBe(sanitizedWorldName);
+            expect(row.source_world_name).not.toBe(rawWorldName);
+        } finally {
+            database.close();
+        }
+    });
+
+    test('serves a cached legacy world-linked card after the referenced world info file is deleted and rebuilds when it reappears', async () => {
+        const directories = makeDirectories('emberdesk-character-index-route-');
+        tempRoots.push(directories.root);
+        writeLegacyCharacterCardFile(directories, 'legacy.png', 'Legacy Hero', 'lorebook');
+        writeWorldInfoFile(directories, 'lorebook', {
+            entries: {
+                1: {
+                    uid: 1,
+                    key: 'first',
+                    content: 'old lore',
+                    order: 0,
+                    position: 0,
+                    disable: false,
+                    selective: false,
+                },
+            },
+        });
+
+        const initialResponse = await invokeCharacterGet(directories, 'legacy.png');
+        expect(initialResponse.statusCode).toBe(200);
+        expect(initialResponse.body.data.character_book.entries[0].content).toBe('old lore');
+
+        fs.unlinkSync(path.join(directories.worlds, 'lorebook.json'));
+
+        const deletedWorldResponse = await invokeCharacterGet(directories, 'legacy.png');
+        expect(deletedWorldResponse.statusCode).toBe(200);
+        expect(deletedWorldResponse.body.data.character_book).toBeUndefined();
+
+        const cachedPayload = getFreshIndexedCharacterFullPayload(
+            directories.root,
+            directories,
+            'legacy.png',
+            fs.statSync(path.join(directories.characters, 'legacy.png')),
+        );
+        expect(cachedPayload).toEqual(expect.objectContaining({
+            avatar: 'legacy.png',
+            name: 'Legacy Hero',
+        }));
+        expect(cachedPayload.data.character_book).toBeUndefined();
+
+        writeWorldInfoFile(directories, 'lorebook', {
+            entries: {
+                1: {
+                    uid: 1,
+                    key: 'first',
+                    content: 'restored lore',
+                    order: 0,
+                    position: 0,
+                    disable: false,
+                    selective: false,
+                },
+            },
+        });
+
+        const restoredWorldResponse = await invokeCharacterGet(directories, 'legacy.png');
+        expect(restoredWorldResponse.statusCode).toBe(200);
+        expect(restoredWorldResponse.body.data.character_book.entries[0].content).toBe('restored lore');
+    });
+
+    test('resets a broken fast-path lookup after a non-SyntaxError index failure', async () => {
+        const directories = makeDirectories('emberdesk-character-index-route-');
+        tempRoots.push(directories.root);
+        writeCharacterCardFile(directories, 'alpha.png', 'Alpha Live');
+
+        const initialResponse = await invokeCharacterGet(directories, 'alpha.png');
+        expect(initialResponse.statusCode).toBe(200);
+        expect(initialResponse.body.name).toBe('Alpha Live');
+
+        const database = await openRawIndexDatabase(directories.root);
+        try {
+            database.exec('ALTER TABLE characters RENAME TO characters_broken;');
+        } finally {
+            database.close();
+        }
+
+        const sourceStat = fs.statSync(path.join(directories.characters, 'alpha.png'));
+        expect(() => getFreshIndexedCharacterFullPayload(
+            directories.root,
+            directories,
+            'alpha.png',
+            sourceStat,
+        )).toThrow();
+
+        const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+        try {
+            const fallbackResponse = await invokeCharacterGet(directories, 'alpha.png');
+            expect(fallbackResponse.statusCode).toBe(200);
+            expect(fallbackResponse.body).toEqual(expect.objectContaining({
+                avatar: 'alpha.png',
+                name: 'Alpha Live',
+            }));
+        } finally {
+            warnSpy.mockRestore();
+        }
+    });
+
+    test('stores current file metadata after /api/characters/get rebuilds a file that changes mid-request', async () => {
+        const directories = makeDirectories('emberdesk-character-index-route-');
+        tempRoots.push(directories.root);
+        writeCharacterCardFile(directories, 'alpha.png', 'Alpha Before');
+
+        const filePath = path.join(directories.characters, 'alpha.png');
+        const originalStatSync = fs.statSync;
+        let swappedFile = false;
+        const statSpy = jest.spyOn(fs, 'statSync').mockImplementation((targetPath, ...args) => {
+            const stat = originalStatSync.call(fs, targetPath, ...args);
+
+            if (!swappedFile && targetPath === filePath) {
+                swappedFile = true;
+                writeCharacterCardFile(directories, 'alpha.png', 'Alpha After Much Longer');
+            }
+
+            return stat;
+        });
+
+        try {
+            const response = await invokeCharacterGet(directories, 'alpha.png');
+
+            expect(response.statusCode).toBe(200);
+            expect(response.body).toEqual(expect.objectContaining({
+                avatar: 'alpha.png',
+                name: 'Alpha After Much Longer',
+            }));
+        } finally {
+            statSpy.mockRestore();
+        }
+
+        const indexedPayload = getFreshIndexedCharacterFullPayload(
+            directories.root,
+            directories,
+            'alpha.png',
+            fs.statSync(filePath),
+        );
+
+        expect(indexedPayload).toEqual(expect.objectContaining({
+            avatar: 'alpha.png',
+            name: 'Alpha After Much Longer',
+        }));
     });
 });

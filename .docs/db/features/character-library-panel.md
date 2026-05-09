@@ -37,6 +37,7 @@ This feature lets users work with large character libraries without leaving the 
 
 - The panel should remain usable for large libraries during ordinary repeated use.
 - Summary metadata such as last-chat information should reflect the latest known state when the list is shown.
+- In steady-state repeated use, EmberDesk may reuse precomputed card-summary state so reopening the panel feels faster than a full cold re-derivation of every card.
 - Browsing and selecting cards belong to this feature; destructive removal belongs to [Delete Character](feature.character_delete).
 
 ## ID Boundary Notes
@@ -46,4 +47,4 @@ This feature covers browsing, visibility, and selection of character rows. Confi
 ## Outcomes
 
 - **Success**: the list appears, rows are browseable, and a selected card becomes the active workspace context.
-- **Repeat-open expectation**: reopening the panel in the same session should feel like a steady-state interaction rather than a full cold rescan.
+- **Repeat-open expectation**: reopening the panel in the same session should feel like a steady-state interaction rather than a full cold rescan, because EmberDesk can reuse precomputed card summaries for this surface.

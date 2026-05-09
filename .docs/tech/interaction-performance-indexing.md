@@ -15,6 +15,7 @@ Primary files:
 The goal of this slice is narrow:
 
 - avoid reparsing every character PNG and rescanning every chat directory on each `POST /api/characters/all`
+- reuse a fresh per-character cached `full_json` on `POST /api/characters/get` when the indexed row still matches the source PNG
 - keep canonical character and chat files on disk
 - reduce the visible lag after character deletion by removing the success-path full character-list refetch
 - keep the indexed fast path self-healing when derived rows or SQLite state become inconsistent
@@ -29,10 +30,12 @@ The goal of this slice is narrow:
 - The first slice preserves both existing `/api/characters/all` payload modes:
   - full objects when `performance.lazyLoadCharacters=false`
   - shallow rows when `performance.lazyLoadCharacters=true`
-- `POST /api/characters/get` stays file-backed and authoritative.
+- `POST /api/characters/get` stays file-authoritative, but no longer has to reparse the PNG on every steady-state request.
+  - when the indexed `full_json` row is present, the source PNG stat still matches, and related derived inputs are still valid, the route can return that cached payload directly
+  - when the row is missing, stale, unreadable, or a linked dependency such as legacy world-info source data no longer matches, the route falls back to the existing file-backed parser and refreshes the row opportunistically
 - The new index does not replace the existing `DiskCache`.
   - `DiskCache` still accelerates PNG-to-JSON extraction through `readCharacterData()`
-  - the SQLite sidecar accelerates only the character-list path
+  - the SQLite sidecar accelerates the character-list path and safe single-character steady-state reads
 - The indexed fast path is optional at runtime.
   - when the active Node runtime exposes `node:sqlite`, EmberDesk enables the derived character index
   - when `node:sqlite` is unavailable, EmberDesk falls back to the previous filesystem-backed `/api/characters/all` path
@@ -57,6 +60,9 @@ The goal of this slice is narrow:
   - `shallow_json`
   - `source_mtime_ms`
   - `source_size`
+  - `source_world_name`
+  - `source_world_mtime_ms`
+  - `source_world_size`
   - `chat_stats_dirty`
 
 The module:
@@ -75,6 +81,51 @@ The module:
 - skips and cleans up corrupt payload rows instead of failing the entire request
 - sorts final rows in JavaScript with `Intl.Collator` instead of relying on SQLite `COLLATE NOCASE`
 
+### What is actually cached
+
+The SQLite sidecar caches per-character derived payloads for `POST /api/characters/all`.
+
+It is not just a tiny row index with avatar and title fields.
+
+Cached content in `characters`:
+
+- `full_json`
+  - the full object produced by `processCharacter(avatar, directories, { shallow: false })`
+  - includes the embedded `json_data` string extracted from the PNG card
+  - includes derived list-facing fields such as:
+    - `avatar`
+    - `chat`
+    - `fav`
+    - `tags`
+    - `date_added`
+    - `create_date`
+    - `date_last_chat`
+    - `chat_size`
+    - `data_size`
+- `shallow_json`
+  - the reduced object produced by `toShallow(fullPayload)`
+  - used when `performance.lazyLoadCharacters=true`
+- invalidation and refresh metadata
+  - `source_mtime_ms`
+  - `source_size`
+  - `source_world_name`
+  - `source_world_mtime_ms`
+  - `source_world_size`
+  - `chat_stats_dirty`
+
+What this slice does not cache in SQLite:
+
+- `POST /api/characters/get` as a new source of truth independent from the PNG file
+- chat message bodies
+- world info lists or entries
+- recent chats
+- general extension or settings state
+
+So the precise answer is:
+
+- by usage scope, mostly yes: this index exists for character-list responses and now also for safe single-character full-payload reuse
+- by stored content, no: it stores both the full `/api/characters/all` payload and the shallow payload for each character, not only a few visible list columns
+
 ### `/api/characters/all` fast path
 
 `src/endpoints/characters.js` now routes `POST /api/characters/all` through the index when runtime support exists.
@@ -85,11 +136,46 @@ Build source for each row:
 2. `toShallow(fullPayload)`
 3. source file stat (`mtimeMs`, `size`)
 
+The indexed response can therefore satisfy either existing list mode directly from cached derived JSON:
+
+- full mode returns cached `full_json`
+- lazy/shallow mode returns cached `shallow_json`
+
 Failure behavior:
 
 - if indexed read or rebuild fails, the route logs the failure and falls back to the previous filesystem scan
 - this keeps the page usable even when the derived DB is unavailable or corrupted
 - if the failure indicates a broken cached DB handle or missing structural state, the next indexed request can reopen and rebuild instead of staying stuck in permanent fallback
+
+### `/api/characters/get` index-first path
+
+`src/endpoints/characters.js` now routes `POST /api/characters/get` through a narrower safe reuse path:
+
+1. validate the avatar path
+2. confirm the PNG still exists
+3. read the current file stat once
+4. ask the index for a fresh `full_json` row for that exact avatar
+5. return the cached payload only when:
+   - the row exists
+   - `source_mtime_ms` matches the current PNG `mtime`
+   - `source_size` matches the current PNG size
+   - current chat-directory aggregates still match the cached `chat_size` and `date_last_chat`
+   - for legacy cards that derive `data.character_book` from an external world-info file, the cached row still matches the linked world file stat
+   - if that linked world file was already absent when the row was last rebuilt, the cached "no linked world book available" state is still reusable until the file reappears
+   - the cached payload parses successfully
+6. otherwise, fall back to `processCharacter(..., { shallow: false })`
+7. after a successful file-backed rebuild, re-stat the source PNG and refresh the indexed row opportunistically with the current file metadata
+
+This keeps the route file-authoritative:
+
+- missing files still return `404`
+- stale or corrupt rows never override the canonical PNG-backed read
+- out-of-band chat cleanup can still be reflected because `/get` recomputes chat aggregates before returning a cached row
+- legacy world-linked cards revalidate the linked world-info file before reusing cached `full_json`
+- when a previously linked world-info file is deleted, the first fallback rebuild updates the cached row to the new "world book unavailable" state so later steady-state reads do not keep reparsing the PNG unnecessarily
+- `/get` fallback writes index metadata from a fresh post-parse file stat so the cached row does not end up with "new payload, old stat" skew when the PNG changes mid-request
+- the index can speed up repeated steady-state full-character reads without becoming a second source of truth
+- only row-read / structural SQLite failures reset the cached DB handle; non-DB dependency failures such as world-file lookup problems degrade through fallback without wiping the whole derived index
 
 ### Mutation consistency
 
@@ -160,6 +246,6 @@ Stability-sensitive binding points:
 - Dirty chat-stat refresh now uses the cached JSON payloads instead of reparsing the source PNG again.
 - The feature keeps two distinct caches with different responsibilities:
   - `DiskCache` for PNG card extraction
-  - SQLite sidecar for precomputed list payloads
+  - SQLite sidecar for precomputed `/api/characters/all` payloads plus safe `/api/characters/get` full-payload reuse
 - Delete success avoids one extra `/api/characters/all` network roundtrip and one extra full list rebuild on the client.
 - Corrupt derived rows are pruned opportunistically so steady-state reads can self-heal instead of degrading the whole list path.
