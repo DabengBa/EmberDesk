@@ -72,6 +72,7 @@ import { checkForNewContent } from './endpoints/content-manager.js';
 import { init as settingsInit } from './endpoints/settings.js';
 import { redirectDeprecatedEndpoints, ServerStartup, setupPrivateEndpoints } from './server-startup.js';
 import { diskCache } from './endpoints/characters.js';
+import { disposeCharacterIndexDatabases } from './endpoints/character-index.js';
 import { migrateFlatSecrets } from './endpoints/secrets.js';
 import { migrateGroupChatsMetadataFormat } from './endpoints/groups.js';
 import { createServerStartupProfiler } from './server-startup-profiler.js';
@@ -325,6 +326,7 @@ async function preSetupTasks() {
             await cleanupPlugins();
         }
         diskCache.dispose();
+        disposeCharacterIndexDatabases();
         setWindowTitle(consoleTitle);
         process.exit();
     };

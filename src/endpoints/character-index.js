@@ -13,6 +13,83 @@ try {
 
 const SCHEMA_VERSION = 1;
 const DATABASES = new Map();
+const ROW_REFRESH_CONCURRENCY = 10;
+const CHARACTER_AVATAR_COLLATOR = new Intl.Collator(undefined, {
+    sensitivity: 'base',
+    numeric: false,
+});
+
+/**
+ * @param {{ chats?: string }} directories
+ * @param {string} avatar
+ * @returns {{ chatSize: number, dateLastChat: number }}
+ */
+function calculateCharacterChatStats(directories, avatar) {
+    let chatSize = 0;
+    let dateLastChat = 0;
+
+    if (!directories.chats) {
+        return { chatSize, dateLastChat };
+    }
+
+    const chatsDirectory = path.join(directories.chats, avatar.replace(/\.png$/i, ''));
+    if (!fs.existsSync(chatsDirectory)) {
+        return { chatSize, dateLastChat };
+    }
+
+    for (const chat of fs.readdirSync(chatsDirectory)) {
+        const chatStat = fs.statSync(path.join(chatsDirectory, chat));
+        chatSize += chatStat.size;
+        dateLastChat = Math.max(dateLastChat, chatStat.mtimeMs);
+    }
+
+    return { chatSize, dateLastChat };
+}
+
+/**
+ * @param {string} userRoot
+ * @param {{ chats?: string }} directories
+ * @param {string} avatar
+ * @returns {void}
+ */
+function refreshCharacterChatStatsRow(userRoot, directories, avatar) {
+    const db = openCharacterIndexDatabase(userRoot);
+    if (!db) {
+        return;
+    }
+
+    try {
+        const row = db.prepare('SELECT full_json, shallow_json FROM characters WHERE avatar = ?').get(avatar);
+        if (!row) {
+            return;
+        }
+
+        const fullPayload = JSON.parse(row.full_json);
+        const shallowPayload = JSON.parse(row.shallow_json);
+        const { chatSize, dateLastChat } = calculateCharacterChatStats(directories, avatar);
+
+        fullPayload.chat_size = chatSize;
+        fullPayload.date_last_chat = dateLastChat;
+        shallowPayload.chat_size = chatSize;
+        shallowPayload.date_last_chat = dateLastChat;
+
+        db.prepare(`
+            UPDATE characters
+            SET
+                full_json = ?,
+                shallow_json = ?,
+                chat_stats_dirty = 0
+            WHERE avatar = ?
+        `).run(
+            JSON.stringify(fullPayload),
+            JSON.stringify(shallowPayload),
+            avatar,
+        );
+    } catch (error) {
+        resetCharacterIndexDatabase(userRoot);
+        throw error;
+    }
+}
 
 /**
  * @returns {boolean}
@@ -62,14 +139,33 @@ function openCharacterIndexDatabase(userRoot) {
         );
     `);
 
-    const currentVersion = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get()?.value;
+    const currentVersion = db.prepare('SELECT value FROM meta WHERE key = \'schema_version\'').get()?.value;
     if (Number(currentVersion) !== SCHEMA_VERSION) {
         db.prepare('DELETE FROM characters').run();
-        db.prepare(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', ?)`).run(String(SCHEMA_VERSION));
+        db.prepare('INSERT OR REPLACE INTO meta (key, value) VALUES (\'schema_version\', ?)').run(String(SCHEMA_VERSION));
     }
 
     DATABASES.set(userRoot, db);
     return db;
+}
+
+/**
+ * @param {string} userRoot
+ * @returns {void}
+ */
+export function resetCharacterIndexDatabase(userRoot) {
+    const db = DATABASES.get(userRoot);
+    if (!db) {
+        return;
+    }
+
+    try {
+        db.close();
+    } catch {
+        // Ignore close failures while recovering a broken index.
+    }
+
+    DATABASES.delete(userRoot);
 }
 
 /**
@@ -82,7 +178,12 @@ export function markCharacterChatStatsDirty(userRoot, avatar) {
     if (!db) {
         return;
     }
-    db.prepare('UPDATE characters SET chat_stats_dirty = 1 WHERE avatar = ?').run(avatar);
+    try {
+        db.prepare('UPDATE characters SET chat_stats_dirty = 1 WHERE avatar = ?').run(avatar);
+    } catch (error) {
+        resetCharacterIndexDatabase(userRoot);
+        throw error;
+    }
 }
 
 /**
@@ -95,7 +196,12 @@ export function deleteCharacterIndexEntry(userRoot, avatar) {
     if (!db) {
         return;
     }
-    db.prepare('DELETE FROM characters WHERE avatar = ?').run(avatar);
+    try {
+        db.prepare('DELETE FROM characters WHERE avatar = ?').run(avatar);
+    } catch (error) {
+        resetCharacterIndexDatabase(userRoot);
+        throw error;
+    }
 }
 
 /**
@@ -103,7 +209,11 @@ export function deleteCharacterIndexEntry(userRoot, avatar) {
  */
 export function disposeCharacterIndexDatabases() {
     for (const db of DATABASES.values()) {
-        db.close();
+        try {
+            db.close();
+        } catch {
+            // Ignore shutdown close failures.
+        }
     }
     DATABASES.clear();
 }
@@ -124,37 +234,42 @@ export function upsertCharacterIndexEntry(userRoot, avatar, row) {
     if (!db) {
         return;
     }
-    db.prepare(`
-        INSERT INTO characters (
+    try {
+        db.prepare(`
+            INSERT INTO characters (
+                avatar,
+                full_json,
+                shallow_json,
+                source_mtime_ms,
+                source_size,
+                chat_stats_dirty
+            ) VALUES (?, ?, ?, ?, ?, 0)
+            ON CONFLICT(avatar) DO UPDATE SET
+                full_json = excluded.full_json,
+                shallow_json = excluded.shallow_json,
+                source_mtime_ms = excluded.source_mtime_ms,
+                source_size = excluded.source_size,
+                chat_stats_dirty = 0
+        `).run(
             avatar,
-            full_json,
-            shallow_json,
-            source_mtime_ms,
-            source_size,
-            chat_stats_dirty
-        ) VALUES (?, ?, ?, ?, ?, 0)
-        ON CONFLICT(avatar) DO UPDATE SET
-            full_json = excluded.full_json,
-            shallow_json = excluded.shallow_json,
-            source_mtime_ms = excluded.source_mtime_ms,
-            source_size = excluded.source_size,
-            chat_stats_dirty = 0
-    `).run(
-        avatar,
-        JSON.stringify(row.fullPayload),
-        JSON.stringify(row.shallowPayload),
-        row.sourceMtimeMs,
-        row.sourceSize,
-    );
+            JSON.stringify(row.fullPayload),
+            JSON.stringify(row.shallowPayload),
+            row.sourceMtimeMs,
+            row.sourceSize,
+        );
+    } catch (error) {
+        resetCharacterIndexDatabase(userRoot);
+        throw error;
+    }
 }
 
 /**
  * @param {{
  *   userRoot: string,
- *   directories: { characters: string },
+ *   directories: { characters: string, chats?: string },
  *   avatarFiles: string[],
  *   useShallowPayload: boolean,
- *   buildRow: (avatar: string, directories: { characters: string }) => Promise<{
+ *   buildRow: (avatar: string, directories: { characters: string, chats?: string }) => Promise<{
  *     avatar: string,
  *     fullPayload: object,
  *     shallowPayload: object,
@@ -175,36 +290,100 @@ export async function listIndexedCharacterPayloads({
     if (!db) {
         return [];
     }
-    const existingRows = new Map(
-        db.prepare('SELECT avatar, source_mtime_ms, source_size, chat_stats_dirty, full_json, shallow_json FROM characters').all()
-            .map(row => [row.avatar, row]),
-    );
-    const avatarSet = new Set(avatarFiles);
-
-    for (const avatar of avatarFiles) {
-        const filePath = path.join(directories.characters, avatar);
-        const stat = fs.statSync(filePath);
-        const existingRow = existingRows.get(avatar);
-        const needsRefresh = !existingRow
-            || Number(existingRow.source_mtime_ms) !== Number(stat.mtimeMs)
-            || Number(existingRow.source_size) !== Number(stat.size)
-            || Number(existingRow.chat_stats_dirty) === 1;
-
-        if (!needsRefresh) {
-            continue;
-        }
-
-        const row = await buildRow(avatar, directories);
-        upsertCharacterIndexEntry(userRoot, avatar, row);
-    }
-
-    for (const avatar of existingRows.keys()) {
-        if (!avatarSet.has(avatar)) {
-            deleteCharacterIndexEntry(userRoot, avatar);
-        }
-    }
-
     const payloadColumn = useShallowPayload ? 'shallow_json' : 'full_json';
-    const rows = db.prepare(`SELECT avatar, ${payloadColumn} AS payload FROM characters ORDER BY avatar COLLATE NOCASE ASC`).all();
-    return rows.map(row => JSON.parse(row.payload));
+    try {
+        const existingRows = new Map(
+            db.prepare('SELECT avatar, source_mtime_ms, source_size, chat_stats_dirty FROM characters').all()
+                .map(row => [row.avatar, row]),
+        );
+        const avatarSet = new Set(avatarFiles);
+        const avatarsToRefresh = [];
+        const avatarsToRefreshChatStats = [];
+
+        for (const avatar of avatarFiles) {
+            const filePath = path.join(directories.characters, avatar);
+            let stat;
+
+            try {
+                stat = fs.statSync(filePath);
+            } catch (error) {
+                if (error?.code === 'ENOENT') {
+                    try {
+                        deleteCharacterIndexEntry(userRoot, avatar);
+                    } catch (deleteError) {
+                        console.warn(`Character index delete skipped for missing avatar ${avatar}:`, deleteError);
+                    }
+                }
+                console.warn(`Character index refresh skipped for ${avatar}:`, error);
+                continue;
+            }
+
+            const existingRow = existingRows.get(avatar);
+            if (!existingRow
+                || Number(existingRow.source_mtime_ms) !== Number(stat.mtimeMs)
+                || Number(existingRow.source_size) !== Number(stat.size)) {
+                avatarsToRefresh.push(avatar);
+                continue;
+            }
+
+            if (Number(existingRow.chat_stats_dirty) === 1) {
+                avatarsToRefreshChatStats.push(avatar);
+            }
+        }
+
+        for (let index = 0; index < avatarsToRefreshChatStats.length; index += ROW_REFRESH_CONCURRENCY) {
+            const batch = avatarsToRefreshChatStats.slice(index, index + ROW_REFRESH_CONCURRENCY);
+            const results = await Promise.allSettled(batch.map(async (avatar) => {
+                refreshCharacterChatStatsRow(userRoot, directories, avatar);
+            }));
+
+            for (let i = 0; i < results.length; i++) {
+                if (results[i].status === 'rejected') {
+                    console.warn(`Character index chat-stat refresh skipped for ${batch[i]}:`, results[i].reason);
+                }
+            }
+        }
+
+        for (let index = 0; index < avatarsToRefresh.length; index += ROW_REFRESH_CONCURRENCY) {
+            const batch = avatarsToRefresh.slice(index, index + ROW_REFRESH_CONCURRENCY);
+            const results = await Promise.allSettled(batch.map(async (avatar) => {
+                const row = await buildRow(avatar, directories);
+                upsertCharacterIndexEntry(userRoot, avatar, row);
+            }));
+
+            for (let i = 0; i < results.length; i++) {
+                if (results[i].status === 'rejected') {
+                    console.warn(`Character index refresh skipped for ${batch[i]}:`, results[i].reason);
+                }
+            }
+        }
+
+        for (const avatar of existingRows.keys()) {
+            if (!avatarSet.has(avatar)) {
+                deleteCharacterIndexEntry(userRoot, avatar);
+            }
+        }
+
+        const rows = db.prepare(`SELECT avatar, ${payloadColumn} AS payload FROM characters`).all();
+        rows.sort((left, right) => CHARACTER_AVATAR_COLLATOR.compare(left.avatar, right.avatar));
+
+        const payloads = [];
+        for (const row of rows) {
+            try {
+                payloads.push(JSON.parse(row.payload));
+            } catch (error) {
+                console.warn(`Character index payload skipped for ${row.avatar}:`, error);
+                try {
+                    deleteCharacterIndexEntry(userRoot, row.avatar);
+                } catch (deleteError) {
+                    console.warn(`Character index cleanup skipped for ${row.avatar}:`, deleteError);
+                }
+            }
+        }
+
+        return payloads;
+    } catch (error) {
+        resetCharacterIndexDatabase(userRoot);
+        throw error;
+    }
 }

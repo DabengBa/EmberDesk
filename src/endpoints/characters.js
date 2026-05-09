@@ -32,6 +32,8 @@ import {
     upsertCharacterIndexEntry,
 } from './character-index.js';
 
+const CHARACTER_INDEX_REFRESH_CONCURRENCY = 10;
+
 // With 100 MB limit it would take roughly 3000 characters to reach this limit
 const memoryCacheCapacity = getConfigValue('performance.memoryCacheCapacity', '100mb');
 const memoryCache = new MemoryLimitedMap(memoryCacheCapacity);
@@ -516,10 +518,14 @@ async function refreshCharacterIndexEntriesSafe(directories, avatars, operation)
         return;
     }
 
-    const results = await Promise.allSettled(uniqueAvatars.map(avatar => refreshCharacterIndexEntry(directories, avatar)));
-    for (let index = 0; index < results.length; index++) {
-        if (results[index].status === 'rejected') {
-            console.warn(`Character index refresh skipped after ${operation} for ${uniqueAvatars[index]}:`, results[index].reason);
+    for (let index = 0; index < uniqueAvatars.length; index += CHARACTER_INDEX_REFRESH_CONCURRENCY) {
+        const batch = uniqueAvatars.slice(index, index + CHARACTER_INDEX_REFRESH_CONCURRENCY);
+        const results = await Promise.allSettled(batch.map(avatar => refreshCharacterIndexEntry(directories, avatar)));
+
+        for (let batchIndex = 0; batchIndex < results.length; batchIndex++) {
+            if (results[batchIndex].status === 'rejected') {
+                console.warn(`Character index refresh skipped after ${operation} for ${batch[batchIndex]}:`, results[batchIndex].reason);
+            }
         }
     }
 }
@@ -1732,7 +1738,8 @@ router.post('/import', async function (request, response) {
             invalidateThumbnail(request.user.directories, 'avatar', `${preservedFileName}.png`);
         }
 
-        await refreshCharacterIndexEntrySafe(request.user.directories, fileName, 'import');
+        const avatarName = fileName.endsWith('.png') ? fileName : `${fileName}.png`;
+        await refreshCharacterIndexEntrySafe(request.user.directories, avatarName, 'import');
         response.send({ file_name: fileName });
     } catch (err) {
         console.error(err);

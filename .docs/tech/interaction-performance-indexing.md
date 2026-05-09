@@ -17,6 +17,7 @@ The goal of this slice is narrow:
 - avoid reparsing every character PNG and rescanning every chat directory on each `POST /api/characters/all`
 - keep canonical character and chat files on disk
 - reduce the visible lag after character deletion by removing the success-path full character-list refetch
+- keep the indexed fast path self-healing when derived rows or SQLite state become inconsistent
 
 ## Architecture And Constraints
 
@@ -38,6 +39,9 @@ The goal of this slice is narrow:
 - Chat save stays lightweight.
   - chat mutations mark character chat aggregates dirty
   - they do not rebuild the full indexed row on every save
+- Derived index failures should degrade safely.
+  - one corrupt indexed row must not break the whole character list
+  - structural DB failures should reset the cached connection so the next request can rebuild derived state
 
 ## Core Implementation
 
@@ -59,12 +63,17 @@ The module:
 
 - feature-detects `node:sqlite`
 - opens one cached `DatabaseSync` handle per user root
+- closes cached handles during server shutdown
+- resets cached handles when structural index operations fail
 - recreates derived rows when:
   - the row is missing
   - the source PNG `mtime` changes
   - the source PNG size changes
-  - `chat_stats_dirty=1`
+  - the row must be fully rebuilt for another source-of-truth reason
+- recomputes `chat_size` and `date_last_chat` in-place when `chat_stats_dirty=1`
 - removes rows whose source avatar files no longer exist
+- skips and cleans up corrupt payload rows instead of failing the entire request
+- sorts final rows in JavaScript with `Intl.Collator` instead of relying on SQLite `COLLATE NOCASE`
 
 ### `/api/characters/all` fast path
 
@@ -80,6 +89,7 @@ Failure behavior:
 
 - if indexed read or rebuild fails, the route logs the failure and falls back to the previous filesystem scan
 - this keeps the page usable even when the derived DB is unavailable or corrupted
+- if the failure indicates a broken cached DB handle or missing structural state, the next indexed request can reopen and rebuild instead of staying stuck in permanent fallback
 
 ### Mutation consistency
 
@@ -97,6 +107,8 @@ Character mutations in `src/endpoints/characters.js` now refresh or delete index
 
 Bulk `merge-attributes` refreshes all successfully updated avatars after the batch finishes.
 
+Bulk refreshes now run with a bounded concurrency limit so derived-row rebuild pressure stays aligned with the surrounding bulk-update path.
+
 Character-chat mutations in `src/endpoints/chats.js` now mark chat-derived aggregates dirty after successful:
 
 - save
@@ -105,6 +117,8 @@ Character-chat mutations in `src/endpoints/chats.js` now mark chat-derived aggre
 - import
 
 This keeps `chat_size` and `date_last_chat` accurate on the next list read without making autosave synchronous-and-heavy.
+
+Import now normalizes the avatar name before refreshing the derived row, so imported cards consistently update the index even when the internal file name comes back without `.png`.
 
 ### Delete-flow UI update
 
@@ -120,7 +134,12 @@ This preserves the existing chat reset semantics while avoiding a second full ch
 
 ## Related Semantic IDs And Code Binding Points
 
-This repo does not currently maintain a semantic product-doc DB for this feature surface.
+Relevant semantic docs now live in `.docs/db/`:
+
+- `page.chat_workspace`
+- `feature.character_library_panel`
+- `feature.character_delete`
+- `term.character_card`
 
 Stability-sensitive binding points:
 
@@ -138,7 +157,9 @@ Stability-sensitive binding points:
 
 - Steady-state character-list reads no longer require one `processCharacter()` call per avatar when the runtime index is available and rows are clean.
 - Chat-directory aggregate recomputation is deferred until the next character-list read after a relevant chat mutation.
+- Dirty chat-stat refresh now uses the cached JSON payloads instead of reparsing the source PNG again.
 - The feature keeps two distinct caches with different responsibilities:
   - `DiskCache` for PNG card extraction
   - SQLite sidecar for precomputed list payloads
 - Delete success avoids one extra `/api/characters/all` network roundtrip and one extra full list rebuild on the client.
+- Corrupt derived rows are pruned opportunistically so steady-state reads can self-heal instead of degrading the whole list path.

@@ -22,7 +22,7 @@ import {
     readFirstLine,
     isPathUnderParent,
 } from '../util.js';
-import { markCharacterChatStatsDirty } from './character-index.js';
+import { isCharacterIndexSupported, markCharacterChatStatsDirty } from './character-index.js';
 
 const isBackupEnabled = !!getConfigValue('backups.chat.enabled', true, 'boolean');
 const maxTotalChatBackups = Number(getConfigValue('backups.chat.maxTotalBackups', -1, 'number'));
@@ -38,7 +38,7 @@ export const CHAT_BACKUPS_PREFIX = 'chat_';
  * @returns {void}
  */
 function markCharacterChatStatsDirtySafe(directories, avatar, operation) {
-    if (!avatar) {
+    if (!avatar || !isCharacterIndexSupported()) {
         return;
     }
 

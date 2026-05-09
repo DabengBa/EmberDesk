@@ -15,13 +15,15 @@ import { removeCharactersFromState } from '../public/scripts/character-list-stat
 
 /**
  * @param {string} prefix
- * @returns {{root: string, characters: string}}
+ * @returns {{root: string, characters: string, chats: string}}
  */
 function makeDirectories(prefix) {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
     const characters = path.join(root, 'characters');
+    const chats = path.join(root, 'chats');
     fs.mkdirSync(characters, { recursive: true });
-    return { root, characters };
+    fs.mkdirSync(chats, { recursive: true });
+    return { root, characters, chats };
 }
 
 /**
@@ -31,6 +33,18 @@ function makeDirectories(prefix) {
  */
 function writeAvatarFile(directories, avatar, contents = 'avatar') {
     fs.writeFileSync(path.join(directories.characters, avatar), contents, 'utf8');
+}
+
+/**
+ * @param {string} root
+ * @param {string} avatar
+ * @param {string} fileName
+ * @param {string} contents
+ */
+function writeChatFile(root, avatar, fileName, contents) {
+    const chatDirectory = path.join(root, 'chats', path.parse(avatar).name);
+    fs.mkdirSync(chatDirectory, { recursive: true });
+    fs.writeFileSync(path.join(chatDirectory, fileName), contents, 'utf8');
 }
 
 /**
@@ -124,6 +138,15 @@ function createBuildRow(buildLog, options = {}) {
     };
 }
 
+/**
+ * @param {string} userRoot
+ * @returns {Promise<import('node:sqlite').DatabaseSync>}
+ */
+async function openRawIndexDatabase(userRoot) {
+    const { DatabaseSync } = await import('node:sqlite');
+    return new DatabaseSync(getCharacterIndexPath(userRoot));
+}
+
 const tempRoots = [];
 
 afterEach(() => {
@@ -183,6 +206,8 @@ describe('character index', () => {
         tempRoots.push(directories.root);
         writeAvatarFile(directories, 'alpha.png', 'alpha');
         writeAvatarFile(directories, 'beta.png', 'beta');
+        writeChatFile(directories.root, 'alpha.png', 'alpha.jsonl', 'hello');
+        writeChatFile(directories.root, 'beta.png', 'beta.jsonl', 'hello');
 
         const avatarFiles = ['alpha.png', 'beta.png'];
         await listIndexedCharacterPayloads({
@@ -204,9 +229,119 @@ describe('character index', () => {
             buildRow: createBuildRow(refreshLog, { fullNamePrefix: 'Refreshed', shallowNamePrefix: 'Refreshed' }),
         });
 
-        expect(refreshLog).toEqual(['beta.png']);
+        expect(refreshLog).toEqual([]);
         expect(refreshedRows.find(row => row.avatar === 'beta.png')).toEqual(expect.objectContaining({
-            name: 'Refreshed beta',
+            name: 'Full beta',
+            chat_size: 5,
+        }));
+    });
+
+    test('skips a corrupt cached row instead of failing the whole character list', async () => {
+        const directories = makeDirectories('emberdesk-character-index-');
+        tempRoots.push(directories.root);
+        writeAvatarFile(directories, 'alpha.png', 'alpha');
+        writeAvatarFile(directories, 'beta.png', 'beta');
+
+        const avatarFiles = ['alpha.png', 'beta.png'];
+        await listIndexedCharacterPayloads({
+            userRoot: directories.root,
+            directories,
+            avatarFiles,
+            useShallowPayload: false,
+            buildRow: createBuildRow([]),
+        });
+
+        const database = await openRawIndexDatabase(directories.root);
+        try {
+            database.prepare('UPDATE characters SET full_json = ? WHERE avatar = ?').run('not-json', 'beta.png');
+        } finally {
+            database.close();
+        }
+
+        const rows = await listIndexedCharacterPayloads({
+            userRoot: directories.root,
+            directories,
+            avatarFiles,
+            useShallowPayload: false,
+            buildRow: createBuildRow([]),
+        });
+
+        expect(rows.map(row => row.avatar)).toEqual(['alpha.png']);
+
+        const verificationDb = await openRawIndexDatabase(directories.root);
+        try {
+            expect(verificationDb.prepare('SELECT avatar FROM characters WHERE avatar = ?').get('beta.png')).toBeUndefined();
+        } finally {
+            verificationDb.close();
+        }
+    });
+
+    test('drops an index row when the avatar disappears between directory scan and stat', async () => {
+        const directories = makeDirectories('emberdesk-character-index-');
+        tempRoots.push(directories.root);
+        writeAvatarFile(directories, 'alpha.png', 'alpha');
+        writeAvatarFile(directories, 'beta.png', 'beta');
+
+        await listIndexedCharacterPayloads({
+            userRoot: directories.root,
+            directories,
+            avatarFiles: ['alpha.png', 'beta.png'],
+            useShallowPayload: false,
+            buildRow: createBuildRow([]),
+        });
+
+        fs.unlinkSync(path.join(directories.characters, 'beta.png'));
+
+        const rows = await listIndexedCharacterPayloads({
+            userRoot: directories.root,
+            directories,
+            avatarFiles: ['alpha.png', 'beta.png'],
+            useShallowPayload: false,
+            buildRow: createBuildRow([]),
+        });
+
+        expect(rows.map(row => row.avatar)).toEqual(['alpha.png']);
+    });
+
+    test('resets a broken cached database so the next request can rebuild it', async () => {
+        const directories = makeDirectories('emberdesk-character-index-');
+        tempRoots.push(directories.root);
+        writeAvatarFile(directories, 'alpha.png', 'alpha');
+
+        await listIndexedCharacterPayloads({
+            userRoot: directories.root,
+            directories,
+            avatarFiles: ['alpha.png'],
+            useShallowPayload: false,
+            buildRow: createBuildRow([]),
+        });
+
+        const database = await openRawIndexDatabase(directories.root);
+        try {
+            database.exec('DROP TABLE characters;');
+        } finally {
+            database.close();
+        }
+
+        await expect(listIndexedCharacterPayloads({
+            userRoot: directories.root,
+            directories,
+            avatarFiles: ['alpha.png'],
+            useShallowPayload: false,
+            buildRow: createBuildRow([]),
+        })).rejects.toThrow();
+
+        const rows = await listIndexedCharacterPayloads({
+            userRoot: directories.root,
+            directories,
+            avatarFiles: ['alpha.png'],
+            useShallowPayload: false,
+            buildRow: createBuildRow([]),
+        });
+
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toEqual(expect.objectContaining({
+            avatar: 'alpha.png',
         }));
     });
 

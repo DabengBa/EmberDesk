@@ -51,9 +51,9 @@ Post-ready work is scheduled through single-flight tasks from `public/scripts/st
 - `deferred.getBackgrounds`
 - `deferred.loadExtensionSettings`
 
-`public/scripts/backgrounds.js` uses a single-flight catalog loader so startup warmup, panel-open reads, and explicit refreshes do not duplicate the same request.
+`public/scripts/backgrounds.js` uses a single-flight catalog loader so startup warmup, panel-open reads, and explicit refreshes do not duplicate the same request. If a refresh is requested while the current load is still in flight, the refresh queues one more run after the active request finishes.
 
-`public/scripts/extensions.js` exposes a deferred loader hook so the extensions UI can show a local placeholder and wait for the same in-flight activation task before opening details.
+`public/scripts/extensions.js` exposes a deferred loader hook so the extensions UI can show a local placeholder and wait for the same in-flight activation task before opening details. When deferred loading fails, the placeholder switches to a retry state instead of leaving a permanent spinner behind.
 
 ### Loader exit behavior
 
@@ -71,12 +71,18 @@ This allows the first overlay to stop consuming a fixed chunk of `APP_READY` bud
 - waits for spawned servers before navigation in local mode
 - supports direct URL sampling for already-running services
 - waits briefly for deferred startup stages so the report captures post-ready work
+- kills the spawned server with `SIGKILL` if shutdown does not complete in time
 
-`src/server-startup-profiler.js` and `src/performance-report.js` remain the stable server/profile summary surfaces.
+`src/server-startup-profiler.js` now records failure stacks alongside the error message, and `src/performance-report.js` remains the stable server/profile summary surface.
 
 ## Related Semantic IDs And Code Binding Points
 
-This repo does not currently use bound semantic Doc IDs for this feature.
+Relevant semantic docs now live in `.docs/db/`:
+
+- `page.chat_workspace`
+- `feature.startup_bootstrap`
+- `feature.background_library_panel`
+- `feature.extension_panel_open`
 
 Stability-sensitive binding points:
 
@@ -89,5 +95,5 @@ Stability-sensitive binding points:
 ## Performance And Caching
 
 - Deferred tasks use single-flight caching to prevent duplicate warmup requests during startup.
-- Background refresh paths can explicitly bypass the cached startup result with force refresh.
+- Background refresh paths can queue a follow-up refresh after the current load completes.
 - Existing-server reports should be compared with the same profile, URL, and machine because startup is sensitive to browser cache and content state.

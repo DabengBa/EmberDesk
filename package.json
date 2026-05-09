@@ -120,6 +120,8 @@
         "init": "node src/server-init.js",
         "start": "node server.js",
         "debug": "node --inspect server.js",
+        "docs:check": "node .docs/db/scripts/doc-compiler.js check",
+        "docs:build": "node .docs/db/scripts/doc-compiler.js build",
         "perf:startup": "node scripts/startup-performance-runner.mjs",
         "start:global": "node server.js --global",
         "start:electron": "cd ./src/electron && npm run start",

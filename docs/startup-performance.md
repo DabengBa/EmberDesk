@@ -65,20 +65,37 @@ The optimized browser startup path now follows three buckets:
 - `On Demand / Refresh`
   Includes panel-driven re-fetches such as background refresh after upload or settings changes.
 
-Background and extension warmup use single-flight behavior, so opening the panel during deferred startup reuses the same in-flight work instead of duplicating requests.
+Background and extension warmup use single-flight behavior, so opening the panel during deferred startup reuses the same in-flight work instead of duplicating requests. A forced background refresh now queues one more fetch after the active load if startup warmup is still in flight.
 
-## Reference Sample
+If deferred extension loading fails, the startup placeholder switches to an explicit retry state instead of leaving a permanent loading spinner in the extensions area.
 
-From the latest existing-server sample on `2026-05-08`:
+## Reference Samples
+
+For the daily-use scenario, keep the existing-server sample as the primary regression reference.
+
+Latest `existing_server_browser_only` sample on `2026-05-08`:
 
 - `navigationToAppReadyMs`: `977.0 ms`
+- `navigationToLoadMs`: `411.4 ms`
 - `appInitAfterLoadMs`: `565.6 ms`
-- `getSettings.fetch`: `23.4 ms`
-- `getSettings.applyCore`: `149.2 ms`
-- `hideInitLoader`: `6.6 ms`
+- `totalBlockingTimeMs`: `281 ms`
 
 Reference artifact:
 
 - `artifacts/startup-performance/2026-05-08T11-16-43-642Z/report.md`
 
-This sample is a regression reference, not a universal SLA.
+Latest `spawn_local_server` sample on `2026-05-09`:
+
+- `serverReadyMs`: `10784.9 ms`
+- `navigationToAppReadyMs`: `1011.7 ms`
+- `navigationToLoadMs`: `345.3 ms`
+- `appInitAfterLoadMs`: `666.4 ms`
+- `getSettings.fetch`: `47.7 ms`
+- `getSettings.applyCore`: `133.3 ms`
+- `hideInitLoader`: `5.7 ms`
+
+Reference artifact:
+
+- `artifacts/startup-performance/2026-05-09T01-22-30-074Z/report.md`
+
+These samples are regression references, not universal SLAs.
