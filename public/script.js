@@ -289,12 +289,34 @@ import { onboardingExperimentalMacroEngine } from './scripts/macros/engine/Macro
 import { compressRequest, setRequestCompressionConfig } from './scripts/request-compression.js';
 import { canJumpToSwipeForMessage, canOpenSwipePickerForMessage, initSwipePicker } from './scripts/swipe-picker.js';
 import { removeCharactersFromState } from './scripts/character-list-state.js';
+import { runDeleteCharacterClosePreflight } from './scripts/delete-character-preflight.js';
 
 // API OBJECT FOR EXTERNAL WIRING
 globalThis.SillyTavern = {
     libs,
     getContext,
 };
+
+if (globalThis.location?.pathname === '/' && globalThis.location?.search.includes('emberdesk_perf_hooks=1')) {
+    globalThis.__emberDeskPerf = {
+        deleteCharacter,
+        getPastCharacterChats,
+        printCharacters,
+    };
+}
+
+function getPerfInteractionTrace() {
+    return globalThis.__emberDeskPerf?.interactionTrace ?? null;
+}
+
+function markPerfInteractionMetric(name, value) {
+    const trace = getPerfInteractionTrace();
+    if (!trace || typeof value !== 'number' || !Number.isFinite(value)) {
+        return;
+    }
+
+    trace.metrics[name] = Math.round(value * 100) / 100;
+}
 
 const startupProfile = globalThis.__emberDeskStartup ??= {
     stages: [],
@@ -10862,6 +10884,37 @@ export async function closeCurrentChat() {
     }
 }
 
+async function closeCurrentChatForDelete() {
+    return await runDeleteCharacterClosePreflight({
+        isGenerationInProgress: () => is_send_press !== false,
+        onGenerationBlocked: () => {
+            toastr.info(t`Please stop the message generation first.`);
+        },
+        waitForPendingChatSave: async () => {
+            await waitUntilCondition(() => !isChatSaving, debounce_timeout.extended, 10);
+        },
+        clearCurrentChat: async () => {
+            await clearChat({ clearData: true });
+        },
+        resetSelectedGroup: () => {
+            resetSelectedGroup();
+        },
+        resetSelectionState: () => {
+            setCharacterId(undefined);
+            setCharacterName('');
+            setActiveCharacter(null);
+            setActiveGroup(null);
+            this_edit_mes_id = undefined;
+            chat_metadata = {};
+            selected_button = 'characters';
+        },
+        selectCharactersView: () => {
+            $('#rm_button_selected_ch').children('h2').text('');
+            select_rm_characters();
+        },
+    });
+}
+
 /**
  * Forces the update of the chat name for a remote character.
  * @param {string|number} characterId Character ID to update chat name for
@@ -10923,6 +10976,7 @@ export async function handleDeleteCharacter(this_chid, delete_chats) {
  * @return {Promise<boolean>} - A promise that resolves when the character is successfully deleted
  */
 export async function deleteCharacter(characterKey, { deleteChats = true } = {}) {
+    const deleteFlowStartedAt = performance.now();
     if (!Array.isArray(characterKey)) {
         characterKey = [characterKey];
     }
@@ -10938,7 +10992,7 @@ export async function deleteCharacter(characterKey, { deleteChats = true } = {})
         }
     }
 
-    const closeChatResult = await closeCurrentChat();
+    const closeChatResult = await closeCurrentChatForDelete();
     if (!closeChatResult) {
         return false;
     }
@@ -10954,16 +11008,20 @@ export async function deleteCharacter(characterKey, { deleteChats = true } = {})
         }
 
         const chid = characters.indexOf(character);
+        const chatLookupStartedAt = performance.now();
         const pastChats = await getPastCharacterChats(chid);
+        markPerfInteractionMetric('preDeleteChatLookupMs', performance.now() - chatLookupStartedAt);
 
         const msg = { avatar_url: character.avatar, delete_chats: deleteChats };
 
+        const deleteRequestStartedAt = performance.now();
         const response = await fetch('/api/characters/delete', {
             method: 'POST',
             headers: getRequestHeaders(),
             body: JSON.stringify(msg),
             cache: 'no-cache',
         });
+        markPerfInteractionMetric('deleteRequestMs', performance.now() - deleteRequestStartedAt);
 
         if (!response.ok) {
             toastr.error(`${response.status} ${response.statusText}`, t`Failed to delete character`);
@@ -10989,6 +11047,7 @@ export async function deleteCharacter(characterKey, { deleteChats = true } = {})
     }
 
     await removeCharacterFromUI(deletedAvatars);
+    markPerfInteractionMetric('deleteFlowMs', performance.now() - deleteFlowStartedAt);
     return deleted;
 }
 
@@ -11000,6 +11059,7 @@ export async function deleteCharacter(characterKey, { deleteChats = true } = {})
  * It also ensures to save the settings after all the operations.
  */
 async function removeCharacterFromUI(deletedAvatars = []) {
+    const refreshStartedAt = performance.now();
     preserveNeutralChat();
     await clearChat();
     $('#character_cross').trigger('click');
@@ -11007,11 +11067,16 @@ async function removeCharacterFromUI(deletedAvatars = []) {
     $(document.getElementById('rm_button_selected_ch')).children('h2').text('');
     restoreNeutralChat();
     removeCharactersFromState(characters, deletedAvatars);
+    const groupsRefreshStartedAt = performance.now();
     await getGroups();
+    markPerfInteractionMetric('groupsRefreshMs', performance.now() - groupsRefreshStartedAt);
+    const printCharactersStartedAt = performance.now();
     await printCharacters(true);
+    markPerfInteractionMetric('characterPrintMs', performance.now() - printCharactersStartedAt);
     await printMessages();
     saveSettingsDebounced();
     await eventSource.emit(event_types.CHAT_CHANGED, getCurrentChatId());
+    markPerfInteractionMetric('removeCharacterFromUIMs', performance.now() - refreshStartedAt);
 }
 
 /**

@@ -9,8 +9,11 @@ Primary files:
 - `src/endpoints/character-index.js`
 - `src/endpoints/characters.js`
 - `src/endpoints/chats.js`
+- `src/interaction-performance-report.js`
 - `public/script.js`
 - `public/scripts/character-list-state.js`
+- `public/perf-harness.html`
+- `scripts/interaction-performance-runner.mjs`
 
 The goal of this slice is narrow:
 
@@ -19,6 +22,7 @@ The goal of this slice is narrow:
 - keep canonical character and chat files on disk
 - reduce the visible lag after character deletion by removing the success-path full character-list refetch
 - keep the indexed fast path self-healing when derived rows or SQLite state become inconsistent
+- add a reproducible local A/B runner that can prove whether the current SQLite slice is helping enough to justify its maintenance cost
 
 ## Architecture And Constraints
 
@@ -39,6 +43,10 @@ The goal of this slice is narrow:
 - The indexed fast path is optional at runtime.
   - when the active Node runtime exposes `node:sqlite`, EmberDesk enables the derived character index
   - when `node:sqlite` is unavailable, EmberDesk falls back to the previous filesystem-backed `/api/characters/all` path
+- Benchmarking must compare both paths in the same runtime.
+  - the measurement runner uses `EMBERDESK_CHARACTER_INDEX_MODE=force_on|force_off`
+  - `force_off` disables the SQLite fast path without changing the Node build
+  - `force_on` still requires actual `node:sqlite` support; it is not a fake mock path
 - Chat save stays lightweight.
   - chat mutations mark character chat aggregates dirty
   - they do not rebuild the full indexed row on every save
@@ -146,6 +154,10 @@ Failure behavior:
 - if indexed read or rebuild fails, the route logs the failure and falls back to the previous filesystem scan
 - this keeps the page usable even when the derived DB is unavailable or corrupted
 - if the failure indicates a broken cached DB handle or missing structural state, the next indexed request can reopen and rebuild instead of staying stuck in permanent fallback
+- in interaction perf mode, the route also emits:
+  - `X-EmberDesk-Interaction-Path`
+  - `Server-Timing: route;dur=...`
+  - this keeps benchmark-only path evidence out of the JSON contract
 
 ### `/api/characters/get` index-first path
 
@@ -176,6 +188,44 @@ This keeps the route file-authoritative:
 - `/get` fallback writes index metadata from a fresh post-parse file stat so the cached row does not end up with "new payload, old stat" skew when the PNG changes mid-request
 - the index can speed up repeated steady-state full-character reads without becoming a second source of truth
 - only row-read / structural SQLite failures reset the cached DB handle; non-DB dependency failures such as world-file lookup problems degrade through fallback without wiping the whole derived index
+- in interaction perf mode, `/get` also emits path and route-duration headers so the runner can verify it really exercised the indexed or filesystem path it claims to compare
+
+### Interaction A/B runner
+
+`scripts/interaction-performance-runner.mjs` is the reproducible benchmark entry point for this slice.
+
+Core design:
+
+- starts isolated local servers with temporary per-run data roots
+- seeds deterministic character PNGs and chat files
+- keeps user auth simple by staying in the default single-user mode
+- uses `public/perf-harness.html` as an inert same-origin page so benchmark requests do not accidentally boot the full app and prewarm `/api/characters/all`
+- alternates SQLite `force_on` and `force_off` variants across pair runs
+- validates route-path headers before accepting a sample
+- rejects pair summaries when on/off payloads are not semantically equivalent
+
+Measured default scenarios:
+
+- `characters_all_first_build`
+- `characters_all_warm_repeat`
+- `characters_get_warm_repeat`
+- `characters_all_after_chat_dirty`
+
+Artifact contract:
+
+- `artifacts/interaction-perf/<timestamp>/report.json`
+- `artifacts/interaction-perf/<timestamp>/report.md`
+- `artifacts/interaction-perf/<timestamp>/samples.json`
+- `artifacts/interaction-perf/<timestamp>/config.json`
+- scenario screenshots
+
+Important reliability controls:
+
+- baseline data is cloned per pair so index files and dirty-state mutations do not leak between variants
+- cloned roots preserve timestamps so file-backed aggregates stay comparable
+- the benchmark config sets `skipContentCheck: true` so default content injection does not pollute the synthetic dataset
+- dirty-chat benchmark writes a fixed payload and forces a fixed chat-file `mtime` through a perf-only hook in `src/endpoints/chats.js`, avoiding false mismatches caused by variant run time
+- semantic comparison ignores fields that are not stable enough for same-machine A/B parity, such as humanized chat label text, while still checking the fields that matter for correctness
 
 ### Mutation consistency
 
@@ -218,6 +268,13 @@ Instead it now:
 
 This preserves the existing chat reset semantics while avoiding a second full character-list request in the delete success path.
 
+The delete flow now also uses a dedicated preflight helper before the delete request:
+
+- `closeCurrentChatForDelete()` reuses the existing save/generation guards and low-level chat cleanup
+- the helper intentionally does not emit the pre-delete `CHAT_CHANGED` event that normal `closeCurrentChat()` uses
+- this keeps the delete request from blocking on welcome-screen recent-chat hydration that is not required to perform the delete
+- the helper still reselects the characters view so the visible landing state matches the old flow
+
 ## Related Semantic IDs And Code Binding Points
 
 Relevant semantic docs now live in `.docs/db/`:
@@ -249,3 +306,10 @@ Stability-sensitive binding points:
   - SQLite sidecar for precomputed `/api/characters/all` payloads plus safe `/api/characters/get` full-payload reuse
 - Delete success avoids one extra `/api/characters/all` network roundtrip and one extra full list rebuild on the client.
 - Corrupt derived rows are pruned opportunistically so steady-state reads can self-heal instead of degrading the whole list path.
+- The benchmark results should be interpreted per scenario, not as one global “SQLite is faster” claim.
+  - first build can be materially slower because it pays index creation cost
+  - warm list reads are the main gain surface
+  - warm `/get` gains are smaller because the route still validates file-backed freshness
+- Delete-flow measurements now need two readings, not one:
+  - pre-delete safety-path cost, which this slice reduced by skipping the old synchronous `closeCurrentChat()` transition
+  - post-delete UI completion cost, which can still dominate large-profile reruns because `removeCharacterFromUI()` keeps its later refresh and `CHAT_CHANGED` work
