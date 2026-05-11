@@ -19,7 +19,7 @@ describe('runDeleteCharacterClosePreflight', () => {
         expect(calls).toEqual(['blocked']);
     });
 
-    test('waits for pending save, clears chat state, and avoids pre-delete transition work', async () => {
+    test('waits for pending save, clears chat state, and emits lightweight close callbacks', async () => {
         const calls = [];
 
         const result = await runDeleteCharacterClosePreflight({
@@ -28,8 +28,9 @@ describe('runDeleteCharacterClosePreflight', () => {
             clearCurrentChat: async () => calls.push('clear'),
             resetSelectedGroup: () => calls.push('reset-group'),
             resetSelectionState: () => calls.push('reset-selection'),
-            emitChatChanged: () => calls.push('emit-chat-changed'),
             selectCharactersView: () => calls.push('select-characters-view'),
+            suppressWelcomeScreen: () => calls.push('suppress-welcome-screen'),
+            emitChatChanged: async () => calls.push('emit-chat-changed'),
         });
 
         expect(result).toBe(true);
@@ -39,6 +40,8 @@ describe('runDeleteCharacterClosePreflight', () => {
             'reset-group',
             'reset-selection',
             'select-characters-view',
+            'suppress-welcome-screen',
+            'emit-chat-changed',
         ]);
     });
 

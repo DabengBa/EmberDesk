@@ -12,6 +12,8 @@
  * @param {() => void} dependencies.resetSelectedGroup
  * @param {() => void} dependencies.resetSelectionState
  * @param {() => void} [dependencies.selectCharactersView]
+ * @param {() => void} [dependencies.suppressWelcomeScreen]
+ * @param {() => Promise<void>} [dependencies.emitChatChanged]
  * @returns {Promise<boolean>}
  */
 export async function runDeleteCharacterClosePreflight({
@@ -22,6 +24,8 @@ export async function runDeleteCharacterClosePreflight({
     resetSelectedGroup,
     resetSelectionState,
     selectCharactersView,
+    suppressWelcomeScreen,
+    emitChatChanged,
 }) {
     if (isGenerationInProgress()) {
         onGenerationBlocked?.();
@@ -33,5 +37,7 @@ export async function runDeleteCharacterClosePreflight({
     resetSelectedGroup();
     resetSelectionState();
     selectCharactersView?.();
+    suppressWelcomeScreen?.();
+    await emitChatChanged?.();
     return true;
 }

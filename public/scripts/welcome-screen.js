@@ -41,9 +41,19 @@ const assistantAvatarKey = 'assistant';
 const pinnedChatsKey = 'pinnedChats';
 const recentChatsSettingsKey = 'recentChatsSettings';
 const defaultAssistantAvatar = 'default_Assistant.png';
+let skipNextChatChangedWelcomeScreen = false;
 
 const DEFAULT_MAX_DISPLAYED = 15;
 const DEFAULT_COLLAPSED_DISPLAYED = 3;
+
+/**
+ * Skips the next welcome-screen open attempt triggered by CHAT_CHANGED.
+ * This lets delete-specific close flows keep chat-scoped cleanup listeners
+ * without paying recent-chat hydration before the delete request.
+ */
+export function suppressNextChatChangedWelcomeScreen() {
+    skipNextChatChangedWelcomeScreen = true;
+}
 
 /**
  * Gets the current recent chats settings from account storage.
@@ -224,6 +234,11 @@ export function getPermanentAssistantAvatar() {
  * @returns {Promise<void>}
  */
 export async function openWelcomeScreen({ force = false, expand = false } = {}) {
+    if (skipNextChatChangedWelcomeScreen) {
+        skipNextChatChangedWelcomeScreen = false;
+        return;
+    }
+
     const currentChatId = getCurrentChatId();
     if (currentChatId !== undefined || (chat.length > 0 && !force)) {
         return;

@@ -271,8 +271,8 @@ This preserves the existing chat reset semantics while avoiding a second full ch
 The delete flow now also uses a dedicated preflight helper before the delete request:
 
 - `closeCurrentChatForDelete()` reuses the existing save/generation guards and low-level chat cleanup
-- the helper intentionally does not emit the pre-delete `CHAT_CHANGED` event that normal `closeCurrentChat()` uses
-- this keeps the delete request from blocking on welcome-screen recent-chat hydration that is not required to perform the delete
+- the helper suppresses the next welcome-screen `CHAT_CHANGED` hydration attempt, then still emits a lightweight pre-delete `CHAT_CHANGED`
+- this preserves existing chat-scoped cleanup listeners such as TTS/gallery teardown without blocking the delete request on welcome-screen recent-chat hydration
 - the helper still reselects the characters view so the visible landing state matches the old flow
 
 ## Related Semantic IDs And Code Binding Points
@@ -311,5 +311,5 @@ Stability-sensitive binding points:
   - warm list reads are the main gain surface
   - warm `/get` gains are smaller because the route still validates file-backed freshness
 - Delete-flow measurements now need two readings, not one:
-  - pre-delete safety-path cost, which this slice reduced by skipping the old synchronous `closeCurrentChat()` transition
+  - pre-delete safety-path cost, which this slice reduced by suppressing welcome-screen hydration while still preserving the lightweight `CHAT_CHANGED` cleanup callback path
   - post-delete UI completion cost, which can still dominate large-profile reruns because `removeCharacterFromUI()` keeps its later refresh and `CHAT_CHANGED` work

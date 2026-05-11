@@ -21,7 +21,9 @@ The goal of this slice was narrow: keep the real safety guards for delete, but s
   - clears the current chat state
   - resets group and character selection state
   - reselects the characters view
-- The helper intentionally does not emit the normal pre-delete `CHAT_CHANGED` transition.
+- The final version does not remove pre-delete chat-scoped cleanup callbacks.
+  - it suppresses the next welcome-screen `CHAT_CHANGED` hydration attempt
+  - then emits a lightweight pre-delete `CHAT_CHANGED` so existing chat-scoped listeners such as TTS and gallery cleanup still run before the delete request
 
 ### Delete flow integration
 
@@ -36,7 +38,7 @@ The goal of this slice was narrow: keep the real safety guards for delete, but s
   - generation-in-progress refusal
   - pending-save wait and cleanup order
   - propagation of save-wait failure
-  - absence of any required pre-delete transition work in the helper path
+  - presence of the lightweight pre-delete callback path without welcome-screen hydration being part of the helper contract
 
 ### Runtime measurement
 
@@ -57,7 +59,7 @@ The goal of this slice was narrow: keep the real safety guards for delete, but s
 
 ### Static validation
 
-- `npx eslint public/script.js public/scripts/delete-character-preflight.js tests/interaction-performance-delete.test.js`
+- `npx eslint public/script.js public/scripts/delete-character-preflight.js public/scripts/welcome-screen.js tests/interaction-performance-delete.test.js`
   - Result: no reported errors on `2026-05-11`
 
 ### Browser-driven validation
@@ -68,10 +70,13 @@ The goal of this slice was narrow: keep the real safety guards for delete, but s
 - `npm run perf:interaction -- --profile large --scenario character_delete_refresh_ui --variant sqlite_on_only --pairs 1 --repeats 3`
   - Artifact: `artifacts/interaction-perf/2026-05-10T21-44-12-262Z/`
   - Median rerun sample: `deleteFlowMs=973.1`, `browserMs=987.7`
+- `npm run perf:interaction -- --profile large --scenario character_delete_refresh_ui --variant sqlite_on_only --pairs 1 --repeats 1`
+  - Artifact: `artifacts/interaction-perf/2026-05-11T00-59-20-892Z/`
+  - Post-fix sample after restoring lightweight cleanup callbacks: `deleteFlowMs=774.4`, `browserMs=784.2`
 
 ## Result
 
-This slice removes the old pre-delete synchronous chat-transition work from the delete request path without changing the normal shared `closeCurrentChat()` contract for other flows.
+This slice removes the old pre-delete welcome-screen hydration cost from the delete request path without breaking the shared chat-scoped cleanup callbacks that other extensions already rely on.
 
 The change is shipped as an internal delete-only preflight rather than a global event-system rewrite.
 
@@ -79,6 +84,7 @@ The change is shipped as an internal delete-only preflight rather than a global 
 
 - This slice does not remove the post-delete UI refresh work that still happens inside `removeCharacterFromUI()`.
 - Large-profile browser reruns still show a noticeable completion tail after the delete request succeeds.
+- Restoring lightweight pre-delete cleanup callbacks adds some bounded work back into the path, but avoids the larger functional regression of delaying TTS/gallery teardown until after the delete round trip.
 - The next optimization target is the later post-delete work, especially the final `CHAT_CHANGED` path and any remaining heavy welcome-screen refresh it triggers.
 
 ## Documentation
