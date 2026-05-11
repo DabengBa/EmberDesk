@@ -2,6 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { promises as fsPromises } from 'node:fs';
 import { Buffer } from 'node:buffer';
+import { performance } from 'node:perf_hooks';
 
 import express from 'express';
 import sanitize from 'sanitize-filename';
@@ -43,6 +44,20 @@ const isAndroid = process.platform === 'android';
 // Use shallow character data for the character list
 const useShallowCharacters = !!getConfigValue('performance.lazyLoadCharacters', false, 'boolean');
 const useDiskCache = !!getConfigValue('performance.useDiskCache', true, 'boolean');
+
+function isInteractionPerfModeEnabled() {
+    return process.env.EMBERDESK_INTERACTION_PERF_MODE === '1';
+}
+
+function applyInteractionPerfHeaders(response, pathName, startedAt) {
+    if (!isInteractionPerfModeEnabled()) {
+        return;
+    }
+
+    const durationMs = Math.max(0, performance.now() - startedAt);
+    response.set('X-EmberDesk-Interaction-Path', pathName);
+    response.set('Server-Timing', `route;dur=${durationMs.toFixed(1)}`);
+}
 
 class DiskCache {
     /**
@@ -389,15 +404,29 @@ const toShallow = (character) => {
         chat_size: character.chat_size,
         data_size: character.data_size,
         tags: character.tags,
+        description: _.get(character, 'description', _.get(character, 'data.description', '')),
+        personality: _.get(character, 'personality', _.get(character, 'data.personality', '')),
+        scenario: _.get(character, 'scenario', _.get(character, 'data.scenario', '')),
+        first_mes: _.get(character, 'first_mes', _.get(character, 'data.first_mes', '')),
+        mes_example: _.get(character, 'mes_example', _.get(character, 'data.mes_example', '')),
+        creatorcomment: _.get(character, 'creatorcomment', _.get(character, 'data.creator_notes', '')),
+        talkativeness: _.get(character, 'talkativeness', _.get(character, 'data.extensions.talkativeness', 0)),
         data: {
             name: _.get(character, 'data.name', ''),
             character_version: _.get(character, 'data.character_version', ''),
             creator: _.get(character, 'data.creator', ''),
             creator_notes: _.get(character, 'data.creator_notes', ''),
+            description: _.get(character, 'data.description', ''),
+            mes_example: _.get(character, 'data.mes_example', ''),
+            scenario: _.get(character, 'data.scenario', ''),
+            personality: _.get(character, 'data.personality', ''),
+            first_mes: _.get(character, 'data.first_mes', ''),
+            alternate_greetings: _.get(character, 'data.alternate_greetings', []),
             tags: _.get(character, 'data.tags', []),
             extensions: {
                 fav: _.get(character, 'data.extensions.fav', false),
                 world: _.get(character, 'data.extensions.world', ''),
+                talkativeness: _.get(character, 'data.extensions.talkativeness', _.get(character, 'talkativeness', 0)),
             },
         },
     };
@@ -632,6 +661,42 @@ async function listCharactersFromFiles(directories, shallow) {
     const pngFiles = files.filter(file => file.endsWith('.png'));
     const processingPromises = pngFiles.map(file => processCharacter(file, directories, { shallow }));
     return (await Promise.all(processingPromises)).filter(character => character.name);
+}
+
+/**
+ * @param {import("express").Request} request
+ * @param {import("express").Response} response
+ * @returns {Promise<void>}
+ */
+async function sendCharacterListResponse(request, response) {
+    try {
+        let data = [];
+
+        if (isCharacterIndexSupported()) {
+            try {
+                const files = fs.readdirSync(request.user.directories.characters);
+                const pngFiles = files.filter(file => file.endsWith('.png')).sort((left, right) => left.localeCompare(right));
+                data = await listIndexedCharacterPayloads({
+                    userRoot: request.user.directories.root,
+                    directories: request.user.directories,
+                    avatarFiles: pngFiles,
+                    useShallowPayload: true,
+                    buildRow: avatar => buildCharacterIndexRow(request.user.directories, avatar),
+                });
+            } catch (error) {
+                console.warn('Falling back to filesystem-backed character summary list after index read failure:', error);
+                data = await listCharactersFromFiles(request.user.directories, true);
+            }
+        } else {
+            data = await listCharactersFromFiles(request.user.directories, true);
+        }
+
+        response.send(data);
+    } catch (err) {
+        console.error(err);
+        const isRangeError = err instanceof RangeError;
+        response.status(500).send({ overflow: isRangeError, error: true });
+    }
 }
 
 /**
@@ -1669,8 +1734,10 @@ router.post('/delete', validateAvatarUrlMiddleware, async function (request, res
  * @return {void}
  */
 router.post('/all', async function (request, response) {
+    const startedAt = performance.now();
     try {
         let data = [];
+        let interactionPath = 'characters_all:filesystem';
 
         if (isCharacterIndexSupported()) {
             try {
@@ -1683,6 +1750,7 @@ router.post('/all', async function (request, response) {
                     useShallowPayload: useShallowCharacters,
                     buildRow: avatar => buildCharacterIndexRow(request.user.directories, avatar),
                 });
+                interactionPath = 'characters_all:indexed';
             } catch (error) {
                 console.warn('Falling back to filesystem-backed character list after index read failure:', error);
                 data = await listCharactersFromFiles(request.user.directories, useShallowCharacters);
@@ -1691,19 +1759,27 @@ router.post('/all', async function (request, response) {
             data = await listCharactersFromFiles(request.user.directories, useShallowCharacters);
         }
 
+        applyInteractionPerfHeaders(response, interactionPath, startedAt);
         return response.send(data);
     } catch (err) {
         console.error(err);
         const isRangeError = err instanceof RangeError;
+        applyInteractionPerfHeaders(response, 'characters_all:error', startedAt);
         response.status(500).send({ overflow: isRangeError, error: true });
     }
 });
 
+router.post('/list', async function (request, response) {
+    await sendCharacterListResponse(request, response);
+});
+
 router.post('/get', validateAvatarUrlMiddleware, async function (request, response) {
+    const startedAt = performance.now();
     try {
         if (!request.body) return response.sendStatus(400);
         const item = request.body.avatar_url;
         const filePath = path.join(request.user.directories.characters, item);
+        let interactionPath = 'characters_get:filesystem';
 
         let fileStat;
         try {
@@ -1725,6 +1801,7 @@ router.post('/get', validateAvatarUrlMiddleware, async function (request, respon
                 );
 
                 if (indexedPayload) {
+                    applyInteractionPerfHeaders(response, 'characters_get:indexed', startedAt);
                     return response.send(indexedPayload);
                 }
             } catch (error) {
@@ -1752,9 +1829,11 @@ router.post('/get', validateAvatarUrlMiddleware, async function (request, respon
             }
         }
 
+        applyInteractionPerfHeaders(response, interactionPath, startedAt);
         return response.send(data);
     } catch (err) {
         console.error(err);
+        applyInteractionPerfHeaders(response, 'characters_get:error', startedAt);
         response.sendStatus(500);
     }
 });

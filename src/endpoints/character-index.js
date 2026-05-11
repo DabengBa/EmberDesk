@@ -19,6 +19,19 @@ const CHARACTER_AVATAR_COLLATOR = new Intl.Collator(undefined, {
     sensitivity: 'base',
     numeric: false,
 });
+const CHARACTER_INDEX_MODE = Object.freeze({
+    AUTO: 'auto',
+    FORCE_ON: 'force_on',
+    FORCE_OFF: 'force_off',
+});
+
+function getCharacterIndexMode() {
+    const mode = String(process.env.EMBERDESK_CHARACTER_INDEX_MODE ?? CHARACTER_INDEX_MODE.AUTO).toLowerCase();
+    if (mode === CHARACTER_INDEX_MODE.FORCE_ON || mode === CHARACTER_INDEX_MODE.FORCE_OFF) {
+        return mode;
+    }
+    return CHARACTER_INDEX_MODE.AUTO;
+}
 
 /**
  * @param {{ chats?: string }} directories
@@ -242,6 +255,13 @@ export function getFreshIndexedCharacterFullPayload(userRoot, directories, avata
  * @returns {boolean}
  */
 export function isCharacterIndexSupported() {
+    const mode = getCharacterIndexMode();
+    if (mode === CHARACTER_INDEX_MODE.FORCE_OFF) {
+        return false;
+    }
+    if (mode === CHARACTER_INDEX_MODE.FORCE_ON) {
+        return typeof DatabaseSync === 'function';
+    }
     return typeof DatabaseSync === 'function';
 }
 

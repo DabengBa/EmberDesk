@@ -13,6 +13,7 @@ import {
     disposeCharacterIndexDatabases,
     getFreshIndexedCharacterFullPayload,
     getCharacterIndexPath,
+    isCharacterIndexSupported,
     listIndexedCharacterPayloads,
     markCharacterChatStatsDirty,
 } from '../src/endpoints/character-index.js';
@@ -243,6 +244,7 @@ function createMockResponse(statusCode = 200) {
     return {
         statusCode,
         body: undefined,
+        headers: {},
         send(payload) {
             this.body = payload;
             return this;
@@ -253,6 +255,10 @@ function createMockResponse(statusCode = 200) {
         },
         status(code) {
             this.statusCode = code;
+            return this;
+        },
+        set(field, value) {
+            this.headers[String(field).toLowerCase()] = value;
             return this;
         },
     };
@@ -271,6 +277,30 @@ function getCharacterRouteHandler() {
 }
 
 /**
+ * @returns {(request: any, response: any) => Promise<void>}
+ */
+function getCharactersAllRouteHandler() {
+    const layer = charactersRouter.stack.find(entry => entry.route?.path === '/all');
+    if (!layer?.route?.stack?.length) {
+        throw new Error('Could not locate /api/characters/all route handler');
+    }
+
+    return layer.route.stack[layer.route.stack.length - 1].handle;
+}
+
+/**
+ * @returns {(request: any, response: any) => Promise<void>}
+ */
+function getCharactersListRouteHandler() {
+    const layer = charactersRouter.stack.find(entry => entry.route?.path === '/list');
+    if (!layer?.route?.stack?.length) {
+        throw new Error('Could not locate /api/characters/list route handler');
+    }
+
+    return layer.route.stack[layer.route.stack.length - 1].handle;
+}
+
+/**
  * @param {{ root: string, characters: string, chats: string }} directories
  * @param {string} avatar
  * @returns {Promise<ReturnType<typeof createMockResponse>>}
@@ -279,6 +309,34 @@ async function invokeCharacterGet(directories, avatar) {
     const handler = getCharacterRouteHandler();
     const request = {
         body: { avatar_url: avatar },
+        user: { directories },
+    };
+    const response = createMockResponse();
+    await handler(request, response);
+    return response;
+}
+
+/**
+ * @param {{ root: string, characters: string, chats: string }} directories
+ * @returns {Promise<ReturnType<typeof createMockResponse>>}
+ */
+async function invokeCharactersList(directories) {
+    const handler = getCharactersListRouteHandler();
+    const request = {
+        user: { directories },
+    };
+    const response = createMockResponse();
+    await handler(request, response);
+    return response;
+}
+
+/**
+ * @param {{ root: string, characters: string, chats: string }} directories
+ * @returns {Promise<ReturnType<typeof createMockResponse>>}
+ */
+async function invokeCharactersAll(directories) {
+    const handler = getCharactersAllRouteHandler();
+    const request = {
         user: { directories },
     };
     const response = createMockResponse();
@@ -303,6 +361,8 @@ beforeAll(async () => {
 afterEach(() => {
     disposeCharacterIndexDatabases();
     diskCache?.dispose();
+    delete process.env.EMBERDESK_CHARACTER_INDEX_MODE;
+    delete process.env.EMBERDESK_INTERACTION_PERF_MODE;
 
     for (const root of tempRoots.splice(0, tempRoots.length)) {
         fs.rmSync(root, { recursive: true, force: true });
@@ -963,5 +1023,116 @@ describe('character index', () => {
             avatar: 'alpha.png',
             name: 'Alpha After Much Longer',
         }));
+    });
+
+    test('disables the SQLite fast path when EMBERDESK_CHARACTER_INDEX_MODE=force_off', async () => {
+        const directories = makeDirectories('emberdesk-character-index-route-');
+        tempRoots.push(directories.root);
+        writeCharacterCardFile(directories, 'alpha.png', 'Alpha Live');
+
+        await listIndexedCharacterPayloads({
+            userRoot: directories.root,
+            directories,
+            avatarFiles: ['alpha.png'],
+            useShallowPayload: false,
+            buildRow: createBuildRow([]),
+        });
+
+        expect(isCharacterIndexSupported()).toBe(true);
+
+        process.env.EMBERDESK_CHARACTER_INDEX_MODE = 'force_off';
+        process.env.EMBERDESK_INTERACTION_PERF_MODE = '1';
+
+        const response = await invokeCharacterGet(directories, 'alpha.png');
+
+        expect(response.statusCode).toBe(200);
+        expect(response.body).toEqual(expect.objectContaining({
+            avatar: 'alpha.png',
+            name: 'Alpha Live',
+        }));
+        expect(response.body.name).not.toBe('Full alpha');
+        expect(response.headers['x-emberdesk-interaction-path']).toBe('characters_get:filesystem');
+    });
+
+    test('emits interaction perf metadata for /api/characters/all', async () => {
+        const directories = makeDirectories('emberdesk-character-index-route-');
+        tempRoots.push(directories.root);
+        writeCharacterCardFile(directories, 'alpha.png', 'Alpha One');
+        writeCharacterCardFile(directories, 'beta.png', 'Beta Two');
+        process.env.EMBERDESK_INTERACTION_PERF_MODE = '1';
+
+        const response = await invokeCharactersAll(directories);
+
+        expect(response.statusCode).toBe(200);
+        expect(response.headers['x-emberdesk-interaction-path']).toBeDefined();
+        expect(response.headers['server-timing']).toContain('route;dur=');
+    });
+
+    test('serves a richer shallow summary from /api/characters/list without full-only fields', async () => {
+        const directories = makeDirectories('emberdesk-character-index-route-');
+        tempRoots.push(directories.root);
+        writeCharacterCardFile(directories, 'alpha.png', 'Alpha One');
+
+        const response = await invokeCharactersList(directories);
+
+        expect(response.statusCode).toBe(200);
+        expect(Array.isArray(response.body)).toBe(true);
+        expect(response.body).toHaveLength(1);
+        expect(response.body[0]).toEqual(expect.objectContaining({
+            shallow: true,
+            avatar: 'alpha.png',
+            name: 'Alpha One',
+            description: 'Description Alpha One',
+            personality: 'Personality Alpha One',
+            scenario: 'Scenario Alpha One',
+            first_mes: 'First Alpha One',
+            mes_example: 'Example Alpha One',
+            data: expect.objectContaining({
+                name: 'Alpha One',
+                description: 'Description Alpha One',
+                personality: 'Personality Alpha One',
+                scenario: 'Scenario Alpha One',
+                first_mes: 'First Alpha One',
+                mes_example: 'Example Alpha One',
+                creator_notes: 'Creator notes Alpha One',
+                alternate_greetings: [],
+                extensions: expect.objectContaining({
+                    talkativeness: 0.5,
+                }),
+            }),
+        }));
+        expect(response.body[0].json_data).toBeUndefined();
+        expect(response.body[0].data.character_book).toBeUndefined();
+    });
+
+    test('keeps /api/characters/all full payload behavior when lazy-load mode is disabled', async () => {
+        const directories = makeDirectories('emberdesk-character-index-route-');
+        tempRoots.push(directories.root);
+        writeCharacterCardFile(directories, 'alpha.png', 'Alpha One');
+
+        const response = await invokeCharactersAll(directories);
+
+        expect(response.statusCode).toBe(200);
+        expect(Array.isArray(response.body)).toBe(true);
+        expect(response.body).toHaveLength(1);
+        expect(response.body[0]).toEqual(expect.objectContaining({
+            avatar: 'alpha.png',
+            name: 'Alpha One',
+        }));
+        expect(response.body[0].json_data).toContain('"name":"Alpha One"');
+        expect(response.body[0].shallow).toBeUndefined();
+    });
+
+    test('emits interaction perf metadata for /api/characters/get', async () => {
+        const directories = makeDirectories('emberdesk-character-index-route-');
+        tempRoots.push(directories.root);
+        writeCharacterCardFile(directories, 'alpha.png', 'Alpha Live');
+        process.env.EMBERDESK_INTERACTION_PERF_MODE = '1';
+
+        const response = await invokeCharacterGet(directories, 'alpha.png');
+
+        expect(response.statusCode).toBe(200);
+        expect(response.headers['x-emberdesk-interaction-path']).toBeDefined();
+        expect(response.headers['server-timing']).toContain('route;dur=');
     });
 });

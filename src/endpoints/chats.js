@@ -49,6 +49,26 @@ function markCharacterChatStatsDirtySafe(directories, avatar, operation) {
     }
 }
 
+function getInteractionPerfChatTimestampMs() {
+    if (process.env.EMBERDESK_INTERACTION_PERF_MODE !== '1') {
+        return null;
+    }
+
+    const rawValue = process.env.EMBERDESK_INTERACTION_PERF_CHAT_MTIME_MS;
+    const timestampMs = Number(rawValue);
+    return Number.isFinite(timestampMs) ? timestampMs : null;
+}
+
+function applyInteractionPerfChatTimestamp(filePath) {
+    const timestampMs = getInteractionPerfChatTimestampMs();
+    if (timestampMs === null) {
+        return;
+    }
+
+    const timestamp = new Date(timestampMs);
+    fs.utimesSync(filePath, timestamp, timestamp);
+}
+
 /**
  * Saves a chat to the backups directory.
  * @param {string} directory The user's backup directory.
@@ -499,6 +519,7 @@ router.post('/save', validateAvatarUrlMiddleware, async function (request, respo
 
         if (Array.isArray(chatData)) {
             await trySaveChat(chatData, chatFilePath, request.body.force, handle, cardName, request.user.directories.backups);
+            applyInteractionPerfChatTimestamp(chatFilePath);
             markCharacterChatStatsDirtySafe(request.user.directories, request.body.avatar_url, 'chat save');
             return response.send({ ok: true });
         } else {

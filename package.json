@@ -123,6 +123,7 @@
         "docs:check": "node .docs/db/scripts/doc-compiler.js check",
         "docs:build": "node .docs/db/scripts/doc-compiler.js build",
         "perf:startup": "node scripts/startup-performance-runner.mjs",
+        "perf:interaction": "node scripts/interaction-performance-runner.mjs",
         "start:global": "node server.js --global",
         "start:electron": "cd ./src/electron && npm run start",
         "start:deno": "deno run --allow-run --allow-net --allow-read --allow-write --allow-sys --allow-env server.js",

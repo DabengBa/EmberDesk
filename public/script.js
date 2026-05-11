@@ -1425,7 +1425,7 @@ export function getCharacterSource(chId = this_chid) {
 }
 
 export async function getCharacters() {
-    const response = await fetch('/api/characters/all', {
+    const response = await fetch('/api/characters/list', {
         method: 'POST',
         headers: getRequestHeaders(),
         body: JSON.stringify({}),
@@ -9675,6 +9675,10 @@ async function openCharacterWorldPopup() {
         return;
     }
 
+    if (menu_type !== 'create') {
+        await unshallowCharacter(String(chid));
+    }
+
     // TODO: Maybe make this utility function not use the window context?
     const fileName = getCharaFilename(chid);
     const charName = (menu_type == 'create' ? create_save.name : characters[chid]?.data?.name) || 'Nameless';
@@ -9738,12 +9742,14 @@ async function openCharacterWorldPopup() {
     await popup.show();
 }
 
-function openAlternateGreetings() {
+async function openAlternateGreetings() {
     const chid = $('.open_alternate_greetings').data('chid');
 
     if (menu_type != 'create' && chid === undefined) {
         toastr.error('Does not have an Id for this character in editor menu.');
         return;
+    } else if (menu_type !== 'create') {
+        await unshallowCharacter(String(chid));
     } else {
         // If the character does not have alternate greetings, create an empty array
         if (characters[chid] && !Array.isArray(characters[chid].data.alternate_greetings)) {
