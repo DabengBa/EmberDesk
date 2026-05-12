@@ -19,7 +19,7 @@ import { deepMerge, humanizedDateTime, tryParse, MemoryLimitedMap, getConfigValu
 import { TavernCardValidator } from '../validator/TavernCardValidator.js';
 import { parse, read, write } from '../character-card-parser.js';
 import { readWorldInfoFile } from './worldinfo.js';
-import { invalidateThumbnail } from './thumbnails.js';
+import { generateThumbnail, invalidateThumbnail } from './thumbnails.js';
 import { importRisuSprites } from './sprites.js';
 import { getUserDirectories } from '../users.js';
 import { getChatInfo } from './chats.js';
@@ -243,6 +243,9 @@ async function readCharacterData(inputFile, inputFormat = 'png') {
  */
 async function writeCharacterData(inputFile, data, outputFile, request, crop = undefined) {
     try {
+        const outputImagePath = path.join(request.user.directories.characters, `${outputFile}.png`);
+        const outputAvatarName = path.parse(outputImagePath).base;
+
         // Reset the cache
         for (const key of memoryCache.keys()) {
             if (Buffer.isBuffer(inputFile)) {
@@ -274,18 +277,35 @@ async function writeCharacterData(inputFile, data, outputFile, request, crop = u
             }
         }
 
+        if (fs.existsSync(outputImagePath)) {
+            invalidateThumbnail(request.user.directories, 'avatar', outputAvatarName);
+        }
+
         const inputImage = await getInputImage();
 
         // Get the chunks
         const outputImage = write(inputImage, data);
-        const outputImagePath = path.join(request.user.directories.characters, `${outputFile}.png`);
 
         writeFileAtomicSync(outputImagePath, outputImage);
+        startThumbnailPregeneration(request.user.directories, 'avatar', outputAvatarName, false);
         return true;
     } catch (err) {
         console.error(err);
         return false;
     }
+}
+
+/**
+ * Starts thumbnail pregeneration without blocking the caller.
+ * @param {import('../users.js').UserDirectoryList} directories
+ * @param {'avatar' | 'persona'} type
+ * @param {string} file
+ * @param {boolean|null} isKnownAnimated
+ */
+function startThumbnailPregeneration(directories, type, file, isKnownAnimated) {
+    void generateThumbnail(directories, type, file, true, isKnownAnimated).catch(error => {
+        console.warn(`Thumbnail pregeneration skipped for ${type}/${file}:`, error);
+    });
 }
 
 /**
@@ -1387,7 +1407,6 @@ router.post('/edit', validateAvatarUrlMiddleware, async function (request, respo
         } else {
             const crop = tryParse(request.query.crop);
             const newAvatarPath = path.join(request.file.destination, request.file.filename);
-            invalidateThumbnail(request.user.directories, 'avatar', request.body.avatar_url);
             await writeCharacterData(newAvatarPath, char, targetFile, request, crop);
             fs.unlinkSync(newAvatarPath);
 
@@ -1435,7 +1454,6 @@ router.post('/edit-avatar', validateAvatarUrlMiddleware, async function (request
 
         // Reset images caches
         cacheBuster.bust(request, response);
-        invalidateThumbnail(request.user.directories, 'avatar', request.body.avatar_url);
 
         await refreshCharacterIndexEntrySafe(request.user.directories, request.body.avatar_url, 'edit-avatar');
         return response.sendStatus(200);
@@ -1929,10 +1947,6 @@ router.post('/import', async function (request, response) {
             return response.sendStatus(400);
         }
 
-        if (preservedFileName) {
-            invalidateThumbnail(request.user.directories, 'avatar', `${preservedFileName}.png`);
-        }
-
         const avatarName = fileName.endsWith('.png') ? fileName : `${fileName}.png`;
         await refreshCharacterIndexEntrySafe(request.user.directories, avatarName, 'import');
         response.send({ file_name: fileName });
@@ -1980,6 +1994,7 @@ router.post('/duplicate', validateAvatarUrlMiddleware, async function (request, 
 
         fs.copyFileSync(filename, newFilename);
         console.info(`${filename} was copied to ${newFilename}`);
+        startThumbnailPregeneration(request.user.directories, 'avatar', path.parse(newFilename).base, false);
         await refreshCharacterIndexEntrySafe(request.user.directories, path.parse(newFilename).base, 'duplicate');
         response.send({ path: path.parse(newFilename).base });
     } catch (error) {

@@ -47,7 +47,8 @@ This page exists so a user can run their daily LLM workflow from one browser sur
 - **Ready state**: the main shell becomes usable before every supporting panel has necessarily finished background loading.
 - **Degraded state**: if a supporting surface such as extensions or backgrounds fails to load, the core shell can still remain usable and the affected panel shows local retry or follow-up refresh behavior.
 - **Thumbnail paint state**: avatar-heavy list surfaces can show a theme-tinted placeholder on the image box before thumbnail pixels fully paint, reducing harsh flashes without changing the page flow.
-- **Thumbnail cache state**: newly regenerated JPEG thumbnails can use the lower shipped default quality, while previously cached files and explicit per-install overrides remain in place until the operator changes config or clears thumbnail cache folders.
+- **Thumbnail cache state**: newly regenerated JPEG thumbnails only pick up the lower shipped default after two separate conditions are satisfied where relevant: an existing install with an explicit `thumbnails.quality` override must first change or remove that config value, and already-cached thumbnail files must still be cleared before regeneration can produce lower-quality replacements.
+- **Post-write thumbnail warm state**: after character-avatar or persona-image writes succeed, EmberDesk can kick off best-effort thumbnail pregeneration in the background so the next normal workspace revisit is less likely to stall on first thumbnail generation; if that background work fails, the existing on-demand thumbnail route still remains the fallback.
 
 ## Navigation
 

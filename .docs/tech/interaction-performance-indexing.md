@@ -64,6 +64,14 @@ That CSS-only slice is intentionally narrow:
 - opaque thumbnails fully cover the placeholder after paint, while transparent avatar regions may continue to reveal the tint by design
 - it does not alter thumbnail routing, request timing, cache-busters, or runtime state
 
+Separate from SQLite, thumbnail HTTP caching, lazy image fetch behavior, placeholder paint, and JPEG quality tuning, EmberDesk now also pre-generates avatar and persona thumbnails immediately after successful source-image writes:
+
+- shared character writes now invalidate an existing avatar thumbnail before overwriting the canonical PNG, then start `generateThumbnail(..., true, false)` in fire-and-forget mode
+- the `/duplicate` character path is covered explicitly even though it bypasses the shared character-write helper
+- persona uploads now start `generateThumbnail(..., true, null)` after the canonical persona image lands, preserving the existing overwrite invalidation and cache-buster behavior
+- mutation success responses do not wait for thumbnail pregeneration to finish
+- if pregeneration fails or loses a race with a very fast follow-up request, the existing `/thumbnail` route remains the fallback source of truth for derived regeneration
+
 ## Architecture And Constraints
 
 - Canonical user data remains file-backed:

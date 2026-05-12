@@ -9,10 +9,22 @@ import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import { getImages, tryParse } from '../util.js';
 import { getFileNameValidationFunction } from '../middleware/validateFileName.js';
 import { applyAvatarCropResize } from './characters.js';
-import { invalidateThumbnail } from './thumbnails.js';
+import { generateThumbnail, invalidateThumbnail } from './thumbnails.js';
 import cacheBuster from '../middleware/cacheBuster.js';
 
 export const router = express.Router();
+
+/**
+ * Starts thumbnail pregeneration without blocking the caller.
+ * @param {import('../users.js').UserDirectoryList} directories
+ * @param {'persona'} type
+ * @param {string} file
+ */
+function startThumbnailPregeneration(directories, type, file) {
+    void generateThumbnail(directories, type, file, true, null).catch(error => {
+        console.warn(`Thumbnail pregeneration skipped for ${type}/${file}:`, error);
+    });
+}
 
 router.post('/get', function (request, response) {
     const images = getImages(request.user.directories.avatars);
@@ -56,6 +68,7 @@ router.post('/upload', getFileNameValidationFunction('overwrite_name'), async (r
         const filename = sanitize(request.body.overwrite_name || `${Date.now()}.png`);
         const pathToNewFile = path.join(request.user.directories.avatars, filename);
         writeFileAtomicSync(pathToNewFile, image);
+        startThumbnailPregeneration(request.user.directories, 'persona', filename);
         fs.unlinkSync(pathToUpload);
         return response.send({ path: filename });
     } catch (err) {
