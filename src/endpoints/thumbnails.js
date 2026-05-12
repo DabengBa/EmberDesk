@@ -24,6 +24,10 @@ const pngFormat = String(getConfigValue('thumbnails.format', 'jpg')).toLowerCase
 const THUMBNAIL_MAX_AGE_SECONDS = 3600;
 const THUMBNAIL_CACHE_CONTROL = `private, max-age=${THUMBNAIL_MAX_AGE_SECONDS}, must-revalidate`;
 
+export function areThumbnailsEnabled() {
+    return thumbnailsEnabled;
+}
+
 /**
  * Applies browser-cacheable thumbnail headers for non-Firefox requests.
  * Firefox keeps using the existing no-store workaround path.

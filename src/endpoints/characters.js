@@ -19,7 +19,7 @@ import { deepMerge, humanizedDateTime, tryParse, MemoryLimitedMap, getConfigValu
 import { TavernCardValidator } from '../validator/TavernCardValidator.js';
 import { parse, read, write } from '../character-card-parser.js';
 import { readWorldInfoFile } from './worldinfo.js';
-import { generateThumbnail, invalidateThumbnail } from './thumbnails.js';
+import { areThumbnailsEnabled, generateThumbnail, invalidateThumbnail } from './thumbnails.js';
 import { importRisuSprites } from './sprites.js';
 import { getUserDirectories } from '../users.js';
 import { getChatInfo } from './chats.js';
@@ -239,12 +239,14 @@ async function readCharacterData(inputFile, inputFormat = 'png') {
  * @param {string} outputFile - Target image file name
  * @param {import('express').Request} request - Express request obejct
  * @param {Crop|undefined} crop - Crop parameters
+ * @param {{ shouldRegenerateThumbnail?: boolean }} [options] - Thumbnail regeneration options
  * @returns {Promise<boolean>} - True if the operation was successful
  */
-async function writeCharacterData(inputFile, data, outputFile, request, crop = undefined) {
+async function writeCharacterData(inputFile, data, outputFile, request, crop = undefined, options = {}) {
     try {
         const outputImagePath = path.join(request.user.directories.characters, `${outputFile}.png`);
         const outputAvatarName = path.parse(outputImagePath).base;
+        const shouldRegenerateThumbnail = options.shouldRegenerateThumbnail ?? true;
 
         // Reset the cache
         for (const key of memoryCache.keys()) {
@@ -277,7 +279,7 @@ async function writeCharacterData(inputFile, data, outputFile, request, crop = u
             }
         }
 
-        if (fs.existsSync(outputImagePath)) {
+        if (shouldRegenerateThumbnail && fs.existsSync(outputImagePath)) {
             invalidateThumbnail(request.user.directories, 'avatar', outputAvatarName);
         }
 
@@ -287,7 +289,7 @@ async function writeCharacterData(inputFile, data, outputFile, request, crop = u
         const outputImage = write(inputImage, data);
 
         writeFileAtomicSync(outputImagePath, outputImage);
-        startThumbnailPregeneration(request.user.directories, 'avatar', outputAvatarName, false);
+        startThumbnailPregeneration(request.user.directories, 'avatar', outputAvatarName, false, shouldRegenerateThumbnail);
         return true;
     } catch (err) {
         console.error(err);
@@ -301,8 +303,13 @@ async function writeCharacterData(inputFile, data, outputFile, request, crop = u
  * @param {'avatar' | 'persona'} type
  * @param {string} file
  * @param {boolean|null} isKnownAnimated
+ * @param {boolean} shouldRegenerateThumbnail
  */
-function startThumbnailPregeneration(directories, type, file, isKnownAnimated) {
+function startThumbnailPregeneration(directories, type, file, isKnownAnimated, shouldRegenerateThumbnail = true) {
+    if (!shouldRegenerateThumbnail || !areThumbnailsEnabled()) {
+        return;
+    }
+
     void generateThumbnail(directories, type, file, true, isKnownAnimated).catch(error => {
         console.warn(`Thumbnail pregeneration skipped for ${type}/${file}:`, error);
     });
@@ -1403,7 +1410,7 @@ router.post('/edit', validateAvatarUrlMiddleware, async function (request, respo
     try {
         if (!request.file) {
             const avatarPath = path.join(request.user.directories.characters, request.body.avatar_url);
-            await writeCharacterData(avatarPath, char, targetFile, request);
+            await writeCharacterData(avatarPath, char, targetFile, request, undefined, { shouldRegenerateThumbnail: false });
         } else {
             const crop = tryParse(request.query.crop);
             const newAvatarPath = path.join(request.file.destination, request.file.filename);
@@ -1506,7 +1513,7 @@ router.post('/edit-attribute', validateAvatarUrlMiddleware, async function (requ
         char.data[request.body.field] = request.body.value;
         let newCharJSON = JSON.stringify(char);
         const targetFile = (request.body.avatar_url).replace('.png', '');
-        await writeCharacterData(avatarPath, newCharJSON, targetFile, request);
+        await writeCharacterData(avatarPath, newCharJSON, targetFile, request, undefined, { shouldRegenerateThumbnail: false });
         await refreshCharacterIndexEntrySafe(request.user.directories, request.body.avatar_url, 'edit-attribute');
         return response.sendStatus(200);
     } catch (err) {
@@ -1583,7 +1590,7 @@ async function mergeCharacterUpdate(avatarPath, avatar, updateData, request, sho
     }
 
     const targetImg = avatar.replace('.png', '');
-    await writeCharacterData(avatarPath, JSON.stringify(character), targetImg, request);
+    await writeCharacterData(avatarPath, JSON.stringify(character), targetImg, request, undefined, { shouldRegenerateThumbnail: false });
     return { ok: true };
 }
 

@@ -9,7 +9,7 @@ import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import { getImages, tryParse } from '../util.js';
 import { getFileNameValidationFunction } from '../middleware/validateFileName.js';
 import { applyAvatarCropResize } from './characters.js';
-import { generateThumbnail, invalidateThumbnail } from './thumbnails.js';
+import { areThumbnailsEnabled, generateThumbnail, invalidateThumbnail } from './thumbnails.js';
 import cacheBuster from '../middleware/cacheBuster.js';
 
 export const router = express.Router();
@@ -21,6 +21,10 @@ export const router = express.Router();
  * @param {string} file
  */
 function startThumbnailPregeneration(directories, type, file) {
+    if (!areThumbnailsEnabled()) {
+        return;
+    }
+
     void generateThumbnail(directories, type, file, true, null).catch(error => {
         console.warn(`Thumbnail pregeneration skipped for ${type}/${file}:`, error);
     });

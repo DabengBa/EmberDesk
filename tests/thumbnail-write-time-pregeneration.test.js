@@ -33,7 +33,7 @@ function makeUserDirectories(prefix) {
     return directories;
 }
 
-async function importCharacterRoutes({ generateThumbnailImpl } = {}) {
+async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled = true } = {}) {
     jest.resetModules();
 
     const mockGenerateThumbnail = jest.fn(generateThumbnailImpl ?? (() => Promise.resolve({ path: 'thumb.png', aspectRatio: 1, resolution: 1 })));
@@ -131,6 +131,7 @@ async function importCharacterRoutes({ generateThumbnailImpl } = {}) {
     }));
 
     jest.unstable_mockModule('../src/endpoints/thumbnails.js', () => ({
+        areThumbnailsEnabled: () => thumbnailsEnabled,
         invalidateThumbnail: mockInvalidateThumbnail,
         generateThumbnail: mockGenerateThumbnail,
     }));
@@ -188,7 +189,7 @@ async function importCharacterRoutes({ generateThumbnailImpl } = {}) {
     };
 }
 
-async function importAvatarRoutes({ generateThumbnailImpl } = {}) {
+async function importAvatarRoutes({ generateThumbnailImpl, thumbnailsEnabled = true } = {}) {
     jest.resetModules();
 
     const mockGenerateThumbnail = jest.fn(generateThumbnailImpl ?? (() => Promise.resolve({ path: 'thumb.png', aspectRatio: 1, resolution: 1 })));
@@ -225,6 +226,7 @@ async function importAvatarRoutes({ generateThumbnailImpl } = {}) {
     }));
 
     jest.unstable_mockModule('../src/endpoints/thumbnails.js', () => ({
+        areThumbnailsEnabled: () => thumbnailsEnabled,
         invalidateThumbnail: mockInvalidateThumbnail,
         generateThumbnail: mockGenerateThumbnail,
     }));
@@ -397,6 +399,48 @@ describe('thumbnail write-time pregeneration hooks', () => {
         warnSpy.mockRestore();
     });
 
+    test('character create skips pregeneration when thumbnails are disabled', async () => {
+        const directories = makeUserDirectories('emberdesk-pregen-disabled-character-');
+        const { router, mocks } = await importCharacterRoutes({
+            thumbnailsEnabled: false,
+        });
+        const request = {
+            body: {
+                ch_name: 'Disabled',
+                description: '',
+                personality: '',
+                scenario: '',
+                first_mes: '',
+                mes_example: '',
+                creator_notes: '',
+                system_prompt: '',
+                post_history_instructions: '',
+                tags: '',
+                creator: '',
+                talkativeness: 0.5,
+                fav: false,
+                world: '',
+                depth_prompt_prompt: '',
+                depth_prompt_depth: 4,
+                depth_prompt_role: 'system',
+                alternate_greetings: [],
+                group_only_greetings: [],
+                extensions: '{}',
+            },
+            file: undefined,
+            query: {},
+            user: {
+                directories,
+                profile: { handle: 'default-user' },
+            },
+        };
+
+        const response = await invokeRoute(router, 'post', '/create', request);
+
+        expect(response.body).toBe('Disabled.png');
+        expect(mocks.generateThumbnail).not.toHaveBeenCalled();
+    });
+
     test('duplicate kicks off avatar pregeneration for the copied character', async () => {
         const { router, mocks } = await importCharacterRoutes();
         const directories = makeUserDirectories('emberdesk-pregen-duplicate-');
@@ -439,6 +483,102 @@ describe('thumbnail write-time pregeneration hooks', () => {
         expect(mocks.invalidateThumbnail.mock.invocationCallOrder[0]).toBeLessThan(mocks.generateThumbnail.mock.invocationCallOrder[0]);
     });
 
+    test('character metadata edit without a new upload does not invalidate or pregenerate thumbnails', async () => {
+        const directories = makeUserDirectories('emberdesk-pregen-edit-metadata-');
+        const { router, mocks } = await importCharacterRoutes();
+        const avatarPath = path.join(directories.characters, 'Tester.png');
+        fs.writeFileSync(avatarPath, Buffer.from('png'));
+        const request = {
+            body: {
+                avatar_url: 'Tester.png',
+                ch_name: 'Tester',
+                description: 'updated',
+                personality: '',
+                scenario: '',
+                first_mes: '',
+                mes_example: '',
+                creator_notes: '',
+                system_prompt: '',
+                post_history_instructions: '',
+                tags: '',
+                creator: '',
+                talkativeness: 0.5,
+                fav: false,
+                world: '',
+                depth_prompt_prompt: '',
+                depth_prompt_depth: 4,
+                depth_prompt_role: 'system',
+                alternate_greetings: [],
+                group_only_greetings: [],
+                extensions: '{}',
+                chat: 'existing-chat',
+                create_date: '2026-05-13T00:00:00.000Z',
+            },
+            user: {
+                directories,
+                profile: { handle: 'default-user' },
+            },
+        };
+
+        const response = await invokeRoute(router, 'post', '/edit', request);
+
+        expect(response.statusCode).toBe(200);
+        expect(mocks.invalidateThumbnail).not.toHaveBeenCalled();
+        expect(mocks.generateThumbnail).not.toHaveBeenCalled();
+    });
+
+    test('metadata-only character edits do not invalidate or pregenerate thumbnails', async () => {
+        const directories = makeUserDirectories('emberdesk-pregen-edit-attribute-');
+        const { router, mocks } = await importCharacterRoutes();
+        const avatarPath = path.join(directories.characters, 'Tester.png');
+        fs.writeFileSync(avatarPath, Buffer.from('png'));
+        const request = {
+            body: {
+                avatar_url: 'Tester.png',
+                ch_name: 'Tester',
+                field: 'name',
+                value: 'Updated Tester',
+            },
+            user: {
+                directories,
+                profile: { handle: 'default-user' },
+            },
+        };
+
+        const response = await invokeRoute(router, 'post', '/edit-attribute', request);
+
+        expect(response.statusCode).toBe(200);
+        expect(mocks.invalidateThumbnail).not.toHaveBeenCalled();
+        expect(mocks.generateThumbnail).not.toHaveBeenCalled();
+    });
+
+    test('merge-attributes single-character updates do not invalidate or pregenerate thumbnails', async () => {
+        const directories = makeUserDirectories('emberdesk-pregen-merge-single-');
+        const { router, mocks } = await importCharacterRoutes();
+        const avatarPath = path.join(directories.characters, 'Tester.png');
+        fs.writeFileSync(avatarPath, Buffer.from('png'));
+        const request = {
+            body: {
+                avatar: 'Tester.png',
+                data: {
+                    data: {
+                        creator_notes: 'updated',
+                    },
+                },
+            },
+            user: {
+                directories,
+                profile: { handle: 'default-user' },
+            },
+        };
+
+        const response = await invokeRoute(router, 'post', '/merge-attributes', request);
+
+        expect(response.statusCode).toBe(200);
+        expect(mocks.invalidateThumbnail).not.toHaveBeenCalled();
+        expect(mocks.generateThumbnail).not.toHaveBeenCalled();
+    });
+
     test('persona upload kicks off persona pregeneration after canonical write', async () => {
         const directories = makeUserDirectories('emberdesk-pregen-persona-');
         let sawWrittenPersona = false;
@@ -464,5 +604,25 @@ describe('thumbnail write-time pregeneration hooks', () => {
         expect(mocks.invalidateThumbnail).toHaveBeenCalledWith(directories, 'persona', 'persona.png');
         expect(mocks.generateThumbnail).toHaveBeenCalledWith(directories, 'persona', 'persona.png', true, null);
         expect(mocks.invalidateThumbnail.mock.invocationCallOrder[0]).toBeLessThan(mocks.generateThumbnail.mock.invocationCallOrder[0]);
+    });
+
+    test('persona upload skips pregeneration when thumbnails are disabled', async () => {
+        const directories = makeUserDirectories('emberdesk-pregen-disabled-persona-');
+        const { router, mocks } = await importAvatarRoutes({
+            thumbnailsEnabled: false,
+        });
+        const tempUploadPath = path.join(directories.root, 'upload.tmp');
+        fs.writeFileSync(tempUploadPath, Buffer.from('upload'));
+        const request = {
+            body: { overwrite_name: 'persona.png' },
+            file: { destination: directories.root, filename: 'upload.tmp' },
+            query: {},
+            user: { directories },
+        };
+
+        const response = await invokeRoute(router, 'post', '/upload', request);
+
+        expect(response.body).toEqual({ path: 'persona.png' });
+        expect(mocks.generateThumbnail).not.toHaveBeenCalled();
     });
 });
