@@ -30,6 +30,18 @@ Separate from the SQLite slice, EmberDesk now also applies a short browser cache
 
 That thumbnail-header change is intentionally scoped to repeat avatar/persona/background image loads. It does not change canonical storage, SQLite behavior, or startup payload size, and Firefox continues using the existing image `no-store` workaround path.
 
+Separate from SQLite and thumbnail HTTP caching, EmberDesk now also ships a lower default JPEG thumbnail quality:
+
+- `default/config.yaml` now sets `thumbnails.quality: 85`
+- `src/endpoints/thumbnails.js` now uses `85` as the runtime fallback when the config key is absent
+
+That quality-tuning slice is intentionally narrow:
+
+- only newly generated JPEG thumbnails pick up the lower default
+- installs that already carry an explicit `thumbnails.quality` value keep that override unchanged
+- already-cached thumbnail files remain on disk until an operator clears the relevant thumbnail folders and lets normal browsing regenerate them
+- PNG mode still ignores JPEG quality settings entirely
+
 Separate from both SQLite and thumbnail HTTP caching, EmberDesk now also marks list-style avatar templates with:
 
 - `loading="lazy"`

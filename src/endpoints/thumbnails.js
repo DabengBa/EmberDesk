@@ -19,7 +19,7 @@ export const SKIPPED_EXTENSIONS = new Set(['.apng', '.mp4', '.webm', '.avi', '.m
 export const ALLOWED_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.tif', '.tiff', '.apng']);
 
 const thumbnailsEnabled = !!getConfigValue('thumbnails.enabled', true, 'boolean');
-const quality = Math.min(100, Math.max(1, parseInt(getConfigValue('thumbnails.quality', 95, 'number'))));
+const quality = Math.min(100, Math.max(1, parseInt(getConfigValue('thumbnails.quality', 85, 'number'))));
 const pngFormat = String(getConfigValue('thumbnails.format', 'jpg')).toLowerCase().trim() === 'png';
 const THUMBNAIL_MAX_AGE_SECONDS = 3600;
 const THUMBNAIL_CACHE_CONTROL = `private, max-age=${THUMBNAIL_MAX_AGE_SECONDS}, must-revalidate`;

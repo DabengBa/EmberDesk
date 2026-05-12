@@ -39,6 +39,7 @@ This feature lets users work with large character libraries without leaving the 
 - Summary metadata such as last-chat information should reflect the latest known state when the list is shown.
 - In steady-state repeated use, EmberDesk may reuse precomputed card-summary state so reopening the panel feels faster than a full cold re-derivation of every card.
 - Reopening the panel in non-Firefox browsers may also reuse short-lived cached avatar thumbnails, reducing repeated image transfer cost without changing character-card source-of-truth behavior.
+- Newly generated JPEG thumbnails in that flow now default to a lower quality setting (`85` instead of `95`), reducing bytes for regenerated assets while leaving explicit per-install overrides and already-cached thumbnails unchanged until the operator edits config or regenerates the cache.
 - List-style avatar surfaces in the library flow may use native browser lazy-loading and async decoding so offscreen thumbnails do less upfront work without changing the card-selection flow.
 - Those same list-style avatar images now also paint a themed placeholder background on the `<img>` surface, reducing stark white or transparent flashes while thumbnails are still loading or decoding.
 - Browsing and selecting cards belong to this feature; destructive removal belongs to [Delete Character](feature.character_delete).

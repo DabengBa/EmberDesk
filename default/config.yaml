@@ -236,7 +236,7 @@ thumbnails:
   # Changing this only affects new thumbnails. To recreate the old ones, clear out /thumbnails folder in your user data.
   format: "jpg"
   # JPG thumbnail quality (0-100)
-  quality: 95
+  quality: 85
   # Maximum thumbnail dimensions per type [width, height]
   dimensions: { 'bg': [160, 90], 'avatar': [96, 144], 'persona': [96, 144] }
 
