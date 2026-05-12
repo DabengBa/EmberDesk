@@ -46,6 +46,7 @@ This page exists so a user can run their daily LLM workflow from one browser sur
 - **Startup state**: the shell is not yet interactive while the startup overlay is still visible.
 - **Ready state**: the main shell becomes usable before every supporting panel has necessarily finished background loading.
 - **Degraded state**: if a supporting surface such as extensions or backgrounds fails to load, the core shell can still remain usable and the affected panel shows local retry or follow-up refresh behavior.
+- **Thumbnail paint state**: avatar-heavy list surfaces can show a theme-tinted placeholder on the image box before thumbnail pixels fully paint, reducing harsh flashes without changing the page flow.
 
 ## Navigation
 

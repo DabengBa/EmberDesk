@@ -41,6 +41,17 @@ That front-end slice is intentionally narrow:
 - it does not change thumbnail URLs, cache-buster behavior, or active-chat avatar rendering
 - it reduces offscreen image fetch/decode work through native browser behavior rather than new JS scheduling logic
 
+Separate from SQLite, thumbnail HTTP caching, and lazy image fetch behavior, EmberDesk now also adds a themed placeholder paint color to the shared avatar image rule:
+
+- `.avatar img { background-color: var(--SmartThemeBlurTintColor); }`
+
+That CSS-only slice is intentionally narrow:
+
+- it affects the shared avatar `<img>` paint surface instead of wrapper elements
+- it reduces visible white or transparent flashes while avatar thumbnails are still loading or decoding
+- opaque thumbnails fully cover the placeholder after paint, while transparent avatar regions may continue to reveal the tint by design
+- it does not alter thumbnail routing, request timing, cache-busters, or runtime state
+
 ## Architecture And Constraints
 
 - Canonical user data remains file-backed:
