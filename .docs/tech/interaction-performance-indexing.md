@@ -24,6 +24,12 @@ The goal of this slice is narrow:
 - keep the indexed fast path self-healing when derived rows or SQLite state become inconsistent
 - add a reproducible local A/B runner that can prove whether the current SQLite slice is helping enough to justify its maintenance cost
 
+Separate from the SQLite slice, EmberDesk now also applies a short browser cache policy on non-Firefox `/thumbnail` responses:
+
+- `Cache-Control: private, max-age=3600, must-revalidate`
+
+That thumbnail-header change is intentionally scoped to repeat avatar/persona/background image loads. It does not change canonical storage, SQLite behavior, or startup payload size, and Firefox continues using the existing image `no-store` workaround path.
+
 ## Architecture And Constraints
 
 - Canonical user data remains file-backed:

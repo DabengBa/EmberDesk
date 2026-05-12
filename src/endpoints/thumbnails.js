@@ -8,6 +8,7 @@ import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import { imageSize as sizeOf } from 'image-size';
 
 import { getConfigValue, invalidateFirefoxCache } from '../util.js';
+import { isFirefox } from '../express-common.js';
 import { getThumbnailResolution, isAnimatedWebP, isAnimatedApng, thumbnailDimensions as dimensions } from './image-metadata.js';
 import { ResizeStrategy } from '@jimp/plugin-resize';
 
@@ -20,6 +21,20 @@ export const ALLOWED_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif'
 const thumbnailsEnabled = !!getConfigValue('thumbnails.enabled', true, 'boolean');
 const quality = Math.min(100, Math.max(1, parseInt(getConfigValue('thumbnails.quality', 95, 'number'))));
 const pngFormat = String(getConfigValue('thumbnails.format', 'jpg')).toLowerCase().trim() === 'png';
+
+/**
+ * Applies browser-cacheable thumbnail headers for non-Firefox requests.
+ * Firefox keeps using the existing no-store workaround path.
+ * @param {import('express').Request} request
+ * @param {import('express').Response} response
+ */
+function applyThumbnailCacheHeaders(request, response) {
+    if (isFirefox(request)) {
+        return;
+    }
+
+    response.setHeader('Cache-Control', 'private, max-age=3600, must-revalidate');
+}
 
 /**
  * @typedef {'bg' | 'avatar' | 'persona'} ThumbnailType
@@ -261,6 +276,7 @@ publicRouter.get('/', async function (request, response) {
             const folder = getOriginalFolder(request.user.directories, type);
             const pathToOriginalFile = path.resolve(path.join(folder, file));
             if (!fs.existsSync(pathToOriginalFile)) return response.sendStatus(404);
+            applyThumbnailCacheHeaders(request, response);
             invalidateFirefoxCache(pathToOriginalFile, request, response);
             return response.sendFile(pathToOriginalFile);
         };
@@ -295,6 +311,7 @@ publicRouter.get('/', async function (request, response) {
         }
 
         if (fs.existsSync(pathToCachedFile)) {
+            applyThumbnailCacheHeaders(request, response);
             invalidateFirefoxCache(pathToCachedFile, request, response);
             return response.sendFile(file, { root: thumbnailFolder, dotfiles: 'allow' });
         }
