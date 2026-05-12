@@ -12,6 +12,7 @@ import {
 } from './lib.js';
 
 import { humanizedDateTime, favsToHotswap, getMessageTimeStamp, dragElement, isMobile, initRossMods } from './scripts/RossAscends-mods.js';
+import { applyResetChatState } from './scripts/chat-state-reset.js';
 import { userStatsHandler, statMesProcess, initStats } from './scripts/stats.js';
 import {
     generateKoboldWithStreaming,
@@ -7165,16 +7166,22 @@ export function deactivateSendButtons() {
 }
 
 export function resetChatState() {
-    // replaces deleted charcter name with system user since it will be displayed next.
-    name2 = (this_chid === undefined && neutralCharacterName) ? neutralCharacterName : systemUserName;
-    //unsets expected chid before reloading (related to getCharacters/printCharacters from using old arrays)
-    setCharacterId(undefined);
-    // sets up system user to tell user about having deleted a character
-    chat.splice(0, chat.length, ...SAFETY_CHAT);
-    // resets chat metadata
+    resetChatStateWithOptions();
+}
+
+function resetChatStateWithOptions({ clearCharacters = true } = {}) {
+    name2 = applyResetChatState({
+        currentCharacterId: this_chid,
+        neutralCharacterName,
+        systemUserName,
+        chat,
+        safetyChat: SAFETY_CHAT,
+        characters,
+        setCharacterId,
+        clearCharacters,
+    });
+
     chat_metadata = {};
-    // resets the characters array, forcing getcharacters to reset
-    characters.length = 0;
 }
 
 /**
@@ -11075,7 +11082,7 @@ async function removeCharacterFromUI(deletedAvatars = []) {
     preserveNeutralChat();
     await clearChat();
     $('#character_cross').trigger('click');
-    resetChatState();
+    resetChatStateWithOptions({ clearCharacters: false });
     $(document.getElementById('rm_button_selected_ch')).children('h2').text('');
     restoreNeutralChat();
     removeCharactersFromState(characters, deletedAvatars);
