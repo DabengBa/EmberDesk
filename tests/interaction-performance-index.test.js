@@ -264,6 +264,17 @@ function createMockResponse(statusCode = 200) {
     };
 }
 
+test('frontend getCharacters implementation uses /api/characters/all to preserve eager payload mode', () => {
+    const scriptSource = fs.readFileSync(path.join(process.cwd(), 'public', 'script.js'), 'utf8');
+    const getCharactersStart = scriptSource.indexOf('export async function getCharacters()');
+
+    expect(getCharactersStart).toBeGreaterThanOrEqual(0);
+
+    const getCharactersBody = scriptSource.slice(getCharactersStart, getCharactersStart + 800);
+    expect(getCharactersBody).toContain("fetch('/api/characters/all'");
+    expect(getCharactersBody).not.toContain("fetch('/api/characters/list'");
+});
+
 /**
  * @returns {(request: any, response: any) => Promise<void>}
  */
@@ -847,6 +858,48 @@ describe('character index', () => {
 
         expect(refreshedResponse.statusCode).toBe(200);
         expect(refreshedResponse.body.data.character_book.entries[0].content).toBe('new lore');
+    });
+
+    test('rebuilds indexed /api/characters/all full rows when legacy world info changes', async () => {
+        const directories = makeDirectories('emberdesk-character-index-route-');
+        tempRoots.push(directories.root);
+        writeLegacyCharacterCardFile(directories, 'legacy.png', 'Legacy Hero', 'lorebook');
+        writeWorldInfoFile(directories, 'lorebook', {
+            entries: {
+                1: {
+                    uid: 1,
+                    key: 'first',
+                    content: 'old lore',
+                    order: 0,
+                    position: 0,
+                    disable: false,
+                    selective: false,
+                },
+            },
+        });
+
+        const initialResponse = await invokeCharactersAll(directories);
+        expect(initialResponse.statusCode).toBe(200);
+        expect(initialResponse.body[0].data.character_book.entries[0].content).toBe('old lore');
+
+        writeWorldInfoFile(directories, 'lorebook', {
+            entries: {
+                1: {
+                    uid: 1,
+                    key: 'first',
+                    content: 'new lore',
+                    order: 0,
+                    position: 0,
+                    disable: false,
+                    selective: false,
+                },
+            },
+        });
+
+        const refreshedResponse = await invokeCharactersAll(directories);
+
+        expect(refreshedResponse.statusCode).toBe(200);
+        expect(refreshedResponse.body[0].data.character_book.entries[0].content).toBe('new lore');
     });
 
     test('stores sanitized world names in the index for legacy world-linked cards', async () => {

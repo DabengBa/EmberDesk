@@ -165,6 +165,29 @@ function isMissingWorldInfoSnapshot(row) {
 }
 
 /**
+ * @param {{ worlds?: string }} directories
+ * @param {{
+ *   source_world_name?: string,
+ *   source_world_mtime_ms?: number,
+ *   source_world_size?: number,
+ * }} row
+ * @returns {boolean}
+ */
+function isWorldInfoSnapshotStale(directories, row) {
+    if (!row.source_world_name) {
+        return false;
+    }
+
+    const currentWorldStat = calculateWorldInfoStat(directories, row.source_world_name);
+    if (!currentWorldStat) {
+        return !isMissingWorldInfoSnapshot(row);
+    }
+
+    return Number(row.source_world_mtime_ms) !== Number(currentWorldStat.mtimeMs)
+        || Number(row.source_world_size) !== Number(currentWorldStat.size);
+}
+
+/**
  * @param {string} userRoot
  * @param {{ chats?: string }} directories
  * @param {string} avatar
@@ -236,16 +259,8 @@ export function getFreshIndexedCharacterFullPayload(userRoot, directories, avata
         }, fullPayload, chatSize, dateLastChat);
     }
 
-    if (row.source_world_name) {
-        const currentWorldStat = calculateWorldInfoStat(directories, row.source_world_name);
-        if (!currentWorldStat) {
-            if (!isMissingWorldInfoSnapshot(row)) {
-                return null;
-            }
-        } else if (Number(row.source_world_mtime_ms) !== Number(currentWorldStat.mtimeMs)
-            || Number(row.source_world_size) !== Number(currentWorldStat.size)) {
-            return null;
-        }
+    if (isWorldInfoSnapshotStale(directories, row)) {
+        return null;
     }
 
     return fullPayload;
@@ -472,7 +487,17 @@ export async function listIndexedCharacterPayloads({
     const payloadColumn = useShallowPayload ? 'shallow_json' : 'full_json';
     try {
         const existingRows = new Map(
-            db.prepare('SELECT avatar, source_mtime_ms, source_size, chat_stats_dirty FROM characters').all()
+            db.prepare(`
+                SELECT
+                    avatar,
+                    source_mtime_ms,
+                    source_size,
+                    source_world_name,
+                    source_world_mtime_ms,
+                    source_world_size,
+                    chat_stats_dirty
+                FROM characters
+            `).all()
                 .map(row => [row.avatar, row]),
         );
         const avatarSet = new Set(avatarFiles);
@@ -501,6 +526,11 @@ export async function listIndexedCharacterPayloads({
             if (!existingRow
                 || Number(existingRow.source_mtime_ms) !== Number(stat.mtimeMs)
                 || Number(existingRow.source_size) !== Number(stat.size)) {
+                avatarsToRefresh.push(avatar);
+                continue;
+            }
+
+            if (!useShallowPayload && isWorldInfoSnapshotStale(directories, existingRow)) {
                 avatarsToRefresh.push(avatar);
                 continue;
             }
