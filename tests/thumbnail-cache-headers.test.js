@@ -51,6 +51,7 @@ async function requestThumbnail(targetPath, { headers } = {}) {
     return response;
 }
 
+// fetch() hides some 304 details, so the raw client is used for validator assertions.
 async function requestThumbnailRaw(targetPath, { headers } = {}) {
     return await new Promise((resolve, reject) => {
         const request = http.request(`${origin}${targetPath}`, {
@@ -73,6 +74,7 @@ beforeAll(async () => {
     const directories = makeDirectories('emberdesk-thumbnail-cache-');
     writeFixtureFile(directories.characters, 'cached.png');
     writeFixtureFile(directories.thumbnailsAvatar, 'cached.png');
+    // The extension selects the serveOriginal() branch; the bytes themselves are irrelevant here.
     writeFixtureFile(directories.characters, 'animated.gif');
 
     const app = createApp(directories);
@@ -150,6 +152,7 @@ describe('thumbnail cache headers', () => {
         });
 
         expect(response.statusCode).toBe(304);
+        expect(response.headers['cache-control']).toBe('private, max-age=3600, must-revalidate');
     });
 
     test('refresh-style no-cache request still receives a normal 200 response', async () => {
@@ -162,5 +165,16 @@ describe('thumbnail cache headers', () => {
 
         expect(response.status).toBe(200);
         expect(response.headers.get('cache-control')).toBe('private, max-age=3600, must-revalidate');
+    });
+
+    test('missing thumbnails keep existing 404 cache behavior', async () => {
+        const response = await requestThumbnail('/thumbnail?type=avatar&file=missing.png', {
+            headers: {
+                'user-agent': 'Mozilla/5.0 Chrome/124.0.0.0 Safari/537.36',
+            },
+        });
+
+        expect(response.status).toBe(404);
+        expect(response.headers.get('cache-control')).toBeNull();
     });
 });
