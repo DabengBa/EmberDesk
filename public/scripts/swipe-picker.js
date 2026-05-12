@@ -131,6 +131,7 @@ async function openSwipePicker(messageId) {
         const swipeBlocks = await Promise.all(message.swipes.map(async (swipe, index) => {
             const swipeText = String(swipe ?? '');
             const template = $('#past_chat_template .select_chat_block_wrapper').clone();
+            template.find('.avatar').remove();
             const block = template.find('.select_chat_block');
             block.removeClass('select_chat_block').addClass('swipe_picker_block');
             block.find('.select_chat_actions').removeClass('gap10px');

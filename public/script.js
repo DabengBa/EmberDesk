@@ -8663,7 +8663,7 @@ export function getCurrentChatDetails() {
     const group = selected_group ? groups.find(x => x.id === selected_group) : null;
     const currentChat = selected_group ? group?.chat_id : characters[this_chid].chat;
     const displayName = selected_group ? group?.name : characters[this_chid].name;
-    const avatarImg = selected_group ? group?.avatar_url : getThumbnailUrl('avatar', characters[this_chid].avatar);
+    const avatarImg = selected_group ? '' : getThumbnailUrl('avatar', characters[this_chid].avatar);
     return { sessionName: currentChat, group: group, characterName: displayName, avatarImgURL: avatarImg };
 }
 
@@ -8682,11 +8682,12 @@ export async function displayPastChats(hightlightNames = []) {
     const currentChat = chatDetails.sessionName;
     const displayName = chatDetails.characterName;
     const avatarImg = chatDetails.avatarImgURL;
+    const groupAvatar = selected_group && chatDetails.group ? getGroupAvatar(chatDetails.group) : null;
 
-    await displayChats('', currentChat, displayName, avatarImg, selected_group, hightlightNames);
+    await displayChats('', currentChat, displayName, avatarImg, groupAvatar, selected_group, hightlightNames);
 
     const debouncedDisplay = debounce((searchQuery) => {
-        displayChats(searchQuery, currentChat, displayName, avatarImg, selected_group, []);
+        displayChats(searchQuery, currentChat, displayName, avatarImg, groupAvatar, selected_group, []);
     });
 
     // Define the search input listener
@@ -8704,7 +8705,7 @@ export async function displayPastChats(hightlightNames = []) {
     addChatBackupsBrowser();
 }
 
-async function displayChats(searchQuery, currentChat, displayName, avatarImg, selected_group, highlightNames) {
+async function displayChats(searchQuery, currentChat, displayName, avatarImg, groupAvatar, selected_group, highlightNames) {
     try {
         const response = await fetch('/api/chats/search', {
             method: 'POST',
@@ -8729,7 +8730,15 @@ async function displayChats(searchQuery, currentChat, displayName, avatarImg, se
             const isSelected = currentChat === chat.file_name;
             const template = $('#past_chat_template .select_chat_block_wrapper').clone();
             template.find('.select_chat_block').attr('file_name', chat.file_name);
-            template.find('.avatar img').attr('src', avatarImg);
+            if (selected_group) {
+                if (groupAvatar) {
+                    template.find('.avatar').replaceWith(groupAvatar.clone());
+                } else {
+                    template.find('.avatar').remove();
+                }
+            } else {
+                template.find('.avatar img').attr('src', avatarImg);
+            }
             template.find('.select_chat_block_filename').text(chat.file_name);
             template.find('.chat_file_size').text(`(${chat.file_size},`);
             template.find('.chat_messages_num').text(`${chat.message_count} 💬)`);

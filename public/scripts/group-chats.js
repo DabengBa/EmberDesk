@@ -870,11 +870,11 @@ function isValidImageUrl(url) {
  */
 function getGroupAvatar(group) {
     if (!group) {
-        return $(`<div class="avatar"><img src="${default_avatar}"></div>`);
+        return $(`<div class="avatar"><img src="${default_avatar}" loading="lazy" decoding="async"></div>`);
     }
     // if isDataURL or if it's a valid local file url
     if (isValidImageUrl(group.avatar_url)) {
-        return $(`<div class="avatar" title="[Group] ${group.name}"><img src="${group.avatar_url}"></div>`);
+        return $(`<div class="avatar" title="[Group] ${group.name}"><img src="${group.avatar_url}" loading="lazy" decoding="async"></div>`);
     }
 
     const memberAvatars = [];
