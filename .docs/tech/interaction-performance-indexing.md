@@ -30,6 +30,17 @@ Separate from the SQLite slice, EmberDesk now also applies a short browser cache
 
 That thumbnail-header change is intentionally scoped to repeat avatar/persona/background image loads. It does not change canonical storage, SQLite behavior, or startup payload size, and Firefox continues using the existing image `no-store` workaround path.
 
+Separate from both SQLite and thumbnail HTTP caching, EmberDesk now also marks list-style avatar templates with:
+
+- `loading="lazy"`
+- `decoding="async"`
+
+That front-end slice is intentionally narrow:
+
+- it applies to template-owned list surfaces such as character rows, inline avatar strips, group member/group collage avatars, past-chat rows, and welcome recent chats
+- it does not change thumbnail URLs, cache-buster behavior, or active-chat avatar rendering
+- it reduces offscreen image fetch/decode work through native browser behavior rather than new JS scheduling logic
+
 ## Architecture And Constraints
 
 - Canonical user data remains file-backed:
