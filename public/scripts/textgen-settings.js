@@ -244,6 +244,8 @@ export let textgenerationwebui_banned_in_macros = [];
 
 export let textgenerationwebui_presets = [];
 export let textgenerationwebui_preset_names = [];
+let textGenGlobalBindingsInitialized = false;
+let textGenPanelBindingsInitialized = false;
 
 export const setting_names = [
     'temp',
@@ -574,15 +576,33 @@ export async function loadTextGenSettings(data, loadedSettings) {
         textgenerationwebui_settings.type = MANCER;
     }
 
+    syncTextGenSettingsUi();
+
+    registerDebugFunction('change-mancer-url', 'Change Mancer base URL', 'Change Mancer API server base URL', () => {
+        const result = prompt(`Enter Mancer base URL\nDefault: ${MANCER_SERVER_DEFAULT}`, MANCER_SERVER);
+
+        if (result) {
+            localStorage.setItem(MANCER_SERVER_KEY, result);
+            MANCER_SERVER = result;
+        }
+    });
+}
+
+function syncTextGenSettingsUi() {
+    const presetSelect = $('#settings_preset_textgenerationwebui');
+    if (presetSelect.length) {
+        presetSelect.empty();
+    }
+
     for (const name of textgenerationwebui_preset_names) {
         const option = document.createElement('option');
         option.value = name;
         option.innerText = name;
-        $('#settings_preset_textgenerationwebui').append(option);
+        presetSelect.append(option);
     }
 
     if (textgenerationwebui_settings.preset) {
-        $('#settings_preset_textgenerationwebui').val(textgenerationwebui_settings.preset);
+        presetSelect.val(textgenerationwebui_settings.preset);
     }
 
     for (const i of setting_names) {
@@ -596,15 +616,10 @@ export async function loadTextGenSettings(data, loadedSettings) {
     showSamplerControls(textgenerationwebui_settings.type);
     BIAS_CACHE.delete(BIAS_KEY);
     displayLogitBias(textgenerationwebui_settings.logit_bias, BIAS_KEY);
+}
 
-    registerDebugFunction('change-mancer-url', 'Change Mancer base URL', 'Change Mancer API server base URL', () => {
-        const result = prompt(`Enter Mancer base URL\nDefault: ${MANCER_SERVER_DEFAULT}`, MANCER_SERVER);
-
-        if (result) {
-            localStorage.setItem(MANCER_SERVER_KEY, result);
-            MANCER_SERVER = result;
-        }
-    });
+export function rehydrateTextGenPanel() {
+    syncTextGenSettingsUi();
 }
 
 /**
@@ -810,7 +825,11 @@ async function getStatusTextgen() {
     return resultCheckStatus();
 }
 
-export function initTextGenSettings() {
+function initializeTextGenPanelBindings() {
+    if (textGenPanelBindingsInitialized || !document.querySelector('#samplerResetButton')) {
+        return;
+    }
+
     $('#send_banned_tokens_textgenerationwebui').on('change', function () {
         const checked = !!$(this).prop('checked');
         toggleBannedStringsKillSwitch(checked,
@@ -914,6 +933,89 @@ export function initTextGenSettings() {
         saveSettingsDebounced();
     });
 
+    $('#samplerResetButton').off('click').on('click', function () {
+        const inputs = {
+            'temp_textgenerationwebui': 1,
+            'top_k_textgenerationwebui': [INFERMATICAI, APHRODITE, VLLM].includes(textgenerationwebui_settings.type) ? -1 : 0,
+            'top_p_textgenerationwebui': 1,
+            'min_p_textgenerationwebui': 0,
+            'rep_pen_textgenerationwebui': 1,
+            'rep_pen_range_textgenerationwebui': 0,
+            'rep_pen_decay_textgenerationwebui': 0,
+            'dynatemp_textgenerationwebui': false,
+            'seed_textgenerationwebui': -1,
+            'ban_eos_token_textgenerationwebui': false,
+            'do_sample_textgenerationwebui': true,
+            'add_bos_token_textgenerationwebui': true,
+            'temperature_last_textgenerationwebui': true,
+            'skip_special_tokens_textgenerationwebui': true,
+            'include_reasoning_textgenerationwebui': true,
+            'top_a_textgenerationwebui': 0,
+            'top_a_counter_textgenerationwebui': 0,
+            'mirostat_mode_textgenerationwebui': 0,
+            'mirostat_tau_textgenerationwebui': 5,
+            'mirostat_eta_textgenerationwebui': 0.1,
+            'tfs_textgenerationwebui': 1,
+            'epsilon_cutoff_textgenerationwebui': 0,
+            'eta_cutoff_textgenerationwebui': 0,
+            'encoder_rep_pen_textgenerationwebui': 1,
+            'freq_pen_textgenerationwebui': 0,
+            'presence_pen_textgenerationwebui': 0,
+            'skew_textgenerationwebui': 0,
+            'no_repeat_ngram_size_textgenerationwebui': 0,
+            'speculative_ngram_textgenerationwebui': false,
+            'min_length_textgenerationwebui': 0,
+            'num_beams_textgenerationwebui': 1,
+            'length_penalty_textgenerationwebui': 1,
+            'penalty_alpha_textgenerationwebui': 0,
+            'typical_p_textgenerationwebui': 1,
+            'guidance_scale_textgenerationwebui': 1,
+            'smoothing_factor_textgenerationwebui': 0,
+            'smoothing_curve_textgenerationwebui': 1,
+            'dry_allowed_length_textgenerationwebui': 2,
+            'dry_multiplier_textgenerationwebui': 0,
+            'dry_base_textgenerationwebui': 1.75,
+            'dry_penalty_last_n_textgenerationwebui': 0,
+            'xtc_threshold_textgenerationwebui': 0.1,
+            'xtc_probability_textgenerationwebui': 0,
+            'nsigma_textgenerationwebui': 0,
+            'min_keep_textgenerationwebui': 0,
+            'adaptive_target_textgenerationwebui': -0.01,
+            'adaptive_decay_textgenerationwebui': 0.9,
+        };
+
+        for (const [id, value] of Object.entries(inputs)) {
+            const inputElement = $(`#${id}`);
+            const valueToSet = typeof value === 'boolean' ? String(value) : value;
+            if (inputElement.prop('type') === 'checkbox') {
+                inputElement.prop('checked', value).trigger('input');
+            } else if (inputElement.prop('type') === 'number') {
+                inputElement.val(valueToSet).trigger('input');
+            } else {
+                inputElement.val(valueToSet).trigger('input');
+                if (power_user.enableZenSliders) {
+                    let masterElementID = inputElement.prop('id');
+                    console.log(masterElementID);
+                    let zenSlider = $(`#${masterElementID}_zenslider`).slider();
+                    zenSlider.slider('option', 'value', value);
+                    zenSlider.slider('option', 'slide')
+                        .call(zenSlider, null, {
+                            handle: $('.ui-slider-handle', zenSlider), value: value,
+                        });
+                }
+            }
+        }
+    });
+
+    $('#textgen_logit_bias_new_entry').on('click', () => createNewLogitBiasEntry(textgenerationwebui_settings.logit_bias, BIAS_KEY));
+    textGenPanelBindingsInitialized = true;
+}
+
+function initializeTextGenGlobalBindings() {
+    if (textGenGlobalBindingsInitialized) {
+        return;
+    }
+
     $('#textgen_type').on('change', function () {
         const type = String($(this).val());
         textgenerationwebui_settings.type = type;
@@ -957,80 +1059,6 @@ export function initTextGenSettings() {
         await eventSource.emit(event_types.PRESET_CHANGED, { apiId: 'textgenerationwebui', name: presetName });
     });
 
-    $('#samplerResetButton').off('click').on('click', function () {
-        const inputs = {
-            'temp_textgenerationwebui': 1,
-            'top_k_textgenerationwebui': [INFERMATICAI, APHRODITE, VLLM].includes(textgenerationwebui_settings.type) ? -1 : 0,
-            'top_p_textgenerationwebui': 1,
-            'min_p_textgenerationwebui': 0,
-            'rep_pen_textgenerationwebui': 1,
-            'rep_pen_range_textgenerationwebui': 0,
-            'rep_pen_decay_textgenerationwebui': 0,
-            'dynatemp_textgenerationwebui': false,
-            'seed_textgenerationwebui': -1,
-            'ban_eos_token_textgenerationwebui': false,
-            'do_sample_textgenerationwebui': true,
-            'add_bos_token_textgenerationwebui': true,
-            'temperature_last_textgenerationwebui': true,
-            'skip_special_tokens_textgenerationwebui': true,
-            'include_reasoning_textgenerationwebui': true,
-            'top_a_textgenerationwebui': 0,
-            'top_a_counter_textgenerationwebui': 0,
-            'mirostat_mode_textgenerationwebui': 0,
-            'mirostat_tau_textgenerationwebui': 5,
-            'mirostat_eta_textgenerationwebui': 0.1,
-            'tfs_textgenerationwebui': 1,
-            'epsilon_cutoff_textgenerationwebui': 0,
-            'eta_cutoff_textgenerationwebui': 0,
-            'encoder_rep_pen_textgenerationwebui': 1,
-            'freq_pen_textgenerationwebui': 0,
-            'presence_pen_textgenerationwebui': 0,
-            'skew_textgenerationwebui': 0,
-            'no_repeat_ngram_size_textgenerationwebui': 0,
-            'speculative_ngram_textgenerationwebui': false,
-            'min_length_textgenerationwebui': 0,
-            'num_beams_textgenerationwebui': 1,
-            'length_penalty_textgenerationwebui': 1,
-            'penalty_alpha_textgenerationwebui': 0,
-            'typical_p_textgenerationwebui': 1, // Added entry
-            'guidance_scale_textgenerationwebui': 1,
-            'smoothing_factor_textgenerationwebui': 0,
-            'smoothing_curve_textgenerationwebui': 1,
-            'dry_allowed_length_textgenerationwebui': 2,
-            'dry_multiplier_textgenerationwebui': 0,
-            'dry_base_textgenerationwebui': 1.75,
-            'dry_penalty_last_n_textgenerationwebui': 0,
-            'xtc_threshold_textgenerationwebui': 0.1,
-            'xtc_probability_textgenerationwebui': 0,
-            'nsigma_textgenerationwebui': 0,
-            'min_keep_textgenerationwebui': 0,
-            'adaptive_target_textgenerationwebui': -0.01,
-            'adaptive_decay_textgenerationwebui': 0.9,
-        };
-
-        for (const [id, value] of Object.entries(inputs)) {
-            const inputElement = $(`#${id}`);
-            const valueToSet = typeof value === 'boolean' ? String(value) : value;
-            if (inputElement.prop('type') === 'checkbox') {
-                inputElement.prop('checked', value).trigger('input');
-            } else if (inputElement.prop('type') === 'number') {
-                inputElement.val(valueToSet).trigger('input');
-            } else {
-                inputElement.val(valueToSet).trigger('input');
-                if (power_user.enableZenSliders) {
-                    let masterElementID = inputElement.prop('id');
-                    console.log(masterElementID);
-                    let zenSlider = $(`#${masterElementID}_zenslider`).slider();
-                    zenSlider.slider('option', 'value', value);
-                    zenSlider.slider('option', 'slide')
-                        .call(zenSlider, null, {
-                            handle: $('.ui-slider-handle', zenSlider), value: value,
-                        });
-                }
-            }
-        }
-    });
-
     for (const i of setting_names) {
         $(`#${i}_textgenerationwebui`).attr('x-setting-id', i);
         $(document).on('input', `#${i}_textgenerationwebui`, function () {
@@ -1057,8 +1085,6 @@ export function initTextGenSettings() {
             saveSettingsDebounced();
         });
     }
-
-    $('#textgen_logit_bias_new_entry').on('click', () => createNewLogitBiasEntry(textgenerationwebui_settings.logit_bias, BIAS_KEY));
 
     $('#openrouter_providers_text').on('change', function () {
         const selectedProviders = $(this).val();
@@ -1121,6 +1147,13 @@ export function initTextGenSettings() {
         saveSettingsDebounced();
         getStatusTextgen();
     });
+
+    textGenGlobalBindingsInitialized = true;
+}
+
+export function initTextGenSettings() {
+    initializeTextGenGlobalBindings();
+    initializeTextGenPanelBindings();
 }
 
 /**

@@ -9,6 +9,8 @@ import path from 'node:path';
 
 /** @type {Map<string, { payload: any, inflight: Promise<any> | null }>} */
 const cache = new Map();
+/** @type {Map<string, number>} */
+const generations = new Map();
 
 /**
  * Read and parse all files in a directory (async).
@@ -108,14 +110,21 @@ export async function getCachedPayload(dirPath, rebuild) {
         return entry.inflight;
     }
 
+    const generation = generations.get(dirPath) ?? 0;
     const promise = (async () => {
         try {
             const payload = await rebuild();
-            cache.set(dirPath, { payload, inflight: null });
+            const latestEntry = cache.get(dirPath);
+            const latestGeneration = generations.get(dirPath) ?? 0;
+            if (latestEntry?.inflight === promise && latestGeneration === generation) {
+                cache.set(dirPath, { payload, inflight: null });
+            }
             return payload;
         } catch (err) {
             // Remove broken entry so next request retries
-            cache.delete(dirPath);
+            if (cache.get(dirPath)?.inflight === promise) {
+                cache.delete(dirPath);
+            }
             throw err;
         }
     })();
@@ -130,5 +139,6 @@ export async function getCachedPayload(dirPath, rebuild) {
  * @param {string} dirPath  Absolute directory path
  */
 export function invalidateDirectory(dirPath) {
+    generations.set(dirPath, (generations.get(dirPath) ?? 0) + 1);
     cache.delete(dirPath);
 }

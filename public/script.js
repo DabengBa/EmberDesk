@@ -34,6 +34,7 @@ import {
     parseTextgenLogprobs,
     parseTabbyLogprobs,
     initTextGenSettings,
+    rehydrateTextGenPanel,
 } from './scripts/textgen-settings.js';
 
 import {
@@ -48,6 +49,7 @@ import {
     wi_anchor_position,
     world_info_include_names,
     initWorldInfo,
+    rehydrateWorldInfoPanel,
     charUpdatePrimaryWorld,
     charSetAuxWorlds,
 } from './scripts/world-info.js';
@@ -248,6 +250,7 @@ import { getBackgrounds, initBackgrounds, loadBackgroundSettings, background_set
 import { loader } from './scripts/action-loader.js';
 import { createSingleFlightTask, resolvePersistedCurrentVersion, resolveStartupSettingsPlan } from './scripts/startup-helpers.js';
 import { ensurePanel, registerPanelHook } from './scripts/deferred-panels.js';
+import { getCharacterCardTagId, resolveTextGenDeferredReplay } from './scripts/deferred-panel-replays.js';
 import { BulkEditOverlay } from './scripts/BulkEditOverlay.js';
 import { initTextGenModels } from './scripts/textgen-models.js';
 import { appendFileContent, hasPendingFileAttachment, populateFileAttachment, decodeStyleTags, encodeStyleTags, isExternalMediaAllowed, preserveNeutralChat, restoreNeutralChat, formatCreatorNotes, initChatUtilities, addDOMPurifyHooks } from './scripts/chats.js';
@@ -648,10 +651,26 @@ function startDeferredStartupTasks() {
  */
 function _replayWorldInfoSettings() {
     initWorldInfo();
+    rehydrateWorldInfoPanel();
 }
 
 function _replayTextGenSettings() {
-    if (main_api === 'textgenerationwebui') {
+    const replayPlan = resolveTextGenDeferredReplay({ mainApi: main_api });
+
+    if (replayPlan.shouldHydrateSettings) {
+        rehydrateTextGenPanel();
+    }
+
+    if (replayPlan.shouldBindPanelControls) {
+        initTextGenSettings();
+        initCustomSelectedSamplers();
+    }
+
+    if (replayPlan.shouldValidateSamplers) {
+        void validateDisabledSamplers().catch(error => console.error('Deferred TextGen sampler validation failed.', error));
+    }
+
+    if (replayPlan.shouldSyncMainApiVisibility) {
         changeMainAPI();
     }
 }
@@ -1144,7 +1163,7 @@ function buildCharacterRowHtml(item, id) {
     for (const tag of printableTags) {
         if (shouldPrintTag(tag) || additionalTagsPrinted++ < availableSlotsForAdditionalTags) {
             const tagName = escapeHtml(tag.name);
-            tagsHtml += `<span class="tag" id="tag__${escapeHtml(tag.id)}"><span class="tag_name">${tagName}</span></span>`;
+            tagsHtml += `<span class="tag" id="${escapeHtml(getCharacterCardTagId(tag.id))}"><span class="tag_name">${tagName}</span></span>`;
         } else {
             tagsSkipped++;
         }

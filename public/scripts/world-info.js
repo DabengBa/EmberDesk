@@ -23,6 +23,7 @@ import { renderTemplateAsync } from './templates.js';
 import { t } from './i18n.js';
 import { accountStorage } from './util/AccountStorage.js';
 import { getOrCreatePersonaDescriptor, setPersonaDescription, user_avatar } from './personas.js';
+import { buildWorldInfoReplayState } from './deferred-panel-replays.js';
 
 export const world_info_insertion_strategy = {
     evenly: 0,
@@ -66,6 +67,9 @@ export let world_info = {};
 export let selected_world_info = [];
 /** @type {string[]} */
 export let world_names;
+let worldInfoRuntimeInitialized = false;
+let worldInfoCoreInitialized = false;
+let worldInfoPanelInitialized = false;
 export let world_info_depth = 2;
 export let world_info_min_activations = 0; // if > 0, will continue seeking chat until minimum world infos are activated
 export let world_info_min_activations_depth_max = 0; // used when (world_info_min_activations > 0)
@@ -996,19 +1000,42 @@ export function setWorldInfoSettings(settings, data) {
 
     // Add to existing selected WI if it exists
     selected_world_info = selected_world_info.concat(settings.world_info?.globalSelect?.filter((e) => world_names.includes(e)) ?? []);
+    syncWorldInfoSettingsUi();
+    ensureWorldInfoRuntimeInitialized();
+}
 
-    if (world_names.length > 0) {
-        $('#world_info').empty();
-    }
-
-    world_names.forEach((item, i) => {
-        $('#world_info').append(`<option value='${i}'${selected_world_info.includes(item) ? ' selected' : ''}>${item}</option>`);
-        $('#world_editor_select').append(`<option value='${i}'>${item}</option>`);
+function syncWorldInfoSettingsUi({ preserveEditorSelection = true, syncGlobalSelect = true, syncEditorSelect = true } = {}) {
+    const editorSelectedName = preserveEditorSelection
+        ? String($('#world_editor_select').find(':selected').text() ?? '')
+        : '';
+    const replayState = buildWorldInfoReplayState({
+        worldNames: world_names,
+        selectedWorldInfo: selected_world_info,
+        editorSelectedName,
     });
 
+    if (syncGlobalSelect) {
+        $('#world_info').empty();
+        for (const option of replayState.globalOptions) {
+            $('#world_info').append(new Option(option.text, option.value, false, option.selected));
+        }
+    }
+
+    if (syncEditorSelect) {
+        const editorSelect = $('#world_editor_select');
+        editorSelect.find('option[value!=""]').remove();
+        for (const option of replayState.editorOptions) {
+            editorSelect.append(new Option(option.text, option.value, false, option.selected));
+        }
+    }
+
     $('#world_info_sort_order').val(accountStorage.getItem(SORT_ORDER_KEY) || '0');
-    $('#world_info').trigger('change');
-    $('#world_editor_select').trigger('change');
+}
+
+function ensureWorldInfoRuntimeInitialized() {
+    if (worldInfoRuntimeInitialized) {
+        return;
+    }
 
     eventSource.on(event_types.CHAT_CHANGED, async () => {
         const hasWorldInfo = !!chat_metadata[METADATA_KEY] && world_names.includes(chat_metadata[METADATA_KEY]);
@@ -1028,8 +1055,12 @@ export function setWorldInfoSettings(settings, data) {
         }
     });
 
-    // Add slash commands
     registerWorldInfoSlashCommands();
+    worldInfoRuntimeInitialized = true;
+}
+
+export function rehydrateWorldInfoPanel() {
+    syncWorldInfoSettingsUi({ syncGlobalSelect: false });
 }
 
 /**
@@ -6054,236 +6085,240 @@ function updateAuxBooks(fileName, computeNext) {
 }
 
 export function initWorldInfo() {
-    $('#world_info').on('mousedown change', async function (e) {
-        // If there's no world names, don't do anything
-        if (world_names.length === 0) {
-            e.preventDefault();
-            return;
-        }
-
-        onWorldInfoChange('__notSlashCommand__');
-    });
-
-    //**************************WORLD INFO IMPORT EXPORT*************************//
-    $('#world_import_button').on('click', function () {
-        $('#world_import_file').trigger('click');
-    });
-
-    $('#world_import_file').on('change', async function (e) {
-        if (!(e.target instanceof HTMLInputElement)) {
-            return;
-        }
-
-        const file = e.target.files[0];
-
-        await importWorldInfo(file);
-
-        // Will allow to select the same file twice in a row
-        e.target.value = '';
-    });
-
-    $('#world_create_button').on('click', async () => {
-        const tempName = getFreeWorldName();
-        const finalName = await Popup.show.input(t`Create a new World Info`, t`Enter a name for the new file:`, tempName);
-
-        if (finalName) {
-            await createNewWorldInfo(finalName, { interactive: true });
-        }
-    });
-
-    $('#world_editor_select').on('change', async () => {
-        $('#world_info_search').val('');
-        worldInfoFilter.setFilterData(FILTER_TYPES.WORLD_INFO_SEARCH, '', true);
-        const selectedIndex = String($('#world_editor_select').find(':selected').val());
-
-        if (selectedIndex === '') {
-            await hideWorldEditor();
-        } else {
-            const worldName = world_names[selectedIndex];
-            showWorldEditor(worldName);
-        }
-    });
-
-    const saveSettings = () => {
-        saveSettingsDebounced();
-        eventSource.emit(event_types.WORLDINFO_SETTINGS_UPDATED);
-    };
-
-    $('#world_info_depth').on('input', function () {
-        world_info_depth = Number($(this).val());
-        $('#world_info_depth_counter').val($(this).val());
-        saveSettings();
-    });
-
-    $('#world_info_min_activations').on('input', function () {
-        world_info_min_activations = Number($(this).val());
-        $('#world_info_min_activations_counter').val(world_info_min_activations);
-
-        if (world_info_min_activations !== 0 && world_info_max_recursion_steps !== 0) {
-            $('#world_info_max_recursion_steps').val(0).trigger('input');
-            flashHighlight($('#world_info_max_recursion_steps').parent()); // flash the other control to show it has changed
-            console.info('[WI] Max recursion steps set to 0, as min activations is set to', world_info_min_activations);
-        } else {
-            saveSettings();
-        }
-    });
-
-    $('#world_info_min_activations_depth_max').on('input', function () {
-        world_info_min_activations_depth_max = Number($(this).val());
-        $('#world_info_min_activations_depth_max_counter').val($(this).val());
-        saveSettings();
-    });
-
-    $('#world_info_budget').on('input', function () {
-        world_info_budget = Number($(this).val());
-        $('#world_info_budget_counter').val($(this).val());
-        saveSettings();
-    });
-
-    $('#world_info_include_names').on('input', function () {
-        world_info_include_names = !!$(this).prop('checked');
-        saveSettings();
-    });
-
-    $('#world_info_recursive').on('input', function () {
-        world_info_recursive = !!$(this).prop('checked');
-        saveSettings();
-    });
-
-    $('#world_info_case_sensitive').on('input', function () {
-        world_info_case_sensitive = !!$(this).prop('checked');
-        saveSettings();
-    });
-
-    $('#world_info_match_whole_words').on('input', function () {
-        world_info_match_whole_words = !!$(this).prop('checked');
-        saveSettings();
-    });
-
-    $('#world_info_character_strategy').on('change', function () {
-        world_info_character_strategy = Number($(this).val());
-        saveSettings();
-    });
-
-    $('#world_info_overflow_alert').on('change', function () {
-        world_info_overflow_alert = !!$(this).prop('checked');
-        saveSettingsDebounced();
-    });
-
-    $('#world_info_use_group_scoring').on('change', function () {
-        world_info_use_group_scoring = !!$(this).prop('checked');
-        saveSettingsDebounced();
-    });
-
-    $('#world_info_budget_cap').on('input', function () {
-        world_info_budget_cap = Number($(this).val());
-        $('#world_info_budget_cap_counter').val(world_info_budget_cap);
-        saveSettings();
-    });
-
-    $('#world_info_max_recursion_steps').on('input', function () {
-        world_info_max_recursion_steps = Number($(this).val());
-        $('#world_info_max_recursion_steps_counter').val(world_info_max_recursion_steps);
-        if (world_info_max_recursion_steps !== 0 && world_info_min_activations !== 0) {
-            $('#world_info_min_activations').val(0).trigger('input');
-            flashHighlight($('#world_info_min_activations').parent()); // flash the other control to show it has changed
-            console.info('[WI] Min activations set to 0, as max recursion steps is set to', world_info_max_recursion_steps);
-        } else {
-            saveSettings();
-        }
-    });
-
-    $('#world_button').on('click', async function (event) {
-        const openSetWorldMenu = () => $('#char-management-dropdown').val($('#set_character_world').val()).trigger('change');
-        const chid = $('#set_character_world').data('chid');
-
-        if (chid === -1) {
-            openSetWorldMenu();
-            return;
-        }
-
-        const worldName = characters[chid]?.data?.extensions?.world;
-        const hasEmbed = checkEmbeddedWorld(chid);
-        if (worldName && world_names.includes(worldName) && !event.shiftKey && !event.altKey) {
-            openWorldInfoEditor(worldName);
-        } else if (hasEmbed && !event.shiftKey && !event.altKey) {
-            await importEmbeddedWorldInfo();
-            saveCharacterDebounced();
-        } else {
-            openSetWorldMenu();
-        }
-    });
-    addLongPressEvent('#world_button', function () {
-        $(this).trigger($.Event('click', { shiftKey: true }));
-    });
-
-    const debouncedWorldInfoSearch = debounce((searchQuery) => {
-        worldInfoFilter.setFilterData(FILTER_TYPES.WORLD_INFO_SEARCH, searchQuery);
-    });
-    $('#world_info_search').on('input', function () {
-        const searchQuery = $(this).val();
-        debouncedWorldInfoSearch(searchQuery);
-    });
-
-    $('#world_refresh').on('click', () => {
-        updateEditor(navigation_option.previous);
-    });
-
-    $('#world_info_sort_order').on('change', function () {
-        const value = String($(this).find(':selected').val());
-        // Save sort order, but do not save search sorting, as this is a temporary sorting option
-        if (value !== 'search') accountStorage.setItem(SORT_ORDER_KEY, value);
-        updateEditor(navigation_option.none);
-    });
-
-    $(document).on('click', '.chat_lorebook_button', assignLorebookToChat);
-    addLongPressEvent('.chat_lorebook_button', function () {
-        assignLorebookToChat({ shiftKey: true, altKey: false });
-    });
-
-    $('#group-chat-lorebook-dropdown').on('change', async function () {
-        $(this).prop('selectedIndex', 0);
-        await assignLorebookToChat({ shiftKey: true, altKey: false });
-    });
-
-    // Not needed on mobile
-    if (!isMobile()) {
-        $('#world_editor_select').select2({
-            placeholder: t`--- Pick to Edit ---`,
-            searchInputPlaceholder: t`Search...`,
-            allowClear: true,
-            closeOnSelect: true,
-            multiple: false,
-        });
-
-        $('#world_info').select2({
-            width: '100%',
-            placeholder: t`No Worlds active. Click here to select.`,
-            allowClear: true,
-            closeOnSelect: false,
-        });
-
-        // Subscribe world loading to the select2 multiselect items (We need to target the specific select2 control)
-        select2ChoiceClickSubscribe($('#world_info'), target => {
-            const name = $(target).text();
-            const selectedIndex = world_names.indexOf(name);
-            const alreadySelectedInEditor = $('#world_editor_select option:selected').text() === name;
-            if (selectedIndex !== -1 && !alreadySelectedInEditor) {
-                $('#world_editor_select').val(selectedIndex).trigger('change');
-                console.log('Quick selection of world', name);
-            } else {
-                console.warn('lets not reload an already loaded list yes?');
+    if (!worldInfoCoreInitialized) {
+        $('#world_info').on('mousedown change', async function (e) {
+            // If there's no world names, don't do anything
+            if (world_names.length === 0) {
+                e.preventDefault();
+                return;
             }
-        }, { buttonStyle: true, closeDrawer: true });
+
+            onWorldInfoChange('__notSlashCommand__');
+        });
+
+        const saveSettings = () => {
+            saveSettingsDebounced();
+            eventSource.emit(event_types.WORLDINFO_SETTINGS_UPDATED);
+        };
+
+        $('#world_info_depth').on('input', function () {
+            world_info_depth = Number($(this).val());
+            $('#world_info_depth_counter').val($(this).val());
+            saveSettings();
+        });
+
+        $('#world_info_min_activations').on('input', function () {
+            world_info_min_activations = Number($(this).val());
+            $('#world_info_min_activations_counter').val(world_info_min_activations);
+
+            if (world_info_min_activations !== 0 && world_info_max_recursion_steps !== 0) {
+                $('#world_info_max_recursion_steps').val(0).trigger('input');
+                flashHighlight($('#world_info_max_recursion_steps').parent());
+                console.info('[WI] Max recursion steps set to 0, as min activations is set to', world_info_min_activations);
+            } else {
+                saveSettings();
+            }
+        });
+
+        $('#world_info_min_activations_depth_max').on('input', function () {
+            world_info_min_activations_depth_max = Number($(this).val());
+            $('#world_info_min_activations_depth_max_counter').val($(this).val());
+            saveSettings();
+        });
+
+        $('#world_info_budget').on('input', function () {
+            world_info_budget = Number($(this).val());
+            $('#world_info_budget_counter').val($(this).val());
+            saveSettings();
+        });
+
+        $('#world_info_include_names').on('input', function () {
+            world_info_include_names = !!$(this).prop('checked');
+            saveSettings();
+        });
+
+        $('#world_info_recursive').on('input', function () {
+            world_info_recursive = !!$(this).prop('checked');
+            saveSettings();
+        });
+
+        $('#world_info_case_sensitive').on('input', function () {
+            world_info_case_sensitive = !!$(this).prop('checked');
+            saveSettings();
+        });
+
+        $('#world_info_match_whole_words').on('input', function () {
+            world_info_match_whole_words = !!$(this).prop('checked');
+            saveSettings();
+        });
+
+        $('#world_info_character_strategy').on('change', function () {
+            world_info_character_strategy = Number($(this).val());
+            saveSettings();
+        });
+
+        $('#world_info_overflow_alert').on('change', function () {
+            world_info_overflow_alert = !!$(this).prop('checked');
+            saveSettingsDebounced();
+        });
+
+        $('#world_info_use_group_scoring').on('change', function () {
+            world_info_use_group_scoring = !!$(this).prop('checked');
+            saveSettingsDebounced();
+        });
+
+        $('#world_info_budget_cap').on('input', function () {
+            world_info_budget_cap = Number($(this).val());
+            $('#world_info_budget_cap_counter').val(world_info_budget_cap);
+            saveSettings();
+        });
+
+        $('#world_info_max_recursion_steps').on('input', function () {
+            world_info_max_recursion_steps = Number($(this).val());
+            $('#world_info_max_recursion_steps_counter').val(world_info_max_recursion_steps);
+            if (world_info_max_recursion_steps !== 0 && world_info_min_activations !== 0) {
+                $('#world_info_min_activations').val(0).trigger('input');
+                flashHighlight($('#world_info_min_activations').parent());
+                console.info('[WI] Min activations set to 0, as max recursion steps is set to', world_info_max_recursion_steps);
+            } else {
+                saveSettings();
+            }
+        });
+
+        $('#world_button').on('click', async function (event) {
+            const openSetWorldMenu = () => $('#char-management-dropdown').val($('#set_character_world').val()).trigger('change');
+            const chid = $('#set_character_world').data('chid');
+
+            if (chid === -1) {
+                openSetWorldMenu();
+                return;
+            }
+
+            const worldName = characters[chid]?.data?.extensions?.world;
+            const hasEmbed = checkEmbeddedWorld(chid);
+            if (worldName && world_names.includes(worldName) && !event.shiftKey && !event.altKey) {
+                openWorldInfoEditor(worldName);
+            } else if (hasEmbed && !event.shiftKey && !event.altKey) {
+                await importEmbeddedWorldInfo();
+                saveCharacterDebounced();
+            } else {
+                openSetWorldMenu();
+            }
+        });
+        addLongPressEvent('#world_button', function () {
+            $(this).trigger($.Event('click', { shiftKey: true }));
+        });
+
+        $(document).on('click', '.chat_lorebook_button', assignLorebookToChat);
+        addLongPressEvent('.chat_lorebook_button', function () {
+            assignLorebookToChat({ shiftKey: true, altKey: false });
+        });
+
+        $('#group-chat-lorebook-dropdown').on('change', async function () {
+            $(this).prop('selectedIndex', 0);
+            await assignLorebookToChat({ shiftKey: true, altKey: false });
+        });
+
+        if (!isMobile()) {
+            $('#world_info').select2({
+                width: '100%',
+                placeholder: t`No Worlds active. Click here to select.`,
+                allowClear: true,
+                closeOnSelect: false,
+            });
+
+            select2ChoiceClickSubscribe($('#world_info'), target => {
+                const name = $(target).text();
+                const selectedIndex = world_names.indexOf(name);
+                const alreadySelectedInEditor = $('#world_editor_select option:selected').text() === name;
+                if (selectedIndex !== -1 && !alreadySelectedInEditor) {
+                    $('#world_editor_select').val(selectedIndex).trigger('change');
+                    console.log('Quick selection of world', name);
+                } else {
+                    console.warn('lets not reload an already loaded list yes?');
+                }
+            }, { buttonStyle: true, closeDrawer: true });
+        }
+
+        worldInfoCoreInitialized = true;
     }
 
-    $('#WorldInfo').on('scroll', () => {
-        $('.world_entry input[name="group"], .world_entry input[name="automationId"]').each((_, el) => {
-            const instance = $(el).autocomplete('instance');
+    if (!worldInfoPanelInitialized && document.querySelector('#world_editor_select')) {
+        $('#world_import_button').on('click', function () {
+            $('#world_import_file').trigger('click');
+        });
 
-            if (instance !== undefined) {
-                $(el).autocomplete('close');
+        $('#world_import_file').on('change', async function (e) {
+            if (!(e.target instanceof HTMLInputElement)) {
+                return;
+            }
+
+            const file = e.target.files[0];
+
+            await importWorldInfo(file);
+            e.target.value = '';
+        });
+
+        $('#world_create_button').on('click', async () => {
+            const tempName = getFreeWorldName();
+            const finalName = await Popup.show.input(t`Create a new World Info`, t`Enter a name for the new file:`, tempName);
+
+            if (finalName) {
+                await createNewWorldInfo(finalName, { interactive: true });
             }
         });
-    });
+
+        $('#world_editor_select').on('change', async () => {
+            $('#world_info_search').val('');
+            worldInfoFilter.setFilterData(FILTER_TYPES.WORLD_INFO_SEARCH, '', true);
+            const selectedIndex = String($('#world_editor_select').find(':selected').val());
+
+            if (selectedIndex === '') {
+                await hideWorldEditor();
+            } else {
+                const worldName = world_names[selectedIndex];
+                showWorldEditor(worldName);
+            }
+        });
+
+        const debouncedWorldInfoSearch = debounce((searchQuery) => {
+            worldInfoFilter.setFilterData(FILTER_TYPES.WORLD_INFO_SEARCH, searchQuery);
+        });
+        $('#world_info_search').on('input', function () {
+            const searchQuery = $(this).val();
+            debouncedWorldInfoSearch(searchQuery);
+        });
+
+        $('#world_refresh').on('click', () => {
+            updateEditor(navigation_option.previous);
+        });
+
+        $('#world_info_sort_order').on('change', function () {
+            const value = String($(this).find(':selected').val());
+            if (value !== 'search') accountStorage.setItem(SORT_ORDER_KEY, value);
+            updateEditor(navigation_option.none);
+        });
+
+        if (!isMobile()) {
+            $('#world_editor_select').select2({
+                placeholder: t`--- Pick to Edit ---`,
+                searchInputPlaceholder: t`Search...`,
+                allowClear: true,
+                closeOnSelect: true,
+                multiple: false,
+            });
+        }
+
+        $('#WorldInfo').on('scroll', () => {
+            $('.world_entry input[name="group"], .world_entry input[name="automationId"]').each((_, el) => {
+                const instance = $(el).autocomplete('instance');
+
+                if (instance !== undefined) {
+                    $(el).autocomplete('close');
+                }
+            });
+        });
+
+        worldInfoPanelInitialized = true;
+    }
 }
