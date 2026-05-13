@@ -158,7 +158,6 @@ import {
     download,
     isDataURL,
     getCharaFilename,
-    PAGINATION_TEMPLATE,
     waitUntilCondition,
     escapeRegex,
     resetScrollHeight,
@@ -1292,7 +1291,12 @@ export async function printCharacters(fullRefresh = false) {
         showSizeChanger: true,
         prevText: '<',
         nextText: '>',
-        formatNavigator: PAGINATION_TEMPLATE,
+        formatNavigator: function (currentPage, totalPage, totalNumber) {
+            const actualTotal = totalNumber || entities.length;
+            const rangeStart = actualTotal > 0 ? (currentPage - 1) * pageSize + 1 : 0;
+            const rangeEnd = Math.min(currentPage * pageSize, actualTotal);
+            return `${rangeStart}-${rangeEnd} .. ${actualTotal}`;
+        },
         formatSizeChanger: renderPaginationDropdown(pageSize, sizeChangerOptions),
         showNavigator: true,
         callback: async function (/** @type {Entity[]} */ data) {
@@ -11799,8 +11803,10 @@ jQuery(async function () {
     });
 
     $('#favorite_button').on('click', function () {
-        updateFavButtonState(!fav_ch_checked);
+        const newFavState = !fav_ch_checked;
+        updateFavButtonState(newFavState);
         if (menu_type != 'create') {
+            updateCharacterRow(this_chid, { fav: newFavState });
             saveCharacterDebounced();
         }
     });
