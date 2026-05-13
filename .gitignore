@@ -60,3 +60,6 @@ yarn.lock
 test-results/
 /artifacts/
 .docs/db/dist/
+.playwright-cli/
+.tmp/
+config.dev-local.yaml

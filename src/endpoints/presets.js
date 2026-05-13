@@ -6,6 +6,7 @@ import sanitize from 'sanitize-filename';
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
 
 import { getDefaultPresetFile, getDefaultPresets } from './content-manager.js';
+import { invalidateDirectory } from './settings-cache.js';
 
 /**
  * Gets the folder and extension for the preset settings based on the API source ID.
@@ -54,6 +55,7 @@ router.post('/save', function (request, response) {
 
     const fullpath = path.join(settings.folder, filename);
     writeFileAtomicSync(fullpath, JSON.stringify(request.body.preset, null, 4), 'utf-8');
+    invalidateDirectory(settings.folder);
     return response.send({ name });
 });
 
@@ -74,6 +76,7 @@ router.post('/delete', function (request, response) {
 
     if (fs.existsSync(fullpath)) {
         fs.unlinkSync(fullpath);
+        invalidateDirectory(settings.folder);
         return response.sendStatus(200);
     } else {
         return response.sendStatus(404);

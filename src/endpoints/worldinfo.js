@@ -6,6 +6,7 @@ import sanitize from 'sanitize-filename';
 import _ from 'lodash';
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import { tryParse } from '../util.js';
+import { invalidateDirectory } from './settings-cache.js';
 
 /**
  * Reads a World Info file and returns its contents
@@ -92,6 +93,7 @@ router.post('/delete', (request, response) => {
     }
 
     fs.unlinkSync(pathToWorldInfo);
+    invalidateDirectory(request.user.directories.worlds);
 
     return response.sendStatus(200);
 });
@@ -128,6 +130,7 @@ router.post('/import', (request, response) => {
     }
 
     writeFileAtomicSync(pathToNewFile, fileContents);
+    invalidateDirectory(request.user.directories.worlds);
     return response.send({ name: worldName });
 });
 
@@ -152,6 +155,7 @@ router.post('/edit', (request, response) => {
     const pathToFile = path.join(request.user.directories.worlds, filename);
 
     writeFileAtomicSync(pathToFile, JSON.stringify(request.body.data, null, 4));
+    invalidateDirectory(request.user.directories.worlds);
 
     return response.send({ ok: true });
 });

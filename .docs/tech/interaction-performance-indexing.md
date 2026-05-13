@@ -323,6 +323,31 @@ The delete flow now also uses a dedicated preflight helper before the delete req
 - this preserves existing chat-scoped cleanup listeners such as TTS/gallery teardown without blocking the delete request on welcome-screen recent-chat hydration
 - the helper still reselects the characters view so the visible landing state matches the old flow
 
+### Character-row string render fast path
+
+`public/script.js` now replaces the per-row jQuery `clone()` / `.find()` / `.append()` path in `getCharacterBlock()` with a string-based builder for `type === 'character'` entities.
+
+`buildCharacterRowHtml(item, id)` produces the full character-row HTML string using `escapeHtml` from `public/scripts/utils.js` for all text fields, preserving the same visible summary contract:
+- `data-chid` and `id="CharID${chid}"`
+- avatar `src`/`alt`/title via `getThumbnailUrl`
+- name text and title
+- `is_fav` row class and `.ch_fav` value
+- assistant badge removal for non-assistant rows
+- creator-notes summary text or hidden state
+- aux field text or hidden state
+- inline tags using `tag_map` and `tags` arrays (collapsed form matching `printTagList` with `isCharacterList: true`)
+
+Group rows, bogus-folder tag rows, back blocks, empty blocks, and hidden-count blocks keep their existing helper paths, so mixed entity pages still behave the same.
+
+`updateCharacterRow(chid, patch)` provides row-local patching for safe metadata updates when:
+- the row is currently visible in the DOM
+- bogus-folder drilldown is not open
+- the main character list has no active filters
+
+Covered patch fields: favorite class/value, avatar thumbnail, creator-notes summary, aux field, inline character tags, and avatar URL text. When the safety gate is not met, the code falls back to the existing `printCharactersDebounced()` or `printCharacters(true)` full-refresh path.
+
+Not covered by row-local patching: `renameCharacter()` flows, filtered list states, bogus-folder drilldown views, or pages where the row is not visible — all of these keep the existing full-refresh fallback.
+
 ## Related Semantic IDs And Code Binding Points
 
 Relevant semantic docs now live in `.docs/db/`:

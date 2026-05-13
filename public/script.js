@@ -247,6 +247,7 @@ import {
 import { getBackgrounds, initBackgrounds, loadBackgroundSettings, background_settings } from './scripts/backgrounds.js';
 import { loader } from './scripts/action-loader.js';
 import { createSingleFlightTask, resolvePersistedCurrentVersion, resolveStartupSettingsPlan } from './scripts/startup-helpers.js';
+import { ensurePanel, registerPanelHook } from './scripts/deferred-panels.js';
 import { BulkEditOverlay } from './scripts/BulkEditOverlay.js';
 import { initTextGenModels } from './scripts/textgen-models.js';
 import { appendFileContent, hasPendingFileAttachment, populateFileAttachment, decodeStyleTags, encodeStyleTags, isExternalMediaAllowed, preserveNeutralChat, restoreNeutralChat, formatCreatorNotes, initChatUtilities, addDOMPurifyHooks } from './scripts/chats.js';
@@ -634,6 +635,25 @@ function startDeferredStartupTasks() {
     if (deferredExtensionTask) {
         void deferredExtensionTask.ensure().catch(error => console.error('Deferred extension startup failed.', error));
     }
+
+    // Idle warmup for deferred panels after APP_READY
+    requestIdleCallback(() => {
+        ensurePanel('world-info-body').catch(() => {});
+        ensurePanel('textgen-api-settings').catch(() => {});
+    });
+}
+
+/**
+ * Replay stored startup settings into a deferred panel's DOM after it loads.
+ */
+function _replayWorldInfoSettings() {
+    initWorldInfo();
+}
+
+function _replayTextGenSettings() {
+    if (main_api === 'textgenerationwebui') {
+        changeMainAPI();
+    }
 }
 
 export function reloadMarkdownProcessor() {
@@ -892,6 +912,9 @@ async function firstLoadInit() {
         await initPersonas();
         await initSlashCommandAutoComplete();
         initMacroAutoComplete();
+        // Register deferred panel hooks before initWorldInfo so they capture any needed state
+        registerPanelHook('world-info-body', _replayWorldInfoSettings);
+        registerPanelHook('textgen-api-settings', _replayTextGenSettings);
         initWorldInfo();
         initHorde();
         initRossMods();
@@ -1071,49 +1094,137 @@ async function getHiddenBlock(hidden) {
 }
 
 function getCharacterBlock(item, id) {
+    return $(buildCharacterRowHtml(item, id));
+}
+
+/**
+ * Builds a character row as an HTML string, replacing the jQuery clone/find/append path.
+ * @param {object} item Character data object
+ * @param {string|number} id Character index
+ * @returns {string} HTML string for the character row
+ */
+function buildCharacterRowHtml(item, id) {
     let this_avatar = default_avatar;
     if (item.avatar != 'none') {
         this_avatar = getThumbnailUrl('avatar', item.avatar);
     }
-    // Populate the template
-    const template = $('#character_template .character_select').clone();
-    template.attr({ 'data-chid': id, 'id': `CharID${id}` });
-    template.find('img').attr('src', this_avatar).attr('alt', item.name);
-    template.find('.avatar').attr('title', `[Character] ${item.name}\nFile: ${item.avatar}`);
-    template.find('.ch_name').text(item.name).attr('title', `[Character] ${item.name}`);
-    if (power_user.show_card_avatar_urls) {
-        template.find('.ch_avatar_url').text(item.avatar);
-    }
-    template.find('.ch_fav_icon').css('display', 'none');
-    template.toggleClass('is_fav', item.fav || item.fav == 'true');
-    template.find('.ch_fav').val(item.fav);
 
+    const isFav = item.fav || item.fav == 'true';
     const isAssistant = item.avatar === getPermanentAssistantAvatar();
-    if (!isAssistant) {
-        template.find('.ch_assistant').remove();
-    }
-
     const description = item.data?.creator_notes || '';
-    if (description) {
-        template.find('.ch_description').text(description);
-    } else {
-        template.find('.ch_description').hide();
-    }
-
     const auxFieldName = power_user.aux_field || 'character_version';
     const auxFieldValue = (item.data && item.data[auxFieldName]) || '';
-    if (auxFieldValue) {
-        template.find('.character_version').text(auxFieldValue);
-    } else {
-        template.find('.character_version').hide();
+    const showAvatarUrl = power_user.show_card_avatar_urls;
+
+    const escapedName = escapeHtml(item.name);
+    const escapedAvatar = escapeHtml(item.avatar);
+    const escapedDescription = escapeHtml(description);
+    const escapedAuxField = escapeHtml(auxFieldValue);
+
+    // Build inline tag markup as string using exported tag_map and tags
+    const tagKey = getTagKeyForEntity(id);
+    let printableTags = [];
+    if (tagKey != null && Array.isArray(tag_map[tagKey])) {
+        printableTags = tag_map[tagKey]
+            .map(x => tags.find(y => y.id === x))
+            .filter(x => x)
+            .filter(tag => !tag.is_hidden_on_character_card)
+            .sort(compareTagsForSort);
     }
 
-    // Display inline tags
-    const tagsElement = template.find('.tags');
-    printTagList(tagsElement, { forEntityOrKey: id, tagOptions: { isCharacterList: true } });
+    const DEFAULT_TAGS_LIMIT = 50;
+    const tagsDisplayLimit = DEFAULT_TAGS_LIMIT;
+    const isFilterActive = (tag) => tag.filter_state && !isFilterState(tag.filter_state, FILTER_STATES.UNDEFINED);
+    const shouldPrintTag = (tag) => isBogusFolder(tag) || isFilterActive(tag);    const mandatoryPrintTagsCount = printableTags.filter(shouldPrintTag).length;
+    const availableSlotsForAdditionalTags = Math.max(tagsDisplayLimit - mandatoryPrintTagsCount, 0);
+    let additionalTagsPrinted = 0;
+    let tagsSkipped = 0;
 
-    // Add to the list
-    return template;
+    let tagsHtml = '';
+    for (const tag of printableTags) {
+        if (shouldPrintTag(tag) || additionalTagsPrinted++ < availableSlotsForAdditionalTags) {
+            const tagName = escapeHtml(tag.name);
+            tagsHtml += `<span class="tag" id="tag__${escapeHtml(tag.id)}"><span class="tag_name">${tagName}</span></span>`;
+        } else {
+            tagsSkipped++;
+        }
+    }
+    if (tagsSkipped > 0) {
+        tagsHtml += `<span class="tag tag_placeholder"><span class="tag_name">+${tagsSkipped}</span></span>`;
+    }
+
+    return `<div class="character_select entity_block flex-container wide100p alignitemsflexstart${isFav ? ' is_fav' : ''}" data-chid="${id}" id="CharID${id}">
+                <div class="avatar" title="[Character] ${escapedName}\nFile: ${escapedAvatar}">
+                    <img src="${this_avatar}" alt="${escapedName}" loading="lazy" decoding="async">
+                </div>
+                <div class="flex-container wide100pLess70px character_select_container">
+                    <div class="wide100p character_name_block">
+                        <span class="ch_name" title="[Character] ${escapedName}">${escapedName}</span>
+                        <small class="ch_additional_info ch_add_placeholder">+++</small>
+                        ${isAssistant ? '<small class="ch_assistant" title="This character will be used as a welcome page assistant." data-i18n="[title]This character will be used as a welcome page assistant."><i class="fa-solid fa-sm fa-user-graduate"></i></small>' : ''}
+                        ${auxFieldValue ? `<small class="ch_additional_info character_version">${escapedAuxField}</small>` : '<small class="ch_additional_info character_version" style="display:none"></small>'}
+                        ${showAvatarUrl ? `<small class="ch_additional_info ch_avatar_url">${escapedAvatar}</small>` : ''}
+                    </div>
+                    <i class="ch_fav_icon fa-solid fa-star" style="display:none"></i>
+                    <input class="ch_fav" value="${isFav}" hidden />
+                    <div class="ch_description"${description ? '' : ' style="display:none"'}>${description ? escapedDescription : ''}</div>
+                    <div class="tags tags_inline">${tagsHtml}</div>
+                </div>
+            </div>`;
+}
+
+/**
+ * Patches a visible character row in place for a narrow set of safe metadata updates.
+ * Returns true if patched, false if the row is not visible or conditions are not met.
+ * @param {string|number} chid Character index
+ * @param {object} patch Patch object with optional fields: fav, avatar, avatarTitle, description, auxField, tags
+ * @returns {boolean}
+ */
+export function updateCharacterRow(chid, patch) {
+    const $row = $(`#CharID${chid}`);
+    if (!$row.length) return false;
+
+    // Only patch in unfiltered main list, no bogus-folder drilldown
+    if (entitiesFilter.hasAnyFilter()) return false;
+    if (power_user.bogus_folders && isBogusFolderOpen()) return false;
+
+    if ('fav' in patch) {
+        const isFav = patch.fav || patch.fav === 'true';
+        $row.toggleClass('is_fav', isFav);
+        $row.find('.ch_fav').val(String(isFav));
+    }
+    if ('avatar' in patch) {
+        let src = default_avatar;
+        if (patch.avatar !== 'none') {
+            src = getThumbnailUrl('avatar', patch.avatar);
+        }
+        $row.find('.avatar img').attr('src', src).attr('alt', patch.name || $row.find('.ch_name').text());
+        $row.find('.avatar').attr('title', patch.avatarTitle || `[Character] ${$row.find('.ch_name').text()}\nFile: ${patch.avatar}`);
+    }
+    if ('description' in patch) {
+        const $desc = $row.find('.ch_description');
+        if (patch.description) {
+            $desc.text(patch.description).show();
+        } else {
+            $desc.hide();
+        }
+    }
+    if ('auxField' in patch) {
+        const $ver = $row.find('.character_version');
+        if (patch.auxField) {
+            $ver.text(patch.auxField).show();
+        } else {
+            $ver.hide();
+        }
+    }
+    if ('tags' in patch) {
+        // Fall back to full tag re-render via printTagList for the row's tag container
+        printTagList($row.find('.tags'), { forEntityOrKey: chid, tagOptions: { isCharacterList: true } });
+    }
+
+    favsToHotswap();
+    updatePersonaConnectionsAvatarList();
+    return true;
 }
 
 /**
@@ -7906,6 +8017,11 @@ export function changeMainAPI(api = null) {
     //then, find and enable the active item.
     //This is split out of the loop so that different apis can share settings divs
     let activeItem = apiElements[selectedVal];
+
+    // Ensure deferred panel is loaded before showing textgenerationwebui settings
+    if (selectedVal === 'textgenerationwebui') {
+        ensurePanel('textgen-api-settings').catch(() => {});
+    }
 
     activeItem.apiStreaming.css('display', 'block');
     activeItem.apiSettings.css('display', 'block');

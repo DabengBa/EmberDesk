@@ -13,6 +13,7 @@ import { write } from '../character-card-parser.js';
 import { serverDirectory } from '../server-directory.js';
 import { Jimp, JimpMime } from '../jimp.js';
 import { DEFAULT_AVATAR_PATH } from '../constants.js';
+import { invalidateDirectory } from './settings-cache.js';
 
 const contentDirectory = path.join(serverDirectory, 'default/content');
 const scaffoldDirectory = path.join(serverDirectory, 'default/scaffold');
@@ -135,6 +136,7 @@ export function getDefaultPresetFile(filename) {
 function seedContent(contentIndex, contentLogPath, resolveTarget, forceCategories) {
     let anyContentAdded = false;
     const contentLog = getContentLog(contentLogPath);
+    const affectedTargets = new Set();
 
     for (const contentItem of contentIndex) {
         if (contentLog.includes(contentItem.filename) && !forceCategories?.includes(contentItem.type)) {
@@ -174,10 +176,11 @@ function seedContent(contentIndex, contentLogPath, resolveTarget, forceCategorie
         setPermissionsSync(targetPath);
         console.info(`Content file ${contentItem.filename} copied to ${contentTarget}`);
         anyContentAdded = true;
+        affectedTargets.add(contentTarget);
     }
 
     writeFileAtomicSync(contentLogPath, contentLog.join('\n'));
-    return anyContentAdded;
+    return { anyContentAdded, affectedTargets };
 }
 
 /**
@@ -193,7 +196,11 @@ async function seedContentForUser(contentIndex, directories, forceCategories) {
     }
 
     const contentLogPath = path.join(directories.root, 'content.log');
-    return seedContent(contentIndex, contentLogPath, (type) => getUserTargetByType(type, directories), forceCategories);
+    const { anyContentAdded, affectedTargets } = seedContent(contentIndex, contentLogPath, (type) => getUserTargetByType(type, directories), forceCategories);
+    for (const dir of affectedTargets) {
+        invalidateDirectory(dir);
+    }
+    return anyContentAdded;
 }
 
 /**
@@ -203,7 +210,8 @@ async function seedContentForUser(contentIndex, directories, forceCategories) {
  */
 async function seedGlobalContent(contentIndex) {
     const contentLogPath = path.join(globalThis.DATA_ROOT, 'content.log');
-    return seedContent(contentIndex, contentLogPath, getGlobalTargetByType);
+    const { anyContentAdded } = seedContent(contentIndex, contentLogPath, getGlobalTargetByType);
+    return anyContentAdded;
 }
 
 /**
