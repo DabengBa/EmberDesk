@@ -38,6 +38,17 @@ Delivered behavior:
 - pregeneration starts only after the new canonical persona image is persisted
 - the existing cache-buster and route response contract stay unchanged
 
+### Follow-up narrowing of pregeneration triggers
+
+After the initial delivery, a follow-up correctness fix narrowed when pregeneration is allowed to run.
+
+Final delivered behavior also includes:
+
+- pregeneration now respects the global `thumbnails.enabled` switch instead of running unconditionally in write paths
+- metadata-only character rewrites no longer invalidate or rebuild thumbnails when the image pixels are unchanged
+- the shared character write helper now accepts a `shouldRegenerateThumbnail` path-level decision so routes such as `/edit` without a new file, `/edit-attribute`, and `mergeCharacterUpdate` can opt out safely
+- persona-side pregeneration uses the same `thumbnails.enabled` guard before starting background thumbnail work
+
 ### Overwrite-ordering fix
 
 Centralizing pregeneration in the shared character-write path exposed an overwrite-ordering hazard: some routes were still invalidating thumbnails after the write helper returned, which would delete the freshly pregenerated thumbnail.
@@ -62,8 +73,10 @@ Covered by the focused test file:
 
 - non-blocking character-write pregeneration
 - failure-safe pregeneration rejection handling
+- disabled-thumbnail deployments skipping pregeneration
 - `/duplicate` pregeneration coverage
 - character overwrite invalidation ordering
+- metadata-only character edits skipping invalidation and pregeneration
 - persona upload pregeneration coverage
 
 ### Regression sweep

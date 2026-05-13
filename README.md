@@ -1,10 +1,10 @@
 # EmberDesk
 
-A lightweight LLM frontend, forked from [SillyTavern](https://github.com/SillyTavern/SillyTavern).
+A lightweight self-hosted LLM frontend, forked from [SillyTavern](https://github.com/SillyTavern/SillyTavern).
 
 ## Goals
 
-- **Simplify** the SillyTavern feature set to focus on core functionality
+- **Simplify** the inherited feature set to focus on core functionality
 - **Optimize** performance and reduce complexity
 - **Modernize** the technology stack incrementally
 

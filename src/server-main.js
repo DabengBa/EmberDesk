@@ -290,7 +290,7 @@ async function preSetupTasks() {
 
     // Print formatted header
     console.log();
-    console.log(`SillyTavern ${version.pkgVersion}`);
+    console.log(`EmberDesk ${version.pkgVersion}`);
     if (version.gitBranch && version.commitDate) {
         const date = new Date(version.commitDate);
         const localDate = date.toLocaleString('en-US', { timeZoneName: 'short' });
@@ -421,9 +421,9 @@ async function postSetupTasks(result) {
         setInterval(writeHeartbeat, intervalMs).unref();
     }
 
-    setWindowTitle('SillyTavern WebServer');
+    setWindowTitle('EmberDesk WebServer');
 
-    let logListen = 'SillyTavern is listening on';
+    let logListen = 'EmberDesk is listening on';
 
     if (result.useIPv6 && !result.v6Failed) {
         logListen += color.green(
@@ -437,7 +437,7 @@ async function postSetupTasks(result) {
         );
     }
 
-    const goToLog = `Go to: ${color.blue(browserLaunchUrl)} to open SillyTavern`;
+    const goToLog = `Go to: ${color.blue(browserLaunchUrl)} to open EmberDesk`;
     const plainGoToLog = removeColorFormatting(goToLog);
 
     console.log(logListen);
