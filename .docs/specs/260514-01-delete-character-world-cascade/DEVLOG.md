@@ -59,9 +59,14 @@ The goal was to surface world info dependencies at delete time and let the user 
 - **P1:** Parsed `readCharacterData()` return value before accessing `data.extensions.world` — the function returns a raw JSON string, not a parsed object.
 - **P1:** Used `parse(cardPath)` (async, returns JSON string) and `write(imageBuffer, jsonString)` correctly in the cascade endpoint — previous code passed a buffer to `parse` and a card object to `write`, neither of which matches the API contract.
 
+### UX polish
+
+- All cascade dialog strings localized to Chinese (zh-cn): 关联世界书、条目、警告文本、清除引用选项。
+- Added "全部删除" button that checks all world info checkboxes at once, available in both the standalone and integrated dialogs.
+
 ## Result
 
-Deleting a character now shows a single confirmation dialog that includes world info disclosure inline: linked world info files with entry counts, bound character counts, and warnings for shared worlds. The user controls whether to delete world files and whether to clear references in remaining characters, all in one step. Embedded `character_book` content is never touched. The delete action is also accessible from the "More..." dropdown menu.
+Deleting a character now shows a single confirmation dialog that includes world info disclosure inline: linked world info files with entry counts, bound character counts, and warnings for shared worlds. The user controls whether to delete world files and whether to clear references in remaining characters, all in one step. A "全部删除" button is available to select all world info files at once. Embedded `character_book` content is never touched. The delete action is also accessible from the "More..." dropdown menu.
 
 ## Residual Boundaries
 
