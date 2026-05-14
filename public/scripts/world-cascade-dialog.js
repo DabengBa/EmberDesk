@@ -1,5 +1,5 @@
-import { t } from '../script.js';
-import { POPUP_TYPE, callGenericPopup } from './popup.js';
+import { t } from './i18n.js';
+import { POPUP_TYPE, Popup } from './popup.js';
 
 /**
  * Shows a cascade dialog for world info files bound to characters being deleted.
@@ -59,27 +59,32 @@ export async function showWorldInfoCascadeDialog(worldInfos) {
 
     html += `</div>`;
 
-    const result = await callGenericPopup(html, POPUP_TYPE.CONFIRM, '', {
+    // Capture checkbox values in onClosing, before the popup removes its DOM.
+    let capturedDeleteWorlds = [];
+    let capturedClearRefs = false;
+
+    const popup = new Popup(html, POPUP_TYPE.CONFIRM, '', {
         okButton: t`Delete`,
         wider: true,
+        onClosing: () => {
+            const checkboxes = document.querySelectorAll('.world-cascade-checkbox');
+            for (const cb of checkboxes) {
+                if (cb.checked) {
+                    capturedDeleteWorlds.push(cb.dataset.world);
+                }
+            }
+            const clearRefsEl = document.getElementById('world-cascade-clear-refs');
+            capturedClearRefs = clearRefsEl?.checked ?? false;
+        },
     });
+
+    const result = await popup.show();
 
     if (!result) {
         return null;
     }
 
-    const checkboxes = document.querySelectorAll('.world-cascade-checkbox');
-    const deleteWorlds = [];
-    for (const cb of checkboxes) {
-        if (cb.checked) {
-            deleteWorlds.push(cb.dataset.world);
-        }
-    }
-
-    const clearRefsEl = document.getElementById('world-cascade-clear-refs');
-    const clearWorldReferences = clearRefsEl?.checked ?? false;
-
-    return { deleteWorlds, clearWorldReferences };
+    return { deleteWorlds: capturedDeleteWorlds, clearWorldReferences: capturedClearRefs };
 }
 
 /** @param {string} str */

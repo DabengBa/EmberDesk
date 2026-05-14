@@ -1727,7 +1727,8 @@ router.post('/delete-preflight', async function (request, response) {
             if (!fs.existsSync(charPath)) continue;
 
             try {
-                const charData = await readCharacterData(charPath);
+                const rawData = await readCharacterData(charPath);
+                const charData = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
                 const worldName = charData?.data?.extensions?.world;
                 if (worldName && typeof worldName === 'string' && worldName.trim()) {
                     if (!worldNameToAvatars.has(worldName)) {

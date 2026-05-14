@@ -183,11 +183,13 @@ router.post('/delete-cascade', async (request, response) => {
                         if (!fs.existsSync(charPath)) continue;
 
                         try {
-                            const { card } = parse(fs.readFileSync(charPath));
+                            const imageBuffer = fs.readFileSync(charPath);
+                            const jsonString = await parse(charPath);
+                            const card = JSON.parse(jsonString);
                             if (card?.data?.extensions?.world === worldName) {
                                 card.data.extensions.world = '';
-                                const buffer = write(card);
-                                fs.writeFileSync(charPath, buffer);
+                                const newBuffer = write(imageBuffer, JSON.stringify(card));
+                                fs.writeFileSync(charPath, newBuffer);
                             }
                         } catch {
                             // Skip characters that can't be updated
