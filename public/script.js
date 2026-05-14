@@ -262,7 +262,7 @@ import { initScrapers } from './scripts/scrapers.js';
 import { initCustomSelectedSamplers, validateDisabledSamplers } from './scripts/samplerSelect.js';
 import { DragAndDropHandler } from './scripts/dragdrop.js';
 import { INTERACTABLE_CONTROL_CLASS, initKeyboard } from './scripts/keyboard.js';
-import { showWorldInfoCascadeDialog } from './scripts/world-cascade-dialog.js';
+import { buildCascadeSectionHtml, captureCascadeChoices, showWorldInfoCascadeDialog } from './scripts/world-cascade-dialog.js';
 import { initDynamicStyles } from './scripts/dynamic-styles.js';
 import { initInputMarkdown } from './scripts/input-md-formatting.js';
 import { AbortReason } from './scripts/util/AbortReason.js';
@@ -11141,9 +11141,11 @@ export async function handleDeleteCharacter(this_chid, delete_chats) {
  * @param {string|string[]} characterKey - The key (avatar) of the character to be deleted
  * @param {Object} [options] - Optional parameters for the deletion
  * @param {boolean} [options.deleteChats=true] - Whether to delete associated chats or not
+ * @param {string[]} [options.deleteWorlds] - World info names to delete (from caller's preflight)
+ * @param {boolean} [options.clearWorldReferences] - Whether to clear world references in remaining characters
  * @return {Promise<boolean>} - A promise that resolves when the character is successfully deleted
  */
-export async function deleteCharacter(characterKey, { deleteChats = true } = {}) {
+export async function deleteCharacter(characterKey, { deleteChats = true, deleteWorlds, clearWorldReferences } = {}) {
     const deleteFlowStartedAt = performance.now();
     if (!Array.isArray(characterKey)) {
         characterKey = [characterKey];
@@ -11165,30 +11167,31 @@ export async function deleteCharacter(characterKey, { deleteChats = true } = {})
         return false;
     }
 
-    // World info cascade preflight
-    let deleteWorlds = [];
-    let clearWorldReferences = false;
-    try {
-        const preflightResponse = await fetch('/api/characters/delete-preflight', {
-            method: 'POST',
-            headers: getRequestHeaders(),
-            body: JSON.stringify({ avatars: characterKey }),
-            cache: 'no-cache',
-        });
-        if (preflightResponse.ok) {
-            const preflightData = await preflightResponse.json();
-            if (preflightData.worldInfos && preflightData.worldInfos.length > 0) {
-                const cascadeResult = await showWorldInfoCascadeDialog(preflightData.worldInfos);
-                if (cascadeResult === null) {
-                    // User cancelled
-                    return false;
+    // World info cascade preflight — only when caller did not provide choices
+    let resolvedDeleteWorlds = deleteWorlds ?? [];
+    let resolvedClearRefs = clearWorldReferences ?? false;
+    if (deleteWorlds === undefined) {
+        try {
+            const preflightResponse = await fetch('/api/characters/delete-preflight', {
+                method: 'POST',
+                headers: getRequestHeaders(),
+                body: JSON.stringify({ avatars: characterKey }),
+                cache: 'no-cache',
+            });
+            if (preflightResponse.ok) {
+                const preflightData = await preflightResponse.json();
+                if (preflightData.worldInfos && preflightData.worldInfos.length > 0) {
+                    const cascadeResult = await showWorldInfoCascadeDialog(preflightData.worldInfos);
+                    if (cascadeResult === null) {
+                        return false;
+                    }
+                    resolvedDeleteWorlds = cascadeResult.deleteWorlds;
+                    resolvedClearRefs = cascadeResult.clearWorldReferences;
                 }
-                deleteWorlds = cascadeResult.deleteWorlds;
-                clearWorldReferences = cascadeResult.clearWorldReferences;
             }
+        } catch {
+            // Preflight failure should not block deletion
         }
-    } catch {
-        // Preflight failure should not block deletion
     }
 
     let deleted = false;
@@ -11246,14 +11249,14 @@ export async function deleteCharacter(characterKey, { deleteChats = true } = {})
     }
 
     // World info cascade: delete world files and clear references after all characters are deleted
-    if (deleted && deleteWorlds.length > 0) {
+    if (deleted && resolvedDeleteWorlds.length > 0) {
         try {
             await fetch('/api/worldinfo/delete-cascade', {
                 method: 'POST',
                 headers: getRequestHeaders(),
                 body: JSON.stringify({
-                    worlds: deleteWorlds,
-                    clear_references: clearWorldReferences,
+                    worlds: resolvedDeleteWorlds,
+                    clear_references: resolvedClearRefs,
                 }),
                 cache: 'no-cache',
             });
@@ -11797,16 +11800,48 @@ jQuery(async function () {
             return;
         }
 
-        let deleteChats = false;
+        // Preflight: gather world info metadata before showing confirmation
+        let worldInfos = [];
+        try {
+            const resp = await fetch('/api/characters/delete-preflight', {
+                method: 'POST',
+                headers: getRequestHeaders(),
+                body: JSON.stringify({ avatars: [characters[this_chid].avatar] }),
+                cache: 'no-cache',
+            });
+            if (resp.ok) {
+                const data = await resp.json();
+                worldInfos = data.worldInfos ?? [];
+            }
+        } catch {
+            // Preflight failure should not block deletion
+        }
 
-        const confirm = await Popup.show.confirm(t`Delete the character?`, await renderTemplateAsync('deleteConfirm'), {
-            onClose: () => { deleteChats = !!$('#del_char_checkbox').prop('checked'); },
+        // Build dialog content: original deleteConfirm template + world info section
+        let content = await renderTemplateAsync('deleteConfirm');
+        const cascadeHtml = buildCascadeSectionHtml(worldInfos);
+        if (cascadeHtml) {
+            content += cascadeHtml;
+        }
+
+        let deleteChats = false;
+        let capturedCascade = { deleteWorlds: [], clearWorldReferences: false };
+
+        const confirm = await Popup.show.confirm(t`Delete the character?`, content, {
+            onClose: () => {
+                deleteChats = !!$('#del_char_checkbox').prop('checked');
+                capturedCascade = captureCascadeChoices();
+            },
         });
         if (!confirm) {
             return;
         }
 
-        await deleteCharacter(characters[this_chid].avatar, { deleteChats: deleteChats });
+        await deleteCharacter(characters[this_chid].avatar, {
+            deleteChats: deleteChats,
+            deleteWorlds: capturedCascade.deleteWorlds,
+            clearWorldReferences: capturedCascade.clearWorldReferences,
+        });
     });
 
     //////// OPTIMIZED ALL CHAR CREATION/EDITING TEXTAREA LISTENERS ///////////////
@@ -12826,6 +12861,9 @@ jQuery(async function () {
             } break;
             case 'import_tags': {
                 await importTags(characters[this_chid], { importSetting: tag_import_setting.ASK });
+            } break;
+            case 'delete_from_dropdown': {
+                $('#delete_button').trigger('click');
             } break;
             /*case 'delete_button':
                 popup_type = "del_ch";

@@ -2,22 +2,53 @@ import { t } from './i18n.js';
 import { POPUP_TYPE, Popup } from './popup.js';
 
 /**
- * Shows a cascade dialog for world info files bound to characters being deleted.
+ * Shows a standalone cascade dialog (used as fallback when caller cannot embed
+ * the cascade section into its own confirmation dialog).
  *
  * @param {Array<{ name: string, entryCount: number, boundCharacters: Array, deleteCandidateAvatars: string[] }>} worldInfos
  * @returns {Promise<{ deleteWorlds: string[], clearWorldReferences: boolean } | null>}
- *   null if user cancelled.
  */
 export async function showWorldInfoCascadeDialog(worldInfos) {
-    if (!worldInfos || worldInfos.length === 0) {
+    const html = buildCascadeSectionHtml(worldInfos);
+    if (!html) {
         return { deleteWorlds: [], clearWorldReferences: false };
+    }
+
+    let capturedCascade = { deleteWorlds: [], clearWorldReferences: false };
+
+    const popup = new Popup(html, POPUP_TYPE.CONFIRM, '', {
+        okButton: t`Delete`,
+        wider: true,
+        onClosing: () => {
+            capturedCascade = captureCascadeChoices();
+        },
+    });
+
+    const result = await popup.show();
+    if (!result) {
+        return null;
+    }
+
+    return capturedCascade;
+}
+
+/**
+ * Builds the world info section HTML for embedding into the delete confirmation dialog.
+ *
+ * @param {Array<{ name: string, entryCount: number, boundCharacters: Array, deleteCandidateAvatars: string[] }>} worldInfos
+ * @returns {string|null} HTML string to inject, or null if no world infos.
+ */
+export function buildCascadeSectionHtml(worldInfos) {
+    if (!worldInfos || worldInfos.length === 0) {
+        return null;
     }
 
     const hasOtherBindings = worldInfos.some(
         (w) => w.boundCharacters.length > w.deleteCandidateAvatars.length,
     );
 
-    let html = `<div class="world-cascade-dialog">`;
+    let html = `<hr>`;
+    html += `<div class="world-cascade-dialog">`;
     html += `<h3>${t`Linked World Info`}</h3>`;
     html += `<p>${t`The following world info files are referenced by the characters being deleted.`}</p>`;
     html += `<div class="world-cascade-list">`;
@@ -58,33 +89,26 @@ export async function showWorldInfoCascadeDialog(worldInfos) {
     }
 
     html += `</div>`;
+    return html;
+}
 
-    // Capture checkbox values in onClosing, before the popup removes its DOM.
-    let capturedDeleteWorlds = [];
-    let capturedClearRefs = false;
-
-    const popup = new Popup(html, POPUP_TYPE.CONFIRM, '', {
-        okButton: t`Delete`,
-        wider: true,
-        onClosing: () => {
-            const checkboxes = document.querySelectorAll('.world-cascade-checkbox');
-            for (const cb of checkboxes) {
-                if (cb.checked) {
-                    capturedDeleteWorlds.push(cb.dataset.world);
-                }
-            }
-            const clearRefsEl = document.getElementById('world-cascade-clear-refs');
-            capturedClearRefs = clearRefsEl?.checked ?? false;
-        },
-    });
-
-    const result = await popup.show();
-
-    if (!result) {
-        return null;
+/**
+ * Captures cascade checkbox values from the popup DOM.
+ * Call this inside an onClosing / onClose handler, before the DOM is removed.
+ *
+ * @returns {{ deleteWorlds: string[], clearWorldReferences: boolean }}
+ */
+export function captureCascadeChoices() {
+    const deleteWorlds = [];
+    const checkboxes = document.querySelectorAll('.world-cascade-checkbox');
+    for (const cb of checkboxes) {
+        if (cb.checked) {
+            deleteWorlds.push(cb.dataset.world);
+        }
     }
-
-    return { deleteWorlds: capturedDeleteWorlds, clearWorldReferences: capturedClearRefs };
+    const clearRefsEl = document.getElementById('world-cascade-clear-refs');
+    const clearWorldReferences = clearRefsEl?.checked ?? false;
+    return { deleteWorlds, clearWorldReferences };
 }
 
 /** @param {string} str */
