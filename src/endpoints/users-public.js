@@ -2,10 +2,15 @@ import crypto from 'node:crypto';
 
 import storage from 'node-persist';
 import express from 'express';
+import lodash from 'lodash';
 import { RateLimiterMemory, RateLimiterRes } from 'rate-limiter-flexible';
 import { getIpAddress, retryAfter } from '../express-common.js';
 import { color, Cache, getConfigValue } from '../util.js';
-import { KEY_PREFIX, getUserAvatar, toKey, getPasswordHash, getPasswordSalt, getAccountVersion } from '../users.js';
+import { checkForNewContent, CONTENT_TYPES } from './content-manager.js';
+import {
+    KEY_PREFIX, getUserAvatar, toKey, getPasswordHash, getPasswordSalt, getAccountVersion,
+    needsSetup, ensurePublicDirectoriesExist, getUserDirectories, getAllUserHandles,
+} from '../users.js';
 
 const DISCREET_LOGIN = getConfigValue('enableDiscreetLogin', false, 'boolean');
 const PREFER_REAL_IP_HEADER = getConfigValue('rateLimiting.preferRealIpHeader', false, 'boolean');
@@ -228,6 +233,75 @@ router.post('/recover-step2', async (request, response) => {
         }
 
         console.error('Recover step 2 failed:', error);
+        return response.sendStatus(500);
+    }
+});
+
+/**
+ * Slugifies a string for use as a user handle.
+ * @param {string} text Text to slugify
+ * @returns {string} Slugified text
+ */
+function slugify(text) {
+    return lodash.deburr(String(text ?? '').toLowerCase().trim()).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+router.post('/setup', async (request, response) => {
+    try {
+        if (!(await needsSetup())) {
+            console.warn('Setup rejected: already completed');
+            return response.status(403).json({ error: 'Setup already completed' });
+        }
+
+        if (!request.body.handle || !request.body.password) {
+            console.warn('Setup failed: Missing required fields');
+            return response.status(400).json({ error: 'Missing required fields' });
+        }
+
+        const handle = slugify(request.body.handle);
+
+        if (!handle) {
+            console.warn('Setup failed: Invalid handle');
+            return response.status(400).json({ error: 'Invalid handle' });
+        }
+
+        const handles = await getAllUserHandles();
+        if (handles.some(x => x === handle)) {
+            console.warn('Setup failed: User already exists');
+            return response.status(409).json({ error: 'User already exists' });
+        }
+
+        const salt = getPasswordSalt();
+        const password = getPasswordHash(request.body.password, salt);
+
+        const newUser = {
+            handle: handle,
+            name: request.body.name || handle,
+            created: Date.now(),
+            password: password,
+            salt: salt,
+            admin: true,
+            enabled: true,
+        };
+
+        await storage.setItem(toKey(handle), newUser);
+
+        console.info('Creating data directories for', newUser.handle);
+        await ensurePublicDirectoriesExist();
+        const directories = getUserDirectories(newUser.handle);
+        await checkForNewContent([directories], [CONTENT_TYPES.SETTINGS]);
+
+        if (!request.session) {
+            console.error('Session not available');
+            return response.sendStatus(500);
+        }
+
+        request.session.handle = newUser.handle;
+        request.session.version = getAccountVersion(newUser);
+        console.info('Setup completed for admin:', newUser.handle);
+        return response.json({ handle: newUser.handle });
+    } catch (error) {
+        console.error('Setup failed:', error);
         return response.sendStatus(500);
     }
 });

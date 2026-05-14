@@ -136,7 +136,7 @@ export async function ensurePublicDirectoriesExist() {
  */
 function logSecurityAlert(message) {
     const { basicAuthMode, whitelistMode } = globalThis.COMMAND_LINE_ARGS;
-    if (basicAuthMode || whitelistMode) return; // safe!
+    if (basicAuthMode || whitelistMode || ENABLE_ACCOUNTS) return; // safe!
     console.error(color.red(message));
     if (getConfigValue('securityOverride', false, 'boolean')) {
         console.warn(color.red('Security has been overridden. If it\'s not a trusted network, change the settings.'));
@@ -158,7 +158,7 @@ export async function verifySecuritySettings() {
     }
 
     if (!ENABLE_ACCOUNTS) {
-        logSecurityAlert('Your current EmberDesk configuration is insecure (listening to non-localhost). Enable whitelisting, basic authentication or user accounts.');
+        logSecurityAlert('Your current EmberDesk configuration is insecure (listening to non-localhost). Enable user accounts or whitelisting.');
     }
 
     const users = await getAllEnabledUsers();
@@ -173,24 +173,18 @@ export async function verifySecuritySettings() {
         console.log();
 
         if (unprotectedAdminUsers.length > 0) {
-            logSecurityAlert('If you are not using basic authentication or whitelisting, you should set a password for all admin users.');
+            logSecurityAlert('Set a password for all admin users via the admin panel or recover.js.');
         }
     }
 
+    // Legacy: basicAuthMode is deprecated but still functional for backward compatibility
     if (basicAuthMode) {
-        const perUserBasicAuth = getConfigValue('perUserBasicAuth', false, 'boolean');
-        if (perUserBasicAuth && !ENABLE_ACCOUNTS) {
-            console.error(color.red(
-                'Per-user basic authentication is enabled, but user accounts are disabled. This configuration may be insecure.',
+        const basicAuthUserName = getConfigValue('basicAuthUser.username', '');
+        const basicAuthUserPassword = getConfigValue('basicAuthUser.password', '');
+        if (!basicAuthUserName || !basicAuthUserPassword) {
+            console.warn(color.yellow(
+                'Basic Authentication is enabled, but username or password is not set or empty!',
             ));
-        } else if (!perUserBasicAuth) {
-            const basicAuthUserName = getConfigValue('basicAuthUser.username', '');
-            const basicAuthUserPassword = getConfigValue('basicAuthUser.password', '');
-            if (!basicAuthUserName || !basicAuthUserPassword) {
-                console.warn(color.yellow(
-                    'Basic Authentication is enabled, but username or password is not set or empty!',
-                ));
-            }
         }
     }
 }
@@ -563,10 +557,22 @@ export async function initUserStorage(dataRoot) {
 
     const keys = await getAllUserHandles();
 
-    // If there are no users, create the default user
-    if (keys.length === 0) {
+    // If accounts are disabled and there are no users, create the default user
+    // When accounts are enabled, storage starts empty — the setup page creates the first admin
+    if (!ENABLE_ACCOUNTS && keys.length === 0) {
         await storage.setItem(toKey(DEFAULT_USER.handle), DEFAULT_USER);
     }
+}
+
+/**
+ * Checks whether the first-time setup page should be shown.
+ * Returns true when user accounts are enabled and no users exist in storage.
+ * @returns {Promise<boolean>}
+ */
+export async function needsSetup() {
+    if (!ENABLE_ACCOUNTS) return false;
+    const handles = await getAllUserHandles();
+    return handles.length === 0;
 }
 
 /**
@@ -1055,6 +1061,18 @@ export async function loginPageMiddleware(request, response) {
     }
 
     return response.sendFile('login.html', { root: path.join(serverDirectory, 'public') });
+}
+
+/**
+ * Middleware to host the first-time setup page.
+ * @param {import('express').Request} request Request object
+ * @param {import('express').Response} response Response object
+ */
+export async function setupPageMiddleware(request, response) {
+    if (await needsSetup()) {
+        return response.sendFile('setup.html', { root: path.join(serverDirectory, 'public') });
+    }
+    return response.redirect('/login');
 }
 
 /**

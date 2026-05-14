@@ -39,6 +39,8 @@ import {
     getSessionCookieAge,
     verifySecuritySettings,
     loginPageMiddleware,
+    setupPageMiddleware,
+    needsSetup,
     migratePublicOverrides,
 } from './users.js';
 
@@ -141,6 +143,8 @@ if (corsEnabled) {
     app.use(cors(corsOptions));
 }
 
+// Legacy: basicAuthMode is deprecated. Use enableUserAccounts instead.
+// Retained for backward compatibility; will show a browser-native prompt before the login page.
 if (cliArgs.listen && cliArgs.basicAuthMode) {
     app.use(basicAuthMiddleware);
 }
@@ -214,7 +218,11 @@ if (!cliArgs.disableCsrf) {
 
 // Static files
 // Host index page
-app.get('/', cacheBuster.middleware, (request, response) => {
+app.get('/', cacheBuster.middleware, async (request, response) => {
+    if (await needsSetup()) {
+        return response.redirect('/setup');
+    }
+
     if (shouldRedirectToLogin(request)) {
         const query = request.url.split('?')[1];
         const redirectUrl = query ? `/login?${query}` : '/login';
@@ -234,6 +242,9 @@ app.get('/callback/:source?', (request, response) => {
     const path = `/?${searchParams.toString()}`;
     return response.redirect(307, path);
 });
+
+// Host setup page (first-time admin account creation)
+app.get('/setup', setupPageMiddleware);
 
 // Host login page
 app.get('/login', loginPageMiddleware);

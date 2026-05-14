@@ -41,6 +41,7 @@ This feature protects individual accounts from brute-force login attempts by tem
 - The lockout is per-account (keyed by handle), independent of the per-IP rate limit.
 - The default lockout window is 300 seconds (5 minutes), configurable via `rateLimiting.accountsLoginLockoutDuration`.
 - The default threshold is 5 failed attempts, configurable via `rateLimiting.accountsLoginMaxAttempts`.
+- Set `rateLimiting.accountsLoginMaxAttempts: 0` to disable account lockout entirely.
 - A successful login clears both the per-account and per-IP failure counters.
 - The lockout message does not confirm whether the handle exists; the same error is returned for unknown handles.
 - The countdown is driven by the `Retry-After` header from the server, not by a client-side timer estimate.

@@ -3,7 +3,7 @@ id: page.login
 type: page
 name: 登录页
 route: /login
-related: [feature.login_submit, feature.password_toggle, feature.password_recovery, feature.account_lockout, page.chat_workspace]
+related: [feature.login_submit, feature.password_toggle, feature.password_recovery, feature.account_lockout, page.chat_workspace, page.setup]
 ---
 
 # Page: 登录页
@@ -53,3 +53,39 @@ The login page does not expose a user list. The user must know their handle to l
 - The login page is the entry point when `enableUserAccounts` is true and the visitor is not authenticated.
 - Successful authentication navigates to [Chat Workspace](page.chat_workspace).
 - The login page has no outgoing navigation links beyond the recovery flow.
+
+## Configuration (config.yaml)
+
+### Required
+
+| Key | Default | Effect |
+|---|---|---|
+| `enableUserAccounts` | `true` | Activates the login page. Without this, EmberDesk skips authentication entirely. |
+
+### Optional
+
+| Key | Default | Effect |
+|---|---|---|
+| `enableDiscreetLogin` | `false` | `true` hides the user list; the user must type their handle manually. |
+| `sessionTimeout` | `-1` | Session lifetime in seconds. `-1` = never expires, `0` = expires on browser close. |
+| `rateLimiting.accountsLoginMaxAttempts` | `5` | Failed login attempts before per-account lockout. `0` disables. |
+| `rateLimiting.accountsLoginLockoutDuration` | `300` | Lockout window in seconds (5 minutes). |
+| `rateLimiting.accountsRecoverMaxAttempts` | `5` | Failed recovery attempts before rate limiting. `0` disables. |
+| `rateLimiting.preferRealIpHeader` | `false` | Use forwarded IP headers for rate-limit tracking behind a reverse proxy. |
+| `disableCsrfProtection` | `false` | Disables CSRF token enforcement on login API. Not recommended. |
+
+### Legacy: Basic Auth (deprecated)
+
+> `basicAuthMode` is a legacy feature retained for backward compatibility. New deployments should use `enableUserAccounts` exclusively.
+
+| Key | Default | Effect |
+|---|---|---|
+| `basicAuthMode` | `false` | Enables HTTP Basic Auth (browser native prompt, no login page UI). Only active when `listen: true`. |
+| `basicAuthUser.username` / `.password` | `"user"` / `"password"` | Global Basic Auth credentials. |
+| `perUserBasicAuth` | `false` | When `true` with `basicAuthMode`, uses per-account credentials instead of the global pair. |
+
+When both `basicAuthMode` and `enableUserAccounts` are active, the user must pass Basic Auth first, then log in via the login page.
+
+### Password Recovery
+
+Password recovery codes are **printed to the server console log** — there is no email or SMS delivery. The server operator must relay the code to the user out-of-band.

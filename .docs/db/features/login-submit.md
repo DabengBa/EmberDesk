@@ -42,6 +42,7 @@ This feature lets a registered user authenticate with their credentials and reac
 - On successful login the user moves to the main workspace; the login page does not persist in browser history.
 - The form must not expose which field (handle or password) was incorrect; the server returns a generic "Incorrect credentials" message.
 - This feature covers the submit-and-authenticate contract only. Lockout behavior after repeated failures belongs to [Account Lockout](feature.account_lockout).
+- Requires `enableUserAccounts: true` in config.yaml. See [Login Page Configuration](page.login) for the full config reference.
 
 ## ID Boundary Notes
 

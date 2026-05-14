@@ -42,8 +42,8 @@ This feature lets a user who has forgotten their password regain access to their
 ## Business Rules And Boundaries
 
 - Recovery codes are single-use and expire after a short window.
-- The recovery code is delivered via the server console, not via email or SMS.
-- A rate limit applies to code requests, separate from the login rate limit.
+- **Recovery codes are printed to the server console log only.** There is no email, SMS, or in-app delivery mechanism. The server operator must relay the code to the user out-of-band (e.g. via chat, email, or terminal access).
+- A rate limit applies to code requests, configurable via `rateLimiting.accountsRecoverMaxAttempts` (default: 5). Separate from the login rate limit.
 - The recovery card does not reveal whether a handle exists; the server returns a generic error for unknown handles.
 - After a successful reset, the user must log in again; the recovery flow does not auto-authenticate.
 
