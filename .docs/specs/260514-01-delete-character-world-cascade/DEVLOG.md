@@ -19,7 +19,7 @@ The goal was to surface world info dependencies at delete time and let the user 
 
 ### Frontend: Cascade dialog
 
-- Added `public/scripts/world-cascade-dialog.js` — exports `showWorldInfoCascadeDialog(worldInfos)` using the existing `callGenericPopup` API. Renders per-world checkboxes with entry counts, warns when other characters are still bound, and offers a global "clear references" checkbox. Returns `{ deleteWorlds, clearWorldReferences }` or `null` on cancel.
+- Added `public/scripts/world-cascade-dialog.js` — exports `showWorldInfoCascadeDialog(worldInfos)` using the `Popup` class directly with an `onClosing` handler to capture checkbox values before DOM removal. Renders per-world checkboxes with entry counts, warns when other characters are still bound, and offers a global "clear references" checkbox. Returns `{ deleteWorlds, clearWorldReferences }` or `null` on cancel.
 
 ### Frontend: Delete flow integration
 
@@ -45,6 +45,13 @@ The goal was to surface world info dependencies at delete time and let the user 
 - Shared world: character bound to a world used by 3 others → warning shows "3 other character(s) are still using this world info."
 - Cancel: dialog cancel aborts entire deletion, no files changed.
 - Preflight failure: if preflight API fails, deletion proceeds without cascade dialog (graceful degradation).
+
+## Review Fixes
+
+- **P0:** Imported `t` from `./i18n.js` instead of `../script.js` — `script.js` imports `t` but does not re-export it, causing ES module instantiation failure on page load.
+- **P1:** Captured cascade checkbox values in `Popup.onClosing` handler — `callGenericPopup` resolves after the popup DOM is removed, so post-close `document.querySelectorAll` always found zero checkboxes.
+- **P1:** Parsed `readCharacterData()` return value before accessing `data.extensions.world` — the function returns a raw JSON string, not a parsed object.
+- **P1:** Used `parse(cardPath)` (async, returns JSON string) and `write(imageBuffer, jsonString)` correctly in the cascade endpoint — previous code passed a buffer to `parse` and a card object to `write`, neither of which matches the API contract.
 
 ## Result
 
