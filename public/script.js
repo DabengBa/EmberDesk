@@ -262,7 +262,7 @@ import { initScrapers } from './scripts/scrapers.js';
 import { initCustomSelectedSamplers, validateDisabledSamplers } from './scripts/samplerSelect.js';
 import { DragAndDropHandler } from './scripts/dragdrop.js';
 import { INTERACTABLE_CONTROL_CLASS, initKeyboard } from './scripts/keyboard.js';
-import { buildCascadeSectionHtml, captureCascadeChoices, showWorldInfoCascadeDialog } from './scripts/world-cascade-dialog.js';
+import { buildCascadeSectionHtml, showDeleteConfirmWithCascade, showWorldInfoCascadeDialog } from './scripts/world-cascade-dialog.js';
 import { initDynamicStyles } from './scripts/dynamic-styles.js';
 import { initInputMarkdown } from './scripts/input-md-formatting.js';
 import { AbortReason } from './scripts/util/AbortReason.js';
@@ -11824,39 +11824,28 @@ jQuery(async function () {
             content += cascadeHtml;
         }
 
-        let deleteChats = false;
-        let capturedCascade = { deleteWorlds: [], clearWorldReferences: false };
-
-        /** @type {import('./scripts/popup.js').PopupOptions} */
-        const popupOptions = {
-            onClose: () => {
-                deleteChats = !!$('#del_char_checkbox').prop('checked');
-                capturedCascade = captureCascadeChoices();
-            },
-        };
-
-        // Add "Delete All" button when world infos are present
+        // When world infos exist, use the integrated dialog with "Delete All" button;
+        // otherwise fall back to the standard confirm dialog.
         if (cascadeHtml) {
-            popupOptions.customButtons = [{
-                text: t`Delete All`,
-                result: POPUP_RESULT.CUSTOM1,
-                classes: ['popup-button-ok'],
-                action: () => {
-                    document.querySelectorAll('.world-cascade-checkbox').forEach((cb) => { cb.checked = true; });
-                },
-            }];
+            const dialogResult = await showDeleteConfirmWithCascade(content);
+            if (!dialogResult.confirmed) {
+                return;
+            }
+            await deleteCharacter(characters[this_chid].avatar, {
+                deleteChats: dialogResult.deleteChats,
+                deleteWorlds: dialogResult.deleteWorlds,
+                clearWorldReferences: dialogResult.clearWorldReferences,
+            });
+        } else {
+            let deleteChats = false;
+            const confirm = await Popup.show.confirm(t`Delete the character?`, content, {
+                onClose: () => { deleteChats = !!$('#del_char_checkbox').prop('checked'); },
+            });
+            if (!confirm) {
+                return;
+            }
+            await deleteCharacter(characters[this_chid].avatar, { deleteChats });
         }
-
-        const confirm = await Popup.show.confirm(t`Delete the character?`, content, popupOptions);
-        if (!confirm) {
-            return;
-        }
-
-        await deleteCharacter(characters[this_chid].avatar, {
-            deleteChats: deleteChats,
-            deleteWorlds: capturedCascade.deleteWorlds,
-            clearWorldReferences: capturedCascade.clearWorldReferences,
-        });
     });
 
     //////// OPTIMIZED ALL CHAR CREATION/EDITING TEXTAREA LISTENERS ///////////////

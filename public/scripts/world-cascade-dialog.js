@@ -23,12 +23,18 @@ export async function showWorldInfoCascadeDialog(worldInfos) {
             text: t`Delete All`,
             result: POPUP_RESULT.CUSTOM1,
             classes: ['popup-button-ok'],
-            action: () => {
-                document.querySelectorAll('.world-cascade-checkbox').forEach((cb) => { cb.checked = true; });
-            },
         }],
         onClosing: () => {
             capturedCascade = captureCascadeChoices();
+        },
+        onOpen: (p) => {
+            const btn = p.dlg.querySelector('[data-result="' + POPUP_RESULT.CUSTOM1 + '"]');
+            if (btn) {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.world-cascade-checkbox').forEach((cb) => { cb.checked = true; });
+                    p.complete(POPUP_RESULT.AFFIRMATIVE);
+                });
+            }
         },
     });
 
@@ -38,6 +44,48 @@ export async function showWorldInfoCascadeDialog(worldInfos) {
     }
 
     return capturedCascade;
+}
+
+/**
+ * Shows a confirmation dialog with integrated world info section and a "Delete All" button.
+ * Used by the delete button handler that already built the combined content.
+ *
+ * @param {string} content - Combined HTML content (deleteConfirm template + cascade section)
+ * @returns {Promise<{ confirmed: boolean, deleteChats: boolean, deleteWorlds: string[], clearWorldReferences: boolean }>}
+ */
+export async function showDeleteConfirmWithCascade(content) {
+    let deleteChats = false;
+    let capturedCascade = { deleteWorlds: [], clearWorldReferences: false };
+
+    const popup = new Popup(content, POPUP_TYPE.CONFIRM, '', {
+        okButton: t`Delete`,
+        wider: true,
+        customButtons: [{
+            text: t`Delete All`,
+            result: POPUP_RESULT.CUSTOM1,
+            classes: ['popup-button-ok'],
+        }],
+        onClose: () => {
+            deleteChats = !!document.getElementById('del_char_checkbox')?.checked;
+            capturedCascade = captureCascadeChoices();
+        },
+        onOpen: (p) => {
+            const btn = p.dlg.querySelector('[data-result="' + POPUP_RESULT.CUSTOM1 + '"]');
+            if (btn) {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.world-cascade-checkbox').forEach((cb) => { cb.checked = true; });
+                    p.complete(POPUP_RESULT.AFFIRMATIVE);
+                });
+            }
+        },
+    });
+
+    const result = await popup.show();
+    if (!result) {
+        return { confirmed: false, deleteChats: false, deleteWorlds: [], clearWorldReferences: false };
+    }
+
+    return { confirmed: true, deleteChats, ...capturedCascade };
 }
 
 /**
