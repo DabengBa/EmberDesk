@@ -43,67 +43,67 @@
 
             <form id="loginForm" novalidate>
                 <div class="login-field" id="handleField">
-                    <label for="handle">Handle</label>
+                    <label for="handle">用户名</label>
                     <input id="handle" type="text" autocomplete="username"
-                           placeholder="your-handle" required aria-required="true">
+                           placeholder="请输入用户名" required aria-required="true">
                 </div>
 
                 <div class="login-field login-field--password" id="passwordField">
-                    <label for="password">Password</label>
+                    <label for="password">密码</label>
                     <div class="login-input-wrap">
                         <input id="password" type="password" autocomplete="current-password"
-                               placeholder="Password">
+                               placeholder="请输入密码">
                         <button type="button" class="password-toggle" id="passwordToggle"
-                                aria-label="Show password" aria-pressed="false">
+                                aria-label="显示密码" aria-pressed="false">
                             <i class="fa-solid fa-eye"></i>
                         </button>
                     </div>
                 </div>
 
-                <button type="submit" class="login-btn" id="loginButton">Sign in</button>
+                <button type="submit" class="login-btn" id="loginButton">登录</button>
             </form>
 
             <div class="login-error" id="errorMessage" role="alert" aria-live="polite"></div>
 
-            <a href="#" class="login-forgot" id="forgotLink">Forgot password?</a>
+            <a href="#" class="login-forgot" id="forgotLink">忘记密码？</a>
         </section>
 
         <!-- Recovery form (hidden by default) -->
         <section class="login-card" id="recoveryCard" style="display:none" aria-labelledby="recovery-title">
             <header class="login-header">
                 <img src="img/logo.png" alt="" class="login-logo">
-                <h1 id="recovery-title">Reset Password</h1>
+                <h1 id="recovery-title">重置密码</h1>
             </header>
 
             <form id="recoveryForm" novalidate>
                 <div class="login-field">
-                    <label for="recoverHandle">Handle</label>
+                    <label for="recoverHandle">用户名</label>
                     <input id="recoverHandle" type="text" autocomplete="username"
-                           placeholder="your-handle" required>
+                           placeholder="请输入用户名" required>
                 </div>
 
                 <div id="recoveryStep1">
-                    <button type="submit" class="login-btn" id="sendCodeBtn">Send recovery code</button>
+                    <button type="submit" class="login-btn" id="sendCodeBtn">发送恢复码</button>
                 </div>
 
                 <div id="recoveryStep2" style="display:none">
                     <div class="login-field">
-                        <label for="recoveryCode">Recovery code</label>
+                        <label for="recoveryCode">恢复码</label>
                         <input id="recoveryCode" type="text" inputmode="numeric"
                                placeholder="000000" maxlength="6">
                     </div>
                     <div class="login-field">
-                        <label for="newPassword">New password</label>
+                        <label for="newPassword">新密码</label>
                         <input id="newPassword" type="password" autocomplete="new-password"
-                               placeholder="New password">
+                               placeholder="请输入新密码">
                     </div>
-                    <button type="submit" class="login-btn" id="resetBtn">Reset password</button>
+                    <button type="submit" class="login-btn" id="resetBtn">重置密码</button>
                 </div>
             </form>
 
             <div class="login-error" id="recoveryError" role="alert" aria-live="polite"></div>
 
-            <a href="#" class="login-forgot" id="cancelRecovery">Back to sign in</a>
+            <a href="#" class="login-forgot" id="cancelRecovery">返回登录</a>
         </section>
     </main>
 

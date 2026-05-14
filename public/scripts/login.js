@@ -3,6 +3,33 @@ import { initAccessibility } from './a11y.js';
 let csrfToken = '';
 let lockoutTimer = null;
 
+const messages = {
+    handleRequired: '请输入用户名',
+    codeRequired: '请输入恢复码',
+    genericError: '发生错误，请稍后重试',
+    incorrectCredentials: '账号或密码不正确',
+    userDisabled: '此账号已被禁用',
+    userNotFound: '未找到该用户',
+    incorrectCode: '恢复码不正确',
+    missingFields: '请填写必填项',
+    tooManyLoginAttempts: '尝试次数过多，请稍后重试或重置密码。',
+    tooManyRecoveryAttempts: '尝试次数过多，请稍后重试或联系管理员。',
+    signingIn: '登录中...',
+    locked: (remaining) => `账号已锁定，请在 ${remaining} 秒后重试。`,
+    showPassword: '显示密码',
+    hidePassword: '隐藏密码',
+};
+
+const serverErrorMessages = new Map([
+    ['Incorrect credentials', messages.incorrectCredentials],
+    ['User is disabled', messages.userDisabled],
+    ['User not found', messages.userNotFound],
+    ['Incorrect code', messages.incorrectCode],
+    ['Missing required fields', messages.missingFields],
+    ['Too many attempts. Try again later or recover your password.', messages.tooManyLoginAttempts],
+    ['Too many attempts. Try again later or contact your admin.', messages.tooManyRecoveryAttempts],
+]);
+
 /**
  * Gets a CSRF token from the server.
  * @returns {Promise<string>} CSRF token
@@ -40,6 +67,30 @@ function hideError(errorBlock) {
 }
 
 /**
+ * Returns user-facing Chinese copy for known auth API errors.
+ * @param {unknown} message Server error message
+ * @returns {string} Localized error message
+ */
+function getErrorMessage(message) {
+    if (typeof message !== 'string') {
+        return messages.genericError;
+    }
+
+    return serverErrorMessages.get(message) || message || messages.genericError;
+}
+
+/**
+ * Hides a visible login error when the user changes credentials.
+ */
+function hideLoginErrorAfterCredentialChange() {
+    if (lockoutTimer) {
+        return;
+    }
+
+    hideError(document.getElementById('errorMessage'));
+}
+
+/**
  * Sets the login form enabled/disabled state.
  * @param {boolean} enabled Whether the form should be enabled
  */
@@ -62,7 +113,7 @@ function startLockoutCountdown(seconds) {
     setFormEnabled(false);
 
     let remaining = seconds;
-    showError(errorBlock, `Account locked. Try again in ${remaining} seconds.`);
+    showError(errorBlock, messages.locked(remaining));
 
     lockoutTimer = setInterval(() => {
         remaining--;
@@ -72,7 +123,7 @@ function startLockoutCountdown(seconds) {
             hideError(errorBlock);
             setFormEnabled(true);
         } else {
-            showError(errorBlock, `Account locked. Try again in ${remaining} seconds.`);
+            showError(errorBlock, messages.locked(remaining));
         }
     }, 1000);
 }
@@ -90,7 +141,7 @@ async function performLogin(handle, password) {
 
     const loginBtn = document.getElementById('loginButton');
     const originalText = loginBtn.textContent;
-    loginBtn.textContent = 'Signing in…';
+    loginBtn.textContent = messages.signingIn;
 
     try {
         const response = await fetch('/api/users/login', {
@@ -114,7 +165,7 @@ async function performLogin(handle, password) {
 
             loginBtn.textContent = originalText;
             setFormEnabled(true);
-            return showError(errorBlock, errorData.error || 'An error occurred', true);
+            return showError(errorBlock, getErrorMessage(errorData.error), true);
         }
 
         const data = await response.json();
@@ -149,7 +200,7 @@ async function sendRecoveryPart1(handle) {
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
-            return showError(errorBlock, errorData.error || 'An error occurred', true);
+            return showError(errorBlock, getErrorMessage(errorData.error), true);
         }
 
         document.getElementById('recoveryStep1').style.display = 'none';
@@ -183,7 +234,7 @@ async function sendRecoveryPart2(handle, code, newPassword) {
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
-            return showError(errorBlock, errorData.error || 'An error occurred', true);
+            return showError(errorBlock, getErrorMessage(errorData.error), true);
         }
 
         await performLogin(handle, newPassword || '');
@@ -236,12 +287,12 @@ function togglePasswordVisibility() {
         input.type = 'text';
         icon.className = 'fa-solid fa-eye-slash';
         btn.setAttribute('aria-pressed', 'true');
-        btn.setAttribute('aria-label', 'Hide password');
+        btn.setAttribute('aria-label', messages.hidePassword);
     } else {
         input.type = 'password';
         icon.className = 'fa-solid fa-eye';
         btn.setAttribute('aria-pressed', 'false');
-        btn.setAttribute('aria-label', 'Show password');
+        btn.setAttribute('aria-label', messages.showPassword);
     }
 }
 
@@ -256,10 +307,13 @@ function togglePasswordVisibility() {
         const handle = String($('#handle').val()).trim();
         const password = String($('#password').val());
         if (!handle) {
-            return showError(document.getElementById('errorMessage'), 'Handle is required', true);
+            return showError(document.getElementById('errorMessage'), messages.handleRequired, true);
         }
         await performLogin(handle, password);
     });
+
+    document.getElementById('handle').addEventListener('input', hideLoginErrorAfterCredentialChange);
+    document.getElementById('password').addEventListener('input', hideLoginErrorAfterCredentialChange);
 
     // Password toggle
     document.getElementById('passwordToggle').addEventListener('click', togglePasswordVisibility);
@@ -276,7 +330,7 @@ function togglePasswordVisibility() {
         const handle = String($('#recoverHandle').val()).trim();
 
         if (!handle) {
-            return showError(document.getElementById('recoveryError'), 'Handle is required', true);
+            return showError(document.getElementById('recoveryError'), messages.handleRequired, true);
         }
 
         // Step 1 is visible → send code
@@ -289,7 +343,7 @@ function togglePasswordVisibility() {
         const code = String($('#recoveryCode').val()).trim();
         const newPassword = String($('#newPassword').val());
         if (!code) {
-            return showError(document.getElementById('recoveryError'), 'Recovery code is required', true);
+            return showError(document.getElementById('recoveryError'), messages.codeRequired, true);
         }
         await sendRecoveryPart2(handle, code, newPassword);
     });
