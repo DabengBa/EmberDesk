@@ -53,7 +53,7 @@ ssl:
   # Path to private key (relative to server root)
   keyPath: "./certs/privkey.pem"
   # Private key passphrase (leave empty if not needed)
-  # For better security, use a CLI argument or an environment variable (SILLYTAVERN_SSL_KEYPASSPHRASE)
+  # For better security, use a CLI argument or an environment variable (EMBERDESK_SSL_KEYPASSPHRASE)
   keyPassphrase: ""
 # -- SECURITY CONFIGURATION --
 # Toggle whitelist mode
@@ -120,7 +120,7 @@ sso:
   # https://www.authelia.com/
   # This will use auto login to an account with the same username
   # as that used for authlia. (Ensure the username in authlia
-  # is an exact match in lowercase with that in sillytavern)
+  # is an exact match in lowercase with that in EmberDesk)
   autheliaAuth: false
   # Enable's authentik based auto login. Only enable this if you
   # have setup and installed Authentik as a middle-ware on your
@@ -128,7 +128,7 @@ sso:
   # https://goauthentik.io/
   # This will use auto login to an account with the same username
   # as that used for authentik. (Ensure the username in authentik
-  # is an exact match in lowercase with that in sillytavern).
+  # is an exact match in lowercase with that in EmberDesk).
   authentikAuth: false
   # List of trusted proxy IPs for SSO authentication.
   # Supports wildcards or CIDR notation for subnets.

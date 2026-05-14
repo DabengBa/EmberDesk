@@ -21,7 +21,7 @@ const contentIndexPath = path.join(contentDirectory, 'index.json');
 const scaffoldIndexPath = path.join(scaffoldDirectory, 'index.json');
 
 const WHITELIST_GENERIC_URL_DOWNLOAD_SOURCES = getConfigValue('whitelistImportDomains', []);
-const USER_AGENT = 'SillyTavern';
+const USER_AGENT = 'EmberDesk';
 
 /**
  * @typedef {Object} ContentItem

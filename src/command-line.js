@@ -51,7 +51,7 @@ export class CommandLineParser {
      * @returns {CommandLineArguments} Default configuration values
      */
     getDefaultConfig(isGlobal) {
-        const appPaths = envPaths('SillyTavern', { suffix: '' });
+        const appPaths = envPaths('EmberDesk', { suffix: '' });
         const configPath = isGlobal ? path.join(appPaths.data, 'config.yaml') : './config.yaml';
         const dataPath = isGlobal ? path.join(appPaths.data, 'data') : './data';
         return Object.freeze({

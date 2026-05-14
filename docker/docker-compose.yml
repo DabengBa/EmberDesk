@@ -1,13 +1,12 @@
 services:
-  sillytavern:
+  emberdesk:
     build: ..
-    container_name: sillytavern
-    hostname: sillytavern
-    image: ghcr.io/sillytavern/sillytavern:latest
+    container_name: emberdesk
+    hostname: emberdesk
+    image: ghcr.io/dabengba/emberdesk:latest
     environment:
       - NODE_ENV=production
       - FORCE_COLOR=1
-      - SILLYTAVERN_HEARTBEATINTERVAL=30
     ports:
       - "8000:8000"
     volumes:

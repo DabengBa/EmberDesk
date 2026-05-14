@@ -16,7 +16,7 @@ export { MODULE_NAME };
 const MODULE_NAME = 'assets';
 const DEBUG_PREFIX = '<Assets module> ';
 let previewAudio = null;
-let ASSETS_JSON_URL = 'https://raw.githubusercontent.com/SillyTavern/SillyTavern-Content/main/index.json';
+let ASSETS_JSON_URL = 'https://raw.githubusercontent.com/DabengBa/EmberDesk-Content/main/index.json';
 
 
 // DBG
@@ -187,7 +187,7 @@ function createAssetBlock(asset, assetType, element) {
 
     assetBlock.find('.tag').on('click', function (e) {
         const a = document.createElement('a');
-        a.href = 'https://docs.sillytavern.app/for-contributors/function-calling/';
+        a.href = '#';
         a.target = '_blank';
         a.click();
     });

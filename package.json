@@ -108,12 +108,12 @@
             "whatwg-url": "^14.0.0"
         }
     },
-    "name": "sillytavern",
+    "name": "emberdesk",
     "type": "module",
     "license": "AGPL-3.0",
     "repository": {
         "type": "git",
-        "url": "https://github.com/SillyTavern/SillyTavern.git"
+        "url": "https://github.com/DabengBa/EmberDesk.git"
     },
     "version": "1.18.0",
     "scripts": {

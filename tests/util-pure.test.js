@@ -35,15 +35,15 @@ import {
 
 describe('keyToEnv', () => {
     test('should convert dotted key to env var format', () => {
-        expect(keyToEnv('extensions.models.speechToText')).toBe('SILLYTAVERN_EXTENSIONS_MODELS_SPEECHTOTEXT');
+        expect(keyToEnv('extensions.models.speechToText')).toBe('EMBERDESK_EXTENSIONS_MODELS_SPEECHTOTEXT');
     });
 
     test('should handle simple key without dots', () => {
-        expect(keyToEnv('port')).toBe('SILLYTAVERN_PORT');
+        expect(keyToEnv('port')).toBe('EMBERDESK_PORT');
     });
 
     test('should coerce non-string input via String()', () => {
-        expect(keyToEnv(42)).toBe('SILLYTAVERN_42');
+        expect(keyToEnv(42)).toBe('EMBERDESK_42');
     });
 });
 

@@ -8,14 +8,14 @@ if %errorlevel% neq 0 (
 ) else (
     if not exist .git (
         echo [91mNot running from a Git repository. Reinstall using an officially supported method to get updates.[0m
-        echo See: https://docs.sillytavern.app/installation/windows/
+        echo See the EmberDesk README for installation instructions.
         goto end
     )
     call git pull --rebase --autostash
     if %errorlevel% neq 0 (
         REM incase there is still something wrong
         echo [91mThere were errors while updating.[0m
-        echo See the update FAQ at https://docs.sillytavern.app/installation/updating/
+        echo See the Update-Instructions.txt file for update troubleshooting.
         goto end
     )
 )

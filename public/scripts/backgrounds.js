@@ -40,7 +40,7 @@ const THUMBNAIL_COLUMNS_DEFAULT_MOBILE = 3;
  * Storage for frontend-generated background thumbnails.
  * This is used to store thumbnails for backgrounds that cannot be generated on the server.
  */
-const THUMBNAIL_STORAGE = localforage.createInstance({ name: 'SillyTavern_Thumbnails' });
+const THUMBNAIL_STORAGE = localforage.createInstance({ name: 'EmberDesk_Thumbnails' });
 
 /**
  * Cache for thumbnail blob URLs.

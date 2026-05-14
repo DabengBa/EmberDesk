@@ -3,7 +3,7 @@ id: page.chat_workspace
 type: page
 name: Chat Workspace
 route: /
-related: [feature.startup_bootstrap, feature.character_library_panel, feature.character_delete, feature.background_library_panel, feature.extension_panel_open, term.character_card]
+related: [feature.startup_bootstrap, feature.character_library_panel, feature.character_delete, feature.background_library_panel, feature.extension_panel_open, term.character_card, page.login]
 ---
 
 # Page: Chat Workspace
