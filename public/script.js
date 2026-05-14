@@ -262,6 +262,7 @@ import { initScrapers } from './scripts/scrapers.js';
 import { initCustomSelectedSamplers, validateDisabledSamplers } from './scripts/samplerSelect.js';
 import { DragAndDropHandler } from './scripts/dragdrop.js';
 import { INTERACTABLE_CONTROL_CLASS, initKeyboard } from './scripts/keyboard.js';
+import { showWorldInfoCascadeDialog } from './scripts/world-cascade-dialog.js';
 import { initDynamicStyles } from './scripts/dynamic-styles.js';
 import { initInputMarkdown } from './scripts/input-md-formatting.js';
 import { AbortReason } from './scripts/util/AbortReason.js';
@@ -474,7 +475,7 @@ export let converter;
 
 // array for prompt token calculations
 
-export const systemUserName = 'SillyTavern System';
+export const systemUserName = 'EmberDesk System';
 export const neutralCharacterName = 'Assistant';
 let default_user_name = 'User';
 export let name1 = default_user_name;
@@ -510,7 +511,7 @@ export const default_avatar = 'img/ai4.png';
 export const system_avatar = 'img/five.png';
 export const comment_avatar = 'img/quill.png';
 export const default_user_avatar = 'img/user-default.png';
-export let CLIENT_VERSION = 'SillyTavern:UNKNOWN:Cohee#1207'; // For Horde header
+export let CLIENT_VERSION = 'EmberDesk:UNKNOWN:dev'; // For Horde header
 let optionsPopper = Popper.createPopper(document.getElementById('options_button'), document.getElementById('options'), {
     placement: 'top-start',
 });
@@ -11164,8 +11165,36 @@ export async function deleteCharacter(characterKey, { deleteChats = true } = {})
         return false;
     }
 
+    // World info cascade preflight
+    let deleteWorlds = [];
+    let clearWorldReferences = false;
+    try {
+        const preflightResponse = await fetch('/api/characters/delete-preflight', {
+            method: 'POST',
+            headers: getRequestHeaders(),
+            body: JSON.stringify({ avatars: characterKey }),
+            cache: 'no-cache',
+        });
+        if (preflightResponse.ok) {
+            const preflightData = await preflightResponse.json();
+            if (preflightData.worldInfos && preflightData.worldInfos.length > 0) {
+                const cascadeResult = await showWorldInfoCascadeDialog(preflightData.worldInfos);
+                if (cascadeResult === null) {
+                    // User cancelled
+                    return false;
+                }
+                deleteWorlds = cascadeResult.deleteWorlds;
+                clearWorldReferences = cascadeResult.clearWorldReferences;
+            }
+        }
+    } catch {
+        // Preflight failure should not block deletion
+    }
+
     let deleted = false;
     const deletedAvatars = [];
+    let lastSuccessfulMsg = null;
+    let lastSuccessfulResponse = null;
 
     for (const key of characterKey) {
         const character = characters.find(x => x.avatar == key);
@@ -11195,6 +11224,9 @@ export async function deleteCharacter(characterKey, { deleteChats = true } = {})
             continue;
         }
 
+        lastSuccessfulMsg = msg;
+        lastSuccessfulResponse = response;
+
         accountStorage.removeItem(`AlertWI_${character.avatar}`);
         accountStorage.removeItem(`AlertRegex_${character.avatar}`);
         accountStorage.removeItem(`mediaWarningShown:${character.avatar}`);
@@ -11211,6 +11243,23 @@ export async function deleteCharacter(characterKey, { deleteChats = true } = {})
         await eventSource.emit(event_types.CHARACTER_DELETED, { id: chid, character: character });
         deletedAvatars.push(character.avatar);
         deleted = true;
+    }
+
+    // World info cascade: delete world files and clear references after all characters are deleted
+    if (deleted && deleteWorlds.length > 0) {
+        try {
+            await fetch('/api/worldinfo/delete-cascade', {
+                method: 'POST',
+                headers: getRequestHeaders(),
+                body: JSON.stringify({
+                    worlds: deleteWorlds,
+                    clear_references: clearWorldReferences,
+                }),
+                cache: 'no-cache',
+            });
+        } catch {
+            // Cascade failure should not block the UI cleanup
+        }
     }
 
     await removeCharacterFromUI(deletedAvatars);
@@ -12425,7 +12474,7 @@ jQuery(async function () {
             }
 
             if (selected_group && format === 'json') {
-                toastr.warning(t`Only SillyTavern's own format is supported for group chat imports. Sorry!`);
+                toastr.warning(t`Only EmberDesk's own format is supported for group chat imports. Sorry!`);
                 continue;
             }
 

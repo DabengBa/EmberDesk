@@ -596,3 +596,39 @@ export async function listIndexedCharacterPayloads({
         throw error;
     }
 }
+
+/**
+ * Finds all characters whose world info binding matches the given name.
+ *
+ * @param {string} userRoot - The user's root data directory.
+ * @param {string} worldName - The world info name to search for.
+ * @returns {Array<{ avatar: string, name: string }>} Characters bound to this world.
+ */
+export function findCharactersBoundToWorld(userRoot, worldName) {
+    const db = openCharacterIndexDatabase(userRoot);
+    if (!db) {
+        return [];
+    }
+    try {
+        const rows = db.prepare(
+            'SELECT avatar, shallow_json FROM characters WHERE source_world_name = ?',
+        ).all(worldName);
+
+        const results = [];
+        for (const row of rows) {
+            try {
+                const shallow = JSON.parse(row.shallow_json);
+                results.push({
+                    avatar: row.avatar,
+                    name: shallow?.name ?? row.avatar,
+                });
+            } catch {
+                results.push({ avatar: row.avatar, name: row.avatar });
+            }
+        }
+        return results;
+    } catch (error) {
+        resetCharacterIndexDatabase(userRoot);
+        throw error;
+    }
+}

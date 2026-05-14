@@ -19,6 +19,7 @@ import { deepMerge, humanizedDateTime, tryParse, MemoryLimitedMap, getConfigValu
 import { TavernCardValidator } from '../validator/TavernCardValidator.js';
 import { parse, read, write } from '../character-card-parser.js';
 import { readWorldInfoFile } from './worldinfo.js';
+
 import { areThumbnailsEnabled, generateThumbnail, invalidateThumbnail } from './thumbnails.js';
 import { importRisuSprites } from './sprites.js';
 import { getUserDirectories } from '../users.js';
@@ -28,6 +29,7 @@ import { CharXParser, persistCharXAssets } from '../charx.js';
 import cacheBuster from '../middleware/cacheBuster.js';
 import {
     deleteCharacterIndexEntry,
+    findCharactersBoundToWorld,
     getFreshIndexedCharacterFullPayload,
     isCharacterIndexSupported,
     listIndexedCharacterPayloads,
@@ -1707,6 +1709,80 @@ router.post('/merge-attributes', getFileNameValidationFunction('avatar'), async 
     }
 });
 
+router.post('/delete-preflight', async function (request, response) {
+    try {
+        const avatars = request.body?.avatars;
+        if (!Array.isArray(avatars) || avatars.length === 0) {
+            return response.send({ worldInfos: [] });
+        }
+
+        const directories = request.user.directories;
+        const worldNameToAvatars = new Map();
+
+        // Read each character to extract extensions.world
+        for (const avatar of avatars) {
+            const safeName = sanitize(avatar);
+            if (!safeName || safeName !== avatar) continue;
+            const charPath = path.join(directories.characters, avatar);
+            if (!fs.existsSync(charPath)) continue;
+
+            try {
+                const charData = await readCharacterData(charPath);
+                const worldName = charData?.data?.extensions?.world;
+                if (worldName && typeof worldName === 'string' && worldName.trim()) {
+                    if (!worldNameToAvatars.has(worldName)) {
+                        worldNameToAvatars.set(worldName, []);
+                    }
+                    worldNameToAvatars.get(worldName).push(avatar);
+                }
+            } catch {
+                // Skip characters that can't be read
+            }
+        }
+
+        if (worldNameToAvatars.size === 0) {
+            return response.send({ worldInfos: [] });
+        }
+
+        const worldInfos = [];
+
+        for (const [worldName, deleteCandidateAvatars] of worldNameToAvatars) {
+            const worldFilename = sanitize(`${worldName}.json`);
+            const worldPath = path.join(directories.worlds, worldFilename);
+            if (!fs.existsSync(worldPath)) continue;
+
+            let entryCount = 0;
+            try {
+                const worldData = JSON.parse(fs.readFileSync(worldPath, 'utf8'));
+                entryCount = worldData.entries?.length ?? 0;
+            } catch {
+                // If we can't parse, still show with 0 entries
+            }
+
+            let boundCharacters = [];
+            if (isCharacterIndexSupported()) {
+                try {
+                    boundCharacters = findCharactersBoundToWorld(directories.root, worldName);
+                } catch {
+                    // Fallback: only show delete candidates
+                }
+            }
+
+            worldInfos.push({
+                name: worldName,
+                entryCount,
+                boundCharacters,
+                deleteCandidateAvatars,
+            });
+        }
+
+        return response.send({ worldInfos });
+    } catch (error) {
+        console.error('Delete preflight error:', error);
+        return response.status(500).send({ error: 'Failed to gather world info metadata.' });
+    }
+});
+
 router.post('/delete', validateAvatarUrlMiddleware, async function (request, response) {
     if (!request.body || !request.body.avatar_url) {
         return response.sendStatus(400);
@@ -1741,6 +1817,7 @@ router.post('/delete', validateAvatarUrlMiddleware, async function (request, res
     }
 
     deleteCharacterIndexEntrySafe(request.user.directories, request.body.avatar_url, 'delete');
+
     return response.sendStatus(200);
 });
 

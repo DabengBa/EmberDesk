@@ -7,6 +7,8 @@ import _ from 'lodash';
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import { tryParse } from '../util.js';
 import { invalidateDirectory } from './settings-cache.js';
+import { findCharactersBoundToWorld, isCharacterIndexSupported } from './character-index.js';
+import { parse, write } from '../character-card-parser.js';
 
 /**
  * Reads a World Info file and returns its contents
@@ -158,4 +160,55 @@ router.post('/edit', (request, response) => {
     invalidateDirectory(request.user.directories.worlds);
 
     return response.send({ ok: true });
+});
+
+router.post('/delete-cascade', async (request, response) => {
+    try {
+        const worlds = request.body?.worlds;
+        if (!Array.isArray(worlds) || worlds.length === 0) {
+            return response.sendStatus(400);
+        }
+
+        const clearReferences = request.body.clear_references === true;
+        const directories = request.user.directories;
+
+        for (const worldName of worlds) {
+            if (typeof worldName !== 'string' || !worldName.trim()) continue;
+
+            if (clearReferences && isCharacterIndexSupported()) {
+                try {
+                    const boundCharacters = findCharactersBoundToWorld(directories.root, worldName);
+                    for (const { avatar } of boundCharacters) {
+                        const charPath = path.join(directories.characters, avatar);
+                        if (!fs.existsSync(charPath)) continue;
+
+                        try {
+                            const { card } = parse(fs.readFileSync(charPath));
+                            if (card?.data?.extensions?.world === worldName) {
+                                card.data.extensions.world = '';
+                                const buffer = write(card);
+                                fs.writeFileSync(charPath, buffer);
+                            }
+                        } catch {
+                            // Skip characters that can't be updated
+                        }
+                    }
+                } catch {
+                    // If index lookup fails, still delete the world file
+                }
+            }
+
+            const worldFilename = sanitize(`${worldName}.json`);
+            const worldPath = path.join(directories.worlds, worldFilename);
+            if (fs.existsSync(worldPath)) {
+                fs.unlinkSync(worldPath);
+            }
+        }
+
+        invalidateDirectory(directories.worlds);
+        return response.sendStatus(200);
+    } catch (error) {
+        console.error('World info cascade delete error:', error);
+        return response.status(500).send({ error: 'Failed to cascade-delete world info files.' });
+    }
 });
