@@ -11827,12 +11827,27 @@ jQuery(async function () {
         let deleteChats = false;
         let capturedCascade = { deleteWorlds: [], clearWorldReferences: false };
 
-        const confirm = await Popup.show.confirm(t`Delete the character?`, content, {
+        /** @type {import('./scripts/popup.js').PopupOptions} */
+        const popupOptions = {
             onClose: () => {
                 deleteChats = !!$('#del_char_checkbox').prop('checked');
                 capturedCascade = captureCascadeChoices();
             },
-        });
+        };
+
+        // Add "Delete All" button when world infos are present
+        if (cascadeHtml) {
+            popupOptions.customButtons = [{
+                text: t`Delete All`,
+                result: POPUP_RESULT.CUSTOM1,
+                classes: ['popup-button-ok'],
+                action: () => {
+                    document.querySelectorAll('.world-cascade-checkbox').forEach((cb) => { cb.checked = true; });
+                },
+            }];
+        }
+
+        const confirm = await Popup.show.confirm(t`Delete the character?`, content, popupOptions);
         if (!confirm) {
             return;
         }

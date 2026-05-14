@@ -1,5 +1,5 @@
 import { t } from './i18n.js';
-import { POPUP_TYPE, Popup } from './popup.js';
+import { POPUP_TYPE, POPUP_RESULT, Popup } from './popup.js';
 
 /**
  * Shows a standalone cascade dialog (used as fallback when caller cannot embed
@@ -19,6 +19,14 @@ export async function showWorldInfoCascadeDialog(worldInfos) {
     const popup = new Popup(html, POPUP_TYPE.CONFIRM, '', {
         okButton: t`Delete`,
         wider: true,
+        customButtons: [{
+            text: t`Delete All`,
+            result: POPUP_RESULT.CUSTOM1,
+            classes: ['popup-button-ok'],
+            action: () => {
+                document.querySelectorAll('.world-cascade-checkbox').forEach((cb) => { cb.checked = true; });
+            },
+        }],
         onClosing: () => {
             capturedCascade = captureCascadeChoices();
         },
