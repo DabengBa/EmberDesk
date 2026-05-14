@@ -1,6 +1,7 @@
 import { initAccessibility } from './a11y.js';
 
 let csrfToken = '';
+let setupMode = 'fresh'; // 'fresh' or 'set-password'
 
 const messages = {
     handleRequired: '请输入用户名',
@@ -11,6 +12,7 @@ const messages = {
     setupComplete: '设置完成，正在进入...',
     missingFields: '请填写必填项',
     creating: '创建中...',
+    setting: '设置中...',
     showPassword: '显示密码',
     hidePassword: '隐藏密码',
 };
@@ -26,6 +28,19 @@ async function getCsrfToken() {
     const response = await fetch('/csrf-token');
     const data = await response.json();
     return data.token;
+}
+
+async function getSetupMode() {
+    try {
+        const response = await fetch('/api/users/setup-mode');
+        if (response.ok) {
+            const data = await response.json();
+            return data.mode;
+        }
+    } catch {
+        // fallback to fresh
+    }
+    return 'fresh';
 }
 
 function showError(errorBlock, message, shake = false) {
@@ -51,8 +66,10 @@ function getErrorMessage(message) {
 }
 
 function setFormEnabled(enabled) {
-    document.getElementById('handle').disabled = !enabled;
-    document.getElementById('name').disabled = !enabled;
+    const handle = document.getElementById('handle');
+    const name = document.getElementById('name');
+    if (handle) handle.disabled = !enabled;
+    if (name) name.disabled = !enabled;
     document.getElementById('password').disabled = !enabled;
     document.getElementById('confirmPassword').disabled = !enabled;
     document.getElementById('setupButton').disabled = !enabled;
@@ -76,6 +93,14 @@ function togglePasswordVisibility(inputId, buttonId) {
     }
 }
 
+function applySetPasswordMode() {
+    setupMode = 'set-password';
+    document.getElementById('setup-title').textContent = '设置密码';
+    document.getElementById('handleField').classList.add('setup-hidden');
+    document.getElementById('nameField').classList.add('setup-hidden');
+    document.getElementById('setupButton').textContent = '设置密码并登录';
+}
+
 async function performSetup(handle, name, password) {
     const errorBlock = document.getElementById('errorMessage');
     hideError(errorBlock);
@@ -83,16 +108,22 @@ async function performSetup(handle, name, password) {
 
     const setupBtn = document.getElementById('setupButton');
     const originalText = setupBtn.textContent;
-    setupBtn.textContent = messages.creating;
+    setupBtn.textContent = setupMode === 'set-password' ? messages.setting : messages.creating;
 
     try {
+        const body = { password };
+        if (setupMode === 'fresh') {
+            body.handle = handle;
+            body.name = name;
+        }
+
         const response = await fetch('/api/users/setup', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRF-Token': csrfToken,
             },
-            body: JSON.stringify({ handle, name, password }),
+            body: JSON.stringify(body),
         });
 
         if (!response.ok) {
@@ -125,14 +156,19 @@ async function performSetup(handle, name, password) {
 
     csrfToken = await getCsrfToken();
 
+    const mode = await getSetupMode();
+    if (mode === 'set-password') {
+        applySetPasswordMode();
+    }
+
     document.getElementById('setupForm').addEventListener('submit', async (e) => {
         e.preventDefault();
-        const handle = String($('#handle').val()).trim();
-        const name = String($('#name').val()).trim();
+        const handle = setupMode === 'fresh' ? String($('#handle').val()).trim() : '';
+        const name = setupMode === 'fresh' ? String($('#name').val()).trim() : '';
         const password = String($('#password').val());
         const confirmPassword = String($('#confirmPassword').val());
 
-        if (!handle) {
+        if (setupMode === 'fresh' && !handle) {
             return showError(document.getElementById('errorMessage'), messages.handleRequired, true);
         }
         if (!password) {

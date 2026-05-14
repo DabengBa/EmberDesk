@@ -246,6 +246,22 @@ function slugify(text) {
     return lodash.deburr(String(text ?? '').toLowerCase().trim()).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
+router.get('/setup-mode', async (_request, response) => {
+    try {
+        const handles = await getAllUserHandles();
+        if (handles.length === 1) {
+            const user = await storage.getItem(toKey(handles[0]));
+            if (user && !user.password) {
+                return response.json({ mode: 'set-password' });
+            }
+        }
+        return response.json({ mode: 'fresh' });
+    } catch (error) {
+        console.error('Setup mode check failed:', error);
+        return response.json({ mode: 'fresh' });
+    }
+});
+
 router.post('/setup', async (request, response) => {
     try {
         if (!(await needsSetup())) {
@@ -253,7 +269,35 @@ router.post('/setup', async (request, response) => {
             return response.status(403).json({ error: 'Setup already completed' });
         }
 
-        if (!request.body.handle || !request.body.password) {
+        if (!request.body.password) {
+            console.warn('Setup failed: Missing password');
+            return response.status(400).json({ error: 'Missing required fields' });
+        }
+
+        // Mode 1: Existing passwordless user — set password only
+        const handles = await getAllUserHandles();
+        if (handles.length === 1) {
+            const user = await storage.getItem(toKey(handles[0]));
+            if (user && !user.password) {
+                const salt = getPasswordSalt();
+                user.password = getPasswordHash(request.body.password, salt);
+                user.salt = salt;
+                await storage.setItem(toKey(user.handle), user);
+
+                if (!request.session) {
+                    console.error('Session not available');
+                    return response.sendStatus(500);
+                }
+
+                request.session.handle = user.handle;
+                request.session.version = getAccountVersion(user);
+                console.info('Password set for existing user:', user.handle);
+                return response.json({ handle: user.handle });
+            }
+        }
+
+        // Mode 2: Fresh deploy — create new admin account
+        if (!request.body.handle) {
             console.warn('Setup failed: Missing required fields');
             return response.status(400).json({ error: 'Missing required fields' });
         }
@@ -265,7 +309,6 @@ router.post('/setup', async (request, response) => {
             return response.status(400).json({ error: 'Invalid handle' });
         }
 
-        const handles = await getAllUserHandles();
         if (handles.some(x => x === handle)) {
             console.warn('Setup failed: User already exists');
             return response.status(409).json({ error: 'User already exists' });

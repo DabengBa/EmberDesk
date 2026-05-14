@@ -566,13 +566,20 @@ export async function initUserStorage(dataRoot) {
 
 /**
  * Checks whether the first-time setup page should be shown.
- * Returns true when user accounts are enabled and no users exist in storage.
+ * Returns true when:
+ * - user accounts are enabled and no users exist in storage (fresh deploy), OR
+ * - the only user is the legacy default-user with no password (existing deploy upgrade)
  * @returns {Promise<boolean>}
  */
 export async function needsSetup() {
     if (!ENABLE_ACCOUNTS) return false;
     const handles = await getAllUserHandles();
-    return handles.length === 0;
+    if (handles.length === 0) return true;
+    if (handles.length === 1) {
+        const user = await storage.getItem(toKey(handles[0]));
+        if (user && !user.password) return true;
+    }
+    return false;
 }
 
 /**

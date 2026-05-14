@@ -13,6 +13,7 @@
         body {
             background-color: rgba(23, 23, 23, 1);
         }
+        .setup-hidden { display: none !important; }
     </style>
     <link rel="preload" as="style" href="style.css">
     <link rel="apple-touch-icon" sizes="57x57" href="img/apple-icon-57x57.png" />
@@ -41,20 +42,20 @@
             </header>
 
             <form id="setupForm" novalidate>
-                <div class="login-field">
+                <div class="login-field" id="handleField">
                     <label for="handle">用户名</label>
                     <input id="handle" type="text" autocomplete="username"
                            placeholder="请输入用户名" required aria-required="true">
                 </div>
 
-                <div class="login-field">
+                <div class="login-field" id="nameField">
                     <label for="name">显示名称 <span style="opacity:0.5;font-size:0.8em">（可选）</span></label>
                     <input id="name" type="text" autocomplete="name"
                            placeholder="留空则使用用户名">
                 </div>
 
                 <div class="login-field login-field--password">
-                    <label for="password">密码</label>
+                    <label for="password" id="passwordLabel">密码</label>
                     <div class="login-input-wrap">
                         <input id="password" type="password" autocomplete="new-password"
                                placeholder="请输入密码" required aria-required="true">
