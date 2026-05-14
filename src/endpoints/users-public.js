@@ -11,6 +11,7 @@ const DISCREET_LOGIN = getConfigValue('enableDiscreetLogin', false, 'boolean');
 const PREFER_REAL_IP_HEADER = getConfigValue('rateLimiting.preferRealIpHeader', false, 'boolean');
 const LOGIN_POINTS = getConfigValue('rateLimiting.accountsLoginMaxAttempts', 5, 'number');
 const RECOVER_POINTS = getConfigValue('rateLimiting.accountsRecoverMaxAttempts', 5, 'number');
+const LOCKOUT_DURATION = getConfigValue('rateLimiting.accountsLoginLockoutDuration', 300, 'number');
 const MFA_CACHE = new Cache(5 * 60 * 1000);
 
 const generateRecoveryCode = () => Array.from({ length: 6 }, () => crypto.randomInt(0, 10)).join('');
@@ -19,6 +20,11 @@ export const router = express.Router();
 const loginLimiter = new RateLimiterMemory({
     points: LOGIN_POINTS > 0 ? LOGIN_POINTS : Number.MAX_SAFE_INTEGER,
     duration: 60,
+});
+const accountLimiter = new RateLimiterMemory({
+    points: LOGIN_POINTS > 0 ? LOGIN_POINTS : Number.MAX_SAFE_INTEGER,
+    duration: LOCKOUT_DURATION,
+    keyPrefix: 'account:',
 });
 const recoverLimiter = new RateLimiterMemory({
     points: RECOVER_POINTS > 0 ? RECOVER_POINTS : Number.MAX_SAFE_INTEGER,
@@ -66,7 +72,27 @@ router.post('/login', async (request, response) => {
         }
 
         const ip = getIpAddress(request, PREFER_REAL_IP_HEADER);
-        await loginLimiter.consume(ip);
+
+        try {
+            await loginLimiter.consume(ip);
+        } catch (error) {
+            if (error instanceof RateLimiterRes) {
+                console.error('Login failed: Rate limited from', ip);
+                return retryAfter(response, error).status(429).send({ error: 'Too many attempts. Try again later or recover your password.' });
+            }
+            throw error;
+        }
+
+        try {
+            await accountLimiter.consume(request.body.handle);
+        } catch (error) {
+            if (error instanceof RateLimiterRes) {
+                const lockoutSeconds = Math.ceil(error.msBeforeNext / 1000);
+                console.error('Login failed: Account locked for', request.body.handle);
+                return retryAfter(response, error).status(429).send({ error: `Account locked. Try again in ${lockoutSeconds} seconds.` });
+            }
+            throw error;
+        }
 
         /** @type {import('../users.js').User} */
         const user = await storage.getItem(toKey(request.body.handle));
@@ -92,16 +118,12 @@ router.post('/login', async (request, response) => {
         }
 
         await loginLimiter.delete(ip);
+        await accountLimiter.delete(request.body.handle);
         request.session.handle = user.handle;
         request.session.version = getAccountVersion(user);
         console.info('Login successful:', user.handle, 'from', ip, 'at', new Date().toLocaleString());
         return response.json({ handle: user.handle });
     } catch (error) {
-        if (error instanceof RateLimiterRes) {
-            console.error('Login failed: Rate limited from', getIpAddress(request, PREFER_REAL_IP_HEADER));
-            return retryAfter(response, error).status(429).send({ error: 'Too many attempts. Try again later or recover your password.' });
-        }
-
         console.error('Login failed:', error);
         return response.sendStatus(500);
     }
