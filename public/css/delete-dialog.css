@@ -122,3 +122,11 @@
 .bulk-delete-avatars {
     margin: 8px 0;
 }
+
+/* ── Checkbox alignment fix ───────────────────────────────────── */
+
+.delete-dialog-option input[type="checkbox"],
+.world-cascade-label input[type="checkbox"],
+.world-cascade-global label input[type="checkbox"] {
+    transform: none;
+}
