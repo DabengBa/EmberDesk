@@ -260,30 +260,6 @@
         "type": "novel_preset"
     },
     {
-        "filename": "presets/textgen/Default.json",
-        "type": "textgen_preset"
-    },
-    {
-        "filename": "presets/textgen/Deterministic.json",
-        "type": "textgen_preset"
-    },
-    {
-        "filename": "presets/textgen/Neutral.json",
-        "type": "textgen_preset"
-    },
-    {
-        "filename": "presets/textgen/Universal-Creative.json",
-        "type": "textgen_preset"
-    },
-    {
-        "filename": "presets/textgen/Universal-Light.json",
-        "type": "textgen_preset"
-    },
-    {
-        "filename": "presets/textgen/Universal-Super-Creative.json",
-        "type": "textgen_preset"
-    },
-    {
         "filename": "presets/openai/Default.json",
         "type": "openai_preset"
     },

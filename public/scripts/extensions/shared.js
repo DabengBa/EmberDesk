@@ -3,7 +3,6 @@ import { extension_settings, openThirdPartyExtensionMenu } from '../extensions.j
 import { t } from '../i18n.js';
 import { oai_settings, ZAI_ENDPOINT } from '../openai.js';
 import { SECRET_KEYS, secret_state } from '../secrets.js';
-import { textgen_types, textgenerationwebui_settings } from '../textgen-settings.js';
 import { getTokenCountAsync } from '../tokenizers.js';
 import { createThumbnail, isValidUrl } from '../utils.js';
 
@@ -66,45 +65,27 @@ export async function getMultimodalCaption(base64Img, prompt) {
     }
 
     if (isOllama) {
-        if (extension_settings.caption.multimodal_model === 'ollama_current') {
-            requestBody.model = textgenerationwebui_settings.ollama_model;
-        }
-
         if (extension_settings.caption.multimodal_model === 'ollama_custom') {
             requestBody.model = extension_settings.caption.ollama_custom_model;
         }
 
-        requestBody.server_url = extension_settings.caption.alt_endpoint_enabled
-            ? extension_settings.caption.alt_endpoint_url
-            : textgenerationwebui_settings.server_urls[textgen_types.OLLAMA];
+        requestBody.server_url = extension_settings.caption.alt_endpoint_url;
     }
 
     if (isVllm) {
-        if (extension_settings.caption.multimodal_model === 'vllm_current') {
-            requestBody.model = textgenerationwebui_settings.vllm_model;
-        }
-
-        requestBody.server_url = extension_settings.caption.alt_endpoint_enabled
-            ? extension_settings.caption.alt_endpoint_url
-            : textgenerationwebui_settings.server_urls[textgen_types.VLLM];
+        requestBody.server_url = extension_settings.caption.alt_endpoint_url;
     }
 
     if (isLlamaCpp) {
-        requestBody.server_url = extension_settings.caption.alt_endpoint_enabled
-            ? extension_settings.caption.alt_endpoint_url
-            : textgenerationwebui_settings.server_urls[textgen_types.LLAMACPP];
+        requestBody.server_url = extension_settings.caption.alt_endpoint_url;
     }
 
     if (isOoba) {
-        requestBody.server_url = extension_settings.caption.alt_endpoint_enabled
-            ? extension_settings.caption.alt_endpoint_url
-            : textgenerationwebui_settings.server_urls[textgen_types.OOBA];
+        requestBody.server_url = extension_settings.caption.alt_endpoint_url;
     }
 
     if (isKoboldCpp) {
-        requestBody.server_url = extension_settings.caption.alt_endpoint_enabled
-            ? extension_settings.caption.alt_endpoint_url
-            : textgenerationwebui_settings.server_urls[textgen_types.KOBOLDCPP];
+        requestBody.server_url = extension_settings.caption.alt_endpoint_url;
     }
 
     if (isCustom) {
@@ -138,7 +119,7 @@ export async function getMultimodalCaption(base64Img, prompt) {
             case 'anthropic':
                 return '/api/anthropic/caption-image';
             case 'ollama':
-                return '/api/backends/text-completions/ollama/caption-image';
+                return '/api/openai/caption-image';
             default:
                 return '/api/openai/caption-image';
         }
@@ -220,36 +201,28 @@ function throwIfInvalidModel(useReverseProxy) {
         throw new Error('xAI API key is not set.');
     }
 
-    if (multimodalApi === 'ollama' && !textgenerationwebui_settings.server_urls[textgen_types.OLLAMA] && !altEndpointEnabled) {
+    if (multimodalApi === 'ollama' && !altEndpointUrl) {
         throw new Error('Ollama server URL is not set.');
-    }
-
-    if (multimodalApi === 'ollama' && multimodalModel === 'ollama_current' && !textgenerationwebui_settings.ollama_model) {
-        throw new Error('Ollama model is not set.');
     }
 
     if (multimodalApi === 'ollama' && multimodalModel === 'ollama_custom' && !extension_settings.caption.ollama_custom_model) {
         throw new Error('Ollama custom model tag is not set.');
     }
 
-    if (multimodalApi === 'llamacpp' && !textgenerationwebui_settings.server_urls[textgen_types.LLAMACPP] && !altEndpointEnabled) {
+    if (multimodalApi === 'llamacpp' && !altEndpointUrl) {
         throw new Error('LlamaCPP server URL is not set.');
     }
 
-    if (multimodalApi === 'ooba' && !textgenerationwebui_settings.server_urls[textgen_types.OOBA] && !altEndpointEnabled) {
+    if (multimodalApi === 'ooba' && !altEndpointUrl) {
         throw new Error('Text Generation WebUI server URL is not set.');
     }
 
-    if (multimodalApi === 'koboldcpp' && !textgenerationwebui_settings.server_urls[textgen_types.KOBOLDCPP] && !altEndpointEnabled) {
+    if (multimodalApi === 'koboldcpp' && !altEndpointUrl) {
         throw new Error('KoboldCpp server URL is not set.');
     }
 
-    if (multimodalApi === 'vllm' && !textgenerationwebui_settings.server_urls[textgen_types.VLLM] && !altEndpointEnabled) {
+    if (multimodalApi === 'vllm' && !altEndpointUrl) {
         throw new Error('vLLM server URL is not set.');
-    }
-
-    if (multimodalApi === 'vllm' && multimodalModel === 'vllm_current' && !textgenerationwebui_settings.vllm_model) {
-        throw new Error('vLLM model is not set.');
     }
 
     if (multimodalApi === 'custom' && !oai_settings.custom_url) {
@@ -398,7 +371,6 @@ export class ConnectionManagerRequestService {
     static getAllowedTypes() {
         return {
             openai: t`Chat Completion`,
-            textgenerationwebui: t`Text Completion`,
         };
     }
 
@@ -455,26 +427,6 @@ export class ConnectionManagerRequestService {
                         presetName: includePreset ? profile.preset : undefined,
                     }, extractData, signal);
                 }
-                case 'textgenerationwebui': {
-                    if (!selectedApiMap.type) {
-                        throw new Error(`API type ${selectedApiMap.selected} does not support text completions`);
-                    }
-
-                    return await context.TextCompletionService.processRequest({
-                        stream,
-                        prompt,
-                        max_tokens: maxTokens,
-                        model: profile.model,
-                        api_type: selectedApiMap.type,
-                        api_server: profile['api-url'],
-                        secret_id: profile['secret-id'],
-                        ...overridePayload,
-                    }, {
-                        instructName: includeInstruct ? profile.instruct : undefined,
-                        presetName: includePreset ? profile.preset : undefined,
-                        instructSettings: includeInstruct ? instructSettings : undefined,
-                    }, extractData, signal);
-                }
                 default: {
                     throw new Error(`Unknown API type ${selectedApiMap.selected}`);
                 }
@@ -503,12 +455,6 @@ export class ConnectionManagerRequestService {
                     throw new Error(`API type ${selectedApiMap.selected} does not support chat completions`);
                 }
                 return prompt;
-            }
-            case 'textgenerationwebui': {
-                if (!selectedApiMap.type) {
-                    throw new Error(`API type ${selectedApiMap.selected} does not support text completions`);
-                }
-                return context.TextCompletionService.constructPrompt(prompt, instructName, instructSettings);
             }
             default: {
                 throw new Error(`Unknown API type ${selectedApiMap.selected}`);
@@ -583,8 +529,6 @@ export class ConnectionManagerRequestService {
         switch (apiMap.selected) {
             case 'openai':
                 return !!apiMap.source;
-            case 'textgenerationwebui':
-                return !!apiMap.type;
         }
 
         return false;

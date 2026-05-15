@@ -178,7 +178,6 @@ router.post('/get', async (request, response) => {
     const [
         { fileContents: novelai_settings, fileNames: novelai_setting_names },
         { fileContents: openai_settings, fileNames: openai_setting_names },
-        { fileContents: textgenerationwebui_presets, fileNames: textgenerationwebui_preset_names },
         { fileContents: koboldai_settings, fileNames: koboldai_setting_names },
         world_names,
         themes,
@@ -191,7 +190,6 @@ router.post('/get', async (request, response) => {
     ] = await Promise.all([
         getCachedPayload(dirs.novelAI_Settings, () => readPresetsFromDirectoryAsync(dirs.novelAI_Settings, presetOpts(dirs.novelAI_Settings))),
         getCachedPayload(dirs.openAI_Settings, () => readPresetsFromDirectoryAsync(dirs.openAI_Settings, presetOpts(dirs.openAI_Settings))),
-        getCachedPayload(dirs.textGen_Settings, () => readPresetsFromDirectoryAsync(dirs.textGen_Settings, presetOpts(dirs.textGen_Settings))),
         getCachedPayload(dirs.koboldAI_Settings, () => readPresetsFromDirectoryAsync(dirs.koboldAI_Settings, presetOpts(dirs.koboldAI_Settings))),
         getCachedPayload(dirs.worlds, () => readWorldNamesAsync(dirs.worlds)),
         getCachedPayload(dirs.themes, () => readAndParseFromDirectoryAsync(dirs.themes)),
@@ -212,8 +210,6 @@ router.post('/get', async (request, response) => {
         novelai_setting_names,
         openai_settings,
         openai_setting_names,
-        textgenerationwebui_presets,
-        textgenerationwebui_preset_names,
         themes,
         movingUIPresets,
         quickReplyPresets,

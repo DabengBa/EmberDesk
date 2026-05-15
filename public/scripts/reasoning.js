@@ -14,7 +14,6 @@ import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from '
 import { commonEnumProviders, enumIcons } from './slash-commands/SlashCommandCommonEnumsProvider.js';
 import { enumTypes, SlashCommandEnumValue } from './slash-commands/SlashCommandEnumValue.js';
 import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
-import { textgen_types, textgenerationwebui_settings } from './textgen-settings.js';
 import { applyStreamFadeIn } from './util/stream-fadein.js';
 import { copyText, escapeRegex, isFalseBoolean, isTrueBoolean, setDatasetProperty, stringToRange, trimSpaces } from './utils.js';
 
@@ -97,15 +96,6 @@ export function extractReasoningFromData(data, {
     chatCompletionSource = null,
 } = {}) {
     switch (mainApi ?? main_api) {
-        case 'textgenerationwebui':
-            switch (textGenType ?? textgenerationwebui_settings.type) {
-                case textgen_types.OPENROUTER:
-                    return data?.choices?.[0]?.reasoning ?? '';
-                case textgen_types.OLLAMA:
-                    return data?.thinking ?? '';
-            }
-            break;
-
         case 'openai':
             if (!ignoreShowThoughts && !oai_settings.show_thoughts) break;
 
@@ -135,7 +125,7 @@ export function extractReasoningFromData(data, {
                 case chat_completion_sources.SILICONFLOW:
                 case chat_completion_sources.ZAI:
                 case chat_completion_sources.WORKERS_AI:
-                case chat_completion_sources.CUSTOM: {
+                case chat_completion_sources.OPENAI: {
                     return data?.choices?.[0]?.message?.reasoning_content
                         ?? data?.choices?.[0]?.message?.reasoning
                         ?? '';

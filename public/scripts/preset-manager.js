@@ -34,11 +34,7 @@ import { SlashCommandEnumValue, enumTypes } from './slash-commands/SlashCommandE
 import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
 import { checkForSystemPromptInInstructTemplate, system_prompts } from './sysprompt.js';
 import { renderTemplateAsync } from './templates.js';
-import {
-    textgenerationwebui_settings as textgen_settings,
-    textgenerationwebui_preset_names,
-    textgenerationwebui_presets,
-} from './textgen-settings.js';
+
 import { download, ensurePlainObject, equalsIgnoreCaseAndAccents, getSanitizedFilename, parseJsonFile, waitUntilCondition } from './utils.js';
 
 const presetManagers = {};
@@ -157,22 +153,6 @@ class PresetManager {
             },
             isValid: (data) => PresetManager.isPossiblySystemPromptData(data),
         },
-        'preset': {
-            name: 'Text Completion Preset',
-            getData: () => {
-                const manager = getPresetManager('textgenerationwebui');
-                const name = manager.getSelectedPresetName();
-                const data = manager.getPresetSettings(name);
-                data.name = name;
-                return data;
-            },
-            setData: (data) => {
-                const manager = getPresetManager('textgenerationwebui');
-                const name = data.name;
-                return manager.savePreset(name, data);
-            },
-            isValid: (data) => PresetManager.isPossiblyTextCompletionData(data),
-        },
         'reasoning': {
             name: 'Reasoning Formatting',
             getData: () => {
@@ -221,11 +201,6 @@ class PresetManager {
         return data && sysPromptProps.every(prop => Object.keys(data).includes(prop));
     }
 
-    static isPossiblyTextCompletionData(data) {
-        const textCompletionProps = ['temp', 'top_k', 'top_p', 'rep_pen'];
-        return data && textCompletionProps.every(prop => Object.keys(data).includes(prop));
-    }
-
     static isPossiblyReasoningData(data) {
         const reasoningProps = ['name', 'prefix', 'suffix', 'separator'];
         return data && reasoningProps.every(prop => Object.keys(data).includes(prop));
@@ -266,13 +241,8 @@ class PresetManager {
             return await getPresetManager('sysprompt').savePreset(data.name, data);
         }
 
-        // 4. Text Completion settings
-        if (this.isPossiblyTextCompletionData(data)) {
-            toastr.info(t`Importing as settings preset...`, t`Text Completion settings detected`);
-            return await getPresetManager('textgenerationwebui').savePreset(fileName, data);
-        }
 
-        // 5. Reasoning Template
+        // 4. Reasoning Template
         if (this.isPossiblyReasoningData(data)) {
             toastr.info(t`Importing as reasoning template...`, t`Reasoning template detected`);
             return await getPresetManager('reasoning').savePreset(data.name, data);
@@ -334,7 +304,7 @@ class PresetManager {
      */
     static async performMasterExport() {
         const sectionNames = Object.entries(this.masterSections).reduce((acc, [key, section]) => {
-            acc[key] = { key: key, name: section.name, checked: !['preset', 'srw'].includes(key) };
+            acc[key] = { key: key, name: section.name, checked: !['srw'].includes(key) };
             return acc;
         }, {});
         const html = $(await renderTemplateAsync('masterExport', { sections: sectionNames }));
@@ -543,11 +513,7 @@ class PresetManager {
                 preset_names = novelai_setting_names;
                 settings = nai_settings;
                 break;
-            case 'textgenerationwebui':
-                presets = textgenerationwebui_presets;
-                preset_names = textgenerationwebui_preset_names;
-                settings = textgen_settings;
-                break;
+
             case 'openai':
                 presets = openai_settings;
                 preset_names = openai_setting_names;
@@ -584,7 +550,7 @@ class PresetManager {
      * Returns true if the API is keyed, meaning it uses a name to identify presets.
      */
     isKeyedApi() {
-        return this.apiId == 'textgenerationwebui' || this.isAdvancedFormatting();
+        return this.isAdvancedFormatting();
     }
 
     /**
@@ -645,8 +611,7 @@ class PresetManager {
                     return kai_settings;
                 case 'novel':
                     return nai_settings;
-                case 'textgenerationwebui':
-                    return textgen_settings;
+
                 case 'context': {
                     const context_preset = getContextSettings();
                     context_preset.name = name || power_user.context.preset;
@@ -702,7 +667,6 @@ class PresetManager {
             'server_urls',
             'type',
             'custom_model',
-            'bypass_status_check',
             'infermaticai_model',
             'dreamgen_model',
             'openrouter_model',

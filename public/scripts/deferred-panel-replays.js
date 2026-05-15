@@ -1,12 +1,3 @@
-export function resolveTextGenDeferredReplay({ mainApi }) {
-    return {
-        shouldHydrateSettings: true,
-        shouldBindPanelControls: true,
-        shouldValidateSamplers: true,
-        shouldSyncMainApiVisibility: mainApi === 'textgenerationwebui',
-    };
-}
-
 export function buildWorldInfoReplayState({
     worldNames = [],
     selectedWorldInfo = [],

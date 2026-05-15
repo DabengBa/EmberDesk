@@ -35,7 +35,7 @@ router.post('/caption-image', async (request, response) => {
         }
 
         if (request.body.api === 'custom') {
-            key = readSecret(request.user.directories, SECRET_KEYS.CUSTOM);
+            key = readSecret(request.user.directories, SECRET_KEYS.OPENAI);
             mergeObjectWithYaml(bodyParams, request.body.custom_include_body);
             mergeObjectWithYaml(headers, request.body.custom_include_headers);
         }
@@ -106,7 +106,7 @@ router.post('/caption-image', async (request, response) => {
             key = readSecret(request.user.directories, SECRET_KEYS.WORKERS_AI);
         }
 
-        const noKeyTypes = ['custom', 'ooba', 'koboldcpp', 'vllm', 'llamacpp'];
+        const noKeyTypes = ['custom', 'ooba', 'koboldcpp', 'vllm', 'llamacpp', 'ollama'];
         if (!key && !request.body.reverse_proxy && !noKeyTypes.includes(request.body.api)) {
             console.warn('No key found for API', request.body.api);
             return response.sendStatus(400);
@@ -228,7 +228,7 @@ router.post('/caption-image', async (request, response) => {
             apiUrl = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/v1/chat/completions`;
         }
 
-        if (['koboldcpp', 'vllm', 'llamacpp', 'ooba'].includes(request.body.api)) {
+        if (['koboldcpp', 'vllm', 'llamacpp', 'ooba', 'ollama'].includes(request.body.api)) {
             apiUrl = `${trimV1(request.body.server_url)}/v1/chat/completions`;
         }
 

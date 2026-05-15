@@ -78,9 +78,6 @@
                         <div class="checked fa-solid fa-lock right_menu_button"></div>
                     </label>
                 </div>
-                <div id="clickSlidersTips" data-i18n="clickslidertips" class="toggle-description wide100p editable-slider-notification">
-                    Click slider numbers to input manually.
-                </div>
                 <div id="labModeWarning" class="redWarningBG textAlignCenter displayNone" data-i18n="MAD LAB MODE ON">MAD LAB MODE ON</div>
                 <a class="topRightInset" href="usage/common-settings/" target="_blank" title="Documentation on sampling parameters." data-i18n="[title]Documentation on sampling parameters">
                     <span name="samplerHelpButton" class="note-link-span fa-solid fa-circle-question"></span>
@@ -173,7 +170,7 @@
                                 <div>
                                     <div class="margin0 title_restorable standoutHeader">
                                         <strong>
-                                            <span data-i18n="openaipresets">Chat Completion Presets</span>
+                                            <span data-i18n="openaipresets">Presets</span>
                                         </strong>
 
                                         <div class="flex-container gap3px">
@@ -213,44 +210,6 @@
                                     </div>
                                 </div>
                             </div>
-                            <div id="textgenerationwebui_api-presets">
-                                <div class="margin0 title_restorable standoutHeader">
-                                    <strong>
-                                        <span data-i18n="Text Completion presets">Text Completion presets</span>
-                                    </strong>
-
-                                    <div class="flex-container gap3px">
-                                        <div data-preset-manager-import="textgenerationwebui" class="margin0 menu_button_icon menu_button" title="Import preset" data-i18n="[title]Import preset">
-                                            <i class="fa-fw fa-solid fa-file-import"></i>
-                                        </div>
-                                        <div data-preset-manager-export="textgenerationwebui" class="margin0 menu_button_icon menu_button" title="Export preset" data-i18n="[title]Export preset">
-                                            <i class="fa-fw fa-solid fa-file-export"></i>
-                                        </div>
-                                        <div data-preset-manager-delete="textgenerationwebui" class="margin0 menu_button_icon menu_button" title="Delete the preset" data-i18n="[title]Delete the preset">
-                                            <i class="fa-fw fa-solid fa-trash-can"></i>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="flex-container flexNoGap">
-                                    <select id="settings_preset_textgenerationwebui" class="flex1 text_pole" data-preset-manager-for="textgenerationwebui">
-                                    </select>
-                                    <div class="flex-container marginLeft5 gap3px">
-                                        <input type="file" hidden data-preset-manager-file="textgenerationwebui" accept=".json, .settings">
-                                        <div data-preset-manager-update="textgenerationwebui" class="menu_button menu_button_icon" title="Update current preset" data-i18n="[title]Update current preset">
-                                            <i class="fa-fw fa-solid fa-save"></i>
-                                        </div>
-                                        <div data-preset-manager-rename="textgenerationwebui" class="menu_button menu_button_icon" title="Rename current preset" data-i18n="[title]Rename current preset">
-                                            <i class="fa-fw fa-solid fa-pencil"></i>
-                                        </div>
-                                        <div data-preset-manager-new="textgenerationwebui" class="menu_button menu_button_icon" title="Save preset as" data-i18n="[title]Save preset as">
-                                            <i class="fa-fw fa-solid fa-file-circle-plus"></i>
-                                        </div>
-                                        <div data-preset-manager-restore="textgenerationwebui" class="menu_button menu_button_icon" title="Restore current preset" data-i18n="[title]Restore current preset">
-                                            <i class="fa-fw fa-solid fa-recycle"></i>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
                         </div>
                         <div id="common-gen-settings-block" class="width100p">
                             <div id="pro-settings-block" class="flex-container gap10h5v justifyCenter">
@@ -259,14 +218,6 @@
                                     <input class="neo-range-slider" type="range" id="amount_gen" name="volume" min="16" max="2048" step="1">
                                     <div data-randomization-disabled="true" class="wide100p">
                                         <input class="neo-range-input" type="number" min="16" max="2048" step="1" data-for="amount_gen" id="amount_gen_counter">
-                                    </div>
-                                    <div id="streaming_textgenerationwebui_block" class="flex-container alignitemscenter justifyCenter marginTop5">
-                                        <label class="checkbox_label" for="streaming_textgenerationwebui">
-                                            <input type="checkbox" id="streaming_textgenerationwebui" />
-                                            <small><span data-i18n="Streaming">Streaming</span>
-                                                <div class="margin5 fa-solid fa-circle-info opacity50p" data-i18n="[title]Streaming_desc" title="Display the response bit by bit as it is generated.&#13;When this is off, responses will be displayed all at once when they are complete."></div>
-                                            </small>
-                                        </label>
                                     </div>
                                     <div id="streaming_kobold_block" class="flex-container alignitemscenter justifyCenter marginTop5">
                                         <label class="checkbox_label" for="streaming_kobold">
@@ -300,9 +251,7 @@
                                         </label>
                                     </div>
                                 </div>
-                                <small id="prompt_cost_block" data-tg-type="openrouter">
-                                    <span data-i18n="Max prompt cost:">Max prompt cost:</span> <span id="or_prompt_cost">&ndash;</span>
-                                </small>
+                                
                             </div>
                             <div id="ai_module_block_novel" class="width100p">
                                 <div class="range-block">
@@ -624,12 +573,6 @@
                                             Unlocked Context Size
                                         </span>
                                     </label>
-                                    <div class="toggle-description justifyLeft">
-                                        <span data-i18n="Unrestricted maximum value for the context slider">
-                                            Unrestricted maximum value for the context size slider. Enable only if you know
-                                            what you're doing.
-                                        </span>
-                                    </div>
                                 </div>
                                 <div class="range-block">
                                     <div class="range-block-title" data-i18n="Context Size (tokens)">
@@ -652,7 +595,7 @@
                                         <input type="number" id="openai_max_tokens" name="openai_max_tokens" class="text_pole" min="1" max="128000" step="1">
                                     </div>
                                 </div>
-                                <div class="range-block" data-source="openai,custom,xai,aimlapi,moonshot,azure_openai">
+                                <div class="range-block" data-source="openai">
                                     <div class="range-block-title" data-i18n="Multiple swipes per generation">
                                         Multiple swipes per generation
                                     </div>
@@ -660,44 +603,14 @@
                                         <input type="number" id="n_openai" name="n_openai" class="text_pole" min="1" value="1">
                                     </div>
                                 </div>
-                                <div data-source="openrouter" class="range-block">
-                                    <div class="range-block-title" data-i18n="[title]Allow compressing requests by removing messages from the middle of the prompt." title="Allow compressing requests by removing messages from the middle of the prompt.">
-                                        <span data-i18n="Middle-out Transform">Middle-out Transform</span>
-                                        <a href="https://openrouter.ai/docs/transforms" target="_blank" rel="noreferrer noopener" class="note-link-span fa-solid fa-circle-question"></a>
-                                    </div>
-                                    <div class="wide100p">
-                                        <select id="openrouter_middleout" class="text_pole">
-                                            <option value="auto" data-i18n="Auto">Auto</option>
-                                            <option value="on" data-i18n="Allow">Allow</option>
-                                            <option value="off" data-i18n="Forbid">Forbid</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div data-source="openrouter">
-                                    <span data-i18n="Max prompt cost:">Max prompt cost:</span> <span id="openrouter_max_prompt_cost" data-i18n="Unknown">Unknown</span>
-                                </div>
-                                <div data-source="electronhub">
-                                    <span data-i18n="Max prompt cost:">Max prompt cost:</span> <span id="electronhub_max_prompt_cost" data-i18n="Unknown">Unknown</span>
-                                </div>
-                                <div data-source="chutes">
-                                    <span data-i18n="Max prompt cost:">Max prompt cost:</span> <span id="chutes_max_prompt_cost" data-i18n="Unknown">Unknown</span>
-                                </div>
                                 <hr>
                                 <div class="range-block">
                                     <label for="stream_toggle" title="Enable OpenAI completion streaming" data-i18n="[title]Enable OpenAI completion streaming" class="checkbox_label widthFreeExpand">
                                         <input id="stream_toggle" type="checkbox" /><span data-i18n="Streaming">
                                             Streaming</span>
                                     </label>
-                                    <div class="toggle-description justifyLeft">
-                                        <span data-i18n="Display the response bit by bit as it is generated.">
-                                            Display the response bit by bit as it is generated.
-                                        </span><br>
-                                        <span data-i18n="When this is off, responses will be displayed all at once when they are complete.">
-                                            When this is off, responses will be displayed all at once when they are complete.
-                                        </span>
-                                    </div>
                                 </div>
-                                <div class="range-block" data-source="openai,claude,aimlapi,openrouter,ai21,makersuite,vertexai,mistralai,custom,cohere,perplexity,groq,siliconflow,minimax,electronhub,chutes,nanogpt,deepseek,xai,pollinations,moonshot,fireworks,cometapi,azure_openai,zai,workers_ai">
+                                <div class="range-block" data-source="openai,claude,makersuite">
                                     <div class="range-block-title" data-i18n="Temperature">
                                         Temperature
                                     </div>
@@ -710,7 +623,7 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="range-block" data-source="openai,aimlapi,openrouter,custom,cohere,perplexity,groq,siliconflow,mistralai,electronhub,nanogpt,deepseek,xai,pollinations,moonshot,fireworks,cometapi,azure_openai,chutes,workers_ai">
+                                <div class="range-block" data-source="openai">
                                     <div class="range-block-title" data-i18n="Frequency Penalty">
                                         Frequency Penalty
                                     </div>
@@ -723,7 +636,7 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="range-block" data-source="openai,aimlapi,openrouter,custom,cohere,perplexity,groq,siliconflow,mistralai,electronhub,nanogpt,deepseek,xai,pollinations,moonshot,fireworks,cometapi,azure_openai,chutes,workers_ai">
+                                <div class="range-block" data-source="openai">
                                     <div class="range-block-title" data-i18n="Presence Penalty">
                                         Presence Penalty
                                     </div>
@@ -736,7 +649,7 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="range-block" data-source="claude,aimlapi,openrouter,makersuite,vertexai,cohere,perplexity,electronhub,chutes,nanogpt,workers_ai">
+                                <div class="range-block" data-source="claude,makersuite">
                                     <div class="range-block-title" data-i18n="Top K">
                                         Top K
                                     </div>
@@ -749,7 +662,7 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="range-block" data-source="openai,claude,aimlapi,openrouter,ai21,makersuite,vertexai,mistralai,custom,cohere,perplexity,groq,siliconflow,minimax,electronhub,chutes,nanogpt,deepseek,xai,pollinations,moonshot,fireworks,cometapi,azure_openai,zai,workers_ai">
+                                <div class="range-block" data-source="openai,claude,makersuite">
                                     <div class="range-block-title" data-i18n="Top P">
                                         Top P
                                     </div>
@@ -762,7 +675,7 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="range-block" data-source="openrouter,nanogpt,chutes,workers_ai">
+                                <div class="range-block" >
                                     <div class="range-block-title" data-i18n="Repetition Penalty">
                                         Repetition Penalty
                                     </div>
@@ -775,7 +688,7 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="range-block" data-source="openrouter,nanogpt,chutes">
+                                <div class="range-block" >
                                     <div class="range-block-title" data-i18n="Min P">
                                         Min P
                                     </div>
@@ -788,7 +701,7 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="range-block" data-source="openrouter,nanogpt">
+                                <div class="range-block" >
                                     <div class="range-block-title" data-i18n="Top A">
                                         Top A
                                     </div>
@@ -986,7 +899,7 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="range-block" data-source="openai,openrouter,mistralai,custom,cohere,groq,electronhub,chutes,nanogpt,xai,pollinations,aimlapi,makersuite,vertexai,azure_openai,workers_ai">
+                                <div class="range-block" data-source="openai,makersuite">
                                     <div class="range-block-title justifyLeft" data-i18n="Seed">
                                         Seed
                                     </div>
@@ -1238,11 +1151,6 @@
                                     </div>
                                 </div>
                             </div><!-- end of novel settings-->
-                            <div id="textgenerationwebui_api-settings" data-deferred-panel="textgen-api-settings">
-                                <div class="deferred-panel-placeholder" style="padding:1em;color:var(--SmartThemeQuoteColor);text-align:center;">
-                                    <i class="fa-solid fa-spinner fa-spin"></i> <span data-i18n="Loading…">Loading…</span>
-                                </div>
-                            </div><!-- end of textgen settings-->
                             <div id="openai_settings">
                                 <div class="">
                                     <div class="inline-drawer wide100p flexFlowColumn">
@@ -1341,7 +1249,7 @@
                                             </span>
                                         </div>
                                     </div>
-                                    <div class="range-block" data-source="claude,makersuite,vertexai">
+                                    <div class="range-block" data-source="claude,makersuite">
                                         <label for="use_sysprompt" class="checkbox_label widthFreeExpand">
                                             <input id="use_sysprompt" type="checkbox" />
                                             <span>
@@ -1354,7 +1262,7 @@
                                             </span>
                                         </div>
                                     </div>
-                                    <div class="range-block" data-source="makersuite,vertexai,aimlapi,openrouter,claude,electronhub,chutes,nanogpt">
+                                    <div class="range-block" data-source="makersuite,claude">
                                         <label for="openai_enable_web_search" class="checkbox_label flexWrap widthFreeExpand">
                                             <input id="openai_enable_web_search" type="checkbox" />
                                             <span data-i18n="Enable web search">Enable web search</span>
@@ -1363,12 +1271,10 @@
                                             <span data-i18n="Use search capabilities provided by the backend.">
                                                 Use search capabilities provided by the backend.
                                             </span>
-                                            <b data-source="openrouter" data-i18n="openrouter_web_search_fee">
-                                                Not free, adds a $0.02 fee to each prompt.
-                                            </b>
+                                            
                                         </div>
                                     </div>
-                                    <div class="range-block" data-source="openai,cohere,mistralai,custom,claude,aimlapi,openrouter,groq,siliconflow,minimax,deepseek,makersuite,vertexai,ai21,xai,pollinations,moonshot,fireworks,cometapi,electronhub,chutes,azure_openai,zai,nanogpt,workers_ai">
+                                    <div class="range-block" data-source="openai,claude,makersuite">
                                         <label for="openai_function_calling" class="checkbox_label flexWrap widthFreeExpand">
                                             <input id="openai_function_calling" type="checkbox" />
                                             <span data-i18n="Enable function calling">Enable function calling</span>
@@ -1397,7 +1303,7 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="range-block" data-source="openrouter,custom">
+                                    <div class="range-block" data-source="openai">
                                         <div class="flex-container flexFlowColumn wide100p textAlignCenter marginTop10">
                                             <div class="flex-container oneline-dropdown">
                                                 <label for="tool_reasoning_mode" data-i18n="Interleaved Thinking">
@@ -1410,18 +1316,8 @@
                                                 </select>
                                             </div>
                                         </div>
-                                        <div class="toggle-description justifyLeft">
-                                            <span data-i18n="openrouter_interleaved_thinking_hint">
-                                                Sends reasoning from preceding assistant turns with tool-call requests to maintain interleaved thinking context.
-                                            </span>
-                                        </div>
-                                        <div id="openrouter_interleaved_thinking_disabled_hint" class="toggle-description justifyLeft" style="display:none;">
-                                            <em data-i18n="Enable &quot;Request model reasoning&quot; to use Interleaved Thinking.">
-                                                Enable "Request model reasoning" to use Interleaved Thinking.
-                                            </em>
-                                        </div>
                                     </div>
-                                    <div class="range-block" data-source="openai,aimlapi,openrouter,mistralai,makersuite,vertexai,claude,custom,xai,pollinations,moonshot,cohere,cometapi,nanogpt,electronhub,azure_openai,zai,siliconflow,chutes,workers_ai">
+                                    <div class="range-block" data-source="openai,makersuite,claude">
                                         <label for="openai_media_inlining" class="checkbox_label flexWrap widthFreeExpand">
                                             <input id="openai_media_inlining" type="checkbox" />
                                             <span data-i18n="Send inline media">Send inline media</span>
@@ -1430,11 +1326,11 @@
                                                     <i class="icon-supported fa-solid fa-image" title="Supported by the current model" data-i18n="[title]Supported by the current model"></i>
                                                     <i class="icon-unsupported fa-solid fa-image" title="Unsupported by the current model" data-i18n="[title]Unsupported by the current model"></i>
                                                 </div>
-                                                <div id="openai_video_inlining_supported" data-source="makersuite,vertexai,openrouter,zai">
+                                                <div id="openai_video_inlining_supported" data-source="makersuite">
                                                     <i class="icon-supported fa-solid fa-film" title="Supported by the current model" data-i18n="[title]Supported by the current model"></i>
                                                     <i class="icon-unsupported fa-solid fa-film" title="Unsupported by the current model" data-i18n="[title]Unsupported by the current model"></i>
                                                 </div>
-                                                <div id="openai_audio_inlining_supported" data-source="makersuite,vertexai,openrouter,openai,custom">
+                                                <div id="openai_audio_inlining_supported" data-source="makersuite,openai">
                                                     <i class="icon-supported fa-solid fa-music" title="Supported by the current model" data-i18n="[title]Supported by the current model"></i>
                                                     <i class="icon-unsupported fa-solid fa-music" title="Unsupported by the current model" data-i18n="[title]Unsupported by the current model"></i>
                                                 </div>
@@ -1442,10 +1338,10 @@
                                         </label>
                                         <div id="image_inlining_hint" class="flexBasis100p toggle-description justifyLeft">
                                             <span data-i18n="image_inlining_hint_1">Sends attached media in prompts if supported by the model.</span>
-                                            <strong data-source="makersuite,vertexai" data-i18n="video_inlining_hint_4">Videos must be less than 20 MB and under 1 minute long.</strong>
-                                            <strong data-source="makersuite,vertexai" data-i18n="audio_inlining_hint_2">Audio must be less than 20 MB.</strong>
+                                            <strong data-source="makersuite" data-i18n="video_inlining_hint_4">Videos must be less than 20 MB and under 1 minute long.</strong>
+                                            <strong data-source="makersuite" data-i18n="audio_inlining_hint_2">Audio must be less than 20 MB.</strong>
                                         </div>
-                                        <div class="flex-container flexFlowColumn wide100p textAlignCenter marginTop10" data-source="openai,custom,xai,pollinations,cohere,cometapi,nanogpt,moonshot,aimlapi,openrouter,mistralai,electronhub,azure_openai,zai,siliconflow,chutes,makersuite,vertexai,workers_ai">
+                                        <div class="flex-container flexFlowColumn wide100p textAlignCenter marginTop10" data-source="openai,makersuite">
                                             <div class="flex-container oneline-dropdown">
                                                 <label for="openai_inline_image_quality" data-i18n="Inline Image Quality">
                                                     Inline Image Quality
@@ -1458,7 +1354,7 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <div id="request_images_block" class="range-block" data-source="makersuite,vertexai">
+                                    <div id="request_images_block" class="range-block" data-source="makersuite">
                                         <label for="openai_request_images" class="checkbox_label widthFreeExpand">
                                             <input id="openai_request_images" type="checkbox" />
                                             <span>
@@ -1470,7 +1366,7 @@
                                             <span data-i18n="Allows the model to return image attachments.">
                                                 Allows the model to return image attachments.
                                             </span>
-                                            <em data-source="makersuite,vertexai" data-i18n="Request inline images_desc_2">
+                                            <em data-source="makersuite" data-i18n="Request inline images_desc_2">
                                                 Incompatible with the following features: function calling, web search, system prompt.
                                             </em>
                                         </div>
@@ -1506,7 +1402,7 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="range-block" data-source="deepseek,aimlapi,openrouter,custom,claude,xai,makersuite,vertexai,pollinations,moonshot,mistralai,fireworks,cometapi,electronhub,chutes,azure_openai,nanogpt,zai,workers_ai">
+                                    <div class="range-block" data-source="claude,makersuite">
                                         <label for="openai_show_thoughts" class="checkbox_label widthFreeExpand">
                                             <input id="openai_show_thoughts" type="checkbox" />
                                             <span data-i18n="Request model reasoning">Request model reasoning</span>
@@ -1515,12 +1411,12 @@
                                             <span data-i18n="Allows the model to return its thinking process.">
                                                 Allows the model to return its thinking process.
                                             </span>
-                                            <strong data-i18n="This setting affects visibility only." data-source-mode="except" data-source="zai,moonshot,openrouter,deepseek">
+                                            <strong data-i18n="This setting affects visibility only." data-source-mode="except" >
                                                 This setting affects visibility only.
                                             </strong>
                                         </div>
                                     </div>
-                                    <div class="flex-container flexFlowColumn wide100p textAlignCenter marginTop10" data-source="openai,custom,claude,xai,makersuite,vertexai,aimlapi,openrouter,pollinations,perplexity,cometapi,electronhub,azure_openai,chutes,nanogpt,deepseek">
+                                    <div class="flex-container flexFlowColumn wide100p textAlignCenter marginTop10" data-source="openai,claude,makersuite">
                                         <div class="flex-container oneline-dropdown" title="Constrains effort on reasoning for reasoning models.&#10;Reducing reasoning effort can result in faster responses and fewer tokens used on reasoning in a response." data-i18n="[title]Constrains effort on reasoning for reasoning models.">
                                             <label for="openai_reasoning_effort">
                                                 <span data-i18n="Reasoning Effort">Reasoning Effort</span>
@@ -1534,27 +1430,18 @@
                                                 <option data-i18n="openai_reasoning_effort_high" value="high">High</option>
                                                 <option data-i18n="openai_reasoning_effort_maximum" value="max">Maximum</option>
                                             </select>
-                                            <div class="toggle-description justifyLeft marginBot5" data-source="openai,custom,xai,aimlapi,openrouter,pollinations,perplexity,cometapi,electronhub,azure_openai,chutes" data-i18n="OpenAI-style options: low, medium, high. Minimum and maximum are aliased to low and high. Auto does not send an effort level.">
-                                                OpenAI-style options: low, medium, high. Minimum and maximum are aliased to low and high. Auto does not send an effort level.
+                                            <div class="toggle-description justifyLeft marginBot5" data-source="openai" data-i18n="Low, medium, high. Auto omits the parameter.">
+                                                Low, medium, high. Auto omits the parameter.
                                             </div>
-                                            <strong class="toggle-description justifyLeft marginBot5" data-source="openrouter">
-                                                Request model reasoning = Off with Reasoning Effort = Minimum disables reasoning entirely on models that support that, but can cause errors with some models.
-                                            </strong>
-                                            <div class="toggle-description justifyLeft marginBot5" data-source="claude" data-i18n="Allocates a portion of the response length for thinking (min: 1024 tokens, low: 10%, medium: 25%, high: 50%, max: 95%), but minimum 1024 tokens. Auto does not request thinking.">
-                                                Allocates a portion of the response length for thinking (min: 1024 tokens, low: 10%, medium: 25%, high: 50%, max: 95%), but minimum 1024 tokens. Auto does not request thinking.
+                                            <div class="toggle-description justifyLeft marginBot5" data-source="claude" title="min: 1024 tokens, low: 10%, medium: 25%, high: 50%, max: 95% (minimum 1024). Auto does not request thinking." data-i18n="[title]Allocates a portion of the response length for thinking.;Controls thinking token allocation.">
+                                                Controls thinking token allocation.
                                             </div>
-                                            <div class="toggle-description justifyLeft marginBot5" data-source="makersuite,vertexai">
-                                                <span data-i18n="Sets a dynamic reasoning depth level for thinking (Flash 3/Pro 3). High and low are supported by both, minimal and medium are Flash 3 only. Auto lets the model decide.">
-                                                    Sets a dynamic reasoning depth level for thinking (Flash 3/Pro 3). High and low are supported by both, minimal and medium are Flash 3 only. Auto lets the model decide.
-                                                </span>
-                                                <br>
-                                                <span data-i18n="Allocates a portion of the response length for thinking (Flash 2.5/Pro 2.5) (min: 0/128 tokens, low: 10%, medium: 25%, high: 50%, max: 24576/32768 tokens). Auto lets the model decide.">
-                                                    Allocates a portion of the response length for thinking (Flash 2.5/Pro 2.5) (min: 0/128 tokens, low: 10%, medium: 25%, high: 50%, max: 24576/32768 tokens). Auto lets the model decide.
-                                                </span>
+                                            <div class="toggle-description justifyLeft marginBot5" data-source="makersuite" title="Flash 3/Pro 3: high, low for both; minimal, medium for Flash 3 only. Flash 2.5/Pro 2.5: percentage-based (low 10%, medium 25%, high 50%, max 24576/32768). Auto lets the model decide." data-i18n="[title]Sets reasoning depth for Gemini models.;Dynamic reasoning depth.">
+                                                Dynamic reasoning depth.
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="flex-container flexFlowColumn wide100p textAlignCenter marginTop10" data-source="openai,custom,openrouter,claude">
+                                    <div class="flex-container flexFlowColumn wide100p textAlignCenter marginTop10" data-source="openai,claude">
                                         <div class="flex-container oneline-dropdown">
                                             <label for="openai_verbosity">
                                                 <span data-i18n="Verbosity">Verbosity</span>
@@ -1565,10 +1452,10 @@
                                                 <option data-i18n="openai_verbosity_medium" value="medium">Medium</option>
                                                 <option data-i18n="openai_verbosity_high" value="high">High</option>
                                             </select>
-                                            <div class="toggle-description justifyLeft marginBot5" data-i18n="Constrains the verbosity of the model's response.">
+                                                            <div class="toggle-description justifyLeft marginBot5" data-i18n="Constrains the verbosity of the model's response.">
                                                 Constrains the verbosity of the model's response.
                                             </div>
-                                            <strong class="toggle-description justifyLeft marginBot5" data-source="claude">
+                                            <strong class="toggle-description justifyLeft marginBot5" data-source="claude" data-i18n="On Opus 4.6 / Sonnet 4.6, a non-automatic Reasoning Effort takes precedence over Verbosity.">
                                                 On Opus 4.6 / Sonnet 4.6, a non-automatic Reasoning Effort takes precedence over Verbosity.
                                             </strong>
                                         </div>
@@ -1588,11 +1475,11 @@
                                         </div>
                                         <div id="claude_function_prefill_warning">
                                             <i class="fa-solid fa-circle-info"></i>
-                                            <span>Prefills won't work when function calling is enabled and any tools are registered.</span>
+                                            <span data-i18n="Prefills won't work when function calling is enabled and any tools are registered.">Prefills won't work when function calling is enabled and any tools are registered.</span>
                                         </div>
                                     </div>
                                 </div>
-                                <div class="range-block m-t-1" data-source="openai,aimlapi,openrouter,custom,electronhub,azure_openai,chutes">
+                                <div class="range-block m-t-1" data-source="openai">
                                     <div id="logit_bias_openai" class="range-block-title openai_restorable" data-i18n="Logit Bias">
                                         Logit Bias
                                     </div>
@@ -1646,1283 +1533,65 @@
                 <div id="API-status-top" class="drawer-icon fa-solid fa-plug-circle-exclamation fa-fw closedIcon" title="API Connections" data-i18n="[title]API Connections;[no_connection_text]api_no_connection" no_connection_text="No connection..."></div>
             </div>
             <div id="rm_api_block" class="drawer-content closedDrawer">
-                <h3 class="margin0" id="title_api">API</h3>
+                <h3 class="margin0" id="title_api" data-i18n="API Connections">API 连接</h3>
                 <div class="flex-container flexFlowColumn">
-                    <div id="main-API-selector-block">
-                        <select id="main_api">
-                            <option value="textgenerationwebui" data-i18n="Text Completion">Text Completion</option>
-                            <option value="openai" data-i18n="Chat Completion">Chat Completion</option>
-                        </select>
-                    </div>
-                    <div id="textgenerationwebui_api" style="display: none;position: relative;">
-                        <form action="javascript:void(null);" method="post" enctype="multipart/form-data">
-                            <div>
-                                <h4 data-i18n="API Type">API Type</h4>
-                                <select id="textgen_type">
-                                    <option value="aphrodite">Aphrodite</option>
-                                    <option value="dreamgen">DreamGen</option>
-                                    <option value="featherless">Featherless</option>
-                                    <option value="generic" data-i18n="Generic (OpenAI-compatible) [LM Studio, LiteLLM, etc.]">Generic (OpenAI-compatible) [LM Studio, LiteLLM, etc.]</option>
-                                    <option value="huggingface">HuggingFace (Inference Endpoint)</option>
-                                    <option value="infermaticai">InfermaticAI</option>
-                                    <option value="koboldcpp">KoboldCpp</option>
-                                    <option value="llamacpp">llama.cpp</option>
-                                    <option value="mancer">Mancer</option>
-                                    <option value="ollama">Ollama</option>
-                                    <option value="openrouter">OpenRouter</option>
-                                    <option value="tabby">TabbyAPI</option>
-                                    <option value="ooba">Text Generation WebUI (oobabooga)</option>
-                                    <option value="togetherai">TogetherAI</option>
-                                    <option value="vllm">vLLM</option>
-                                </select>
-                            </div>
-                            <div data-tg-type="togetherai" class="flex-container flexFlowColumn">
-                                <h4 data-i18n="TogetherAI API Key">TogetherAI API Key</h4>
-                                <div class="flex-container">
-                                    <input id="api_key_togetherai" name="api_key_togetherai" class="text_pole flex1" value="" type="text" autocomplete="off">
-                                    <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_togetherai"></div>
-                                </div>
-                                <div data-for="api_key_togetherai" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                    For privacy reasons, your API key will be hidden after you click 'Connect'.
-                                </div>
-                                <div>
-                                    <h4 data-i18n="TogetherAI Model">TogetherAI Model</h4>
-                                    <select id="model_togetherai_select">
-                                        <option value="" data-i18n="-- Connect to the API --">
-                                            -- Connect to the API --
-                                        </option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div data-tg-type="openrouter" class="flex-container flexFlowColumn">
-                                <h4 data-i18n="OpenRouter API Key">OpenRouter API Key</h4>
-                                <div>
-                                    <small data-i18n="Click Authorize below or get the key from">
-                                        Click "Authorize" below or get the key from </small> <a target="_blank" href="https://openrouter.ai/keys/">OpenRouter</a>.
-                                    <br>
-                                    <a href="https://openrouter.ai/settings/credits" target="_blank" class="openrouter_view_credits" data-i18n="View Remaining Credits">View Remaining Credits</a>
-                                    <span class="openrouter_credits_display marginLeft5"></span>
-                                </div>
-                                <div class="flex-container">
-                                    <input id="api_key_openrouter-tg" name="api_key_openrouter" class="text_pole flex1 api_key_openrouter" value="" type="text" autocomplete="off">
-                                    <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_openrouter"></div>
-                                </div>
-                                <div data-for="api_key_openrouter-tg" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                    For privacy reasons, your API key will be hidden after you click 'Connect'.
-                                </div>
-                                <div>
-                                    <h4 data-i18n="OpenRouter Model">OpenRouter Model</h4>
-                                    <select id="openrouter_model">
-                                        <option value="" data-i18n="-- Connect to the API --">
-                                            -- Connect to the API --
-                                        </option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <h4>
-                                        <span data-i18n="Model Providers">Model Providers</span>
-                                        <i id="openrouter_provider_warning_text" class="fa-solid fa-circle-exclamation displayNone" title="Deselect inapplicable provider(s) or select an applicable provider to avoid a 404 error."></i>
-                                    </h4>
-                                    <select id="openrouter_providers_text" class="openrouter_providers" multiple>
-                                    </select>
-                                    <label class="checkbox_label" data-i18n="[title]Automatically chooses an alternative provider if chosen providers can't serve your request." for="openrouter_allow_fallbacks_textgenerationwebui" title="Automatically chooses an alternative provider if chosen providers can't serve your request.">
-                                        <input id="openrouter_allow_fallbacks_textgenerationwebui" type="checkbox" />
-                                        <span data-i18n="Allow fallback providers">Allow fallback providers</span>
-                                    </label>
-                                </div>
-                                <div>
-                                    <h4 data-i18n="Model Quantizations">Model Quantizations</h4>
-                                    <select id="openrouter_quantizations_text" class="openrouter_quantizations" multiple>
-                                        <option data-i18n="Integer (4 bit)" value="int4">Integer (4 bit)</option>
-                                        <option data-i18n="Integer (8 bit)" value="int8">Integer (8 bit)</option>
-                                        <option data-i18n="Floating point (4 bit)" value="fp4">Floating point (4 bit)</option>
-                                        <option data-i18n="Floating point (6 bit)" value="fp6">Floating point (6 bit)</option>
-                                        <option data-i18n="Floating point (8 bit)" value="fp8">Floating point (8 bit)</option>
-                                        <option data-i18n="Floating point (16 bit)" value="fp16">Floating point (16 bit)</option>
-                                        <option data-i18n="Brain floating point (16 bit)" value="bf16">Brain floating point (16 bit)</option>
-                                        <option data-i18n="Floating point (32 bit)" value="fp32">Floating point (32 bit)</option>
-                                        <option data-i18n="Unknown" value="unknown">Unknown</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div data-tg-type="infermaticai" class="flex-container flexFlowColumn">
-                                <h4 data-i18n="InfermaticAI API Key">InfermaticAI API Key</h4>
-                                <div class="flex-container">
-                                    <input id="api_key_infermaticai" name="api_key_infermaticai" class="text_pole flex1" value="" type="text" autocomplete="off">
-                                    <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_infermaticai"></div>
-                                </div>
-                                <div data-for="api_key_infermaticai" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                    For privacy reasons, your API key will be hidden after you click 'Connect'.
-                                </div>
-                                <div>
-                                    <h4 data-i18n="InfermaticAI Model">InfermaticAI Model</h4>
-                                    <select id="model_infermaticai_select">
-                                        <option value="" data-i18n="-- Connect to the API --">
-                                            -- Connect to the API --
-                                        </option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div data-tg-type="dreamgen" class="flex-container flexFlowColumn">
-                                <h4>
-                                    <span data-i18n="DreamGen API key">DreamGen API key</span>
-                                    <a href="usage/api-connections/dreamgen/" class="notes-link" target="_blank">
-                                        <span class="fa-solid fa-circle-question note-link-span"></span>
-                                    </a>
-                                </h4>
-                                <div class="flex-container">
-                                    <input id="api_key_dreamgen" name="api_key_dreamgen" class="text_pole flex1" value="" type="text" autocomplete="off">
-                                    <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_dreamgen"></div>
-                                </div>
-                                <div data-for="api_key_dreamgen" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                    For privacy reasons, your API key will be hidden after you click 'Connect'.
-                                </div>
-                                <div>
-                                    <h4 data-i18n="DreamGen Model">DreamGen Model</h4>
-                                    <select id="model_dreamgen_select">
-                                        <option value="" data-i18n="-- Connect to the API --">
-                                            -- Connect to the API --
-                                        </option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div data-tg-type="mancer" class="flex-container flexFlowColumn">
-                                <div class="flex-container flexFlowColumn">
-                                </div>
-                                <h4>
-                                    <span data-i18n="Mancer API key">Mancer API key</span>
-                                    <a href="https://mancer.tech/" class="notes-link" target="_blank">
-                                        <span class="fa-solid fa-circle-question note-link-span"></span>
-                                    </a>
-                                </h4>
-                                <div class="flex-container">
-                                    <input id="api_key_mancer" name="api_key_mancer" class="text_pole flex1 wide100p" type="text" autocomplete="off">
-                                    <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_mancer">
-                                    </div>
-                                </div>
-                                <div data-for="api_key_mancer" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                    For privacy reasons, your API key will be hidden after you click 'Connect'.
-                                </div>
-                                <div class="flex1">
-                                    <h4 data-i18n="Mancer Model">Mancer Model</h4>
-                                    <select id="mancer_model">
-                                        <option value="" data-i18n="-- Connect to the API --">
-                                            -- Connect to the API --
-                                        </option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div data-tg-type="generic" class="flex-container flexFlowColumn">
-                                <h4 data-i18n="API key (optional)">API key (optional)</h4>
-                                <div class="flex-container">
-                                    <input id="api_key_generic" name="api_key_generic" class="text_pole flex1 wide100p" type="text" autocomplete="off">
-                                    <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_generic">
-                                    </div>
-                                </div>
-                                <div data-for="api_key_generic" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                    For privacy reasons, your API key will be hidden after you click 'Connect'.
-                                </div>
-                                <div class="flex1">
-                                    <h4 data-i18n="Server url">Server URL</h4>
-                                    <small data-i18n="Example: http://127.0.0.1:5000">Example: http://127.0.0.1:5000</small>
-                                    <input id="generic_api_url_text" name="generic_api_url" class="text_pole wide100p" value="" autocomplete="off" data-server-history="generic">
-                                </div>
-                                <datalist id="generic_model_fill"></datalist>
-                                <input id="generic_model_textgenerationwebui" list="generic_model_fill" class="text_pole wide100p" placeholder="Model ID (optional)" data-i18n="[placeholder]Model ID (optional)" type="text">
-                            </div>
-                            <div data-tg-type="ooba" class="flex-container flexFlowColumn">
-                                <div class="flex-container flexFlowColumn">
-                                    <a href="https://github.com/oobabooga/text-generation-webui" target="_blank">
-                                        oobabooga/text-generation-webui
-                                    </a>
-                                    <label for="">
-                                        <span data-i18n="Make sure you run it with">Make sure you run it with</span>
-                                        <code>--api</code>
-                                        <span data-i18n="flag">flag</span>
-                                    </label>
-
-                                </div>
-                                <h4 data-i18n="API key (optional)">API key (optional)</h4>
-                                <div class="flex-container">
-                                    <input id="api_key_ooba" name="api_key_ooba" class="text_pole flex1 wide100p" type="text" autocomplete="off">
-                                    <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_ooba">
-                                    </div>
-                                </div>
-                                <div data-for="api_key_ooba" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                    For privacy reasons, your API key will be hidden after you click 'Connect'.
-                                </div>
-                                <div class="flex1">
-                                    <h4 data-i18n="Server url">Server URL</h4>
-                                    <small data-i18n="Example: http://127.0.0.1:5000">Example: http://127.0.0.1:5000</small>
-                                    <input id="textgenerationwebui_api_url_text" name="textgenerationwebui_api_url" class="text_pole wide100p" value="" autocomplete="off" data-server-history="ooba_blocking">
-                                </div>
-                                <input id="custom_model_textgenerationwebui" class="text_pole wide100p" placeholder="Custom model (optional)" data-i18n="[placeholder]Custom model (optional)" type="text">
-                            </div>
-                            <div data-tg-type="featherless" class="flex-container flexFlowColumn">
-                                <div class="flex-container flexFlowColumn">
-                                    <a href="https://featherless.ai/models/" target="_blank" rel="noopener noreferrer">
-                                        featherless.ai
-                                    </a>
-                                </div>
-                                <h4 data-i18n="API key (optional)">API key</h4>
-                                <div class="flex-container">
-                                    <input id="api_key_featherless" name="api_key_featherless" class="text_pole flex1 wide100p" type="text" autocomplete="off">
-                                    <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_featherless">
-                                    </div>
-                                </div>
-                                <div data-for="api_key_featherless" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                    For privacy reasons, your API key will be hidden after you click 'Connect'.
-                                </div>
-                                <hr>
-                                <h4 data-i18n="Featherless Model Selection">Featherless Model Selection</h4>
-                                <div class="flex-container wide100p flexGap10">
-                                    <div class="flex1 overflowHidden wide100p">
-                                        <div class="flex-container marginBot10 alignitemscenter">
-                                            <input id="featherless_model_search_bar" class="text_pole width100p flex1 margin0" type="search" data-i18n="[placeholder]Search..." placeholder="Search...">
-                                            <select id="featherless_model_sort_order" class="margin0 text_pole">
-                                                <option value="search" data-i18n="Search" hidden>A-Z</option>
-                                                <option value="asc">A-Z</option>
-                                                <option value="desc">Z-A</option>
-                                                <option data-i18n="Date Asc" value="date_asc">Date Asc</option>
-                                                <option data-i18n="Date Desc" value="date_desc">Date Desc</option>
-                                            </select>
-                                            <select id="featherless_category_selection" class="text_pole">
-                                                <option value="" disabled selected data-i18n="category">category</option>
-                                                <!-- <option value="Favorite" data-i18n="Top">Favorite</option> -->
-                                                <option value="Top" data-i18n="Top">Top</option>
-                                                <option value="New" data-i18n="New">New</option>
-                                                <option value="All" data-i18n="All">All</option>
-                                            </select>
-                                            <select id="featherless_class_selection" class="text_pole">
-                                                <option value="" selected data-i18n="All Classes">All Classes</option>
-                                            </select>
-                                            <div id="featherless_model_pagination_container" class="flex1"></div>
-                                            <i id="featherless_model_grid_toggle" class="fa-solid fa-table-cells-large menu_button" data-i18n="[title]Toggle grid view" title="Toggle grid view"></i>
-                                        </div>
-                                        <div id="featherless_model_card_block" data-i18n="[no_desc_text]No model description" no_desc_text="[No description]"></div>
-                                    </div>
-                                </div>
-                                <!-- Do not remove. Needed for the /model command to function -->
-                                <select id="featherless_model" class="displayNone">
-                                    <option value="" data-i18n="-- Connect to the API --">
-                                        -- Connect to the API --
-                                    </option>
-                                </select>
-                            </div>
-                            <div data-tg-type="vllm">
-                                <div class="flex-container flexFlowColumn">
-                                    <a href="https://github.com/vllm-project/vllm" target="_blank" data-i18n="vllm-project/vllm">
-                                        vllm-project/vllm (OpenAI API wrapper mode)
-                                    </a>
-                                </div>
-                                <h4 data-i18n="vLLM API key">vLLM API key</h4>
-                                <div class="flex-container">
-                                    <input id="api_key_vllm" name="api_key_vllm" class="text_pole flex1 wide100p" type="text" autocomplete="off">
-                                    <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_vllm">
-                                    </div>
-                                </div>
-                                <div data-for="api_key_vllm" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                    For privacy reasons, your API key will be hidden after you click 'Connect'.
-                                </div>
-                                <div class="flex1">
-                                    <h4 data-i18n="API url">API URL</h4>
-                                    <small data-i18n="Example: http://127.0.0.1:8000">Example: http://127.0.0.1:8000</small>
-                                    <input id="vllm_api_url_text" class="text_pole wide100p" value="" autocomplete="off" data-server-history="vllm">
-                                </div>
-                                <div>
-                                    <h4 data-i18n="vLLM Model">vLLM Model</h4>
-                                    <select id="vllm_model">
-                                        <option value="" data-i18n="-- Connect to the API --">
-                                            -- Connect to the API --
-                                        </option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div data-tg-type="huggingface">
-                                <h4 data-i18n="HuggingFace Token">HuggingFace Token</h4>
-                                <div class="flex-container">
-                                    <input id="api_key_huggingface" name="api_key_huggingface" class="text_pole flex1 wide100p" type="text" autocomplete="off">
-                                    <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_huggingface">
-                                    </div>
-                                </div>
-                                <div data-for="api_key_huggingface" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                    For privacy reasons, your API key will be hidden after you click 'Connect'.
-                                </div>
-                                <div class="flex1">
-                                    <h4 data-i18n="Endpoint URL">Endpoint URL</h4>
-                                    <small data-i18n="Example: https://****.endpoints.huggingface.cloud">Example: https://****.endpoints.huggingface.cloud</small>
-                                    <input id="huggingface_api_url_text" class="text_pole wide100p" value="" autocomplete="off" data-server-history="huggingface">
-                                </div>
-                            </div>
-
-                            <div data-tg-type="aphrodite">
-                                <div class="flex-container flexFlowColumn">
-                                    <a href="https://github.com/PygmalionAI/aphrodite-engine" target="_blank" data-i18n="PygmalionAI/aphrodite-engine">
-                                        PygmalionAI/aphrodite-engine (OpenAI API wrapper mode)
-                                    </a>
-                                </div>
-                                <h4 data-i18n="Aphrodite API key">Aphrodite API key</h4>
-                                <div class="flex-container">
-                                    <input id="api_key_aphrodite" name="api_key_aphrodite" class="text_pole flex1 wide100p" type="text" autocomplete="off">
-                                    <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_aphrodite">
-                                    </div>
-                                </div>
-                                <div data-for="api_key_aphrodite" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                    For privacy reasons, your API key will be hidden after you click 'Connect'.
-                                </div>
-                                <div class="flex1">
-                                    <h4 data-i18n="API url">API URL</h4>
-                                    <small data-i18n="Example: http://127.0.0.1:5000">Example: http://127.0.0.1:5000</small>
-                                    <input id="aphrodite_api_url_text" class="text_pole wide100p" value="" autocomplete="off" data-server-history="aphrodite">
-                                </div>
-                                <div>
-                                    <h4 data-i18n="Aphrodite Model">Aphrodite Model</h4>
-                                    <select id="aphrodite_model">
-                                        <option value="" data-i18n="-- Connect to the API --">
-                                            -- Connect to the API --
-                                        </option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div data-tg-type="llamacpp">
-                                <div class="flex-container flexFlowColumn">
-                                    <a href="https://github.com/ggml-org/llama.cpp/blob/master/README.md#llama-server" target="_blank" data-i18n="ggml-org/llama.cpp">
-                                        ggml-org/llama.cpp (inference server)
-                                    </a>
-                                </div>
-                                <h4 data-i18n="API key (optional)">API key (optional)</h4>
-                                <div class="flex-container">
-                                    <input id="api_key_llamacpp" name="api_key_llamacpp" class="text_pole flex1 wide100p" type="text" autocomplete="off">
-                                    <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_llamacpp">
-                                    </div>
-                                </div>
-                                <div data-for="api_key_llamacpp" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                    For privacy reasons, your API key will be hidden after you click 'Connect'.
-                                </div>
-                                <div class="flex1">
-                                    <h4 data-i18n="API url">API URL</h4>
-                                    <small data-i18n="Example: http://127.0.0.1:8080">Example: http://127.0.0.1:8080</small>
-                                    <input id="llamacpp_api_url_text" class="text_pole wide100p" value="" autocomplete="off" data-server-history="llamacpp">
-                                </div>
-                                <div>
-                                    <h4>
-                                        <span data-i18n="llama.cpp Model">llama.cpp Model</span>
-                                    </h4>
-                                    <select id="llamacpp_model">
-                                        <option value="" data-i18n="-- Connect to the API --">
-                                            -- Connect to the API --
-                                        </option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div data-tg-type="ollama">
-                                <div class="flex-container flexFlowColumn">
-                                    <a href="https://github.com/ollama/ollama" target="_blank">
-                                        ollama/ollama
-                                    </a>
-                                </div>
-                                <div class="flex1">
-                                    <h4 data-i18n="API url">API URL</h4>
-                                    <small data-i18n="Example: http://127.0.0.1:11434">Example: http://127.0.0.1:11434</small>
-                                    <input id="ollama_api_url_text" class="text_pole wide100p" value="" autocomplete="off" data-server-history="ollama">
-                                </div>
-                                <div class="flex1">
-                                    <h4>
-                                        <span data-i18n="Ollama Model">Ollama Model</span>
-                                    </h4>
-                                    <select id="ollama_model">
-                                        <option value="" data-i18n="-- Connect to the API --">
-                                            -- Connect to the API --
-                                        </option>
-                                    </select>
-                                    <div id="ollama_download_model" class="menu_button menu_button_icon">
-                                        <i class="fa-solid fa-download"></i>
-                                        <span data-i18n="Download">Download</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div data-tg-type="tabby">
-                                <div class="flex-container flexFlowColumn">
-                                    <a href="https://github.com/theroyallab/tabbyAPI" target="_blank">
-                                        theroyallab/tabbyAPI
-                                    </a>
-                                </div>
-                                <h4 data-i18n="Tabby API key">Tabby API key</h4>
-                                <div class="flex-container">
-                                    <input id="api_key_tabby" name="api_key_tabby" class="text_pole flex1 wide100p" type="text" autocomplete="off">
-                                    <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_tabby">
-                                    </div>
-                                </div>
-                                <div data-for="api_key_tabby" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                    For privacy reasons, your API key will be hidden after you click 'Connect'.
-                                </div>
-                                <div class="flex1">
-                                    <h4 data-i18n="API url">API URL</h4>
-                                    <small data-i18n="Example: http://127.0.0.1:5000">Example: http://127.0.0.1:5000</small>
-                                    <input id="tabby_api_url_text" class="text_pole wide100p" value="" autocomplete="off" data-server-history="tabby">
-                                </div>
-                                <div class="flex1">
-                                    <h4>
-                                        <span data-i18n="Tabby Model">Tabby Model</span>
-                                    </h4>
-                                    <select id="tabby_model">
-                                        <option value="" data-i18n="-- Connect to the API --">
-                                            -- Connect to the API --
-                                        </option>
-                                    </select>
-                                    <div class="marginTopBot5">
-                                        <i class="fa-solid fa-flask"></i>
-                                        <span data-i18n="Experimental feature. Use at your own risk.">Experimental feature. Use at your own risk.</span>
-                                    </div>
-                                    <div class="marginTopBot5">
-                                        <small>
-                                            <i class="fa-solid fa-lightbulb"></i>
-                                            &nbsp;<span data-i18n="Tabby model hint prefix"></span>
-                                            <code>inline_model_loading: True</code>
-                                            <span data-i18n="must be set in Tabby's config.yml to switch models.">
-                                                must be set in Tabby's config.yml to switch models.
-                                            </span>
-                                            <b data-i18n="Use an admin API key.">
-                                                Use an admin API key.
-                                            </b>
-                                        </small>
-                                    </div>
-                                    <div id="tabby_download_model" class="menu_button menu_button_icon">
-                                        <i class="fa-solid fa-download"></i>
-                                        <span data-i18n="Download">Download</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div data-tg-type="koboldcpp">
-                                <div class="flex-container flexFlowColumn">
-                                    <a href="https://github.com/LostRuins/koboldcpp" target="_blank">
-                                        LostRuins/koboldcpp
-                                    </a>
-                                </div>
-                                <h4 data-i18n="koboldcpp API key (optional)">koboldcpp API key (optional)</h4>
-                                <div class="flex-container">
-                                    <input id="api_key_koboldcpp" name="api_key_koboldcpp" class="text_pole flex1 wide100p" type="text" autocomplete="off">
-                                    <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_koboldcpp">
-                                    </div>
-                                </div>
-                                <div data-for="api_key_koboldcpp" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                    For privacy reasons, your API key will be hidden after you click 'Connect'.
-                                </div>
-                                <div class="flex1">
-                                    <h4 data-i18n="API url">API URL</h4>
-                                    <small data-i18n="Example: http://127.0.0.1:5001">Example: http://127.0.0.1:5001</small>
-                                    <input id="koboldcpp_api_url_text" class="text_pole wide100p" value="" autocomplete="off" data-server-history="koboldcpp">
-                                </div>
-                            </div>
-                            <div class="flex-container flexFlowColumn marginTopBot5">
-                                <label data-tg-type="ooba, generic" class="checkbox_label" for="bypass_status_check_textgenerationwebui">
-                                    <input type="checkbox" id="bypass_status_check_textgenerationwebui" />
-                                    <span data-i18n="Bypass status check">Bypass status check</span>
-                                </label>
-                                <label data-tg-type="koboldcpp, llamacpp" class="checkbox_label" for="context_size_derived">
-                                    <input type="checkbox" id="context_size_derived" />
-                                    <span data-i18n="Derive context size from backend">Derive context size from backend</span>
-                                </label>
-                            </div>
-                            <div class="flex-container">
-                                <div id="api_button_textgenerationwebui" class="api_button menu_button menu_button_icon" type="submit" data-i18n="Connect" data-server-connect="ooba_blocking,vllm,aphrodite,tabby,koboldcpp,ollama,llamacpp,huggingface">Connect</div>
-                                <div data-tg-type="openrouter" class="menu_button menu_button_icon openrouter_authorize" title="Get your OpenRouter API token using OAuth flow. You will be redirected to openrouter.ai" data-i18n="Authorize;[title]Get your OpenRouter API token using OAuth flow. You will be redirected to openrouter.ai">Authorize</div>
-                                <div class="api_loading menu_button menu_button_icon" data-i18n="Cancel">Cancel</div>
-                            </div>
-                        </form>
-                        <div class="online_status">
-                            <div class="online_status_indicator"></div>
-                            <div class="online_status_text" data-i18n="Not connected">Not connected</div>
-                        </div>
-                    </div>
-                    <div id="openai_api" style="display: none;position: relative;">
+                    <div id="api_connection_form" style="position: relative;">
                         <select id="chat_completion_source">
-                            <optgroup label="OpenAI">
-                                <option value="openai">OpenAI</option>
-                                <option value="custom" data-i18n="Custom (OpenAI-compatible)">Custom (OpenAI-compatible)</option>
-                            </optgroup>
-                            <optgroup label="Providers">
-                                <option value="ai21">AI21</option>
-                                <option value="aimlapi">AI/ML API</option>
-                                <option value="azure_openai">Azure OpenAI</option>
-                                <option value="chutes">Chutes</option>
-                                <option value="claude">Claude</option>
-                                <option value="workers_ai">Cloudflare Workers AI</option>
-                                <option value="cohere">Cohere</option>
-                                <!-- Temporarily disabled. -->
-                                <!-- <option value="cometapi">CometAPI</option> -->
-                                <option value="deepseek">DeepSeek</option>
-                                <option value="electronhub">Electron Hub</option>
-                                <option value="fireworks">Fireworks AI</option>
-                                <option value="groq">Groq</option>
-                                <option value="makersuite">Google AI Studio</option>
-                                <option value="vertexai">Google Vertex AI</option>
-                                <option value="mistralai">MistralAI</option>
-                                <option value="minimax">MiniMax</option>
-                                <option value="moonshot">Moonshot AI</option>
-                                <option value="nanogpt">NanoGPT</option>
-                                <option value="openrouter">OpenRouter</option>
-                                <option value="perplexity">Perplexity</option>
-                                <option value="pollinations">Pollinations</option>
-                                <option value="siliconflow">SiliconFlow</option>
-                                <option value="xai">xAI (Grok)</option>
-                                <option value="zai">Z.AI (GLM)</option>
-                            </optgroup>
+                            <option value="openai">OpenAI</option>
+                            <option value="claude">Claude</option>
+                            <option value="makersuite">Google</option>
                         </select>
-                        <div class="inline-drawer wide100p" data-source="openai,claude,mistralai,makersuite,vertexai,deepseek,xai,zai,moonshot">
+                        <label class="field-label" for="api_key_unified" data-i18n="API Key">API Key</label>
+                        <div class="flex-container width100p">
+                            <input id="api_key_unified" type="password" class="text_pole flex1" placeholder="sk-..." autocomplete="off" />
+                            <div id="api_key_unified_show" title="Peek a password" data-i18n="[title]Peek a password" class="menu_button fa-solid fa-eye-slash fa-fw"></div>
+                        </div>
+                        <div class="inline-drawer wide100p" data-source="openai,claude,makersuite">
                             <div class="inline-drawer-toggle inline-drawer-header">
                                 <b data-i18n="Custom Base URL">Custom Base URL</b>
-                                <div class="fa-solid fa-circle-chevron-up inline-drawer-icon up"></div>
+                                <div class="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
                             </div>
-                            <div class="inline-drawer-content" style="display: block;">
-                                <label class="field-label" for="openai_reverse_proxy" data-i18n="Custom Base URL">Custom Base URL</label>
+                            <div class="inline-drawer-content">
                                 <div class="wide100p">
                                     <input id="openai_reverse_proxy" type="text" class="text_pole" placeholder="https://api.openai.com/v1" />
                                 </div>
-                                <label class="field-label" for="api_key_unified" data-i18n="API Key">API Key</label>
-                                <div class="flex-container width100p">
-                                    <input id="api_key_unified" type="password" class="text_pole flex1" placeholder="" autocomplete="off" />
-                                    <div id="api_key_unified_show" title="Peek a password" data-i18n="[title]Peek a password" class="menu_button fa-solid fa-eye-slash fa-fw"></div>
-                                </div>
                             </div>
                         </div>
-                        <form id="openai_form" data-source="openai" action="javascript:void(null);" method="post" enctype="multipart/form-data">
-                            <div>
-                                <h4 data-i18n="OpenAI Model">OpenAI Model</h4>
-                                <select id="model_openai_select">
-                                    <optgroup label="GPT-5.5">
-                                        <option value="gpt-5.5">gpt-5.5</option>
-                                        <option value="gpt-5.5-2026-04-23">gpt-5.5-2026-04-23</option>
-                                    </optgroup>
-                                    <optgroup label="GPT-5.4">
-                                        <option value="gpt-5.4">gpt-5.4</option>
-                                        <option value="gpt-5.4-2026-03-05">gpt-5.4-2026-03-05</option>
-                                        <option value="gpt-5.4-mini">gpt-5.4-mini</option>
-                                        <option value="gpt-5.4-mini-2026-03-17">gpt-5.4-mini-2026-03-17</option>
-                                        <option value="gpt-5.4-nano">gpt-5.4-nano</option>
-                                        <option value="gpt-5.4-nano-2026-03-17">gpt-5.4-nano-2026-03-17</option>
-                                    </optgroup>
-                                    <optgroup label="GPT-5.3">
-                                        <option value="gpt-5.3-chat-latest">gpt-5.3-chat-latest</option>
-                                    </optgroup>
-                                    <optgroup label="GPT-5.2">
-                                        <option value="gpt-5.2">gpt-5.2</option>
-                                        <option value="gpt-5.2-2025-12-11">gpt-5.2-2025-12-11</option>
-                                        <option value="gpt-5.2-chat-latest">gpt-5.2-chat-latest</option>
-                                    </optgroup>
-                                    <optgroup label="GPT-5.1">
-                                        <option value="gpt-5.1">gpt-5.1</option>
-                                        <option value="gpt-5.1-2025-11-13">gpt-5.1-2025-11-13</option>
-                                        <option value="gpt-5.1-chat-latest">gpt-5.1-chat-latest</option>
-                                    </optgroup>
-                                    <optgroup label="GPT-5">
-                                        <option value="gpt-5">gpt-5</option>
-                                        <option value="gpt-5-2025-08-07">gpt-5-2025-08-07</option>
-                                        <option value="gpt-5-chat-latest">gpt-5-chat-latest</option>
-                                        <option value="gpt-5-mini">gpt-5-mini</option>
-                                        <option value="gpt-5-mini-2025-08-07">gpt-5-mini-2025-08-07</option>
-                                        <option value="gpt-5-nano">gpt-5-nano</option>
-                                        <option value="gpt-5-nano-2025-08-07">gpt-5-nano-2025-08-07</option>
-                                    </optgroup>
-                                    <optgroup label="GPT-4o">
-                                        <option value="gpt-4o">gpt-4o</option>
-                                        <option value="gpt-4o-2024-11-20">gpt-4o-2024-11-20</option>
-                                        <option value="gpt-4o-2024-08-06">gpt-4o-2024-08-06</option>
-                                        <option value="gpt-4o-2024-05-13">gpt-4o-2024-05-13</option>
-                                        <option value="chatgpt-4o-latest">chatgpt-4o-latest</option>
-                                    </optgroup>
-                                    <optgroup label="GPT-4o mini">
-                                        <option value="gpt-4o-mini">gpt-4o-mini</option>
-                                        <option value="gpt-4o-mini-2024-07-18">gpt-4o-mini-2024-07-18</option>
-                                    </optgroup>
-                                    <optgroup label="GPT-4.1">
-                                        <option value="gpt-4.1">gpt-4.1</option>
-                                        <option value="gpt-4.1-2025-04-14">gpt-4.1-2025-04-14</option>
-                                        <option value="gpt-4.1-mini">gpt-4.1-mini</option>
-                                        <option value="gpt-4.1-mini-2025-04-14">gpt-4.1-mini-2025-04-14</option>
-                                        <option value="gpt-4.1-nano">gpt-4.1-nano</option>
-                                        <option value="gpt-4.1-nano-2025-04-14">gpt-4.1-nano-2025-04-14</option>
-                                    </optgroup>
-                                    <optgroup label="o1">
-                                        <option value="o1">o1</option>
-                                        <option value="o1-2024-12-17">o1-2024-12-17</option>
-                                        <option value="o1-mini">o1-mini</option>
-                                        <option value="o1-mini-2024-09-12">o1-mini-2024-09-12</option>
-                                        <option value="o1-preview">o1-preview</option>
-                                        <option value="o1-preview-2024-09-12">o1-preview-2024-09-12</option>
-                                    </optgroup>
-                                    <optgroup label="o3">
-                                        <option value="o3">o3</option>
-                                        <option value="o3-2025-04-16">o3-2025-04-16</option>
-                                        <option value="o3-mini">o3-mini</option>
-                                        <option value="o3-mini-2025-01-31">o3-mini-2025-01-31</option>
-                                    </optgroup>
-                                    <optgroup label="o4">
-                                        <option value="o4-mini">o4-mini</option>
-                                        <option value="o4-mini-2025-04-16">o4-mini-2025-04-16</option>
-                                    </optgroup>
-                                    <optgroup label="GPT-4.5">
-                                        <option value="gpt-4.5-preview">gpt-4.5-preview</option>
-                                        <option value="gpt-4.5-preview-2025-02-27">gpt-4.5-preview-2025-02-27</option>
-                                    </optgroup>
-                                    <optgroup label="GPT-4 Turbo and GPT-4">
-                                        <option value="gpt-4-turbo">gpt-4-turbo</option>
-                                        <option value="gpt-4-turbo-2024-04-09">gpt-4-turbo-2024-04-09</option>
-                                        <option value="gpt-4-turbo-preview">gpt-4-turbo-preview</option>
-                                        <option value="gpt-4-0125-preview">gpt-4-0125-preview (2024)</option>
-                                        <option value="gpt-4-1106-preview">gpt-4-1106-preview (2023)</option>
-                                        <option value="gpt-4">gpt-4</option>
-                                        <option value="gpt-4-0613">gpt-4-0613 (2023)</option>
-                                        <option value="gpt-4-0314">gpt-4-0314 (2023)</option>
-                                    </optgroup>
-                                    <optgroup label="GPT-3.5 Turbo">
-                                        <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
-                                        <option value="gpt-3.5-turbo-0125">gpt-3.5-turbo-0125 (2024)</option>
-                                        <option value="gpt-3.5-turbo-1106">gpt-3.5-turbo-1106 (2023)</option>
-                                        <option value="gpt-3.5-turbo-instruct">gpt-3.5-turbo-instruct</option>
-                                    </optgroup>
-                                    <optgroup label="Other">
-                                        <option value="babbage-002">babbage-002</option>
-                                        <option value="davinci-002">davinci-002</option>
-                                    </optgroup>
-                                    <optgroup id="openai_external_category" label="External">
-                                    </optgroup>
-                                </select>
-                                <label for="openai_bypass_status_check" class="checkbox_label">
-                                    <input id="openai_bypass_status_check" type="checkbox" />
-                                    <span data-i18n="Bypass API status check">Bypass API status check</span>
-                                </label>
-                                <label for="openai_show_external_models" class="checkbox_label">
-                                    <input id="openai_show_external_models" type="checkbox" />
-                                    <span data-i18n="Show External models (provided by API)">Show "External" models (provided by API)</span>
-                                </label>
-                            </div>
-                        </form>
-                        <form id="claude_form" data-source="claude" action="javascript:void(null);" method="post" enctype="multipart/form-data">
-                            <div>
-                                <h4 data-i18n="Claude Model">Claude Model</h4>
-                                <select id="model_claude_select">
-                                    <optgroup label="Versions">
-                                        <option value="claude-opus-4-7">claude-opus-4-7</option>
-                                        <option value="claude-opus-4-6">claude-opus-4-6</option>
-                                        <option value="claude-opus-4-5">claude-opus-4-5</option>
-                                        <option value="claude-opus-4-5-20251101">claude-opus-4-5-20251101</option>
-                                        <option value="claude-sonnet-4-6">claude-sonnet-4-6</option>
-                                        <option value="claude-sonnet-4-5">claude-sonnet-4-5</option>
-                                        <option value="claude-sonnet-4-5-20250929">claude-sonnet-4-5-20250929</option>
-                                        <option value="claude-haiku-4-5">claude-haiku-4-5</option>
-                                        <option value="claude-haiku-4-5-20251001">claude-haiku-4-5-20251001</option>
-                                        <option value="claude-opus-4-1">claude-opus-4-1</option>
-                                        <option value="claude-opus-4-1-20250805">claude-opus-4-1-20250805</option>
-                                        <option value="claude-opus-4-0">claude-opus-4-0</option>
-                                        <option value="claude-opus-4-20250514">claude-opus-4-20250514</option>
-                                        <option value="claude-sonnet-4-0">claude-sonnet-4-0</option>
-                                        <option value="claude-sonnet-4-20250514">claude-sonnet-4-20250514</option>
-                                        <option value="claude-3-7-sonnet-latest">claude-3-7-sonnet-latest</option>
-                                        <option value="claude-3-7-sonnet-20250219">claude-3-7-sonnet-20250219</option>
-                                        <option value="claude-3-5-sonnet-latest">claude-3-5-sonnet-latest</option>
-                                        <option value="claude-3-5-sonnet-20241022">claude-3-5-sonnet-20241022</option>
-                                        <option value="claude-3-5-sonnet-20240620">claude-3-5-sonnet-20240620</option>
-                                        <option value="claude-3-5-haiku-latest">claude-3-5-haiku-latest</option>
-                                        <option value="claude-3-5-haiku-20241022">claude-3-5-haiku-20241022</option>
-                                        <option value="claude-3-opus-20240229">claude-3-opus-20240229</option>
-                                        <option value="claude-3-haiku-20240307">claude-3-haiku-20240307</option>
-                                    </optgroup>
-                                </select>
-                            </div>
-                        </form>
-                        <form id="openrouter_form" data-source="openrouter" action="javascript:void(null);" method="post" enctype="multipart/form-data">
-                            <div>
-                                <h4 data-i18n="OpenRouter Model">OpenRouter Model</h4>
-                                <select id="model_openrouter_select">
-                                    <option value="" data-i18n="-- Connect to the API --">-- Connect to the API --</option>
-                                </select>
-                            </div>
-                            <label for="openrouter_use_fallback" class="checkbox_label marginTopBot5" data-i18n="[title]Allow fallback routes Description" title="Automatically chooses an alternative model if the chosen model can't serve your request.">
-                                <input id="openrouter_use_fallback" type="checkbox" />
-                                <span data-i18n="Allow fallback models">Allow fallback models</span>
+                        <div id="openai_form" data-source="openai">
+                            <label class="field-label" data-i18n="OpenAI Model">OpenAI Model</label>
+                            <input id="model_openai_select" list="model_openai_list" class="text_pole" placeholder="Select or type a model" />
+                            <datalist id="model_openai_list"></datalist>
+                        </div>
+                        <div id="claude_form" data-source="claude">
+                            <label class="field-label" data-i18n="Claude Model">Claude Model</label>
+                            <input id="model_claude_select" list="model_claude_list" class="text_pole" placeholder="Select or type a model" />
+                            <datalist id="model_claude_list"></datalist>
+                        </div>
+                        <div id="makersuite_form" data-source="makersuite">
+                            <label class="field-label" data-i18n="Google Model">Google Model</label>
+                            <input id="model_google_select" list="model_google_list" class="text_pole" placeholder="Select or type a model" />
+                            <datalist id="model_google_list"></datalist>
+                            <label class="checkbox_label margin-top-5px">
+                                <input id="use_vertexai" type="checkbox" />
+                                <span data-i18n="Use Vertex AI">Use Vertex AI</span>
                             </label>
-                            <div>
-                                <h4>
-                                    <span data-i18n="Model Providers">Model Providers</span>
-                                    <i id="openrouter_provider_warning_chat" class="fa-solid fa-circle-exclamation displayNone" title="Deselect inapplicable provider(s) or select an applicable provider to avoid a 404 error."></i>
-                                </h4>
-                                <select id="openrouter_providers_chat" class="openrouter_providers" multiple>
-                                </select>
-                                <label class="checkbox_label marginTopBot5" for="openrouter_allow_fallbacks" data-i18n="[title]Automatically chooses an alternative provider if chosen providers can't serve your request." title="Automatically chooses an alternative provider if chosen providers can't serve your request.">
-                                    <input id="openrouter_allow_fallbacks" type="checkbox" />
-                                    <span data-i18n="Allow fallback providers">Allow fallback providers</span>
-                                </label>
-                            </div>
-                            <small class="marginTopBot5">
-                                <i class="fa-solid fa-lightbulb"></i>
-                                <span data-i18n="To use instruct formatting, switch to OpenRouter under Text Completion API.">To use instruct formatting, switch to OpenRouter under Text Completion API.</span>
-                            </small>
-                            <div>
-                                <h4 data-i18n="Model Quantizations">Model Quantizations</h4>
-                                <select id="openrouter_quantizations_chat" class="openrouter_quantizations" multiple>
-                                    <option data-i18n="Integer (4 bit)" value="int4">Integer (4 bit)</option>
-                                    <option data-i18n="Integer (8 bit)" value="int8">Integer (8 bit)</option>
-                                    <option data-i18n="Floating point (4 bit)" value="fp4">Floating point (4 bit)</option>
-                                    <option data-i18n="Floating point (6 bit)" value="fp6">Floating point (6 bit)</option>
-                                    <option data-i18n="Floating point (8 bit)" value="fp8">Floating point (8 bit)</option>
-                                    <option data-i18n="Floating point (16 bit)" value="fp16">Floating point (16 bit)</option>
-                                    <option data-i18n="Brain floating point (16 bit)" value="bf16">Brain floating point (16 bit)</option>
-                                    <option data-i18n="Floating point (32 bit)" value="fp32">Floating point (32 bit)</option>
-                                    <option data-i18n="Unknown" value="unknown">Unknown</option>
-                                </select>
-                            </div>
-                        </form>
-                        <form id="ai21_form" data-source="ai21" action="javascript:void(null);" method="post" enctype="multipart/form-data">
-                            <div>
-                                <h4 data-i18n="AI21 Model">AI21 Model</h4>
-                                <select id="model_ai21_select">
-                                    <optgroup label="Jamba (Latest)">
-                                        <option value="jamba-mini">jamba-mini</option>
-                                        <option value="jamba-large">jamba-large</option>
-                                    </optgroup>
-                                    <optgroup label="Jamba 1.7">
-                                        <option value="jamba-1.7-mini">jamba-1.7-mini</option>
-                                        <option value="jamba-1.7-large">jamba-1.7-large</option>
-                                    </optgroup>
-                                    <optgroup label="Jamba 1.6 (Deprecated)">
-                                        <option value="jamba-1.6-mini">jamba-1.6-mini</option>
-                                        <option value="jamba-1.6-large">jamba-1.6-large</option>
-                                    </optgroup>
-                                    <optgroup label="Jamba 1.5 (Deprecated)">
-                                        <option value="jamba-1.5-mini">jamba-1.5-mini</option>
-                                        <option value="jamba-1.5-large">jamba-1.5-large</option>
-                                    </optgroup>
-                                    <optgroup label="Jamba-Instruct (Deprecated)">
-                                        <option value="jamba-instruct-preview">jamba-instruct-preview</option>
-                                    </optgroup>
-                                </select>
-                            </div>
-                        </form>
-                        <form id="makersuite_form" data-source="makersuite" action="javascript:void(null);" method="post" enctype="multipart/form-data">
-                            <div>
-                                <h4 data-i18n="Google Model">Google Model</h4>
-                                <select id="model_google_select">
-                                    <optgroup label="Gemini 3.1">
-                                        <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
-                                        <option value="gemini-3.1-flash-lite-preview">gemini-3.1-flash-lite-preview</option>
-                                        <option value="gemini-3.1-flash-image-preview">gemini-3.1-flash-image-preview</option>
-                                    </optgroup>
-                                    <optgroup label="Gemini 3.0">
-                                        <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
-                                        <option value="gemini-3-pro-image-preview">gemini-3-pro-image-preview</option>
-                                        <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
-                                    </optgroup>
-                                    <optgroup label="Gemini 2.5">
-                                        <option value="gemini-2.5-pro">gemini-2.5-pro</option>
-                                        <option value="gemini-2.5-pro-preview-06-05">gemini-2.5-pro-preview-06-05</option>
-                                        <option value="gemini-2.5-pro-preview-05-06">gemini-2.5-pro-preview-05-06</option>
-                                        <option value="gemini-2.5-pro-preview-03-25">gemini-2.5-pro-preview-03-25</option>
-                                        <option value="gemini-2.5-flash">gemini-2.5-flash</option>
-                                        <option value="gemini-2.5-flash-preview-09-2025">gemini-2.5-flash-preview-09-2025</option>
-                                        <option value="gemini-2.5-flash-preview-05-20">gemini-2.5-flash-preview-05-20</option>
-                                        <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite</option>
-                                        <option value="gemini-2.5-flash-lite-preview-09-2025">gemini-2.5-flash-lite-preview-09-2025</option>
-                                        <option value="gemini-2.5-flash-lite-preview-06-17">gemini-2.5-flash-lite-preview-06-17</option>
-                                        <option value="gemini-2.5-flash-image">gemini-2.5-flash-image</option>
-                                        <option value="gemini-2.5-flash-image-preview">gemini-2.5-flash-image-preview</option>
-                                    </optgroup>
-                                    <optgroup label="Gemini 2.0">
-                                        <option value="gemini-2.0-pro-exp-02-05">gemini-2.0-pro-exp-02-05 → 2.5-exp-03-25</option>
-                                        <option value="gemini-2.0-pro-exp">gemini-2.0-pro-exp → 2.5-exp-03-25</option>
-                                        <option value="gemini-exp-1206">gemini-exp-1206 → 2.5-exp-03-25</option>
-                                        <option value="gemini-2.0-flash-001">gemini-2.0-flash-001</option>
-                                        <option value="gemini-2.0-flash-exp-image-generation">gemini-2.0-flash-exp-image-generation</option>
-                                        <option value="gemini-2.0-flash-preview-image-generation">gemini-2.0-flash-preview-image-generation</option>
-                                        <option value="gemini-2.0-flash-exp">gemini-2.0-flash-exp</option>
-                                        <option value="gemini-2.0-flash">gemini-2.0-flash</option>
-                                        <option value="gemini-2.0-flash-thinking-exp-01-21">gemini-2.0-flash-thinking-exp-01-21 → 2.5-flash-preview-05-20</option>
-                                        <option value="gemini-2.0-flash-thinking-exp-1219">gemini-2.0-flash-thinking-exp-1219 → 2.5-flash-preview-05-20</option>
-                                        <option value="gemini-2.0-flash-thinking-exp">gemini-2.0-flash-thinking-exp → 2.5-flash-preview-05-20</option>
-                                        <option value="gemini-2.0-flash-lite-001">gemini-2.0-flash-lite-001</option>
-                                        <option value="gemini-2.0-flash-lite-preview-02-05">gemini-2.0-flash-lite-preview-02-05</option>
-                                        <option value="gemini-2.0-flash-lite-preview">gemini-2.0-flash-lite-preview</option>
-                                        <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite</option>
-                                    </optgroup>
-                                    <optgroup label="Gemma">
-                                        <option value="gemma-4-31b-it">gemma-4-31b-it</option>
-                                        <option value="gemma-4-26b-a4b-it">gemma-4-26b-a4b-it</option>
-                                        <option value="gemma-3n-e4b-it">gemma-3n-e4b-it</option>
-                                        <option value="gemma-3n-e2b-it">gemma-3n-e2b-it</option>
-                                        <option value="gemma-3-27b-it">gemma-3-27b-it</option>
-                                        <option value="gemma-3-12b-it">gemma-3-12b-it</option>
-                                        <option value="gemma-3-4b-it">gemma-3-4b-it</option>
-                                        <option value="gemma-3-1b-it">gemma-3-1b-it</option>
-                                    </optgroup>
-                                    <optgroup label="LearnLM">
-                                        <option value="learnlm-2.0-flash-experimental">learnlm-2.0-flash-experimental</option>
-                                    </optgroup>
-                                    <optgroup label="Robotics-ER">
-                                        <option value="gemini-robotics-er-1.5-preview">gemini-robotics-er-1.5-preview</option>
-                                    </optgroup>
-                                    <optgroup id="google_other_models" label="Other"></optgroup>
-                                </select>
-                            </div>
-                        </form>
-                        <div id="vertexai_form" data-source="vertexai">
-                            <h4 data-i18n="Google Vertex AI Configuration">Google Vertex AI Configuration</h4>
-
-                            <!-- Authentication Mode Selection -->
-                            <div class="flex-container">
-                                <label for="vertexai_auth_mode" data-i18n="Authentication Mode">Authentication Mode:</label>
+                            <div id="vertexai_config" style="display:none;">
+                                <label class="field-label" data-i18n="Auth Mode">Auth Mode</label>
                                 <select id="vertexai_auth_mode" class="text_pole">
-                                    <option value="express" data-i18n="Express Mode (API Key)">Express Mode (API Key)</option>
-                                    <option value="full" data-i18n="Full Version (Service Account)">Full Version (Service Account)</option>
+                                    <option value="express" data-i18n="Express (API Key)">Express (API Key)</option>
+                                    <option value="full" data-i18n="Full (Service Account)">Full (Service Account)</option>
                                 </select>
-                            </div>
-
-                            <!-- Express Mode Configuration -->
-                            <div id="vertexai_express_config" class="vertexai-auth-section" data-mode="express">
-                                <h4>
-                                    <span data-i18n="Google Vertex AI Configuration">
-                                        Google Vertex AI Configuration
-                                    </span>
-                                    <a href="https://cloud.google.com/vertex-ai/generative-ai/docs/start/express-mode/overview" data-i18n="(Express mode)" target="_blank" rel="noopener noreferrer">
-                                        (Express mode)
-                                    </a>
-                                </h4>
-                                <!-- Project ID -->
-                                <div class="flex-container flexFlowColumn marginTop10">
-                                    <label for="vertexai_express_project_id">
-                                        <span data-i18n="Project ID">Project ID:</span>
-                                    </label>
-                                    <div class="flex-container">
-                                        <input id="vertexai_express_project_id" name="vertexai_express_project_id" class="text_pole flex1" value="" type="text" autocomplete="off" placeholder="Enter your Project ID">
-                                    </div>
-                                    <div class="toggle-description justifyLeft marginBot5">
-                                        <small data-i18n="Project ID is required when selecting regions other than the default (us-central1). You can find this in a model 404 error message.">
-                                            `Project ID` is only required when selecting regions other than the default (us-central1).<br>
-                                            You can find this in a model 404 error message.
-                                        </small>
-                                    </div>
+                                <label class="field-label" data-i18n="Region">Region</label>
+                                <input id="vertexai_region" type="text" class="text_pole" value="us-central1" />
+                                <div id="vertexai_express_fields">
+                                    <label class="field-label" data-i18n="Project ID">Project ID</label>
+                                    <input id="vertexai_express_project_id" type="text" class="text_pole" placeholder="my-gcp-project" />
                                 </div>
-                            </div>
-
-                            <!-- Full Version Configuration -->
-                            <div id="vertexai_full_config" class="vertexai-auth-section" data-mode="full">
-                                <h4>
-                                    <span data-i18n="Service Account Configuration">
-                                        Service Account Configuration
-                                    </span>
-                                    <a href="https://cloud.google.com/vertex-ai/docs/authentication" target="_blank" rel="noopener noreferrer">
-                                        <i class="fa-solid fa-circle-question"></i>
-                                    </a>
-                                </h4>
-                                <!-- Service Account JSON Content -->
-                                <div class="flex-container flexFlowColumn">
-                                    <label for="vertexai_service_account_json" data-i18n="Service Account JSON Content">Service Account JSON Content:</label>
-                                    <div id="vertexai_service_account_status" class="info-block marginTopBot5" style="display: none;">
-                                        <span id="vertexai_service_account_info"></span>
-                                    </div>
-                                    <div class="flex-container">
-                                        <input id="vertexai_service_account_json" name="vertexai_service_account_json" class="text_pole flex1" value="" type="text" autocomplete="off">
-                                        <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="vertexai_service_account_json"></div>
-                                    </div>
-                                    <div data-for="vertexai_service_account_json" class="neutral_warning" data-i18n="For privacy reasons, your Service Account JSON content will be hidden after you click 'Validate JSON'.">
-                                        For privacy reasons, your Service Account JSON content will be hidden after you click 'Validate JSON'.
-                                    </div>
-                                    <div class="flex-container">
-                                        <button type="button" id="vertexai_validate_service_account" class="menu_button menu_button_icon" data-i18n="Validate JSON">Validate JSON</button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Region -->
-                            <div class="flex-container flexFlowColumn">
-                                <label for="vertexai_region">
-                                    <span data-i18n="Region">
-                                        Region:
-                                    </span>
-                                    <a href="https://cloud.google.com/vertex-ai/generative-ai/docs/learn/locations" target="_blank" rel="noopener noreferrer" title="View available regions and models" data-i18n="[title]View available regions and models" class="notes-link">
-                                        <span class="fa-solid fa-circle-question note-link-span"></span>
-                                    </a>
-                                </label>
-                                <input id="vertexai_region" name="vertexai_region" class="text_pole flex1" value="us-central1" type="text" autocomplete="off" placeholder="e.g., global, us-central1, europe-west1, asia-northeast1" list="vertexai_region_suggestions">
-
-                                <datalist id="vertexai_region_suggestions">
-                                    <option value="global">global</option>
-                                    <option value="us-central1">us-central1</option>
-                                    <option value="us-east1">us-east1</option>
-                                    <option value="us-east4">us-east4</option>
-                                    <option value="us-west1">us-west1</option>
-                                    <option value="us-west2">us-west2</option>
-                                    <option value="us-west3">us-west3</option>
-                                    <option value="us-west4">us-west4</option>
-                                    <option value="europe-west1">europe-west1</option>
-                                    <option value="europe-west2">europe-west2</option>
-                                    <option value="europe-west3">europe-west3</option>
-                                    <option value="europe-west4">europe-west4</option>
-                                    <option value="europe-west6">europe-west6</option>
-                                    <option value="europe-central2">europe-central2</option>
-                                    <option value="asia-northeast1">asia-northeast1</option>
-                                    <option value="asia-northeast3">asia-northeast3</option>
-                                    <option value="asia-southeast1">asia-southeast1</option>
-                                    <option value="asia-south1">asia-south1</option>
-                                    <option value="australia-southeast1">australia-southeast1</option>
-                                </datalist>
-                            </div>
-
-                            <!-- Model Selection -->
-                            <div>
-                                <h4 data-i18n="Google Model">Google Model</h4>
-                                <select id="model_vertexai_select">
-                                    <!-- data-mode="full" is for models that require a service account -->
-                                    <optgroup label="Gemini 3.1">
-                                        <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
-                                        <option value="gemini-3.1-flash-lite-preview">gemini-3.1-flash-lite-preview</option>
-                                        <option value="gemini-3.1-flash-image-preview">gemini-3.1-flash-image-preview</option>
-                                    </optgroup>
-                                    <optgroup label="Gemini 3.0">
-                                        <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
-                                        <option value="gemini-3-pro-image-preview">gemini-3-pro-image-preview</option>
-                                        <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
-                                    </optgroup>
-                                    <optgroup label="Gemini 2.5">
-                                        <option value="gemini-2.5-pro">gemini-2.5-pro</option>
-                                        <option value="gemini-2.5-flash">gemini-2.5-flash</option>
-                                        <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite</option>
-                                        <option value="gemini-2.5-flash-image">gemini-2.5-flash-image</option>
-                                        <option value="gemini-2.5-flash-image-preview">gemini-2.5-flash-image-preview</option>
-                                    </optgroup>
-                                    <optgroup label="Gemini 2.0">
-                                        <option value="gemini-2.0-flash-exp" data-mode="full">gemini-2.0-flash-exp</option>
-                                        <option value="gemini-2.0-flash-preview-image-generation" data-mode="full">gemini-2.0-flash-preview-image-generation</option>
-                                        <option value="gemini-2.0-flash">gemini-2.0-flash</option>
-                                        <option value="gemini-2.0-flash-001">gemini-2.0-flash-001</option>
-                                        <option value="gemini-2.0-flash-lite-001">gemini-2.0-flash-lite-001</option>
-                                    </optgroup>
-                                </select>
-                            </div>
-                        </div>
-                        <form id="mistralai_form" data-source="mistralai" action="javascript:void(null);" method="post" enctype="multipart/form-data">
-                            <div>
-                                <h4 data-i18n="MistralAI Model">MistralAI Model</h4>
-                                <select id="model_mistralai_select">
-                                    <option data-i18n="-- Connect to the API --" value="">-- Connect to the API --</option>
-                                </select>
-                            </div>
-                        </form>
-                        <div id="groq_form" data-source="groq">
-                            <h4 data-i18n="Groq Model">Groq Model</h4>
-                            <select id="model_groq_select">
-                                <option value="qwen/qwen3-32b">qwen/qwen3-32b</option>
-                                <option value="deepseek-r1-distill-llama-70b">deepseek-r1-distill-llama-70b</option>
-                                <option value="gemma2-9b-it">gemma2-9b-it</option>
-                                <option value="meta-llama/llama-4-scout-17b-16e-instruct">meta-llama/llama-4-scout-17b-16e-instruct</option>
-                                <option value="meta-llama/llama-4-maverick-17b-128e-instruct">meta-llama/llama-4-maverick-17b-128e-instruct</option>
-                                <option value="llama-3.1-8b-instant">llama-3.1-8b-instant</option>
-                                <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile </option>
-                                <option value="llama-guard-3-8b">llama-guard-3-8b</option>
-                                <option value="llama3-70b-8192">llama3-70b-8192</option>
-                                <option value="llama3-8b-8192">llama3-8b-8192</option>
-                                <option value="mistral-saba-24b">mistral-saba-24b</option>
-                            </select>
-                        </div>
-                        <div id="siliconflow_form" data-source="siliconflow">
-                            <h4 data-i18n="SiliconFlow Endpoint">SiliconFlow Endpoint</h4>
-                            <select id="siliconflow_endpoint">
-                                <option value="global" data-i18n="Global (siliconflow.com)">Global (siliconflow.com)</option>
-                                <option value="cn" data-i18n="China (siliconflow.cn)">China (siliconflow.cn)</option>
-                            </select>
-                            <h4>SiliconFlow Model</h4>
-                            <select id="model_siliconflow_select">
-                                <option value="" data-i18n="-- Connect to the API --">-- Connect to the API --</option>
-                            </select>
-                        </div>
-                        <div id="minimax_form" data-source="minimax">
-                            <h4 data-i18n="MiniMax Endpoint">MiniMax Endpoint</h4>
-                            <select id="minimax_endpoint">
-                                <option value="global" data-i18n="Global (minimax.io)">Global (minimax.io)</option>
-                                <option value="cn" data-i18n="China (minimaxi.com)">China (minimaxi.com)</option>
-                            </select>
-                            <h4 data-i18n="MiniMax Model">MiniMax Model</h4>
-                            <select id="model_minimax_select">
-                                <option value="MiniMax-M2.7">MiniMax-M2.7</option>
-                                <option value="MiniMax-M2.7-highspeed">MiniMax-M2.7-highspeed</option>
-                                <option value="MiniMax-M2.5">MiniMax-M2.5</option>
-                                <option value="MiniMax-M2.5-highspeed">MiniMax-M2.5-highspeed</option>
-                                <option value="MiniMax-M2.1">MiniMax-M2.1</option>
-                                <option value="MiniMax-M2.1-highspeed">MiniMax-M2.1-highspeed</option>
-                                <option value="MiniMax-M2">MiniMax-M2</option>
-                                <option value="M2-her">M2-her</option>
-                            </select>
-                        </div>
-                        <div id="electronhub_form" data-source="electronhub">
-                            <div>
-                                <h4 data-i18n="Electron Hub Model">Electron Hub Model</h4>
-                                <select id="model_electronhub_select">
-                                    <option value="" data-i18n="-- Connect to the API --">-- Connect to the API --</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div id="chutes_form" data-source="chutes">
-                            <div>
-                                <h4 data-i18n="Chutes Model">Chutes Model</h4>
-                                <select id="model_chutes_select">
-                                    <option value="" data-i18n="-- Connect to the API --">-- Connect to the API --</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div id="nanogpt_form" data-source="nanogpt">
-                            <div>
-                                <h4 data-i18n="NanoGPT Model">NanoGPT Model</h4>
-                                <select id="model_nanogpt_select">
-                                    <option value="" data-i18n="-- Connect to the API --">-- Connect to the API --</option>
-                                </select>
-                            </div>
-                            <div>
-                                <h4>
-                                    <span data-i18n="Model Providers">Model Providers</span>
-                                    <i id="nanogpt_provider_warning" class="fa-solid fa-circle-exclamation displayNone" title="Deselect inapplicable provider(s) or select an applicable provider to avoid a 404 error."></i>
-                                </h4>
-                                <select id="nanogpt_provider">
-                                    <option value="" data-i18n="Auto">Auto</option>
-                                </select>
-                                <label class="checkbox_label marginTopBot5" for="nanogpt_payg_override" data-i18n="[title]Force NanoGPT pay-as-you-go billing for this request." title="Force NanoGPT pay-as-you-go billing for this request.">
-                                    <input id="nanogpt_payg_override" type="checkbox" />
-                                    <span data-i18n="Use pay-as-you-go billing">Use pay-as-you-go billing</span>
-                                </label>
-                            </div>
-                        </div>
-                        <div id="workers_ai_form" data-source="workers_ai">
-                            <h4><a href="https://dash.cloudflare.com/?to=/:account/workers-and-pages" target="_blank" rel="noopener noreferrer" data-i18n="Cloudflare Account ID">Cloudflare Account ID</a></h4>
-                            <div class="flex-container">
-                                <input id="workers_ai_account_id" class="text_pole flex1" value="" type="text" autocomplete="off" placeholder="e.g. 023e105f4ecef8ad9ca31a8372d0c353" data-i18n="[placeholder]e.g. 023e105f4ecef8ad9ca31a8372d0c353">
-                            </div>
-                            <div>
-                                <h4 data-i18n="Workers AI Model">Workers AI Model</h4>
-                                <select id="model_workers_ai_select">
-                                    <option value="" data-i18n="-- Connect to the API --">-- Connect to the API --</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div id="deepseek_form" data-source="deepseek">
-                            <div>
-                                <h4 data-i18n="DeepSeek Model">DeepSeek Model</h4>
-                                <select id="model_deepseek_select">
-                                    <option value="" data-i18n="-- Connect to the API --">-- Connect to the API --</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div id="fireworks_form" data-source="fireworks">
-                            <div>
-                                <h4 data-i18n="Fireworks AI Model">Fireworks AI Model</h4>
-                                <select id="model_fireworks_select">
-                                    <option value="" data-i18n="-- Connect to the API --">-- Connect to the API --</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div id="cometapi_form" data-source="cometapi">
-                            <div>
-                                <h4 data-i18n="CometAPI Model">CometAPI Model</h4>
-                                <div class="flex-container">
-                                    <select id="model_cometapi_select" class="flex1">
-                                        <option value="" data-i18n="-- Connect to the API --">-- Connect to the API --</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-                        <div id="perplexity_form" data-source="perplexity">
-                            <h4 data-i18n="Perplexity Model">Perplexity Model</h4>
-                            <select id="model_perplexity_select">
-                                <optgroup label="Perplexity Sonar Models">
-                                    <option value="sonar">sonar</option>
-                                    <option value="sonar-pro">sonar-pro</option>
-                                    <option value="sonar-reasoning">sonar-reasoning</option>
-                                    <option value="sonar-reasoning-pro">sonar-reasoning-pro</option>
-                                    <option value="sonar-deep-research">sonar-deep-research</option>
-                                </optgroup>
-                                <optgroup label="Offline Models">
-                                    <option value="r1-1776">r1-1776</option>
-                                </optgroup>
-                                <optgroup label="Deprecated Models">
-                                    <!-- These are scheduled for deprecation after 2/22/2025 -->
-                                    <option value="llama-3.1-sonar-small-128k-online">llama-3.1-sonar-small-128k-online</option>
-                                    <option value="llama-3.1-sonar-large-128k-online">llama-3.1-sonar-large-128k-online</option>
-                                    <option value="llama-3.1-sonar-huge-128k-online">llama-3.1-sonar-huge-128k-online</option>
-                                    <!-- These are not listed on the site anymore -->
-                                    <option value="llama-3.1-sonar-small-128k-chat">llama-3.1-sonar-small-128k-chat</option>
-                                    <option value="llama-3.1-sonar-large-128k-chat">llama-3.1-sonar-large-128k-chat</option>
-                                </optgroup>
-                            </select>
-                        </div>
-                        <form id="cohere_form" data-source="cohere" action="javascript:void(null);" method="post" enctype="multipart/form-data">
-                            <div>
-                                <h4 data-i18n="Cohere Model">Cohere Model</h4>
-                                <select id="model_cohere_select">
-                                    <optgroup label="Stable">
-                                        <option value="c4ai-aya-23-8b">c4ai-aya-23-8b</option>
-                                        <option value="c4ai-aya-23">c4ai-aya-23</option>
-                                        <option value="c4ai-aya-expanse-8b">c4ai-aya-expanse-8b</option>
-                                        <option value="c4ai-aya-expanse-32b">c4ai-aya-expanse-32b</option>
-                                        <option value="c4ai-aya-vision-8b">c4ai-aya-vision-8b</option>
-                                        <option value="c4ai-aya-vision-32b">c4ai-aya-vision-32b</option>
-                                        <option value="command-light">command-light</option>
-                                        <option value="command">command</option>
-                                        <option value="command-r">command-r</option>
-                                        <option value="command-r-plus">command-r-plus</option>
-                                        <option value="command-r-08-2024">command-r-08-2024</option>
-                                        <option value="command-r-plus-08-2024">command-r-plus-08-2024</option>
-                                        <option value="command-r7b-12-2024">command-r7b-12-2024</option>
-                                        <option value="command-a-03-2025">command-a-03-2025</option>
-                                        <option value="command-a-vision-07-2025">command-a-vision-07-2025</option>
-                                    </optgroup>
-                                    <optgroup label="Nightly">
-                                        <option value="command-light-nightly">command-light-nightly</option>
-                                        <option value="command-nightly">command-nightly</option>
-                                    </optgroup>
-                                </select>
-                            </div>
-                        </form>
-                        <form id="custom_form" data-source="custom">
-                            <h4 data-i18n="Custom Endpoint (Base URL)">Custom Endpoint (Base URL)</h4>
-                            <div class="flex-container">
-                                <input id="custom_api_url_text" class="text_pole wide100p" value="" autocomplete="off" data-i18n="[placeholder]Example: http://localhost:1234/v1" placeholder="Example: http://localhost:1234/v1">
-                            </div>
-                            <div>
-                                <small>
-                                    <span data-i18n="Doesn't work? Try adding">Doesn't work? Try adding</span> <code>/v1</code> <span data-i18n="at the end!">at the end!</span>
-                                    <b data-i18n="completions note prefix"></b><code>/chat/completions</code> <b data-i18n="suffix will be added automatically.">suffix will be added automatically.</b>
-                                </small>
-                            </div>
-                            <h4 data-i18n="Enter a Model ID">Enter a Model ID</h4>
-                            <div class="flex-container">
-                                <input list="model_custom_select_fill" id="custom_model_id" class="text_pole wide100p" value="" autocomplete="off" data-i18n="[placeholder]Example: gpt-4o" placeholder="Example: gpt-4o">
-                                <datalist id="model_custom_select_fill" class="text_pole model_custom_select"></datalist>
-                            </div>
-                            <h4 data-i18n="Available Models">Available Models</h4>
-                            <div class="flex-container">
-                                <select id="model_custom_select" class="text_pole model_custom_select"></select>
-                            </div>
-                        </form>
-                        <div id="xai_form" data-source="xai">
-                            <div>
-                                <h4 data-i18n="xAI Model">xAI Model</h4>
-                                <select id="model_xai_select">
-                                    <option value="" data-i18n="-- Connect to the API --">-- Connect to the API --</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div id="aimlapi_form" data-source="aimlapi">
-                            <h4 data-i18n="AI/ML Model">AI/ML Model</h4>
-                            <select id="model_aimlapi_select">
-                            </select>
-                        </div>
-                        <div id="pollinations_form" data-source="pollinations">
-                            <h4 data-i18n="Pollinations Model">Pollinations Model</h4>
-                            <select id="model_pollinations_select">
-                                <!-- Populated by JavaScript -->
-                            </select>
-                        </div>
-                        <div id="moonshot_form" data-source="moonshot">
-                            <h4 data-i18n="Moonshot AI Model">Moonshot AI Model</h4>
-                            <select id="model_moonshot_select">
-                                <option value="kimi-k2-0711-preview">kimi-k2-0711-preview</option>
-                                <option value="moonshot-v1-8k">moonshot-v1-8k</option>
-                                <option value="moonshot-v1-32k">moonshot-v1-32k</option>
-                                <option value="moonshot-v1-128k">moonshot-v1-128k</option>
-                                <option value="moonshot-v1-auto">moonshot-v1-auto</option>
-                                <option value="kimi-latest">kimi-latest</option>
-                                <option value="moonshot-v1-8k-vision-preview">moonshot-v1-8k-vision-preview</option>
-                                <option value="moonshot-v1-32k-vision-preview">moonshot-v1-32k-vision-preview</option>
-                                <option value="moonshot-v1-128k-vision-preview">moonshot-v1-128k-vision-preview</option>
-                                <option value="kimi-thinking-preview">kimi-thinking-preview</option>
-                            </select>
-                        </div>
-                        <div id="zai_form" data-source="zai">
-                            <h4 data-i18n="Z.AI Endpoint">Z.AI Endpoint</h4>
-                            <select id="zai_endpoint">
-                                <option value="common" data-i18n="Common API">Common API</option>
-                                <option value="coding" data-i18n="Coding API">Coding API</option>
-                            </select>
-                            <h4 data-i18n="Z.AI Model">Z.AI Model</h4>
-                            <select id="model_zai_select">
-                                <option value="glm-5-turbo">glm-5-turbo</option>
-                                <option value="glm-5v-turbo">glm-5v-turbo</option>
-                                <option value="glm-5.1">glm-5.1</option>
-                                <option value="glm-5">glm-5</option>
-                                <option value="glm-4.7">glm-4.7</option>
-                                <option value="glm-4.7-flash">glm-4.7-flash</option>
-                                <option value="glm-4.7-flashx">glm-4.7-flashx</option>
-                                <option value="glm-4.6">glm-4.6</option>
-                                <option value="glm-4.6v">glm-4.6v</option>
-                                <option value="glm-4.6v-flash">glm-4.6v-flash</option>
-                                <option value="glm-4.6v-flashx">glm-4.6v-flashx</option>
-                                <option value="glm-4.5v">glm-4.5v</option>
-                                <option value="glm-4.5">glm-4.5</option>
-                                <option value="glm-4.5-air">glm-4.5-air</option>
-                                <option value="glm-4.5-x">glm-4.5-x</option>
-                                <option value="glm-4.5-airx">glm-4.5-airx</option>
-                                <option value="glm-4.5-flash">glm-4.5-flash</option>
-                                <option value="glm-4-32b-0414-128k">glm-4-32b-0414-128k</option>
-                                <option value="autoglm-phone-multilingual">autoglm-phone-multilingual</option>
-                            </select>
-                        </div>
-                        <div id="azure_openai_settings" data-source="azure_openai">
-                            <!-- Azure Base URL -->
-                            <h4><span data-i18n="Azure Base URL">Azure Base URL</span></h4>
-                            <div class="flex-container">
-                                <input id="azure_base_url" data-setting="azure_base_url" class="text_pole wide100p" type="text" placeholder="https://your-resource.openai.azure.com/">
-                            </div>
-
-                            <!-- Azure Deployment Name -->
-                            <h4><span data-i18n="Deployment Name">Deployment Name</span></h4>
-                            <div class="flex-container">
-                                <input id="azure_deployment_name" data-setting="azure_deployment_name" class="text_pole wide100p" type="text" placeholder="your-deployment-name" title="The name of your model deployment in Azure." data-i18n="[title]The name of your model deployment in Azure.">
-                            </div>
-
-                            <!-- Azure API Version Dropdown -->
-                            <h4><span data-i18n="API Version">API Version</span></h4>
-                            <div class="flex-container">
-                                <select id="azure_api_version" data-setting="azure_api_version" class="text_pole wide100p">
-                                    <option value="2025-04-01-preview">2025-04-01-preview</option>
-                                    <option value="2024-10-21">2024-10-21</option>
-                                </select>
-                            </div>
-
-                            <!-- Model Name (Select) -->
-                            <h4><span data-i18n="Model Name">Model Name</span></h4>
-                            <div class="flex-container">
-                                <select id="azure_openai_model" data-setting="azure_openai_model" class="text_pole wide100p">
-                                    <option value="" disabled selected data-i18n="Click 'Connect' to fetch model name">Click 'Connect' to fetch model name</option>
-                                </select>
-                            </div>
-                            <div>
-                                <small data-i18n="The underlying model of your deployment. This is detected automatically when you connect.">The underlying model of your deployment. This is detected automatically when you connect.</small>
-                            </div>
-                        </div>
-                        <div id="model_sorting_form" data-source="openrouter,chutes,electronhub,nanogpt,aimlapi">
-                            <div class="inline-drawer wide100p">
-                                <div class="inline-drawer-toggle inline-drawer-header">
-                                    <b data-i18n="Model Sorting">Model Sorting</b>
-                                    <div class="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
-                                </div>
-                                <div class="inline-drawer-content m-b-1">
-                                    <div class="marginTopBot5">
-                                        <label for="cc_sort_models" class="checkbox_label">
-                                            <select id="cc_sort_models">
-                                                <option data-i18n="Alphabetically" value="alphabetically">Alphabetically</option>
-                                                <option data-i18n="Prompt Price (cheapest)" value="pricing.prompt">Prompt Price (cheapest)</option>
-                                                <option data-i18n="Completion Price (cheapest)" value="pricing.completion">Completion Price (cheapest)</option>
-                                                <option data-i18n="Context Size" value="context_length">Context Size</option>
-                                            </select>
-                                        </label>
-                                    </div>
-                                    <div class="marginTopBot5">
-                                        <label for="cc_group_models" class="checkbox_label">
-                                            <input id="cc_group_models" type="checkbox" />
-                                            <span data-i18n="Group by vendors">Group by vendors</span>
-                                        </label>
-                                        <div class="toggle-description justifyLeft wide100p">
-                                            <span data-i18n="Group by vendors Description">
-                                                Put OpenAI models in one group, Anthropic models in other group, etc. Can be combined with sorting.
-                                            </span>
-                                        </div>
+                                <div id="vertexai_full_fields" style="display:none;">
+                                    <label class="field-label" data-i18n="Service Account JSON">Service Account JSON</label>
+                                    <div class="flex-container width100p">
+                                        <input id="vertexai_service_account_json" type="password" class="text_pole flex1" placeholder='{"type":"service_account",...}' />
+                                        <div id="vertexai_sa_show" title="Peek" data-i18n="[title]Peek a password" class="menu_button fa-solid fa-eye-slash fa-fw"></div>
                                     </div>
                                 </div>
                             </div>
@@ -2938,12 +1607,12 @@
                             </h4>
                             <select id="custom_prompt_post_processing" class="text_pole" title="Applies additional processing to the prompt before sending it to the API." data-i18n="[title]Applies additional processing to the prompt before sending it to the API.">
                                 <option data-i18n="prompt_post_processing_none" value="">None</option>
-                                <optgroup label="With Tools">
+                                <optgroup label="With Tools" data-i18n="[label]With Tools">
                                     <option data-i18n="prompt_post_processing_merge_tools" value="merge_tools">Merge consecutive roles (with tools)</option>
                                     <option data-i18n="prompt_post_processing_semi_tools" value="semi_tools">Semi-strict (alternating roles; with tools)</option>
                                     <option data-i18n="prompt_post_processing_strict_tools" value="strict_tools">Strict (user first, alternating roles; with tools)</option>
                                 </optgroup>
-                                <optgroup label="No Tools">
+                                <optgroup label="No Tools" data-i18n="[label]No Tools">
                                     <option data-i18n="prompt_post_processing_merge" value="merge">Merge consecutive roles (no tools)</option>
                                     <option data-i18n="prompt_post_processing_semi" value="semi">Semi-strict (alternating roles; no tools)</option>
                                     <option data-i18n="prompt_post_processing_strict" value="strict">Strict (user first, alternating roles; no tools)</option>
@@ -2954,9 +1623,8 @@
                         <div class="flex-container flex">
                             <div id="api_button_openai" class="api_button menu_button menu_button_icon" type="submit" data-i18n="Connect">Connect</div>
                             <div class="api_loading menu_button menu_button_icon" data-i18n="Cancel">Cancel</div>
-                            <div data-source="custom" id="customize_additional_parameters" class="menu_button menu_button_icon" data-i18n="Additional Parameters">Additional Parameters</div>
-                            <div data-source="openrouter" class="menu_button menu_button_icon openrouter_authorize" title="Get your OpenRouter API token using OAuth flow. You will be redirected to openrouter.ai" data-i18n="Authorize;[title]Get your OpenRouter API token using OAuth flow. You will be redirected to openrouter.ai">Authorize</div>
-                            <div id="test_api_button" class="menu_button menu_button_icon" title="Verifies your API connection by sending a short test message. Be aware that you'll be credited for it!" data-i18n="Test Message;[title]Verifies your API connection by sending a short test message. Be aware that you'll be credited for it!">Test Message</div>
+                            <div data-source="openai" id="customize_additional_parameters" class="menu_button menu_button_icon" data-i18n="Additional Parameters">Additional Parameters</div>
+                            <div id="test_api_button" class="menu_button menu_button_icon" title="Send a short test message to verify your connection." data-i18n="[title]Send a short test message to verify your connection.;Test">Test</div>
                         </div>
                         <div class="online_status">
                             <div class="online_status_indicator"></div>

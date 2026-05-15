@@ -98,14 +98,13 @@ import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from '
 import { SlashCommandEnumValue } from './slash-commands/SlashCommandEnumValue.js';
 import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
 import { tag_map, tags, importTags } from './tags.js';
-import { getTextGenServer, textgenerationwebui_settings } from './textgen-settings.js';
 import { tokenizers, getTextTokens, getTokenCount, getTokenCountAsync, getTokenizerModel } from './tokenizers.js';
 import { ToolManager } from './tool-calling.js';
 import { accountStorage } from './util/AccountStorage.js';
 import { timestampToMoment, uuidv4, importFromExternalUrl } from './utils.js';
 import { addGlobalVariable, addLocalVariable, decrementGlobalVariable, decrementLocalVariable, deleteGlobalVariable, deleteLocalVariable, existsGlobalVariable, existsLocalVariable, getGlobalVariable, getLocalVariable, incrementGlobalVariable, incrementLocalVariable, setGlobalVariable, setLocalVariable } from './variables.js';
 import { convertCharacterBook, getWorldInfoPrompt, loadWorldInfo, reloadEditor, saveWorldInfo, updateWorldInfoList, world_names } from './world-info.js';
-import { ChatCompletionService, TextCompletionService } from './custom-request.js';
+import { ChatCompletionService } from './custom-request.js';
 import { ConnectionManagerRequestService } from './extensions/shared.js';
 import { updateReasoningUI, parseReasoningFromString, getReasoningTemplateByName } from './reasoning.js';
 import { IGNORE_SYMBOL } from './constants.js';
@@ -224,7 +223,6 @@ export function getContext() {
         POPUP_TYPE,
         POPUP_RESULT,
         chatCompletionSettings: oai_settings,
-        textCompletionSettings: textgenerationwebui_settings,
         powerUserSettings: power_user,
         getCharacters,
         getOneCharacter,
@@ -281,14 +279,12 @@ export function getContext() {
         getWorldInfoPrompt,
         getWorldInfoNames: () => Array.isArray(world_names) ? [...world_names] : [],
         CONNECT_API_MAP,
-        getTextGenServer,
         extractMessageFromData,
         getPresetManager,
         getChatCompletionModel,
         printMessages,
         clearChat,
         ChatCompletionService,
-        TextCompletionService,
         ConnectionManagerRequestService,
         updateReasoningUI,
         parseReasoningFromString,

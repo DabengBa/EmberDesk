@@ -599,11 +599,9 @@ async function switchZenSliders() {
         $('#clickSlidersTips').hide();
         $('#pro-settings-block input[type=\'number\']').hide();
         //hide number inputs that are not 'seed' inputs
-        $(`#textgenerationwebui_api-settings :input[type='number']:not([id^='seed']):not([id^='n_']),
-            #kobold_api-settings :input[type='number']:not([id^='seed'])`).hide();
+        $(`#kobold_api-settings :input[type='number']:not([id^='seed'])`).hide();
         //hide original sliders
-        $(`#textgenerationwebui_api-settings input[type='range'],
-            #kobold_api-settings input[type='range'],
+        $(`#kobold_api-settings input[type='range'],
             #pro-settings-block input[type='range']:not(#max_context)`) //exclude max context because its creation is handled by switchMaxContext()
             .hide()
             .each(function () {
@@ -619,10 +617,8 @@ async function switchZenSliders() {
 
     function revertOriginalSliders() {
         $('#pro-settings-block input[type=\'number\']').show();
-        $(`#textgenerationwebui_api-settings input[type='number'],
-            #kobold_api-settings input[type='number']`).show();
-        $(`#textgenerationwebui_api-settings input[type='range'],
-            #kobold_api-settings input[type='range'],
+        $(`#kobold_api-settings input[type='number']`).show();
+        $(`#kobold_api-settings input[type='range'],
             #pro-settings-block input[type='range']`).each(function () {
             $(this).show();
         });
@@ -651,144 +647,49 @@ async function CreateZenSliders(elmnt) {
         sliderValue = steps.indexOf(Number(sliderValue));
         if (sliderValue === -1) { sliderValue = 4; } // default to '200' if origSlider has value we can't use
     }
-    if (sliderID == 'rep_pen_range_textgenerationwebui') {
-        if (power_user.max_context_unlocked) {
-            steps = [0, 256, 512, 768, 1024, 2048, 4096, 8192, 16355, 24576, 32768, 49152, 65536, -1];
-            numSteps = 13;
-            allVal = 13;
-        } else {
-            steps = [0, 256, 512, 768, 1024, 2048, 4096, 8192, -1];
-            numSteps = 8;
-            allVal = 8;
-        }
-        decimals = 0;
-        offVal = 0;
-        sliderMin = 0;
-        sliderMax = steps.length - 1;
-        stepScale = 1;
-        sliderValue = steps.indexOf(Number(sliderValue));
-        if (sliderValue === -1) { sliderValue = allVal; } // default to allValue if origSlider has value we can't use
-    }
     //customize decimals
     if (sliderID == 'max_context' ||
-        sliderID == 'mirostat_mode_textgenerationwebui' ||
-        sliderID == 'mirostat_tau_textgenerationwebui' ||
-        sliderID == 'top_k_textgenerationwebui' ||
-        sliderID == 'num_beams_textgenerationwebui' ||
-        sliderID == 'no_repeat_ngram_size_textgenerationwebui' ||
-        sliderID == 'min_length_textgenerationwebui' ||
         sliderID == 'top_k' ||
         sliderID == 'mirostat_mode_kobold' ||
-        sliderID == 'rep_pen_range' ||
-        sliderID == 'dry_allowed_length_textgenerationwebui' ||
-        sliderID == 'rep_pen_decay_textgenerationwebui' ||
-        sliderID == 'dry_penalty_last_n_textgenerationwebui' ||
-        sliderID == 'max_tokens_second_textgenerationwebui') {
+        sliderID == 'rep_pen_range') {
         decimals = 0;
-    }
-    if (sliderID == 'min_temp_textgenerationwebui' ||
-        sliderID == 'max_temp_textgenerationwebui' ||
-        sliderID == 'smoothing_curve_textgenerationwebui' ||
-        sliderID == 'smoothing_factor_textgenerationwebui' ||
-        sliderID == 'dry_multiplier_textgenerationwebui' ||
-        sliderID == 'dry_base_textgenerationwebui') {
-        decimals = 2;
-    }
-    if (sliderID == 'eta_cutoff_textgenerationwebui' ||
-        sliderID == 'epsilon_cutoff_textgenerationwebui') {
-        numSteps = 50;
-        decimals = 1;
     }
     if (sliderID == 'nsigma') {
         numSteps = 50;
         decimals = 1;
     }
     //customize steps
-    if (sliderID == 'mirostat_mode_textgenerationwebui' ||
-        sliderID == 'mirostat_mode_kobold') {
+    if (sliderID == 'mirostat_mode_kobold') {
         numSteps = 2;
-    }
-    if (sliderID == 'encoder_rep_pen_textgenerationwebui') {
-        numSteps = 14;
     }
     if (sliderID == 'max_context') {
         numSteps = 15;
     }
-    if (sliderID == 'mirostat_tau_textgenerationwebui' ||
-        sliderID == 'top_k_textgenerationwebui' ||
-        sliderID == 'num_beams_textgenerationwebui' ||
-        sliderID == 'no_repeat_ngram_size_textgenerationwebui' ||
-        sliderID == 'epsilon_cutoff_textgenerationwebui' ||
-        sliderID == 'tfs_textgenerationwebui' ||
-        sliderID == 'min_p_textgenerationwebui' ||
-        sliderID == 'temp_textgenerationwebui' ||
-        sliderID == 'temp') {
+    if (sliderID == 'temp') {
         numSteps = 20;
     }
-    if (sliderID == 'mirostat_eta_textgenerationwebui' ||
-        sliderID == 'penalty_alpha_textgenerationwebui' ||
-        sliderID == 'length_penalty_textgenerationwebui' ||
-        sliderID == 'min_temp_textgenerationwebui' ||
-        sliderID == 'max_temp_textgenerationwebui') {
-        numSteps = 50;
-    }
     //customize off values
-    if (sliderID == 'presence_pen_textgenerationwebui' ||
-        sliderID == 'freq_pen_textgenerationwebui' ||
-        sliderID == 'mirostat_mode_textgenerationwebui' ||
-        sliderID == 'mirostat_mode_kobold' ||
-        sliderID == 'mirostat_tau_textgenerationwebui' ||
+    if (sliderID == 'mirostat_mode_kobold' ||
         sliderID == 'mirostat_tau_kobold' ||
-        sliderID == 'mirostat_eta_textgenerationwebui' ||
         sliderID == 'mirostat_eta_kobold' ||
-        sliderID == 'min_p_textgenerationwebui' ||
         sliderID == 'min_p' ||
-        sliderID == 'no_repeat_ngram_size_textgenerationwebui' ||
-        sliderID == 'penalty_alpha_textgenerationwebui' ||
-        sliderID == 'length_penalty_textgenerationwebui' ||
-        sliderID == 'epsilon_cutoff_textgenerationwebui' ||
         sliderID == 'nsigma' ||
         sliderID == 'rep_pen_range' ||
-        sliderID == 'eta_cutoff_textgenerationwebui' ||
-        sliderID == 'top_a_textgenerationwebui' ||
         sliderID == 'top_a' ||
-        sliderID == 'top_k_textgenerationwebui' ||
         sliderID == 'top_k' ||
-        sliderID == 'rep_pen_slope' ||
-        sliderID == 'smoothing_factor_textgenerationwebui' ||
-        sliderID == 'smoothing_curve_textgenerationwebui' ||
-        sliderID == 'skew_textgenerationwebui' ||
-        sliderID == 'dry_multiplier_textgenerationwebui' ||
-        sliderID == 'min_length_textgenerationwebui') {
+        sliderID == 'rep_pen_slope') {
         offVal = 0;
     }
-    if (sliderID == 'rep_pen_textgenerationwebui' ||
-        sliderID == 'rep_pen' ||
-        sliderID == 'tfs_textgenerationwebui' ||
+    if (sliderID == 'rep_pen' ||
         sliderID == 'tfs' ||
-        sliderID == 'top_p_textgenerationwebui' ||
         sliderID == 'top_p' ||
-        sliderID == 'typical_p_textgenerationwebui' ||
         sliderID == 'typical_p' ||
-        sliderID == 'encoder_rep_pen_textgenerationwebui' ||
-        sliderID == 'temp_textgenerationwebui' ||
         sliderID == 'temp' ||
-        sliderID == 'min_temp_textgenerationwebui' ||
-        sliderID == 'max_temp_textgenerationwebui' ||
-        sliderID == 'dynatemp_exponent_textgenerationwebui' ||
-        sliderID == 'guidance_scale_textgenerationwebui' ||
-        sliderID == 'rep_pen_slope_textgenerationwebui' ||
         sliderID == 'guidance_scale') {
         offVal = 1;
     }
-    if (sliderID == 'guidance_scale_textgenerationwebui') {
-        numSteps = 78;
-    }
-    if (sliderID == 'top_k_textgenerationwebui') {
-        sliderMin = 0;
-    }
     //customize amt gen steps
-    if (sliderID !== 'amount_gen' && sliderID !== 'rep_pen_range_textgenerationwebui') {
+    if (sliderID !== 'amount_gen') {
         stepScale = sliderRange / numSteps;
     }
     var newSlider = $('<div>')
@@ -813,23 +714,6 @@ async function CreateZenSliders(elmnt) {
                 handle.text(handleText)
                     .css('margin-left', `${leftMargin}px`);
                 //console.log(`${newSlider.attr('id')} initial value:${handleText}, stepNum:${stepNumber}, numSteps:${numSteps}, left-margin:${leftMargin}`)
-            } else if (newSlider.attr('id') == 'rep_pen_range_textgenerationwebui_zenslider') {
-                //handling creation of rep_pen_range for ooba
-                if ($('#rep_pen_range_textgenerationwebui_zensliders').length !== 0) {
-                    $('#rep_pen_range_textgenerationwebui_zensliders').remove();
-                }
-                handleText = steps[sliderValue];
-                stepNumber = sliderValue;
-                leftMargin = ((stepNumber) / numSteps) * 50 * -1;
-                if (sliderValue === offVal) {
-                    handleText = 'Off';
-                    handle.css('color', 'rgba(128,128,128,0.5)');
-                } else if (sliderValue === allVal) { handleText = 'All'; } else { handle.css('color', ''); }
-                handle.text(handleText)
-                    .css('margin-left', `${leftMargin}px`);
-                //console.log(sliderValue, handleText, offVal, allVal)
-                //console.log(`${newSlider.attr('id')} sliderValue = ${sliderValue}, handleText:${handleText}, stepNum:${stepNumber}, numSteps:${numSteps}, left-margin:${leftMargin}`)
-                originalSlider.val(steps[sliderValue]);
             } else {
                 //create all other sliders
                 var numVal = Number(sliderValue).toFixed(decimals);
@@ -932,13 +816,6 @@ async function CreateZenSliders(elmnt) {
             handleText = steps[stepNumber];
             handle.text(handleText);
             newSlider.val(stepNumber);
-            numVal = steps[stepNumber];
-        } else if (newSlider.attr('id') == 'rep_pen_range_textgenerationwebui_zenslider') {
-            //special handling for TextCompletion rep pen range slider, pulls text aliases for step values from an array
-            handleText = steps[stepNumber];
-            handle.text(handleText);
-            newSlider.val(stepNumber);
-            if (numVal === offVal) { handle.text('Off').css('color', 'rgba(128,128,128,0.5)'); } else if (numVal === allVal) { handle.text('All'); } else { handle.css('color', ''); }
             numVal = steps[stepNumber];
         } else {
             //everything else uses the flat slider value
@@ -1873,19 +1750,10 @@ function switchMaxContextSize() {
         $('#max_context_counter'),
         $('#rep_pen_range'),
         $('#rep_pen_range_counter'),
-        $('#rep_pen_range_textgenerationwebui'),
-        $('#rep_pen_range_counter_textgenerationwebui'),
-        $('#dry_penalty_last_n_textgenerationwebui'),
-        $('#dry_penalty_last_n_counter_textgenerationwebui'),
-        $('#rep_pen_decay_textgenerationwebui'),
-        $('#rep_pen_decay_counter_textgenerationwebui'),
     ];
     const maxValue = power_user.max_context_unlocked ? MAX_CONTEXT_UNLOCKED : MAX_CONTEXT_DEFAULT;
     const minValue = power_user.max_context_unlocked ? maxContextMin : maxContextMin;
     const steps = power_user.max_context_unlocked ? unlockedMaxContextStep : maxContextStep;
-    $('#rep_pen_range_textgenerationwebui_zenslider').remove(); //unsure why, but this is necessary.
-    $('#dry_penalty_last_n_textgenerationwebui_zenslider').remove();
-    $('#rep_pen_decay_textgenerationwebui_zenslider').remove();
     for (const element of elements) {
         const id = element.attr('id');
         element.attr('max', maxValue);
@@ -1912,12 +1780,6 @@ function switchMaxContextSize() {
     if (power_user.enableZenSliders) {
         $('#max_context_zenslider').remove();
         CreateZenSliders($('#max_context'));
-        $('#rep_pen_range_textgenerationwebui_zenslider').remove();
-        CreateZenSliders($('#rep_pen_range_textgenerationwebui'));
-        $('#dry_penalty_last_n_textgenerationwebui_zenslider').remove();
-        CreateZenSliders($('#dry_penalty_last_n_textgenerationwebui'));
-        $('#rep_pen_decay_textgenerationwebui_zenslider').remove();
-        CreateZenSliders($('#rep_pen_decay_textgenerationwebui'));
     }
 }
 

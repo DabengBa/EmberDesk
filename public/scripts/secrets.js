@@ -11,7 +11,6 @@ import { SlashCommandExecutor } from './slash-commands/SlashCommandExecutor.js';
 import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
 import { SlashCommandScope } from './slash-commands/SlashCommandScope.js';
 import { renderTemplateAsync } from './templates.js';
-import { textgen_types } from './textgen-settings.js';
 import { getCurrentUserHandle } from './user.js';
 import { copyText, isTrueBoolean, uuidv4 } from './utils.js';
 import { accountStorage } from './util/AccountStorage.js';
@@ -95,7 +94,6 @@ const FRIENDLY_NAMES = {
     [SECRET_KEYS.APHRODITE]: 'Aphrodite',
     [SECRET_KEYS.TABBY]: 'TabbyAPI',
     [SECRET_KEYS.MISTRALAI]: 'MistralAI',
-    [SECRET_KEYS.CUSTOM]: 'Custom (OpenAI-compatible)',
     [SECRET_KEYS.TOGETHERAI]: 'TogetherAI',
     [SECRET_KEYS.OOBA]: 'Text Generation WebUI',
     [SECRET_KEYS.INFERMATICAI]: 'InfermaticAI',
@@ -160,7 +158,6 @@ const INPUT_MAP = {
     [SECRET_KEYS.APHRODITE]: '#api_key_aphrodite',
     [SECRET_KEYS.TABBY]: '#api_key_tabby',
     [SECRET_KEYS.MISTRALAI]: '#api_key_mistralai',
-    [SECRET_KEYS.CUSTOM]: '#api_key_custom',
     [SECRET_KEYS.TOGETHERAI]: '#api_key_togetherai',
     [SECRET_KEYS.OOBA]: '#api_key_ooba',
     [SECRET_KEYS.INFERMATICAI]: '#api_key_infermaticai',
@@ -198,9 +195,8 @@ const getLabel = () => moment().format('L LT');
  * @returns {string|null} The secret key corresponding to the selected API, or null if no key is found.
  */
 export function resolveSecretKey() {
-    const { mainApi, chatCompletionSettings, textCompletionSettings } = SillyTavern.getContext();
+    const { mainApi, chatCompletionSettings } = SillyTavern.getContext();
     const chatCompletionSource = chatCompletionSettings.chat_completion_source;
-    const textCompletionType = textCompletionSettings.type;
 
     if (mainApi === 'koboldhorde') {
         return SECRET_KEYS.HORDE;
@@ -210,15 +206,10 @@ export function resolveSecretKey() {
         return SECRET_KEYS.NOVEL;
     }
 
-    if (mainApi === 'textgenerationwebui') {
-        const [key] = Object.entries(textgen_types).find(([, value]) => value === textCompletionType) ?? [null];
-        if (key && SECRET_KEYS[key]) {
-            return SECRET_KEYS[key];
-        }
-    }
-
     if (mainApi === 'openai') {
-        if (chatCompletionSource === chat_completion_sources.VERTEXAI) {
+        const isVertexAI = chatCompletionSource === chat_completion_sources.VERTEXAI
+            || (chatCompletionSource === chat_completion_sources.MAKERSUITE && chatCompletionSettings.use_vertexai);
+        if (isVertexAI) {
             switch (chatCompletionSettings.vertexai_auth_mode) {
                 case 'express':
                     return SECRET_KEYS.VERTEXAI;
@@ -395,8 +386,7 @@ export async function deleteSecret(key, id) {
 
         if (response.ok) {
             await readSecretState();
-            // Force reconnection to the API with the new key
-            $('#main_api').trigger('change');
+            await eventSource.emit(event_types.MAIN_API_CHANGED, { apiId: 'openai' });
             await eventSource.emit(event_types.SECRET_DELETED, key);
         }
     } catch (error) {
@@ -466,8 +456,7 @@ export async function rotateSecret(key, id) {
 
         if (response.ok) {
             await readSecretState();
-            // Force reconnection to the API with the new key
-            $('#main_api').trigger('change');
+            await eventSource.emit(event_types.MAIN_API_CHANGED, { apiId: 'openai' });
             await eventSource.emit(event_types.SECRET_ROTATED, key);
         }
     } catch (error) {

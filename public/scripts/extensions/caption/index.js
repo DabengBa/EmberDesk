@@ -5,7 +5,6 @@ import { getMessageTimeStamp } from '../../RossAscends-mods.js';
 import { SECRET_KEYS, secret_state } from '../../secrets.js';
 import { oai_settings } from '../../openai.js';
 import { getMultimodalCaption } from '../shared.js';
-import { textgen_types, textgenerationwebui_settings } from '../../textgen-settings.js';
 import { SlashCommandParser } from '../../slash-commands/SlashCommandParser.js';
 import { SlashCommand } from '../../slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from '../../slash-commands/SlashCommandArgument.js';
@@ -514,19 +513,9 @@ export async function init() {
                         return true;
                     }
 
-                    const textCompletionApis = {
-                        'ollama': textgen_types.OLLAMA,
-                        'llamacpp': textgen_types.LLAMACPP,
-                        'ooba': textgen_types.OOBA,
-                        'koboldcpp': textgen_types.KOBOLDCPP,
-                        'vllm': textgen_types.VLLM,
-                    };
+                    const localApis = ['ollama', 'llamacpp', 'ooba', 'koboldcpp', 'vllm'];
 
-                    if (textCompletionApis[api] && altEndpointEnabled && altEndpointUrl) {
-                        return true;
-                    }
-
-                    if (textCompletionApis[api] && !altEndpointEnabled && textgenerationwebui_settings.server_urls[textCompletionApis[api]]) {
+                    if (localApis.includes(api) && altEndpointEnabled && altEndpointUrl) {
                         return true;
                     }
 
@@ -670,7 +659,7 @@ export async function init() {
     });
     $('#caption_ollama_pull').on('click', (e) => {
         const selectedModel = extension_settings.caption.multimodal_model;
-        const staticModels = { 'ollama_current': textgenerationwebui_settings.ollama_model, 'ollama_custom': extension_settings.caption.ollama_custom_model };
+        const staticModels = { 'ollama_custom': extension_settings.caption.ollama_custom_model };
         const presetModel = staticModels[selectedModel] || selectedModel;
         e.preventDefault();
         $('#ollama_download_model').trigger('click');

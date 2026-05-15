@@ -27,7 +27,6 @@ import { getDataBankAttachments, getDataBankAttachmentsForSource, getFileAttachm
 import { debounce, getStringHash as calculateHash, waitUntilCondition, onlyUnique, splitRecursive, trimToStartSentence, trimToEndSentence, escapeHtml, isTrueBoolean } from '../../utils.js';
 import { debounce_timeout } from '../../constants.js';
 import { getSortedEntries } from '../../world-info.js';
-import { textgen_types, textgenerationwebui_settings } from '../../textgen-settings.js';
 import { SlashCommandParser } from '../../slash-commands/SlashCommandParser.js';
 import { SlashCommand } from '../../slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from '../../slash-commands/SlashCommandArgument.js';
@@ -952,15 +951,18 @@ function getVectorsRequestBody(args = {}) {
             break;
         case 'ollama':
             body.model = extension_settings.vectors.ollama_model;
-            body.apiUrl = settings.use_alt_endpoint ? settings.alt_endpoint_url : textgenerationwebui_settings.server_urls[textgen_types.OLLAMA];
+            body.apiUrl = settings.alt_endpoint_url;
             body.keep = !!extension_settings.vectors.ollama_keep;
             break;
         case 'llamacpp':
-            body.apiUrl = settings.use_alt_endpoint ? settings.alt_endpoint_url : textgenerationwebui_settings.server_urls[textgen_types.LLAMACPP];
+            body.apiUrl = settings.alt_endpoint_url;
             break;
         case 'vllm':
-            body.apiUrl = settings.use_alt_endpoint ? settings.alt_endpoint_url : textgenerationwebui_settings.server_urls[textgen_types.VLLM];
+            body.apiUrl = settings.alt_endpoint_url;
             body.model = extension_settings.vectors.vllm_model;
+            break;
+        case 'koboldcpp':
+            body.apiUrl = settings.alt_endpoint_url;
             break;
         case 'webllm':
             body.model = extension_settings.vectors.webllm_model;
@@ -1007,12 +1009,6 @@ async function getAdditionalArgs(items) {
         case 'webllm':
             args.embeddings = await createWebLlmEmbeddings(items);
             break;
-        case 'koboldcpp': {
-            const { embeddings, model } = await createKoboldCppEmbeddings(items);
-            args.embeddings = embeddings;
-            args.model = model;
-            break;
-        }
     }
     return args;
 }
@@ -1088,15 +1084,8 @@ function throwIfSourceInvalid() {
         throw new Error('Vectors: API key missing', { cause: 'api_key_missing' });
     }
 
-    if (vectorApiRequiresUrl.includes(settings.source) && settings.use_alt_endpoint) {
+    if (vectorApiRequiresUrl.includes(settings.source)) {
         if (!settings.alt_endpoint_url) {
-            throw new Error('Vectors: API URL missing', { cause: 'api_url_missing' });
-        }
-    } else {
-        if (settings.source === 'ollama' && !textgenerationwebui_settings.server_urls[textgen_types.OLLAMA] ||
-            settings.source === 'vllm' && !textgenerationwebui_settings.server_urls[textgen_types.VLLM] ||
-            settings.source === 'koboldcpp' && !textgenerationwebui_settings.server_urls[textgen_types.KOBOLDCPP] ||
-            settings.source === 'llamacpp' && !textgenerationwebui_settings.server_urls[textgen_types.LLAMACPP]) {
             throw new Error('Vectors: API URL missing', { cause: 'api_url_missing' });
         }
     }
@@ -1444,45 +1433,6 @@ async function createWebLlmEmbeddings(items) {
         }
         return result;
     });
-}
-
-/**
- * Creates KoboldCpp embeddings for a list of items.
- * @param {string[]} items Items to embed
- * @returns {Promise<{embeddings: Record<string, number[]>, model: string}>} Calculated embeddings
- */
-async function createKoboldCppEmbeddings(items) {
-    const response = await fetch('/api/backends/kobold/embed', {
-        method: 'POST',
-        headers: getRequestHeaders(),
-        body: JSON.stringify({
-            items: items,
-            server: settings.use_alt_endpoint ? settings.alt_endpoint_url : textgenerationwebui_settings.server_urls[textgen_types.KOBOLDCPP],
-        }),
-    });
-
-    if (!response.ok) {
-        throw new Error('Failed to get KoboldCpp embeddings');
-    }
-
-    const data = await response.json();
-    if (!Array.isArray(data.embeddings) || !data.model || data.embeddings.length !== items.length) {
-        throw new Error('Invalid response from KoboldCpp embeddings');
-    }
-
-    const embeddings = /** @type {Record<string, number[]>} */ ({});
-    for (let i = 0; i < data.embeddings.length; i++) {
-        if (!Array.isArray(data.embeddings[i]) || data.embeddings[i].length === 0) {
-            throw new Error('KoboldCpp returned an empty embedding. Reduce the chunk size and/or size threshold and try again.');
-        }
-
-        embeddings[items[i]] = data.embeddings[i];
-    }
-
-    return {
-        embeddings: embeddings,
-        model: data.model,
-    };
 }
 
 async function onPurgeClick() {

@@ -21,8 +21,6 @@ function getPresetSettingsByAPI(apiId, directories) {
             return { folder: directories.koboldAI_Settings, extension: '.json' };
         case 'novel':
             return { folder: directories.novelAI_Settings, extension: '.json' };
-        case 'textgenerationwebui':
-            return { folder: directories.textGen_Settings, extension: '.json' };
         case 'openai':
             return { folder: directories.openAI_Settings, extension: '.json' };
         case 'instruct':

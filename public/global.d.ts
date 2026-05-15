@@ -3,7 +3,6 @@ import getContext from './scripts/st-context';
 import { power_user, getThemeObject } from './scripts/power-user';
 import { QuickReplyApi } from './scripts/extensions/quick-reply/api/QuickReplyApi';
 import { oai_settings } from './scripts/openai';
-import { textgenerationwebui_settings } from './scripts/textgen-settings';
 import { FileAttachment } from './scripts/chats';
 import { ReasoningMessageExtra } from './scripts/reasoning';
 import { IGNORE_SYMBOL, OVERSWIPE_BEHAVIOR } from './scripts/constants';
@@ -16,7 +15,6 @@ declare global {
     type ContextSettings = typeof power_user.context;
     type ReasoningSettings = typeof power_user.reasoning;
     type ChatCompletionSettings = typeof oai_settings;
-    type TextCompletionSettings = typeof textgenerationwebui_settings;
     type WorldInfoSettings = ReturnType<typeof getWorldInfoSettings>;
     type MessageTimestamp = string | number | Date;
     type Character = import('./scripts/char-data').v1CharData;

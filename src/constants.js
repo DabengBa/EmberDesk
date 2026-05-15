@@ -187,173 +187,14 @@ export const VERTEX_SAFETY = [
 export const CHAT_COMPLETION_SOURCES = {
     OPENAI: 'openai',
     CLAUDE: 'claude',
-    OPENROUTER: 'openrouter',
-    AI21: 'ai21',
     MAKERSUITE: 'makersuite',
     VERTEXAI: 'vertexai',
-    MISTRALAI: 'mistralai',
-    CUSTOM: 'custom',
-    COHERE: 'cohere',
-    PERPLEXITY: 'perplexity',
-    GROQ: 'groq',
-    CHUTES: 'chutes',
-    ELECTRONHUB: 'electronhub',
-    NANOGPT: 'nanogpt',
-    DEEPSEEK: 'deepseek',
-    AIMLAPI: 'aimlapi',
-    XAI: 'xai',
-    POLLINATIONS: 'pollinations',
-    MOONSHOT: 'moonshot',
-    FIREWORKS: 'fireworks',
-    COMETAPI: 'cometapi',
-    AZURE_OPENAI: 'azure_openai',
-    ZAI: 'zai',
-    SILICONFLOW: 'siliconflow',
-    MINIMAX: 'minimax',
-    WORKERS_AI: 'workers_ai',
 };
 
 /**
  * Path to multer file uploads under the data root.
  */
 export const UPLOADS_DIRECTORY = '_uploads';
-
-// TODO: this is copied from the client code; there should be a way to de-duplicate it eventually
-export const TEXTGEN_TYPES = {
-    OOBA: 'ooba',
-    MANCER: 'mancer',
-    VLLM: 'vllm',
-    APHRODITE: 'aphrodite',
-    TABBY: 'tabby',
-    KOBOLDCPP: 'koboldcpp',
-    TOGETHERAI: 'togetherai',
-    LLAMACPP: 'llamacpp',
-    OLLAMA: 'ollama',
-    INFERMATICAI: 'infermaticai',
-    DREAMGEN: 'dreamgen',
-    OPENROUTER: 'openrouter',
-    FEATHERLESS: 'featherless',
-    HUGGINGFACE: 'huggingface',
-    GENERIC: 'generic',
-};
-
-export const INFERMATICAI_KEYS = [
-    'model',
-    'prompt',
-    'max_tokens',
-    'temperature',
-    'top_p',
-    'top_k',
-    'repetition_penalty',
-    'stream',
-    'stop',
-    'presence_penalty',
-    'frequency_penalty',
-    'min_p',
-    'seed',
-    'ignore_eos',
-    'n',
-    'best_of',
-    'min_tokens',
-    'spaces_between_special_tokens',
-    'skip_special_tokens',
-    'logprobs',
-];
-
-export const FEATHERLESS_KEYS = [
-    'model',
-    'prompt',
-    'best_of',
-    'echo',
-    'frequency_penalty',
-    'logit_bias',
-    'logprobs',
-    'max_tokens',
-    'n',
-    'presence_penalty',
-    'seed',
-    'stop',
-    'stream',
-    'suffix',
-    'temperature',
-    'top_p',
-    'user',
-
-    'use_beam_search',
-    'top_k',
-    'min_p',
-    'repetition_penalty',
-    'length_penalty',
-    'early_stopping',
-    'stop_token_ids',
-    'ignore_eos',
-    'min_tokens',
-    'skip_special_tokens',
-    'spaces_between_special_tokens',
-    'truncate_prompt_tokens',
-
-    'include_stop_str_in_output',
-    'response_format',
-    'guided_json',
-    'guided_regex',
-    'guided_choice',
-    'guided_grammar',
-    'guided_decoding_backend',
-    'guided_whitespace_pattern',
-];
-
-// https://docs.together.ai/reference/completions
-export const TOGETHERAI_KEYS = [
-    'model',
-    'prompt',
-    'max_tokens',
-    'temperature',
-    'top_p',
-    'top_k',
-    'repetition_penalty',
-    'min_p',
-    'presence_penalty',
-    'frequency_penalty',
-    'stream',
-    'stop',
-];
-
-// https://github.com/ollama/ollama/blob/main/docs/api.md#request-8
-export const OLLAMA_KEYS = [
-    'num_predict',
-    'num_ctx',
-    'num_batch',
-    'stop',
-    'temperature',
-    'repeat_penalty',
-    'presence_penalty',
-    'frequency_penalty',
-    'top_k',
-    'top_p',
-    'tfs_z',
-    'typical_p',
-    'seed',
-    'repeat_last_n',
-    'min_p',
-];
-
-// https://platform.openai.com/docs/api-reference/completions
-export const OPENAI_KEYS = [
-    'model',
-    'prompt',
-    'stream',
-    'temperature',
-    'top_p',
-    'frequency_penalty',
-    'presence_penalty',
-    'stop',
-    'seed',
-    'logit_bias',
-    'logprobs',
-    'max_tokens',
-    'n',
-    'best_of',
-];
 
 export const AVATAR_WIDTH = 512;
 export const AVATAR_HEIGHT = 768;
@@ -374,87 +215,7 @@ export const FEATHERLESS_HEADERS = {
     'X-Title': 'EmberDesk',
 };
 
-export const OPENROUTER_KEYS = [
-    'max_tokens',
-    'temperature',
-    'top_k',
-    'top_p',
-    'presence_penalty',
-    'frequency_penalty',
-    'repetition_penalty',
-    'min_p',
-    'top_a',
-    'seed',
-    'logit_bias',
-    'model',
-    'stream',
-    'prompt',
-    'stop',
-    'provider',
-    'include_reasoning',
-];
 
-// https://github.com/vllm-project/vllm/blob/0f8a91401c89ac0a8018def3756829611b57727f/vllm/entrypoints/openai/protocol.py#L220
-export const VLLM_KEYS = [
-    'model',
-    'prompt',
-    'best_of',
-    'echo',
-    'frequency_penalty',
-    'logit_bias',
-    'logprobs',
-    'max_tokens',
-    'n',
-    'presence_penalty',
-    'seed',
-    'stop',
-    'stream',
-    'suffix',
-    'temperature',
-    'top_p',
-    'user',
-
-    'use_beam_search',
-    'top_k',
-    'min_p',
-    'repetition_penalty',
-    'length_penalty',
-    'early_stopping',
-    'stop_token_ids',
-    'ignore_eos',
-    'min_tokens',
-    'skip_special_tokens',
-    'spaces_between_special_tokens',
-    'truncate_prompt_tokens',
-
-    'include_stop_str_in_output',
-    'response_format',
-    'guided_json',
-    'guided_regex',
-    'guided_choice',
-    'guided_grammar',
-    'guided_decoding_backend',
-    'guided_whitespace_pattern',
-];
-
-export const AZURE_OPENAI_KEYS = [
-    'messages',
-    'temperature',
-    'frequency_penalty',
-    'presence_penalty',
-    'top_p',
-    'max_tokens',
-    'max_completion_tokens',
-    'stream',
-    'logit_bias',
-    'stop',
-    'n',
-    'logprobs',
-    'seed',
-    'tools',
-    'tool_choice',
-    'reasoning_effort',
-];
 
 export const OPENAI_VERBOSITY_MODELS = /^gpt-5/;
 
@@ -501,13 +262,6 @@ export const OPENAI_FIXED_REASONING_EFFORT = {
     'gpt-5.3-chat-latest': 'medium',
 };
 
-export const NANOGPT_REASONING_EFFORT_MAP = {
-    min: 'none',
-    low: 'minimal',
-    medium: 'low',
-    high: 'medium',
-    max: 'high',
-};
 
 export const LOG_LEVELS = {
     DEBUG: 0,

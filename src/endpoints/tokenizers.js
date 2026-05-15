@@ -13,8 +13,6 @@ import { SentencePieceProcessor } from '@agnai/sentencepiece-js';
 import tiktoken from 'tiktoken';
 
 import { convertClaudePrompt } from '../prompt-converters.js';
-import { TEXTGEN_TYPES } from '../constants.js';
-import { setAdditionalHeaders } from '../additional-headers.js';
 import { getConfigValue, isValidUrl } from '../util.js';
 
 /**
@@ -29,34 +27,6 @@ const tokenizersCache = {};
 /**
  * @type {string[]}
  */
-export const TEXT_COMPLETION_MODELS = [
-    'gpt-3.5-turbo-instruct',
-    'gpt-3.5-turbo-instruct-0914',
-    'text-davinci-003',
-    'text-davinci-002',
-    'text-davinci-001',
-    'text-curie-001',
-    'text-babbage-001',
-    'text-ada-001',
-    'code-davinci-002',
-    'code-davinci-001',
-    'code-cushman-002',
-    'code-cushman-001',
-    'text-davinci-edit-001',
-    'code-davinci-edit-001',
-    'text-embedding-ada-002',
-    'text-similarity-davinci-001',
-    'text-similarity-curie-001',
-    'text-similarity-babbage-001',
-    'text-similarity-ada-001',
-    'text-search-davinci-doc-001',
-    'text-search-curie-doc-001',
-    'text-search-babbage-doc-001',
-    'text-search-ada-doc-001',
-    'code-search-babbage-code-001',
-    'code-search-ada-code-001',
-];
-
 const BYTES_PER_TOKEN = 3.35;
 const IS_DOWNLOAD_ALLOWED = getConfigValue('enableDownloadableTokenizers', true, 'boolean');
 const gunzip = promisify(zlib.gunzip);
@@ -469,10 +439,6 @@ export function getTokenizerModel(requestModel) {
 
     if (requestModel.includes('gpt-3.5-turbo')) {
         return 'gpt-3.5-turbo';
-    }
-
-    if (TEXT_COMPLETION_MODELS.includes(requestModel)) {
-        return requestModel;
     }
 
     if (requestModel.includes('claude')) {
@@ -1064,71 +1030,6 @@ router.post('/remote/kobold/count', async function (request, response) {
         const data = await result.json();
         const count = data.value;
         const ids = data.ids ?? [];
-        return response.send({ count, ids });
-    } catch (error) {
-        console.error(error);
-        return response.send({ error: true });
-    }
-});
-
-router.post('/remote/textgenerationwebui/encode', async function (request, response) {
-    if (!request.body) {
-        return response.sendStatus(400);
-    }
-    const text = String(request.body.text) || '';
-    const baseUrl = String(request.body.url);
-    const model = String(request.body.model) || '';
-
-    try {
-        const args = {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-        };
-
-        setAdditionalHeaders(request, args, baseUrl);
-
-        // Convert to string + remove trailing slash + /v1 suffix
-        let url = String(baseUrl).replace(/\/$/, '').replace(/\/v1$/, '');
-
-        switch (request.body.api_type) {
-            case TEXTGEN_TYPES.TABBY:
-                url += '/v1/token/encode';
-                args.body = JSON.stringify({ 'text': text, 'add_bos_token': false, 'encode_special_tokens': false });
-                break;
-            case TEXTGEN_TYPES.KOBOLDCPP:
-                url += '/api/extra/tokencount';
-                args.body = JSON.stringify({ 'prompt': text, 'special': false });
-                break;
-            case TEXTGEN_TYPES.LLAMACPP:
-                url += '/tokenize';
-                args.body = JSON.stringify({ 'model': model, 'content': text });
-                break;
-            case TEXTGEN_TYPES.VLLM:
-                url += '/tokenize';
-                args.body = JSON.stringify({ 'model': model, 'prompt': text });
-                break;
-            case TEXTGEN_TYPES.APHRODITE:
-                url += '/v1/tokenize';
-                args.body = JSON.stringify({ 'model': model, 'prompt': text });
-                break;
-            default:
-                url += '/v1/internal/encode';
-                args.body = JSON.stringify({ 'text': text });
-                break;
-        }
-
-        const result = await fetch(url, args);
-
-        if (!result.ok) {
-            console.warn(`API returned error: ${result.status} ${result.statusText}`);
-            return response.send({ error: true });
-        }
-
-        /** @type {any} */
-        const data = await result.json();
-        const count = (data?.length ?? data?.count ?? data?.value ?? data?.tokens?.length);
-        const ids = (data?.tokens ?? data?.ids ?? []);
-
         return response.send({ count, ids });
     } catch (error) {
         console.error(error);

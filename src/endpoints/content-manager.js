@@ -47,7 +47,6 @@ export const CONTENT_TYPES = {
     KOBOLD_PRESET: 'kobold_preset',
     OPENAI_PRESET: 'openai_preset',
     NOVEL_PRESET: 'novel_preset',
-    TEXTGEN_PRESET: 'textgen_preset',
     INSTRUCT: 'instruct',
     CONTEXT: 'context',
     MOVING_UI: 'moving_ui',
@@ -355,8 +354,6 @@ export function getUserTargetByType(type, directories) {
             return directories.openAI_Settings;
         case CONTENT_TYPES.NOVEL_PRESET:
             return directories.novelAI_Settings;
-        case CONTENT_TYPES.TEXTGEN_PRESET:
-            return directories.textGen_Settings;
         case CONTENT_TYPES.INSTRUCT:
             return directories.instruct;
         case CONTENT_TYPES.CONTEXT:
