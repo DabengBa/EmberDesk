@@ -1,7 +1,7 @@
 import { CONNECT_API_MAP, createModelIcon, getRequestHeaders } from '../../script.js';
 import { extension_settings, openThirdPartyExtensionMenu } from '../extensions.js';
 import { t } from '../i18n.js';
-import { oai_settings, proxies, ZAI_ENDPOINT } from '../openai.js';
+import { oai_settings, ZAI_ENDPOINT } from '../openai.js';
 import { SECRET_KEYS, secret_state } from '../secrets.js';
 import { textgen_types, textgenerationwebui_settings } from '../textgen-settings.js';
 import { getTokenCountAsync } from '../tokenizers.js';
@@ -434,8 +434,6 @@ export class ConnectionManagerRequestService {
                         throw new Error(`API type ${selectedApiMap.selected} does not support chat completions`);
                     }
 
-                    const proxyPreset = proxies.find((p) => p.name === profile.proxy);
-
                     const messages = Array.isArray(prompt) ? prompt : [{ role: 'user', content: prompt }];
                     return await context.ChatCompletionService.processRequest({
                         stream,
@@ -449,8 +447,8 @@ export class ConnectionManagerRequestService {
                         zai_endpoint: profile['api-url'],
                         siliconflow_endpoint: profile['api-url'],
                         minimax_endpoint: profile['api-url'],
-                        reverse_proxy: proxyPreset?.url,
-                        proxy_password: proxyPreset?.password,
+                        reverse_proxy: profile['proxy-url'],
+                        proxy_password: profile['proxy-password'],
                         custom_prompt_post_processing: profile['prompt-post-processing'],
                         ...overridePayload,
                     }, {
