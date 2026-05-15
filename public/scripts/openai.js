@@ -3,7 +3,7 @@
 * By CncAnon (@CncAnon1)
 * https://github.com/CncAnon1/TavernAITurbo
 */
-import { Fuse, DOMPurify } from '../lib.js';
+import { DOMPurify } from '../lib.js';
 
 import {
     abortStatusCheck,
@@ -509,15 +509,6 @@ const default_settings = {
 };
 
 const oai_settings = structuredClone(default_settings);
-
-export let proxies = [
-    {
-        name: 'None',
-        url: '',
-        password: '',
-    },
-];
-export let selected_proxy = proxies[0];
 
 export let openai_setting_names;
 export let openai_settings;
@@ -6346,127 +6337,23 @@ export function isReasoningSignatureSupported(settings = oai_settings) {
     return isGoogle || isOpenRouterGemini;
 }
 
-/**
- * Proxy stuff
- */
-export function loadProxyPresets(settings) {
-    let proxyPresets = settings.proxies;
-    selected_proxy = settings.selected_proxy || selected_proxy;
-    if (!Array.isArray(proxyPresets) || proxyPresets.length === 0) {
-        proxyPresets = proxies;
-    } else {
-        proxies = proxyPresets;
-    }
-
-    $('#openai_proxy_preset').empty();
-
-    for (const preset of proxyPresets) {
-        const option = document.createElement('option');
-        option.innerText = preset.name;
-        option.value = preset.name;
-        option.selected = preset.name === 'None';
-        $('#openai_proxy_preset').append(option);
-    }
-    $('#openai_proxy_preset').val(selected_proxy.name);
-    setProxyPreset(selected_proxy.name, selected_proxy.url, selected_proxy.password);
-}
-
-function setProxyPreset(name, url, password) {
-    const preset = proxies.find(p => p.name === name);
-    if (preset) {
-        preset.url = url;
-        preset.password = password;
-        selected_proxy = preset;
-    } else {
-        let new_proxy = { name, url, password };
-        proxies.push(new_proxy);
-        selected_proxy = new_proxy;
-    }
-
-    $('#openai_reverse_proxy_name').val(name);
-    oai_settings.reverse_proxy = url;
-    $('#openai_reverse_proxy').val(oai_settings.reverse_proxy);
-    oai_settings.proxy_password = password;
-    $('#openai_proxy_password').val(oai_settings.proxy_password);
-    reconnectOpenAi();
-}
-
-function onProxyPresetChange() {
-    const value = String($('#openai_proxy_preset').find(':selected').val());
-    const selectedPreset = proxies.find(preset => preset.name === value);
-
-    if (selectedPreset) {
-        setProxyPreset(selectedPreset.name, selectedPreset.url, selectedPreset.password);
-    } else {
-        console.error(t`Proxy preset '${value}' not found in proxies array.`);
-    }
-    saveSettingsDebounced();
-}
-
-$('#save_proxy').on('click', async function () {
-    const presetName = $('#openai_reverse_proxy_name').val();
-    const reverseProxy = $('#openai_reverse_proxy').val();
-    const proxyPassword = $('#openai_proxy_password').val();
-
-    setProxyPreset(presetName, reverseProxy, proxyPassword);
-    saveSettingsDebounced();
-    toastr.success(t`Proxy Saved`);
-    if ($('#openai_proxy_preset').val() !== presetName) {
-        const option = document.createElement('option');
-        option.text = String(presetName);
-        option.value = String(presetName);
-
-        $('#openai_proxy_preset').append(option);
-    }
-    $('#openai_proxy_preset').val(presetName);
-});
-
-$('#delete_proxy').on('click', async function () {
-    const presetName = $('#openai_reverse_proxy_name').val();
-    const index = proxies.findIndex(preset => preset.name === presetName);
-
-    if (index !== -1) {
-        proxies.splice(index, 1);
-        $('#openai_proxy_preset option[value="' + presetName + '"]').remove();
-
-        if (proxies.length > 0) {
-            const newIndex = Math.max(0, index - 1);
-            selected_proxy = proxies[newIndex];
-        } else {
-            selected_proxy = { name: 'None', url: '', password: '' };
-        }
-
-        $('#openai_reverse_proxy_name').val(selected_proxy.name);
-        oai_settings.reverse_proxy = selected_proxy.url;
-        $('#openai_reverse_proxy').val(selected_proxy.url);
-        oai_settings.proxy_password = selected_proxy.password;
-        $('#openai_proxy_password').val(selected_proxy.password);
-
-        saveSettingsDebounced();
-        $('#openai_proxy_preset').val(selected_proxy.name);
-        toastr.success(t`Proxy Deleted`);
-    } else {
-        toastr.error(t`Could not find proxy with name '${presetName}'`);
-    }
-});
-
-function runProxyCallback(_, value) {
+function proxyUrlCallback(_, value) {
     if (!value) {
-        return selected_proxy?.name || '';
+        return oai_settings.reverse_proxy ?? '';
     }
+    oai_settings.reverse_proxy = value;
+    $('#openai_reverse_proxy').val(value);
+    reconnectOpenAi();
+    return oai_settings.reverse_proxy;
+}
 
-    const proxyNames = proxies.map(preset => preset.name);
-    const fuse = new Fuse(proxyNames);
-    const result = fuse.search(value);
-
-    if (result.length === 0) {
-        toastr.warning(t`Proxy preset '${value}' not found`);
-        return '';
+function proxyPasswordCallback(_, value) {
+    if (!value) {
+        return oai_settings.proxy_password ?? '';
     }
-
-    const foundName = result[0].item;
-    $('#openai_proxy_preset').val(foundName).trigger('change');
-    return foundName;
+    oai_settings.proxy_password = value;
+    $('#openai_proxy_password').val(value);
+    return oai_settings.proxy_password;
 }
 
 /**
@@ -6621,19 +6508,32 @@ function updateFeatureSupportFlags() {
 
 export function initOpenAI() {
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'proxy',
-        callback: runProxyCallback,
-        returns: 'current proxy',
+        name: 'proxy-url',
+        callback: proxyUrlCallback,
+        returns: 'current proxy URL',
         namedArgumentList: [],
         unnamedArgumentList: [
             SlashCommandArgument.fromProps({
-                description: 'name',
+                description: 'url',
                 typeList: [ARGUMENT_TYPE.STRING],
-                isRequired: true,
-                enumProvider: () => proxies.map(preset => new SlashCommandEnumValue(preset.name, preset.url)),
+                isRequired: false,
             }),
         ],
-        helpString: 'Sets a proxy preset by name.',
+        helpString: 'Gets or sets the reverse proxy URL. Leave empty to get the current value.',
+    }));
+    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+        name: 'proxy-password',
+        callback: proxyPasswordCallback,
+        returns: 'current proxy password',
+        namedArgumentList: [],
+        unnamedArgumentList: [
+            SlashCommandArgument.fromProps({
+                description: 'password',
+                typeList: [ARGUMENT_TYPE.STRING],
+                isRequired: false,
+            }),
+        ],
+        helpString: 'Gets or sets the proxy password. Leave empty to get the current value.',
     }));
 
     $('#test_api_button').on('click', testApiConnection);
@@ -7245,5 +7145,4 @@ export function initOpenAI() {
     $('#import_oai_preset').on('click', onImportPresetClick);
     $('#openai_proxy_password_show').on('click', onProxyPasswordShowClick);
     $('#customize_additional_parameters').on('click', onCustomizeParametersClick);
-    $('#openai_proxy_preset').on('change', onProxyPresetChange);
 }

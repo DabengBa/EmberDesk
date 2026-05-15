@@ -111,9 +111,6 @@ import {
     openai_messages_count,
     chat_completion_sources,
     getChatCompletionModel,
-    proxies,
-    loadProxyPresets,
-    selected_proxy,
     initOpenAI,
 } from './scripts/openai.js';
 
@@ -8230,9 +8227,6 @@ async function applyStartupSettingsCore(data, initLoaderHandle = null) {
         // Load background
         loadBackgroundSettings(settings);
 
-        // Load proxy presets
-        loadProxyPresets(settings);
-
         // Allow subscribers to mutate settings
         await eventSource.emit(event_types.SETTINGS_LOADED_AFTER, settings);
 
@@ -8245,10 +8239,10 @@ async function applyStartupSettingsCore(data, initLoaderHandle = null) {
 
         //Load which API we are using
         if (settings.main_api == undefined) {
-            settings.main_api = 'kobold';
+            settings.main_api = 'openai';
         }
 
-        if (settings.main_api == 'poe') {
+        if (['poe', 'kobold', 'koboldhorde', 'novel'].includes(settings.main_api)) {
             settings.main_api = 'openai';
         }
 
@@ -8357,8 +8351,6 @@ export async function saveSettings(loopCounter = 0) {
         kai_settings: kai_settings,
         oai_settings: oai_settings,
         background: background_settings,
-        proxies: proxies,
-        selected_proxy: selected_proxy,
     };
 
     try {

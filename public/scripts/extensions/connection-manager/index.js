@@ -33,6 +33,8 @@ const DEFAULT_SETTINGS = {
 const ALLOW_EMPTY = [
     'stop-strings',
     'start-reply-with',
+    'proxy-url',
+    'proxy-password',
 ];
 
 const CC_COMMANDS = [
@@ -42,7 +44,8 @@ const CC_COMMANDS = [
     'api',
     'api-url',
     'model',
-    'proxy',
+    'proxy-url',
+    'proxy-password',
     'stop-strings',
     'start-reply-with',
     'reasoning-template',
@@ -74,7 +77,8 @@ const FANCY_NAMES = {
     'api-url': 'Server URL',
     'preset': 'Settings Preset',
     'model': 'Model',
-    'proxy': 'Proxy Preset',
+    'proxy-url': 'Proxy URL',
+    'proxy-password': 'Proxy Password',
     'sysprompt-state': 'Use System Prompt',
     'sysprompt': 'System Prompt Name',
     'instruct-state': 'Instruct Mode',

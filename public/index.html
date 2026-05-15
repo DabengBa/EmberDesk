@@ -1652,138 +1652,7 @@
                         <select id="main_api">
                             <option value="textgenerationwebui" data-i18n="Text Completion">Text Completion</option>
                             <option value="openai" data-i18n="Chat Completion">Chat Completion</option>
-                            <option value="novel" data-i18n="NovelAI">NovelAI</option>
-                            <option value="koboldhorde" data-i18n="AI Horde">AI Horde</option>
-                            <option value="kobold" data-i18n="KoboldAI">KoboldAI Classic</option>
                         </select>
-                    </div>
-                    <div id="kobold_horde" style="position: relative;"> <!-- shows the kobold settings -->
-                        <form action="javascript:void(null);" method="post" enctype="multipart/form-data">
-                            <div id="kobold_horde_block">
-                                <ul>
-                                    <li>
-                                        <a target="_blank" href="https://aihorde.net/" data-i18n="AI Horde Website">
-                                            AI Horde Website
-                                        </a>
-                                    </li>
-                                    <li>
-                                        <span data-i18n="Avoid sending sensitive information to the Horde.">Avoid sending sensitive information to the Horde.</span>
-                                        <a target="_blank" href="usage/api-connections/horde/" data-i18n="Review the Privacy statement">
-                                            Review the Privacy statement
-                                        </a>
-                                    </li>
-                                    <li>
-                                        <a target="_blank" href="https://aihorde.net/register" data-i18n="Register a Horde account for faster queue times">
-                                            Register a Horde account for faster queue times
-                                        </a>
-                                    </li>
-                                    <li>
-                                        <a target="_blank" href="https://github.com/Haidra-Org/horde-worker-reGen?tab=readme-ov-file#ai-horde-worker-regen" data-i18n="Learn how to contribute your idle GPU cycles to the Horde">
-                                            Learn how to contribute your idle GPU cycles to the Horde
-                                        </a>
-                                    </li>
-                                </ul>
-                                <label for="horde_auto_adjust_context_length" class="checkbox_label">
-                                    <input id="horde_auto_adjust_context_length" type="checkbox" />
-                                    <span data-i18n="Adjust context size to worker capabilities">Adjust context size to worker capabilities</span>
-                                </label>
-                                <label for="horde_auto_adjust_response_length" class="checkbox_label">
-                                    <input id="horde_auto_adjust_response_length" type="checkbox" />
-                                    <span data-i18n="Adjust response length to worker capabilities">Adjust response length to worker capabilities</span>
-                                </label>
-                                <label for="horde_trusted_workers_only" class="checkbox_label" title="Can help with bad responses by queueing only the approved workers. May slowdown the response time." data-i18n="[title]Can help with bad responses by queueing only the approved workers. May slowdown the response time.">
-                                    <input id="horde_trusted_workers_only" type="checkbox" />
-                                    <span data-i18n="Trusted workers only">Trusted workers only</span>
-                                </label>
-                                <small id="adjustedHordeParams"><span data-i18n="Context">Context</span>: --, <span data-i18n="Response">Response</span>: --</small>
-                                <h4 data-i18n="API key">API key</h4>
-                                <small>
-                                    <span data-i18n="Get it here:">Get it here: </span> <a target="_blank" href="https://aihorde.net/register" data-i18n="Register">Register</a> (<a id="horde_kudos" href="javascript:void(0);" data-i18n="View my Kudos">View my Kudos</a>)<br>
-                                    <span data-i18n="Enter">Enter </span> <span class="monospace">0000000000</span> <span data-i18n="to use anonymous mode.">to use anonymous mode. </span>
-                                </small>
-                                <div class="flex-container">
-                                    <input id="horde_api_key" name="horde_api_key" class="text_pole flex1" type="text" placeholder="0000000000" autocomplete="off">
-                                    <div title="Save and connect" data-i18n="[title]Save and connect" class="menu_button fa-solid fa-plug fa-fw" id="horde_api_key_button"></div>
-                                    <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_horde"></div>
-                                </div>
-                                <div data-for="horde_api_key" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                    For privacy reasons, your API key will be hidden after you click 'Connect'.
-                                </div>
-                                <h4 class="horde_model_title">
-                                    <span data-i18n="Models">Models </span>
-                                    <div id="horde_refresh" title="Refresh models" data-i18n="[title]Refresh models" class="right_menu_button">
-                                        <div class="fa-solid fa-repeat "></div>
-                                    </div>
-                                </h4>
-                                <select id="horde_model" multiple>
-                                    <option data-i18n="-- Horde models not loaded --">-- Horde models not loaded --</option>
-                                </select>
-                            </div>
-                            <div class="online_status">
-                                <div class="online_status_indicator"></div>
-                                <div data-i18n="Not connected..." class="online_status_text">Not connected...</div>
-                            </div>
-                        </form>
-                    </div>
-                    <div id="kobold_api" style="position: relative;"> <!-- shows the kobold settings -->
-                        <form action="javascript:void(null);" method="post" enctype="multipart/form-data">
-                            <div id="kobold_api_block">
-                                <h4 data-i18n="API url">API url</h4>
-                                <small data-i18n="Example: http://127.0.0.1:5000/api ">Example: http://127.0.0.1:5000/api </small>
-                                <input id="api_url_text" name="api_url" class="text_pole" placeholder="http://127.0.0.1:5000/api" value="" autocomplete="off" data-server-history="kobold">
-                                <div id="koboldcpp_hint" class="neutral_warning displayNone">
-                                    KoboldCpp works better when you select the Text Completion API and then KoboldCpp as a type!
-                                </div>
-                                <div class="flex-container">
-                                    <div id="api_button" class="api_button menu_button menu_button_icon" type="submit" data-i18n="Connect" data-server-connect="kobold">Connect</div>
-                                    <div class="api_loading menu_button menu_button_icon" data-i18n="Cancel">Cancel</div>
-                                </div>
-                            </div>
-                            <div class="online_status">
-                                <div class="online_status_indicator"></div>
-                                <div class="online_status_text" data-i18n="Not connected...">Not connected...</div>
-                            </div>
-                        </form>
-                    </div>
-                    <div id="novel_api" style="display: none;position: relative;"> <!-- shows the novel settings -->
-                        <form action="javascript:void(null);" method="post" enctype="multipart/form-data">
-                            <h4 data-i18n="Novel API key">Novel API key</h4>
-                            <span>
-                                <ol>
-                                    <li>
-                                        <a href="usage/api-connections/novelai/" class="notes-link" target="_blank"> <span data-i18n="Get your NovelAI API Key">Get your NovelAI API key</span></a>
-                                    </li>
-                                    <li><span data-i18n="Enter it in the box below">Enter it in the box below:</span>
-                                    </li>
-                                </ol>
-                            </span>
-                            <div class="flex-container">
-                                <input id="api_key_novel" name="api_key_novel" class="text_pole flex1 wide100p" type="text" autocomplete="off">
-                                <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_novel">
-                                </div>
-                            </div>
-                            <div data-for="api_key_novel" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                For privacy reasons, your API key will be hidden after you click 'Connect'.
-                            </div>
-                            <h4><span data-i18n="Novel AI Model">Novel AI Model</span>
-                                <a href="usage/api-connections/novelai/#models" class="notes-link" target="_blank">
-                                    <span class="fa-solid fa-circle-question note-link-span"></span>
-                                </a>
-                            </h4>
-                            <select id="model_novel_select">
-                                <option value="clio-v1">Clio</option>
-                                <option value="kayra-v1">Kayra</option>
-                                <option value="llama-3-erato-v1">Erato</option>
-                            </select>
-                            <div class="flex-container">
-                                <div id="api_button_novel" class="api_button menu_button menu_button_icon" type="submit" data-i18n="Connect">Connect</div>
-                                <div class="api_loading menu_button menu_button_icon" data-i18n="Cancel">Cancel</div>
-                            </div>
-                        </form>
-                        <div class="online_status">
-                            <div class="online_status_indicator"></div>
-                            <div class="online_status_text" data-i18n="No connection...">No connection... </div>
-                        </div>
                     </div>
                     <div id="textgenerationwebui_api" style="display: none;position: relative;">
                         <form action="javascript:void(null);" method="post" enctype="multipart/form-data">
@@ -2309,33 +2178,6 @@
                                 <div class="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
                             </div>
                             <div class="inline-drawer-content">
-                                <div class="range-block-title justifyLeft" data-i18n="Proxy Presets">
-                                    Proxy Presets
-                                </div>
-                                <div class="toggle-description justifyLeft">
-                                    <span data-i18n="Saved addresses and passwords.">
-                                        Saved addresses and passwords.
-                                    </span>
-                                    <br>
-                                </div>
-                                <div class="openai_logit_bias_preset_form">
-                                    <select id="openai_proxy_preset">
-                                    </select>
-                                    <i id="save_proxy" class="menu_button fa-solid fa-save" title="Save Proxy" data-i18n="[title]Save Proxy"></i>
-                                    <i id="delete_proxy" class="menu_button fa-solid fa-trash" title="Delete Proxy" data-i18n="[title]Delete Proxy"></i>
-                                </div>
-                                <div class="range-block-title justifyLeft" data-i18n="Proxy Name">
-                                    Proxy Name
-                                </div>
-                                <div class="toggle-description justifyLeft">
-                                    <span data-i18n="This will show up as your saved preset.">
-                                        This will show up as your saved preset.
-                                    </span>
-                                    <br>
-                                </div>
-                                <div class="wide100p">
-                                    <input id="openai_reverse_proxy_name" type="text" class="text_pole" placeholder="..." />
-                                </div>
                                 <div class="range-block-title justifyLeft" data-i18n="Proxy Server URL">
                                     Proxy Server URL
                                 </div>
@@ -2367,49 +2209,11 @@
                                 </div>
                             </div>
                         </div>
-                        <div id="ReverseProxyWarningMessage" data-source="openai,claude,mistralai,makersuite,vertexai,deepseek,xai,zai,moonshot">
-                            <div class="reverse_proxy_warning">
-                                <b>
-                                    <div data-i18n="Using a proxy that you're not running yourself is a risk to your data privacy.">
-                                        Using a proxy that you're not running yourself is a risk to your data privacy.
-                                    </div>
-                                    <div data-i18n="ANY support requests will be REFUSED if you are using a proxy.">
-                                        ANY support requests will be REFUSED if you are using a proxy.
-                                    </div>
-                                    <hr>
-                                    <i data-i18n="Do not proceed if you do not agree to this!">
-                                        Do not proceed if you do not agree to this!
-                                    </i>
-                                </b>
-                            </div>
-                        </div>
                         <form id="openai_form" data-source="openai" action="javascript:void(null);" method="post" enctype="multipart/form-data">
                             <h4><span data-i18n="OpenAI API key">OpenAI API key</span></h4>
-                            <div>
-                                <a id="openai_api_usage" href="https://platform.openai.com/account/usage" target="_blank">
-                                    <span data-i18n="View API Usage Metrics">View API Usage Metrics</span>
-                                </a>
-                            </div>
-                            <span>
-                                <ol>
-                                    <li>
-                                        <span data-i18n="Follow">Follow</span>
-                                        <a href="usage/api-connections/openai/" class="notes-link" target="_blank"><span data-i18n="these directions"> these directions </span></a>
-                                        <span data-i18n="to get your OpenAI API key.">to get your OpenAI API key.</span>
-                                    </li>
-                                    <li>
-                                        <span data-i18n="Enter it in the box below">Enter it in the box below:</span>
-                                    </li>
-                                </ol>
-                            </span>
                             <div class="flex-container">
                                 <input id="api_key_openai" name="api_key_openai" class="text_pole flex1" value="" type="text" autocomplete="off">
                                 <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_openai"></div>
-                            </div>
-                            <div id="ReverseProxyWarningMessage2" class="reverse_proxy_warning">
-                                <b data-i18n="Use Proxy password field instead. This input will be ignored.">
-                                    Use "Proxy password" field instead. This input will be ignored.
-                                </b>
                             </div>
                             <div data-for="api_key_openai" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
                                 For privacy reasons, your API key will be hidden after you click 'Connect'.
