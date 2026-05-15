@@ -19,6 +19,7 @@ export async function showWorldInfoCascadeDialog(worldInfos) {
     const popup = new Popup(html, POPUP_TYPE.CONFIRM, '', {
         okButton: t`Delete`,
         wider: true,
+        leftAlign: true,
         customButtons: [{
             text: t`Delete All`,
             result: POPUP_RESULT.CUSTOM1,
@@ -49,18 +50,21 @@ export async function showWorldInfoCascadeDialog(worldInfos) {
 
 /**
  * Shows a confirmation dialog with integrated world info section and a "Delete All" button.
- * Used by the delete button handler that already built the combined content.
  *
+ * @param {string} title - Dialog heading text
  * @param {string} content - Combined HTML content (deleteConfirm template + cascade section)
  * @returns {Promise<{ confirmed: boolean, deleteChats: boolean, deleteWorlds: string[], clearWorldReferences: boolean }>}
  */
-export async function showDeleteConfirmWithCascade(content) {
+export async function showDeleteConfirmWithCascade(title, content) {
     let deleteChats = false;
     let capturedCascade = { deleteWorlds: [], clearWorldReferences: false };
 
-    const popup = new Popup(content, POPUP_TYPE.CONFIRM, '', {
+    const fullContent = title ? `<h3>${title}</h3>${content}` : content;
+
+    const popup = new Popup(fullContent, POPUP_TYPE.CONFIRM, '', {
         okButton: t`Delete`,
         wider: true,
+        leftAlign: true,
         customButtons: [{
             text: t`Delete All`,
             result: POPUP_RESULT.CUSTOM1,
@@ -105,10 +109,11 @@ export function buildCascadeSectionHtml(worldInfos) {
         (w) => w.boundCharacters.length > w.deleteCandidateAvatars.length,
     );
 
-    let html = `<hr>`;
-    html += `<div class="world-cascade-dialog">`;
-    html += `<h3>${t`Linked World Info`}</h3>`;
-    html += `<p>${t`The following world info files are referenced by the characters being deleted.`}</p>`;
+    let html = `<div class="world-cascade-section">`;
+    html += `<div class="world-cascade-section-header">`;
+    html += `<i class="fa-solid fa-book fa-fw"></i>`;
+    html += `<span>${t`Linked World Info`}</span>`;
+    html += `</div>`;
     html += `<div class="world-cascade-list">`;
 
     for (const world of worldInfos) {
@@ -116,18 +121,16 @@ export function buildCascadeSectionHtml(worldInfos) {
         const hasWarning = otherCount > 0;
 
         html += `<div class="world-cascade-item${hasWarning ? ' world-cascade-warn' : ''}">`;
-        html += `<label class="world-cascade-label flex-container alignItemsCenter flexGap10">`;
+        html += `<label class="world-cascade-label">`;
         html += `<input type="checkbox" class="world-cascade-checkbox" data-world="${escapeAttr(world.name)}">`;
-        html += `<div class="flex1">`;
         html += `<strong>${escapeHtml(world.name)}</strong>`;
-        html += `<span class="opacity50p"> — ${world.entryCount} ${t`entries`}</span>`;
-        html += `</div>`;
+        html += `<span class="world-cascade-meta">${world.entryCount} ${t`entries`}</span>`;
         html += `</label>`;
 
         if (hasWarning) {
-            html += `<div class="world-cascade-warning flex-container alignItemsCenter flexGap5 marginTopBot5">`;
-            html += `<i class="fa-solid fa-triangle-exclamation fa-fw warning"></i>`;
-            html += `<span class="warning">${otherCount} ${t`other character(s) are still using this world info.`}</span>`;
+            html += `<div class="world-cascade-warning">`;
+            html += `<i class="fa-solid fa-triangle-exclamation fa-fw"></i>`;
+            html += `<span>${otherCount} ${t`other character(s) are still using this world info.`}</span>`;
             html += `</div>`;
         }
 
@@ -137,12 +140,12 @@ export function buildCascadeSectionHtml(worldInfos) {
     html += `</div>`;
 
     if (hasOtherBindings) {
-        html += `<div class="world-cascade-global marginTopBot5">`;
-        html += `<label class="flex-container alignItemsCenter flexGap10">`;
+        html += `<div class="world-cascade-global">`;
+        html += `<label>`;
         html += `<input type="checkbox" id="world-cascade-clear-refs">`;
         html += `<span>${t`Also clear world info references in remaining characters`}</span>`;
         html += `</label>`;
-        html += `<small class="opacity50p">${t`The embedded world book content inside those characters will NOT be removed and can still be imported later.`}</small>`;
+        html += `<small>${t`The embedded world book content inside those characters will NOT be removed and can still be imported later.`}</small>`;
         html += `</div>`;
     }
 
@@ -152,7 +155,7 @@ export function buildCascadeSectionHtml(worldInfos) {
 
 /**
  * Captures cascade checkbox values from the popup DOM.
- * Call this inside an onClosing / onClose handler, before the DOM is removed.
+ * Call this inside an onClosing handler, before the DOM is removed.
  *
  * @returns {{ deleteWorlds: string[], clearWorldReferences: boolean }}
  */

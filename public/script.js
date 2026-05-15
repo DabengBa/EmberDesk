@@ -11829,7 +11829,7 @@ jQuery(async function () {
         // When world infos exist, use the integrated dialog with "Delete All" button;
         // otherwise fall back to the standard confirm dialog.
         if (cascadeHtml) {
-            const dialogResult = await showDeleteConfirmWithCascade(content);
+            const dialogResult = await showDeleteConfirmWithCascade(t`Delete the character?`, content);
             if (!dialogResult.confirmed) {
                 return;
             }
@@ -11841,6 +11841,7 @@ jQuery(async function () {
         } else {
             let deleteChats = false;
             const confirm = await Popup.show.confirm(t`Delete the character?`, content, {
+                leftAlign: true,
                 onClose: () => { deleteChats = !!$('#del_char_checkbox').prop('checked'); },
             });
             if (!confirm) {

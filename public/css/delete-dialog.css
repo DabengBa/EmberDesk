@@ -1,0 +1,124 @@
+/* ── Delete confirmation dialog ─────────────────────────────── */
+
+.delete-dialog-danger {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--crimson70a);
+    border-radius: 5px;
+    margin-bottom: 10px;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.delete-dialog-danger i {
+    flex-shrink: 0;
+    color: var(--warning);
+}
+
+.delete-dialog-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+/* ── World cascade section ───────────────────────────────────── */
+
+.world-cascade-section {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--SmartThemeBorderColor);
+}
+
+.world-cascade-section-header {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 8px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: 0.55;
+}
+
+.world-cascade-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.world-cascade-item {
+    border-radius: 5px;
+    padding: 7px 10px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--SmartThemeBorderColor);
+}
+
+.world-cascade-item.world-cascade-warn {
+    background: rgba(215, 136, 114, 0.07);
+    border-color: rgba(215, 136, 114, 0.3);
+}
+
+.world-cascade-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.world-cascade-label strong {
+    font-weight: 500;
+    flex: 1;
+}
+
+.world-cascade-meta {
+    font-size: 0.8rem;
+    opacity: 0.5;
+}
+
+.world-cascade-warning {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 5px;
+    padding-left: 26px;
+    font-size: 0.8rem;
+    color: var(--SmartThemeQuoteColor);
+}
+
+.world-cascade-global {
+    margin-top: 8px;
+    padding: 8px 10px;
+    background: rgba(0, 0, 0, 0.15);
+    border-radius: 5px;
+    border: 1px solid var(--SmartThemeBorderColor);
+}
+
+.world-cascade-global label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.world-cascade-global small {
+    display: block;
+    margin-top: 4px;
+    padding-left: 26px;
+    font-size: 0.78rem;
+    line-height: 1.4;
+    opacity: 0.5;
+}
+
+/* ── Bulk delete ─────────────────────────────────────────────── */
+
+.bulk-delete-avatars {
+    margin: 8px 0;
+}
