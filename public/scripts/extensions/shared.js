@@ -448,7 +448,7 @@ export class ConnectionManagerRequestService {
                         siliconflow_endpoint: profile['api-url'],
                         minimax_endpoint: profile['api-url'],
                         reverse_proxy: profile['proxy-url'],
-                        proxy_password: profile['proxy-password'],
+                        proxy_password: profile['api-key'],
                         custom_prompt_post_processing: profile['prompt-post-processing'],
                         ...overridePayload,
                     }, {

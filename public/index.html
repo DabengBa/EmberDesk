@@ -2174,16 +2174,16 @@
                         </select>
                         <div class="inline-drawer wide100p" data-source="openai,claude,mistralai,makersuite,vertexai,deepseek,xai,zai,moonshot">
                             <div class="inline-drawer-toggle inline-drawer-header">
-                                <b data-i18n="Reverse Proxy">Reverse Proxy</b>
+                                <b data-i18n="Custom Base URL">Custom Base URL</b>
                                 <div class="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
                             </div>
                             <div class="inline-drawer-content">
-                                <div class="range-block-title justifyLeft" data-i18n="Proxy Server URL">
-                                    Proxy Server URL
+                                <div class="range-block-title justifyLeft" data-i18n="Base URL">
+                                    Base URL
                                 </div>
                                 <div class="toggle-description justifyLeft wide100p">
-                                    <span data-i18n="Alternative server URL (leave empty to use the default value).">
-                                        Alternative server URL (leave empty to use the default value).
+                                    <span data-i18n="Custom API endpoint URL (leave empty to use the default provider URL).">
+                                        Custom API endpoint URL (leave empty to use the default provider URL).
                                     </span>
                                     <br>
                                 </div>
@@ -2194,30 +2194,22 @@
                                         <span data-i18n="completions note prefix"></span><code>/chat/completions</code> <b data-i18n="suffix will be added automatically.">suffix will be added automatically.</b>
                                     </small>
                                 </div>
-                                <div class="range-block-title justifyLeft" data-i18n="Proxy Password">
-                                    Proxy Password
+                                <div class="range-block-title justifyLeft" data-i18n="API Key">
+                                    API Key
                                 </div>
                                 <div class="toggle-description justifyLeft">
-                                    <span data-i18n="Will be used as a password for the proxy instead of API key.">
-                                        Will be used as a password for the proxy instead of API key.
+                                    <span data-i18n="Your API key or gateway password.">
+                                        Your API key or gateway password.
                                     </span>
                                     <br>
                                 </div>
                                 <div class="flex-container width100p">
-                                    <input id="openai_proxy_password" type="password" class="text_pole flex1" placeholder="" form="openai_form" autocomplete="off" />
-                                    <div id="openai_proxy_password_show" title="Peek a password" data-i18n="[title]Peek a password" class="menu_button fa-solid fa-eye-slash fa-fw"></div>
+                                    <input id="api_key_unified" type="password" class="text_pole flex1" placeholder="" autocomplete="off" />
+                                    <div id="api_key_unified_show" title="Peek a password" data-i18n="[title]Peek a password" class="menu_button fa-solid fa-eye-slash fa-fw"></div>
                                 </div>
                             </div>
                         </div>
                         <form id="openai_form" data-source="openai" action="javascript:void(null);" method="post" enctype="multipart/form-data">
-                            <h4><span data-i18n="OpenAI API key">OpenAI API key</span></h4>
-                            <div class="flex-container">
-                                <input id="api_key_openai" name="api_key_openai" class="text_pole flex1" value="" type="text" autocomplete="off">
-                                <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_openai"></div>
-                            </div>
-                            <div data-for="api_key_openai" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                For privacy reasons, your API key will be hidden after you click 'Connect'.
-                            </div>
                             <div>
                                 <h4 data-i18n="OpenAI Model">OpenAI Model</h4>
                                 <select id="model_openai_select">
@@ -2330,17 +2322,6 @@
                             </div>
                         </form>
                         <form id="claude_form" data-source="claude" action="javascript:void(null);" method="post" enctype="multipart/form-data">
-                            <h4 data-i18n="Claude API Key">Claude API Key</h4>
-                            <div>
-                                <span data-i18n="Get your key from">Get your key from </span> <a target="_blank" href="https://console.anthropic.com/account/keys" data-i18n="Anthropic's developer console">Anthropic's developer console</a>.
-                            </div>
-                            <div class="flex-container">
-                                <input id="api_key_claude" name="api_key_claude" class="text_pole flex1" value="" type="text" autocomplete="off">
-                                <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_claude"></div>
-                            </div>
-                            <div data-for="api_key_claude" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                For privacy reasons, your API key will be hidden after you click 'Connect'.
-                            </div>
                             <div>
                                 <h4 data-i18n="Claude Model">Claude Model</h4>
                                 <select id="model_claude_select">
@@ -2374,21 +2355,6 @@
                             </div>
                         </form>
                         <form id="openrouter_form" data-source="openrouter" action="javascript:void(null);" method="post" enctype="multipart/form-data">
-                            <h4 data-i18n="OpenRouter API Key">OpenRouter API Key</h4>
-                            <div>
-                                <small data-i18n="Click Authorize below or get the key from">
-                                    Click "Authorize" below or get the key from </small> <a target="_blank" href="https://openrouter.ai/keys/">OpenRouter</a>.
-                                <br>
-                                <a href="https://openrouter.ai/settings/credits" target="_blank" class="openrouter_view_credits" data-i18n="View Remaining Credits">View Remaining Credits</a>
-                                <span class="openrouter_credits_display marginLeft5"></span>
-                            </div>
-                            <div class="flex-container">
-                                <input id="api_key_openrouter" name="api_key_openrouter" class="text_pole flex1 api_key_openrouter" value="" type="text" autocomplete="off">
-                                <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_openrouter"></div>
-                            </div>
-                            <div data-for="api_key_openrouter" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                For privacy reasons, your API key will be hidden after you click 'Connect'.
-                            </div>
                             <div>
                                 <h4 data-i18n="OpenRouter Model">OpenRouter Model</h4>
                                 <select id="model_openrouter_select">
@@ -2431,14 +2397,6 @@
                             </div>
                         </form>
                         <form id="ai21_form" data-source="ai21" action="javascript:void(null);" method="post" enctype="multipart/form-data">
-                            <h4 data-i18n="AI21 API Key">AI21 API Key</h4>
-                            <div class="flex-container">
-                                <input id="api_key_ai21" name="api_key_ai21" class="text_pole flex1" value="" type="text" autocomplete="off">
-                                <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_ai21"></div>
-                            </div>
-                            <div data-for="api_key_ai21" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                For privacy reasons, your API key will be hidden after you click 'Connect'.
-                            </div>
                             <div>
                                 <h4 data-i18n="AI21 Model">AI21 Model</h4>
                                 <select id="model_ai21_select">
@@ -2465,14 +2423,6 @@
                             </div>
                         </form>
                         <form id="makersuite_form" data-source="makersuite" action="javascript:void(null);" method="post" enctype="multipart/form-data">
-                            <h4 data-i18n="Google AI Studio API Key">Google AI Studio API Key</h4>
-                            <div class="flex-container">
-                                <input id="api_key_makersuite" name="api_key_makersuite" class="text_pole flex1" value="" type="text" autocomplete="off">
-                                <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_makersuite"></div>
-                            </div>
-                            <div data-for="api_key_makersuite" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                For privacy reasons, your API key will be hidden after you click 'Connect'.
-                            </div>
                             <div>
                                 <h4 data-i18n="Google Model">Google Model</h4>
                                 <select id="model_google_select">
@@ -2559,17 +2509,6 @@
                                         (Express mode)
                                     </a>
                                 </h4>
-                                <!-- API Key -->
-                                <div class="flex-container flexFlowColumn">
-                                    <label for="api_key_vertexai" data-i18n="API Key">API Key:</label>
-                                    <div class="flex-container">
-                                        <input id="api_key_vertexai" name="api_key_vertexai" class="text_pole flex1" value="" type="text" autocomplete="off">
-                                        <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_vertexai"></div>
-                                    </div>
-                                    <div data-for="api_key_vertexai" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                        For privacy reasons, your API key will be hidden after you click 'Connect'.
-                                    </div>
-                                </div>
                                 <!-- Project ID -->
                                 <div class="flex-container flexFlowColumn marginTop10">
                                     <label for="vertexai_express_project_id">
@@ -2684,14 +2623,6 @@
                             </div>
                         </div>
                         <form id="mistralai_form" data-source="mistralai" action="javascript:void(null);" method="post" enctype="multipart/form-data">
-                            <h4 data-i18n="MistralAI API Key">MistralAI API Key</h4>
-                            <div class="flex-container">
-                                <input id="api_key_mistralai" name="api_key_mistralai" class="text_pole flex1" value="" type="text" autocomplete="off">
-                                <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_mistralai"></div>
-                            </div>
-                            <div data-for="api_key_mistralai" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                For privacy reasons, your API key will be hidden after you click 'Connect'.
-                            </div>
                             <div>
                                 <h4 data-i18n="MistralAI Model">MistralAI Model</h4>
                                 <select id="model_mistralai_select">
@@ -2700,14 +2631,6 @@
                             </div>
                         </form>
                         <div id="groq_form" data-source="groq">
-                            <h4 data-i18n="Groq API Key">Groq API Key</h4>
-                            <div class="flex-container">
-                                <input id="api_key_groq" name="api_key_groq" class="text_pole flex1" value="" type="text" autocomplete="off">
-                                <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_groq"></div>
-                            </div>
-                            <div data-for="api_key_groq" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                For privacy reasons, your API key will be hidden after you click 'Connect'.
-                            </div>
                             <h4 data-i18n="Groq Model">Groq Model</h4>
                             <select id="model_groq_select">
                                 <option value="qwen/qwen3-32b">qwen/qwen3-32b</option>
@@ -2724,14 +2647,6 @@
                             </select>
                         </div>
                         <div id="siliconflow_form" data-source="siliconflow">
-                            <h4>SiliconFlow API Key</h4>
-                            <div class="flex-container">
-                                <input id="api_key_siliconflow" name="api_key_siliconflow" class="text_pole flex1" value="" type="text" autocomplete="off">
-                                <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_siliconflow"></div>
-                            </div>
-                            <div data-for="api_key_siliconflow" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                For privacy reasons, your API key will be hidden after you click 'Connect'.
-                            </div>
                             <h4 data-i18n="SiliconFlow Endpoint">SiliconFlow Endpoint</h4>
                             <select id="siliconflow_endpoint">
                                 <option value="global" data-i18n="Global (siliconflow.com)">Global (siliconflow.com)</option>
@@ -2743,14 +2658,6 @@
                             </select>
                         </div>
                         <div id="minimax_form" data-source="minimax">
-                            <h4 data-i18n="MiniMax API Key">MiniMax API Key</h4>
-                            <div class="flex-container">
-                                <input id="api_key_minimax" name="api_key_minimax" class="text_pole flex1" value="" type="text" autocomplete="off">
-                                <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_minimax"></div>
-                            </div>
-                            <div data-for="api_key_minimax" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                For privacy reasons, your API key will be hidden after you click 'Connect'.
-                            </div>
                             <h4 data-i18n="MiniMax Endpoint">MiniMax Endpoint</h4>
                             <select id="minimax_endpoint">
                                 <option value="global" data-i18n="Global (minimax.io)">Global (minimax.io)</option>
@@ -2769,17 +2676,6 @@
                             </select>
                         </div>
                         <div id="electronhub_form" data-source="electronhub">
-                            <h4 data-i18n="Electron Hub API Key">Electron Hub API Key</h4>
-                            <div>
-                                <a href="https://playground.electronhub.ai/console" target="_blank" data-i18n="View Remaining Credits">View Remaining Credits</a>
-                            </div>
-                            <div class="flex-container">
-                                <input id="api_key_electronhub" name="api_key_electronhub" class="text_pole flex1" value="" type="text" autocomplete="off">
-                                <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_electronhub"></div>
-                            </div>
-                            <div data-for="api_key_electronhub" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                For privacy reasons, your API key will be hidden after you click 'Connect'.
-                            </div>
                             <div>
                                 <h4 data-i18n="Electron Hub Model">Electron Hub Model</h4>
                                 <select id="model_electronhub_select">
@@ -2788,17 +2684,6 @@
                             </div>
                         </div>
                         <div id="chutes_form" data-source="chutes">
-                            <h4 data-i18n="Chutes API Key">Chutes API Key</h4>
-                            <div id="chutes_credits_display">
-                                <a href="https://chutes.ai/app/api/billing-balance" target="_blank" data-i18n="View Billing/Balance">View Billing/Balance</a>
-                            </div>
-                            <div class="flex-container">
-                                <input id="api_key_chutes" name="api_key_chutes" class="text_pole flex1" value="" type="text" autocomplete="off">
-                                <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_chutes"></div>
-                            </div>
-                            <div data-for="api_key_chutes" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                For privacy reasons, your API key will be hidden after you click 'Connect'.
-                            </div>
                             <div>
                                 <h4 data-i18n="Chutes Model">Chutes Model</h4>
                                 <select id="model_chutes_select">
@@ -2807,16 +2692,6 @@
                             </div>
                         </div>
                         <div id="nanogpt_form" data-source="nanogpt">
-                            <h4 data-i18n="NanoGPT API Key">NanoGPT API Key</h4>
-                            <a href="https://nano-gpt.com/balance" target="_blank" rel="noopener noreferrer" class="nanogpt_view_credits" data-i18n="View Remaining Credits">View Remaining Credits</a>
-                            <span class="nanogpt_credits_display marginLeft5"></span>
-                            <div class="flex-container">
-                                <input id="api_key_nanogpt" name="api_key_nanogpt" class="text_pole flex1" value="" type="text" autocomplete="off">
-                                <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_nanogpt"></div>
-                            </div>
-                            <div data-for="api_key_nanogpt" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                For privacy reasons, your API key will be hidden after you click 'Connect'.
-                            </div>
                             <div>
                                 <h4 data-i18n="NanoGPT Model">NanoGPT Model</h4>
                                 <select id="model_nanogpt_select">
@@ -2838,14 +2713,6 @@
                             </div>
                         </div>
                         <div id="workers_ai_form" data-source="workers_ai">
-                            <h4><a href="https://dash.cloudflare.com/?to=/:account/ai/workers-ai/api-quick-start" target="_blank" rel="noopener noreferrer" data-i18n="Cloudflare Workers AI API Key">Cloudflare Workers AI API Key</a></h4>
-                            <div class="flex-container">
-                                <input id="api_key_workers_ai" name="api_key_workers_ai" class="text_pole flex1" value="" type="text" autocomplete="off">
-                                <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_workers_ai"></div>
-                            </div>
-                            <div data-for="api_key_workers_ai" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                For privacy reasons, your API key will be hidden after you click 'Connect'.
-                            </div>
                             <h4><a href="https://dash.cloudflare.com/?to=/:account/workers-and-pages" target="_blank" rel="noopener noreferrer" data-i18n="Cloudflare Account ID">Cloudflare Account ID</a></h4>
                             <div class="flex-container">
                                 <input id="workers_ai_account_id" class="text_pole flex1" value="" type="text" autocomplete="off" placeholder="e.g. 023e105f4ecef8ad9ca31a8372d0c353" data-i18n="[placeholder]e.g. 023e105f4ecef8ad9ca31a8372d0c353">
@@ -2858,14 +2725,6 @@
                             </div>
                         </div>
                         <div id="deepseek_form" data-source="deepseek">
-                            <h4 data-i18n="DeepSeek API Key">DeepSeek API Key</h4>
-                            <div class="flex-container">
-                                <input id="api_key_deepseek" name="api_key_deepseek" class="text_pole flex1" value="" type="text" autocomplete="off">
-                                <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_deepseek"></div>
-                            </div>
-                            <div data-for="api_key_deepseek" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                For privacy reasons, your API key will be hidden after you click 'Connect'.
-                            </div>
                             <div>
                                 <h4 data-i18n="DeepSeek Model">DeepSeek Model</h4>
                                 <select id="model_deepseek_select">
@@ -2874,14 +2733,6 @@
                             </div>
                         </div>
                         <div id="fireworks_form" data-source="fireworks">
-                            <h4 data-i18n="Fireworks AI API Key">Fireworks AI API Key</h4>
-                            <div class="flex-container">
-                                <input id="api_key_fireworks" name="api_key_fireworks" class="text_pole flex1" value="" type="text" autocomplete="off">
-                                <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_fireworks"></div>
-                            </div>
-                            <div data-for="api_key_fireworks" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                For privacy reasons, your API key will be hidden after you click 'Connect'.
-                            </div>
                             <div>
                                 <h4 data-i18n="Fireworks AI Model">Fireworks AI Model</h4>
                                 <select id="model_fireworks_select">
@@ -2890,14 +2741,6 @@
                             </div>
                         </div>
                         <div id="cometapi_form" data-source="cometapi">
-                            <h4><a href="https://api.cometapi.com/" target="_blank" rel="noopener noreferrer" data-i18n="CometAPI API Key">CometAPI API Key</a></h4>
-                            <div class="flex-container">
-                                <input id="api_key_cometapi" name="api_key_cometapi" class="text_pole flex1" value="" type="text" autocomplete="off">
-                                <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_cometapi"></div>
-                            </div>
-                            <div data-for="api_key_cometapi" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                For privacy reasons, your API key will be hidden after you click 'Connect'.
-                            </div>
                             <div>
                                 <h4 data-i18n="CometAPI Model">CometAPI Model</h4>
                                 <div class="flex-container">
@@ -2908,14 +2751,6 @@
                             </div>
                         </div>
                         <div id="perplexity_form" data-source="perplexity">
-                            <h4 data-i18n="Perplexity API Key">Perplexity API Key</h4>
-                            <div class="flex-container">
-                                <input id="api_key_perplexity" name="api_key_perplexity" class="text_pole flex1" value="" type="text" autocomplete="off">
-                                <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_perplexity"></div>
-                            </div>
-                            <div data-for="api_key_perplexity" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                For privacy reasons, your API key will be hidden after you click 'Connect'.
-                            </div>
                             <h4 data-i18n="Perplexity Model">Perplexity Model</h4>
                             <select id="model_perplexity_select">
                                 <optgroup label="Perplexity Sonar Models">
@@ -2940,14 +2775,6 @@
                             </select>
                         </div>
                         <form id="cohere_form" data-source="cohere" action="javascript:void(null);" method="post" enctype="multipart/form-data">
-                            <h4 data-i18n="Cohere API Key">Cohere API Key</h4>
-                            <div class="flex-container">
-                                <input id="api_key_cohere" name="api_key_cohere" class="text_pole flex1" value="" type="text" autocomplete="off">
-                                <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_cohere"></div>
-                            </div>
-                            <div data-for="api_key_cohere" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                For privacy reasons, your API key will be hidden after you click 'Connect'.
-                            </div>
                             <div>
                                 <h4 data-i18n="Cohere Model">Cohere Model</h4>
                                 <select id="model_cohere_select">
@@ -2986,17 +2813,6 @@
                                     <b data-i18n="completions note prefix"></b><code>/chat/completions</code> <b data-i18n="suffix will be added automatically.">suffix will be added automatically.</b>
                                 </small>
                             </div>
-                            <h4>
-                                <span data-i18n="Custom API Key">Custom API Key</span>
-                                <small data-i18n="(Optional)">(Optional)</small>
-                            </h4>
-                            <div class="flex-container">
-                                <input id="api_key_custom" name="api_key_custom" class="text_pole flex1" value="" type="text" autocomplete="off">
-                                <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_custom"></div>
-                            </div>
-                            <div data-for="api_key_custom" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                For privacy reasons, your API key will be hidden after you click 'Connect'.
-                            </div>
                             <h4 data-i18n="Enter a Model ID">Enter a Model ID</h4>
                             <div class="flex-container">
                                 <input list="model_custom_select_fill" id="custom_model_id" class="text_pole wide100p" value="" autocomplete="off" data-i18n="[placeholder]Example: gpt-4o" placeholder="Example: gpt-4o">
@@ -3008,18 +2824,6 @@
                             </div>
                         </form>
                         <div id="xai_form" data-source="xai">
-                            <h4>
-                                <a data-i18n="xAI API Key" href="https://console.x.ai/" target="_blank" rel="noopener noreferrer">
-                                    xAI API Key
-                                </a>
-                            </h4>
-                            <div class="flex-container">
-                                <input id="api_key_xai" name="api_key_xai" class="text_pole flex1" value="" type="text" autocomplete="off">
-                                <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_xai"></div>
-                            </div>
-                            <div data-for="api_key_xai" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                For privacy reasons, your API key will be hidden after you click 'Connect'.
-                            </div>
                             <div>
                                 <h4 data-i18n="xAI Model">xAI Model</h4>
                                 <select id="model_xai_select">
@@ -3028,51 +2832,17 @@
                             </div>
                         </div>
                         <div id="aimlapi_form" data-source="aimlapi">
-                            <h4>
-                                <span data-i18n="AI/ML API Key">AI/ML API Key</span>
-                            </h4>
-                            <div class="flex-container">
-                                <input id="api_key_aimlapi" name="api_key_aimlapi" class="text_pole flex1" value="" type="text" autocomplete="off">
-                                <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_aimlapi"></div>
-                            </div>
-                            <div data-for="api_key_aimlapi" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                For privacy reasons, your API key will be hidden after you click 'Connect'.
-                            </div>
                             <h4 data-i18n="AI/ML Model">AI/ML Model</h4>
                             <select id="model_aimlapi_select">
                             </select>
                         </div>
                         <div id="pollinations_form" data-source="pollinations">
-                            <h4>
-                                <a href="https://enter.pollinations.ai/" target="_blank" rel="noopener noreferrer" data-i18n="Pollinations API Key">
-                                    Pollinations API Key
-                                </a>
-                            </h4>
-                            <div class="flex-container">
-                                <input id="api_key_pollinations" name="api_key_pollinations" class="text_pole flex1" value="" type="text" autocomplete="off">
-                                <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_pollinations"></div>
-                            </div>
-                            <div data-for="api_key_pollinations" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                For privacy reasons, your API key will be hidden after you click 'Connect'.
-                            </div>
                             <h4 data-i18n="Pollinations Model">Pollinations Model</h4>
                             <select id="model_pollinations_select">
                                 <!-- Populated by JavaScript -->
                             </select>
                         </div>
                         <div id="moonshot_form" data-source="moonshot">
-                            <h4>
-                                <a data-i18n="Moonshot AI API Key" href="https://platform.moonshot.ai/console/api-keys" target="_blank" rel="noopener noreferrer">
-                                    Moonshot AI API Key
-                                </a>
-                            </h4>
-                            <div class="flex-container">
-                                <input id="api_key_moonshot" name="api_key_moonshot" class="text_pole flex1" value="" type="text" autocomplete="off">
-                                <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_moonshot"></div>
-                            </div>
-                            <div data-for="api_key_moonshot" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                For privacy reasons, your API key will be hidden after you click 'Connect'.
-                            </div>
                             <h4 data-i18n="Moonshot AI Model">Moonshot AI Model</h4>
                             <select id="model_moonshot_select">
                                 <option value="kimi-k2-0711-preview">kimi-k2-0711-preview</option>
@@ -3088,18 +2858,6 @@
                             </select>
                         </div>
                         <div id="zai_form" data-source="zai">
-                            <h4>
-                                <a data-i18n="Z.AI API Key" href="https://z.ai/manage-apikey/apikey-list" target="_blank" rel="noopener noreferrer">
-                                    Z.AI API Key
-                                </a>
-                            </h4>
-                            <div class="flex-container">
-                                <input id="api_key_zai" name="api_key_zai" class="text_pole flex1" value="" type="text" autocomplete="off">
-                                <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_zai"></div>
-                            </div>
-                            <div data-for="api_key_zai" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
-                                For privacy reasons, your API key will be hidden after you click 'Connect'.
-                            </div>
                             <h4 data-i18n="Z.AI Endpoint">Z.AI Endpoint</h4>
                             <select id="zai_endpoint">
                                 <option value="common" data-i18n="Common API">Common API</option>
@@ -3148,16 +2906,6 @@
                                     <option value="2025-04-01-preview">2025-04-01-preview</option>
                                     <option value="2024-10-21">2024-10-21</option>
                                 </select>
-                            </div>
-
-                            <!-- Azure API Key -->
-                            <h4><span data-i18n="Azure API Key">Azure API Key</span></h4>
-                            <div class="flex-container">
-                                <input id="api_key_azure_openai" data-setting="api_key_azure_openai" class="text_pole flex1" type="password" autocomplete="off">
-                                <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_azure_openai"></div>
-                            </div>
-                            <div class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'." data-for="api_key_azure_openai">
-                                For privacy reasons, your API key will be hidden after you click 'Connect'.
                             </div>
 
                             <!-- Model Name (Select) -->

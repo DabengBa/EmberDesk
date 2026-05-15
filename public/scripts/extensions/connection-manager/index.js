@@ -34,7 +34,7 @@ const ALLOW_EMPTY = [
     'stop-strings',
     'start-reply-with',
     'proxy-url',
-    'proxy-password',
+    'api-key',
 ];
 
 const CC_COMMANDS = [
@@ -45,12 +45,11 @@ const CC_COMMANDS = [
     'api-url',
     'model',
     'proxy-url',
-    'proxy-password',
+    'api-key',
     'stop-strings',
     'start-reply-with',
     'reasoning-template',
     'prompt-post-processing',
-    'secret-id',
     'regex-preset',
 ];
 
@@ -77,8 +76,8 @@ const FANCY_NAMES = {
     'api-url': 'Server URL',
     'preset': 'Settings Preset',
     'model': 'Model',
-    'proxy-url': 'Proxy URL',
-    'proxy-password': 'Proxy Password',
+    'proxy-url': 'Base URL',
+    'api-key': 'API Key',
     'sysprompt-state': 'Use System Prompt',
     'sysprompt': 'System Prompt Name',
     'instruct-state': 'Instruct Mode',
@@ -89,7 +88,6 @@ const FANCY_NAMES = {
     'start-reply-with': 'Start Reply With',
     'reasoning-template': 'Reasoning Template',
     'prompt-post-processing': 'Prompt Post-Processing',
-    'secret-id': 'Secret',
     'regex-preset': 'Regex Preset',
 };
 

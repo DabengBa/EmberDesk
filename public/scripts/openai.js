@@ -43,7 +43,7 @@ import {
 } from './PromptManager.js';
 
 import { forceCharacterEditorTokenize, getCustomStoppingStrings, persona_description_positions, power_user } from './power-user.js';
-import { SECRET_KEYS, secret_state, writeSecret } from './secrets.js';
+import { SECRET_KEYS, secret_state, writeSecret, resolveSecretKey } from './secrets.js';
 
 import { getEventSourceStream } from './sse-stream.js';
 import {
@@ -369,7 +369,7 @@ export const settingsToUpdate = {
     prompts: ['', 'prompts', false, false],
     prompt_order: ['', 'prompt_order', false, false],
     show_external_models: ['#openai_show_external_models', 'show_external_models', true, true],
-    proxy_password: ['#openai_proxy_password', 'proxy_password', false, true],
+    proxy_password: ['#api_key_unified', 'proxy_password', false, true],
     assistant_prefill: ['#claude_assistant_prefill', 'assistant_prefill', false, false],
     assistant_impersonation: ['#claude_assistant_impersonation', 'assistant_impersonation', false, false],
     use_sysprompt: ['#use_sysprompt', 'use_sysprompt', true, false],
@@ -5892,9 +5892,29 @@ async function onNewPresetClick() {
     await saveOpenAIPreset(name, oai_settings);
 }
 
+function updateUnifiedKeyField() {
+    const $field = $('#api_key_unified');
+    if (oai_settings.reverse_proxy) {
+        $field.attr('placeholder', 'Proxy password');
+        $field.val(oai_settings.proxy_password || '');
+    } else {
+        const secretKey = resolveSecretKey();
+        if (secretKey && secret_state[secretKey]) {
+            const label = Array.isArray(secret_state[secretKey])
+                ? (secret_state[secretKey].find(s => s.active)?.label || '')
+                : '';
+            $field.attr('placeholder', label ? `Saved (${label})` : 'Saved');
+        } else {
+            $field.attr('placeholder', 'Enter API key');
+        }
+        $field.val('');
+    }
+}
+
 function onReverseProxyInput() {
     oai_settings.reverse_proxy = String($(this).val());
     $('.reverse_proxy_warning').toggle(oai_settings.reverse_proxy != '');
+    updateUnifiedKeyField();
     saveSettingsDebounced();
 }
 
@@ -5902,32 +5922,33 @@ async function onConnectButtonClick(e) {
     e.stopPropagation();
 
     /** @type {Object.<string, {key: string, selector: string, proxy?: boolean, keyless?: boolean}>} */
+    const unifiedSelector = '#api_key_unified';
     const apiSourceConfig = {
-        [chat_completion_sources.OPENROUTER]: { key: SECRET_KEYS.OPENROUTER, selector: '#api_key_openrouter', proxy: false },
-        [chat_completion_sources.MAKERSUITE]: { key: SECRET_KEYS.MAKERSUITE, selector: '#api_key_makersuite', proxy: true },
-        [chat_completion_sources.CLAUDE]: { key: SECRET_KEYS.CLAUDE, selector: '#api_key_claude', proxy: true },
-        [chat_completion_sources.OPENAI]: { key: SECRET_KEYS.OPENAI, selector: '#api_key_openai', proxy: true },
-        [chat_completion_sources.AI21]: { key: SECRET_KEYS.AI21, selector: '#api_key_ai21', proxy: false },
-        [chat_completion_sources.MISTRALAI]: { key: SECRET_KEYS.MISTRALAI, selector: '#api_key_mistralai', proxy: true },
-        [chat_completion_sources.CUSTOM]: { key: SECRET_KEYS.CUSTOM, selector: '#api_key_custom', proxy: false, keyless: true },
-        [chat_completion_sources.COHERE]: { key: SECRET_KEYS.COHERE, selector: '#api_key_cohere', proxy: false },
-        [chat_completion_sources.PERPLEXITY]: { key: SECRET_KEYS.PERPLEXITY, selector: '#api_key_perplexity', proxy: false },
-        [chat_completion_sources.GROQ]: { key: SECRET_KEYS.GROQ, selector: '#api_key_groq', proxy: false },
-        [chat_completion_sources.SILICONFLOW]: { key: SECRET_KEYS.SILICONFLOW, selector: '#api_key_siliconflow', proxy: false },
-        [chat_completion_sources.ELECTRONHUB]: { key: SECRET_KEYS.ELECTRONHUB, selector: '#api_key_electronhub', proxy: false },
-        [chat_completion_sources.NANOGPT]: { key: SECRET_KEYS.NANOGPT, selector: '#api_key_nanogpt', proxy: false },
-        [chat_completion_sources.DEEPSEEK]: { key: SECRET_KEYS.DEEPSEEK, selector: '#api_key_deepseek', proxy: true },
-        [chat_completion_sources.XAI]: { key: SECRET_KEYS.XAI, selector: '#api_key_xai', proxy: true },
-        [chat_completion_sources.AIMLAPI]: { key: SECRET_KEYS.AIMLAPI, selector: '#api_key_aimlapi', proxy: false },
-        [chat_completion_sources.MOONSHOT]: { key: SECRET_KEYS.MOONSHOT, selector: '#api_key_moonshot', proxy: true },
-        [chat_completion_sources.FIREWORKS]: { key: SECRET_KEYS.FIREWORKS, selector: '#api_key_fireworks', proxy: false },
-        [chat_completion_sources.COMETAPI]: { key: SECRET_KEYS.COMETAPI, selector: '#api_key_cometapi', proxy: false },
-        [chat_completion_sources.AZURE_OPENAI]: { key: SECRET_KEYS.AZURE_OPENAI, selector: '#api_key_azure_openai', proxy: false },
-        [chat_completion_sources.ZAI]: { key: SECRET_KEYS.ZAI, selector: '#api_key_zai', proxy: true },
-        [chat_completion_sources.CHUTES]: { key: SECRET_KEYS.CHUTES, selector: '#api_key_chutes', proxy: false },
-        [chat_completion_sources.POLLINATIONS]: { key: SECRET_KEYS.POLLINATIONS, selector: '#api_key_pollinations', proxy: false },
-        [chat_completion_sources.WORKERS_AI]: { key: SECRET_KEYS.WORKERS_AI, selector: '#api_key_workers_ai', proxy: false },
-        [chat_completion_sources.MINIMAX]: { key: SECRET_KEYS.MINIMAX, selector: '#api_key_minimax', proxy: false },
+        [chat_completion_sources.OPENROUTER]: { key: SECRET_KEYS.OPENROUTER, selector: unifiedSelector, proxy: false },
+        [chat_completion_sources.MAKERSUITE]: { key: SECRET_KEYS.MAKERSUITE, selector: unifiedSelector, proxy: true },
+        [chat_completion_sources.CLAUDE]: { key: SECRET_KEYS.CLAUDE, selector: unifiedSelector, proxy: true },
+        [chat_completion_sources.OPENAI]: { key: SECRET_KEYS.OPENAI, selector: unifiedSelector, proxy: true },
+        [chat_completion_sources.AI21]: { key: SECRET_KEYS.AI21, selector: unifiedSelector, proxy: false },
+        [chat_completion_sources.MISTRALAI]: { key: SECRET_KEYS.MISTRALAI, selector: unifiedSelector, proxy: true },
+        [chat_completion_sources.CUSTOM]: { key: SECRET_KEYS.CUSTOM, selector: unifiedSelector, proxy: false, keyless: true },
+        [chat_completion_sources.COHERE]: { key: SECRET_KEYS.COHERE, selector: unifiedSelector, proxy: false },
+        [chat_completion_sources.PERPLEXITY]: { key: SECRET_KEYS.PERPLEXITY, selector: unifiedSelector, proxy: false },
+        [chat_completion_sources.GROQ]: { key: SECRET_KEYS.GROQ, selector: unifiedSelector, proxy: false },
+        [chat_completion_sources.SILICONFLOW]: { key: SECRET_KEYS.SILICONFLOW, selector: unifiedSelector, proxy: false },
+        [chat_completion_sources.ELECTRONHUB]: { key: SECRET_KEYS.ELECTRONHUB, selector: unifiedSelector, proxy: false },
+        [chat_completion_sources.NANOGPT]: { key: SECRET_KEYS.NANOGPT, selector: unifiedSelector, proxy: false },
+        [chat_completion_sources.DEEPSEEK]: { key: SECRET_KEYS.DEEPSEEK, selector: unifiedSelector, proxy: true },
+        [chat_completion_sources.XAI]: { key: SECRET_KEYS.XAI, selector: unifiedSelector, proxy: true },
+        [chat_completion_sources.AIMLAPI]: { key: SECRET_KEYS.AIMLAPI, selector: unifiedSelector, proxy: false },
+        [chat_completion_sources.MOONSHOT]: { key: SECRET_KEYS.MOONSHOT, selector: unifiedSelector, proxy: true },
+        [chat_completion_sources.FIREWORKS]: { key: SECRET_KEYS.FIREWORKS, selector: unifiedSelector, proxy: false },
+        [chat_completion_sources.COMETAPI]: { key: SECRET_KEYS.COMETAPI, selector: unifiedSelector, proxy: false },
+        [chat_completion_sources.AZURE_OPENAI]: { key: SECRET_KEYS.AZURE_OPENAI, selector: unifiedSelector, proxy: false },
+        [chat_completion_sources.ZAI]: { key: SECRET_KEYS.ZAI, selector: unifiedSelector, proxy: true },
+        [chat_completion_sources.CHUTES]: { key: SECRET_KEYS.CHUTES, selector: unifiedSelector, proxy: false },
+        [chat_completion_sources.POLLINATIONS]: { key: SECRET_KEYS.POLLINATIONS, selector: unifiedSelector, proxy: false },
+        [chat_completion_sources.WORKERS_AI]: { key: SECRET_KEYS.WORKERS_AI, selector: unifiedSelector, proxy: false },
+        [chat_completion_sources.MINIMAX]: { key: SECRET_KEYS.MINIMAX, selector: unifiedSelector, proxy: false },
     };
 
     // Vertex AI Express version - use API key
@@ -5948,10 +5969,14 @@ async function onConnectButtonClick(e) {
     if (config) {
         const apiKey = String($(config.selector).val()).trim();
         if (apiKey.length) {
-            await writeSecret(config.key, apiKey);
+            if (oai_settings.reverse_proxy) {
+                oai_settings.proxy_password = apiKey;
+            } else {
+                await writeSecret(config.key, apiKey);
+            }
         }
 
-        if (!secret_state[config.key] && (!config.proxy || !oai_settings.reverse_proxy) && !config.keyless) {
+        if (!oai_settings.reverse_proxy && !secret_state[config.key] && !config.keyless) {
             console.log(`No secret key saved for ${oai_settings.chat_completion_source}`);
             return;
         }
@@ -6057,8 +6082,8 @@ function reconnectOpenAi() {
     }
 }
 
-function onProxyPasswordShowClick() {
-    const $input = $('#openai_proxy_password');
+function onApiKeyUnifiedShowClick() {
+    const $input = $('#api_key_unified');
     const type = $input.attr('type') === 'password' ? 'text' : 'password';
     $input.attr('type', type);
     $(this).toggleClass('fa-eye-slash fa-eye');
@@ -6347,13 +6372,23 @@ function proxyUrlCallback(_, value) {
     return oai_settings.reverse_proxy;
 }
 
-function proxyPasswordCallback(_, value) {
+function apiKeyCallback(_, value) {
     if (!value) {
-        return oai_settings.proxy_password ?? '';
+        if (oai_settings.reverse_proxy) {
+            return oai_settings.proxy_password ?? '';
+        }
+        return '';
     }
-    oai_settings.proxy_password = value;
-    $('#openai_proxy_password').val(value);
-    return oai_settings.proxy_password;
+    if (oai_settings.reverse_proxy) {
+        oai_settings.proxy_password = value;
+    } else {
+        const secretKey = resolveSecretKey();
+        if (secretKey) {
+            writeSecret(secretKey, value);
+        }
+    }
+    $('#api_key_unified').val(value);
+    return value;
 }
 
 /**
@@ -6522,18 +6557,18 @@ export function initOpenAI() {
         helpString: 'Gets or sets the reverse proxy URL. Leave empty to get the current value.',
     }));
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'proxy-password',
-        callback: proxyPasswordCallback,
-        returns: 'current proxy password',
+        name: 'api-key',
+        callback: apiKeyCallback,
+        returns: 'current API key',
         namedArgumentList: [],
         unnamedArgumentList: [
             SlashCommandArgument.fromProps({
-                description: 'password',
+                description: 'key',
                 typeList: [ARGUMENT_TYPE.STRING],
                 isRequired: false,
             }),
         ],
-        helpString: 'Gets or sets the proxy password. Leave empty to get the current value.',
+        helpString: 'Gets or sets the API key. With proxy: proxy password. Without proxy: provider secret key.',
     }));
 
     $('#test_api_button').on('click', testApiConnection);
@@ -6739,6 +6774,7 @@ export function initOpenAI() {
         forceCharacterEditorTokenize();
         updateFeatureSupportFlags();
         eventSource.emit(event_types.CHATCOMPLETION_SOURCE_CHANGED, oai_settings.chat_completion_source);
+        updateUnifiedKeyField();
     });
 
     $('#oai_max_context_unlocked').on('input', function (_e, data) {
@@ -6755,8 +6791,11 @@ export function initOpenAI() {
         saveSettingsDebounced();
     });
 
-    $('#openai_proxy_password').on('input', function () {
-        oai_settings.proxy_password = String($(this).val());
+    $('#api_key_unified').on('input', function () {
+        const value = String($(this).val());
+        if (oai_settings.reverse_proxy) {
+            oai_settings.proxy_password = value;
+        }
         saveSettingsDebounced();
     });
 
@@ -7143,6 +7182,7 @@ export function initOpenAI() {
     $('#openai_logit_bias_export_preset').on('click', onLogitBiasPresetExportClick);
     $('#openai_logit_bias_delete_preset').on('click', onLogitBiasPresetDeleteClick);
     $('#import_oai_preset').on('click', onImportPresetClick);
-    $('#openai_proxy_password_show').on('click', onProxyPasswordShowClick);
+    $('#api_key_unified_show').on('click', onApiKeyUnifiedShowClick);
     $('#customize_additional_parameters').on('click', onCustomizeParametersClick);
+    eventSource.on(event_types.MAIN_API_CHANGED, updateUnifiedKeyField);
 }
