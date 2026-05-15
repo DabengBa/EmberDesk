@@ -26,6 +26,7 @@ export async function showWorldInfoCascadeDialog(worldInfos) {
         }],
         onClosing: () => {
             capturedCascade = captureCascadeChoices();
+            return true;
         },
         onOpen: (p) => {
             const btn = p.dlg.querySelector('[data-result="' + POPUP_RESULT.CUSTOM1 + '"]');
@@ -65,9 +66,10 @@ export async function showDeleteConfirmWithCascade(content) {
             result: POPUP_RESULT.CUSTOM1,
             classes: ['popup-button-ok'],
         }],
-        onClose: () => {
+        onClosing: () => {
             deleteChats = !!document.getElementById('del_char_checkbox')?.checked;
             capturedCascade = captureCascadeChoices();
+            return true;
         },
         onOpen: (p) => {
             const btn = p.dlg.querySelector('[data-result="' + POPUP_RESULT.CUSTOM1 + '"]');

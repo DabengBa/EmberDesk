@@ -52,6 +52,7 @@ import {
     rehydrateWorldInfoPanel,
     charUpdatePrimaryWorld,
     charSetAuxWorlds,
+    updateWorldInfoList,
 } from './scripts/world-info.js';
 
 import {
@@ -11260,6 +11261,7 @@ export async function deleteCharacter(characterKey, { deleteChats = true, delete
                 }),
                 cache: 'no-cache',
             });
+            await updateWorldInfoList();
         } catch {
             // Cascade failure should not block the UI cleanup
         }
