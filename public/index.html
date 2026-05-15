@@ -2132,19 +2132,16 @@
                         </form>
                         <div class="online_status">
                             <div class="online_status_indicator"></div>
-                            <div class="online_status_text" data-i18n="Not connected...">Not connected...</div>
+                            <div class="online_status_text" data-i18n="Not connected">Not connected</div>
                         </div>
                     </div>
                     <div id="openai_api" style="display: none;position: relative;">
-                        <h4 class="margin0" data-i18n="Chat Completion Source">
-                            Chat Completion Source
-                        </h4>
                         <select id="chat_completion_source">
-                            <optgroup>
+                            <optgroup label="OpenAI">
                                 <option value="openai">OpenAI</option>
                                 <option value="custom" data-i18n="Custom (OpenAI-compatible)">Custom (OpenAI-compatible)</option>
                             </optgroup>
-                            <optgroup>
+                            <optgroup label="Providers">
                                 <option value="ai21">AI21</option>
                                 <option value="aimlapi">AI/ML API</option>
                                 <option value="azure_openai">Azure OpenAI</option>
@@ -2178,31 +2175,11 @@
                                 <div class="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
                             </div>
                             <div class="inline-drawer-content">
-                                <div class="range-block-title justifyLeft" data-i18n="Base URL">
-                                    Base URL
-                                </div>
-                                <div class="toggle-description justifyLeft wide100p">
-                                    <span data-i18n="Custom API endpoint URL (leave empty to use the default provider URL).">
-                                        Custom API endpoint URL (leave empty to use the default provider URL).
-                                    </span>
-                                    <br>
-                                </div>
+                                <label class="field-label" for="openai_reverse_proxy" data-i18n="Base URL">Base URL</label>
                                 <div class="wide100p">
                                     <input id="openai_reverse_proxy" type="text" class="text_pole" placeholder="https://api.openai.com/v1" />
-                                    <small class="reverse_proxy_warning">
-                                        <span data-i18n="Doesn't work? Try adding">Doesn't work? Try adding</span> <code>/v1</code> <span data-i18n="at the end!">at the end!</span>
-                                        <span data-i18n="completions note prefix"></span><code>/chat/completions</code> <b data-i18n="suffix will be added automatically.">suffix will be added automatically.</b>
-                                    </small>
                                 </div>
-                                <div class="range-block-title justifyLeft" data-i18n="API Key">
-                                    API Key
-                                </div>
-                                <div class="toggle-description justifyLeft">
-                                    <span data-i18n="Your API key or gateway password.">
-                                        Your API key or gateway password.
-                                    </span>
-                                    <br>
-                                </div>
+                                <label class="field-label" for="api_key_unified" data-i18n="API Key">API Key</label>
                                 <div class="flex-container width100p">
                                     <input id="api_key_unified" type="password" class="text_pole flex1" placeholder="" autocomplete="off" />
                                     <div id="api_key_unified_show" title="Peek a password" data-i18n="[title]Peek a password" class="menu_button fa-solid fa-eye-slash fa-fw"></div>
@@ -2983,7 +2960,7 @@
                         </div>
                         <div class="online_status">
                             <div class="online_status_indicator"></div>
-                            <div class="online_status_text" data-i18n="No connection...">No connection...</div>
+                            <div class="online_status_text" data-i18n="Not connected">Not connected</div>
                         </div>
                     </div>
                 </div>

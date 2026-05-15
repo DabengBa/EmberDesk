@@ -5828,9 +5828,32 @@ body:not(.movingUI) .drawer-content.maximized {
     border: 1px solid var(--SmartThemeBorderColor);
 }
 
+.field-label {
+    display: block;
+    font-size: calc(var(--mainFontSize) * 0.85);
+    font-weight: 500;
+    color: var(--SmartThemeEmColor);
+    margin-top: 10px;
+    margin-bottom: 2px;
+}
+
+.field-label:first-child {
+    margin-top: 0;
+}
+
+#api_button_openai.api_button {
+    background-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 20%, var(--SmartThemeBlurTintColor) 80%);
+    border-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 30%, var(--SmartThemeBorderColor) 70%);
+}
+
+#api_button_openai.api_button:hover {
+    background-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 35%, var(--SmartThemeBlurTintColor) 65%);
+}
+
 .neutral_warning {
-    color: var(--warning);
-    font-weight: 800;
+    color: var(--SmartThemeEmColor);
+    font-weight: 500;
+    font-size: calc(var(--mainFontSize) * 0.85);
 }
 
 .neutral_warning[data-for] {

@@ -345,6 +345,8 @@
     "Refresh models": "刷新模型",
     "-- Horde models not loaded --": "-- Horde 模型未加载 --",
     "Not connected...": "未连接...",
+    "Not connected": "未连接",
+    "Base URL": "Base URL",
     "API url": "API 地址",
     "Example: http://127.0.0.1:5000/api ": "示例：http://127.0.0.1:5000/api",
     "Connect": "连接",
