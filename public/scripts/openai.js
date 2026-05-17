@@ -265,9 +265,6 @@ export const settingsToUpdate = {
     presence_penalty: ['#pres_pen_openai', 'pres_pen_openai', false, false],
     top_p: ['#top_p_openai', 'top_p_openai', false, false],
     top_k: ['#top_k_openai', 'top_k_openai', false, false],
-    top_a: ['#top_a_openai', 'top_a_openai', false, false],
-    min_p: ['#min_p_openai', 'min_p_openai', false, false],
-    repetition_penalty: ['#repetition_penalty_openai', 'repetition_penalty_openai', false, false],
     max_context_unlocked: ['#oai_max_context_unlocked', 'max_context_unlocked', true, false],
     openai_model: ['#model_openai_select', 'openai_model', false, true],
     claude_model: ['#model_claude_select', 'claude_model', false, true],
@@ -330,9 +327,6 @@ const default_settings = {
     pres_pen_openai: 0,
     top_p_openai: 1.0,
     top_k_openai: 0,
-    min_p_openai: 0,
-    top_a_openai: 0,
-    repetition_penalty_openai: 1,
     stream_openai: false,
     openai_max_context: max_4k,
     openai_max_tokens: 300,
@@ -3136,6 +3130,10 @@ function loadOpenAISettings(data, settings) {
     $('#vertexai_config').toggle(oai_settings.use_vertexai);
     $('#vertexai_express_fields').toggle(oai_settings.vertexai_auth_mode === 'express');
     $('#vertexai_full_fields').toggle(oai_settings.vertexai_auth_mode === 'full');
+    if (oai_settings.use_vertexai && oai_settings.vertexai_auth_mode === 'express'
+        && oai_settings.chat_completion_source === chat_completion_sources.MAKERSUITE) {
+        $('body').addClass('vertexai-active');
+    }
 
     $('#chat_completion_source').trigger('change');
 }
@@ -3215,12 +3213,23 @@ async function getStatusOpen() {
         chat_completion_source: oai_settings.chat_completion_source,
     };
 
+    if (oai_settings.chat_completion_source === chat_completion_sources.MAKERSUITE && oai_settings.use_vertexai) {
+        data.chat_completion_source = chat_completion_sources.VERTEXAI;
+        data.vertexai_auth_mode = oai_settings.vertexai_auth_mode;
+        data.vertexai_region = oai_settings.vertexai_region;
+        data.model = oai_settings.google_model;
+        if (oai_settings.vertexai_auth_mode === 'express') {
+            data.vertexai_express_project_id = oai_settings.vertexai_express_project_id;
+        }
+    }
+
     const validateProxySources = [
         chat_completion_sources.CLAUDE,
         chat_completion_sources.OPENAI,
-                chat_completion_sources.MAKERSUITE,
+        chat_completion_sources.MAKERSUITE,
+        chat_completion_sources.VERTEXAI,
     ];
-    if (oai_settings.reverse_proxy && validateProxySources.includes(oai_settings.chat_completion_source)) {
+    if (oai_settings.reverse_proxy && validateProxySources.includes(data.chat_completion_source)) {
         await validateReverseProxy();
     }
 
@@ -3956,6 +3965,12 @@ async function onNewPresetClick() {
 
 function updateUnifiedKeyField() {
     const $field = $('#api_key_unified');
+    const source = oai_settings.chat_completion_source;
+    const isVertexExpress = source === chat_completion_sources.MAKERSUITE
+        && oai_settings.use_vertexai
+        && oai_settings.vertexai_auth_mode === 'express';
+    $('body').toggleClass('vertexai-active', isVertexExpress);
+
     if (oai_settings.reverse_proxy) {
         $field.attr('placeholder', 'Proxy password');
         $field.val(oai_settings.proxy_password || '');
@@ -3967,7 +3982,11 @@ function updateUnifiedKeyField() {
                 : '';
             $field.attr('placeholder', label ? `Saved (${label})` : 'Saved');
         } else {
-            $field.attr('placeholder', 'Enter API key');
+            const placeholders = {
+                [chat_completion_sources.OPENAI]: 'sk-...',
+                [chat_completion_sources.CLAUDE]: 'sk-ant-...',
+            };
+            $field.attr('placeholder', placeholders[source] || 'Enter API key');
         }
         $field.val('');
     }
@@ -4033,6 +4052,14 @@ function toggleChatCompletionForms() {
         const matchesSource = validSources.includes(oai_settings.chat_completion_source);
         $(this).toggle(mode !== 'except' ? matchesSource : !matchesSource);
     });
+
+    // Update Base URL placeholder per source
+    const basePlaceholders = {
+        [chat_completion_sources.OPENAI]: 'https://api.openai.com/v1',
+        [chat_completion_sources.CLAUDE]: 'https://api.anthropic.com',
+        [chat_completion_sources.MAKERSUITE]: 'https://generativelanguage.googleapis.com',
+    };
+    $('#openai_reverse_proxy').attr('placeholder', basePlaceholders[oai_settings.chat_completion_source] || '');
 
     setToolReasoningControls();
 }
@@ -4360,24 +4387,6 @@ export function initOpenAI() {
         saveSettingsDebounced();
     });
 
-    $('#top_a_openai').on('input', function () {
-        oai_settings.top_a_openai = Number($(this).val());
-        $('#top_a_counter_openai').val(Number($(this).val()));
-        saveSettingsDebounced();
-    });
-
-    $('#min_p_openai').on('input', function () {
-        oai_settings.min_p_openai = Number($(this).val());
-        $('#min_p_counter_openai').val(Number($(this).val()));
-        saveSettingsDebounced();
-    });
-
-    $('#repetition_penalty_openai').on('input', function () {
-        oai_settings.repetition_penalty_openai = Number($(this).val());
-        $('#repetition_penalty_counter_openai').val(Number($(this).val()));
-        saveSettingsDebounced();
-    });
-
     $('#openai_max_context').on('input', function () {
         oai_settings.openai_max_context = Number($(this).val());
         $('#openai_max_context_counter').val(`${$(this).val()}`);
@@ -4525,7 +4534,7 @@ export function initOpenAI() {
 
     $('#use_vertexai').on('change', function () {
         oai_settings.use_vertexai = !!$(this).prop('checked');
-        $('#vertexai_config').toggle(oai_settings.use_vertexai);
+        $('#vertexai_config').slideToggle(200);
         updateUnifiedKeyField();
         saveSettingsDebounced();
     });
@@ -4553,9 +4562,8 @@ export function initOpenAI() {
     });
 
     $('#vertexai_sa_show').on('click', function () {
-        const $input = $('#vertexai_service_account_json');
-        const type = $input.attr('type') === 'password' ? 'text' : 'password';
-        $input.attr('type', type);
+        const $textarea = $('#vertexai_service_account_json');
+        $textarea.toggleClass('sa-masked');
         $(this).toggleClass('fa-eye-slash fa-eye');
     });
 
@@ -4794,6 +4802,21 @@ export function initOpenAI() {
     $('#openai_logit_bias_export_preset').on('click', onLogitBiasPresetExportClick);
     $('#openai_logit_bias_delete_preset').on('click', onLogitBiasPresetDeleteClick);
     $('#import_oai_preset').on('click', onImportPresetClick);
+
+    // Preset overflow popup menu
+    $('.preset-menu-trigger').on('click', function (e) {
+        e.stopPropagation();
+        const menu = $(this).find('.preset-popup-menu');
+        $('.preset-popup-menu').not(menu).removeClass('show');
+        menu.toggleClass('show');
+    });
+    $('.preset-popup-menu-item').on('click', function () {
+        $(this).closest('.preset-popup-menu').removeClass('show');
+    });
+    $(document).on('click', function () {
+        $('.preset-popup-menu').removeClass('show');
+    });
+
     $('#api_key_unified_show').on('click', onApiKeyUnifiedShowClick);
     $('#customize_additional_parameters').on('click', onCustomizeParametersClick);
     eventSource.on(event_types.MAIN_API_CHANGED, updateUnifiedKeyField);
