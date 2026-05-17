@@ -6,13 +6,8 @@ import {
     eventSource,
     event_types,
     getRequestHeaders,
-    koboldai_setting_names,
-    koboldai_settings,
     main_api,
     max_context,
-    nai_settings,
-    novelai_setting_names,
-    novelai_settings,
     online_status,
     saveSettings,
     saveSettingsDebounced,
@@ -21,8 +16,6 @@ import {
 import { groups, selected_group } from './group-chats.js';
 import { t } from './i18n.js';
 import { instruct_presets } from './instruct-mode.js';
-import { kai_settings } from './kai-settings.js';
-import { convertNovelPreset } from './nai-settings.js';
 import { oai_settings, openai_setting_names, openai_settings } from './openai.js';
 import { POPUP_RESULT, POPUP_TYPE, Popup } from './popup.js';
 import { context_presets, getContextSettings, power_user } from './power-user.js';
@@ -77,11 +70,8 @@ function autoSelectPreset() {
  * @returns {PresetManager} Preset manager
  */
 export function getPresetManager(apiId = '') {
-    if (apiId === 'koboldhorde') {
-        apiId = 'kobold';
-    }
     if (!apiId) {
-        apiId = main_api == 'koboldhorde' ? 'kobold' : main_api;
+        apiId = main_api;
     }
 
     if (!Object.keys(presetManagers).includes(apiId)) {
@@ -438,10 +428,6 @@ class PresetManager {
             await checkForSystemPromptInInstructTemplate(name, settings);
         }
 
-        if (this.apiId === 'novel' && settings) {
-            settings = convertNovelPreset(settings);
-        }
-
         const preset = settings ?? this.getPresetSettings(name);
 
         const response = await fetch('/api/presets/save', {
@@ -502,18 +488,6 @@ class PresetManager {
         }
 
         switch (api) {
-            case 'koboldhorde':
-            case 'kobold':
-                presets = koboldai_settings;
-                preset_names = koboldai_setting_names;
-                settings = kai_settings;
-                break;
-            case 'novel':
-                presets = novelai_settings;
-                preset_names = novelai_setting_names;
-                settings = nai_settings;
-                break;
-
             case 'openai':
                 presets = openai_settings;
                 preset_names = openai_setting_names;
@@ -606,12 +580,6 @@ class PresetManager {
     getPresetSettings(name) {
         function getSettingsByApiId(apiId) {
             switch (apiId) {
-                case 'koboldhorde':
-                case 'kobold':
-                    return kai_settings;
-                case 'novel':
-                    return nai_settings;
-
                 case 'context': {
                     const context_preset = getContextSettings();
                     context_preset.name = name || power_user.context.preset;
@@ -648,15 +616,8 @@ class PresetManager {
             'stopping_strings',
             'can_use_tokenization',
             'can_use_streaming',
-            'preset_settings_novel',
-            'preset_settings',
-            'streaming_novel',
-            'nai_preamble',
-            'model_novel',
-            'streaming_kobold',
             'enabled',
             'bind_to_context',
-            'seed',
             'legacy_api',
             'mancer_model',
             'togetherai_model',

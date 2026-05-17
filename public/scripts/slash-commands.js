@@ -95,7 +95,6 @@ import { accountStorage } from './util/AccountStorage.js';
 import { SlashCommandDebugController } from './slash-commands/SlashCommandDebugController.js';
 import { SlashCommandScope } from './slash-commands/SlashCommandScope.js';
 import { t } from './i18n.js';
-import { kai_settings } from './kai-settings.js';
 import { instruct_presets, selectContextPreset, selectInstructPreset } from './instruct-mode.js';
 import { debounce_timeout, SWIPE_DIRECTION, SWIPE_SOURCE } from './constants.js';
 export {
@@ -6603,29 +6602,6 @@ async function setApiUrlCallback({ api = null, connect = 'true', quiet = 'false'
         }
 
         return oai_settings.vertexai_region || defaultRegion;
-    }
-
-    // Special handling for Kobold Classic API
-    const isCurrentlyKoboldClassic = main_api === 'kobold';
-    if (api === 'kobold' || (!api && isCurrentlyKoboldClassic)) {
-        if (!url) {
-            return kai_settings.api_server ?? '';
-        }
-
-        if (!isCurrentlyKoboldClassic && autoConnect) {
-            toastr.warning(t`Kobold Classic API is not the currently selected API, so we cannot do an auto-connect. Consider switching to it via /api beforehand.`);
-            return '';
-        }
-
-        $('#api_url_text').val(url).trigger('input');
-        // trigger blur debounced, so we hide the autocomplete menu
-        setTimeout(() => $('#api_url_text').trigger('blur'), 1);
-
-        if (autoConnect) {
-            $('#api_button').trigger('click');
-        }
-
-        return kai_settings.api_server ?? '';
     }
 
     // The requested API is not supported for server URL configuration

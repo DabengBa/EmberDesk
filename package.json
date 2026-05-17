@@ -118,6 +118,9 @@
     "version": "1.18.0",
     "scripts": {
         "init": "node src/server-init.js",
+        "test": "npm --prefix tests run test:unit --",
+        "test:unit": "npm --prefix tests run test:unit --",
+        "test:e2e": "npm --prefix tests run test:e2e --",
         "start": "node server.js",
         "debug": "node --inspect server.js",
         "docs:check": "node .docs/db/scripts/doc-compiler.js check",

@@ -438,14 +438,9 @@ export class SecretManager {
 
         if (!hasOpenAI && hasCustom) {
             secrets[openaiKey] = customSecrets;
-            this._writeSecretsFile(secrets);
-            console.info(color.green('Migrated CUSTOM API key to OPENAI key.'));
-        }
-
-        // Clean up old CUSTOM key
-        if (hasCustom) {
             delete secrets[customKey];
             this._writeSecretsFile(secrets);
+            console.info(color.green('Migrated CUSTOM API key to OPENAI key.'));
         }
     }
 }

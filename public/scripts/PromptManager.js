@@ -13,21 +13,6 @@ import { Popup } from './popup.js';
 import { t } from './i18n.js';
 import { isMobile } from './RossAscends-mods.js';
 
-function debouncePromise(func, delay) {
-    let timeoutId;
-
-    return (...args) => {
-        clearTimeout(timeoutId);
-
-        return new Promise((resolve) => {
-            timeoutId = setTimeout(() => {
-                const result = func(...args);
-                resolve(result);
-            }, delay);
-        });
-    };
-}
-
 const DEFAULT_DEPTH = 4;
 const DEFAULT_ORDER = 100;
 
@@ -505,10 +490,6 @@ class PromptManager {
                 this.updatePromptWithPromptEditForm(prompt);
             }
 
-            if ('main' === promptId) this.updateQuickEdit('main', prompt);
-            if ('nsfw' === promptId) this.updateQuickEdit('nsfw', prompt);
-            if ('jailbreak' === promptId) this.updateQuickEdit('jailbreak', prompt);
-
             this.log('Saved prompt: ' + promptId);
 
             this.hidePopup();
@@ -722,38 +703,6 @@ class PromptManager {
                 });
         };
 
-        // Fill quick edit fields for the first time
-        if ('global' === this.configuration.promptOrder.strategy) {
-            const handleQuickEditSave = (event) => {
-                const promptId = event.target.dataset.pmPrompt;
-                const prompt = this.getPromptById(promptId);
-
-                prompt.content = event.target.value;
-
-                // Update edit form if present
-                // @see https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/offsetParent
-                const popupEditFormPrompt = /** @type {HTMLTextAreaElement} */(document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_prompt'));
-                if (popupEditFormPrompt.offsetParent) {
-                    popupEditFormPrompt.value = prompt.content;
-                }
-
-                this.log('Saved prompt: ' + promptId);
-                this.saveServiceSettings().then(() => this.render());
-            };
-
-            const mainPrompt = this.getPromptById('main');
-            const mainElementId = this.updateQuickEdit('main', mainPrompt);
-            document.getElementById(mainElementId).addEventListener('blur', handleQuickEditSave);
-
-            const nsfwPrompt = this.getPromptById('nsfw');
-            const nsfwElementId = this.updateQuickEdit('nsfw', nsfwPrompt);
-            document.getElementById(nsfwElementId).addEventListener('blur', handleQuickEditSave);
-
-            const jailbreakPrompt = this.getPromptById('jailbreak');
-            const jailbreakElementId = this.updateQuickEdit('jailbreak', jailbreakPrompt);
-            document.getElementById(jailbreakElementId).addEventListener('blur', handleQuickEditSave);
-        }
-
         // Re-render when chat history changes.
         eventSource.on(event_types.MESSAGE_DELETED, () => this.renderDebounced());
         eventSource.on(event_types.MESSAGE_EDITED, () => this.renderDebounced());
@@ -817,14 +766,6 @@ class PromptManager {
         // Re-render prompt manager on openai preset change
         eventSource.on(event_types.OAI_PRESET_CHANGED_AFTER, () => {
             this.sanitizeServiceSettings();
-            const mainPrompt = this.getPromptById('main');
-            this.updateQuickEdit('main', mainPrompt);
-
-            const nsfwPrompt = this.getPromptById('nsfw');
-            this.updateQuickEdit('nsfw', nsfwPrompt);
-
-            const jailbreakPrompt = this.getPromptById('jailbreak');
-            this.updateQuickEdit('jailbreak', jailbreakPrompt);
 
             this.hidePopup();
             this.clearEditForm();
@@ -1287,50 +1228,6 @@ class PromptManager {
         }
 
         return preparedPrompt;
-    }
-
-    /**
-     * Factory function for creating a QuickEdit object associated with a prompt element.
-     *
-     * The QuickEdit object provides methods to synchronize an input element's value with a prompt's content
-     * and handle input events to update the prompt content.
-     *
-     */
-    createQuickEdit(identifier, title) {
-        const prompt = this.getPromptById(identifier);
-        const textareaIdentifier = `${identifier}_prompt_quick_edit_textarea`;
-        const html = `<div class="range-block m-t-1">
-                        <div class="justifyLeft">${title}</div>
-                        <div class="wide100p">
-                            <textarea id="${textareaIdentifier}" class="text_pole textarea_compact" rows="6" placeholder="">${prompt.content}</textarea>
-                        </div>
-                    </div>`;
-
-        const quickEditContainer = document.getElementById('quick-edit-container');
-        quickEditContainer.insertAdjacentHTML('afterbegin', html);
-
-        const debouncedSaveServiceSettings = debouncePromise(() => this.saveServiceSettings(), 300);
-
-        const textarea = /** @type {HTMLTextAreaElement} */(document.getElementById(textareaIdentifier));
-        textarea.addEventListener('blur', () => {
-            prompt.content = textarea.value;
-            this.updatePromptByIdentifier(identifier, prompt);
-            debouncedSaveServiceSettings().then(() => this.render());
-        });
-    }
-
-    /**
-     * Updates the quick edit textarea for a specific prompt.
-     * @param {string} identifier - The identifier of the prompt.
-     * @param {Prompt} prompt - The updated prompt object.
-     * @returns {string} The ID of the updated textarea element.
-     */
-    updateQuickEdit(identifier, prompt) {
-        const elementId = `${identifier}_prompt_quick_edit_textarea`;
-        const textarea = /** @type {HTMLTextAreaElement} */(document.getElementById(elementId));
-        textarea.value = prompt.content;
-
-        return elementId;
     }
 
     /**

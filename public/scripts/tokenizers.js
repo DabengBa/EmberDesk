@@ -1,10 +1,9 @@
 import { localforage } from '../lib.js';
-import { characters, main_api, nai_settings, online_status, this_chid } from '../script.js';
+import { characters, main_api, online_status, this_chid } from '../script.js';
 import { power_user, registerDebugFunction } from './power-user.js';
 import { chat_completion_sources, model_list, oai_settings } from './openai.js';
 import { groups, selected_group } from './group-chats.js';
 import { getStringHash } from './utils.js';
-import { kai_flags, kai_settings } from './kai-settings.js';
 export { BYTES_PER_TOKEN as CHARACTERS_PER_TOKEN_RATIO };
 
 export const BYTES_PER_TOKEN = 3.35;
@@ -269,42 +268,12 @@ export function getTokenizerBestMatch(forApi) {
         forApi = main_api;
     }
 
-    if (forApi === 'novel') {
-        if (nai_settings.model_novel.includes('clio')) {
-            return tokenizers.NERD;
-        }
-        if (nai_settings.model_novel.includes('kayra')) {
-            return tokenizers.NERD2;
-        }
-        if (nai_settings.model_novel.includes('erato')) {
-            return tokenizers.LLAMA3;
-        }
-    }
-    if (forApi === 'kobold' || forApi === 'koboldhorde') {
-        // Try to use the API tokenizer if possible:
-        // - API must be connected
-        // - Kobold must pass a version check
-        // - Tokenizer haven't reported an error previously
-        const hasTokenizerError = sessionStorage.getItem(TOKENIZER_WARNING_KEY);
-        const isConnected = online_status !== 'no_connection';
-
-        if (!hasTokenizerError && isConnected) {
-            if (forApi === 'kobold' && kai_flags.can_use_tokenization) {
-                return tokenizers.API_KOBOLD;
-            }
-        }
-
-        return tokenizers.LLAMA;
-    }
-
     return tokenizers.NONE;
 }
 
 // Get the current remote tokenizer API based on the current text generation API.
 function currentRemoteTokenizerAPI() {
     switch (main_api) {
-        case 'kobold':
-            return tokenizers.API_KOBOLD;
         default:
             return tokenizers.NONE;
     }
@@ -872,7 +841,7 @@ function countTokensFromKoboldAPI(str, resolve) {
         url: TOKENIZER_URLS[tokenizers.API_KOBOLD].count,
         data: JSON.stringify({
             text: str,
-            url: kai_settings.api_server,
+            url: '',
         }),
         dataType: 'json',
         contentType: 'application/json',
@@ -958,7 +927,7 @@ function getTextTokensFromKoboldAPI(str, resolve) {
         url: TOKENIZER_URLS[tokenizers.API_KOBOLD].encode,
         data: JSON.stringify({
             text: str,
-            url: kai_settings.api_server,
+            url: '',
         }),
         dataType: 'json',
         contentType: 'application/json',

@@ -597,17 +597,6 @@ async function switchZenSliders() {
 
     if (power_user.enableZenSliders) {
         $('#clickSlidersTips').hide();
-        $('#pro-settings-block input[type=\'number\']').hide();
-        //hide number inputs that are not 'seed' inputs
-        $(`#kobold_api-settings :input[type='number']:not([id^='seed'])`).hide();
-        //hide original sliders
-        $(`#kobold_api-settings input[type='range'],
-            #pro-settings-block input[type='range']:not(#max_context)`) //exclude max context because its creation is handled by switchMaxContext()
-            .hide()
-            .each(function () {
-                //make a zen slider for each original slider
-                CreateZenSliders($(this));
-            });
         //this is for when zensliders is toggled after pageload
         switchMaxContextSize();
     } else {
@@ -617,9 +606,7 @@ async function switchZenSliders() {
 
     function revertOriginalSliders() {
         $('#pro-settings-block input[type=\'number\']').show();
-        $(`#kobold_api-settings input[type='number']`).show();
-        $(`#kobold_api-settings input[type='range'],
-            #pro-settings-block input[type='range']`).each(function () {
+        $('#pro-settings-block input[type=\'range\']').each(function () {
             $(this).show();
         });
         $('div[id$="_zenslider"]').remove();

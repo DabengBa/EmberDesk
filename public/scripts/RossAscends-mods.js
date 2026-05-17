@@ -41,7 +41,6 @@ import { debounce_timeout, SWIPE_SOURCE } from './constants.js';
 import { Popup } from './popup.js';
 import { accountStorage } from './util/AccountStorage.js';
 import { getCurrentUserHandle } from './user.js';
-import { kai_settings } from './kai-settings.js';
 
 var RPanelPin = document.getElementById('rm_button_panel_pin');
 var LPanelPin = document.getElementById('lm_button_panel_pin');
@@ -359,16 +358,6 @@ function RA_autoconnect(PrevApi) {
     }
     if (online_status === 'no_connection' && power_user.auto_connect) {
         switch (main_api) {
-            case 'kobold':
-                if (kai_settings.api_server && isValidUrl(kai_settings.api_server)) {
-                    $('#api_button').trigger('click');
-                }
-                break;
-            case 'novel':
-                if (secret_state[SECRET_KEYS.NOVEL]) {
-                    $('#api_button_novel').trigger('click');
-                }
-                break;
             case 'openai':
                 if (((secret_state[SECRET_KEYS.OPENAI] || oai_settings.reverse_proxy) && oai_settings.chat_completion_source == chat_completion_sources.OPENAI)
                     || ((secret_state[SECRET_KEYS.CLAUDE] || oai_settings.reverse_proxy) && oai_settings.chat_completion_source == chat_completion_sources.CLAUDE)

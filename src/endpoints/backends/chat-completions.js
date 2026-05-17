@@ -39,6 +39,7 @@ import {
 } from '../../prompt-converters.js';
 
 import { readSecret, SECRET_KEYS } from '../secrets.js';
+import { getGoogleApiConfig } from '../google.js';
 import {
     getTokenizerModel,
     getSentencepiceTokenizer,
@@ -293,16 +294,14 @@ async function sendClaudeRequest(request, response) {
  * @param {express.Response} response Express response
  */
 async function sendMakerSuiteRequest(request, response) {
-    const apiUrl = new URL(request.body.reverse_proxy || API_MAKERSUITE);
-    const apiKey = request.body.reverse_proxy ? request.body.proxy_password : readSecret(request.user.directories, SECRET_KEYS.MAKERSUITE, request.body.secret_id);
+    const isVertexAi = request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.VERTEXAI;
+    const apiUrl = isVertexAi ? null : new URL(request.body.reverse_proxy || API_MAKERSUITE);
+    const apiKey = isVertexAi ? null : (request.body.reverse_proxy ? request.body.proxy_password : readSecret(request.user.directories, SECRET_KEYS.MAKERSUITE, request.body.secret_id));
 
-    if (!request.body.reverse_proxy && !apiKey) {
+    if (!isVertexAi && !request.body.reverse_proxy && !apiKey) {
         console.warn('Google AI Studio API key is missing.');
         return response.status(400).send({ error: true });
     }
-
-    const authHeader = `Bearer ${apiKey}`;
-    const authType = 'api_key';
 
     const model = String(request.body.model);
     const stream = Boolean(request.body.stream);
@@ -493,7 +492,17 @@ async function sendMakerSuiteRequest(request, response) {
             'Content-Type': 'application/json',
         };
 
-        url = `${apiUrl.toString().replace(/\/$/, '')}/${apiVersion}/models/${model}:${responseType}?key=${apiKey}${stream ? '?alt=sse' : ''}`;
+        if (isVertexAi) {
+            const googleConfig = await getGoogleApiConfig({ ...request, body: { ...request.body, api: 'vertexai' } }, model, responseType);
+            url = googleConfig.url;
+            if (stream) {
+                url += `${url.includes('?') ? '&' : '?'}alt=sse`;
+            }
+            headers = googleConfig.headers;
+            body.safetySettings = googleConfig.safetySettings;
+        } else {
+            url = `${apiUrl.toString().replace(/\/$/, '')}/${apiVersion}/models/${model}:${responseType}?key=${apiKey}${stream ? '&alt=sse' : ''}`;
+        }
 
         const generateResponse = await fetch(url, {
             body: JSON.stringify(body),
@@ -573,41 +582,66 @@ router.post('/status', async function (request, statusResponse) {
             apiKey = request.body.reverse_proxy ? request.body.proxy_password : readSecret(request.user.directories, SECRET_KEYS.OPENAI, request.body.secret_id);
             headers = {};
             mergeObjectWithYaml(headers, request.body.custom_include_headers);
-        } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.MAKERSUITE) {
-            apiKey = request.body.reverse_proxy ? request.body.proxy_password : readSecret(request.user.directories, SECRET_KEYS.MAKERSUITE, request.body.secret_id);
-            apiUrl = trimTrailingSlash(request.body.reverse_proxy || API_MAKERSUITE);
-            const apiVersion = getConfigValue('gemini.apiVersion', 'v1beta');
-            const modelsUrl = !apiKey && request.body.reverse_proxy
-                ? `${apiUrl}/${apiVersion}/models`
-                : `${apiUrl}/${apiVersion}/models?key=${apiKey}`;
+        } else if ([CHAT_COMPLETION_SOURCES.MAKERSUITE, CHAT_COMPLETION_SOURCES.VERTEXAI].includes(request.body.chat_completion_source)) {
+            const isVertexAi = request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.VERTEXAI;
+            let modelsUrl;
 
-            if (!apiKey && !request.body.reverse_proxy) {
-                console.warn('Google AI Studio API key is missing.');
-                return statusResponse.status(400).send({ error: true });
+            if (isVertexAi) {
+                const statusModel = String(request.body.model || 'gemini-2.5-flash');
+                try {
+                    const googleConfig = await getGoogleApiConfig({ ...request, body: { ...request.body, api: 'vertexai' } }, statusModel, 'countTokens');
+                    modelsUrl = googleConfig.url;
+                    headers = googleConfig.headers;
+                } catch (error) {
+                    console.warn('Google Vertex AI status check configuration failed:', error);
+                    return statusResponse.status(400).send({ error: true });
+                }
+            } else {
+                apiKey = request.body.reverse_proxy ? request.body.proxy_password : readSecret(request.user.directories, SECRET_KEYS.MAKERSUITE, request.body.secret_id);
+                apiUrl = trimTrailingSlash(request.body.reverse_proxy || API_MAKERSUITE);
+                const apiVersion = getConfigValue('gemini.apiVersion', 'v1beta');
+                modelsUrl = !apiKey && request.body.reverse_proxy
+                    ? `${apiUrl}/${apiVersion}/models`
+                    : `${apiUrl}/${apiVersion}/models?key=${apiKey}`;
+
+                if (!apiKey && !request.body.reverse_proxy) {
+                    console.warn('Google AI Studio API key is missing.');
+                    return statusResponse.status(400).send({ error: true });
+                }
             }
 
             try {
-                const response = await fetch(modelsUrl);
+                const response = await fetch(modelsUrl, isVertexAi ? {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'ping' }] }] }),
+                } : undefined);
 
                 if (response.ok) {
                     /** @type {any} */
                     const data = await response.json();
-                    // Transform Google AI Studio models to OpenAI format
+                    if (isVertexAi) {
+                        const id = String(request.body.model || 'gemini-2.5-flash');
+                        console.info('Google Vertex AI status check succeeded:', data);
+                        return statusResponse.send({ data: [{ id, name: id }] });
+                    }
+
+                    // Transform Google models to OpenAI format.
                     const models = data.models
                         ?.filter(model => model.supportedGenerationMethods?.includes('generateContent'))
                         ?.map(model => ({
                             ...model,
-                            id: model.name.replace('models/', ''),
+                            id: String(model.name).split('/').pop(),
                         })) || [];
 
                     console.info('Available Google AI Studio models:', models.map(m => m.id));
                     return statusResponse.send({ data: models });
                 } else {
-                    console.warn('Google AI Studio models endpoint failed:', response.status, response.statusText);
+                    console.warn(`${isVertexAi ? 'Google Vertex AI status check' : 'Google AI Studio models endpoint'} failed:`, response.status, response.statusText);
                     return statusResponse.send({ error: true, bypass: true, data: { data: [] } });
                 }
             } catch (error) {
-                console.error('Error fetching Google AI Studio models:', error);
+                console.error(`Error during ${isVertexAi ? 'Google Vertex AI status check' : 'Google AI Studio model fetch'}:`, error);
                 return statusResponse.send({ error: true, bypass: true, data: { data: [] } });
             }
         } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.CLAUDE) {
