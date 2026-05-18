@@ -7962,9 +7962,6 @@ export async function saveSettings(loopCounter = 0) {
  * @param {{ genamt?: number, max_length?: number }} preset Preset object
  */
 export function setGenerationParamsFromPreset(preset) {
-    const needsUnlock = (preset.max_length ?? max_context) > MAX_CONTEXT_DEFAULT || (preset.genamt ?? amount_gen) > MAX_RESPONSE_DEFAULT;
-    $('#max_context_unlocked').prop('checked', needsUnlock).trigger('change');
-
     if (preset.genamt !== undefined) {
         amount_gen = preset.genamt;
         $('#amount_gen').val(amount_gen);

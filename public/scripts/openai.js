@@ -141,8 +141,6 @@ const max_200k = 200 * 1000;
 const max_256k = 256 * 1000;
 const max_400k = 400 * 1000;
 const max_1mil = 1000 * 1000;
-const max_2mil = 2000 * 1000;
-const unlocked_max = max_2mil;
 const oai_max_temp = 2.0;
 const claude_max_temp = 1.0;
 const openai_max_stop_strings = 4;
@@ -361,7 +359,6 @@ const default_settings = {
     tool_reasoning_mode: tool_reasoning_modes.DISABLED,
     reverse_proxy: '',
     chat_completion_source: chat_completion_sources.OPENAI,
-    max_context_unlocked: false,
     proxy_password: '',
     assistant_prefill: '',
     assistant_impersonation: '',
@@ -3738,10 +3735,6 @@ function onSettingsPresetChange() {
  * @returns {number} Maximum context size in tokens
  */
 function getMaxContextOpenAI(value) {
-    if (oai_settings.max_context_unlocked) {
-        return unlocked_max;
-    }
-
     /** @type {[RegExp, number][]} */
     const contextMap = [
         [/^gpt-5\.[45]/, max_1mil],
@@ -3774,14 +3767,9 @@ function getMaxContextOpenAI(value) {
 /**
  * Get the maximum context size for Gemini models based on model identifier and optional model list.
  * @param {string} model Model identifier
- * @param {boolean} isUnlocked Whether context limits are unlocked
  * @returns {number} Maximum context size in tokens
  */
-function getGeminiMaxContext(model, isUnlocked) {
-    if (isUnlocked) {
-        return unlocked_max;
-    }
-
+function getGeminiMaxContext(model) {
     if (Array.isArray(model_list) && model_list.length > 0) {
         const contextLength = model_list.find((record) => record.id === model)?.inputTokenLimit;
         if (Number.isFinite(contextLength) && contextLength > 0) {
@@ -3871,21 +3859,18 @@ async function onModelChange() {
 
 
     if (oai_settings.chat_completion_source === chat_completion_sources.MAKERSUITE) {
-        const contextSize = getGeminiMaxContext(value, oai_settings.max_context_unlocked);
+        const contextSize = getGeminiMaxContext(value);
         const maxTemp = getGeminiMaxTemp(value);
         $('#openai_max_context').attr('max', contextSize / 1000);
         oai_settings.temp_openai = Math.min(maxTemp, oai_settings.temp_openai);
         $('#temp_openai').attr('max', maxTemp).val(oai_settings.temp_openai).trigger('input');
-        oai_settings.openai_max_context = Math.min(contextSize, oai_settings.openai_max_context);
         $('#openai_max_context').val(oai_settings.openai_max_context / 1000).trigger('input');
     }
 
 
     if (oai_settings.chat_completion_source == chat_completion_sources.CLAUDE) {
         let claudeMaxContext;
-        if (oai_settings.max_context_unlocked) {
-            claudeMaxContext = unlocked_max;
-        } else if (/^claude-(sonnet-4-5|sonnet-4-6|opus-4-6|opus-4-7)/.test(value)) {
+        if (/^claude-(sonnet-4-5|sonnet-4-6|opus-4-6|opus-4-7)/.test(value)) {
             claudeMaxContext = max_1mil;
         } else if (/^claude-(3|opus|haiku|sonnet)/.test(value)) {
             claudeMaxContext = max_200k;
@@ -3894,7 +3879,6 @@ async function onModelChange() {
         }
         $('#openai_max_context').attr('max', claudeMaxContext / 1000);
 
-        oai_settings.openai_max_context = Math.min(oai_settings.openai_max_context, claudeMaxContext);
         $('#openai_max_context').val(oai_settings.openai_max_context / 1000).trigger('input');
 
         $('#openai_reverse_proxy').attr('placeholder', 'https://api.anthropic.com/v1');

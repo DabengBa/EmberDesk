@@ -195,8 +195,7 @@ export const power_user = {
     timestamp_model_icon: false,
     mesIDDisplay_enabled: false,
     hideChatAvatars_enabled: false,
-    max_context_unlocked: false,
-    message_token_count_enabled: false,
+message_token_count_enabled: false,
     expand_message_actions: false,
     enableZenSliders: false,
     enableLabMode: false,
@@ -1722,12 +1721,6 @@ export function loadMovingUIState() {
 }
 
 function loadMaxContextUnlocked() {
-    $('#max_context_unlocked').prop('checked', power_user.max_context_unlocked);
-    $('#max_context_unlocked').on('change', function () {
-        power_user.max_context_unlocked = !!$(this).prop('checked');
-        switchMaxContextSize();
-        saveSettingsDebounced();
-    });
     switchMaxContextSize();
 }
 
@@ -1738,16 +1731,16 @@ function switchMaxContextSize() {
         $('#rep_pen_range'),
         $('#rep_pen_range_counter'),
     ];
-    const maxValue = power_user.max_context_unlocked ? MAX_CONTEXT_UNLOCKED : MAX_CONTEXT_DEFAULT;
-    const minValue = power_user.max_context_unlocked ? maxContextMin : maxContextMin;
-    const steps = power_user.max_context_unlocked ? unlockedMaxContextStep : maxContextStep;
+    const maxValue = MAX_CONTEXT_UNLOCKED;
+    const minValue = maxContextMin;
+    const steps = unlockedMaxContextStep;
     for (const element of elements) {
         const id = element.attr('id');
         element.attr('max', maxValue);
 
         if (typeof id === 'string' && id?.indexOf('max_context') !== -1) {
             element.attr('min', minValue);
-            element.attr('step', steps); //only change setps for max context, because rep pen range needs step of 1 due to important values of -1 and 0
+            element.attr('step', steps);
         }
         const value = Number(element.val());
 
@@ -1756,7 +1749,7 @@ function switchMaxContextSize() {
         }
     }
 
-    const maxAmountGen = power_user.max_context_unlocked ? MAX_RESPONSE_UNLOCKED : MAX_RESPONSE_DEFAULT;
+    const maxAmountGen = MAX_RESPONSE_UNLOCKED;
     $('#amount_gen').attr('max', maxAmountGen);
     $('#amount_gen_counter').attr('max', maxAmountGen);
 
