@@ -388,6 +388,7 @@ const default_settings = {
 };
 
 const oai_settings = structuredClone(default_settings);
+let _presetChangeGuard = false;
 syncProxies();
 
 export let openai_setting_names;
@@ -3098,6 +3099,18 @@ function loadOpenAISettings(data, settings) {
     $('.reverse_proxy_warning').toggle(oai_settings.reverse_proxy !== '');
     syncProxies();
 
+    // Protect openai_max_context from being overridden by extensions on initial load
+    const loadedMaxContext = oai_settings.openai_max_context;
+    _presetChangeGuard = true;
+    eventSource.once(event_types.SETTINGS_UPDATED, () => {
+        _presetChangeGuard = false;
+        if (oai_settings.openai_max_context !== loadedMaxContext) {
+            oai_settings.openai_max_context = loadedMaxContext;
+            const unit = $('#openai_max_context').data('unit');
+            $('#openai_max_context').val(unit === 'k' ? loadedMaxContext / 1000 : loadedMaxContext);
+        }
+    });
+
     $('#openai_logit_bias_preset').empty();
     for (const preset of Object.keys(oai_settings.bias_presets)) {
         // Backfill missing IDs
@@ -3723,9 +3736,13 @@ function onSettingsPresetChange() {
 
         $('#openai_logit_bias_preset').trigger('change');
 
-        saveSettingsDebounced();
+        // Protect openai_max_context from being overridden by extensions
+        _presetChangeGuard = true;
         await eventSource.emit(event_types.OAI_PRESET_CHANGED_AFTER);
         await eventSource.emit(event_types.PRESET_CHANGED, { apiId: 'openai', name: presetName });
+        _presetChangeGuard = false;
+
+        saveSettingsDebounced();
     });
 }
 
@@ -4348,6 +4365,7 @@ export function initOpenAI() {
     });
 
     $('#openai_max_context').on('input', function () {
+        if (_presetChangeGuard) return;
         oai_settings.openai_max_context = Math.round(Number($(this).val()) * 1000);
         saveSettingsDebounced();
     });
