@@ -4070,8 +4070,7 @@ function reconnectOpenAi() {
 
 function onApiKeyUnifiedShowClick() {
     const $input = $('#api_key_unified');
-    const type = $input.attr('type') === 'password' ? 'text' : 'password';
-    $input.attr('type', type);
+    $input.toggleClass('api-key-masked');
     $(this).toggleClass('fa-eye-slash fa-eye');
 }
 
