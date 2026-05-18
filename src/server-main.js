@@ -106,196 +106,203 @@ https.globalAgent = new https.Agent({ keepAlive: cliArgs.enableKeepAlive });
 
 const app = express();
 const startupProfiler = createServerStartupProfiler(process.env.EMBERDESK_STARTUP_PROFILE);
-app.use(helmet({
-    contentSecurityPolicy: false,
-}));
-app.use(compression());
-app.use(responseTime());
-
-app.use(bodyParser.json({ limit: '500mb' }));
-app.use(bodyParser.urlencoded({ extended: true, limit: '500mb' }));
-
-// CORS Settings //
-const corsEnabled = getConfigValue('cors.enabled', true, 'boolean');
-if (corsEnabled) {
-    const corsOrigin = getConfigValue('cors.origin', 'null');
-    const corsMethods = getConfigValue('cors.methods', ['OPTIONS']);
-    const corsAllowedHeaders = getConfigValue('cors.allowedHeaders', []);
-    const corsExposedHeaders = getConfigValue('cors.exposedHeaders', []);
-    const corsCredentials = getConfigValue('cors.credentials', false, 'boolean');
-    const corsMaxAge = getConfigValue('cors.maxAge', null, 'number');
-
-    /** @type {cors.CorsOptions} */
-    const corsOptions = {
-        origin: corsOrigin,
-        methods: corsMethods,
-        credentials: corsCredentials,
-    };
-    if (Array.isArray(corsAllowedHeaders) && corsAllowedHeaders.length > 0) {
-        corsOptions.allowedHeaders = corsAllowedHeaders;
-    }
-    if (Array.isArray(corsExposedHeaders) && corsExposedHeaders.length > 0) {
-        corsOptions.exposedHeaders = corsExposedHeaders;
-    }
-    if (corsMaxAge !== null && Number.isInteger(corsMaxAge)) {
-        corsOptions.maxAge = corsMaxAge;
-    }
-    app.use(cors(corsOptions));
-}
-
-// Legacy: basicAuthMode is deprecated. Use enableUserAccounts instead.
-// Retained for backward compatibility; will show a browser-native prompt before the login page.
-if (cliArgs.listen && cliArgs.basicAuthMode) {
-    app.use(basicAuthMiddleware);
-}
-
-if (cliArgs.whitelistMode) {
-    const whitelistMiddleware = await getWhitelistMiddleware();
-    app.use(whitelistMiddleware);
-}
-
-app.use(hostWhitelistMiddleware);
-
-if (cliArgs.listen) {
-    app.use(accessLoggerMiddleware());
-}
-
-app.use(cookieSession({
-    name: getCookieSessionName(),
-    sameSite: 'lax',
-    httpOnly: true,
-    maxAge: getSessionCookieAge(),
-    secret: getCookieSecret(globalThis.DATA_ROOT),
-}));
-
-app.use(setUserDataMiddleware);
-
-// CSRF Protection //
-if (!cliArgs.disableCsrf) {
-    const csrfSyncProtection = csrfSync({
-        getTokenFromState: (req) => {
-            if (!req.session) {
-                console.error('(CSRF error) getTokenFromState: Session object not initialized');
-                return;
-            }
-            return req.session.csrfToken;
-        },
-        getTokenFromRequest: (req) => {
-            return req.headers['x-csrf-token']?.toString();
-        },
-        storeTokenInState: (req, token) => {
-            if (!req.session) {
-                console.error('(CSRF error) storeTokenInState: Session object not initialized');
-                return;
-            }
-            req.session.csrfToken = token;
-        },
-        skipCsrfProtection: (req) => {
-            return cliArgs.enableCorsProxy ? /^\/proxy\//.test(req.path) : false;
-        },
-        size: 32,
-    });
-
-    app.get('/csrf-token', (req, res) => {
-        res.json({
-            'token': csrfSyncProtection.generateToken(req),
-        });
-    });
-
-    // Customize the error message
-    csrfSyncProtection.invalidCsrfTokenError.message = color.red('Invalid CSRF token. Please refresh the page and try again.');
-    csrfSyncProtection.invalidCsrfTokenError.stack = undefined;
-
-    app.use(csrfSyncProtection.csrfSynchronisedProtection);
-} else {
-    console.warn('\nCSRF protection is disabled. This will make your server vulnerable to CSRF attacks.\n');
-    app.get('/csrf-token', (req, res) => {
-        res.json({
-            'token': 'disabled',
-        });
-    });
-}
-
-// Static files
-// Host index page
-app.get('/', cacheBuster.middleware, async (request, response) => {
-    if (await needsSetup()) {
-        return response.redirect('/setup');
-    }
-
-    if (shouldRedirectToLogin(request)) {
-        const query = request.url.split('?')[1];
-        const redirectUrl = query ? `/login?${query}` : '/login';
-        return response.redirect(redirectUrl);
-    }
-
-    return response.sendFile('index.html', { root: path.join(serverDirectory, 'public') });
-});
-
-// Callback endpoint for OAuth PKCE flows (e.g. OpenRouter)
-app.get('/callback/:source?', (request, response) => {
-    const source = request.params.source;
-    const query = request.url.split('?')[1];
-    const searchParams = new URLSearchParams();
-    source && searchParams.set('source', source);
-    query && searchParams.set('query', query);
-    const path = `/?${searchParams.toString()}`;
-    return response.redirect(307, path);
-});
-
-// Host setup page (first-time admin account creation)
-app.get('/setup', setupPageMiddleware);
-
-// Host login page
-app.get('/login', loginPageMiddleware);
-
-// Host frontend assets
-const webpackMiddleware = getWebpackServeMiddleware();
-app.use(webpackMiddleware);
-app.use(userCssMiddleware);
-app.use(express.static(path.join(serverDirectory, 'public'), {}));
-
-// Public API
-app.use('/api/users', usersPublicRouter);
-
-// Everything below this line requires authentication
-app.use(requireLoginMiddleware);
-app.post('/api/ping', (request, response) => {
-    if (request.query.extend && request.session) {
-        request.session.touch = Date.now();
-    }
-
-    response.sendStatus(204);
-});
-
-if (cliArgs.enableCorsProxy) {
-    app.use('/proxy/:url(*)', corsProxyMiddleware);
-} else {
-    app.use('/proxy/:url(*)', async (_, res) => {
-        const message = 'CORS proxy is disabled. Enable it in config.yaml or use the --corsProxy flag.';
-        console.log(message);
-        res.status(404).send(message);
-    });
-}
-
-// File uploads
-const uploadsPath = path.join(cliArgs.dataRoot, UPLOADS_DIRECTORY);
-app.use(multer({ dest: uploadsPath, limits: { fieldSize: 500 * 1024 * 1024 } }).single('avatar'));
-app.use(multerMonkeyPatch);
-
-app.get('/version', async function (_, response) {
-    const data = await getVersion();
-    response.send(data);
-});
-
-redirectDeprecatedEndpoints(app);
-setupPrivateEndpoints(app);
+let webpackMiddleware;
 
 /**
- * Tasks that need to be run before the server starts listening.
- * @returns {Promise<void>}
+ * Phase 2: Register Express middleware and static file routes.
+ * @param {import('express').Express} app The Express app
+ * @param {import('./command-line.js').CommandLineArguments} cli The CLI arguments
  */
-async function preSetupTasks() {
+async function registerMiddleware(app, cli) {
+    app.use(helmet({
+        contentSecurityPolicy: false,
+    }));
+    app.use(compression());
+    app.use(responseTime());
+
+    app.use(bodyParser.json({ limit: '500mb' }));
+    app.use(bodyParser.urlencoded({ extended: true, limit: '500mb' }));
+
+    // CORS Settings //
+    const corsEnabled = getConfigValue('cors.enabled', true, 'boolean');
+    if (corsEnabled) {
+        const corsOrigin = getConfigValue('cors.origin', 'null');
+        const corsMethods = getConfigValue('cors.methods', ['OPTIONS']);
+        const corsAllowedHeaders = getConfigValue('cors.allowedHeaders', []);
+        const corsExposedHeaders = getConfigValue('cors.exposedHeaders', []);
+        const corsCredentials = getConfigValue('cors.credentials', false, 'boolean');
+        const corsMaxAge = getConfigValue('cors.maxAge', null, 'number');
+
+        /** @type {cors.CorsOptions} */
+        const corsOptions = {
+            origin: corsOrigin,
+            methods: corsMethods,
+            credentials: corsCredentials,
+        };
+        if (Array.isArray(corsAllowedHeaders) && corsAllowedHeaders.length > 0) {
+            corsOptions.allowedHeaders = corsAllowedHeaders;
+        }
+        if (Array.isArray(corsExposedHeaders) && corsExposedHeaders.length > 0) {
+            corsOptions.exposedHeaders = corsExposedHeaders;
+        }
+        if (corsMaxAge !== null && Number.isInteger(corsMaxAge)) {
+            corsOptions.maxAge = corsMaxAge;
+        }
+        app.use(cors(corsOptions));
+    }
+
+    // Legacy: basicAuthMode is deprecated. Use enableUserAccounts instead.
+    // Retained for backward compatibility; will show a browser-native prompt before the login page.
+    if (cli.listen && cli.basicAuthMode) {
+        app.use(basicAuthMiddleware);
+    }
+
+    if (cli.whitelistMode) {
+        const whitelistMiddleware = await getWhitelistMiddleware();
+        app.use(whitelistMiddleware);
+    }
+
+    app.use(hostWhitelistMiddleware);
+
+    if (cli.listen) {
+        app.use(accessLoggerMiddleware());
+    }
+
+    app.use(cookieSession({
+        name: getCookieSessionName(),
+        sameSite: 'lax',
+        httpOnly: true,
+        maxAge: getSessionCookieAge(),
+        secret: getCookieSecret(globalThis.DATA_ROOT),
+    }));
+
+    app.use(setUserDataMiddleware);
+
+    // CSRF Protection //
+    if (!cli.disableCsrf) {
+        const csrfSyncProtection = csrfSync({
+            getTokenFromState: (req) => {
+                if (!req.session) {
+                    console.error('(CSRF error) getTokenFromState: Session object not initialized');
+                    return;
+                }
+                return req.session.csrfToken;
+            },
+            getTokenFromRequest: (req) => {
+                return req.headers['x-csrf-token']?.toString();
+            },
+            storeTokenInState: (req, token) => {
+                if (!req.session) {
+                    console.error('(CSRF error) storeTokenInState: Session object not initialized');
+                    return;
+                }
+                req.session.csrfToken = token;
+            },
+            skipCsrfProtection: (req) => {
+                return cli.enableCorsProxy ? /^\/proxy\//.test(req.path) : false;
+            },
+            size: 32,
+        });
+
+        app.get('/csrf-token', (req, res) => {
+            res.json({
+                'token': csrfSyncProtection.generateToken(req),
+            });
+        });
+
+        // Customize the error message
+        csrfSyncProtection.invalidCsrfTokenError.message = color.red('Invalid CSRF token. Please refresh the page and try again.');
+        csrfSyncProtection.invalidCsrfTokenError.stack = undefined;
+
+        app.use(csrfSyncProtection.csrfSynchronisedProtection);
+    } else {
+        console.warn('\nCSRF protection is disabled. This will make your server vulnerable to CSRF attacks.\n');
+        app.get('/csrf-token', (req, res) => {
+            res.json({
+                'token': 'disabled',
+            });
+        });
+    }
+
+    // Static files
+    // Host index page
+    app.get('/', cacheBuster.middleware, async (request, response) => {
+        if (await needsSetup()) {
+            return response.redirect('/setup');
+        }
+
+        if (shouldRedirectToLogin(request)) {
+            const query = request.url.split('?')[1];
+            const redirectUrl = query ? `/login?${query}` : '/login';
+            return response.redirect(redirectUrl);
+        }
+
+        return response.sendFile('index.html', { root: path.join(serverDirectory, 'public') });
+    });
+
+    // Callback endpoint for OAuth PKCE flows (e.g. OpenRouter)
+    app.get('/callback/:source?', (request, response) => {
+        const source = request.params.source;
+        const query = request.url.split('?')[1];
+        const searchParams = new URLSearchParams();
+        source && searchParams.set('source', source);
+        query && searchParams.set('query', query);
+        const path = `/?${searchParams.toString()}`;
+        return response.redirect(307, path);
+    });
+
+    // Host setup page (first-time admin account creation)
+    app.get('/setup', setupPageMiddleware);
+
+    // Host login page
+    app.get('/login', loginPageMiddleware);
+
+    // Host frontend assets
+    webpackMiddleware = getWebpackServeMiddleware();
+    app.use(webpackMiddleware);
+    app.use(userCssMiddleware);
+    app.use(express.static(path.join(serverDirectory, 'public'), {}));
+
+    // Public API
+    app.use('/api/users', usersPublicRouter);
+
+    // Everything below this line requires authentication
+    app.use(requireLoginMiddleware);
+    app.post('/api/ping', (request, response) => {
+        if (request.query.extend && request.session) {
+            request.session.touch = Date.now();
+        }
+
+        response.sendStatus(204);
+    });
+
+    if (cli.enableCorsProxy) {
+        app.use('/proxy/:url(*)', corsProxyMiddleware);
+    } else {
+        app.use('/proxy/:url(*)', async (_, res) => {
+            const message = 'CORS proxy is disabled. Enable it in config.yaml or use the --corsProxy flag.';
+            console.log(message);
+            res.status(404).send(message);
+        });
+    }
+
+    // File uploads
+    const uploadsPath = path.join(cli.dataRoot, UPLOADS_DIRECTORY);
+    app.use(multer({ dest: uploadsPath, limits: { fieldSize: 500 * 1024 * 1024 } }).single('avatar'));
+    app.use(multerMonkeyPatch);
+
+    app.get('/version', async function (_, response) {
+        const data = await getVersion();
+        response.send(data);
+    });
+}
+
+/**
+ * Phase 4a: Run migrations, content checks, and plugin loading.
+ * Returns cleanup resources as soon as they are available.
+ * @returns {Promise<{cleanupPlugins: Function|null, diskCache: object, statsOnExit: Function, consoleTitle: string}>}
+ */
+async function collectCleanupResources() {
     startupProfiler.mark('preSetupTasks:start');
     const version = await getVersion();
 
@@ -328,29 +335,15 @@ async function preSetupTasks() {
     const cleanupPlugins = await startupProfiler.measure('loadPlugins', () => loadPlugins(app, pluginsDirectory));
     const consoleTitle = process.title;
 
-    let isExiting = false;
-    const exitProcess = async () => {
-        if (isExiting) return;
-        isExiting = true;
-        await statsOnExit();
-        if (typeof cleanupPlugins === 'function') {
-            await cleanupPlugins();
-        }
-        diskCache.dispose();
-        disposeCharacterIndexDatabases();
-        setWindowTitle(consoleTitle);
-        process.exit();
-    };
+    return { cleanupPlugins, diskCache, statsOnExit, consoleTitle };
+}
 
-    // Set up event listeners for a graceful shutdown
-    process.on('SIGINT', exitProcess);
-    process.on('SIGTERM', exitProcess);
-    process.on('uncaughtException', (err) => {
-        console.error('Uncaught exception:', err);
-        exitProcess();
-    });
-
-    // Add private request filter.
+/**
+ * Phase 4b: Initialize request filter, request proxy, and compile frontend.
+ * Runs after cleanup resources and signal handlers are in place.
+ * @returns {Promise<void>}
+ */
+async function initRemainingServices() {
     const requestFilterOptions = {
         listen: cliArgs.listen,
         enabled: !!getConfigValue('privateAddressWhitelist.enabled', false, 'boolean'),
@@ -362,10 +355,8 @@ async function preSetupTasks() {
     };
     await startupProfiler.measure('initPrivateRequestFilter', () => Promise.resolve(initPrivateRequestFilter(requestFilterOptions)));
 
-    // Add request proxy.
     await startupProfiler.measure('initRequestProxy', () => Promise.resolve(initRequestProxy({ enabled: cliArgs.requestProxyEnabled, url: cliArgs.requestProxyUrl, bypass: cliArgs.requestProxyBypass, enableKeepAlive: cliArgs.enableKeepAlive, privateRequestFilterEnabled: requestFilterOptions.enabled })));
 
-    // Wait for frontend libs to compile
     await startupProfiler.measure('webpackCompile', () => webpackMiddleware.runWebpackCompiler({ pruneCache: true }));
     startupProfiler.mark('preSetupTasks:end');
 }
@@ -498,25 +489,67 @@ function setDnsResolutionOrder() {
     }
 }
 
-// User storage module needs to be initialized before starting the server
-startupProfiler.mark('bootstrap:start');
-startupProfiler.measure('initUserStorage', () => initUserStorage(globalThis.DATA_ROOT))
-    .then(() => startupProfiler.measure('setDnsResolutionOrder', () => Promise.resolve(setDnsResolutionOrder())))
-    .then(() => startupProfiler.measure('ensurePublicDirectoriesExist', () => ensurePublicDirectoriesExist()))
-    .then(() => startupProfiler.measure('migrateUserData', () => migrateUserData()))
-    .then(() => startupProfiler.measure('migrateSystemPrompts', () => migrateSystemPrompts()))
-    .then(() => startupProfiler.measure('migratePublicOverrides', () => migratePublicOverrides()))
-    .then(() => startupProfiler.measure('verifySecuritySettings', () => verifySecuritySettings()))
-    .then(preSetupTasks)
-    .then(() => startupProfiler.measure('apply404Middleware', () => Promise.resolve(apply404Middleware())))
-    .then(() => startupProfiler.measure('serverStartup.start', () => new ServerStartup(app, cliArgs).start()))
-    .then(postSetupTasks)
-    .catch((error) => {
-        startupProfiler.mark('bootstrap:error', {
-            message: String(error?.message ?? error),
-        });
-        startupProfiler.flush({
-            error: String(error?.stack ?? error),
-        });
-        throw error;
+/**
+ * Phase 1: Data-layer initialization. No Express dependency.
+ * @returns {Promise<void>}
+ */
+async function initDataPhase() {
+    await startupProfiler.measure('initUserStorage', () => initUserStorage(globalThis.DATA_ROOT));
+    await startupProfiler.measure('setDnsResolutionOrder', () => Promise.resolve(setDnsResolutionOrder()));
+    await startupProfiler.measure('ensurePublicDirectoriesExist', () => ensurePublicDirectoriesExist());
+    await startupProfiler.measure('migrateUserData', () => migrateUserData());
+    await startupProfiler.measure('migrateSystemPrompts', () => migrateSystemPrompts());
+    await startupProfiler.measure('migratePublicOverrides', () => migratePublicOverrides());
+    await startupProfiler.measure('verifySecuritySettings', () => verifySecuritySettings());
+}
+
+/**
+ * Creates a one-shot cleanup handler for graceful shutdown.
+ * @param {{cleanupPlugins: Function|null, diskCache: object, statsOnExit: Function, consoleTitle: string}} resources
+ * @returns {() => Promise<void>}
+ */
+function createCleanupHandler(resources) {
+    let isExiting = false;
+    return async function exitProcess() {
+        if (isExiting) return;
+        isExiting = true;
+        await resources.statsOnExit();
+        if (typeof resources.cleanupPlugins === 'function') {
+            await resources.cleanupPlugins();
+        }
+        resources.diskCache.dispose();
+        disposeCharacterIndexDatabases();
+        setWindowTitle(resources.consoleTitle);
+        process.exit();
+    };
+}
+
+async function main() {
+    startupProfiler.mark('bootstrap:start');
+    await initDataPhase();
+    await registerMiddleware(app, cliArgs);
+    redirectDeprecatedEndpoints(app);
+    setupPrivateEndpoints(app);
+    const resources = await collectCleanupResources();
+    const exitProcess = createCleanupHandler(resources);
+    process.on('SIGINT', exitProcess);
+    process.on('SIGTERM', exitProcess);
+    process.on('uncaughtException', (err) => {
+        console.error('Uncaught exception:', err);
+        exitProcess();
     });
+    await initRemainingServices();
+    await startupProfiler.measure('apply404Middleware', () => Promise.resolve(apply404Middleware()));
+    const result = await startupProfiler.measure('serverStartup.start', () => new ServerStartup(app, cliArgs).start());
+    await postSetupTasks(result);
+}
+
+main().catch((error) => {
+    startupProfiler.mark('bootstrap:error', {
+        message: String(error?.message ?? error),
+    });
+    startupProfiler.flush({
+        error: String(error?.stack ?? error),
+    });
+    throw error;
+});
