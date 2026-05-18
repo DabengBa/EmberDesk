@@ -7692,14 +7692,27 @@ export function setUserName(value, { toastPersonaNameChange = true } = {}) {
 }
 
 async function doOnboarding(avatarId) {
-    const template = $('#onboarding_template .onboarding');
-    let userName = await callGenericPopup(template, POPUP_TYPE.INPUT, currentUser?.name || name1, { wider: true, cancelButton: false });
+    const userName = currentUser?.name
+        ? String(currentUser.name).replace('\n', ' ')
+        : null;
 
     if (userName) {
-        userName = String(userName).replace('\n', ' ');
         setUserName(userName);
-        console.log(`Binding persona ${avatarId} to name ${userName}`);
         power_user.personas[avatarId] = userName;
+        power_user.persona_descriptions[avatarId] = {
+            description: '',
+            position: persona_description_positions.IN_PROMPT,
+        };
+        return;
+    }
+
+    const template = $('#onboarding_template .onboarding');
+    let inputName = await callGenericPopup(template, POPUP_TYPE.INPUT, name1, { wider: true, cancelButton: false });
+
+    if (inputName) {
+        inputName = String(inputName).replace('\n', ' ');
+        setUserName(inputName);
+        power_user.personas[avatarId] = inputName;
         power_user.persona_descriptions[avatarId] = {
             description: '',
             position: persona_description_positions.IN_PROMPT,
