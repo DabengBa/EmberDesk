@@ -81,6 +81,15 @@ import { ToolManager } from './tool-calling.js';
 import { accountStorage } from './util/AccountStorage.js';
 import { IGNORE_SYMBOL, MEDIA_DISPLAY, MEDIA_TYPE } from './constants.js';
 
+/** @type {{name: string, url: string, password: string}[]} */
+export let proxies = [];
+
+function syncProxies() {
+    proxies = oai_settings?.reverse_proxy
+        ? [{ name: 'default', url: oai_settings.reverse_proxy, password: oai_settings.proxy_password ?? '' }]
+        : [];
+}
+
 export {
     openai_messages_count,
     oai_settings,
@@ -382,6 +391,7 @@ const default_settings = {
 };
 
 const oai_settings = structuredClone(default_settings);
+syncProxies();
 
 export let openai_setting_names;
 export let openai_settings;
@@ -3089,6 +3099,7 @@ function loadOpenAISettings(data, settings) {
     $(`#settings_preset_openai option[value="${openai_setting_names[oai_settings.preset_settings_openai]}"]`).prop('selected', true);
     $('#bind_preset_to_connection').prop('checked', oai_settings.bind_preset_to_connection);
     $('.reverse_proxy_warning').toggle(oai_settings.reverse_proxy !== '');
+    syncProxies();
 
     $('#openai_logit_bias_preset').empty();
     for (const preset of Object.keys(oai_settings.bias_presets)) {
@@ -3963,6 +3974,7 @@ function onReverseProxyInput() {
     oai_settings.reverse_proxy = String($(this).val());
     oai_settings.custom_url = oai_settings.reverse_proxy;
     $('.reverse_proxy_warning').toggle(oai_settings.reverse_proxy != '');
+    syncProxies();
     updateUnifiedKeyField();
     saveSettingsDebounced();
 }
@@ -4253,6 +4265,7 @@ function proxyUrlCallback(_, value) {
     }
     oai_settings.reverse_proxy = value;
     $('#openai_reverse_proxy').val(value);
+    syncProxies();
     reconnectOpenAi();
     return oai_settings.reverse_proxy;
 }
@@ -4266,6 +4279,7 @@ function apiKeyCallback(_, value) {
     }
     if (oai_settings.reverse_proxy) {
         oai_settings.proxy_password = value;
+        syncProxies();
     } else {
         const secretKey = resolveSecretKey();
         if (secretKey) {
@@ -4527,6 +4541,7 @@ export function initOpenAI() {
         const value = String($(this).val());
         if (oai_settings.reverse_proxy) {
             oai_settings.proxy_password = value;
+            syncProxies();
         }
         saveSettingsDebounced();
     });
