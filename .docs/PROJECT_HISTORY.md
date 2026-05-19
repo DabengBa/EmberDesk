@@ -12,3 +12,4 @@ Scope: EmberDesk is a self-hosted browser-based LLM workspace derived from Silly
 | 2026-05-09 | perf | SQLite character index for list/get paths | Accelerate character-library browsing for large collections | [interaction-performance-indexing](tech/interaction-performance-indexing.md) |
 | 2026-05-18 | refactor | Server startup phase extraction | Make boot phases independently callable and cleanup testable | [server-startup-orchestration](tech/server-startup-orchestration.md), [ADR-0001](adr/0001-startup-phase-extraction.md) |
 | 2026-05-18 | refactor | Config resolution three-phase split | Make argv parsing and config resolution independently testable | [ADR-0002](adr/0002-config-resolution-three-phase-split.md) |
+| 2026-05-19 | refactor | User account module split | Split 1244-line users.js into storage, directories, migrations, and auth modules | [user-module-split](tech/user-module-split.md) |
