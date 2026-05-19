@@ -39,6 +39,18 @@ Current architectural boundaries:
 - `.docs/tech/` owns implementation and architecture notes
 - `.docs/db/` owns user-facing semantic product docs for pages, features, and terms
 
+Key module structure within `src/`:
+
+- `users.js` — barrel re-export plus middleware, routes, backup, security verification. Delegates to:
+  - `user-storage.js` — `node-persist` CRUD, lazy `getEnableAccounts()` config read
+  - `user-directories.js` — per-user filesystem layout under `DATA_ROOT/<handle>/`
+  - `user-migrations.js` — three self-contained idempotent migration functions
+  - `user-auth.js` — credential verification, SSO (Authelia/Authentik/basic), session crypto
+- `plugin-loader.js` — orchestrator: discovery, validation, initialization, cleanup collection. Delegates to:
+  - `plugin-updater.js` — standalone git auto-update for repo-backed plugins
+- `server-main.js` — boot pipeline coordinator with six sequenced phases (see [server-startup-orchestration](tech/server-startup-orchestration.md))
+- `server-startup.js` — transport layer: IP detection, HTTP/HTTPS creation, listen failure handling
+
 The project still carries substantial upstream SillyTavern structure. EmberDesk is in a transition stage, not a clean-room rewrite.
 
 ## Current Capability Set

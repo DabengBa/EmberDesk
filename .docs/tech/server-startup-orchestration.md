@@ -12,6 +12,8 @@ Primary files:
 - `src/server-startup.js` — transport: IP detection, HTTP/HTTPS creation, listen failure handling
 - `src/server-startup-profiler.js` — instrumentation: stage timing, event marks, JSON profile output
 - `src/command-line.js` — config resolution pipeline (see [config-resolution.md](config-resolution.md))
+- `src/users.js` — barrel re-export plus middleware, routes, backup (see [user-module-split.md](user-module-split.md))
+- `src/plugin-loader.js` — plugin discovery, validation, init, cleanup (see [plugin-loader-lifecycle.md](plugin-loader-lifecycle.md))
 
 ## Architecture And Constraints
 
