@@ -11,6 +11,7 @@ Primary files:
 - `src/server-main.js` — coordinator: phase sequencing, cleanup wiring, signal handlers
 - `src/server-startup.js` — transport: IP detection, HTTP/HTTPS creation, listen failure handling
 - `src/server-startup-profiler.js` — instrumentation: stage timing, event marks, JSON profile output
+- `src/command-line.js` — config resolution pipeline (see [config-resolution.md](config-resolution.md))
 
 ## Architecture And Constraints
 
