@@ -8,6 +8,37 @@ import { color, getConfigValue, stringToBool } from './util.js';
 import { initConfig } from './config-init.js';
 
 /**
+ * @typedef {object} ParsedArgv Raw CLI arguments, nullable where not provided.
+ * @property {boolean} isGlobal Whether global mode is active
+ * @property {string} configPath Resolved config file path
+ * @property {string|null} dataRoot Data root from CLI (null if not provided)
+ * @property {number|null} port Port number from CLI
+ * @property {boolean|null} listen Whether to listen on all interfaces
+ * @property {string|null} listenAddressIPv6 IPv6 listen address
+ * @property {string|null} listenAddressIPv4 IPv4 listen address
+ * @property {string|null} enableIPv4 IPv4 protocol (raw string: "true", "false", "auto")
+ * @property {string|null} enableIPv6 IPv6 protocol (raw string: "true", "false", "auto")
+ * @property {boolean|null} dnsPreferIPv6 Prefer IPv6 for DNS
+ * @property {number|null} heartbeatInterval Heartbeat interval in seconds
+ * @property {boolean|null} browserLaunchEnabled Auto-launch browser
+ * @property {string|null} browserLaunchHostname Browser launch hostname
+ * @property {number|null} browserLaunchPort Browser launch port override
+ * @property {boolean|null} browserLaunchAvoidLocalhost Avoid localhost for browser launch
+ * @property {boolean|null} enableCorsProxy Enable CORS proxy
+ * @property {boolean|null} disableCsrf Disable CSRF protection
+ * @property {boolean|null} ssl Enable SSL
+ * @property {string|null} certPath SSL certificate path
+ * @property {string|null} keyPath SSL private key path
+ * @property {string|null} keyPassphrase SSL key passphrase
+ * @property {boolean|null} whitelistMode Enable whitelist mode
+ * @property {boolean|null} basicAuthMode Enable basic auth
+ * @property {boolean|null} enableKeepAlive Enable HTTP keep-alive
+ * @property {boolean|null} requestProxyEnabled Enable outgoing request proxy
+ * @property {string|null} requestProxyUrl Request proxy URL
+ * @property {string[]|null} requestProxyBypass Request proxy bypass list
+ */
+
+/**
  * @typedef {object} CommandLineArguments Parsed command line arguments
  * @property {string} configPath Path to the config file
  * @property {string} dataRoot Data root directory
@@ -40,6 +71,338 @@ import { initConfig } from './config-init.js';
  * @property {function(import('./server-startup.js').ServerStartupResult): Promise<string>} getBrowserLaunchHostname Get browser launch hostname
  * @property {function(string): URL} getBrowserLaunchUrl Get browser launch URL
  */
+
+/**
+ * Phase 1 — Pure argv parsing, no side effects.
+ * Reads argv, detects global mode, derives configPath.
+ * @param {string[]} args Process startup arguments
+ * @returns {ParsedArgv} Raw CLI arguments
+ */
+export function parseArgv(args) {
+    const cliArguments = yargs(hideBin(args))
+        .usage('Usage: <your-start-script> [options]\nOptions that are not provided will be filled with config values.')
+        .option('global', {
+            type: 'boolean',
+            default: null,
+            describe: 'Use global data and config paths instead of the server directory',
+        })
+        .option('configPath', {
+            type: 'string',
+            default: null,
+            describe: 'Path to the config file (only for standalone mode)',
+        })
+        .option('enableIPv6', {
+            type: 'string',
+            default: null,
+            describe: 'Enables IPv6 protocol',
+        })
+        .option('enableIPv4', {
+            type: 'string',
+            default: null,
+            describe: 'Enables IPv4 protocol',
+        })
+        .option('port', {
+            type: 'number',
+            default: null,
+            describe: 'Sets the server listening port',
+        })
+        .option('dnsPreferIPv6', {
+            type: 'boolean',
+            default: null,
+            describe: 'Prefers IPv6 for DNS\nYou should probably have the enabled if you\'re on an IPv6 only network',
+        })
+        .option('browserLaunchEnabled', {
+            type: 'boolean',
+            default: null,
+            describe: 'Automatically launch EmberDesk in the browser',
+        })
+        .option('browserLaunchHostname', {
+            type: 'string',
+            default: null,
+            describe: 'Sets the browser launch hostname, best left on \'auto\'.\nUse values like \'localhost\', \'st.example.com\'',
+        })
+        .option('browserLaunchPort', {
+            type: 'number',
+            default: null,
+            describe: 'Overrides the port for browser launch with open your browser with this port and ignore what port the server is running on. -1 is use server port',
+        })
+        .option('browserLaunchAvoidLocalhost', {
+            type: 'boolean',
+            default: null,
+            describe: 'Avoids using \'localhost\' for browser launch in auto mode.\nUse if you don\'t have \'localhost\' in your hosts file',
+        })
+        .option('listen', {
+            type: 'boolean',
+            default: null,
+            describe: 'Whether to listen on all network interfaces',
+        })
+        .option('listenAddressIPv6', {
+            type: 'string',
+            default: null,
+            describe: 'Specific IPv6 address to listen to',
+        })
+        .option('listenAddressIPv4', {
+            type: 'string',
+            default: null,
+            describe: 'Specific IPv4 address to listen to',
+        })
+        .option('corsProxy', {
+            type: 'boolean',
+            default: null,
+            describe: 'Enables CORS proxy',
+        })
+        .option('disableCsrf', {
+            type: 'boolean',
+            default: null,
+            describe: 'Disables CSRF protection - NOT RECOMMENDED',
+        })
+        .option('ssl', {
+            type: 'boolean',
+            default: null,
+            describe: 'Enables SSL',
+        })
+        .option('certPath', {
+            type: 'string',
+            default: null,
+            describe: 'Path to SSL certificate file',
+        })
+        .option('keyPath', {
+            type: 'string',
+            default: null,
+            describe: 'Path to SSL private key file',
+        })
+        .option('keyPassphrase', {
+            type: 'string',
+            default: null,
+            describe: 'Passphrase for the SSL private key',
+        })
+        .option('whitelist', {
+            type: 'boolean',
+            default: null,
+            describe: 'Enables whitelist mode',
+        })
+        .option('dataRoot', {
+            type: 'string',
+            default: null,
+            describe: 'Root directory for data storage (only for standalone mode)',
+        })
+        .option('basicAuthMode', {
+            type: 'boolean',
+            default: null,
+            describe: 'Enables basic authentication',
+        })
+        .option('enableKeepAlive', {
+            type: 'boolean',
+            default: null,
+            describe: 'Enable HTTP/HTTPS keep-alive globally',
+        })
+        .option('requestProxyEnabled', {
+            type: 'boolean',
+            default: null,
+            describe: 'Enables a use of proxy for outgoing requests',
+        })
+        .option('requestProxyUrl', {
+            type: 'string',
+            default: null,
+            describe: 'Request proxy URL (HTTP or SOCKS protocols)',
+        })
+        .option('requestProxyBypass', {
+            type: 'array',
+            describe: 'Request proxy bypass list (space separated list of hosts)',
+        })
+        .option('heartbeatInterval', {
+            type: 'number',
+            default: null,
+            describe: 'Interval in seconds to write a heartbeat file. 0 to disable.',
+        })
+        /* DEPRECATED options */
+        .option('autorun', {
+            type: 'boolean',
+            default: null,
+            describe: 'DEPRECATED: Use "browserLaunchEnabled" instead.',
+        })
+        .option('autorunHostname', {
+            type: 'string',
+            default: null,
+            describe: 'DEPRECATED: Use "browserLaunchHostname" instead.',
+        })
+        .option('autorunPortOverride', {
+            type: 'number',
+            default: null,
+            describe: 'DEPRECATED: Use "browserLaunchPort" instead.',
+        })
+        .option('avoidLocalhost', {
+            type: 'boolean',
+            default: null,
+            describe: 'DEPRECATED: Use "browserLaunchAvoidLocalhost" instead.',
+        })
+        .parseSync();
+
+    const isGlobal = globalThis.FORCE_GLOBAL_MODE ?? cliArguments.global ?? false;
+    const defaultConfig = CommandLineParser.prototype.getDefaultConfig(isGlobal);
+
+    if (isGlobal && cliArguments.configPath) {
+        console.warn(color.yellow('Warning: "--configPath" argument is ignored in global mode'));
+    }
+
+    if (isGlobal && cliArguments.dataRoot) {
+        console.warn(color.yellow('Warning: "--dataRoot" argument is ignored in global mode'));
+    }
+
+    const configPath = isGlobal
+        ? defaultConfig.configPath
+        : (cliArguments.configPath ?? defaultConfig.configPath);
+
+    return {
+        isGlobal,
+        configPath,
+        dataRoot: cliArguments.dataRoot ?? null,
+        port: cliArguments.port ?? null,
+        listen: cliArguments.listen ?? null,
+        listenAddressIPv6: cliArguments.listenAddressIPv6 ?? null,
+        listenAddressIPv4: cliArguments.listenAddressIPv4 ?? null,
+        enableIPv4: cliArguments.enableIPv4 ?? null,
+        enableIPv6: cliArguments.enableIPv6 ?? null,
+        dnsPreferIPv6: cliArguments.dnsPreferIPv6 ?? null,
+        heartbeatInterval: cliArguments.heartbeatInterval ?? null,
+        browserLaunchEnabled: cliArguments.browserLaunchEnabled ?? cliArguments.autorun ?? null,
+        browserLaunchHostname: cliArguments.browserLaunchHostname ?? cliArguments.autorunHostname ?? null,
+        browserLaunchPort: cliArguments.browserLaunchPort ?? cliArguments.autorunPortOverride ?? null,
+        browserLaunchAvoidLocalhost: cliArguments.browserLaunchAvoidLocalhost ?? cliArguments.avoidLocalhost ?? null,
+        enableCorsProxy: cliArguments.corsProxy ?? null,
+        disableCsrf: cliArguments.disableCsrf ?? null,
+        ssl: cliArguments.ssl ?? null,
+        certPath: cliArguments.certPath ?? null,
+        keyPath: cliArguments.keyPath ?? null,
+        keyPassphrase: cliArguments.keyPassphrase ?? null,
+        whitelistMode: cliArguments.whitelist ?? null,
+        basicAuthMode: cliArguments.basicAuthMode ?? null,
+        enableKeepAlive: cliArguments.enableKeepAlive ?? null,
+        requestProxyEnabled: cliArguments.requestProxyEnabled ?? null,
+        requestProxyUrl: cliArguments.requestProxyUrl ?? null,
+        requestProxyBypass: cliArguments.requestProxyBypass ?? null,
+    };
+}
+
+/**
+ * Phase 2a — Create config directory and initialize config file.
+ * @param {string} configPath Path to the config file
+ * @param {boolean} isGlobal Whether global mode is active
+ */
+export function prepareConfigFilesystem(configPath, isGlobal) {
+    if (isGlobal && !fs.existsSync(path.dirname(configPath))) {
+        fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    }
+    initConfig(configPath);
+}
+
+/**
+ * Phase 2b — Create data root directory.
+ * @param {string|null} dataRoot Path to the data root directory (null = skip)
+ */
+export function prepareDataRoot(dataRoot) {
+    if (!dataRoot) return;
+    try {
+        if (!fs.existsSync(dataRoot)) {
+            fs.mkdirSync(dataRoot, { recursive: true });
+        }
+    } catch (err) {
+        console.warn(color.yellow(`Warning: Failed to create data root directory at ${dataRoot}. Please make sure the path is correct and writable.`), err);
+    }
+}
+
+/**
+ * Phase 3 — Resolve final config by merging CLI overrides with config file values.
+ * @param {ParsedArgv} argv Raw CLI arguments from parseArgv
+ * @param {CommandLineArguments} defaultConfig Default config from getDefaultConfig
+ * @returns {CommandLineArguments} Fully resolved config with URL helpers
+ */
+export function resolveConfig(argv, defaultConfig) {
+    const booleanAutoOptions = [true, false, 'auto'];
+
+    const result = {
+        configPath: argv.configPath,
+        dataRoot: argv.dataRoot ?? getConfigValue('dataRoot', defaultConfig.dataRoot),
+        port: argv.port ?? getConfigValue('port', defaultConfig.port, 'number'),
+        listen: argv.listen ?? getConfigValue('listen', defaultConfig.listen, 'boolean'),
+        listenAddressIPv6: argv.listenAddressIPv6 ?? getConfigValue('listenAddress.ipv6', defaultConfig.listenAddressIPv6),
+        listenAddressIPv4: argv.listenAddressIPv4 ?? getConfigValue('listenAddress.ipv4', defaultConfig.listenAddressIPv4),
+        enableIPv4: stringToBool(argv.enableIPv4) ?? stringToBool(getConfigValue('protocol.ipv4', defaultConfig.enableIPv4)) ?? defaultConfig.enableIPv4,
+        enableIPv6: stringToBool(argv.enableIPv6) ?? stringToBool(getConfigValue('protocol.ipv6', defaultConfig.enableIPv6)) ?? defaultConfig.enableIPv6,
+        dnsPreferIPv6: argv.dnsPreferIPv6 ?? getConfigValue('dnsPreferIPv6', defaultConfig.dnsPreferIPv6, 'boolean'),
+        heartbeatInterval: argv.heartbeatInterval ?? getConfigValue('heartbeatInterval', defaultConfig.heartbeatInterval, 'number'),
+        browserLaunchEnabled: argv.browserLaunchEnabled ?? getConfigValue('browserLaunch.enabled', defaultConfig.browserLaunchEnabled, 'boolean'),
+        browserLaunchHostname: argv.browserLaunchHostname ?? getConfigValue('browserLaunch.hostname', defaultConfig.browserLaunchHostname),
+        browserLaunchPort: argv.browserLaunchPort ?? getConfigValue('browserLaunch.port', defaultConfig.browserLaunchPort, 'number'),
+        browserLaunchAvoidLocalhost: argv.browserLaunchAvoidLocalhost ?? getConfigValue('browserLaunch.avoidLocalhost', defaultConfig.browserLaunchAvoidLocalhost, 'boolean'),
+        enableCorsProxy: argv.enableCorsProxy ?? getConfigValue('enableCorsProxy', defaultConfig.enableCorsProxy, 'boolean'),
+        disableCsrf: argv.disableCsrf ?? getConfigValue('disableCsrfProtection', defaultConfig.disableCsrf, 'boolean'),
+        ssl: argv.ssl ?? getConfigValue('ssl.enabled', defaultConfig.ssl, 'boolean'),
+        certPath: argv.certPath ?? getConfigValue('ssl.certPath', defaultConfig.certPath),
+        keyPath: argv.keyPath ?? getConfigValue('ssl.keyPath', defaultConfig.keyPath),
+        keyPassphrase: argv.keyPassphrase ?? getConfigValue('ssl.keyPassphrase', defaultConfig.keyPassphrase),
+        whitelistMode: argv.whitelistMode ?? getConfigValue('whitelistMode', defaultConfig.whitelistMode, 'boolean'),
+        basicAuthMode: argv.basicAuthMode ?? getConfigValue('basicAuthMode', defaultConfig.basicAuthMode, 'boolean'),
+        enableKeepAlive: argv.enableKeepAlive ?? getConfigValue('enableKeepAlive', defaultConfig.enableKeepAlive, 'boolean'),
+        requestProxyEnabled: argv.requestProxyEnabled ?? getConfigValue('requestProxy.enabled', defaultConfig.requestProxyEnabled, 'boolean'),
+        requestProxyUrl: argv.requestProxyUrl ?? getConfigValue('requestProxy.url', defaultConfig.requestProxyUrl),
+        requestProxyBypass: argv.requestProxyBypass ?? getConfigValue('requestProxy.bypass', defaultConfig.requestProxyBypass),
+        getIPv4ListenUrl: function () {
+            const isValid = ipRegex.v4({ exact: true }).test(this.listenAddressIPv4);
+            return new URL(
+                (this.ssl ? 'https://' : 'http://') +
+                (this.listen ? (isValid ? this.listenAddressIPv4 : '0.0.0.0') : '127.0.0.1') +
+                (':' + this.port),
+            );
+        },
+        getIPv6ListenUrl: function () {
+            const isValid = ipRegex.v6({ exact: true }).test(this.listenAddressIPv6);
+            return new URL(
+                (this.ssl ? 'https://' : 'http://') +
+                (this.listen ? (isValid ? this.listenAddressIPv6 : '[::]') : '[::1]') +
+                (':' + this.port),
+            );
+        },
+        getBrowserLaunchHostname: async function ({ useIPv6, useIPv4 }) {
+            if (this.browserLaunchHostname === 'auto') {
+                if (useIPv6 && useIPv4) {
+                    return this.browserLaunchAvoidLocalhost ? '[::1]' : 'localhost';
+                }
+
+                if (useIPv6) {
+                    return '[::1]';
+                }
+
+                if (useIPv4) {
+                    return '127.0.0.1';
+                }
+            }
+
+            return this.browserLaunchHostname;
+        },
+        getBrowserLaunchUrl: function (hostname) {
+            const browserLaunchPort = (this.browserLaunchPort >= 0) ? this.browserLaunchPort : this.port;
+            return new URL(
+                (this.ssl ? 'https://' : 'http://') +
+                (hostname) +
+                (':') +
+                (browserLaunchPort),
+            );
+        },
+    };
+
+    if (!booleanAutoOptions.includes(result.enableIPv6)) {
+        console.warn(color.red('`protocol: ipv6` option invalid'), '\n use:', booleanAutoOptions, '\n setting to:', defaultConfig.enableIPv6);
+        result.enableIPv6 = defaultConfig.enableIPv6;
+    }
+
+    if (!booleanAutoOptions.includes(result.enableIPv4)) {
+        console.warn(color.red('`protocol: ipv4` option invalid'), '\n use:', booleanAutoOptions, '\n setting to:', defaultConfig.enableIPv4);
+        result.enableIPv4 = defaultConfig.enableIPv4;
+    }
+
+    return result;
+}
 
 /**
  * Provides a command line arguments parser.
@@ -96,10 +459,6 @@ export class CommandLineParser {
         });
     }
 
-    constructor() {
-        this.booleanAutoOptions = [true, false, 'auto'];
-    }
-
     /**
      * Parses command line arguments.
      * Arguments that are not provided will be filled with config values.
@@ -107,277 +466,10 @@ export class CommandLineParser {
      * @returns {CommandLineArguments} Parsed command line arguments.
      */
     parse(args) {
-        const cliArguments = yargs(hideBin(args))
-            .usage('Usage: <your-start-script> [options]\nOptions that are not provided will be filled with config values.')
-            .option('global', {
-                type: 'boolean',
-                default: null,
-                describe: 'Use global data and config paths instead of the server directory',
-            })
-            .option('configPath', {
-                type: 'string',
-                default: null,
-                describe: 'Path to the config file (only for standalone mode)',
-            })
-            .option('enableIPv6', {
-                type: 'string',
-                default: null,
-                describe: 'Enables IPv6 protocol',
-            })
-            .option('enableIPv4', {
-                type: 'string',
-                default: null,
-                describe: 'Enables IPv4 protocol',
-            })
-            .option('port', {
-                type: 'number',
-                default: null,
-                describe: 'Sets the server listening port',
-            })
-            .option('dnsPreferIPv6', {
-                type: 'boolean',
-                default: null,
-                describe: 'Prefers IPv6 for DNS\nYou should probably have the enabled if you\'re on an IPv6 only network',
-            })
-            .option('browserLaunchEnabled', {
-                type: 'boolean',
-                default: null,
-                describe: 'Automatically launch EmberDesk in the browser',
-            })
-            .option('browserLaunchHostname', {
-                type: 'string',
-                default: null,
-                describe: 'Sets the browser launch hostname, best left on \'auto\'.\nUse values like \'localhost\', \'st.example.com\'',
-            })
-            .option('browserLaunchPort', {
-                type: 'number',
-                default: null,
-                describe: 'Overrides the port for browser launch with open your browser with this port and ignore what port the server is running on. -1 is use server port',
-            })
-            .option('browserLaunchAvoidLocalhost', {
-                type: 'boolean',
-                default: null,
-                describe: 'Avoids using \'localhost\' for browser launch in auto mode.\nUse if you don\'t have \'localhost\' in your hosts file',
-            })
-            .option('listen', {
-                type: 'boolean',
-                default: null,
-                describe: 'Whether to listen on all network interfaces',
-            })
-            .option('listenAddressIPv6', {
-                type: 'string',
-                default: null,
-                describe: 'Specific IPv6 address to listen to',
-            })
-            .option('listenAddressIPv4', {
-                type: 'string',
-                default: null,
-                describe: 'Specific IPv4 address to listen to',
-            })
-            .option('corsProxy', {
-                type: 'boolean',
-                default: null,
-                describe: 'Enables CORS proxy',
-            })
-            .option('disableCsrf', {
-                type: 'boolean',
-                default: null,
-                describe: 'Disables CSRF protection - NOT RECOMMENDED',
-            })
-            .option('ssl', {
-                type: 'boolean',
-                default: null,
-                describe: 'Enables SSL',
-            })
-            .option('certPath', {
-                type: 'string',
-                default: null,
-                describe: 'Path to SSL certificate file',
-            })
-            .option('keyPath', {
-                type: 'string',
-                default: null,
-                describe: 'Path to SSL private key file',
-            })
-            .option('keyPassphrase', {
-                type: 'string',
-                default: null,
-                describe: 'Passphrase for the SSL private key',
-            })
-            .option('whitelist', {
-                type: 'boolean',
-                default: null,
-                describe: 'Enables whitelist mode',
-            })
-            .option('dataRoot', {
-                type: 'string',
-                default: null,
-                describe: 'Root directory for data storage (only for standalone mode)',
-            })
-            .option('basicAuthMode', {
-                type: 'boolean',
-                default: null,
-                describe: 'Enables basic authentication',
-            })
-            .option('enableKeepAlive', {
-                type: 'boolean',
-                default: null,
-                describe: 'Enable HTTP/HTTPS keep-alive globally',
-            })
-            .option('requestProxyEnabled', {
-                type: 'boolean',
-                default: null,
-                describe: 'Enables a use of proxy for outgoing requests',
-            })
-            .option('requestProxyUrl', {
-                type: 'string',
-                default: null,
-                describe: 'Request proxy URL (HTTP or SOCKS protocols)',
-            })
-            .option('requestProxyBypass', {
-                type: 'array',
-                describe: 'Request proxy bypass list (space separated list of hosts)',
-            })
-            .option('heartbeatInterval', {
-                type: 'number',
-                default: null,
-                describe: 'Interval in seconds to write a heartbeat file. 0 to disable.',
-            })
-            /* DEPRECATED options */
-            .option('autorun', {
-                type: 'boolean',
-                default: null,
-                describe: 'DEPRECATED: Use "browserLaunchEnabled" instead.',
-            })
-            .option('autorunHostname', {
-                type: 'string',
-                default: null,
-                describe: 'DEPRECATED: Use "browserLaunchHostname" instead.',
-            })
-            .option('autorunPortOverride', {
-                type: 'number',
-                default: null,
-                describe: 'DEPRECATED: Use "browserLaunchPort" instead.',
-            })
-            .option('avoidLocalhost', {
-                type: 'boolean',
-                default: null,
-                describe: 'DEPRECATED: Use "browserLaunchAvoidLocalhost" instead.',
-            })
-            .parseSync();
-
-        const isGlobal = globalThis.FORCE_GLOBAL_MODE ?? cliArguments.global ?? false;
-        const defaultConfig = this.getDefaultConfig(isGlobal);
-
-        if (isGlobal && cliArguments.configPath) {
-            console.warn(color.yellow('Warning: "--configPath" argument is ignored in global mode'));
-        }
-
-        if (isGlobal && cliArguments.dataRoot) {
-            console.warn(color.yellow('Warning: "--dataRoot" argument is ignored in global mode'));
-        }
-
-        const configPath = isGlobal
-            ? defaultConfig.configPath
-            : (cliArguments.configPath ?? defaultConfig.configPath);
-        if (isGlobal && !fs.existsSync(path.dirname(configPath))) {
-            fs.mkdirSync(path.dirname(configPath), { recursive: true });
-        }
-        initConfig(configPath);
-
-        const dataRoot = isGlobal
-            ? defaultConfig.dataRoot
-            : (cliArguments.dataRoot ?? getConfigValue('dataRoot', defaultConfig.dataRoot));
-        try {
-            if (!fs.existsSync(dataRoot)) {
-                fs.mkdirSync(dataRoot, { recursive: true });
-            }
-        } catch (err) {
-            console.warn(color.yellow(`Warning: Failed to create data root directory at ${dataRoot}. Please make sure the path is correct and writable.`), err);
-        }
-
-        /** @type {CommandLineArguments} */
-        const result = {
-            configPath: configPath,
-            dataRoot: dataRoot,
-            port: cliArguments.port ?? getConfigValue('port', defaultConfig.port, 'number'),
-            listen: cliArguments.listen ?? getConfigValue('listen', defaultConfig.listen, 'boolean'),
-            listenAddressIPv6: cliArguments.listenAddressIPv6 ?? getConfigValue('listenAddress.ipv6', defaultConfig.listenAddressIPv6),
-            listenAddressIPv4: cliArguments.listenAddressIPv4 ?? getConfigValue('listenAddress.ipv4', defaultConfig.listenAddressIPv4),
-            enableIPv4: stringToBool(cliArguments.enableIPv4) ?? stringToBool(getConfigValue('protocol.ipv4', defaultConfig.enableIPv4)) ?? defaultConfig.enableIPv4,
-            enableIPv6: stringToBool(cliArguments.enableIPv6) ?? stringToBool(getConfigValue('protocol.ipv6', defaultConfig.enableIPv6)) ?? defaultConfig.enableIPv6,
-            dnsPreferIPv6: cliArguments.dnsPreferIPv6 ?? getConfigValue('dnsPreferIPv6', defaultConfig.dnsPreferIPv6, 'boolean'),
-            heartbeatInterval: cliArguments.heartbeatInterval ?? getConfigValue('heartbeatInterval', defaultConfig.heartbeatInterval, 'number'),
-            browserLaunchEnabled: cliArguments.browserLaunchEnabled ?? cliArguments.autorun ?? getConfigValue('browserLaunch.enabled', defaultConfig.browserLaunchEnabled, 'boolean'),
-            browserLaunchHostname: cliArguments.browserLaunchHostname ?? cliArguments.autorunHostname ?? getConfigValue('browserLaunch.hostname', defaultConfig.browserLaunchHostname),
-            browserLaunchPort: cliArguments.browserLaunchPort ?? cliArguments.autorunPortOverride ?? getConfigValue('browserLaunch.port', defaultConfig.browserLaunchPort, 'number'),
-            browserLaunchAvoidLocalhost: cliArguments.browserLaunchAvoidLocalhost ?? cliArguments.avoidLocalhost ?? getConfigValue('browserLaunch.avoidLocalhost', defaultConfig.browserLaunchAvoidLocalhost, 'boolean'),
-            enableCorsProxy: cliArguments.corsProxy ?? getConfigValue('enableCorsProxy', defaultConfig.enableCorsProxy, 'boolean'),
-            disableCsrf: cliArguments.disableCsrf ?? getConfigValue('disableCsrfProtection', defaultConfig.disableCsrf, 'boolean'),
-            ssl: cliArguments.ssl ?? getConfigValue('ssl.enabled', defaultConfig.ssl, 'boolean'),
-            certPath: cliArguments.certPath ?? getConfigValue('ssl.certPath', defaultConfig.certPath),
-            keyPath: cliArguments.keyPath ?? getConfigValue('ssl.keyPath', defaultConfig.keyPath),
-            keyPassphrase: cliArguments.keyPassphrase ?? getConfigValue('ssl.keyPassphrase', defaultConfig.keyPassphrase),
-            whitelistMode: cliArguments.whitelist ?? getConfigValue('whitelistMode', defaultConfig.whitelistMode, 'boolean'),
-            basicAuthMode: cliArguments.basicAuthMode ?? getConfigValue('basicAuthMode', defaultConfig.basicAuthMode, 'boolean'),
-            enableKeepAlive: cliArguments.enableKeepAlive ?? getConfigValue('enableKeepAlive', defaultConfig.enableKeepAlive, 'boolean'),
-            requestProxyEnabled: cliArguments.requestProxyEnabled ?? getConfigValue('requestProxy.enabled', defaultConfig.requestProxyEnabled, 'boolean'),
-            requestProxyUrl: cliArguments.requestProxyUrl ?? getConfigValue('requestProxy.url', defaultConfig.requestProxyUrl),
-            requestProxyBypass: cliArguments.requestProxyBypass ?? getConfigValue('requestProxy.bypass', defaultConfig.requestProxyBypass),
-            getIPv4ListenUrl: function () {
-                const isValid = ipRegex.v4({ exact: true }).test(this.listenAddressIPv4);
-                return new URL(
-                    (this.ssl ? 'https://' : 'http://') +
-                    (this.listen ? (isValid ? this.listenAddressIPv4 : '0.0.0.0') : '127.0.0.1') +
-                    (':' + this.port),
-                );
-            },
-            getIPv6ListenUrl: function () {
-                const isValid = ipRegex.v6({ exact: true }).test(this.listenAddressIPv6);
-                return new URL(
-                    (this.ssl ? 'https://' : 'http://') +
-                    (this.listen ? (isValid ? this.listenAddressIPv6 : '[::]') : '[::1]') +
-                    (':' + this.port),
-                );
-            },
-            getBrowserLaunchHostname: async function ({ useIPv6, useIPv4 }) {
-                if (this.browserLaunchHostname === 'auto') {
-                    if (useIPv6 && useIPv4) {
-                        return this.browserLaunchAvoidLocalhost ? '[::1]' : 'localhost';
-                    }
-
-                    if (useIPv6) {
-                        return '[::1]';
-                    }
-
-                    if (useIPv4) {
-                        return '127.0.0.1';
-                    }
-                }
-
-                return this.browserLaunchHostname;
-            },
-            getBrowserLaunchUrl: function (hostname) {
-                const browserLaunchPort = (this.browserLaunchPort >= 0) ? this.browserLaunchPort : this.port;
-                return new URL(
-                    (this.ssl ? 'https://' : 'http://') +
-                    (hostname) +
-                    (':') +
-                    (browserLaunchPort),
-                );
-            },
-        };
-
-        if (!this.booleanAutoOptions.includes(result.enableIPv6)) {
-            console.warn(color.red('`protocol: ipv6` option invalid'), '\n use:', this.booleanAutoOptions, '\n setting to:', defaultConfig.enableIPv6);
-            result.enableIPv6 = defaultConfig.enableIPv6;
-        }
-
-        if (!this.booleanAutoOptions.includes(result.enableIPv4)) {
-            console.warn(color.red('`protocol: ipv4` option invalid'), '\n use:', this.booleanAutoOptions, '\n setting to:', defaultConfig.enableIPv4);
-            result.enableIPv4 = defaultConfig.enableIPv4;
-        }
-
-        return result;
+        const argv = parseArgv(args);
+        prepareConfigFilesystem(argv.configPath, argv.isGlobal);
+        const resolvedDataRoot = argv.dataRoot ?? getConfigValue('dataRoot', this.getDefaultConfig(argv.isGlobal).dataRoot);
+        prepareDataRoot(resolvedDataRoot);
+        return resolveConfig({ ...argv, dataRoot: resolvedDataRoot }, this.getDefaultConfig(argv.isGlobal));
     }
 }
