@@ -19,37 +19,28 @@
     }
 }
 
-/* Pop animations with opacity and vertical scaling */
+/* Pop animations with opacity and vertical translation */
 @keyframes pop-in {
     0% {
         opacity: 0;
-        transform: scaleY(0);
-    }
-
-    /* Make the scaling faster on pop-in, otherwise it looks a bit weird */
-    33% {
-        transform: scaleY(1);
+        transform: translateY(8px);
     }
 
     100% {
         opacity: 1;
-        transform: scaleY(1);
+        transform: translateY(0);
     }
 }
 
 @keyframes pop-out {
     0% {
         opacity: 1;
-        transform: scaleY(1);
-    }
-
-    66% {
-        transform: scaleY(1);
+        transform: translateY(0);
     }
 
     100% {
         opacity: 0;
-        transform: scaleY(0);
+        transform: translateY(8px);
     }
 }
 

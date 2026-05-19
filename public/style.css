@@ -55,8 +55,8 @@
     --cobalt30a: rgba(100, 100, 255, 0.3);
     --greyCAIbg: rgb(36, 36, 37);
     --ivory: rgb(220, 220, 210);
-    --golden: rgb(248, 211, 0);
-    --warning: rgba(255, 0, 0, 0.9);
+    --golden: var(--SmartThemeQuoteColor);
+    --warning: var(--fullred);
     --active: rgb(88, 182, 0);
     --preferred: rgb(244, 67, 54);
 
@@ -424,12 +424,12 @@ input[type='checkbox']:focus-visible {
 
 .mes_reasoning {
     display: block;
-    border-left: 2px solid var(--reasoning-body-color);
     border-radius: 2px;
     padding: 5px;
     padding-left: 14px;
     margin-bottom: 0.5em;
     overflow-y: auto;
+    background-color: color-mix(in oklch, var(--reasoning-body-color) 6%, transparent);
     color: hsl(from var(--reasoning-body-color) h calc(s * var(--reasoning-saturation)) l);
 }
 
@@ -462,7 +462,7 @@ input[type='checkbox']:focus-visible {
     padding: 7px 14px;
     padding-right: calc(0.7em + 14px);
     border-radius: 5px;
-    background-color: var(--grey30);
+    background-color: var(--SmartThemeBlurTintColor);
     font-size: calc(var(--mainFontSize) * 0.9);
     align-items: baseline;
 }
@@ -577,9 +577,9 @@ input[type='checkbox']:focus-visible {
 
 .mes_text blockquote,
 .mes_reasoning blockquote {
-    border-left: 3px solid var(--SmartThemeQuoteColor);
     padding-left: 10px;
-    background-color: var(--black30a);
+    background-color: color-mix(in oklch, var(--SmartThemeQuoteColor) 8%, transparent);
+    border-radius: 2px;
     margin: 0;
 }
 
@@ -750,12 +750,10 @@ kbd {
     padding: 2px 4px;
     font-family: var(--monoFontFamily);
     white-space: nowrap;
-    /* background-color: #eeeeee; */
-    background-color: rgba(255, 255, 255, 0.9);
-    color: #333;
-    border: 1px solid #b4b4b4;
+    background-color: var(--black70a);
+    color: var(--ivory);
+    border: 1px solid var(--SmartThemeBorderColor);
     border-radius: 3px;
-    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.2), 0 2px 0 0 rgba(255, 255, 255, 0.7) inset;
     font-size: 90%;
     line-height: 1;
 }
@@ -1245,8 +1243,7 @@ body .panelControlBar {
 }
 
 #chat .mes.selected {
-    /* background-color: rgb(from var(--SmartThemeQuoteColor) r g b / .5); */
-    background-color: rgb(102, 0, 0);
+    background-color: color-mix(in oklch, var(--SmartThemeQuoteColor) 20%, transparent);
 }
 
 #chat .style-pins {
@@ -1651,7 +1648,7 @@ button {
     order: 3;
     field-sizing: content;
 
-    --progColor: var(--SmartThemeQuoteColor);
+    --progColor: var(--SmartThemeBorderColor);
     --progFlashColor: var(--SmartThemeEmColor);
     --progSuccessColor: var(--SmartThemeUnderlineColor);
     --progErrorColor: var(--crimson70a, rgb(189, 54, 47));
@@ -5576,6 +5573,24 @@ body:not(.caption) .mes_img_caption {
     font-size: calc(var(--mainFontSize) * 0.9);
 }
 
+.preset-action-btn {
+    font-size: 0.75em;
+    padding: 2px 6px !important;
+    white-space: nowrap;
+}
+
+.preset-action-btn i {
+    font-size: 0.85em;
+}
+
+#ai_response_configuration input[type="checkbox"],
+#openai_settings input[type="checkbox"] {
+    accent-color: var(--SmartThemeQuoteColor);
+    width: 14px;
+    height: 14px;
+    cursor: pointer;
+}
+
 /*------------ TOP SIDE SETTINGS ----------------*/
 
 #top-settings-holder {
@@ -6707,4 +6722,97 @@ body:not(.movingUI) .drawer-content.maximized {
     .popup {
         border-width: 2px;
     }
+}
+
+/* ── AI Response Configuration ── */
+
+/* Preset header: clean bottom rule, no gradient */
+.preset-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0 6px;
+    border-bottom: 1px solid var(--white20a);
+    margin-bottom: 6px;
+}
+
+/* Preset action buttons: icon-only, text hidden */
+.preset-action-btn span {
+    display: none;
+}
+
+/* Visual separation between the three config sections */
+#respective-ranges-and-temps,
+#advanced-ai-config-block {
+    border-top: 1px solid var(--white20a);
+    padding-top: 8px;
+    margin-top: 4px;
+}
+
+/* Features grid: more breathing room between checkboxes */
+.features-grid {
+    gap: 6px 12px;
+}
+
+/* Prompt Manager: visual separation from Features */
+#completion_prompt_manager {
+    border-top: 1px solid var(--white20a);
+    padding-top: 8px;
+    margin-top: 4px;
+}
+
+/* Segmented control */
+.segmented-control {
+    display: flex;
+    background-color: var(--black30a);
+    border: 1px solid var(--white20a);
+    border-radius: 5px;
+    overflow: hidden;
+    width: 100%;
+    margin: 5px 0;
+}
+
+.segmented-control .seg-option {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 4px 6px;
+    font-size: calc(var(--mainFontSize) * 0.8);
+    font-family: var(--mainFontFamily);
+    color: var(--SmartThemeBodyColor);
+    opacity: 0.55;
+    transition: background-color var(--animation-duration-2x), opacity var(--animation-duration-2x);
+    border-right: 1px solid var(--white20a);
+    text-align: center;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.segmented-control .seg-option:last-child {
+    border-right: none;
+}
+
+.segmented-control .seg-option input[type="radio"] {
+    display: none;
+}
+
+.segmented-control .seg-option:has(input:checked) {
+    background-color: var(--SmartThemeQuoteColor);
+    color: var(--grey10);
+    font-weight: 600;
+    opacity: 1;
+}
+
+.segmented-control .seg-option:hover:not(:has(input:checked)) {
+    background-color: rgba(255, 255, 255, 0.07);
+    opacity: 0.85;
+}
+
+/* Prompt Manager footer: labeled toolbar buttons */
+.pm-btn-label {
+    margin-left: 3px;
+    font-size: calc(var(--mainFontSize) * 0.75);
+    opacity: 0.8;
 }

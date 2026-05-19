@@ -7,183 +7,180 @@ description: >
   earns its place through function, not decoration.
 
 colors:
-  primary: "#171717"
-  secondary: "#4B4B4B"
-  tertiary: "#E88A24"
-  neutral: "#DCDCD2"
-  on-primary: "#DCDCD2"
-  on-secondary: "#DCDCD2"
-  on-tertiary: "#171717"
-  on-neutral: "#171717"
-  surface: "rgba(23, 23, 23, 1)"
-  surface-low: "rgba(0, 0, 0, 0.3)"
-  surface-overlay: "rgba(0, 0, 0, 0.9)"
-  border: "rgba(0, 0, 0, 0.5)"
-  shadow: "rgba(0, 0, 0, 0.5)"
-  text-primary: "#DCDCD2"
-  text-secondary: "#919191"
-  text-muted: "rgba(220, 220, 210, 0.7)"
-  accent-underline: "#BCE7CF"
-  accent-quote: "#E88A24"
-  accent-code-bg: "rgba(0, 0, 0, 0.7)"
-  accent-code-text: "rgba(255, 255, 255, 0.7)"
-  success: "rgb(88, 182, 0)"
-  danger: "rgba(255, 0, 0, 0.9)"
-  danger-fill: "rgba(100, 0, 0, 0.7)"
-  info: "#92BEFC"
-  warning: "#D78872"
+  surface: "#171717"
+  surface-muted: "#4B4B4B"
+  amber-accent: "#E88A24"
+  ivory: "#DCDCD2"
+  ivory-faint: "#BCBCB4"
+  ash-gray: "#919191"
+  mint-underline: "#BCE7CF"
+  frost-blue: "#92BEFC"
+  clay-warning: "#D78872"
+  ember-red: "#CC0000"
+  ember-deep: "#640000"
+  success-green: "#58B600"
 
 typography:
-  h1:
-    fontFamily: Noto Sans, sans-serif
-    fontSize: 1.5rem
-    fontWeight: bold
+  display:
+    fontFamily: "Noto Sans, sans-serif"
+    fontSize: "1.5rem"
+    fontWeight: 700
     lineHeight: 1.4
-  h2:
-    fontFamily: Noto Sans, sans-serif
-    fontSize: 1.2rem
-    fontWeight: bold
+  headline:
+    fontFamily: "Noto Sans, sans-serif"
+    fontSize: "1.2rem"
+    fontWeight: 700
     lineHeight: 1.4
-  h3:
-    fontFamily: Noto Sans, sans-serif
-    fontSize: 1.05rem
+  title:
+    fontFamily: "Noto Sans, sans-serif"
+    fontSize: "1.05rem"
     fontWeight: 600
     lineHeight: 1.4
-  body-lg:
-    fontFamily: Noto Sans, sans-serif
-    fontSize: 1rem
-    fontWeight: 500
-    lineHeight: calc(1rem + 0.5rem)
-  body-md:
-    fontFamily: Noto Sans, sans-serif
-    fontSize: 1rem
+  body:
+    fontFamily: "Noto Sans, sans-serif"
+    fontSize: "1rem"
     fontWeight: 400
     lineHeight: 1.5
-  body-sm:
-    fontFamily: Noto Sans, sans-serif
-    fontSize: 0.8rem
-    fontWeight: 400
-    lineHeight: 1.4
   label:
-    fontFamily: Noto Sans, sans-serif
-    fontSize: 0.95rem
+    fontFamily: "Noto Sans, sans-serif"
+    fontSize: "0.95rem"
     fontWeight: 500
     lineHeight: 1.3
   mono:
-    fontFamily: Noto Sans Mono, Courier New, Consolas, monospace
-    fontSize: 1rem
+    fontFamily: "Noto Sans Mono, Courier New, Consolas, monospace"
+    fontSize: "1rem"
     fontWeight: 400
-    lineHeight: 1rem
+    lineHeight: 1.0
 
 rounded:
-  xs: 2px
-  sm: 3px
-  md: 5px
-  lg: 10px
-  pill: 50%
+  xs: "2px"
+  sm: "3px"
+  md: "5px"
+  lg: "10px"
+  pill: "50%"
 
 spacing:
-  xs: 2px
-  sm: 5px
-  md: 10px
-  lg: 15px
-  xl: 20px
-  xxl: 30px
+  xs: "2px"
+  sm: "5px"
+  md: "10px"
+  lg: "15px"
+  xl: "20px"
+  xxl: "30px"
 
 components:
   button:
     backgroundColor: "{colors.surface}"
-    textColor: "{colors.text-primary}"
-    border: "1px solid {colors.border}"
+    textColor: "{colors.ivory}"
     rounded: "{rounded.md}"
     padding: "3px 5px"
     typography: "{typography.label}"
   button-hover:
-    backgroundColor: "rgba(255, 255, 255, 0.3)"
+    backgroundColor: "#7F7F7F"
   button-danger:
-    backgroundColor: "{colors.danger-fill}"
-    textColor: "{colors.text-primary}"
+    backgroundColor: "{colors.ember-deep}"
+    textColor: "{colors.ivory}"
   input:
-    backgroundColor: "{colors.surface-low}"
-    textColor: "{colors.text-primary}"
-    border: "1px solid {colors.border}"
+    backgroundColor: "#000000"
+    textColor: "{colors.ivory}"
     rounded: "{rounded.md}"
     padding: "3px 5px"
-    typography: "{typography.body-md}"
-  input-focus:
-    border: "1px solid rgba(255, 255, 255, 0.2)"
-  textarea:
-    backgroundColor: "{colors.surface-low}"
-    textColor: "{colors.text-primary}"
-    border: "1px solid {colors.border}"
-    rounded: "{rounded.md}"
-    padding: "5px 10px"
-    typography: "{typography.body-md}"
+    typography: "{typography.body}"
   panel:
     backgroundColor: "{colors.surface}"
-    textColor: "{colors.text-primary}"
-    border: "1px solid {colors.border}"
+    textColor: "{colors.ivory}"
     rounded: "{rounded.lg}"
     padding: "2px 14px"
   popup:
     backgroundColor: "{colors.surface}"
-    textColor: "{colors.text-primary}"
-    border: "1px solid {colors.border}"
+    textColor: "{colors.ivory}"
     rounded: "{rounded.lg}"
     padding: "4px 14px"
-    width: 500px
+    width: "500px"
   tag:
-    backgroundColor: "{colors.surface-low}"
-    textColor: "{colors.text-primary}"
-    border: "1px solid rgba(255, 255, 255, 0.5)"
+    backgroundColor: "#000000"
+    textColor: "{colors.ivory}"
     rounded: "{rounded.md}"
     padding: "0.1rem 0.2rem"
   tag-actionable:
     rounded: "{rounded.pill}"
-    size: "calc(1rem * 2)"
+    size: "2rem"
   chat-bubble:
-    backgroundColor: "{colors.surface-low}"
-    textColor: "{colors.text-primary}"
-    padding: 10px
-  scrollbar:
-    width: 0.7rem
-    thumbColor: "rgba(175, 175, 175, 0.7)"
-    thumbBorder: "inset 0 0 0 1px rgba(0, 0, 0, 0.5)"
-    rounded: "{rounded.lg}"
-  status-dot:
-    size: 14px
-    rounded: "{rounded.pill}"
-    successColor: "green"
-    dangerColor: "red"
+    backgroundColor: "#000000"
+    textColor: "{colors.ivory}"
+    padding: "10px"
 ---
 
 ## Overview
 
-EmberDesk is a self-hosted LLM frontend built for power users who live inside the application for hours. The design philosophy is **functional darkness** — a dense, low-fatigue workspace where every surface earns its place through utility, not ornamentation.
+**Creative North Star: "The Workshop at Midnight"**
 
-The visual identity is atmospheric and layered. Backgrounds use tinted blur overlays rather than flat solid colors, creating subtle depth that avoids monotony in a long-session tool. The palette is deliberately muted: near-black surfaces, ivory text, with color reserved for semantic meaning — amber for emphasis and quotes, soft green for underlines and success states, red for danger.
+EmberDesk is a self-hosted LLM frontend built for users who spend hours inside the application. The design philosophy is **functional warmth** — a dense, low-fatigue workspace where dark surfaces are layered with blur and tint to create atmosphere, not drama. Every pixel earns its place through utility, not ornamentation.
 
-Density is a feature, not a compromise. Controls are compact because screen real estate is the scarcest resource in a multi-panel workspace. But density never sacrifices clarity — consistent spacing, a11y-aware focus rings, and hover opacity transitions keep the interface navigable at speed.
+This is not a showroom. It is a well-worn desk: compact controls, information-rich surfaces, and a palette that rewards long sessions without eye strain. The interface should feel like a tool that belongs to the user, not a service they're renting. Density is respect for the user's time, not a compromise.
+
+The system explicitly rejects the visual language of consumer AI tools: no white backgrounds, no rounded pastel cards, no cartoon illustrations, no "powered by AI" badges. It rejects SaaS dashboard clichés: no hero metrics, no gradient accent cards, no identical card grids. It rejects the sterile cleanliness of ChatGPT-style minimalism. And it rejects neon-on-black cyberpunk performance: the dark theme is warm and atmospheric, not dramatic.
+
+**Key Characteristics:**
+- Atmospheric blur overlays create depth without competing with content
+- Semantic color is sparse and meaningful: amber for speech, green for success, red for danger
+- Controls are compact; density never sacrifices clarity
+- Every surface is configurable; the user's choices persist without friction
 
 ## Colors
 
-The palette operates in two layers: **structural colors** define surfaces, borders, and shadows; **semantic colors** carry meaning.
+The palette is deliberately muted. Near-black surfaces, ivory text, with color reserved for semantic meaning. The entire color system is overridable: users can customize every token via theme settings, and the built-in ThemeGenerator can algorithmically derive a palette from a background image using OKLCH color math, enforcing WCAG contrast ratios automatically.
 
-Structural colors are near-neutral and low-contrast by design. The default surface is `#171717` — close to black but warm enough to avoid the clinical feel of pure `#000`. Body text is `#DCDCD2`, a muted ivory that reads comfortably against dark surfaces without the harshness of pure white. Secondary text at `#919191` and muted text at 70% opacity provide two tiers of de-emphasis for labels, timestamps, and metadata.
+### Primary
+- **Warm Charcoal** (#171717): The default surface. Close to black but warm enough to avoid the clinical feel of pure `#000`. Used for panel backgrounds, popup bodies, and the main workspace. Implementation note: OKLCH-derived, often expressed as `rgba(23, 23, 23, 1)` in CSS for alpha compatibility.
 
-Semantic color is sparse and deliberate. Amber (`#E88A24`) marks in-line quotes and emphasis — it is the loudest color in the default theme and signals "someone is speaking." Soft green (`#BCE7CF`) marks underlines and success indicators. Red is reserved exclusively for destructive actions and error states, appearing as `rgba(255, 0, 0, 0.9)` for text and `rgba(100, 0, 0, 0.7)` for filled backgrounds.
+### Secondary
+- **Muted Umber** (#4B4B4B): Secondary surfaces and borders. Provides subtle separation between layered elements without harsh contrast.
 
-The entire color system is overridable. Users can customize every semantic token via theme settings, and the built-in ThemeGenerator can algorithmically derive a palette from a background image using Oklch color math, enforcing WCAG contrast ratios automatically.
+### Tertiary
+- **Hearthside Amber** (#E88A24): The loudest color in the system. Marks in-line quotes (`<q>`) and emphasis — it signals "someone is speaking." Used sparingly; its rarity is the point.
+
+### Neutral
+- **Ivory** (#DCDCD2): Primary text. A muted off-white that reads comfortably against dark surfaces without the harshness of pure white.
+- **Warm Gray** (#919191): Secondary text for labels, timestamps, and metadata. First tier of de-emphasis.
+- **Faint Ivory** (#BCBCB4): Muted text at reduced opacity. Second tier of de-emphasis for auxiliary information.
+
+### Semantic
+- **Mint Underline** (#BCE7CF): Underlines and success indicators. A soft, cool green that doesn't compete with amber for attention.
+- **Ember Red** (#CC0000): Destructive actions and error text. Never used decoratively.
+- **Deep Ember** (#640000): Filled danger backgrounds. Paired with Ember Red text for destructive UI states.
+- **Frost Blue** (#92BEFC): Informational callouts and links.
+- **Clay Warning** (#D78872): Warning states. Warm enough to stay in palette.
+- **Success Green** (#58B600): Positive status indicators and confirmation states.
+
+### Named Rules
+
+**The Amber Rarity Rule.** Amber is the loudest color in the default theme. It appears on quotes and emphasis only. If amber covers more than a few percent of any screen, it has been overused.
+
+**The No Pure White Rule.** Pure white (`#FFF`) is never used for text. Always use Ivory (`#DCDCD2`). Pure black (`#000`) is similarly avoided for surfaces — use Warm Charcoal (`#171717`). This prevents the clinical harshness that causes eye strain in long sessions.
 
 ## Typography
 
-Two font families cover all use cases. **Noto Sans** is the workhorse — clean, neutral, wide language support, and well-hinted at small sizes. **Noto Sans Mono** handles code blocks, terminal output, and technical labels.
+**Display Font:** Noto Sans (with system sans-serif fallback)
+**Body Font:** Noto Sans (with system sans-serif fallback)
+**Mono Font:** Noto Sans Mono (with Courier New, Consolas fallback)
 
-The base font size is **15px**, scaled by a user-adjustable `--fontScale` multiplier. All other sizes derive from this single root, so a user who scales up for a HiDPI display or accessibility needs gets proportional scaling everywhere.
+**Character:** Clean, neutral, wide language support. Noto Sans is well-hinted at small sizes and renders crisply against dark surfaces. The globally applied text shadow (`0px 0px Npx shadow`) gives text a slightly floating, soft-edged quality that reduces the harsh pixel-clarity feel of dense dark UIs — a deliberate aesthetic choice that also improves legibility against varied background images.
 
-Weight usage is restrained: 400 for body text, 500 for emphasized body and labels, 600 for sub-headings, bold for true headings. The globally applied text shadow (`0px 0px Npx shadow`) gives text a slightly floating, soft-edged quality that reduces the harsh pixel-clarity feel of dense dark UIs — it is a deliberate aesthetic choice that also improves legibility against varied background images.
+The base font size is **15px**, scaled by a user-adjustable `--fontScale` multiplier. All other sizes derive from this single root, so a user who scales up for a HiDPI display or accessibility needs gets proportional scaling everywhere. Line height follows a formula tied to font size (`calc(var(--mainFontSize) + 0.5rem)`), keeping text blocks breathable without wasting vertical space.
 
-Line height follows a formula tied to font size (`calc(var(--mainFontSize) + 0.5rem)`), keeping text blocks breathable without wasting vertical space.
+### Hierarchy
+- **Display** (700, 1.5rem, line-height 1.4): Page-level headings. Reserved for true headings that define a section.
+- **Headline** (700, 1.2rem, line-height 1.4): Sub-section headings and panel titles.
+- **Title** (600, 1.05rem, line-height 1.4): Component-level headings, card titles, dialog headers.
+- **Body** (400, 1rem, line-height 1.5): Default text. Max line length 65-75ch for readability.
+- **Label** (500, 0.95rem, line-height 1.3): Button text, form labels, tags, navigation items.
+- **Mono** (400, 1rem, line-height 1.0): Code blocks, terminal output, technical labels.
+
+### Named Rules
+
+**The Scalable Root Rule.** Never use fixed pixel values for font sizes. Always derive from `--mainFontSize` and the `--fontScale` multiplier. This is non-negotiable for accessibility and HiDPI support.
+
+**The Weight Restraint Rule.** Weight usage is restrained: 400 for body, 500 for labels and emphasis, 600 for sub-headings, 700 for true headings. No lighter or heavier weights are used.
 
 ## Layout
 
@@ -195,6 +192,20 @@ The layout is responsive by necessity (multi-device self-hosting) but not mobile
 
 Panel shell containers are present in the initial HTML for instant first paint. Heavy inner content (settings sections, character cards) is deferred and rendered after the app-ready event, then state is replayed into late-loaded DOM.
 
+### Spacing Scale
+- **xs** (2px): Hairline gaps, border offsets.
+- **sm** (5px): Default gap between interactive elements. The baseline rhythm.
+- **md** (10px): Container padding for most panels. Standard internal spacing.
+- **lg** (15px): Section separation within panels.
+- **xl** (20px): Major section boundaries.
+- **xxl** (30px): Top-level layout spacing, rarely used in dense UI.
+
+### Named Rules
+
+**The Functional Whitespace Rule.** Whitespace should exist where it aids scanning — between logically distinct groups — not as a blanket luxury margin. If removing padding doesn't hurt comprehension, the padding was decorative.
+
+**The Shell-First Rule.** Panel shells are in the initial HTML for instant first paint. Heavy inner content is deferred. The user sees structure immediately, content arrives next.
+
 ## Elevation & Depth
 
 EmberDesk creates depth through **blur overlays** rather than drop shadows or material-style elevation layers.
@@ -204,6 +215,16 @@ The blur system has two configurable variables: `--blurStrength` (default 10, co
 Box shadows are minimal: `0 0 10px rgba(0, 0, 0, 0.5)` on popups and `0 2px 20px 0 rgba(0, 0, 0, 0.7)` on the top bar — enough to separate layers without competing with the blur system.
 
 The shadow popup overlay (`#shadow_popup`) uses double the blur strength as a backdrop, creating a strong depth separation between the active modal and the dimmed workspace behind it.
+
+### Shadow Vocabulary
+- **Popup shadow** (`0 0 10px rgba(0, 0, 0, 0.5)`): Separates popups and dialogs from the workspace.
+- **Top bar shadow** (`0 2px 20px 0 rgba(0, 0, 0, 0.7)`): Anchors the top bar above the content area.
+
+### Named Rules
+
+**The Blur-Over-Shadow Rule.** Depth is created primarily through blur overlays, not drop shadows. Box shadows are minimal and structural — they separate layers, not decorate them. If a shadow is doing the work that a blur overlay should be doing, replace it.
+
+**The User-Controlled Depth Rule.** Both `--blurStrength` and `--shadowWidth` are user-configurable. Never hardcode blur or shadow values that override the user's preferences.
 
 ## Shapes
 
@@ -218,6 +239,17 @@ The consistent use of 5px for interactive controls and 10px for container-level 
 
 Avatars have three shape modes: square (`2px`), rounded (`10px`), and round (`50%`), toggled by user preference.
 
+### Radius Vocabulary
+- **xs** (2px): Avatars in square mode, the sharpest elements in the system.
+- **sm** (3px): Keyboard shortcuts, small inline items.
+- **md** (5px): All interactive controls — buttons, inputs, tags, textareas.
+- **lg** (10px): Container surfaces — panels, popups, modals, scroll thumbs, code blocks.
+- **pill** (50%): Circular elements — actionable filter tags, avatars in round mode, status dots.
+
+### Named Rules
+
+**The Embedded Controls Rule.** Interactive controls use 5px radius; container surfaces use 10px. This creates a subtle hierarchy: controls feel embedded within the containers they inhabit. Never invert this relationship.
+
 ## Components
 
 **Buttons** (`menu_button`) are compact, bordered, and semi-transparent. Background is the surface tint with a 50% grayscale filter that lifts on hover to full brightness. The transition duration is 250ms. Disabled buttons reduce opacity to 0.5 and add `grayscale(0.5)`.
@@ -228,25 +260,30 @@ Avatars have three shape modes: square (`2px`), rounded (`10px`), and round (`50
 
 **Popups/Modals** use the `<dialog>` element, styled at 500px default width with 10px radius, surface-tint background, blur backdrop, and a `pop-in` entrance animation. Content is scrollable with `overflow-y: auto` inside the popup body.
 
-**Chat Messages** (`.mes`) are full-width flex rows with 10px padding. Message text uses the body-lg weight (500) for a slightly heavier-than-default reading experience. Inline semantic markup is color-coded: `<em>`/`<i>` in the em color, `<q>` in quote amber, `<u>` in underline green. Code blocks use the mono font with a near-black background and 70% white text.
+**Chat Messages** (`.mes`) are full-width flex rows with 10px padding. Message text uses Body size at weight 500 for a slightly heavier-than-default reading experience. Inline semantic markup is color-coded: `<em>`/`<i>` in the em color, `<q>` in quote amber, `<u>` in underline green. Code blocks use Mono with a near-black background and 70% white text.
 
 **Status indicators** are 14px circles: green for connected, red for disconnected. They appear in the online status bar with 4px left margin spacing from the label text.
 
 ## Do's and Don'ts
 
-**Do:**
-- Use blur overlays and tinted surfaces for depth — never flat solid-gray panels.
-- Keep interactive controls at 5px radius; reserve 10px for container surfaces.
-- Use opacity transitions (0.5 to 1.0) for hover states on icons and buttons.
-- Use the semantic color tokens (amber for quotes, green for success, red for danger) consistently.
-- Derive font sizes from `--mainFontSize` and the `--fontScale` multiplier.
-- Provide `:focus-visible` outlines on all interactive elements — use the theme outline color, not browser defaults.
-- Keep panel shells in initial HTML; defer heavy inner content.
+### Do:
+- **Do** use blur overlays and tinted surfaces for depth — never flat solid-gray panels. Depth is atmospheric, not structural.
+- **Do** keep interactive controls at 5px radius; reserve 10px for container surfaces. The hierarchy is deliberate.
+- **Do** use opacity transitions (0.5 to 1.0) for hover states on icons and buttons. Transitions are 250ms.
+- **Do** use the semantic color tokens consistently: amber for quotes, mint green for underlines and success, red for danger.
+- **Do** derive font sizes from `--mainFontSize` and the `--fontScale` multiplier. Never hardcode pixel sizes.
+- **Do** provide `:focus-visible` outlines on all interactive elements using the theme outline color.
+- **Do** keep panel shells in initial HTML for instant first paint; defer heavy inner content.
+- **Do** make density a feature, not a compromise. Compact controls respect the user's screen real estate.
 
-**Don't:**
-- Introduce bright or saturated accent colors beyond the established semantic set.
-- Use large border radii (15px+) or heavy drop shadows — they fight the atmospheric blur aesthetic.
-- Add decorative elements that consume vertical space without providing functional information.
-- Use pure white (`#FFF`) for text — always use the ivory tone (`#DCDCD2`).
-- Break the ID-based DOM integration pattern with framework component abstractions.
-- Use fixed pixel values for font sizes — always derive from the scalable root.
+### Don't:
+- **Don't** introduce bright or saturated accent colors beyond the established semantic set. The palette is muted by design.
+- **Don't** use large border radii (15px+) or heavy drop shadows — they fight the atmospheric blur aesthetic.
+- **Don't** add decorative elements that consume vertical space without providing functional information.
+- **Don't** use pure white (`#FFF`) for text — always use Ivory (`#DCDCD2`). Pure black (`#000`) is similarly avoided for surfaces.
+- **Don't** build a **generic AI tool UI** — no white backgrounds, no rounded pastel cards, no cartoon illustrations, no "powered by AI" badges.
+- **Don't** build a **SaaS dashboard cliché** — no hero metrics with big numbers, no gradient accent cards, no identical card grids, no "Start your free trial" energy.
+- **Don't** build a **ChatGPT-like clean UI** — no sterile white chat bubbles on gray, no minimal chrome that hides everything behind a sidebar toggle.
+- **Don't** build a **neon/cyberpunk aesthetic** — no glowing borders, no neon gradients on black, no "hacker" visual language. The dark theme is warm, not dramatic.
+- **Don't** break the ID-based DOM integration pattern with framework component abstractions.
+- **Don't** use fixed pixel values for font sizes — always derive from the scalable root.
