@@ -137,6 +137,7 @@ import {
     clamp,
     shakeElement,
     createTimeout,
+    waitUntilCondition,
 } from './scripts/utils.js';
 import { debounce_timeout, GENERATION_TYPE_TRIGGERS, IGNORE_SYMBOL, inject_ids, MEDIA_DISPLAY, MEDIA_SOURCE, MEDIA_TYPE, OVERSWIPE_BEHAVIOR, SCROLL_BEHAVIOR, SWIPE_DIRECTION, SWIPE_SOURCE, SWIPE_STATE } from './scripts/constants.js';
 
@@ -11368,6 +11369,16 @@ jQuery(async function () {
         if (this_chid === undefined || !characters[this_chid]) {
             toastr.warning('No character selected.');
             return;
+        }
+
+        // Auto-stop generation if active
+        if (is_send_press !== false) {
+            stopGeneration();
+            try {
+                await waitUntilCondition(() => is_send_press === false, debounce_timeout.extended, 10);
+            } catch {
+                // Timeout — proceed anyway
+            }
         }
 
         // Preflight: gather world info metadata before showing confirmation

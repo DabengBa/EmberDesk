@@ -11,12 +11,20 @@ import {
     characterToEntity,
     printCharactersDebounced,
     deleteCharacter,
+    stopGeneration,
+    is_send_press,
+    this_chid,
+    name2,
+    neutralCharacterName,
 } from '../script.js';
 
 import { favsToHotswap } from './RossAscends-mods.js';
 import { loader } from './action-loader.js';
 import { convertCharacterToPersona } from './personas.js';
-import { callGenericPopup, POPUP_TYPE } from './popup.js';
+import { POPUP_TYPE, POPUP_RESULT, Popup } from './popup.js';
+import { buildCascadeSectionHtml, captureCascadeChoices } from './world-cascade-dialog.js';
+import { waitUntilCondition } from './utils.js';
+import { debounce_timeout } from './constants.js';
 import { createTagInput, getTagKeyForEntity, getTagsList, printTagList, tag_map, compareTagsForSort, removeTagFromMap, importTags, tag_import_setting } from './tags.js';
 import { t } from './i18n.js';
 
@@ -809,58 +817,185 @@ class BulkEditOverlay {
     };
 
     /**
-     * Gets the HTML as a string that is displayed inside the popup for the bulk delete
+     * Builds the unified delete confirmation dialog HTML.
      *
-     * @param {Array<number>} characterIds - The characters that are shown inside the popup
-     * @returns String containing the html for the popup content
+     * @param {object} options
+     * @param {number} options.count - Number of characters to delete
+     * @param {string} options.nameTagsHtml - Pre-rendered character name tag HTML
+     * @param {boolean} options.isGenerating - Whether generation is in progress
+     * @param {string|null} options.activeChatName - Name of the active chat character if in delete list, else null
+     * @param {boolean} options.isTempChat - Whether the user is in a temporary chat
+     * @param {string|null} options.cascadeHtml - World info cascade section HTML, or null
+     * @returns {string}
      */
-    static #getDeletePopupContentHtml = (characterIds) => {
-        return `
-            <h3>${t`Delete`} ${characterIds.length} ${t`characters?`}</h3>
+    static #buildUnifiedDeleteDialogHtml = ({ count, nameTagsHtml, isGenerating, activeChatName, isTempChat, cascadeHtml }) => {
+        let html = `
+            <h3>${t`Delete`} ${count} ${t`characters?`}</h3>
             <div class="delete-dialog-danger">
                 <i class="fa-solid fa-triangle-exclamation fa-fw"></i>
                 <span>${t`This action cannot be undone.`}</span>
             </div>
-            <div id="bulk_delete_avatars_block" class="avatars_inline avatars_inline_small tags tags_inline bulk-delete-avatars"></div>
+            <div class="delete-dialog-names">${nameTagsHtml}</div>
+            <div class="delete-dialog-count">${count} ${t`characters selected`}</div>`;
+
+        if (isGenerating) {
+            html += `
+            <div class="delete-dialog-info">
+                <i class="fa-solid fa-circle-info fa-fw"></i>
+                <span>${t`Will stop the current generation when deleting.`}</span>
+            </div>`;
+        }
+
+        if (activeChatName) {
+            html += `
+            <div class="delete-dialog-info">
+                <i class="fa-solid fa-circle-info fa-fw"></i>
+                <span>${t`You are currently chatting with ${activeChatName}. Deleting it will end the conversation.`}</span>
+            </div>`;
+        }
+
+        if (isTempChat) {
+            html += `
+            <div class="delete-dialog-info">
+                <i class="fa-solid fa-circle-info fa-fw"></i>
+                <span>${t`Unsaved messages in the current temporary chat will be lost.`}</span>
+            </div>`;
+        }
+
+        html += `
             <label class="delete-dialog-option" for="del_char_checkbox">
                 <input type="checkbox" id="del_char_checkbox" />
                 <span>${t`Also delete the chat files`}</span>
             </label>`;
+
+        if (cascadeHtml) {
+            html += cascadeHtml;
+        }
+
+        return html;
     };
 
     /**
-     * Request user input before concurrently handle deletion
-     * requests.
+     * Stops generation and waits for the send state to clear.
      *
-     * @returns {Promise<number>}
+     * @returns {Promise<boolean>} Whether generation was stopped
      */
-    handleContextMenuDelete = () => {
+    static #stopGenerationAndWait = async () => {
+        if (is_send_press === false) return false;
+        stopGeneration();
+        try {
+            await waitUntilCondition(() => is_send_press === false, debounce_timeout.extended, 10);
+        } catch {
+            // Timeout — proceed anyway, the toastr in closeCurrentChatForDelete is non-blocking
+        }
+        return true;
+    };
+
+    /**
+     * Shows a unified delete confirmation dialog with character names,
+     * inline info banners, and optional world info cascade section.
+     *
+     * @returns {Promise<void>}
+     */
+    handleContextMenuDelete = async () => {
         const characterIds = this.selectedCharacters;
-        const popupContent = $(BulkEditOverlay.#getDeletePopupContentHtml(characterIds));
-        const checkbox = popupContent.find('#del_char_checkbox');
-        const promise = callGenericPopup(popupContent, POPUP_TYPE.CONFIRM, '', { leftAlign: true, wider: true, okButton: t`Delete` })
-            .then((accept) => {
-                if (!accept) return;
+        const count = characterIds.length;
 
-                const deleteChats = checkbox.prop('checked') ?? false;
+        // 1. Detect state before showing dialog
+        const isGenerating = is_send_press !== false;
+        const inTempChat = this_chid === undefined && name2 === neutralCharacterName;
+        const activeChatCharacter = (this_chid !== undefined && characterIds.includes(this_chid))
+            ? characters[this_chid]
+            : null;
 
-                const loaderHandle = loader.show({
-                    slug: 'bulk-delete',
-                    title: t`Bulk Delete`,
-                    message: t`Deleting ${characterIds.length} character(s)…`,
-                    toastMode: loader.ToastMode.STATIC,
-                });
-                const avatarList = characterIds.map(id => characters[id]?.avatar).filter(a => a);
-                return CharacterContextMenu.delete(avatarList, deleteChats)
-                    .then(() => this.browseState())
-                    .finally(() => loaderHandle.hide());
+        // 2. Pre-fetch world info data (does NOT close chat or change state)
+        let worldInfos = [];
+        try {
+            const avatarList = characterIds.map(id => characters[id]?.avatar).filter(a => a);
+            const resp = await fetch('/api/characters/delete-preflight', {
+                method: 'POST',
+                headers: getRequestHeaders(),
+                body: JSON.stringify({ avatars: avatarList }),
+                cache: 'no-cache',
             });
+            if (resp.ok) {
+                const data = await resp.json();
+                worldInfos = data.worldInfos ?? [];
+            }
+        } catch {
+            // Preflight failure — degrade to dialog without world info section
+        }
 
-        // At this moment the popup is already changed in the dom, but not yet closed/resolved. We build the avatar list here
-        const entities = characterIds.map(id => characterToEntity(characters[id], id)).filter(entity => entity.item !== undefined);
-        buildAvatarList($('#bulk_delete_avatars_block'), entities);
+        // 3. Build dialog HTML
+        const nameTagsHtml = characterIds
+            .map(id => characters[id]?.name)
+            .filter(Boolean)
+            .map(name => {
+                const escaped = name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                return `<span class="tag">${escaped}</span>`;
+            })
+            .join('');
+        const cascadeHtml = buildCascadeSectionHtml(worldInfos);
+        const dialogHtml = BulkEditOverlay.#buildUnifiedDeleteDialogHtml({
+            count,
+            nameTagsHtml,
+            isGenerating,
+            activeChatName: activeChatCharacter?.name ?? null,
+            isTempChat: inTempChat,
+            cascadeHtml,
+        });
 
-        return promise;
+        // 4. Configure popup
+        let deleteChats = false;
+        let capturedCascade = { deleteWorlds: [], clearWorldReferences: false };
+        const hasWorldInfos = worldInfos.length > 0;
+
+        const popup = new Popup(dialogHtml, POPUP_TYPE.CONFIRM, '', {
+            okButton: t`Delete`,
+            wider: true,
+            leftAlign: true,
+            customButtons: hasWorldInfos
+                ? [{ text: t`Delete All`, result: POPUP_RESULT.CUSTOM1, classes: ['popup-button-ok'] }]
+                : [],
+            onClosing: () => {
+                deleteChats = !!document.getElementById('del_char_checkbox')?.checked;
+                capturedCascade = captureCascadeChoices();
+                return true;
+            },
+            onOpen: (p) => {
+                if (!hasWorldInfos) return;
+                const btn = p.dlg.querySelector('[data-result="' + POPUP_RESULT.CUSTOM1 + '"]');
+                if (btn) {
+                    btn.addEventListener('click', () => {
+                        const chatCb = document.getElementById('del_char_checkbox');
+                        if (chatCb) chatCb.checked = true;
+                        document.querySelectorAll('.world-cascade-checkbox').forEach((cb) => { cb.checked = true; });
+                        p.complete(POPUP_RESULT.AFFIRMATIVE);
+                    });
+                }
+            },
+        });
+
+        const result = await popup.show();
+        if (!result) return;
+
+        // 5. Execute deletion
+        const loaderHandle = loader.show({
+            slug: 'bulk-delete',
+            title: t`Bulk Delete`,
+            message: t`Deleting ${count} character(s)…`,
+            toastMode: loader.ToastMode.STATIC,
+        });
+
+        try {
+            await BulkEditOverlay.#stopGenerationAndWait();
+            const avatarList = characterIds.map(id => characters[id]?.avatar).filter(a => a);
+            await CharacterContextMenu.delete(avatarList, deleteChats);
+            toastr.success(t`Deleted ${count} character(s)`);
+        } finally {
+            loaderHandle.hide();
+            this.browseState();
+        }
     };
 
     /**
