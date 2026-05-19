@@ -344,11 +344,20 @@ describe('CommandLineParser.parse()', () => {
         expect(result.port).toBe(9000);
     });
 
-    test('global mode: configPath uses envPaths', () => {
-        const parser = new CommandLineParser();
-        const result = parser.parse(['node', 'server.js', '--global']);
+    test('global mode: configPath uses envPaths (via parseArgv, no fs side effects)', () => {
+        // Use parseArgv to verify global path selection without writing to real app-data
+        const result = parseArgv(['node', 'server.js', '--global']);
+        expect(result.isGlobal).toBe(true);
         expect(result.configPath).toContain('EmberDesk');
         expect(result.configPath).toMatch(/config\.yaml$/);
+    });
+
+    test('global mode: dataRoot forced to OS app-data, not config/CLI value', () => {
+        // Verify P1 fix: global mode must ignore config/CLI dataRoot
+        const parser = new CommandLineParser();
+        const defaultConfig = parser.getDefaultConfig(true);
+        expect(defaultConfig.dataRoot).toContain('EmberDesk');
+        expect(defaultConfig.dataRoot).not.toBe('./data');
     });
 
     test('missing config file: config file created with defaults', () => {

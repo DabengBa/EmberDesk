@@ -467,9 +467,12 @@ export class CommandLineParser {
      */
     parse(args) {
         const argv = parseArgv(args);
+        const defaultConfig = this.getDefaultConfig(argv.isGlobal);
         prepareConfigFilesystem(argv.configPath, argv.isGlobal);
-        const resolvedDataRoot = argv.dataRoot ?? getConfigValue('dataRoot', this.getDefaultConfig(argv.isGlobal).dataRoot);
+        const resolvedDataRoot = argv.isGlobal
+            ? defaultConfig.dataRoot
+            : (argv.dataRoot ?? getConfigValue('dataRoot', defaultConfig.dataRoot));
         prepareDataRoot(resolvedDataRoot);
-        return resolveConfig({ ...argv, dataRoot: resolvedDataRoot }, this.getDefaultConfig(argv.isGlobal));
+        return resolveConfig({ ...argv, dataRoot: resolvedDataRoot }, defaultConfig);
     }
 }
