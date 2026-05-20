@@ -37,9 +37,9 @@ This feature lets a user remove unwanted characters and immediately see the work
 2. If message generation is in progress, EmberDesk automatically stops it.
 3. EmberDesk checks whether the character references any world info files (`extensions.world`).
 4. EmberDesk presents a confirmation dialog. If linked world info files exist, the dialog includes a **World Info Cascade** section listing each world with its entry count and the number of other characters still bound to it. Worlds shared with other characters display a warning.
-5. The user optionally checks which world info files to delete and whether to also delete chat files.
+5. The user optionally checks which world info files to delete and whether to also delete chat files (checked by default).
 6. The user confirms deletion.
-7. EmberDesk removes the deleted character, deletes any selected world info files, and clears references if requested.
+7. EmberDesk removes the deleted character and deletes any selected world info files.
 8. EmberDesk removes the deleted row from the visible character library.
 9. A success toast confirms the deletion.
 
@@ -47,16 +47,14 @@ This feature lets a user remove unwanted characters and immediately see the work
 
 1. The user enters bulk-select mode from the character library panel and selects one or more [character cards](term.character_card).
 2. The user clicks the bulk delete button or uses the right-click context menu delete option.
-3. EmberDesk gathers state: whether generation is in progress, whether the user is in a temporary chat, and whether the active chat character is in the selection.
+3. EmberDesk gathers state: whether the user is in a temporary chat.
 4. EmberDesk pre-fetches world info metadata for all selected characters.
 5. EmberDesk shows a **single unified confirmation dialog** containing:
    - Character names displayed as scrollable tag labels
-   - An info banner if generation will be stopped automatically
-   - An info banner if the active chat character is in the selection
-   - An info banner if the user is in a temporary chat
-   - A "Also delete the chat files" checkbox
-   - A World Info Cascade section (if any selected characters have linked world info), with per-world checkboxes and a "Also clear world info references in remaining characters" option
-   - A "Delete All" button that selects all world info checkboxes and the chat file checkbox in one action
+   - An info banner if the user is in a temporary chat (unsaved messages will be lost)
+   - A "Also delete the chat files" checkbox (checked by default)
+   - A World Info Cascade section (if any selected characters have linked world info), with per-world checkboxes
+   - A "Delete All" button that selects all world info checkboxes in one action
 6. The user confirms deletion (or cancels).
 7. EmberDesk stops any active generation, closes the current chat, deletes all selected characters with their chosen options, and removes selected world info files.
 8. A success toast ("Deleted N character(s)") confirms the result.
@@ -68,11 +66,12 @@ This feature lets a user remove unwanted characters and immediately see the work
 - Both single and batch delete use a unified confirmation dialog — no separate cascading popups.
 - The success path should update the visible library immediately.
 - Removing rows from the library is part of this feature; re-browsing the remaining library belongs to [Character Library Panel](feature.character_library_panel).
+- The "Also delete the chat files" checkbox is checked by default.
 - World info files are unchecked by default in the cascade section — the user must actively opt in to delete them (or use "Delete All").
-- "Delete All" selects all world info checkboxes and the "delete chat files" checkbox — it means complete cleanup, not selective deletion.
-- Clearing `extensions.world` references only removes the external link; the embedded `character_book` content inside each character is never touched and can be re-imported later.
-- A failed cascade (world file deletion or reference clearing) does not block the character deletion itself.
-- If generation is in progress when deletion is triggered, it is stopped automatically — the user is informed via an info banner but is not blocked.
+- "Delete All" selects all world info checkboxes — it means complete world info cleanup, not selective deletion.
+- Deleting a character does not affect other characters' world info references. See [ADR-0005](../adr/0005-delete-no-cross-character-world-ref-cleanup.md).
+- A failed cascade (world file deletion) does not block the character deletion itself.
+- If generation is in progress when deletion is triggered, it is stopped automatically without blocking the user.
 - If the preflight world info request fails, the dialog degrades gracefully by omitting the World Info Cascade section.
 
 ## ID Boundary Notes
