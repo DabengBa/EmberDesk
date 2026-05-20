@@ -1,22 +1,5 @@
 /* ── Delete confirmation dialog ─────────────────────────────── */
 
-.delete-dialog-danger {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
-    background: var(--crimson70a);
-    border-radius: 5px;
-    margin-bottom: 10px;
-    font-size: 0.9rem;
-    font-weight: 500;
-}
-
-.delete-dialog-danger i {
-    flex-shrink: 0;
-    color: var(--warning);
-}
-
 .delete-dialog-option {
     display: flex;
     align-items: center;
@@ -92,56 +75,26 @@
     color: var(--SmartThemeQuoteColor);
 }
 
-.world-cascade-global {
-    margin-top: 8px;
-    padding: 8px 10px;
-    background: rgba(0, 0, 0, 0.15);
-    border-radius: 5px;
-    border: 1px solid var(--SmartThemeBorderColor);
-}
-
-.world-cascade-global label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    cursor: pointer;
-    font-size: 0.9rem;
-}
-
-.world-cascade-global small {
-    display: block;
-    margin-top: 4px;
-    padding-left: 26px;
-    font-size: 0.78rem;
-    line-height: 1.4;
-    opacity: 0.5;
-}
-
 /* ── Bulk delete ─────────────────────────────────────────────── */
 
 .bulk-delete-avatars {
     margin: 8px 0;
 }
 
-/* ── Info banner ────────────────────────────────────────────────── */
+/* ── Info line (low-visual-weight status) ────────────────────── */
 
 .delete-dialog-info {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
-    background: rgba(59, 130, 246, 0.1);
-    border-radius: 5px;
+    gap: 6px;
+    padding: 5px 0 5px 10px;
     margin-bottom: 10px;
-    font-size: 0.9rem;
+    border-left: 2px solid var(--SmartThemeFrostBlueColor, #92BEFC);
+    font-size: 0.85rem;
+    color: var(--SmartThemeFadedColor, #BCBCB4);
 }
 
-.delete-dialog-info i {
-    flex-shrink: 0;
-    color: #3b82f6;
-}
-
-/* ── Character name list ────────────────────────────────────────── */
+/* ── Character name list ────────────────────────────────────── */
 
 .delete-dialog-names {
     max-height: 120px;
@@ -163,16 +116,16 @@
     white-space: nowrap;
 }
 
-.delete-dialog-count {
-    font-size: 0.8rem;
-    opacity: 0.5;
-    margin-bottom: 8px;
+/* ── Delete All danger style ─────────────────────────────────── */
+
+.popup-button-danger {
+    background: var(--crimson70a, #640000) !important;
+    color: var(--SmartThemeEm_Color, #DCDCD2) !important;
 }
 
 /* ── Checkbox alignment fix ───────────────────────────────────── */
 
 .delete-dialog-option input[type="checkbox"],
-.world-cascade-label input[type="checkbox"],
-.world-cascade-global label input[type="checkbox"] {
+.world-cascade-label input[type="checkbox"] {
     transform: none;
 }

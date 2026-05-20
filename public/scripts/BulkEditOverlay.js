@@ -822,52 +822,25 @@ class BulkEditOverlay {
      * @param {object} options
      * @param {number} options.count - Number of characters to delete
      * @param {string} options.nameTagsHtml - Pre-rendered character name tag HTML
-     * @param {boolean} options.isGenerating - Whether generation is in progress
-     * @param {string|null} options.activeChatName - Name of the active chat character if in delete list, else null
      * @param {boolean} options.isTempChat - Whether the user is in a temporary chat
      * @param {string|null} options.cascadeHtml - World info cascade section HTML, or null
      * @returns {string}
      */
-    static #buildUnifiedDeleteDialogHtml = ({ count, nameTagsHtml, isGenerating, activeChatName, isTempChat, cascadeHtml }) => {
+    static #buildUnifiedDeleteDialogHtml = ({ count, nameTagsHtml, isTempChat, cascadeHtml }) => {
         let html = `
             <h3>${t`Delete`} ${count} ${t`characters?`}</h3>
-            <div class="delete-dialog-danger">
-                <i class="fa-solid fa-triangle-exclamation fa-fw"></i>
-                <span>${t`This action cannot be undone.`}</span>
-            </div>
             <div class="delete-dialog-names">${nameTagsHtml}</div>
-            <div class="delete-dialog-count">${count} ${t`characters selected`}</div>`;
-
-        if (isGenerating) {
-            html += `
-            <div class="delete-dialog-info">
-                <i class="fa-solid fa-circle-info fa-fw"></i>
-                <span>${t`Will stop the current generation when deleting.`}</span>
-            </div>`;
-        }
-
-        if (activeChatName) {
-            const escapedName = activeChatName.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-            html += `
-            <div class="delete-dialog-info">
-                <i class="fa-solid fa-circle-info fa-fw"></i>
-                <span>${t`You are currently chatting with ${escapedName}. Deleting it will end the conversation.`}</span>
-            </div>`;
-        }
+            <label class="delete-dialog-option" for="del_char_checkbox">
+                <input type="checkbox" id="del_char_checkbox" checked />
+                <span>${t`Also delete the chat files`}</span>
+            </label>`;
 
         if (isTempChat) {
             html += `
             <div class="delete-dialog-info">
-                <i class="fa-solid fa-circle-info fa-fw"></i>
-                <span>${t`Unsaved messages in the current temporary chat will be lost.`}</span>
+                <span>${t`temporary chat — unsaved messages will be lost`}</span>
             </div>`;
         }
-
-        html += `
-            <label class="delete-dialog-option" for="del_char_checkbox">
-                <input type="checkbox" id="del_char_checkbox" />
-                <span>${t`Also delete the chat files`}</span>
-            </label>`;
 
         if (cascadeHtml) {
             html += cascadeHtml;
@@ -940,8 +913,6 @@ class BulkEditOverlay {
         const dialogHtml = BulkEditOverlay.#buildUnifiedDeleteDialogHtml({
             count,
             nameTagsHtml,
-            isGenerating,
-            activeChatName: activeChatCharacter?.name ?? null,
             isTempChat: inTempChat,
             cascadeHtml,
         });
@@ -956,7 +927,7 @@ class BulkEditOverlay {
             wider: true,
             leftAlign: true,
             customButtons: hasWorldInfos
-                ? [{ text: t`Delete All`, result: POPUP_RESULT.CUSTOM1, classes: ['popup-button-ok'] }]
+                ? [{ text: t`Delete All`, result: POPUP_RESULT.CUSTOM1, classes: ['popup-button-danger'] }]
                 : [],
             onClosing: () => {
                 deleteChats = !!document.getElementById('del_char_checkbox')?.checked;

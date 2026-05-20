@@ -105,10 +105,6 @@ export function buildCascadeSectionHtml(worldInfos) {
         return null;
     }
 
-    const hasOtherBindings = worldInfos.some(
-        (w) => w.boundCharacters.length > w.deleteCandidateAvatars.length,
-    );
-
     let html = `<div class="world-cascade-section">`;
     html += `<div class="world-cascade-section-header">`;
     html += `<i class="fa-solid fa-book fa-fw"></i>`;
@@ -139,16 +135,6 @@ export function buildCascadeSectionHtml(worldInfos) {
 
     html += `</div>`;
 
-    if (hasOtherBindings) {
-        html += `<div class="world-cascade-global">`;
-        html += `<label>`;
-        html += `<input type="checkbox" id="world-cascade-clear-refs">`;
-        html += `<span>${t`Also clear world info references in remaining characters`}</span>`;
-        html += `</label>`;
-        html += `<small>${t`The embedded world book content inside those characters will NOT be removed and can still be imported later.`}</small>`;
-        html += `</div>`;
-    }
-
     html += `</div>`;
     return html;
 }
@@ -167,9 +153,7 @@ export function captureCascadeChoices() {
             deleteWorlds.push(cb.dataset.world);
         }
     }
-    const clearRefsEl = document.getElementById('world-cascade-clear-refs');
-    const clearWorldReferences = clearRefsEl?.checked ?? false;
-    return { deleteWorlds, clearWorldReferences };
+    return { deleteWorlds, clearWorldReferences: false };
 }
 
 /** @param {string} str */
