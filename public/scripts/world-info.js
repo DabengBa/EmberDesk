@@ -2114,6 +2114,56 @@ export async function updateWorldInfoList() {
     }
 }
 
+/**
+ * Flushes deleted world names from all client-side UI state.
+ * Call after worlds are confirmed deleted on the server.
+ * @param {string[]} worldNames
+ */
+export async function flushDeletedWorldsFromUI(worldNames) {
+    const names = new Set(worldNames);
+
+    for (const name of names) {
+        worldInfoCache.delete(name);
+    }
+
+    let needsSave = false;
+    const before = selected_world_info.length;
+    selected_world_info = selected_world_info.filter((e) => !names.has(e));
+    if (selected_world_info.length !== before) {
+        needsSave = true;
+    }
+
+    await updateWorldInfoList();
+
+    const editorSelected = String($('#world_editor_select').find(':selected').text());
+    if (names.has(editorSelected)) {
+        $('#world_editor_select').val(null).trigger('change');
+    }
+
+    const charWorld = $('#character_world').val();
+    if (names.has(charWorld)) {
+        $('#character_world').val('').trigger('change');
+        setWorldInfoButtonClass(undefined, false);
+        if (menu_type !== 'create') {
+            saveCharacterDebounced();
+        }
+    }
+
+    if (names.has(power_user.persona_description_lorebook)) {
+        power_user.persona_description_lorebook = '';
+        if (power_user.personas[user_avatar]) {
+            const object = getOrCreatePersonaDescriptor();
+            object.lorebook = '';
+        }
+        $('#persona_lore_button').toggleClass('world_set', false);
+        needsSave = true;
+    }
+
+    if (needsSave) {
+        saveSettingsDebounced();
+    }
+}
+
 async function hideWorldEditor() {
     await displayWorldEntries(null, null);
 }
@@ -4277,37 +4327,7 @@ export async function deleteWorldInfo(worldInfoName) {
         return false;
     }
 
-    if (worldInfoCache.has(worldInfoName)) {
-        worldInfoCache.delete(worldInfoName);
-    }
-
-    const existingWorldIndex = selected_world_info.findIndex((e) => e === worldInfoName);
-    if (existingWorldIndex !== -1) {
-        selected_world_info.splice(existingWorldIndex, 1);
-        saveSettingsDebounced();
-    }
-
-    await updateWorldInfoList();
-    $('#world_editor_select').trigger('change');
-
-    if ($('#character_world').val() === worldInfoName) {
-        $('#character_world').val('').trigger('change');
-        setWorldInfoButtonClass(undefined, false);
-        if (menu_type != 'create') {
-            saveCharacterDebounced();
-        }
-    }
-
-    if (power_user.persona_description_lorebook === worldInfoName) {
-        power_user.persona_description_lorebook = '';
-        if (power_user.personas[user_avatar]) {
-            const object = getOrCreatePersonaDescriptor();
-            object.lorebook = '';
-        }
-        $('#persona_lore_button').toggleClass('world_set', false);
-        saveSettingsDebounced();
-    }
-
+    await flushDeletedWorldsFromUI([worldInfoName]);
     return true;
 }
 

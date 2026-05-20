@@ -31,6 +31,7 @@ import {
     charUpdatePrimaryWorld,
     charSetAuxWorlds,
     updateWorldInfoList,
+    flushDeletedWorldsFromUI,
 } from './scripts/world-info.js';
 
 import {
@@ -1045,6 +1046,7 @@ function buildCharacterRowHtml(item, id) {
     }
 
     const isFav = item.fav || item.fav == 'true';
+    const isActive = !selected_group && this_chid !== undefined && String(this_chid) === String(id);
     const isAssistant = item.avatar === getPermanentAssistantAvatar();
     const description = item.data?.creator_notes || '';
     const auxFieldName = power_user.aux_field || 'character_version';
@@ -1088,9 +1090,10 @@ function buildCharacterRowHtml(item, id) {
         tagsHtml += `<span class="tag tag_placeholder"><span class="tag_name">+${tagsSkipped}</span></span>`;
     }
 
-    return `<div class="character_select entity_block flex-container wide100p alignitemsflexstart${isFav ? ' is_fav' : ''}" data-chid="${id}" id="CharID${id}">
+    return `<div class="character_select entity_block flex-container wide100p alignitemsflexstart${isFav ? ' is_fav' : ''}${isActive ? ' is_active' : ''}" data-chid="${id}" id="CharID${id}">
                 <div class="avatar" title="[Character] ${escapedName}\nFile: ${escapedAvatar}">
                     <img src="${this_avatar}" alt="${escapedName}" loading="lazy" decoding="async">
+                    <i class="ch_fav_icon fa-solid fa-star" aria-hidden="true"></i>
                 </div>
                 <div class="flex-container wide100pLess70px character_select_container">
                     <div class="wide100p character_name_block">
@@ -1100,7 +1103,6 @@ function buildCharacterRowHtml(item, id) {
                         ${auxFieldValue ? `<small class="ch_additional_info character_version">${escapedAuxField}</small>` : '<small class="ch_additional_info character_version" style="display:none"></small>'}
                         ${showAvatarUrl ? `<small class="ch_additional_info ch_avatar_url">${escapedAvatar}</small>` : ''}
                     </div>
-                    <i class="ch_fav_icon fa-solid fa-star" style="display:none"></i>
                     <input class="ch_fav" value="${isFav}" hidden />
                     <div class="ch_description"${description ? '' : ' style="display:none"'}>${description ? escapedDescription : ''}</div>
                     <div class="tags tags_inline">${tagsHtml}</div>
@@ -1112,7 +1114,7 @@ function buildCharacterRowHtml(item, id) {
  * Patches a visible character row in place for a narrow set of safe metadata updates.
  * Returns true if patched, false if the row is not visible or conditions are not met.
  * @param {string|number} chid Character index
- * @param {object} patch Patch object with optional fields: fav, avatar, avatarTitle, description, auxField, tags
+ * @param {object} patch Patch object with optional fields: fav, avatar, avatarTitle, description, tags, auxField
  * @returns {boolean}
  */
 export function updateCharacterRow(chid, patch) {
@@ -1144,6 +1146,10 @@ export function updateCharacterRow(chid, patch) {
             $desc.hide();
         }
     }
+    if ('tags' in patch) {
+        // Fall back to full tag re-render via printTagList for the row's tag container
+        printTagList($row.find('.tags'), { forEntityOrKey: chid, tagOptions: { isCharacterList: true } });
+    }
     if ('auxField' in patch) {
         const $ver = $row.find('.character_version');
         if (patch.auxField) {
@@ -1151,10 +1157,6 @@ export function updateCharacterRow(chid, patch) {
         } else {
             $ver.hide();
         }
-    }
-    if ('tags' in patch) {
-        // Fall back to full tag re-render via printTagList for the row's tag container
-        printTagList($row.find('.tags'), { forEntityOrKey: chid, tagOptions: { isCharacterList: true } });
     }
 
     favsToHotswap();
@@ -8610,6 +8612,9 @@ export function select_rm_info(type, charId, previousCharId = null) {
 export function select_selected_character(chid, { switchMenu = true } = {}) {
     //character select
     //console.log('select_selected_character() -- starting with input of -- ' + chid + ' (name:' + characters[chid].name + ')');
+    $('#rm_print_characters_block .character_select').removeClass('is_active');
+    $(`#CharID${chid}`).addClass('is_active');
+
     select_rm_create({ switchMenu });
     switchMenu && setMenuType('character_edit');
     $('#delete_button').css('display', 'flex');
@@ -10829,7 +10834,7 @@ export async function deleteCharacter(characterKey, { deleteChats = true, delete
                 }),
                 cache: 'no-cache',
             });
-            await updateWorldInfoList();
+            await flushDeletedWorldsFromUI(resolvedDeleteWorlds);
         } catch {
             // Cascade failure should not block the UI cleanup
         }
