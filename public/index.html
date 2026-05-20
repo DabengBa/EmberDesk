@@ -84,7 +84,7 @@
                         <div id="respective-presets-block" class="width100p">
                             <div id="openai_api-presets">
                                 <div>
-                                    <div class="margin0 title_restorable standoutHeader">
+                                    <div class="margin0 title_restorable preset-header">
                                         <strong>
                                             <span data-i18n="openaipresets">Presets</span>
                                         </strong>
@@ -112,14 +112,14 @@
                                         </select>
                                         <div class="flex-container marginLeft5 gap3px">
                                             <input id="openai_preset_import_file" type="file" accept=".json,.settings" hidden />
-                                            <div id="update_oai_preset" class="menu_button menu_button_icon" title="Update current preset" data-i18n="[title]Update current preset">
-                                                <i class="fa-fw fa-solid fa-save"></i>
+                                            <div id="update_oai_preset" class="menu_button menu_button_icon preset-action-btn" title="Update current preset" data-i18n="[title]Update current preset">
+                                                <i class="fa-fw fa-solid fa-save"></i><span data-i18n="Save">Save</span>
                                             </div>
-                                            <div data-preset-manager-rename="openai" class="menu_button menu_button_icon" title="Rename current preset" data-i18n="[title]Rename current preset">
-                                                <i class="fa-fw fa-solid fa-pencil"></i>
+                                            <div data-preset-manager-rename="openai" class="menu_button menu_button_icon preset-action-btn" title="Rename current preset" data-i18n="[title]Rename current preset">
+                                                <i class="fa-fw fa-solid fa-pencil"></i><span data-i18n="Rename">Rename</span>
                                             </div>
-                                            <div id="new_oai_preset" class="menu_button menu_button_icon" title="Save preset as" data-i18n="[title]Save preset as">
-                                                <i class="fa-fw fa-solid fa-file-circle-plus"></i>
+                                            <div id="new_oai_preset" class="menu_button menu_button_icon preset-action-btn" title="Save preset as" data-i18n="[title]Save preset as">
+                                                <i class="fa-fw fa-solid fa-file-circle-plus"></i><span data-i18n="Save As">Save As</span>
                                             </div>
                                         </div>
                                     </div>
@@ -142,55 +142,24 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="range-block-pair" data-source="openai,claude,makersuite">
-                                    <div class="range-block">
-                                        <div class="range-block-title" data-i18n="Temperature">Temperature</div>
-                                        <div class="wide100p">
-                                            <input type="number" id="temp_openai" class="text_pole" min="0" max="2.0" step="0.01">
-                                        </div>
-                                    </div>
-                                    <div class="range-block">
-                                        <div class="range-block-title" data-i18n="Top P">Top P</div>
-                                        <div class="wide100p">
-                                            <input type="number" id="top_p_openai" class="text_pole" min="0" max="1" step="0.01">
-                                        </div>
-                                    </div>
-                                </div>
+                                <div class="config-section-header"><span data-i18n="Options">Options</span></div>
                                 <div class="range-block">
                                     <label for="stream_toggle" title="Enable OpenAI completion streaming" data-i18n="[title]Enable OpenAI completion streaming" class="checkbox_label widthFreeExpand">
                                         <input id="stream_toggle" type="checkbox" /><span data-i18n="Streaming">Streaming</span>
                                     </label>
                                 </div>
-                                <div class="range-block-pair" data-source="openai">
-                                    <div class="range-block">
-                                        <div class="range-block-title" data-i18n="Frequency Penalty">Freq Penalty</div>
-                                        <div class="wide100p">
-                                            <input type="number" id="freq_pen_openai" class="text_pole" min="-2" max="2" step="0.01">
-                                        </div>
-                                    </div>
-                                    <div class="range-block">
-                                        <div class="range-block-title" data-i18n="Presence Penalty">Pres Penalty</div>
-                                        <div class="wide100p">
-                                            <input type="number" id="pres_pen_openai" class="text_pole" min="-2" max="2" step="0.01">
-                                        </div>
-                                    </div>
-                                </div>
                                 <div class="range-block" data-source="claude,makersuite">
                                     <div class="range-block-title" data-i18n="Top K">Top K</div>
                                     <div class="wide100p">
-                                        <input type="number" id="top_k_openai" class="text_pole" min="0" max="500" step="1">
-                                    </div>
-                                </div>
-                                <div class="range-block" data-source="openai">
-                                    <div class="range-block-title" data-i18n="Swipes">Swipes</div>
-                                    <div class="wide100p">
-                                        <input type="number" id="n_openai" class="text_pole" min="1" value="1">
+                                        <input class="neo-range-slider" type="range" id="top_k_openai" min="0" max="500" step="1">
+                                        <input class="neo-range-input" type="number" id="top_k_openai_counter" data-for="top_k_openai" min="0" max="500" step="1">
                                     </div>
                                 </div>
                             </div>
                         </div>
                         <div id="advanced-ai-config-block" class="width100p">
                             <div id="openai_settings">
+                                <div class="config-section-header"><span data-i18n="Features">Features</span></div>
                                 <div class="features-grid">
                                     <div class="range-block" data-source="makersuite,claude">
                                         <label for="openai_enable_web_search" class="checkbox_label widthFreeExpand">
@@ -222,76 +191,20 @@
                                             <span data-i18n="Request model reasoning">Model Reasoning</span>
                                         </label>
                                     </div>
-                                    <div id="request_images_block" class="range-block" data-source="makersuite">
-                                        <label for="openai_request_images" class="checkbox_label widthFreeExpand">
-                                            <input id="openai_request_images" type="checkbox" />
-                                            <span data-i18n="Request inline images">Request Images</span>
-                                        </label>
-                                    </div>
-                                    <div class="range-block full-width" data-source="openai,makersuite" style="margin-top:2px">
-                                        <div class="range-block-title"><small data-i18n="Inline Image Quality">Image Quality</small></div>
-                                        <select id="openai_inline_image_quality" class="text_pole">
-                                            <option data-i18n="openai_inline_image_quality_auto" value="auto">Auto</option>
-                                            <option data-i18n="openai_inline_image_quality_low" value="low">Low</option>
-                                            <option data-i18n="openai_inline_image_quality_high" value="high">High</option>
-                                        </select>
-                                    </div>
-                                    <div id="request_images_settings" class="range-block-pair full-width" data-source="makersuite" style="margin-top:2px">
-                                        <div class="range-block">
-                                            <div class="range-block-title"><small data-i18n="Resolution">Resolution</small></div>
-                                            <select id="request_image_resolution" class="text_pole">
-                                                <option value="">Auto</option>
-                                                <option value="1K">1K</option>
-                                                <option value="2K">2K</option>
-                                                <option value="4K">4K</option>
-                                            </select>
-                                        </div>
-                                        <div class="range-block">
-                                            <div class="range-block-title"><small data-i18n="Aspect Ratio">Aspect Ratio</small></div>
-                                            <select id="request_image_aspect_ratio" class="text_pole">
-                                                <option value="">Auto</option>
-                                                <option value="1:1">1:1</option>
-                                                <option value="9:16">9:16</option>
-                                                <option value="16:9">16:9</option>
-                                                <option value="3:4">3:4</option>
-                                                <option value="4:3">4:3</option>
-                                                <option value="3:2">3:2</option>
-                                                <option value="2:3">2:3</option>
-                                                <option value="5:4">5:4</option>
-                                                <option value="4:5">4:5</option>
-                                                <option value="21:9">21:9</option>
-                                            </select>
-                                        </div>
-                                    </div>
                                     <div class="range-block full-width" data-source="openai,claude,makersuite">
                                         <div class="range-block-title" data-i18n="Reasoning Effort">Reasoning Effort</div>
                                         <div class="wide100p">
-                                            <select id="openai_reasoning_effort" class="text_pole">
-                                                <option data-i18n="openai_reasoning_effort_auto" value="auto">Auto</option>
-                                                <option data-i18n="openai_reasoning_effort_low" value="low">Low</option>
-                                                <option data-i18n="openai_reasoning_effort_medium" value="medium">Medium</option>
-                                                <option data-i18n="openai_reasoning_effort_high" value="high">High</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="range-block full-width" data-source="openai,claude">
-                                        <div class="range-block-title" data-i18n="Verbosity">Verbosity</div>
-                                        <div class="wide100p">
-                                            <select id="openai_verbosity" class="text_pole">
-                                                <option data-i18n="openai_verbosity_auto" value="auto">Auto</option>
-                                                <option data-i18n="openai_verbosity_low" value="low">Low</option>
-                                                <option data-i18n="openai_verbosity_medium" value="medium">Medium</option>
-                                                <option data-i18n="openai_verbosity_high" value="high">High</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="range-block full-width" data-source="openai">
-                                        <div class="range-block-title" data-i18n="Interleaved Thinking">Interleaved Thinking</div>
-                                        <div class="wide100p">
-                                            <select id="tool_reasoning_mode" class="text_pole">
-                                                <option data-i18n="Disabled" value="disabled">Disabled</option>
-                                                <option data-i18n="Since Last User Message" value="since_last_user">Since Last User</option>
-                                                <option data-i18n="Active Tool Chain" value="active_chain">Active Tool Chain</option>
+                                            <div class="segmented-control" data-sync-select="openai_reasoning_effort">
+                                                <label class="seg-option"><input type="radio" name="reasoning_effort_ui" value="auto"><span data-i18n="openai_reasoning_effort_auto">Auto</span></label>
+                                                <label class="seg-option"><input type="radio" name="reasoning_effort_ui" value="low"><span data-i18n="openai_reasoning_effort_low">Low</span></label>
+                                                <label class="seg-option"><input type="radio" name="reasoning_effort_ui" value="medium"><span data-i18n="openai_reasoning_effort_medium">Medium</span></label>
+                                                <label class="seg-option"><input type="radio" name="reasoning_effort_ui" value="high"><span data-i18n="openai_reasoning_effort_high">High</span></label>
+                                            </div>
+                                            <select id="openai_reasoning_effort" class="displayNone">
+                                                <option value="auto">Auto</option>
+                                                <option value="low">Low</option>
+                                                <option value="medium">Medium</option>
+                                                <option value="high">High</option>
                                             </select>
                                         </div>
                                     </div>
@@ -306,6 +219,7 @@
                                         <textarea id="claude_assistant_impersonation" class="text_pole textarea_compact autoSetHeight" name="assistant_impersonation" rows="2" data-i18n="[placeholder]Start Claude's answer with..." placeholder="Start Claude's answer with..."></textarea>
                                     </div>
                                 </div>
+                                <div class="config-section-header"><span data-i18n="Prompt Manager">Prompt Manager</span></div>
                                 <div class="range-block m-b-1">
                                     <div id="completion_prompt_manager"></div>
                                 </div>
@@ -313,11 +227,117 @@
                         </div>
                         <div class="inline-drawer wide100p">
                             <div class="inline-drawer-toggle inline-drawer-header">
-                                <b data-i18n="Advanced Prompts">高级提示词</b>
+                                <b data-i18n="Advanced">高级</b>
                                 <div class="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
                             </div>
                             <div class="inline-drawer-content">
-                                <div class="config-section-header"><span data-i18n="Settings">设置</span></div>
+                        <div class="config-section-header"><span data-i18n="Advanced Sampling">高级采样</span></div>
+                        <div class="range-block-pair" data-source="openai,claude,makersuite">
+                            <div class="range-block">
+                                <div class="range-block-title" data-i18n="Temperature">Temperature</div>
+                                <div class="wide100p">
+                                    <input class="neo-range-slider" type="range" id="temp_openai" min="0" max="2.0" step="0.01">
+                                    <input class="neo-range-input" type="number" id="temp_openai_counter" data-for="temp_openai" min="0" max="2.0" step="0.01">
+                                </div>
+                            </div>
+                            <div class="range-block">
+                                <div class="range-block-title" data-i18n="Top P">Top P</div>
+                                <div class="wide100p">
+                                    <input class="neo-range-slider" type="range" id="top_p_openai" min="0" max="1" step="0.01">
+                                    <input class="neo-range-input" type="number" id="top_p_openai_counter" data-for="top_p_openai" min="0" max="1" step="0.01">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="range-block-pair" data-source="openai">
+                            <div class="range-block">
+                                <div class="range-block-title" data-i18n="Frequency Penalty">Freq Penalty</div>
+                                <div class="wide100p">
+                                    <input type="number" id="freq_pen_openai" class="text_pole" min="-2" max="2" step="0.01">
+                                </div>
+                            </div>
+                            <div class="range-block">
+                                <div class="range-block-title" data-i18n="Presence Penalty">Pres Penalty</div>
+                                <div class="wide100p">
+                                    <input type="number" id="pres_pen_openai" class="text_pole" min="-2" max="2" step="0.01">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="range-block" data-source="openai">
+                            <div class="range-block-title" data-i18n="Swipes">Swipes</div>
+                            <div class="wide100p">
+                                <input type="number" id="n_openai" class="text_pole" min="1" value="1">
+                            </div>
+                        </div>
+                        <div class="range-block full-width" data-source="openai,claude">
+                            <div class="range-block-title" data-i18n="Verbosity">Verbosity</div>
+                            <div class="wide100p">
+                                <div class="segmented-control" data-sync-select="openai_verbosity">
+                                    <label class="seg-option"><input type="radio" name="verbosity_ui" value="auto"><span data-i18n="openai_verbosity_auto">Auto</span></label>
+                                    <label class="seg-option"><input type="radio" name="verbosity_ui" value="low"><span data-i18n="openai_verbosity_low">Low</span></label>
+                                    <label class="seg-option"><input type="radio" name="verbosity_ui" value="medium"><span data-i18n="openai_verbosity_medium">Medium</span></label>
+                                    <label class="seg-option"><input type="radio" name="verbosity_ui" value="high"><span data-i18n="openai_verbosity_high">High</span></label>
+                                </div>
+                                <select id="openai_verbosity" class="displayNone">
+                                    <option value="auto">Auto</option>
+                                    <option value="low">Low</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="high">High</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="range-block full-width" data-source="openai">
+                            <div class="range-block-title" data-i18n="Interleaved Thinking">Interleaved Thinking</div>
+                            <div class="wide100p">
+                                <select id="tool_reasoning_mode" class="text_pole">
+                                    <option data-i18n="Disabled" value="disabled">Disabled</option>
+                                    <option data-i18n="Since Last User Message" value="since_last_user">Since Last User</option>
+                                    <option data-i18n="Active Tool Chain" value="active_chain">Active Tool Chain</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="config-section-header"><span data-i18n="Image Generation">图片生成</span></div>
+                        <div id="request_images_block" class="range-block" data-source="makersuite">
+                            <label for="openai_request_images" class="checkbox_label widthFreeExpand">
+                                <input id="openai_request_images" type="checkbox" />
+                                <span data-i18n="Request inline images">Request Images</span>
+                            </label>
+                        </div>
+                        <div class="range-block full-width" data-source="openai,makersuite">
+                            <div class="range-block-title"><small data-i18n="Inline Image Quality">Image Quality</small></div>
+                            <select id="openai_inline_image_quality" class="text_pole">
+                                <option data-i18n="openai_inline_image_quality_auto" value="auto">Auto</option>
+                                <option data-i18n="openai_inline_image_quality_low" value="low">Low</option>
+                                <option data-i18n="openai_inline_image_quality_high" value="high">High</option>
+                            </select>
+                        </div>
+                        <div id="request_images_settings" class="range-block-pair full-width" data-source="makersuite">
+                            <div class="range-block">
+                                <div class="range-block-title"><small data-i18n="Resolution">Resolution</small></div>
+                                <select id="request_image_resolution" class="text_pole">
+                                    <option value="">Auto</option>
+                                    <option value="1K">1K</option>
+                                    <option value="2K">2K</option>
+                                    <option value="4K">4K</option>
+                                </select>
+                            </div>
+                            <div class="range-block">
+                                <div class="range-block-title"><small data-i18n="Aspect Ratio">Aspect Ratio</small></div>
+                                <select id="request_image_aspect_ratio" class="text_pole">
+                                    <option value="">Auto</option>
+                                    <option value="1:1">1:1</option>
+                                    <option value="9:16">9:16</option>
+                                    <option value="16:9">16:9</option>
+                                    <option value="3:4">3:4</option>
+                                    <option value="4:3">4:3</option>
+                                    <option value="3:2">3:2</option>
+                                    <option value="2:3">2:3</option>
+                                    <option value="5:4">5:4</option>
+                                    <option value="4:5">4:5</option>
+                                    <option value="21:9">21:9</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="config-section-header"><span data-i18n="Settings">设置</span></div>
                         <div class="range-block">
                             <div class="range-block-title" data-i18n="Character Names Behavior">Character Names <small id="character_names_display"></small></div>
                             <div class="wide100p">
@@ -476,44 +496,44 @@
             <div id="rm_api_block" class="drawer-content closedDrawer">
                 <h3 class="margin0" id="title_api" data-i18n="API Connections">API 连接</h3>
                 <div class="flex-container flexFlowColumn">
-                    <div id="api_connection_form" style="position: relative;">
-                        <select id="chat_completion_source">
-                            <option value="openai">OpenAI</option>
-                            <option value="claude">Claude</option>
-                            <option value="makersuite">Google</option>
-                        </select>
-                        <div id="api_key_section">
-                            <label class="field-label" for="api_key_unified" data-i18n="API Key">API Key</label>
-                            <div class="flex-container width100p">
-                                <input id="api_key_unified" type="text" class="text_pole flex1 api-key-masked" autocomplete="off" data-lpignore="true" data-1p-ignore data-bwignore />
-                                <div id="api_key_unified_show" title="Peek a password" data-i18n="[title]Peek a password" class="menu_button fa-solid fa-eye-slash fa-fw"></div>
+                    <div id="api_connection_form">
+                        <div class="chat-completion-select">
+                            <div class="chat-completion-row">
+                                <label class="chat-completion-field provider-field" for="chat_completion_source">
+                                    <span class="field-label" data-i18n="Provider">Provider</span>
+                                    <select id="chat_completion_source">
+                                        <option value="openai">OpenAI</option>
+                                        <option value="claude">Claude</option>
+                                        <option value="makersuite">Google</option>
+                                    </select>
+                                </label>
+                                <div id="openai_form" class="chat-completion-field model-field" data-source="openai">
+                                    <label class="field-label" for="model_openai_select" data-i18n="Model">Model</label>
+                                    <input id="model_openai_select" list="model_openai_list" class="text_pole" placeholder="Select or type a model" />
+                                    <datalist id="model_openai_list"></datalist>
+                                </div>
+                                <div id="claude_form" class="chat-completion-field model-field" data-source="claude">
+                                    <label class="field-label" for="model_claude_select" data-i18n="Model">Model</label>
+                                    <input id="model_claude_select" list="model_claude_list" class="text_pole" placeholder="Select or type a model" />
+                                    <datalist id="model_claude_list"></datalist>
+                                </div>
+                                <div id="makersuite_form" class="chat-completion-field model-field" data-source="makersuite">
+                                    <label class="field-label" for="model_google_select" data-i18n="Model">Model</label>
+                                    <input id="model_google_select" list="model_google_list" class="text_pole" placeholder="Select or type a model" />
+                                    <datalist id="model_google_list"></datalist>
+                                </div>
                             </div>
-                        </div>
-                        <div class="inline-drawer wide100p" data-source="openai,claude,makersuite">
-                            <div class="inline-drawer-toggle inline-drawer-header">
-                                <b data-i18n="Custom Base URL">Custom Base URL</b>
-                                <div class="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
-                            </div>
-                            <div class="inline-drawer-content">
-                                <div class="wide100p">
-                                    <input id="openai_reverse_proxy" type="text" class="text_pole" placeholder="https://api.openai.com/v1" />
+                            <div id="api_key_section">
+                                <div class="flex-container width100p">
+                                    <input id="api_key_unified" type="text" class="text_pole flex1 api-key-masked" autocomplete="off" data-lpignore="true" data-1p-ignore data-bwignore data-i18n="[placeholder]API Key" placeholder="API Key" />
+                                    <div id="api_key_unified_show" title="Peek a password" data-i18n="[title]Peek a password" class="menu_button fa-solid fa-eye-slash fa-fw"></div>
                                 </div>
                             </div>
                         </div>
-                        <div id="openai_form" data-source="openai">
-                            <label class="field-label" data-i18n="OpenAI Model">OpenAI Model</label>
-                            <input id="model_openai_select" list="model_openai_list" class="text_pole" placeholder="Select or type a model" />
-                            <datalist id="model_openai_list"></datalist>
+                        <div class="wide100p" data-source="openai,claude,makersuite">
+                            <input id="openai_reverse_proxy" type="text" class="text_pole" placeholder="Base URL" />
                         </div>
-                        <div id="claude_form" data-source="claude">
-                            <label class="field-label" data-i18n="Claude Model">Claude Model</label>
-                            <input id="model_claude_select" list="model_claude_list" class="text_pole" placeholder="Select or type a model" />
-                            <datalist id="model_claude_list"></datalist>
-                        </div>
-                        <div id="makersuite_form" data-source="makersuite">
-                            <label class="field-label" data-i18n="Google Model">Google Model</label>
-                            <input id="model_google_select" list="model_google_list" class="text_pole" placeholder="Select or type a model" />
-                            <datalist id="model_google_list"></datalist>
+                        <div class="chat-completion-provider-options" data-source="makersuite">
                             <label class="checkbox_label margin-top-5px">
                                 <input id="use_vertexai" type="checkbox" />
                                 <span data-i18n="Use Vertex AI">Use Vertex AI</span>
@@ -572,7 +592,7 @@
                                 </select>
                             </div>
                         </div>
-                        <div class="flex-container flex">
+                        <div class="flex-container flex chat-completion-actions">
                             <div id="api_button_openai" class="api_button menu_button menu_button_icon" type="submit" data-i18n="Connect">Connect</div>
                             <div class="api_loading menu_button menu_button_icon" style="opacity:0.6" data-i18n="Cancel">Cancel</div>
                             <div data-source="openai" id="customize_additional_parameters" class="menu_button menu_button_icon" data-i18n="Additional Parameters">Additional Parameters</div>
@@ -581,14 +601,6 @@
                         <div class="online_status">
                             <div class="online_status_indicator"></div>
                             <div class="online_status_text" data-i18n="Not connected">Not connected</div>
-                        </div>
-                        <div class="flex-container alignitemscenter spaceBetween wide100p">
-                            <label for="auto-connect-checkbox" class="checkbox_label"><input id="auto-connect-checkbox" type="checkbox" />
-                                <span data-i18n="Auto-connect to Last Server">Auto-connect to Last Server</span>
-                            </label>
-                            <a id="viewSecrets" href="javascript:void(0);" data-i18n="[missing_key_text]Missing key;[key_saved_text]Key saved" missing_key_text="❌ Missing key" key_saved_text="✔️ Key saved">
-                                <span data-i18n="View hidden API keys">View hidden API keys</span>
-                            </a>
                         </div>
                     </div>
                 </div>
@@ -3697,6 +3709,7 @@
             <div class="character_select entity_block flex-container wide100p alignitemsflexstart" chid="" id="">
                 <div class="avatar" title="">
                     <img src="" loading="lazy" decoding="async">
+                    <i class="ch_fav_icon fa-solid fa-star" aria-hidden="true"></i>
                 </div>
                 <div class="flex-container wide100pLess70px character_select_container">
                     <div class="wide100p character_name_block">
@@ -3705,10 +3718,7 @@
                         <small class="ch_assistant" title="This character will be used as a welcome page assistant." data-i18n="[title]This character will be used as a welcome page assistant.">
                             <i class="fa-solid fa-sm fa-user-graduate"></i>
                         </small>
-                        <small class="ch_additional_info character_version"></small>
-                        <small class="ch_additional_info ch_avatar_url"></small>
                     </div>
-                    <i class="ch_fav_icon fa-solid fa-star"></i>
                     <input class="ch_fav" value="" hidden />
                     <div class="ch_description"></div>
                     <div class="tags tags_inline"></div>

@@ -2925,7 +2925,7 @@ input[type="file"] {
     display: flex;
     flex-direction: row;
     gap: 5px;
-    justify-content: center;
+    justify-content: flex-start;
     align-items: center;
     flex-wrap: wrap;
     padding: 1px;
@@ -2938,6 +2938,7 @@ input[type="file"] {
 
 .bulk_select_checkbox {
     align-self: center;
+    flex: 0 0 auto;
 }
 
 #rm_print_characters_block .text_block {
@@ -3276,6 +3277,11 @@ select option[disabled]:not(:checked) {
     border-radius: 5px;
     margin: 0;
     min-width: 75px;
+    align-self: stretch;
+    background-color: var(--SmartThemeBlurTintColor);
+    color: var(--SmartThemeBodyColor);
+    border: 1px solid var(--SmartThemeBorderColor);
+    font-size: calc(var(--mainFontSize) * 0.9);
 }
 
 #character_search_bar {
@@ -3345,6 +3351,9 @@ input[type=search]:focus::-webkit-search-cancel-button {
     border-radius: 10px;
     cursor: pointer;
     margin-bottom: 1px;
+    position: relative;
+    gap: 8px;
+    border: 1px solid transparent;
 }
 
 .character_select.inline_avatar,
@@ -3375,7 +3384,7 @@ input[type=search]:focus::-webkit-search-cancel-button {
     align-items: baseline;
     flex-direction: row;
     gap: 5px;
-    margin-bottom: 6px;
+    margin-bottom: 0;
 }
 
 .character_name_block_sub_line {
@@ -3397,15 +3406,16 @@ input[type=search]:focus::-webkit-search-cancel-button {
 .bogus_folder_select .avatar,
 .character_select .avatar {
     align-self: center;
+    position: relative;
+    overflow: visible;
 }
 
 .ch_description {
-    font-size: calc(var(--mainFontSize) * 0.8);
+    font-size: calc(var(--mainFontSize) * 0.85);
     white-space: nowrap;
     text-overflow: ellipsis;
     overflow: hidden;
     width: 100%;
-    margin-top: -5px;
 }
 
 .mes_block .ch_name {
@@ -3415,7 +3425,15 @@ input[type=search]:focus::-webkit-search-cancel-button {
 }
 
 /*applies to both groups and solos chars in the char list*/
-#rm_print_characters_block .character_select_container,
+#rm_print_characters_block .character_select_container {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    gap: 2px;
+    min-width: 0;
+}
+
 #rm_print_characters_block .group_select_container {
     position: relative;
 }
@@ -3502,12 +3520,22 @@ input[type=search]:focus::-webkit-search-cancel-button {
 .ch_fav_icon {
     filter: drop-shadow(1px 1px 2px black);
     color: var(--golden);
-    font-size: 14px;
-    order: -1;
-    margin-left: -75px;
-    padding-right: 54px;
-    margin-top: 3px;
-    position: relative;
+    font-size: calc(var(--mainFontSize) * 0.8);
+    position: absolute;
+    right: -3px;
+    bottom: -3px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: calc(var(--mainFontSize) * 1.15);
+    height: calc(var(--mainFontSize) * 1.15);
+    border-radius: 50%;
+    background-color: var(--SmartThemeBlurTintColor);
+    z-index: 1;
+}
+
+.character_select.is_fav .ch_fav_icon {
+    display: flex;
 }
 
 #rm_group_top_bar:not(:has(#rm_group_activation_strategy option[value="0"]:checked)) label:has(#rm_group_allow_self_responses) {
@@ -3531,11 +3559,19 @@ input[type=search]:focus::-webkit-search-cancel-button {
     outline: 2px solid var(--active);
 }
 
-.character_select.is_fav .avatar,
 .group_select.is_fav .avatar,
 .group_member.is_fav .avatar,
 .avatar.is_fav {
     outline: 2px solid var(--golden);
+}
+
+.character_select.is_active {
+    background-color: color-mix(in srgb, var(--active) 8%, transparent);
+    border-color: color-mix(in srgb, var(--active) 24%, transparent);
+}
+
+.character_select.is_active .avatar {
+    outline: 2px solid var(--active);
 }
 
 .character_select.is_fav .ch_name,
@@ -6019,14 +6055,87 @@ body:not(.movingUI) .drawer-content.maximized {
     margin-top: 0;
 }
 
+#api_connection_form {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.chat-completion-select {
+    padding: 8px;
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 70%, transparent);
+    border-radius: 10px;
+    background-color: color-mix(in srgb, var(--SmartThemeBlurTintColor) 74%, transparent);
+}
+
+.chat-completion-row {
+    display: grid;
+    grid-template-columns: minmax(112px, 0.8fr) minmax(0, 1.6fr);
+    gap: 6px;
+    align-items: end;
+}
+
+.chat-completion-field {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.chat-completion-field .field-label {
+    margin: 0;
+    color: var(--SmartThemeBodyColor);
+    opacity: 0.65;
+    font-size: calc(var(--mainFontSize) * 0.75);
+    font-weight: 600;
+    letter-spacing: 0;
+}
+
+.chat-completion-field select,
+.chat-completion-field input {
+    height: calc(var(--mainFontSize) * 2);
+    margin: 0;
+    background-color: color-mix(in srgb, var(--SmartThemeBodyColor) 12%, var(--SmartThemeBlurTintColor) 88%);
+    min-width: 0;
+}
+
+.chat-completion-field input::placeholder {
+    color: color-mix(in srgb, var(--SmartThemeBodyColor) 54%, transparent);
+}
+
+#api_key_section {
+    margin-top: 6px;
+}
+
+#api_key_section .flex-container {
+    gap: 5px;
+}
+
+.chat-completion-provider-options {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.chat-completion-actions {
+    justify-content: flex-start;
+    align-items: center;
+    gap: 5px;
+}
+
+.chat-completion-actions .menu_button {
+    margin: 0;
+}
+
 /* Vertex AI config section */
 #vertexai_config {
     display: none;
-    background-color: var(--black30a);
-    border: 1px solid var(--SmartThemeBorderColor);
+    background-color: color-mix(in srgb, var(--SmartThemeBlurTintColor) 72%, transparent);
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 70%, transparent);
     border-radius: 5px;
     padding: 8px 10px;
-    margin-top: 5px;
+    margin-top: 0;
 }
 
 .vertexai-fields-row {
@@ -6076,6 +6185,11 @@ body:not(.movingUI) .drawer-content.maximized {
     opacity: 1;
 }
 
+#api_key_unified,
+#openai_reverse_proxy {
+    background-color: color-mix(in srgb, var(--SmartThemeBodyColor) 12%, var(--SmartThemeBlurTintColor) 88%);
+}
+
 #api_button_openai.api_button {
     background-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 20%, var(--SmartThemeBlurTintColor) 80%);
     border-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 30%, var(--SmartThemeBorderColor) 70%);
@@ -6092,6 +6206,12 @@ body:not(.movingUI) .drawer-content.maximized {
 
 #test_api_button:hover {
     opacity: 1;
+}
+
+@media screen and (max-width: 600px) {
+    .chat-completion-row {
+        grid-template-columns: 1fr;
+    }
 }
 
 .neutral_warning {
