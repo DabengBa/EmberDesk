@@ -847,10 +847,11 @@ class BulkEditOverlay {
         }
 
         if (activeChatName) {
+            const escapedName = activeChatName.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
             html += `
             <div class="delete-dialog-info">
                 <i class="fa-solid fa-circle-info fa-fw"></i>
-                <span>${t`You are currently chatting with ${activeChatName}. Deleting it will end the conversation.`}</span>
+                <span>${t`You are currently chatting with ${escapedName}. Deleting it will end the conversation.`}</span>
             </div>`;
         }
 
@@ -990,7 +991,11 @@ class BulkEditOverlay {
         try {
             await BulkEditOverlay.#stopGenerationAndWait();
             const avatarList = characterIds.map(id => characters[id]?.avatar).filter(a => a);
-            await CharacterContextMenu.delete(avatarList, deleteChats);
+            await deleteCharacter(avatarList, {
+                deleteChats,
+                deleteWorlds: capturedCascade.deleteWorlds,
+                clearWorldReferences: capturedCascade.clearWorldReferences,
+            });
             toastr.success(t`Deleted ${count} character(s)`);
         } finally {
             loaderHandle.hide();
