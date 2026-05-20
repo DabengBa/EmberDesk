@@ -876,11 +876,7 @@ class BulkEditOverlay {
         const count = characterIds.length;
 
         // 1. Detect state before showing dialog
-        const isGenerating = is_send_press !== false;
         const inTempChat = this_chid === undefined && name2 === neutralCharacterName;
-        const activeChatCharacter = (this_chid !== undefined && characterIds.includes(this_chid))
-            ? characters[this_chid]
-            : null;
 
         // 2. Pre-fetch world info data (does NOT close chat or change state)
         let worldInfos = [];
