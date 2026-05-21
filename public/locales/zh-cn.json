@@ -3682,5 +3682,6 @@
     "Apply to entire app": "应用到整个应用",
     "${0} script(s)": "${0} 个脚本",
     "Apply": "应用",
+    "Import All": "全部导入",
     "Skip All": "全部跳过"
 }

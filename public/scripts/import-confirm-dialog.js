@@ -178,14 +178,34 @@ export async function showUnifiedImportConfirm(results) {
 
     html += `</div></div>`;
 
+    let importAllChoices = null;
+
     const result = await callGenericPopup(html, POPUP_TYPE.CONFIRM, '', {
         okButton: t`Apply`,
         cancelButton: t`Skip All`,
         wide: false,
+        customButtons: [{
+            text: t`Import All`,
+            classes: ['import-all-btn'],
+            action: () => {
+                document.querySelectorAll('.import-opt-item input[type=checkbox]').forEach(cb => { cb.checked = true; });
+                importAllChoices = {
+                    importTags: showTags,
+                    importWorldBook: showWorldBook,
+                    enableRegex: showRegex,
+                    applyCSS: showCSS,
+                    tagImportSetting: showTags ? tag_import_setting.ALL : tag_import_setting.NONE,
+                };
+            },
+        }],
     });
 
     if (!result) {
         return null;
+    }
+
+    if (importAllChoices) {
+        return importAllChoices;
     }
 
     return {
