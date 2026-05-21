@@ -1483,6 +1483,10 @@ body.hideAllSwipeButtons :is(.swipe_left, .swipe_right),
     justify-content: space-evenly;
 }
 
+#HotSwapWrapper:not(:has(.avatar)) {
+    display: none;
+}
+
 .avatar.interactable {
     opacity: 0.6;
 }
@@ -2992,13 +2996,17 @@ input[type="file"] {
     display: flex;
     gap: 5px;
     align-items: center;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
 }
 
 #rm_button_bar .menu_button {
     width: calc(var(--mainFontSize) * 1.7);
     aspect-ratio: 1;
     margin: 0;
+}
+
+#rm_print_characters_pagination {
+    min-height: 0;
 }
 
 #rm_buttons_container {
@@ -3454,6 +3462,10 @@ input[type=search]:focus::-webkit-search-cancel-button {
     overflow: hidden;
     text-wrap: nowrap;
     max-width: 50%;
+}
+
+#rm_print_characters_block .character_version {
+    display: none;
 }
 
 #rm_print_characters_block .character_name_block> :last-child {
