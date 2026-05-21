@@ -5,6 +5,7 @@ import { power_user } from './power-user.js';
 import { tag_import_setting } from './tags.js';
 import { isScopedScriptsAllowed, allowScopedScripts } from './extensions/regex/engine.js';
 import { importEmbeddedWorldInfo, world_names } from './world-info.js';
+import { t } from './i18n.js';
 
 const EXCLUDED_TAGS = ['ROOT', 'TAVERN'];
 const GLOBAL_STYLES_KEY_PREFIX = 'AllowGlobalStyles-';
@@ -102,16 +103,20 @@ export async function showUnifiedImportConfirm(results) {
     }
 
     const characterNames = results.map(r => r.name).join(', ');
+    const shortNames = results.length > 3
+        ? results.slice(0, 3).map(r => r.name).join(', ') + ` +${results.length - 3}`
+        : characterNames;
     let html = `<div class="import-confirm-dialog">
-        <h3>Import Options for ${escapeHtml(characterNames)}</h3>
-        <p>This character contains embedded content. Choose what to import:</p>
+        <h3>${t`Import Options for ${shortNames}`}</h3>
+        <p>${t`This character contains embedded content. Choose what to import:`}</p>
         <div class="import-confirm-options">`;
 
     if (showTags) {
         const allTags = [...new Set(results.flatMap(r => r.tagNames))];
+        const tagPreview = escapeHtml(allTags.slice(0, 5).join(', ')) + (allTags.length > 5 ? '...' : '');
         html += `<label class="checkbox_label import-confirm-option">
             <input type="checkbox" id="import_opt_tags" checked />
-            <span>Import tags (${allTags.length}: ${escapeHtml(allTags.slice(0, 5).join(', '))}${allTags.length > 5 ? '...' : '')})</span>
+            <span>${t`Import tags` + ` (${allTags.length}: ${tagPreview})`}</span>
         </label>`;
     }
 
@@ -119,34 +124,39 @@ export async function showUnifiedImportConfirm(results) {
         const worlds = results.filter(r => r.hasWorldBook);
         const worldList = worlds.map(w => {
             const willOverwrite = world_names.includes(w.worldBookName);
-            return `${escapeHtml(w.worldBookName)}${willOverwrite ? ' (will overwrite)' : ''}`;
+            const nameHtml = escapeHtml(w.worldBookName);
+            return willOverwrite
+                ? `${nameHtml} <span class="import-overwrite-warning">${t`(will overwrite)`}</span>`
+                : nameHtml;
         }).join(', ');
+        const worldLabel = worlds.length > 1 ? t`Import World/Lorebooks` : t`Import World/Lorebook`;
         html += `<label class="checkbox_label import-confirm-option">
             <input type="checkbox" id="import_opt_world" />
-            <span>Import World/Lorebook${worlds.length > 1 ? 's' : ''} (${worldList})</span>
+            <span>${worldLabel} (${worldList})</span>
         </label>`;
     }
 
     if (showRegex) {
         const total = results.reduce((sum, r) => sum + r.regexScriptCount, 0);
+        const scriptLabel = total > 1 ? t`Enable embedded regex scripts` : t`Enable embedded regex script`;
         html += `<label class="checkbox_label import-confirm-option">
             <input type="checkbox" id="import_opt_regex" />
-            <span>Enable embedded regex script${total > 1 ? 's' : ''} (${total})</span>
+            <span>${scriptLabel} (${total})</span>
         </label>`;
     }
 
     if (showCSS) {
         html += `<label class="checkbox_label import-confirm-option">
             <input type="checkbox" id="import_opt_css" />
-            <span>Apply Creator Notes CSS to entire app</span>
+            <span>${t`Apply Creator Notes CSS to entire app`}</span>
         </label>`;
     }
 
-    html += `</div></div>`;
+    html += `</div><style>.import-overwrite-warning{color:var(--warning,#f0ad40);font-weight:bold}</style></div>`;
 
     const result = await callGenericPopup(html, POPUP_TYPE.CONFIRM, '', {
-        okButton: 'Apply Selected',
-        cancelButton: 'Skip All',
+        okButton: t`Apply Selected`,
+        cancelButton: t`Skip All`,
         wide: false,
     });
 
@@ -167,10 +177,9 @@ export async function showUnifiedImportConfirm(results) {
 
 /**
  * Build "skip all" choices for when user cancels the dialog.
- * @param {ImportScanResult[]} results
  * @returns {Object}
  */
-export function buildSkipAllChoices(results) {
+export function buildSkipAllChoices() {
     return {
         importTags: false,
         importWorldBook: false,
@@ -193,11 +202,12 @@ export async function applyImportChoices(character, choices) {
     if (character?.data?.character_book) {
         accountStorage.setItem(`AlertWI_${avatar}`, 'true');
         if (choices.importWorldBook) {
-            // Set the chid data so importEmbeddedWorldInfo can find it
             const chid = characters.indexOf(character);
             if (chid !== -1) {
+                const prevChid = $('#import_character_info').data('chid');
                 $('#import_character_info').data('chid', chid);
                 await importEmbeddedWorldInfo(true);
+                $('#import_character_info').data('chid', prevChid);
             }
         }
     }

@@ -10344,24 +10344,7 @@ export async function processDroppedFiles(files, data = new Map()) {
     }
 
     if (avatarFileNames.length > 0) {
-        await getCharacters();
-
-        // Unified import confirmation
-        const scanResults = avatarFileNames.map(av => {
-            const ch = characters.find(c => c.avatar === av);
-            return ch ? scanImportedCharacter(ch) : null;
-        }).filter(Boolean);
-        let tagImportSetting = null;
-        if (scanResults.some(r => r.hasAnyContent)) {
-            const importChoices = await showUnifiedImportConfirm(scanResults);
-            const effectiveChoices = importChoices ?? buildSkipAllChoices(scanResults);
-            for (const result of scanResults) {
-                const ch = characters.find(c => c.avatar === result.avatar);
-                if (ch) await applyImportChoices(ch, effectiveChoices);
-            }
-            tagImportSetting = effectiveChoices.tagImportSetting;
-        }
-        await importCharactersTags(avatarFileNames, { importSetting: tagImportSetting });
+        await handleUnifiedImport(avatarFileNames);
         selectImportedChar(avatarFileNames[avatarFileNames.length - 1]);
     }
 }
@@ -10380,6 +10363,41 @@ async function importCharactersTags(avatarFileNames, { importSetting = null } = 
         const importedCharacter = characters.find(character => character.avatar === avatarFileNames[i]);
         await importTags(importedCharacter, { importSetting: effectiveSetting });
     }
+}
+
+/**
+ * Show unified import confirmation dialog and apply choices for imported characters.
+ * @param {string[]} avatarFileNames character avatar filenames
+ */
+async function handleUnifiedImport(avatarFileNames) {
+    await getCharacters();
+
+    const scanResults = avatarFileNames.map(av => {
+        const ch = characters.find(c => c.avatar === av);
+        if (!ch) {
+            console.warn(`[unified-import] Character not found after refresh: ${av}`);
+            return null;
+        }
+        return scanImportedCharacter(ch);
+    }).filter(Boolean);
+
+    let tagImportSetting = null;
+    if (scanResults.some(r => r.hasAnyContent)) {
+        const importChoices = await showUnifiedImportConfirm(scanResults);
+        const effectiveChoices = importChoices ?? buildSkipAllChoices();
+        for (const result of scanResults) {
+            const ch = characters.find(c => c.avatar === result.avatar);
+            if (ch) {
+                try {
+                    await applyImportChoices(ch, effectiveChoices);
+                } catch (e) {
+                    console.error(`[unified-import] Failed to apply choices for ${result.avatar}`, e);
+                }
+            }
+        }
+        tagImportSetting = effectiveChoices.tagImportSetting;
+    }
+    await importCharactersTags(avatarFileNames, { importSetting: tagImportSetting });
 }
 
 /**
@@ -12043,24 +12061,7 @@ jQuery(async function () {
         }
 
         if (avatarFileNames.length > 0) {
-            await getCharacters();
-
-            // Unified import confirmation
-            const scanResults = avatarFileNames.map(av => {
-                const ch = characters.find(c => c.avatar === av);
-                return ch ? scanImportedCharacter(ch) : null;
-            }).filter(Boolean);
-            let tagImportSetting = null;
-            if (scanResults.some(r => r.hasAnyContent)) {
-                const importChoices = await showUnifiedImportConfirm(scanResults);
-                const effectiveChoices = importChoices ?? buildSkipAllChoices(scanResults);
-                for (const result of scanResults) {
-                    const ch = characters.find(c => c.avatar === result.avatar);
-                    if (ch) await applyImportChoices(ch, effectiveChoices);
-                }
-                tagImportSetting = effectiveChoices.tagImportSetting;
-            }
-            await importCharactersTags(avatarFileNames, { importSetting: tagImportSetting });
+            await handleUnifiedImport(avatarFileNames);
             selectImportedChar(avatarFileNames[avatarFileNames.length - 1]);
         }
 
