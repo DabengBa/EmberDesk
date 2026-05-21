@@ -33,6 +33,7 @@ import {
     updateWorldInfoList,
     flushDeletedWorldsFromUI,
 } from './scripts/world-info.js';
+import { scanImportedCharacter, showUnifiedImportConfirm, applyImportChoices, buildSkipAllChoices } from './scripts/import-confirm-dialog.js';
 
 import {
     groups,
@@ -10343,7 +10344,24 @@ export async function processDroppedFiles(files, data = new Map()) {
     }
 
     if (avatarFileNames.length > 0) {
-        await importCharactersTags(avatarFileNames);
+        await getCharacters();
+
+        // Unified import confirmation
+        const scanResults = avatarFileNames.map(av => {
+            const ch = characters.find(c => c.avatar === av);
+            return ch ? scanImportedCharacter(ch) : null;
+        }).filter(Boolean);
+        let tagImportSetting = null;
+        if (scanResults.some(r => r.hasAnyContent)) {
+            const importChoices = await showUnifiedImportConfirm(scanResults);
+            const effectiveChoices = importChoices ?? buildSkipAllChoices(scanResults);
+            for (const result of scanResults) {
+                const ch = characters.find(c => c.avatar === result.avatar);
+                if (ch) await applyImportChoices(ch, effectiveChoices);
+            }
+            tagImportSetting = effectiveChoices.tagImportSetting;
+        }
+        await importCharactersTags(avatarFileNames, { importSetting: tagImportSetting });
         selectImportedChar(avatarFileNames[avatarFileNames.length - 1]);
     }
 }
@@ -10351,14 +10369,16 @@ export async function processDroppedFiles(files, data = new Map()) {
 /**
  * Imports tags for the given characters
  * @param {string[]} avatarFileNames character avatar filenames whose tags are to import
+ * @param {object} [options]
+ * @param {import('./scripts/tags.js').tag_import_setting} [options.importSetting] Override tag import setting
  */
-async function importCharactersTags(avatarFileNames) {
+async function importCharactersTags(avatarFileNames, { importSetting = null } = {}) {
     await getCharacters();
+    const effectiveSetting = importSetting ?? power_user.tag_import_setting;
+    if (effectiveSetting === tag_import_setting.NONE) return;
     for (let i = 0; i < avatarFileNames.length; i++) {
-        if (power_user.tag_import_setting !== tag_import_setting.NONE) {
-            const importedCharacter = characters.find(character => character.avatar === avatarFileNames[i]);
-            await importTags(importedCharacter);
-        }
+        const importedCharacter = characters.find(character => character.avatar === avatarFileNames[i]);
+        await importTags(importedCharacter, { importSetting: effectiveSetting });
     }
 }
 
@@ -12023,7 +12043,24 @@ jQuery(async function () {
         }
 
         if (avatarFileNames.length > 0) {
-            await importCharactersTags(avatarFileNames);
+            await getCharacters();
+
+            // Unified import confirmation
+            const scanResults = avatarFileNames.map(av => {
+                const ch = characters.find(c => c.avatar === av);
+                return ch ? scanImportedCharacter(ch) : null;
+            }).filter(Boolean);
+            let tagImportSetting = null;
+            if (scanResults.some(r => r.hasAnyContent)) {
+                const importChoices = await showUnifiedImportConfirm(scanResults);
+                const effectiveChoices = importChoices ?? buildSkipAllChoices(scanResults);
+                for (const result of scanResults) {
+                    const ch = characters.find(c => c.avatar === result.avatar);
+                    if (ch) await applyImportChoices(ch, effectiveChoices);
+                }
+                tagImportSetting = effectiveChoices.tagImportSetting;
+            }
+            await importCharactersTags(avatarFileNames, { importSetting: tagImportSetting });
             selectImportedChar(avatarFileNames[avatarFileNames.length - 1]);
         }
 
