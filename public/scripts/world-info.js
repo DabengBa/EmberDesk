@@ -24,6 +24,7 @@ import { t } from './i18n.js';
 import { accountStorage } from './util/AccountStorage.js';
 import { getOrCreatePersonaDescriptor, setPersonaDescription, user_avatar } from './personas.js';
 import { buildWorldInfoReplayState } from './deferred-panel-replays.js';
+import { buildCascadeSectionHtml, captureCascadeChoices } from './world-cascade-dialog.js';
 
 export const world_info_insertion_strategy = {
     evenly: 0,
@@ -2412,9 +2413,82 @@ async function displayWorldEntries(name, data, navigation = navigation_option.no
     // Regardless of whether success is displayed or not. Make sure the delete button is available.
     // Do not put this code behind.
     $('#world_popup_delete').off('click').on('click', async () => {
-        const confirmation = await Popup.show.confirm(`Delete the World/Lorebook: "${name}"?`, 'This action is irreversible!');
-        if (!confirmation) {
-            return;
+        // Call preflight to check for bound characters
+        let worldInfos = [];
+        try {
+            const pf = await fetch('/api/worldinfo/delete-preflight', {
+                method: 'POST',
+                headers: getRequestHeaders(),
+                body: JSON.stringify({ name }),
+            });
+            if (pf.ok) {
+                const data = await pf.json();
+                worldInfos = data.worldInfos ?? [];
+            }
+        } catch {
+            // If preflight fails, fall through to simple confirmation
+        }
+
+        const hasBoundCharacters = worldInfos.some(w => w.boundCharacters.length > 0);
+
+        if (hasBoundCharacters) {
+            // Show cascade dialog with bound character warning
+            const cascadeHtml = buildCascadeSectionHtml(worldInfos);
+            const refId = `world-clear-refs-${Date.now()}`;
+            const refCheckboxHtml = `<div class="delete-dialog-option" style="margin-top:10px;">
+                <input type="checkbox" id="${refId}"><label for="${refId}">${t`Also clear world info references in bound characters`}</label>
+            </div>`;
+            const fullHtml = `<h3>${t`Delete the World/Lorebook: "${name}"?`}</h3>${cascadeHtml}${refCheckboxHtml}`;
+
+            let capturedCascade = { deleteWorlds: [], clearWorldReferences: false };
+            const popup = new Popup(fullHtml, POPUP_TYPE.CONFIRM, '', {
+                okButton: t`Delete`,
+                wider: true,
+                leftAlign: true,
+                customButtons: [{
+                    text: t`Delete All`,
+                    result: POPUP_RESULT.CUSTOM1,
+                    classes: ['popup-button-ok'],
+                }],
+                onClosing: () => {
+                    capturedCascade = captureCascadeChoices();
+                    capturedCascade.clearWorldReferences = !!document.getElementById(refId)?.checked;
+                    return true;
+                },
+                onOpen: (p) => {
+                    // Auto-check the single world since the user explicitly clicked Delete
+                    document.querySelectorAll('.world-cascade-checkbox').forEach((cb) => { cb.checked = true; });
+                    const btn = p.dlg.querySelector('[data-result="' + POPUP_RESULT.CUSTOM1 + '"]');
+                    if (btn) {
+                        btn.addEventListener('click', () => {
+                            document.querySelectorAll('.world-cascade-checkbox').forEach((cb) => { cb.checked = true; });
+                            p.complete(POPUP_RESULT.AFFIRMATIVE);
+                        });
+                    }
+                },
+            });
+            const result = await popup.show();
+            if (!result) return;
+
+            // User unchecked the world checkbox — treat as cancel
+            if (capturedCascade.deleteWorlds.length === 0) return;
+
+            if (capturedCascade.clearWorldReferences) {
+                // Use delete-cascade to also clear character references
+                await fetch('/api/worldinfo/delete-cascade', {
+                    method: 'POST',
+                    headers: getRequestHeaders(),
+                    body: JSON.stringify({ worlds: capturedCascade.deleteWorlds, clear_references: true }),
+                });
+                await flushDeletedWorldsFromUI(capturedCascade.deleteWorlds);
+                // Skip regular deleteWorldInfo since cascade already handled it
+                return;
+            }
+            // fall through to regular delete below
+        } else {
+            // No bound characters — simple confirmation
+            const confirmed = await Popup.show.confirm(`Delete the World/Lorebook: "${name}"?`, 'This action is irreversible!');
+            if (!confirmed) return;
         }
 
         if (world_info.charLore) {

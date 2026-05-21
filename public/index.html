@@ -3294,11 +3294,6 @@
                 <div class="flex-container wide100p alignitemscenter">
                     <div name="keywordsAndLogicBlock" class="flex-container wide100p alignitemscenter">
                         <div class="world_entry_form_control keyprimary flex1">
-                            <small class="displayNone">
-                                <span data-i18n="Comma separated (required)">
-                                    Comma separated (required)
-                                </span>
-                            </small>
                             <small class="textAlignCenter" data-i18n="Primary Keywords">Primary Keywords</small>
                             <select class="keyprimaryselect keyselect" name="key" data-i18n="[placeholder]Keywords or Regexes" placeholder="Keywords or Regexes" multiple="multiple"></select>
                             <textarea class="text_pole keyprimarytextpole mobile" name="key" rows="1" data-i18n="[placeholder]Comma separated list" placeholder="Comma separated list" style="display: none;"></textarea>
@@ -3316,11 +3311,6 @@
                             </select>
                         </div>
                         <div class="world_entry_form_control keysecondary flex1">
-                            <small class="displayNone">
-                                <span data-i18n="(ignored if empty)">
-                                    (ignored if empty)
-                                </span>
-                            </small>
                             <small class="textAlignCenter" data-i18n="Optional Filter">Optional Filter</small>
                             <select class="keysecondaryselect keyselect" name="keysecondary" data-i18n="[placeholder]Keywords or Regexes (ignored if empty)" placeholder="Keywords or Regexes (ignored if empty)" multiple="multiple"></select>
                             <textarea class="text_pole keysecondarytextpole mobile" name="keysecondary" rows="1" data-i18n="[placeholder]Comma separated list (ignored if empty)" placeholder="Comma separated list (ignored if empty)" style="display: none;"></textarea>
@@ -3392,41 +3382,24 @@
                                             (<span data-i18n="extension_token_counter">Tokens:</span>&nbsp; <span class="world_entry_form_token_counter" data-first-run="true">counting...</span>)&nbsp;
                                             <span class="world_entry_form_uid_value" data-first-run="true"></span>
                                         </span>
-                                        <div class="flex-container">
-                                            <div class="flex-container flexFlowColumn">
-                                                <label class="checkbox flex-container alignitemscenter flexNoGap" data-i18n="[title]This entry will not be recursively activated by other entries." title="This entry will not be recursively activated by other entries.">
-                                                    <input type="checkbox" name="excludeRecursion" />
-                                                    <span data-i18n="Non-recursable">
-                                                        Non-recursable
-                                                    </span>
-                                                </label>
-                                                <label class="checkbox flex-container alignitemscenter flexNoGap" title="This entry will not activate other entries recursively." data-i18n="[title]This entry will not activate other entries recursively.">
-                                                    <input type="checkbox" name="preventRecursion" />
-                                                    <span data-i18n="Prevent further recursion">
-                                                        Prevent further recursion
-                                                    </span>
-                                                </label>
-                                            </div>
-                                            <div class="flex-container flexFlowColumn">
-                                                <label class="checkbox flex-container alignitemscenter flexNoGap" title="This entry can only be activated on recursive checking." data-i18n="[title]This entry can only be activated on recursive checking.">
-                                                    <input type="checkbox" name="delay_until_recursion" />
-                                                    <span data-i18n="Delay until recursion">
-                                                        Delay until recursion
-                                                    </span>
-                                                </label>
-                                                <label class="checkbox flex-container alignitemscenter flexNoGap" title="This entry will be included ignoring budget constraints, assuming all other checks pass." data-i18n="[title]This entry will be included ignoring budget constraints, assuming all other checks pass.">
-                                                    <input type="checkbox" name="ignoreBudget" />
-                                                    <span data-i18n="Ignore budget">
-                                                        Ignore budget
-                                                    </span>
-                                                </label>
-                                            </div>
+                                        <div class="flex-container flexFlowColumn" style="gap:2px;">
+                                            <label class="checkbox flex-container alignitemscenter flexNoGap" data-i18n="[title]This entry will not be recursively activated by other entries." title="This entry will not be recursively activated by other entries.">
+                                                <input type="checkbox" name="excludeRecursion" />
+                                                <span data-i18n="Non-recursable">Non-recursable</span>
+                                            </label>
+                                            <label class="checkbox flex-container alignitemscenter flexNoGap" title="This entry will not activate other entries recursively." data-i18n="[title]This entry will not activate other entries recursively.">
+                                                <input type="checkbox" name="preventRecursion" />
+                                                <span data-i18n="Prevent further recursion">Prevent further recursion</span>
+                                            </label>
+                                            <label class="checkbox flex-container alignitemscenter flexNoGap" title="This entry can only be activated on recursive checking." data-i18n="[title]This entry can only be activated on recursive checking.">
+                                                <input type="checkbox" name="delay_until_recursion" />
+                                                <span data-i18n="Delay until recursion">Delay until recursion</span>
+                                            </label>
+                                            <label class="checkbox flex-container alignitemscenter flexNoGap" title="This entry will be included ignoring budget constraints, assuming all other checks pass." data-i18n="[title]This entry will be included ignoring budget constraints, assuming all other checks pass.">
+                                                <input type="checkbox" name="ignoreBudget" />
+                                                <span data-i18n="Ignore budget">Ignore budget</span>
+                                            </label>
                                         </div>
-                                    </span>
-                                </small>
-                                <small class="displayNone">
-                                    <span data-i18n="What this keyword should mean to the AI, sent verbatim">
-                                        What this keyword should mean to the AI, sent verbatim
                                     </span>
                                 </small>
                             </label>

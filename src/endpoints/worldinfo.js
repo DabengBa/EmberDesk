@@ -81,6 +81,52 @@ router.post('/get', (request, response) => {
     return response.send(file);
 });
 
+router.post('/delete-preflight', (request, response) => {
+    try {
+        const worldName = request.body?.name;
+        if (!worldName || typeof worldName !== 'string') {
+            return response.status(400).send({ error: 'World name is required.' });
+        }
+
+        const directories = request.user.directories;
+        const worldFilename = sanitize(`${worldName}.json`);
+        const worldPath = path.join(directories.worlds, worldFilename);
+
+        if (!fs.existsSync(worldPath)) {
+            return response.send({ worldInfos: [] });
+        }
+
+        let entryCount = 0;
+        try {
+            const worldData = JSON.parse(fs.readFileSync(worldPath, 'utf8'));
+            entryCount = worldData.entries ? Object.keys(worldData.entries).length : 0;
+        } catch {
+            // If we can't parse, still show with 0 entries
+        }
+
+        let boundCharacters = [];
+        if (isCharacterIndexSupported()) {
+            try {
+                boundCharacters = findCharactersBoundToWorld(directories.root, worldName);
+            } catch {
+                // Fallback: only show the world itself
+            }
+        }
+
+        return response.send({
+            worldInfos: [{
+                name: worldName,
+                entryCount,
+                boundCharacters,
+                deleteCandidateAvatars: [],
+            }],
+        });
+    } catch (error) {
+        console.error('World delete preflight error:', error);
+        return response.status(500).send({ error: 'Failed to gather world info metadata.' });
+    }
+});
+
 router.post('/delete', (request, response) => {
     if (!request.body?.name) {
         return response.sendStatus(400);
