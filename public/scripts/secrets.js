@@ -185,7 +185,6 @@ const INPUT_MAP = {
     [SECRET_KEYS.SILICONFLOW]: '#api_key_siliconflow',
     [SECRET_KEYS.MINIMAX]: '#api_key_minimax',
     [SECRET_KEYS.POLLINATIONS]: '#api_key_pollinations',
-    [SECRET_KEYS.WORKERS_AI]: '#api_key_workers_ai',
 };
 
 const getLabel = () => moment().format('L LT');
@@ -247,9 +246,11 @@ export function getSecretLabelById(id) {
 }
 
 export function updateSecretDisplay() {
+    const savedText = t`Key saved`;
+    const missingText = t`Missing key`;
     for (const [secret_key, input_selector] of Object.entries(INPUT_MAP)) {
         const validSecret = !!secret_state[secret_key];
-        const placeholder = $('#viewSecrets').attr(validSecret ? 'key_saved_text' : 'missing_key_text');
+        const placeholder = validSecret ? savedText : missingText;
         const label = getActiveSecretLabel(secret_key);
         const placeholderWithLabel = label ? `${placeholder} (${label})` : placeholder;
         $(input_selector).attr('placeholder', placeholderWithLabel);
@@ -296,32 +297,6 @@ export async function canViewSecrets() {
     }
 }
 
-async function viewSecrets() {
-    const response = await fetch('/api/secrets/view', {
-        method: 'POST',
-        headers: getRequestHeaders({ omitContentType: true }),
-    });
-
-    if (response.status == 403) {
-        await Popup.show.text(t`Forbidden`, t`To view your API keys here, set the value of allowKeysExposure to true in config.yaml file and restart the EmberDesk server.`);
-        return;
-    }
-
-    if (!response.ok) {
-        return;
-    }
-
-    const data = await response.json();
-    const table = document.createElement('table');
-    table.classList.add('responsiveTable');
-    $(table).append('<thead><th>Key</th><th>Value</th></thead>');
-
-    for (const [key, value] of Object.entries(data)) {
-        $(table).append(`<tr><td>${DOMPurify.sanitize(key)}</td><td>${DOMPurify.sanitize(value)}</td></tr>`);
-    }
-
-    await callGenericPopup(table.outerHTML, POPUP_TYPE.TEXT, '', { wide: true, large: true, allowVerticalScrolling: true });
-}
 
 /**
  * @type {import('../../src/endpoints/secrets.js').SecretStateMap}
@@ -1124,7 +1099,6 @@ function registerSecretSlashCommands() {
 }
 
 export async function initSecrets() {
-    $('#viewSecrets').on('click', viewSecrets);
     $(document).on('click', '.manage-api-keys', async function () {
         const key = $(this).data('key');
         if (!key || !Object.values(SECRET_KEYS).includes(key)) {

@@ -86,6 +86,7 @@ export let world_info_character_strategy = world_info_insertion_strategy.charact
 export let world_info_budget_cap = 0;
 export let world_info_max_recursion_steps = 0;
 const saveWorldDebounced = debounce(async (name, data) => await _save(name, data), debounce_timeout.relaxed);
+function closeMoreMenu() { $('#world_more_menu_dropdown').hide(); }
 const saveSettingsDebounced = debounce(() => {
     Object.assign(world_info, { globalSelect: selected_world_info });
     saveSettings();
@@ -2400,11 +2401,11 @@ async function displayWorldEntries(name, data, navigation = navigation_option.no
     worldEntriesList.show();
 
     if (!data || !('entries' in data)) {
-        $('#world_popup_new').off('click').on('click', nullWorldInfo);
-        $('#world_popup_name_button').off('click').on('click', nullWorldInfo);
-        $('#world_popup_export').off('click').on('click', nullWorldInfo);
-        $('#world_popup_delete').off('click').on('click', nullWorldInfo);
-        $('#world_duplicate').off('click').on('click', nullWorldInfo);
+        $('#world_create_button').off('click').on('click', nullWorldInfo);
+        $('#world_rename_menu_item').off('click').on('click', nullWorldInfo);
+        $('#world_export_menu_item').off('click').on('click', nullWorldInfo);
+        $('#world_delete_menu_item').off('click').on('click', nullWorldInfo);
+        $('#world_duplicate_menu_item').off('click').on('click', nullWorldInfo);
         worldEntriesList.hide();
         $('#world_info_pagination').html('');
         return;
@@ -2412,7 +2413,7 @@ async function displayWorldEntries(name, data, navigation = navigation_option.no
 
     // Regardless of whether success is displayed or not. Make sure the delete button is available.
     // Do not put this code behind.
-    $('#world_popup_delete').off('click').on('click', async () => {
+    $('#world_delete_menu_item').off('click').on('click', async () => {
         // Call preflight to check for bound characters
         let worldInfos = [];
         try {
@@ -2570,29 +2571,54 @@ async function displayWorldEntries(name, data, navigation = navigation_option.no
             try {
                 clearEntryList(worldEntriesList);
 
-                const keywordHeaders = await renderTemplateAsync('worldInfoKeywordHeaders');
                 const blocks = [];
+                const populates = new Map();
 
                 for (const entry of page) {
                     try {
-                        const block = await getWorldEntry(name, data, entry);
-                        if (block) {
-                            blocks.push(block);
+                        const { header, populateEditForm } = createWorldEntryCard(name, data, entry);
+                        if (header) {
+                            blocks.push(header);
+                            populates.set(entry.uid, populateEditForm);
                         }
                     } catch (error) {
                         console.error(`Error while processing entry ${entry.uid}:`, error);
                     }
                 }
 
-                const isCustomOrder = $('#world_info_sort_order').find(':selected').data('rule') === 'custom';
-                if (!isCustomOrder) {
-                    blocks.forEach(block => {
-                        block.find('.drag-handle').remove();
-                    });
+                worldEntriesList.append(blocks.map(block => block[0]).filter(Boolean));
+
+                function toggleWorldInfoCard(target) {
+                    const $card = $(target).closest('.world_entry');
+                    const uid = $card.data('uid');
+                    const populate = populates.get(uid);
+                    if (!populate) return;
+
+                    const $outlet = $card.find('.inline-drawer-outlet');
+
+                    if ($outlet.children().length > 0) {
+                        $outlet.empty();
+                        $card.find('.wi-card-header').removeClass('wi-card-expanded');
+                    } else {
+                        populate();
+                        $card.find('.wi-card-header').addClass('wi-card-expanded');
+                        $card[0]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }
                 }
 
-                worldEntriesList.append(keywordHeaders);
-                worldEntriesList.append(blocks);
+                // Click-to-expand handlers
+                worldEntriesList.find('.wi-card-body-wrap, .wi-card-expand-button').off('click.wiExpand').on('click.wiExpand', function (e) {
+                    if (window.getSelection().toString().length > 0) return;
+                    if ($(e.target).is('textarea, input, select, button, a') || $(e.target).closest('textarea, input, select, button, a').length > 0) return;
+
+                    toggleWorldInfoCard(this);
+                });
+
+                worldEntriesList.find('.wi-card-expand-button').off('keydown.wiExpand').on('keydown.wiExpand', function (e) {
+                    if (e.key !== 'Enter' && e.key !== ' ') return;
+                    e.preventDefault();
+                    toggleWorldInfoCard(this);
+                });
             } catch (error) {
                 console.error('Error while rendering WI entries:', error);
             }
@@ -2625,13 +2651,16 @@ async function displayWorldEntries(name, data, navigation = navigation_option.no
         });
     }
 
-    $('#world_popup_new').off('click').on('click', () => {
+    // "New entry" button (now #world_create_button in the toolbar)
+    $('#world_create_button').off('click').on('click', () => {
         const entry = createWorldInfoEntry(name, data);
         if (entry) updateEditor(entry.uid);
     });
 
-    $('#world_popup_name_button').off('click').on('click', async () => {
+    // More menu: rename
+    $('#world_rename_menu_item').off('click').on('click', async () => {
         await renameWorldInfo(name, data);
+        closeMoreMenu();
     });
 
     $('#world_backfill_memos').off('click').on('click', async () => {
@@ -2695,15 +2724,18 @@ async function displayWorldEntries(name, data, navigation = navigation_option.no
         }
     });
 
-    $('#world_popup_export').off('click').on('click', () => {
+    // More menu: export
+    $('#world_export_menu_item').off('click').on('click', () => {
         if (name && data) {
             const jsonValue = JSON.stringify(data);
             const fileName = `${name}.json`;
             download(jsonValue, fileName, 'application/json');
         }
+        closeMoreMenu();
     });
 
-    $('#world_duplicate').off('click').on('click', async () => {
+    // More menu: duplicate
+    $('#world_duplicate_menu_item').off('click').on('click', async () => {
         // Find current name for the world selected
         const selectedIndex = String($('#world_editor_select').find(':selected').val());
         const worldName = world_names[selectedIndex] || null;
@@ -2725,41 +2757,23 @@ async function displayWorldEntries(name, data, navigation = navigation_option.no
         }
     });
 
-    // Check if a sortable instance exists
+    // Remove sortable (no drag-and-drop in new design)
     if (worldEntriesList.sortable('instance') !== undefined) {
-        // Destroy the instance
         worldEntriesList.sortable('destroy');
     }
 
-    worldEntriesList.sortable({
-        items: '.world_entry',
-        delay: getSortableDelay(),
-        handle: '.drag-handle',
-        stop: async function (_event, _ui) {
-            const firstEntryUid = $('#world_popup_entries_list .world_entry').first().data('uid');
-            const minDisplayIndex = data?.entries[firstEntryUid]?.displayIndex ?? 0;
-            $('#world_popup_entries_list .world_entry').each(function (index) {
-                const uid = $(this).data('uid');
-
-                // Update the display index in the data array
-                const item = data.entries[uid];
-
-                if (!item) {
-                    console.debug(`Could not find entry with uid ${uid}`);
-                    return;
-                }
-
-                item.displayIndex = minDisplayIndex + index;
-                setWIOriginalDataValue(data, uid, 'extensions.display_index', item.displayIndex);
-            });
-
-            console.table(Object.keys(data.entries).map(uid => data.entries[uid]).map(x => ({ uid: x.uid, key: x.key.join(','), displayIndex: x.displayIndex })));
-
-            await saveWorldInfo(name, data);
-        },
+    // Close more menu when clicking outside
+    $(document).off('click.worldMoreMenu').on('click.worldMoreMenu', function (e) {
+        if (!$(e.target).closest('#world_more_menu_wrapper').length) {
+            $('#world_more_menu_dropdown').hide();
+        }
     });
 
-    //$("#world_popup_entries_list").disableSelection();
+    // Refresh button
+    $('#world_refresh').off('click').on('click', () => {
+        updateEditor(navigation_option.previous);
+        closeMoreMenu();
+    });
 }
 
 export const originalWIDataKeyMap = {
@@ -3437,22 +3451,27 @@ function setCommentPlaceholder(keys, commentInput) {
  * @param {object} data - The world info data object.
  * @param {object} entry - The entry object to be edited.
  */
-export async function getWorldEntry(name, data, entry) {
-    if (!data.entries[entry.uid]) return;
+/**
+ * Renders a collapsed card header for a world info entry.
+ * The card shows: title, position tag, status light, and keywords preview.
+ * Clicking the card expands it to the full edit form via getWorldEntry.
+ *
+ * @param {string} name - World book name
+ * @param {object} data - World book data
+ * @param {object} entry - Entry object
+ * @returns {Promise<jQuery|null>} The collapsed card element
+ */
+export function renderCollapsedCard(name, data, entry) {
+    if (!data.entries[entry.uid]) return null;
 
-    const headerTemplate = WI_ENTRY_HEADER_TEMPLATE.clone();
-    headerTemplate.data('uid', entry.uid);
-    headerTemplate.attr('uid', entry.uid);
+    const template = WI_ENTRY_HEADER_TEMPLATE.clone();
+    template.data('uid', entry.uid);
+    template.attr('uid', entry.uid);
 
-    if (typeof power_user.wi_key_input_plaintext === 'undefined') power_user.wi_key_input_plaintext = true;
-
-    // Comment
-    const commentInput = headerTemplate.find('textarea[name="comment"]');
-
-    //Update the commentInput's placeholder.
+    // Comment (title) - editable inline
+    const commentInput = template.find('textarea[name="comment"]');
     const keys = entry.key.join(', ');
     setCommentPlaceholder(keys, commentInput);
-
     commentInput.data('uid', entry.uid);
     commentInput.on('input', async function (_, { skipReset = false, noSave = false } = {}) {
         const uid = $(this).data('uid');
@@ -3463,82 +3482,517 @@ export async function getWorldEntry(name, data, entry) {
         !noSave && await saveWorldInfo(name, data);
     });
     commentInput.val(entry.comment).trigger('input', { skipReset: true, noSave: true });
+    commentInput.on('click', e => e.stopPropagation());
 
-    // Order
-    const orderInput = headerTemplate.find('input[name="order"]');
-    orderInput.data('uid', entry.uid);
-    orderInput.on('input', async function (_, { noSave = false } = {}) {
-        const uid = $(this).data('uid');
-        const value = Number($(this).val());
-        data.entries[uid].order = !isNaN(value) ? value : 0;
-        updatePosOrdDisplayHelper({ template: headerTemplate, data, uid });
-        setWIOriginalDataValue(data, uid, 'insertion_order', data.entries[uid].order);
-        !noSave && await saveWorldInfo(name, data);
+    // Position tag
+    const posLabels = {
+        0: '↑Char', 1: '↓Char', 2: '↑AN', 3: '↓AN',
+        4: `@D${enumIcons.getRoleIcon(entry.role) || ''}`, 5: '↑EM', 6: '↓EM', 7: '→Outlet',
+    };
+    const posTag = template.find('.wi-card-position-tag');
+    posTag.text(posLabels[entry.position] ?? '');
+
+    // Entry state selector
+    const stateSelector = template.find('select[name="entryStateSelector"]');
+    stateSelector.val(entry.constant === true ? 'constant' : entry.vectorized === true ? 'vectorized' : 'normal');
+    stateSelector.on('change', async function () {
+        const val = $(this).val();
+        if (val === 'constant') {
+            data.entries[entry.uid].constant = true;
+            data.entries[entry.uid].vectorized = false;
+        } else if (val === 'vectorized') {
+            data.entries[entry.uid].constant = false;
+            data.entries[entry.uid].vectorized = true;
+        } else {
+            data.entries[entry.uid].constant = false;
+            data.entries[entry.uid].vectorized = false;
+        }
+        setWIOriginalDataValue(data, entry.uid, 'constant', data.entries[entry.uid].constant);
+        setWIOriginalDataValue(data, entry.uid, 'extensions.vectorized', data.entries[entry.uid].vectorized);
+        updateStatusLight(template, entry);
+        await saveWorldInfo(name, data);
     });
-    orderInput.val(entry.order).trigger('input', { noSave: true });
-    orderInput.css('width', 'calc(3em + 15px)');
+    stateSelector.on('click', e => e.stopPropagation());
 
-    // Probability
-    handleProbabilityInputHelper({ probabilityInput: headerTemplate.find('input[name="probability"]'), data, entry, name });
-
-    // Depth
-    handleNumberInputHelper({
-        inputElem: headerTemplate.find('input[name="depth"]'),
-        entry, entryKey: 'depth', data, name, min: 0, max: MAX_SCAN_DEPTH, clamp: false,
+    // Status light
+    updateStatusLight(template, entry);
+    const statusLight = template.find('.wi-card-status-light');
+    statusLight.on('click', async function (e) {
+        e.stopPropagation();
+        data.entries[entry.uid].disable = !data.entries[entry.uid].disable;
+        setWIOriginalDataValue(data, entry.uid, 'enabled', data.entries[entry.uid].disable !== true);
+        updateStatusLight(template, entry);
+        template.toggleClass('disabledWIEntry', data.entries[entry.uid].disable === true);
+        await saveWorldInfo(name, data);
     });
-    headerTemplate.find('input[name="depth"]').css('width', 'calc(3em + 15px)');
 
-    // Position
+    // Keywords preview
+    const preview = template.find('.wi-card-keywords-preview');
+    if (entry.key && entry.key.length > 0) {
+        const isConstant = entry.constant === true;
+        if (!isConstant) {
+            preview.text(entry.key.join(', '));
+        }
+    }
+
+    // Disabled state
+    if (entry.disable === true) {
+        template.addClass('disabledWIEntry');
+    }
+
+    // Store original data for WI scanning
+    if (!data.entries[entry.uid]._originalData) {
+        setWIOriginalDataValue(data, entry.uid, 'keyprimary', entry.keyprimary ?? entry.key);
+        setWIOriginalDataValue(data, entry.uid, 'keysecondary', entry.keysecondary ?? []);
+        setWIOriginalDataValue(data, entry.uid, 'position', entry.position === 0 ? 'before_char' : 'after_char');
+        setWIOriginalDataValue(data, entry.uid, 'extensions.position', entry.position);
+        setWIOriginalDataValue(data, entry.uid, 'extensions.role', entry.role);
+    }
+
+    return template;
+}
+
+/**
+ * Updates the status light CSS class based on entry state.
+ */
+function updateStatusLight($template, entry) {
+    const light = $template.find('.wi-card-status-light');
+    light.removeClass('wi-status-enabled-constant wi-status-enabled-keyword wi-status-disabled');
+    if (entry.disable === true) {
+        light.addClass('wi-status-disabled');
+    } else if (entry.constant === true) {
+        light.addClass('wi-status-enabled-constant');
+    } else {
+        light.addClass('wi-status-enabled-keyword');
+    }
+}
+
+/**
+ * Initializes accordion state from data-default attributes.
+ */
+function initAccordionState($container) {
+    $container.find('.wi-accordion').each(function () {
+        const $acc = $(this);
+        if (!$acc.attr('data-state')) {
+            const defaultState = $acc.attr('data-default') || 'closed';
+            $acc.attr('data-state', defaultState);
+        }
+    });
+
+    $container.find('.wi-accordion-header').off('click.wiAccordion').on('click.wiAccordion', function () {
+        const $acc = $(this).closest('.wi-accordion');
+        const current = $acc.attr('data-state') || 'closed';
+        $acc.attr('data-state', current === 'open' ? 'closed' : 'open');
+    });
+}
+
+export async function getWorldEntry(name, data, entry) {
+    if (!data.entries[entry.uid]) return;
+
+    const headerTemplate = WI_ENTRY_HEADER_TEMPLATE.clone();
+    headerTemplate.data('uid', entry.uid);
+    headerTemplate.attr('uid', entry.uid);
+
+    if (typeof power_user.wi_key_input_plaintext === 'undefined') power_user.wi_key_input_plaintext = true;
+
+    const editOutlet = headerTemplate.find('.inline-drawer-outlet');
+
+    function addEditorDrawerContent() {
+        const editTemplate = WI_ENTRY_EDIT_TEMPLATE.clone();
+        setupEditFormBindings(editTemplate, editOutlet, name, data, entry);
+        initAccordionState(editOutlet);
+    }
+
+
+    headerTemplate.find('.inline-drawer-content').css('display', 'none');
+
+    return headerTemplate;
+}
+
+
+/**
+ * Creates a collapsed WI card with a lazy-loading edit form.
+ * Returns { header, populateEditForm } — call populateEditForm() to build the
+ * edit form inside the card's outlet on first expand.
+ */
+export function createWorldEntryCard(name, data, entry) {
+    const header = renderCollapsedCard(name, data, entry);
+    const outlet = header.find('.inline-drawer-outlet');
+
+    function populateEditForm() {
+        if (outlet.children().length > 0) return;
+        const editTemplate = WI_ENTRY_EDIT_TEMPLATE.clone();
+        setupEditFormBindings(editTemplate, outlet, name, data, entry);
+        initAccordionState(outlet);
+    }
+
+    return { header, populateEditForm };
+}
+
+/**
+ * Builds the edit form (clone of WI_ENTRY_EDIT_TEMPLATE), binds all controls,
+ * and appends it to the given outlet. Called by createWorldEntryCard and getWorldEntry.
+ */
+function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
+    // UID display
+    editTemplate.find('.world_entry_form_uid_value').text(`(UID: ${entry.uid})`);
+
+    // Key inputs
+    const keyInput = enableKeysInputHelper({ template: editTemplate, entry, entryPropName: 'key', originalDataValueName: 'keys', name, data });
+    const keySecondaryInput = enableKeysInputHelper({ template: editTemplate, entry, entryPropName: 'keysecondary', originalDataValueName: 'secondary_keys', name, data });
+    if (!keyInput.isFancy) initScrollHeight(keyInput.control);
+    if (!keySecondaryInput.isFancy) initScrollHeight(keySecondaryInput.control);
+
+    // Key input switch
+    editTemplate.find('.switch_input_type_icon').on('click', function () {
+        power_user.wi_key_input_plaintext = !power_user.wi_key_input_plaintext;
+        saveSettingsDebounced();
+        const uid = ($(this).parents('.world_entry')).data('uid');
+        updateEditor(uid, false);
+        $(`.world_entry[uid="${uid}"] .inline-drawer-icon`).trigger('click');
+    }).each((_, icon) => {
+        $(icon).attr('title', $(icon).data(power_user.wi_key_input_plaintext ? 'tooltip-on' : 'tooltip-off'));
+        $(icon).text($(icon).data(power_user.wi_key_input_plaintext ? 'icon-on' : 'icon-off'));
+    });
+
+    // Build injection controls (position, depth, order, probability)
+    const $injectionContainer = editTemplate.find('[data-populate="injection"]');
+    const $injectionControls = $('<div class="wi-injection-controls"></div>');
+
     if (entry.position === undefined) entry.position = 0;
-    const positionInput = headerTemplate.find('select[name="position"]');
-    positionInput.data('uid', entry.uid);
-    positionInput.on('click', e => e.stopPropagation());
-    positionInput.on('input', async function (_, { noSave = false } = {}) {
+    const $posControl = $('<div class="world_entry_form_control"><small class="textAlignCenter" data-i18n="Position">Position</small></div>');
+    const $posSelect = $(`<select name="position" class="text_pole widthNatural margin0">
+        <option value="0" data-role="">↑Char</option>
+        <option value="1" data-role="">↓Char</option>
+        <option value="5" data-role="">↑EM</option>
+        <option value="6" data-role="">↓EM</option>
+        <option value="2" data-role="">↑AN</option>
+        <option value="3" data-role="">↓AN</option>
+        <option value="4" data-role="0">@D ⚙️</option>
+        <option value="4" data-role="1">@D 👤</option>
+        <option value="4" data-role="2">@D 🤖</option>
+        <option value="7" data-role="">➡️ Outlet</option>
+    </select>`);
+    $posSelect.data('uid', entry.uid);
+    $posSelect.on('input', async function (_, { noSave = false } = {}) {
         const uid = $(this).data('uid');
         const value = Number($(this).val());
         data.entries[uid].position = !isNaN(value) ? value : 0;
-        const depthInput = headerTemplate.find('input[name="depth"]');
+        const $depthInput = $injectionControls.find('input[name="depth"]');
         if (value === world_info_position.atDepth) {
-            depthInput.prop('disabled', false);
-            depthInput.css('visibility', 'visible');
-            const role = Number($(this).find(':selected').data('role'));
-            data.entries[uid].role = role;
+            $depthInput.prop('disabled', false).css('visibility', 'visible');
+            data.entries[uid].role = Number($(this).find(':selected').data('role'));
         } else {
-            depthInput.prop('disabled', true);
-            depthInput.css('visibility', 'hidden');
+            $depthInput.prop('disabled', true).css('visibility', 'hidden');
             data.entries[uid].role = null;
         }
-        updatePosOrdDisplayHelper({ template: headerTemplate, data, uid });
         setWIOriginalDataValue(data, uid, 'position', data.entries[uid].position == 0 ? 'before_char' : 'after_char');
         setWIOriginalDataValue(data, uid, 'extensions.position', data.entries[uid].position);
         setWIOriginalDataValue(data, uid, 'extensions.role', data.entries[uid].role);
         !noSave && await saveWorldInfo(name, data);
     });
     const roleValue = entry.position === world_info_position.atDepth ? String(entry.role ?? extension_prompt_roles.SYSTEM) : '';
-    headerTemplate.find(`select[name="position"] option[value="${entry.position}"][data-role="${roleValue}"]`).prop('selected', true).trigger('input', { noSave: true });
+    $posSelect.find(`option[value="${entry.position}"][data-role="${roleValue}"]`).prop('selected', true);
+    $posControl.append($posSelect);
+    $injectionControls.append($posControl);
 
-    // Tri-state selector
-    handleEntryStateSelectorHelper({
-        entryStateSelector: headerTemplate.find('select[name="entryStateSelector"]'),
-        entry, data, name,
+    const $depthControl = $('<div class="world_entry_form_control"><small class="textAlignCenter" data-i18n="Depth">Depth</small></div>');
+    const $depthInput = $('<input class="text_pole margin0" type="number" name="depth" min="0" max="1000">');
+    handleNumberInputHelper({ inputElem: $depthInput, entry, entryKey: 'depth', data, name, min: 0, max: MAX_SCAN_DEPTH, clamp: false });
+    $depthInput.css('width', 'calc(3em + 15px)');
+    if (entry.position !== world_info_position.atDepth) {
+        $depthInput.prop('disabled', true).css('visibility', 'hidden');
+    }
+    $depthControl.append($depthInput);
+    $injectionControls.append($depthControl);
+
+    const $orderControl = $('<div class="world_entry_form_control"><small class="textAlignCenter" data-i18n="Order">Order</small></div>');
+    const $orderInput = $('<input class="text_pole margin0" type="number" name="order" min="0" max="9999">');
+    $orderInput.data('uid', entry.uid);
+    $orderInput.on('input', async function (_, { noSave = false } = {}) {
+        const uid = $(this).data('uid');
+        const value = Number($(this).val());
+        data.entries[uid].order = !isNaN(value) ? value : 0;
+        setWIOriginalDataValue(data, uid, 'insertion_order', data.entries[uid].order);
+        !noSave && await saveWorldInfo(name, data);
+    });
+    $orderInput.val(entry.order).trigger('input', { noSave: true });
+    $orderInput.css('width', 'calc(3em + 15px)');
+    $orderControl.append($orderInput);
+    $injectionControls.append($orderControl);
+
+    const $probControl = $('<div class="world_entry_form_control probabilityContainer"><small class="textAlignCenter" data-i18n="Trigger %">Trigger %</small></div>');
+    const $probInput = $('<input class="text_pole margin0" type="number" name="probability" min="0" max="100">');
+    handleProbabilityInputHelper({ probabilityInput: $probInput, data, entry, name });
+    $probControl.append($probInput);
+    $injectionControls.append($probControl);
+
+    $injectionContainer.append($injectionControls);
+
+    // Probability toggle
+    handleProbabilityToggleHelper({
+        probabilityToggle: editTemplate.find('input[name="useProbability"]'),
+        data, entry, name,
+        probabilityInput: $probInput,
     });
 
-    // Kill switch
-    handleEntryKillSwitchHelper({
-        entryKillSwitch: headerTemplate.find('div[name="entryKillSwitch"]'),
-        entry, data, name, template: headerTemplate,
+    // Comment toggle
+    const commentToggle = editTemplate.find('input[name="addMemo"]');
+    commentToggle.data('uid', entry.uid);
+    commentToggle.on('input', async function (_, { noSave = false } = {}) {
+        const uid = $(this).data('uid');
+        const value = $(this).prop('checked');
+        const commentContainer = $(this).closest('.world_entry').find('.commentContainer');
+        data.entries[uid].addMemo = value;
+        !noSave && await saveWorldInfo(name, data);
+        value ? commentContainer.show() : commentContainer.hide();
     });
+    commentToggle.prop('checked', true).trigger('input', { noSave: true });
+    commentToggle.parent().hide();
+
+    // Logic AND/NOT
+    const selectiveLogicDropdown = editTemplate.find('select[name="entryLogicType"]');
+    selectiveLogicDropdown.data('uid', entry.uid);
+    selectiveLogicDropdown.on('click', e => e.stopPropagation());
+    selectiveLogicDropdown.on('input', async function (_, { noSave = false } = {}) {
+        const uid = $(this).data('uid');
+        const value = Number($(this).val());
+        data.entries[uid].selectiveLogic = !isNaN(value) ? value : world_info_logic.AND_ANY;
+        setWIOriginalDataValue(data, uid, 'selectiveLogic', data.entries[uid].selectiveLogic);
+        !noSave && await saveWorldInfo(name, data);
+    });
+    editTemplate.find(`select[name="entryLogicType"] option[value=${entry.selectiveLogic}]`).prop('selected', true).trigger('input', { noSave: true });
+
+    // Selective
+    const selectiveInput = editTemplate.find('input[name="selective"]');
+    selectiveInput.data('uid', entry.uid);
+    selectiveInput.on('input', async function (_, { noSave = false } = {}) {
+        const uid = $(this).data('uid');
+        const value = $(this).prop('checked');
+        data.entries[uid].selective = value;
+        setWIOriginalDataValue(data, uid, 'selective', data.entries[uid].selective);
+        !noSave && await saveWorldInfo(name, data);
+        const keysecondary = $(this).closest('.world_entry').find('.keysecondary');
+        const keysecondarytextpole = $(this).closest('.world_entry').find('.keysecondarytextpole');
+        const keyprimaryselect = $(this).closest('.world_entry').find('.keyprimaryselect');
+        const keyprimaryHeight = keyprimaryselect.outerHeight();
+        keysecondarytextpole.css('height', keyprimaryHeight + 'px');
+        value ? keysecondary.show() : keysecondary.hide();
+    });
+    selectiveInput.prop('checked', true).trigger('input', { noSave: true });
+    selectiveInput.parent().hide();
+
+    // Character filter
+    const characterFilterLabel = editTemplate.find('label[for="characterFilter"] > small');
+    characterFilterLabel.text(entry.characterFilter?.isExclude ? 'Exclude Character(s)' : 'Filter to Character(s)');
+    const characterExclusionInput = editTemplate.find('input[name="character_exclusion"]');
+    characterExclusionInput.data('uid', entry.uid);
+    characterExclusionInput.on('input', async function (_, { noSave = false } = {}) {
+        const uid = $(this).data('uid');
+        const value = $(this).prop('checked');
+        characterFilterLabel.text(value ? 'Exclude Character(s)' : 'Filter to Character(s)');
+        if (data.entries[uid].characterFilter) {
+            if (!value && data.entries[uid].characterFilter.names.length === 0 && data.entries[uid].characterFilter.tags.length === 0) {
+                delete data.entries[uid].characterFilter;
+            } else {
+                data.entries[uid].characterFilter.isExclude = value;
+            }
+        } else if (value) {
+            Object.assign(data.entries[uid], { characterFilter: { isExclude: true, names: [], tags: [] } });
+        }
+        if (data.entries[uid]?.characterFilter?.names?.length > 0) {
+            for (const name of [...data.entries[uid].characterFilter.names]) {
+                if (!getContext().characters.find(x => x.avatar.replace(/\.[^/.]+$/, '') === name)) {
+                    data.entries[uid].characterFilter.names = data.entries[uid].characterFilter.names.filter(x => x !== name);
+                }
+            }
+        }
+        setWIOriginalDataValue(data, uid, 'character_filter', data.entries[uid].characterFilter);
+        !noSave && await saveWorldInfo(name, data);
+    });
+    characterExclusionInput.prop('checked', entry.characterFilter?.isExclude ?? false).trigger('input', { noSave: true });
+
+    const characterFilter = editTemplate.find('select[name="characterFilter"]');
+    characterFilter.data('uid', entry.uid);
+    initCharacterFilterSelect2Helper(characterFilter);
+    fillCharacterAndTagOptionsHelper({ characterFilter, entry });
+    handleCharacterFilterChangeHelper({ characterFilter, data, entry, name });
+
+    // Content
+    const counter = editTemplate.find('.world_entry_form_token_counter');
+    const countTokensDebounced = debounce(async function (counter, value) {
+        const numberOfTokens = await getTokenCountAsync(value);
+        $(counter).text(numberOfTokens);
+    }, debounce_timeout.relaxed);
+    const contentInputId = `world_entry_content_${entry.uid}`;
+    const contentInput = editTemplate.find('textarea[name="content"]');
+    contentInput.data('uid', entry.uid);
+    contentInput.attr('id', contentInputId);
+    contentInput[0].dataset.macros = '';
+    contentInput.on('input', async function (_, { skipCount, noSave } = {}) {
+        const uid = $(this).data('uid');
+        const value = $(this).val();
+        data.entries[uid].content = value;
+        setWIOriginalDataValue(data, uid, 'content', data.entries[uid].content);
+        !noSave && await saveWorldInfo(name, data);
+        if (!skipCount) countTokensDebounced(counter, value);
+    });
+    contentInput.val(entry.content).trigger('input', { skipCount: true, noSave: true });
+    editTemplate.find('.editor_maximize').attr('data-for', contentInputId);
+
+    // Outlet name
+    const outletNameInput = editTemplate.find('input[name="outletName"]');
+    outletNameInput.data('uid', entry.uid);
+    outletNameInput.on('input', async function (_, { noSave = false } = {}) {
+        const uid = $(this).data('uid');
+        const value = $(this).val();
+        data.entries[uid].outletName = value;
+        setWIOriginalDataValue(data, uid, 'extensions.outlet_name', data.entries[uid].outletName);
+        !noSave && await saveWorldInfo(name, data);
+    });
+    outletNameInput.val(entry.outletName ?? '').trigger('input', { noSave: true });
+    setTimeout(() => createEntryInputAutocomplete(outletNameInput, getOutletNameCallback(data), { allowMultiple: true }), 1);
+
+    // Scan depth
+    const scanDepthInput = editTemplate.find('input[name="scanDepth"]');
+    scanDepthInput.data('uid', entry.uid);
+    scanDepthInput.on('input', async function (_, { noSave = false } = {}) {
+        const uid = $(this).data('uid');
+        const isEmpty = $(this).val() === '';
+        const value = Number($(this).val());
+        if (value < 0) { $(this).val(0).trigger('input'); toastr.warning('Scan depth cannot be negative'); return; }
+        if (value > MAX_SCAN_DEPTH) { $(this).val(MAX_SCAN_DEPTH).trigger('input'); toastr.warning(`Scan depth cannot exceed ${MAX_SCAN_DEPTH}`); return; }
+        data.entries[uid].scanDepth = !isEmpty && !isNaN(value) && value >= 0 && value <= MAX_SCAN_DEPTH ? Math.floor(value) : null;
+        setWIOriginalDataValue(data, uid, 'extensions.scan_depth', data.entries[uid].scanDepth);
+        !noSave && await saveWorldInfo(name, data);
+    });
+    scanDepthInput.val(entry.scanDepth ?? null).trigger('input', { noSave: true });
+
+    // Group
+    const groupInput = editTemplate.find('input[name="group"]');
+    groupInput.data('uid', entry.uid);
+    groupInput.on('input', async function (_, { noSave = false } = {}) {
+        const uid = $(this).data('uid');
+        const value = String($(this).val()).trim();
+        data.entries[uid].group = value;
+        setWIOriginalDataValue(data, uid, 'extensions.group', data.entries[uid].group);
+        !noSave && await saveWorldInfo(name, data);
+    });
+    groupInput.val(entry.group ?? '').trigger('input', { noSave: true });
+    setTimeout(() => createEntryInputAutocomplete(groupInput, getInclusionGroupCallback(data), { allowMultiple: true }), 1);
+
+    // Inclusion priority
+    const groupOverrideInput = editTemplate.find('input[name="groupOverride"]');
+    groupOverrideInput.data('uid', entry.uid);
+    groupOverrideInput.on('input', async function (_, { noSave = false } = {}) {
+        const uid = $(this).data('uid');
+        const value = $(this).prop('checked');
+        data.entries[uid].groupOverride = value;
+        setWIOriginalDataValue(data, uid, 'extensions.group_override', data.entries[uid].groupOverride);
+        !noSave && await saveWorldInfo(name, data);
+    });
+    groupOverrideInput.prop('checked', entry.groupOverride).trigger('input', { noSave: true });
+
+    // Group weight, sticky, cooldown, delay
+    handleNumberInputHelper({ inputElem: editTemplate.find('input[name="groupWeight"]'), entry, entryKey: 'groupWeight', data, name, min: 1, max: 10000, clamp: true });
+    handleNumberInputHelper({ inputElem: editTemplate.find('input[name="sticky"]'), entry, entryKey: 'sticky', data, name, min: 1, max: 10000, clamp: false });
+    handleNumberInputHelper({ inputElem: editTemplate.find('input[name="cooldown"]'), entry, entryKey: 'cooldown', data, name, min: 1, max: 10000, clamp: false });
+    handleNumberInputHelper({ inputElem: editTemplate.find('input[name="delay"]'), entry, entryKey: 'delay', data, name, min: 1, max: 10000, clamp: false });
+
+    // Exclude/prevent recursion
+    handleMatchCheckboxHelper({ template: editTemplate, entry, fieldName: 'excludeRecursion', data, name });
+    handleMatchCheckboxHelper({ template: editTemplate, entry, fieldName: 'preventRecursion', data, name });
+
+    // Delay until recursion
+    const delayUntilRecursionInput = editTemplate.find('input[name="delay_until_recursion"]');
+    delayUntilRecursionInput.data('uid', entry.uid);
+    const delayUntilRecursionLevelInput = editTemplate.find('input[name="delayUntilRecursionLevel"]');
+    delayUntilRecursionLevelInput.data('uid', entry.uid);
+    delayUntilRecursionInput.on('input', async function (_, { noSave = false } = {}) {
+        const uid = $(this).data('uid');
+        const toggled = $(this).prop('checked');
+        const value = toggled ? data.entries[uid].delayUntilRecursion || true : false;
+        if (!toggled) delayUntilRecursionLevelInput.val('');
+        data.entries[uid].delayUntilRecursion = value;
+        setWIOriginalDataValue(data, uid, 'extensions.delay_until_recursion', data.entries[uid].delayUntilRecursion);
+        !noSave && await saveWorldInfo(name, data);
+    });
+    delayUntilRecursionInput.prop('checked', entry.delayUntilRecursion).trigger('input', { noSave: true });
+    delayUntilRecursionLevelInput.on('input', async function (_, { noSave = false } = {}) {
+        const uid = $(this).data('uid');
+        const content = $(this).val();
+        const value = content === '' ? (typeof data.entries[uid].delayUntilRecursion === 'boolean' ? data.entries[uid].delayUntilRecursion : true)
+            : content === 1 ? true
+                : !isNaN(Number(content)) ? Number(content)
+                    : false;
+        data.entries[uid].delayUntilRecursion = value;
+        setWIOriginalDataValue(data, uid, 'extensions.delay_until_recursion', data.entries[uid].delayUntilRecursion);
+        !noSave && await saveWorldInfo(name, data);
+    });
+    delayUntilRecursionLevelInput.val(['number', 'string'].includes(typeof entry.delayUntilRecursion) ? entry.delayUntilRecursion : '').trigger('input', { noSave: true });
+
+    // Boolean selects
+    handleBooleanSelectHelper({ selectElem: editTemplate.find('select[name="caseSensitive"]'), entry, entryKey: 'caseSensitive', data, name });
+    handleBooleanSelectHelper({ selectElem: editTemplate.find('select[name="matchWholeWords"]'), entry, entryKey: 'matchWholeWords', data, name });
+    handleBooleanSelectHelper({ selectElem: editTemplate.find('select[name="useGroupScoring"]'), entry, entryKey: 'useGroupScoring', data, name });
+
+    // Match checkboxes
+    handleMatchCheckboxHelper({ template: editTemplate, entry, fieldName: 'matchPersonaDescription', data, name });
+    handleMatchCheckboxHelper({ template: editTemplate, entry, fieldName: 'matchCharacterDescription', data, name });
+    handleMatchCheckboxHelper({ template: editTemplate, entry, fieldName: 'matchCharacterPersonality', data, name });
+    handleMatchCheckboxHelper({ template: editTemplate, entry, fieldName: 'matchCharacterDepthPrompt', data, name });
+    handleMatchCheckboxHelper({ template: editTemplate, entry, fieldName: 'matchScenario', data, name });
+    handleMatchCheckboxHelper({ template: editTemplate, entry, fieldName: 'matchCreatorNotes', data, name });
+
+    // Automation ID
+    const automationIdInput = editTemplate.find('input[name="automationId"]');
+    automationIdInput.data('uid', entry.uid);
+    automationIdInput.on('input', async function (_, { noSave = false } = {}) {
+        const uid = $(this).data('uid');
+        const value = $(this).val();
+        data.entries[uid].automationId = value;
+        setWIOriginalDataValue(data, uid, 'extensions.automation_id', data.entries[uid].automationId);
+        !noSave && await saveWorldInfo(name, data);
+    });
+    automationIdInput.val(entry.automationId ?? '').trigger('input', { noSave: true });
+    setTimeout(() => createEntryInputAutocomplete(automationIdInput, getAutomationIdCallback(data)), 1);
+
+    // Generation Type Triggers
+    const generationTypeTriggers = editTemplate.find('select[name="triggers"]');
+    generationTypeTriggers.data('uid', entry.uid);
+    generationTypeTriggers.on('input', async function (_, { noSave = false } = {}) {
+        const uid = $(this).data('uid');
+        const value = $(this).val();
+        data.entries[uid].triggers = Array.isArray(value) ? value : [];
+        setWIOriginalDataValue(data, uid, 'extensions.triggers', data.entries[uid].triggers);
+        !noSave && await saveWorldInfo(name, data);
+    });
+    if (!isMobile()) {
+        generationTypeTriggers.select2({ placeholder: t`All types (default)`, width: '100%', closeOnSelect: false, allowClear: true });
+    }
+    generationTypeTriggers.val(Array.isArray(entry.triggers) ? entry.triggers : []).trigger('input', { noSave: true }).trigger('change');
+
+    // Ignore budget
+    const ignoreBudgetInput = editTemplate.find('input[name="ignoreBudget"]');
+    ignoreBudgetInput.data('uid', entry.uid);
+    ignoreBudgetInput.on('input', async function (_, { noSave = false } = {}) {
+        const uid = $(this).data('uid');
+        const value = $(this).prop('checked');
+        data.entries[uid].ignoreBudget = value;
+        setWIOriginalDataValue(data, uid, 'extensions.ignore_budget', data.entries[uid].ignoreBudget);
+        !noSave && await saveWorldInfo(name, data);
+    });
+    ignoreBudgetInput.prop('checked', entry.ignoreBudget ?? false).trigger('input', { noSave: true });
+
+    countTokensDebounced(counter, contentInput.val());
 
     // Duplicate/delete/move buttons
-    headerTemplate.find('.duplicate_entry_button').data('uid', entry.uid).on('click', async function () {
+    editTemplate.find('.duplicate_entry_button').data('uid', entry.uid).on('click', async function () {
         const uid = $(this).data('uid');
         const entryDup = duplicateWorldInfoEntry(data, uid);
-        if (entryDup) {
-            await saveWorldInfo(name, data);
-            updateEditor(entryDup.uid);
-        }
+        if (entryDup) { await saveWorldInfo(name, data); updateEditor(entryDup.uid); }
     });
-    headerTemplate.find('.delete_entry_button').data('uid', entry.uid).on('click', async function (e) {
+    editTemplate.find('.delete_entry_button').data('uid', entry.uid).on('click', async function (e) {
         e.stopPropagation();
         const uid = $(this).data('uid');
         const deleted = await deleteWorldInfoEntry(data, uid);
@@ -3547,7 +4001,7 @@ export async function getWorldEntry(name, data, entry) {
         await saveWorldInfo(name, data);
         updateEditor(navigation_option.previous);
     });
-    headerTemplate.find('.move_entry_button').attr('data-uid', entry.uid).attr('data-current-world', name).on('click', async function (e) {
+    editTemplate.find('.move_entry_button').attr('data-uid', entry.uid).attr('data-current-world', name).on('click', async function (e) {
         e.stopPropagation();
         const sourceUid = $(this).attr('data-uid');
         const sourceWorld = $(this).attr('data-current-world');
@@ -3572,382 +4026,27 @@ export async function getWorldEntry(name, data, entry) {
                 selectableWorldCount++;
             }
         });
-        if (selectableWorldCount === 0) {
-            toastr.warning(t`There are no other lorebooks to move to.`);
-            return;
-        }
+        if (selectableWorldCount === 0) { toastr.warning(t`There are no other lorebooks to move to.`); return; }
         const wrapper = document.createElement('div');
         wrapper.textContent = t`Move/Copy '${sourceName}' to:`;
         const container = document.createElement('div');
         container.appendChild(wrapper);
         container.appendChild(select);
         let selectedWorldIndex = -1;
-        select.addEventListener('change', function () {
-            selectedWorldIndex = this.value === '' ? -1 : Number(this.value);
-        });
+        select.addEventListener('change', function () { selectedWorldIndex = this.value === '' ? -1 : Number(this.value); });
         const popup = new Popup(container, POPUP_TYPE.CONFIRM, '', {
             cancelButton: t`Cancel`,
-            customButtons: [
-                { text: t`Move`, result: POPUP_RESULT.CUSTOM1 },
-                { text: t`Copy`, result: POPUP_RESULT.CUSTOM2 },
-            ],
+            customButtons: [{ text: t`Move`, result: POPUP_RESULT.CUSTOM1 }, { text: t`Copy`, result: POPUP_RESULT.CUSTOM2 }],
         });
-        popup.okButton.style.display = 'none'; // Hide the default OK button
+        popup.okButton.style.display = 'none';
         const popupConfirm = await popup.show();
-        if (!popupConfirm) return;
-        if (selectedWorldIndex === -1) return;
+        if (!popupConfirm || selectedWorldIndex === -1) return;
         const selectedValue = world_names[selectedWorldIndex];
-        if (!selectedValue) {
-            toastr.warning(t`Please select a target lorebook.`);
-            return;
-        }
-        const deleteOriginal = popupConfirm === POPUP_RESULT.CUSTOM1;
-        await moveWorldInfoEntry(sourceWorld, selectedValue, sourceUid, { deleteOriginal });
+        if (!selectedValue) { toastr.warning(t`Please select a target lorebook.`); return; }
+        await moveWorldInfoEntry(sourceWorld, selectedValue, sourceUid, { deleteOriginal: popupConfirm === POPUP_RESULT.CUSTOM1 });
     });
 
-    let drawerInitialized = false;
-    let drawerDestroyTimeout = null;
-    headerTemplate.find('.inline-drawer').on('inline-drawer-toggle', function () {
-        if (drawerDestroyTimeout) {
-            clearTimeout(drawerDestroyTimeout);
-            drawerDestroyTimeout = null;
-        }
-        if (drawerInitialized) {
-            drawerDestroyTimeout = setTimeout(() => {
-                // Drawer was reopened, so we don't destroy it
-                if (editOutlet.is(':visible')) {
-                    return;
-                }
-                drawerInitialized = false;
-                clearEntryList(editOutlet);
-                drawerDestroyTimeout = null;
-            }, debounce_timeout.relaxed);
-        } else {
-            drawerInitialized = true;
-            addEditorDrawerContent();
-        }
-    });
-
-    const editOutlet = headerTemplate.find('.inline-drawer-outlet');
-
-    function addEditorDrawerContent() {
-        const editTemplate = WI_ENTRY_EDIT_TEMPLATE.clone();
-
-        // UID display
-        editTemplate.find('.world_entry_form_uid_value').text(`(UID: ${entry.uid})`);
-
-        // Key inputs
-        const keyInput = enableKeysInputHelper({ template: editTemplate, entry, entryPropName: 'key', originalDataValueName: 'keys', name, data });
-        const keySecondaryInput = enableKeysInputHelper({ template: editTemplate, entry, entryPropName: 'keysecondary', originalDataValueName: 'secondary_keys', name, data });
-        if (!keyInput.isFancy) initScrollHeight(keyInput.control);
-        if (!keySecondaryInput.isFancy) initScrollHeight(keySecondaryInput.control);
-
-        // Key input switch
-        editTemplate.find('.switch_input_type_icon').on('click', function () {
-            power_user.wi_key_input_plaintext = !power_user.wi_key_input_plaintext;
-            saveSettingsDebounced();
-            const uid = ($(this).parents('.world_entry')).data('uid');
-            updateEditor(uid, false);
-            $(`.world_entry[uid="${uid}"] .inline-drawer-icon`).trigger('click');
-        }).each((_, icon) => {
-            $(icon).attr('title', $(icon).data(power_user.wi_key_input_plaintext ? 'tooltip-on' : 'tooltip-off'));
-            $(icon).text($(icon).data(power_user.wi_key_input_plaintext ? 'icon-on' : 'icon-off'));
-        });
-
-        // Probability toggle
-        handleProbabilityToggleHelper({
-            probabilityToggle: editTemplate.find('input[name="useProbability"]'),
-            data, entry, name,
-            probabilityInput: headerTemplate.find('input[name="probability"]'),
-        });
-
-        // Comment toggle
-        const commentToggle = editTemplate.find('input[name="addMemo"]');
-        commentToggle.data('uid', entry.uid);
-        commentToggle.on('input', async function (_, { noSave = false } = {}) {
-            const uid = $(this).data('uid');
-            const value = $(this).prop('checked');
-            const commentContainer = $(this).closest('.world_entry').find('.commentContainer');
-            data.entries[uid].addMemo = value;
-            !noSave && await saveWorldInfo(name, data);
-            value ? commentContainer.show() : commentContainer.hide();
-        });
-        commentToggle.prop('checked', true).trigger('input', { noSave: true });
-        commentToggle.parent().hide();
-
-        // Logic AND/NOT
-        const selectiveLogicDropdown = editTemplate.find('select[name="entryLogicType"]');
-        selectiveLogicDropdown.data('uid', entry.uid);
-        selectiveLogicDropdown.on('click', e => e.stopPropagation());
-        selectiveLogicDropdown.on('input', async function (_, { noSave = false } = {}) {
-            const uid = $(this).data('uid');
-            const value = Number($(this).val());
-            data.entries[uid].selectiveLogic = !isNaN(value) ? value : world_info_logic.AND_ANY;
-            setWIOriginalDataValue(data, uid, 'selectiveLogic', data.entries[uid].selectiveLogic);
-            !noSave && await saveWorldInfo(name, data);
-        });
-        editTemplate.find(`select[name="entryLogicType"] option[value=${entry.selectiveLogic}]`).prop('selected', true).trigger('input', { noSave: true });
-
-        // Selective
-        const selectiveInput = editTemplate.find('input[name="selective"]');
-        selectiveInput.data('uid', entry.uid);
-        selectiveInput.on('input', async function (_, { noSave = false } = {}) {
-            const uid = $(this).data('uid');
-            const value = $(this).prop('checked');
-            data.entries[uid].selective = value;
-            setWIOriginalDataValue(data, uid, 'selective', data.entries[uid].selective);
-            !noSave && await saveWorldInfo(name, data);
-            const keysecondary = $(this).closest('.world_entry').find('.keysecondary');
-            const keysecondarytextpole = $(this).closest('.world_entry').find('.keysecondarytextpole');
-            const keyprimaryselect = $(this).closest('.world_entry').find('.keyprimaryselect');
-            const keyprimaryHeight = keyprimaryselect.outerHeight();
-            keysecondarytextpole.css('height', keyprimaryHeight + 'px');
-            value ? keysecondary.show() : keysecondary.hide();
-        });
-        selectiveInput.prop('checked', true).trigger('input', { noSave: true });
-        selectiveInput.parent().hide();
-
-        // Character filter
-        const characterFilterLabel = editTemplate.find('label[for="characterFilter"] > small');
-        characterFilterLabel.text(entry.characterFilter?.isExclude ? 'Exclude Character(s)' : 'Filter to Character(s)');
-        const characterExclusionInput = editTemplate.find('input[name="character_exclusion"]');
-        characterExclusionInput.data('uid', entry.uid);
-        characterExclusionInput.on('input', async function (_, { noSave = false } = {}) {
-            const uid = $(this).data('uid');
-            const value = $(this).prop('checked');
-            characterFilterLabel.text(value ? 'Exclude Character(s)' : 'Filter to Character(s)');
-            if (data.entries[uid].characterFilter) {
-                if (!value && data.entries[uid].characterFilter.names.length === 0 && data.entries[uid].characterFilter.tags.length === 0) {
-                    delete data.entries[uid].characterFilter;
-                } else {
-                    data.entries[uid].characterFilter.isExclude = value;
-                }
-            } else if (value) {
-                Object.assign(data.entries[uid], { characterFilter: { isExclude: true, names: [], tags: [] } });
-            }
-            if (data.entries[uid]?.characterFilter?.names?.length > 0) {
-                for (const name of [...data.entries[uid].characterFilter.names]) {
-                    if (!getContext().characters.find(x => x.avatar.replace(/\.[^/.]+$/, '') === name)) {
-                        data.entries[uid].characterFilter.names = data.entries[uid].characterFilter.names.filter(x => x !== name);
-                    }
-                }
-            }
-            setWIOriginalDataValue(data, uid, 'character_filter', data.entries[uid].characterFilter);
-            !noSave && await saveWorldInfo(name, data);
-        });
-        characterExclusionInput.prop('checked', entry.characterFilter?.isExclude ?? false).trigger('input', { noSave: true });
-
-        const characterFilter = editTemplate.find('select[name="characterFilter"]');
-        characterFilter.data('uid', entry.uid);
-        initCharacterFilterSelect2Helper(characterFilter);
-        fillCharacterAndTagOptionsHelper({ characterFilter, entry });
-        handleCharacterFilterChangeHelper({ characterFilter, data, entry, name });
-
-        // Content
-        const counter = editTemplate.find('.world_entry_form_token_counter');
-        const countTokensDebounced = debounce(async function (counter, value) {
-            const numberOfTokens = await getTokenCountAsync(value);
-            $(counter).text(numberOfTokens);
-        }, debounce_timeout.relaxed);
-        const contentInputId = `world_entry_content_${entry.uid}`;
-        const contentInput = editTemplate.find('textarea[name="content"]');
-        contentInput.data('uid', entry.uid);
-        contentInput.attr('id', contentInputId);
-        contentInput[0].dataset.macros = ''; // active
-        contentInput.on('input', async function (_, { skipCount, noSave } = {}) {
-            const uid = $(this).data('uid');
-            const value = $(this).val();
-            data.entries[uid].content = value;
-            setWIOriginalDataValue(data, uid, 'content', data.entries[uid].content);
-            !noSave && await saveWorldInfo(name, data);
-            if (!skipCount) countTokensDebounced(counter, value);
-        });
-        contentInput.val(entry.content).trigger('input', { skipCount: true, noSave: true });
-        editTemplate.find('.editor_maximize').attr('data-for', contentInputId);
-
-        // Outlet name
-        const outletNameInput = editTemplate.find('input[name="outletName"]');
-        outletNameInput.data('uid', entry.uid);
-        outletNameInput.on('input', async function (_, { noSave = false } = {}) {
-            const uid = $(this).data('uid');
-            const value = $(this).val();
-            data.entries[uid].outletName = value;
-            setWIOriginalDataValue(data, uid, 'extensions.outlet_name', data.entries[uid].outletName);
-            !noSave && await saveWorldInfo(name, data);
-        });
-        outletNameInput.val(entry.outletName ?? '').trigger('input', { noSave: true });
-        setTimeout(() => createEntryInputAutocomplete(outletNameInput, getOutletNameCallback(data), { allowMultiple: true }), 1);
-
-        // Scan depth
-        const scanDepthInput = editTemplate.find('input[name="scanDepth"]');
-        scanDepthInput.data('uid', entry.uid);
-        scanDepthInput.on('input', async function (_, { noSave = false } = {}) {
-            const uid = $(this).data('uid');
-            const isEmpty = $(this).val() === '';
-            const value = Number($(this).val());
-            if (value < 0) {
-                $(this).val(0).trigger('input');
-                toastr.warning('Scan depth cannot be negative');
-                return;
-            }
-            if (value > MAX_SCAN_DEPTH) {
-                $(this).val(MAX_SCAN_DEPTH).trigger('input');
-                toastr.warning(`Scan depth cannot exceed ${MAX_SCAN_DEPTH}`);
-                return;
-            }
-            data.entries[uid].scanDepth = !isEmpty && !isNaN(value) && value >= 0 && value <= MAX_SCAN_DEPTH ? Math.floor(value) : null;
-            setWIOriginalDataValue(data, uid, 'extensions.scan_depth', data.entries[uid].scanDepth);
-            !noSave && await saveWorldInfo(name, data);
-        });
-        scanDepthInput.val(entry.scanDepth ?? null).trigger('input', { noSave: true });
-
-        // Group
-        const groupInput = editTemplate.find('input[name="group"]');
-        groupInput.data('uid', entry.uid);
-        groupInput.on('input', async function (_, { noSave = false } = {}) {
-            const uid = $(this).data('uid');
-            const value = String($(this).val()).trim();
-            data.entries[uid].group = value;
-            setWIOriginalDataValue(data, uid, 'extensions.group', data.entries[uid].group);
-            !noSave && await saveWorldInfo(name, data);
-        });
-        groupInput.val(entry.group ?? '').trigger('input', { noSave: true });
-        setTimeout(() => createEntryInputAutocomplete(groupInput, getInclusionGroupCallback(data), { allowMultiple: true }), 1);
-
-        // Inclusion priority
-        const groupOverrideInput = editTemplate.find('input[name="groupOverride"]');
-        groupOverrideInput.data('uid', entry.uid);
-        groupOverrideInput.on('input', async function (_, { noSave = false } = {}) {
-            const uid = $(this).data('uid');
-            const value = $(this).prop('checked');
-            data.entries[uid].groupOverride = value;
-            setWIOriginalDataValue(data, uid, 'extensions.group_override', data.entries[uid].groupOverride);
-            !noSave && await saveWorldInfo(name, data);
-        });
-        groupOverrideInput.prop('checked', entry.groupOverride).trigger('input', { noSave: true });
-
-        // Group weight
-        handleNumberInputHelper({
-            inputElem: editTemplate.find('input[name="groupWeight"]'),
-            entry, entryKey: 'groupWeight', data, name, min: 1, max: 10000, clamp: true,
-        });
-
-        // Sticky, cooldown, delay
-        handleNumberInputHelper({
-            inputElem: editTemplate.find('input[name="sticky"]'),
-            entry, entryKey: 'sticky', data, name, min: 1, max: 10000, clamp: false,
-        });
-        handleNumberInputHelper({
-            inputElem: editTemplate.find('input[name="cooldown"]'),
-            entry, entryKey: 'cooldown', data, name, min: 1, max: 10000, clamp: false,
-        });
-        handleNumberInputHelper({
-            inputElem: editTemplate.find('input[name="delay"]'),
-            entry, entryKey: 'delay', data, name, min: 1, max: 10000, clamp: false,
-        });
-
-        // Exclude/prevent recursion
-        handleMatchCheckboxHelper({ template: editTemplate, entry, fieldName: 'excludeRecursion', data, name });
-        handleMatchCheckboxHelper({ template: editTemplate, entry, fieldName: 'preventRecursion', data, name });
-
-        // Delay until recursion
-        const delayUntilRecursionInput = editTemplate.find('input[name="delay_until_recursion"]');
-        delayUntilRecursionInput.data('uid', entry.uid);
-        const delayUntilRecursionLevelInput = editTemplate.find('input[name="delayUntilRecursionLevel"]');
-        delayUntilRecursionLevelInput.data('uid', entry.uid);
-        delayUntilRecursionInput.on('input', async function (_, { noSave = false } = {}) {
-            const uid = $(this).data('uid');
-            const toggled = $(this).prop('checked');
-            const value = toggled ? data.entries[uid].delayUntilRecursion || true : false;
-            if (!toggled) delayUntilRecursionLevelInput.val('');
-            data.entries[uid].delayUntilRecursion = value;
-            setWIOriginalDataValue(data, uid, 'extensions.delay_until_recursion', data.entries[uid].delayUntilRecursion);
-            !noSave && await saveWorldInfo(name, data);
-        });
-        delayUntilRecursionInput.prop('checked', entry.delayUntilRecursion).trigger('input', { noSave: true });
-        delayUntilRecursionLevelInput.on('input', async function (_, { noSave = false } = {}) {
-            const uid = $(this).data('uid');
-            const content = $(this).val();
-            const value = content === '' ? (typeof data.entries[uid].delayUntilRecursion === 'boolean' ? data.entries[uid].delayUntilRecursion : true)
-                : content === 1 ? true
-                    : !isNaN(Number(content)) ? Number(content)
-                        : false;
-            data.entries[uid].delayUntilRecursion = value;
-            setWIOriginalDataValue(data, uid, 'extensions.delay_until_recursion', data.entries[uid].delayUntilRecursion);
-            !noSave && await saveWorldInfo(name, data);
-        });
-        delayUntilRecursionLevelInput.val(['number', 'string'].includes(typeof entry.delayUntilRecursion) ? entry.delayUntilRecursion : '').trigger('input', { noSave: true });
-
-        // Boolean selects
-        handleBooleanSelectHelper({ selectElem: editTemplate.find('select[name="caseSensitive"]'), entry, entryKey: 'caseSensitive', data, name });
-        handleBooleanSelectHelper({ selectElem: editTemplate.find('select[name="matchWholeWords"]'), entry, entryKey: 'matchWholeWords', data, name });
-        handleBooleanSelectHelper({ selectElem: editTemplate.find('select[name="useGroupScoring"]'), entry, entryKey: 'useGroupScoring', data, name });
-
-        // Match checkboxes
-        handleMatchCheckboxHelper({ template: editTemplate, entry, fieldName: 'matchPersonaDescription', data, name });
-        handleMatchCheckboxHelper({ template: editTemplate, entry, fieldName: 'matchCharacterDescription', data, name });
-        handleMatchCheckboxHelper({ template: editTemplate, entry, fieldName: 'matchCharacterPersonality', data, name });
-        handleMatchCheckboxHelper({ template: editTemplate, entry, fieldName: 'matchCharacterDepthPrompt', data, name });
-        handleMatchCheckboxHelper({ template: editTemplate, entry, fieldName: 'matchScenario', data, name });
-        handleMatchCheckboxHelper({ template: editTemplate, entry, fieldName: 'matchCreatorNotes', data, name });
-
-        // Automation ID
-        const automationIdInput = editTemplate.find('input[name="automationId"]');
-        automationIdInput.data('uid', entry.uid);
-        automationIdInput.on('input', async function (_, { noSave = false } = {}) {
-            const uid = $(this).data('uid');
-            const value = $(this).val();
-            data.entries[uid].automationId = value;
-            setWIOriginalDataValue(data, uid, 'extensions.automation_id', data.entries[uid].automationId);
-            !noSave && await saveWorldInfo(name, data);
-        });
-        automationIdInput.val(entry.automationId ?? '').trigger('input', { noSave: true });
-        setTimeout(() => createEntryInputAutocomplete(automationIdInput, getAutomationIdCallback(data)), 1);
-
-        // Generation Type Triggers
-        const generationTypeTriggers = editTemplate.find('select[name="triggers"]');
-        generationTypeTriggers.data('uid', entry.uid);
-        generationTypeTriggers.on('input', async function (_, { noSave = false } = {}) {
-            const uid = $(this).data('uid');
-            const value = $(this).val();
-            data.entries[uid].triggers = Array.isArray(value) ? value : [];
-            setWIOriginalDataValue(data, uid, 'extensions.triggers', data.entries[uid].triggers);
-            !noSave && await saveWorldInfo(name, data);
-        });
-        if (!isMobile()) {
-            generationTypeTriggers.select2({
-                placeholder: t`All types (default)`,
-                width: '100%',
-                closeOnSelect: false,
-                allowClear: true,
-            });
-        }
-        generationTypeTriggers
-            .val(Array.isArray(entry.triggers) ? entry.triggers : [])
-            .trigger('input', { noSave: true })
-            .trigger('change');
-
-        // Ignore budget
-        const ignoreBudgetInput = editTemplate.find('input[name="ignoreBudget"]');
-        ignoreBudgetInput.data('uid', entry.uid);
-        ignoreBudgetInput.on('input', async function (_, { noSave = false } = {}) {
-            const uid = $(this).data('uid');
-            const value = $(this).prop('checked');
-            data.entries[uid].ignoreBudget = value;
-            setWIOriginalDataValue(data, uid, 'extensions.ignore_budget', data.entries[uid].ignoreBudget);
-            !noSave && await saveWorldInfo(name, data);
-        });
-        ignoreBudgetInput.prop('checked', entry.ignoreBudget ?? false).trigger('input', { noSave: true });
-
-        countTokensDebounced(counter, contentInput.val());
-
-        editTemplate.find('.inline-drawer-content').css('display', 'none');
-        editOutlet.append(editTemplate);
-    }
-
-    headerTemplate.find('.inline-drawer-content').css('display', 'none');
-
-    return headerTemplate;
+    outlet.append(editTemplate);
 }
 
 
@@ -6341,8 +6440,10 @@ export function initWorldInfo() {
     }
 
     if (!worldInfoPanelInitialized && document.querySelector('#world_editor_select')) {
-        $('#world_import_button').on('click', function () {
+        // More menu: import
+        $('#world_import_menu_item').on('click', function () {
             $('#world_import_file').trigger('click');
+            closeMoreMenu();
         });
 
         $('#world_import_file').on('change', async function (e) {
@@ -6356,13 +6457,21 @@ export function initWorldInfo() {
             e.target.value = '';
         });
 
-        $('#world_create_button').on('click', async () => {
+        // More menu toggle
+        $('#world_more_menu').on('click', function (e) {
+            e.stopPropagation();
+            $('#world_more_menu_dropdown').toggle();
+        });
+
+        // More menu: create new world (uses separate ID to avoid conflict with new-entry button)
+        $('#world_create_world').on('click', async () => {
             const tempName = getFreeWorldName();
             const finalName = await Popup.show.input(t`Create a new World Info`, t`Enter a name for the new file:`, tempName);
 
             if (finalName) {
                 await createNewWorldInfo(finalName, { interactive: true });
             }
+            closeMoreMenu();
         });
 
         $('#world_editor_select').on('change', async () => {

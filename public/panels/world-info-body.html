@@ -1,27 +1,12 @@
                         <div id="world_popup">
                         <hr>
-                        <div class="flex-container alignitemscenter">
+                        <div id="world_info_pagination"></div>
+                        <div id="world_toolbar" class="flex-container alignitemscenter">
                             <input type="file" id="world_import_file" accept=".json,.lorebook,.png" name="avatar" hidden>
-                            <div id="world_create_button" class="menu_button menu_button_icon">
-                                <i class="fa-solid fa-globe"></i>
-                                <span data-i18n="Create">Create</span>
-                            </div>
-                            <small data-i18n="or">or</small>
                             <select id="world_editor_select">
                                 <option value="" data-i18n="--- Pick to Edit ---">--- Pick to Edit ---</option>
                             </select>
-                            <div id="world_import_button" class="menu_button fa-solid fa-file-import" title="Import World Info" data-i18n="[title]Import World Info"></div>
-                            <div id="world_popup_export" class="menu_button fa-solid fa-file-export" title="Export World Info" data-i18n="[title]Export World Info"></div>
-                            <div id="world_popup_name_button" class="menu_button fa-pencil fa-solid" title="Rename World Info" data-i18n="[title]Rename World Info"></div>
-                            <div id="world_duplicate" class="menu_button fa-solid fa-paste" title="Duplicate World Info" data-i18n="[title]Duplicate World Info"></div>
-                            <div id="world_popup_delete" class="menu_button fa-solid fa-trash-can redWarningBG" title="Delete World Info" data-i18n="[title]Delete World Info"></div>
-                        </div>
-                        <div class="flex-container alignitemscenter">
-                            <div id="world_popup_new" class="menu_button fa-solid fa-plus" title="New Entry" data-i18n="[title]New Entry"></div>
-                            <div id="OpenAllWIEntries" class="menu_button fa-solid fa-expand" title="Open all Entries" data-i18n="[title]Open all Entries"></div>
-                            <div id="CloseAllWIEntries" class="menu_button fa-solid fa-compress" title="Close all Entries" data-i18n="[title]Close all Entries"></div>
-                            <div id="world_backfill_memos" class="menu_button fa-solid fa-notes-medical" title="Fill empty Memo/Titles with Keywords" data-i18n="[title]Fill empty Memo/Titles with Keywords"></div>
-                            <div id="world_apply_current_sorting" class="menu_button fa-solid fa-solid fa-arrow-down-9-1" title="Apply current sorting as Order" data-i18n="[title]Apply current sorting as Order"></div>
+                            <div id="world_create_button" class="menu_button fa-solid fa-plus" title="New Entry" data-i18n="[title]New Entry"></div>
                             <input type="search" class="text_pole textarea_compact" data-i18n="[placeholder]Search..." id="world_info_search" placeholder="Search...">
                             <select id="world_info_sort_order" class="text_pole textarea_compact">
                                 <option data-rule="search" value="14" data-i18n="Search" hidden>Search</option>
@@ -40,8 +25,31 @@
                                 <option data-order="asc" data-field="probability" value="11" data-i18n="Trigger% ↗">Trigger% ↗</option>
                                 <option data-order="desc" data-field="probability" value="12" data-i18n="Trigger% ↘">Trigger% ↘</option>
                             </select>
-                            <div id="world_refresh" class="menu_button fa-solid fa-arrows-rotate" title="Refresh" data-i18n="[title]Refresh"></div>
-                            <div id="world_info_pagination"></div>
+                            <div id="world_multi_select" class="menu_button" data-i18n="Multi-select" title="Multi-select" style="display:none;">多选</div>
+                            <div id="world_more_menu_wrapper" class="menu_button_icon">
+                                <div id="world_more_menu" class="menu_button fa-solid fa-ellipsis" title="More" data-i18n="[title]More"></div>
+                                <div id="world_more_menu_dropdown" class="options-content" style="display:none;">
+                                    <div class="options-menu" data-i18n="Create New World" id="world_create_world"><i class="fa-solid fa-globe fa-fw"></i> Create New World</div>
+                                    <div class="options-menu" data-i18n="Import World Info" id="world_import_menu_item"><i class="fa-solid fa-file-import fa-fw"></i> Import</div>
+                                    <div class="options-menu" data-i18n="Export World Info" id="world_export_menu_item"><i class="fa-solid fa-file-export fa-fw"></i> Export</div>
+                                    <div class="options-menu" data-i18n="Rename World Info" id="world_rename_menu_item"><i class="fa-solid fa-pencil fa-fw"></i> Rename</div>
+                                    <div class="options-menu" data-i18n="Duplicate World Info" id="world_duplicate_menu_item"><i class="fa-solid fa-paste fa-fw"></i> Duplicate</div>
+                                    <hr class="options-content-hr">
+                                    <div class="options-menu redWarningBG" data-i18n="Delete World Info" id="world_delete_menu_item"><i class="fa-solid fa-trash-can fa-fw"></i> Delete</div>
+                                    <hr class="options-content-hr">
+                                    <div class="options-menu" data-i18n="Fill empty Memo/Titles with Keywords" id="world_backfill_memos"><i class="fa-solid fa-notes-medical fa-fw"></i> Backfill Memos</div>
+                                    <div class="options-menu" data-i18n="Apply current sorting as Order" id="world_apply_current_sorting"><i class="fa-solid fa-arrow-down-9-1 fa-fw"></i> Apply Sorting</div>
+                                    <div class="options-menu" data-i18n="Refresh" id="world_refresh"><i class="fa-solid fa-arrows-rotate fa-fw"></i> Refresh</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="world_multi_select_bar" class="flex-container alignitemscenter" style="display:none;">
+                            <div id="world_multi_select_all" class="menu_button" data-i18n="Select All">Select All</div>
+                            <div id="world_multi_select_cancel" class="menu_button" data-i18n="Cancel">Cancel</div>
+                            <div class="world_popup_expander"></div>
+                            <div id="world_multi_select_delete" class="menu_button fa-solid fa-trash-can redWarningBG" title="Delete Selected" data-i18n="[title]Delete Selected"></div>
+                            <div id="world_multi_select_enable" class="menu_button fa-solid fa-toggle-on" title="Enable Selected" data-i18n="[title]Enable Selected"></div>
+                            <div id="world_multi_select_disable" class="menu_button fa-solid fa-toggle-off" title="Disable Selected" data-i18n="[title]Disable Selected"></div>
                         </div>
                         <div id="world_popup_entries_list">
                         </div>

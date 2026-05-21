@@ -90,6 +90,11 @@ function syncProxies() {
         : [];
 }
 
+function syncSegmentedFromSelect(selectId) {
+    const value = $('#' + selectId).val();
+    $(`.segmented-control[data-sync-select="${selectId}"] input[value="${value}"]`).prop('checked', true);
+}
+
 export {
     openai_messages_count,
     oai_settings,
@@ -3134,6 +3139,9 @@ function loadOpenAISettings(data, settings) {
     setToolReasoningControls();
     ToolManager.RECURSE_LIMIT = oai_settings.tool_call_recurse_limit;
 
+    syncSegmentedFromSelect('openai_reasoning_effort');
+    syncSegmentedFromSelect('openai_verbosity');
+
     // Restore VertexAI config visibility
     $('#vertexai_config').toggle(oai_settings.use_vertexai);
     $('#vertexai_express_fields').toggle(oai_settings.vertexai_auth_mode === 'express');
@@ -4338,8 +4346,16 @@ export function initOpenAI() {
 
     $('#test_api_button').on('click', testApiConnection);
 
+    $(document).on('change', '.segmented-control input[type="radio"]', function () {
+        const selectId = $(this).closest('.segmented-control').data('sync-select');
+        if (selectId) {
+            $('#' + selectId).val($(this).val()).trigger('input');
+        }
+    });
+
     $('#temp_openai').on('input', function () {
         oai_settings.temp_openai = Number($(this).val());
+        $('#temp_openai_counter').val($(this).val());
         saveSettingsDebounced();
     });
 
@@ -4355,11 +4371,13 @@ export function initOpenAI() {
 
     $('#top_p_openai').on('input', function () {
         oai_settings.top_p_openai = Number($(this).val());
+        $('#top_p_openai_counter').val($(this).val());
         saveSettingsDebounced();
     });
 
     $('#top_k_openai').on('input', function () {
         oai_settings.top_k_openai = Number($(this).val());
+        $('#top_k_openai_counter').val($(this).val());
         saveSettingsDebounced();
     });
 
@@ -4657,11 +4675,13 @@ export function initOpenAI() {
 
     $('#openai_reasoning_effort').on('input', function () {
         oai_settings.reasoning_effort = String($(this).val());
+        syncSegmentedFromSelect('openai_reasoning_effort');
         saveSettingsDebounced();
     });
 
     $('#openai_verbosity').on('input', function () {
         oai_settings.verbosity = String($(this).val());
+        syncSegmentedFromSelect('openai_verbosity');
         saveSettingsDebounced();
     });
 

@@ -3290,16 +3290,41 @@
             </div>
         </div>
         <div id="entry_edit_template" class="template_element">
+            <div class="world_entry">
+                <form class="world_entry_form wi-card-entry">
+                    <div class="inline-drawer wide100p">
+                        <div class="wi-card-header inline-drawer-header gap5px padding0">
+                            <div class="wi-card-status-light killSwitch" name="entryKillSwitch" title="Toggle entry active state" data-i18n="[title]Toggle entry active state"></div>
+                            <div class="wi-card-body-wrap" data-action="toggle">
+                                <div class="wi-card-title-row flex-container alignitemscenter wide100p">
+                                    <textarea class="text_pole" rows="1" name="comment" data-i18n="[placeholder]Entry Title/Memo" placeholder="Entry Title/Memo"></textarea>
+                                    <span class="wi-card-position-tag wi-position-value" name="positionValue"></span>
+                                    <select name="entryStateSelector" class="text_pole widthNatural margin0" data-i18n="[title]WI Entry Status:🔵 Constant🟢 Normal🔗 Vectorized" title="WI Entry Status:&#13;🔵 Constant&#13;🟢 Normal&#13;🔗 Vectorized">
+                                        <option value="constant" title="Constant" data-i18n="[title]WI_Entry_Status_Constant">🔵</option>
+                                        <option value="normal" title="Normal" data-i18n="[title]WI_Entry_Status_Normal">🟢</option>
+                                        <option value="vectorized" title="Vectorized" data-i18n="[title]WI_Entry_Status_Vectorized">🔗</option>
+                                    </select>
+                                </div>
+                                <div class="wi-card-keywords-preview" name="keywordsPreview"></div>
+                            </div>
+                            <div class="wi-card-expand-button fa-solid fa-circle-chevron-down" role="button" tabindex="0" title="Expand entry" data-i18n="[title]Expand entry"></div>
+                        </div>
+                        <div class="inline-drawer-content inline-drawer-outlet flex-container paddingBottom5px wide100p">
+                            <!-- Outlet for world_entry_edit (accordion form) -->
+                        </div>
+                    </div>
+                </form>
+            </div>
             <div class="world_entry_edit">
+                <div class="wi-accordion" data-group="trigger" data-default="open">
+                    <div class="wi-accordion-header" data-i18n="Trigger Conditions">Trigger Conditions</div>
+                    <div class="wi-accordion-content">
                 <div class="flex-container wide100p alignitemscenter">
                     <div name="keywordsAndLogicBlock" class="flex-container wide100p alignitemscenter">
                         <div class="world_entry_form_control keyprimary flex1">
                             <small class="textAlignCenter" data-i18n="Primary Keywords">Primary Keywords</small>
                             <select class="keyprimaryselect keyselect" name="key" data-i18n="[placeholder]Keywords or Regexes" placeholder="Keywords or Regexes" multiple="multiple"></select>
                             <textarea class="text_pole keyprimarytextpole mobile" name="key" rows="1" data-i18n="[placeholder]Comma separated list" placeholder="Comma separated list" style="display: none;"></textarea>
-                            <button type="button" class="switch_input_type_icon" tabindex="-1" title="Switch to plaintext mode" data-i18n="[title]Switch to plaintext mode" data-icon-on="✨" data-icon-off="⌨️" data-tooltip-on="Switch to fancy mode" data-tooltip-off="Switch to plaintext mode">
-                                ⌨️
-                            </button>
                         </div>
                         <div class="world_entry_form_control">
                             <small class="textAlignCenter" data-i18n="Logic">Logic</small>
@@ -3314,9 +3339,6 @@
                             <small class="textAlignCenter" data-i18n="Optional Filter">Optional Filter</small>
                             <select class="keysecondaryselect keyselect" name="keysecondary" data-i18n="[placeholder]Keywords or Regexes (ignored if empty)" placeholder="Keywords or Regexes (ignored if empty)" multiple="multiple"></select>
                             <textarea class="text_pole keysecondarytextpole mobile" name="keysecondary" rows="1" data-i18n="[placeholder]Comma separated list (ignored if empty)" placeholder="Comma separated list (ignored if empty)" style="display: none;"></textarea>
-                            <button type="button" class="switch_input_type_icon" tabindex="-1" title="Switch to plaintext mode" data-i18n="[title]Switch to plaintext mode" data-icon-on="✨" data-icon-off="⌨️" data-tooltip-on="Switch to fancy mode" data-tooltip-off="Switch to plaintext mode">
-                                ⌨️
-                            </button>
                         </div>
                     </div>
                     <div name="perEntryOverridesBlock" class="flex-container wide100p alignitemscenter">
@@ -3367,6 +3389,10 @@
                             <input class="text_pole margin0" name="delayUntilRecursionLevel" type="text" placeholder="1">
                         </div>
                     </div>
+                    </div></div>
+                    <div class="wi-accordion" data-group="content" data-default="open">
+                    <div class="wi-accordion-header" data-i18n="Content">Content</div>
+                    <div class="wi-accordion-content">
                     <div name="contentAndCharFilterBlock" class="world_entry_thin_controls flex2">
                         <div class="world_entry_form_control flex1">
                             <label for="content ">
@@ -3406,9 +3432,51 @@
                             <textarea class="text_pole mdHotkeys" name="content" rows="8" data-i18n="[placeholder]What this keyword should mean to the AI, sent verbatim" placeholder="What this keyword should mean to the AI, sent verbatim"></textarea>
                         </div>
                     </div>
+                    </div></div>
+                    <div class="wi-accordion" data-group="matchScope" data-default="closed">
+                    <div class="wi-accordion-header" data-i18n="Match Scope">Match Scope</div>
+                    <div class="wi-accordion-content">
+                        <div class="flex-container flexFlowRow flexGap10">
+                            <small class="flex-container flex1 flexFlowColumn">
+                                <label class="checkbox flex-container alignItemsCenter flexNoGap">
+                                    <input type="checkbox" name="matchCharacterDescription" />
+                                    <span data-i18n="Character Description">Character Description</span>
+                                </label>
+                                <label class="checkbox flex-container alignItemsCenter flexNoGap">
+                                    <input type="checkbox" name="matchCharacterPersonality" />
+                                    <span data-i18n="Character Personality">Character Personality</span>
+                                </label>
+                                <label class="checkbox flex-container alignItemsCenter flexNoGap">
+                                    <input type="checkbox" name="matchScenario" />
+                                    <span data-i18n="Scenario">Scenario</span>
+                                </label>
+                            </small>
+                            <small class="flex-container flex1 flexFlowColumn">
+                                <label class="checkbox flex-container alignItemsCenter flexNoGap">
+                                    <input type="checkbox" name="matchPersonaDescription" />
+                                    <span data-i18n="Persona Description">Persona Description</span>
+                                </label>
+                                <label class="checkbox flex-container alignItemsCenter flexNoGap">
+                                    <input type="checkbox" name="matchCharacterDepthPrompt" />
+                                    <span data-i18n="Character's Note">Character's Note</span>
+                                </label>
+                                <label class="checkbox flex-container alignItemsCenter flexNoGap">
+                                    <input type="checkbox" name="matchCreatorNotes" />
+                                    <span data-i18n="Creator's Notes">Creator's Notes</span>
+                                </label>
+                            </small>
+                        </div>
+                    </div></div>
+                    <div class="wi-accordion" data-group="injection" data-default="closed">
+                    <div class="wi-accordion-header" data-i18n="Injection Settings">Injection Settings</div>
+                    <div class="wi-accordion-content" data-populate="injection">
+                    </div></div>
                     <div class="world_entry_thin_controls commentContainer">
                     </div>
                 </div>
+                <div class="wi-accordion" data-group="advanced" data-default="closed">
+                <div class="wi-accordion-header" data-i18n="Advanced">Advanced</div>
+                <div class="wi-accordion-content">
                 <div class="flex-container wide100p flexGap10">
                     <div class="flex4 flex-container flexFlowColumn flexNoGap">
                         <div class="flex-container justifySpaceBetween">
@@ -3531,8 +3599,9 @@
                         </div>
                     </div>
                 </div>
+                </div></div>
                 <div name="WIEntryBottomControls" class="flex-container flex1 justifySpaceBetween world_entry_form_horizontal">
-                    <div class="flex-container flexFlowColumn flexNoGap  wi-enter-footer-text">
+                    <div class="flex-container flexFlowColumn flexNoGap wi-enter-footer-text">
                         <label class="checkbox flex-container">
                             <input type="checkbox" name="selective" />
                             <span data-i18n="Selective">Selective</span>
@@ -3546,136 +3615,13 @@
                             <span data-i18n="Add Memo">Add Memo</span>
                         </label>
                     </div>
-                </div>
-                <div class="inline-drawer wide100p flexFlowColumn">
-                    <div class="inline-drawer-toggle inline-drawer-header inline-drawer-header-pointer userSettingsInnerExpandable">
-                        <strong data-i18n="Additional Matching Sources">Additional Matching Sources</strong>
-                        <div class="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
-                    </div>
-                    <div class="inline-drawer-content flex-container flexFlowRow flexGap10 paddingBottom5px">
-                        <small class="flex-container flex1 flexFlowColumn">
-                            <label class="checkbox flex-container alignItemsCenter flexNoGap">
-                                <input type="checkbox" name="matchCharacterDescription" />
-                                <span data-i18n="Character Description">
-                                    Character Description
-                                </span>
-                            </label>
-                            <label class="checkbox flex-container alignItemsCenter flexNoGap">
-                                <input type="checkbox" name="matchCharacterPersonality" />
-                                <span data-i18n="Character Personality">
-                                    Character Personality
-                                </span>
-                            </label>
-                            <label class="checkbox flex-container alignItemsCenter flexNoGap">
-                                <input type="checkbox" name="matchScenario" />
-                                <span data-i18n="Scenario">
-                                    Scenario
-                                </span>
-                            </label>
-                        </small>
-                        <small class="flex-container flex1 flexFlowColumn">
-                            <label class="checkbox flex-container alignItemsCenter flexNoGap">
-                                <input type="checkbox" name="matchPersonaDescription" />
-                                <span data-i18n="Persona Description">
-                                    Persona Description
-                                </span>
-                            </label>
-                            <label class="checkbox flex-container alignItemsCenter flexNoGap">
-                                <input type="checkbox" name="matchCharacterDepthPrompt" />
-                                <span data-i18n="Character's Note">
-                                    Character's Note
-                                </span>
-                            </label>
-                            <label class="checkbox flex-container alignItemsCenter flexNoGap">
-                                <input type="checkbox" name="matchCreatorNotes" />
-                                <span data-i18n="Creator's Notes">
-                                    Creator's Notes
-                                </span>
-                            </label>
-                        </small>
+                    <div class="wi-card-actions flex-container alignitemscenter">
+                        <i class="menu_button move_entry_button fa-solid fa-right-left" title="Move/Copy Entry to Another Lorebook" data-i18n="[title]Move/Copy Entry to Another Lorebook"></i>
+                        <i class="menu_button duplicate_entry_button fa-solid fa-paste" title="Duplicate world info entry" data-i18n="[title]Duplicate world info entry"></i>
+                        <i class="menu_button delete_entry_button fa-solid fa-trash-can" title="Delete world info entry" data-i18n="[title]Delete world info entry"></i>
                     </div>
                 </div>
-            </div>
-            <div class="world_entry">
-                <form class="world_entry_form  wi-card-entry">
-                    <div class="inline-drawer wide100p">
-                        <div class="inline-drawer-header gap5px padding0">
-                            <span class="drag-handle">&#9776;</span>
-                            <div class="gap5px world_entry_thin_controls wide100p alignitemscenter">
-                                <div class="inline-drawer-toggle fa-fw fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
-                                <div class="fa-solid fa-toggle-on killSwitch" name="entryKillSwitch" data-i18n="[title]Toggle entry's active state." title="Toggle entry's active state."></div>
-                                <div class="flex-container alignitemscenter wide100p">
-                                    <div class="WIEntryTitleAndStatus flex-container flex1 alignitemscenter">
-                                        <div class="flex-container flex1">
-                                            <textarea class="text_pole" rows="1" name="comment" data-i18n="[placeholder]Entry Title/Memo" placeholder="Entry Title/Memo"></textarea>
-                                        </div>
-                                        <!-- <span class="world_entry_form_position_value"></span> -->
-                                        <select data-i18n="[title]WI Entry Status:🔵 Constant🟢 Normal🔗 Vectorized" title="WI Entry Status:&#13;🔵 Constant&#13;🟢 Normal&#13;🔗 Vectorized" name="entryStateSelector" class="text_pole widthNatural margin0">
-                                            <option value="constant" title="Constant" data-i18n="[title]WI_Entry_Status_Constant">🔵</option>
-                                            <option value="normal" title="Normal" data-i18n="[title]WI_Entry_Status_Normal">🟢</option>
-                                            <option value="vectorized" title="Vectorized" data-i18n="[title]WI_Entry_Status_Vectorized">🔗</option>
-                                        </select>
-                                    </div>
-                                    <div class="WIEnteryHeaderControls flex-container">
-                                        <div name="PositionBlock" class="world_entry_form_control world_entry_form_radios wi-enter-footer-text">
-                                            <label for="position" class="WIEntryHeaderTitleMobile" data-i18n="Position:">Position:</label>
-                                            <select name="position" class="text_pole widthNatural margin0" data-i18n="[title]T_Position" title="↑Char: Before Character Definitions&#13;↓Char: After Character Definitions&#13;↑EM: Before Example Messages&#13;↓EM: After Example Messages&#13;↑AN: Before Author's Note&#13;↓AN: After Author's Note&#13;@D ⚙️: at Depth (System)&#13;@D 👤: at Depth (User)&#13;@D 🤖: at Depth (Assistant)">
-                                                <option value="0" data-role="" data-i18n="Before Char Defs">
-                                                    ↑Char
-                                                </option>
-                                                <option value="1" data-role="" data-i18n="After Char Defs">
-                                                    ↓Char
-                                                </option>
-                                                <option value="5" data-role="" data-i18n="Before EM">
-                                                    ↑EM
-                                                </option>
-                                                <option value="6" data-role="" data-i18n="After EM">
-                                                    ↓EM
-                                                </option>
-                                                <option value="2" data-role="" data-i18n="Before AN">
-                                                    ↑AN
-                                                </option>
-                                                <option value="3" data-role="" data-i18n="After AN">
-                                                    ↓AN
-                                                </option>
-                                                <option value="4" data-role="0" data-i18n="at Depth System">
-                                                    @D ⚙️
-                                                </option>
-                                                <option value="4" data-role="1" data-i18n="at Depth User">
-                                                    @D 👤
-                                                </option>
-                                                <option value="4" data-role="2" data-i18n="at Depth AI">
-                                                    @D 🤖
-                                                </option>
-                                                <option value="7" data-role="" data-i18n="Outlet">
-                                                    ➡️ Outlet
-                                                </option>
-                                            </select>
-                                        </div>
-                                        <div class="world_entry_form_control wi-enter-footer-text flex-container flexNoGap">
-                                            <label for="depth" class="WIEntryHeaderTitleMobile" data-i18n="Depth:">Depth:</label>
-                                            <input title="Depth" class="text_pole wideMax100px margin0" type="number" name="depth" data-i18n="[title]Depth" placeholder="" min="0" max="9999" />
-                                        </div>
-                                        <div class="world_entry_form_control wi-enter-footer-text  flex-container flexNoGap">
-                                            <label for="order" class="WIEntryHeaderTitleMobile" data-i18n="Order:">Order:</label>
-                                            <input title="Order" data-i18n="[title]Order" class="text_pole wideMax100px margin0" type="number" name="order" placeholder="" min="0" max="9999" />
-                                        </div>
-                                        <div class="world_entry_form_control wi-enter-footer-text flex-container flexNoGap probabilityContainer">
-                                            <label for="order" class="WIEntryHeaderTitleMobile" data-i18n="Trigger %:">Trigger %:</label>
-                                            <input title="Probability" data-i18n="[title]Probability" class="text_pole wideMax100px margin0" type="number" name="probability" placeholder="" min="0" max="100" />
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <i class="menu_button move_entry_button fa-solid fa-right-left" title="Move/Copy Entry to Another Lorebook" data-i18n="[title]Move/Copy Entry to Another Lorebook"></i>
-                            <i class="menu_button duplicate_entry_button fa-solid fa-paste" title="Duplicate world info entry" data-i18n="[title]Duplicate world info entry" type="submit" value=""></i>
-                            <i class="menu_button delete_entry_button fa-solid fa-trash-can" title="Delete world info entry" data-i18n="[title]Delete world info entry" type="submit" value=""></i>
-                        </div>
-                        <div class="inline-drawer-content inline-drawer-outlet flex-container paddingBottom5px wide100p ">
-                            <!-- Outlet for world_entry_edit -->
-                        </div>
-                    </div>
-                </form>
+                </div>
             </div>
         </div>
         <div id="character_template" class="template_element">

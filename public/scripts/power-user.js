@@ -330,7 +330,7 @@ message_token_count_enabled: false,
     reduced_motion: false,
     compact_input_area: true,
     show_swipe_num_all_messages: false,
-    auto_connect: false,
+    auto_connect: true,
     auto_load_chat: false,
     forbid_external_media: true,
     external_media_allowed_overrides: [],
@@ -1639,7 +1639,6 @@ export async function loadPowerUserSettings(settings, data) {
     $('#shadow-color-picker').attr('color', power_user.shadow_color);
     $('#border-color-picker').attr('color', power_user.border_color);
     $('#reduced_motion').prop('checked', power_user.reduced_motion);
-    $('#auto-connect-checkbox').prop('checked', power_user.auto_connect);
     $('#auto-load-chat-checkbox').prop('checked', power_user.auto_load_chat);
     $('#forbid_external_media').prop('checked', power_user.forbid_external_media);
     $('#pin_styles').prop('checked', power_user.pin_styles);
@@ -3864,11 +3863,6 @@ jQuery(() => {
     $('#show_swipe_num_all_messages').on('input', function () {
         power_user.show_swipe_num_all_messages = !!$(this).prop('checked');
         switchSwipeNumAllMessages();
-        saveSettingsDebounced();
-    });
-
-    $('#auto-connect-checkbox').on('input', function () {
-        power_user.auto_connect = !!$(this).prop('checked');
         saveSettingsDebounced();
     });
 
