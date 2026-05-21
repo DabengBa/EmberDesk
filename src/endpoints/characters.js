@@ -1755,7 +1755,7 @@ router.post('/delete-preflight', async function (request, response) {
             let entryCount = 0;
             try {
                 const worldData = JSON.parse(fs.readFileSync(worldPath, 'utf8'));
-                entryCount = worldData.entries?.length ?? 0;
+                entryCount = worldData.entries ? Object.keys(worldData.entries).length : 0;
             } catch {
                 // If we can't parse, still show with 0 entries
             }
