@@ -3468,6 +3468,10 @@ input[type=search]:focus::-webkit-search-cancel-button {
     display: none;
 }
 
+body:not(.hide-char-version) #rm_print_characters_block .character_version {
+    display: revert;
+}
+
 #rm_print_characters_block .character_name_block> :last-child {
     flex: 0 100000 auto;
     /* Force shrinking first */

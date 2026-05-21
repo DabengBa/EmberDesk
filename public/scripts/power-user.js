@@ -1693,6 +1693,7 @@ function toggleMDHotkeyIconDisplay() {
 
 function loadCharListState() {
     document.body.classList.toggle('charListGrid', power_user.charListGrid);
+    document.body.classList.toggle('hide-char-version', power_user.aux_field === 'character_version');
 }
 
 export function loadMovingUIState() {
@@ -3753,6 +3754,7 @@ jQuery(() => {
     $('#aux_field').on('change', function () {
         const value = $(this).find(':selected').val();
         power_user.aux_field = String(value);
+        document.body.classList.toggle('hide-char-version', power_user.aux_field === 'character_version');
         printCharactersDebounced();
         saveSettingsDebounced();
     });
