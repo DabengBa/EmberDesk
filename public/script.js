@@ -10825,7 +10825,7 @@ export async function deleteCharacter(characterKey, { deleteChats = true, delete
     // World info cascade: delete world files and clear references after all characters are deleted
     if (deleted && resolvedDeleteWorlds.length > 0) {
         try {
-            await fetch('/api/worldinfo/delete-cascade', {
+            const cascadeResp = await fetch('/api/worldinfo/delete-cascade', {
                 method: 'POST',
                 headers: getRequestHeaders(),
                 body: JSON.stringify({
@@ -10834,7 +10834,9 @@ export async function deleteCharacter(characterKey, { deleteChats = true, delete
                 }),
                 cache: 'no-cache',
             });
-            await flushDeletedWorldsFromUI(resolvedDeleteWorlds);
+            if (cascadeResp.ok) {
+                await flushDeletedWorldsFromUI(resolvedDeleteWorlds);
+            }
         } catch {
             // Cascade failure should not block the UI cleanup
         }

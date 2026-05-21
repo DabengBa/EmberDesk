@@ -2133,11 +2133,14 @@ export async function flushDeletedWorldsFromUI(worldNames) {
         needsSave = true;
     }
 
+    const wasEditingDeletedWorld = names.has(
+        String($('#world_editor_select').find(':selected').text()),
+    );
+
     await updateWorldInfoList();
 
-    const editorSelected = String($('#world_editor_select').find(':selected').text());
-    if (names.has(editorSelected)) {
-        $('#world_editor_select').val(null).trigger('change');
+    if (wasEditingDeletedWorld) {
+        await hideWorldEditor();
     }
 
     const charWorld = $('#character_world').val();
