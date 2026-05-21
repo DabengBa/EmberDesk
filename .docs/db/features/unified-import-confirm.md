@@ -50,6 +50,13 @@ After importing a PNG/JSON character card, embedded content (tags, world books, 
 - Storage pre-set mechanism: `AlertWI_${avatar}`, `AlertRegex_${avatar}`, `AllowGlobalStyles-${avatar}` in `accountStorage`.
 - Batch import shows aggregated content from all imported characters in a single dialog.
 - The `importCharactersTags()` function now accepts an optional `{ importSetting }` parameter to bypass the `ASK` mode when the unified dialog has already handled the decision.
+- Both import entry points (button and drag-drop) share a single `handleUnifiedImport()` function to avoid logic duplication.
+- If applying choices fails for one character, the error is logged and remaining characters continue processing — one failure does not block the entire import.
+- When importing a world book, the `$('#import_character_info').data('chid')` DOM state is saved before and restored after the call to prevent cross-character pollution in batch imports.
+- All user-visible strings in the dialog use the `t` i18n tagged template literal system.
+- When batch-importing more than 3 characters, the dialog title truncates to the first 3 names plus "+N".
+- World book names that match existing worlds display a styled "(will overwrite)" warning in yellow bold text.
+- Characters not found after `getCharacters()` refresh are logged with `console.warn` and silently skipped.
 
 ## Outcomes
 
