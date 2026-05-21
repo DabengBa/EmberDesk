@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chat Completion Select Demo</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; }
+
+:root {
+    --bg: oklch(0.15 0.006 82);
+    --surface: oklch(0.19 0.006 82);
+    --surface-raised: oklch(0.23 0.007 82);
+    --border: oklch(0.72 0.012 82 / 0.14);
+    --border-focus: oklch(0.69 0.13 58 / 0.5);
+    --text: oklch(0.90 0.016 86);
+    --muted: oklch(0.60 0.01 86);
+    --faint: oklch(0.44 0.008 86);
+    --amber: oklch(0.69 0.13 58);
+    --amber-dim: oklch(0.69 0.13 58 / 0.14);
+    --green: oklch(0.67 0.14 142);
+    --red: oklch(0.55 0.18 25);
+    --font: "Noto Sans", system-ui, -apple-system, sans-serif;
+    --mono: "Noto Sans Mono", "SF Mono", "Consolas", monospace;
+    --r: 8px;
+    --r-sm: 5px;
+}
+
+body {
+    min-height: 100vh;
+    display: grid;
+    place-items: start center;
+    gap: 24px;
+    padding: 40px 18px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+h2 {
+    grid-column: 1 / -1;
+    text-align: center;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--faint);
+}
+
+.demo-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(280px, 360px));
+    gap: 24px;
+}
+
+/* ---------- Panel ---------- */
+.panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: var(--surface);
+}
+
+/* ---------- Status line ---------- */
+.status-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 20px;
+}
+
+.dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--faint);
+    transition: background 0.2s;
+}
+.dot.ok  { background: var(--green); }
+.dot.warn { background: var(--amber); }
+.dot.off { background: var(--red); }
+
+.status-text {
+    font-size: 0.8rem;
+    color: var(--muted);
+}
+
+/* ---------- Config flow ---------- */
+.config-flow {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.provider-model {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 8px;
+    align-items: center;
+}
+
+.provider-model select {
+    width: auto;
+    min-width: 120px;
+}
+
+.provider-model input {
+    width: 100%;
+    min-width: 0;
+}
+
+/* ---------- Inputs ---------- */
+select,
+input[type="text"],
+input[type="password"] {
+    height: 32px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: oklch(0.13 0.006 82 / 0.8);
+    color: var(--text);
+    font: inherit;
+    font-size: 0.88rem;
+    min-width: 0;
+    transition: border-color 0.15s;
+    appearance: none;
+    -webkit-appearance: none;
+    outline: none;
+}
+
+select {
+    padding-right: 26px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23999'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 10px 6px;
+}
+
+select:focus,
+input:focus {
+    border-color: var(--border-focus);
+}
+
+input::placeholder {
+    color: var(--faint);
+    font-size: 0.82rem;
+}
+
+/* ---------- Key row ---------- */
+.key-row {
+    display: grid;
+    grid-template-columns: 1fr 32px;
+    gap: 4px;
+    align-items: center;
+}
+
+.icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 32px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: var(--surface-raised);
+    color: var(--muted);
+    cursor: default;
+    transition: color 0.12s;
+    font-size: 0.82rem;
+}
+.icon-btn:hover { color: var(--text); }
+
+/* ---------- Checkbox ---------- */
+.check-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.84rem;
+    color: var(--muted);
+}
+
+.check-row input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+    accent-color: var(--amber);
+}
+
+/* ---------- Sub-config (Vertex et al) ---------- */
+.sub-config {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: oklch(0.17 0.006 82 / 0.55);
+}
+
+.two-col {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px;
+}
+
+.two-col select {
+    min-width: 100px;
+}
+
+/* ---------- Actions ---------- */
+.actions {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+}
+
+.btn {
+    height: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: var(--surface-raised);
+    color: var(--text);
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 500;
+    cursor: default;
+    transition: background 0.12s;
+}
+
+.btn.primary {
+    border-color: oklch(0.69 0.13 58 / 0.32);
+    background: var(--amber-dim);
+    color: oklch(0.88 0.12 58);
+    font-weight: 600;
+}
+
+.btn.tight {
+    padding: 0 8px;
+    font-size: 0.78rem;
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 720px) {
+    body { padding: 18px 10px; }
+    .demo-grid { grid-template-columns: 1fr; }
+    .provider-model,
+    .two-col { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<h2>Chat Completion Select</h2>
+
+<main class="demo-grid">
+
+    <!-- ===== OpenAI, connected ===== -->
+    <section>
+        <p class="demo-label" style="margin:0 0 6px;color:var(--faint);font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;">Connected</p>
+        <div class="panel">
+            <div class="status-bar">
+                <span class="dot ok"></span>
+                <span class="status-text">Connected</span>
+            </div>
+            <div class="config-flow">
+                <div class="provider-model">
+                    <select><option>OpenAI</option><option>Claude</option><option>Google</option></select>
+                    <input value="gpt-4.1-mini">
+                </div>
+                <div class="key-row">
+                    <input type="password" value="sk-xxxxxxxxxxxxxxxxxxxx">
+                    <button class="icon-btn" title="Peek password">&#128065;</button>
+                </div>
+                <input type="text" placeholder="Base URL">
+            </div>
+            <div class="actions">
+                <button class="btn primary">Connect</button>
+                <button class="btn tight">Test</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== Claude, key saved, custom base URL ===== -->
+    <section>
+        <p class="demo-label" style="margin:0 0 6px;color:var(--faint);font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;">Key saved, custom base URL</p>
+        <div class="panel">
+            <div class="status-bar">
+                <span class="dot warn"></span>
+                <span class="status-text">Key saved</span>
+            </div>
+            <div class="config-flow">
+                <div class="provider-model">
+                    <select><option>OpenAI</option><option selected>Claude</option><option>Google</option></select>
+                    <input value="claude-sonnet-4-5">
+                </div>
+                <div class="key-row">
+                    <input type="password" value="sk-ant-xxxxxxxxxxxxxxxx">
+                    <button class="icon-btn" title="Peek password">&#128065;</button>
+                </div>
+                <input type="text" value="https://proxy.example.com/v1" placeholder="Base URL">
+            </div>
+            <div class="actions">
+                <button class="btn primary">Connect</button>
+                <button class="btn tight">Test</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== Google, Vertex enabled ===== -->
+    <section>
+        <p class="demo-label" style="margin:0 0 6px;color:var(--faint);font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;">Google + Vertex AI</p>
+        <div class="panel">
+            <div class="status-bar">
+                <span class="dot ok"></span>
+                <span class="status-text">Connected</span>
+            </div>
+            <div class="config-flow">
+                <div class="provider-model">
+                    <select><option>OpenAI</option><option>Claude</option><option selected>Google</option></select>
+                    <input value="gemini-2.5-pro">
+                </div>
+                <div class="key-row">
+                    <input type="password" value="AIza...">
+                    <button class="icon-btn" title="Peek password">&#128065;</button>
+                </div>
+                <label class="check-row"><input type="checkbox" checked>Vertex AI</label>
+                <div class="sub-config">
+                    <div class="two-col">
+                        <select><option selected>API Key</option><option>Service Account</option></select>
+                        <input type="text" value="us-central1" placeholder="Region">
+                    </div>
+                    <input type="text" value="emberdesk-lab" placeholder="Project ID">
+                </div>
+                <input type="text" placeholder="Base URL">
+            </div>
+            <div class="actions">
+                <button class="btn primary">Connect</button>
+                <button class="btn tight">Test</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== Not connected ===== -->
+    <section>
+        <p class="demo-label" style="margin:0 0 6px;color:var(--faint);font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;">Disconnected</p>
+        <div class="panel">
+            <div class="status-bar">
+                <span class="dot off"></span>
+                <span class="status-text">Not connected</span>
+            </div>
+            <div class="config-flow">
+                <div class="provider-model">
+                    <select><option selected>OpenAI</option><option>Claude</option><option>Google</option></select>
+                    <input placeholder="Connect to load models">
+                </div>
+                <div class="key-row">
+                    <input type="password" placeholder="API key">
+                    <button class="icon-btn" title="Peek password">&#128065;</button>
+                </div>
+                <input type="text" placeholder="Base URL">
+            </div>
+            <div class="actions">
+                <button class="btn primary">Connect</button>
+            </div>
+        </div>
+    </section>
+
+</main>
+</body>
+</html>

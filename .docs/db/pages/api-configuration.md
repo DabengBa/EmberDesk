@@ -21,8 +21,14 @@ This page exists so a user can configure how EmberDesk connects to an LLM API pr
 1. **API type selector**: top-level toggle between Chat Completion and Text Completion modes.
 2. **Connection Profile bar**: dropdown and save/delete controls for named configuration snapshots at the top of the drawer.
 3. **Custom Base URL section**: collapsible drawer containing the base URL input and the unified API key input.
-4. **Provider-specific section**: model selection dropdown and provider-specific settings (e.g., endpoint variant, auth mode). Shown/hidden based on the selected chat completion source.
-5. **Generation parameter sliders**: temperature, frequency penalty, presence penalty, and other sampling controls shared across providers.
+4. **Preset bar**: preset dropdown with labeled action buttons (Save, Rename, Save As).
+5. **Options section**: streaming toggle and other basic completion switches.
+6. **Provider-specific section**: model selection dropdown and provider-specific controls (e.g., endpoint variant, auth mode). Shown/hidden based on the selected chat completion source.
+7. **Features section**: reasoning effort segmented control (Auto/Low/Medium/High), image request toggles, and provider-specific feature switches.
+8. **Prompt Manager section**: the inline prompt manager surface.
+9. **Advanced Sampling section**: collapsible drawer containing temperature, top P, frequency penalty, presence penalty, top K, and verbosity controls. Uses slider + number-input pairs for numeric values. Verbosity uses a segmented control (Auto/Low/Medium/High).
+10. **Image Generation section**: image request toggles and provider-specific image settings.
+11. **Settings section**: character names behavior, group nudge, and other general chat completion options.
 
 ## Page-Level Semantic IDs
 

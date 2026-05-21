@@ -71,6 +71,7 @@ This feature lets a user remove unwanted characters and immediately see the work
 - "Delete All" selects all world info checkboxes — it means complete world info cleanup, not selective deletion.
 - Deleting a character does not affect other characters' world info references. See [ADR-0005](../adr/0005-delete-no-cross-character-world-ref-cleanup.md).
 - A failed cascade (world file deletion) does not block the character deletion itself.
+- If the World Info editor panel is open showing a world that gets cascade-deleted, EmberDesk closes the editor and clears all related client-side references (cache, global selection, character world field, persona lorebook).
 - If generation is in progress when deletion is triggered, it is stopped automatically without blocking the user.
 - If the preflight world info request fails, the dialog degrades gracefully by omitting the World Info Cascade section.
 

@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>Character Library Panel — Design Demo</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --panel-bg: #141414;
+  --surface: #1a1a1a;
+  --surface-hover: rgba(255,255,255,0.06);
+  --border: rgba(255,255,255,0.08);
+  --border-focus: rgba(255,255,255,0.18);
+  --text: #d4d4cc;
+  --text-secondary: #858580;
+  --accent: #c87d2a;
+  --accent-dim: rgba(200,125,42,0.12);
+  --accent-border: rgba(200,125,42,0.35);
+  --active: #4a9e00;
+  --active-dim: rgba(74,158,0,0.10);
+  --active-border: rgba(74,158,0,0.25);
+  --danger: #c0392b;
+  --danger-dim: rgba(192,57,43,0.15);
+  --radius: 7px;
+  --row-radius: 6px;
+}
+
+body {
+  font-family: 'Inter', 'Noto Sans', system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  background: #0c0c0c;
+  color: var(--text);
+  display: flex;
+  gap: 32px;
+  padding: 40px 28px;
+  align-items: flex-start;
+  justify-content: center;
+  -webkit-font-smoothing: antialiased;
+}
+
+.demo-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.demo-label {
+  font-size: 0.68rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-secondary);
+  opacity: 0.5;
+}
+
+/* ── Panel ───────────────────────────────────────────── */
+.panel {
+  width: 280px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  max-height: 540px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+}
+
+/* ── Toolbar (unified top bar) ──────────────────────── */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 6px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.icon-btn {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius);
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.78rem;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+.icon-btn:hover { background: var(--surface-hover); color: var(--text); }
+
+.icon-btn.is-active {
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.sort-select {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  border-radius: var(--radius);
+  font-family: inherit;
+  font-size: 0.75rem;
+  padding: 0 4px;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  transition: color 0.15s;
+}
+.sort-select:hover { color: var(--text); }
+.sort-select:focus { outline: none; color: var(--text); }
+
+/* ── Search (collapsible, below toolbar) ────────────── */
+.search-bar {
+  padding: 0 6px 6px;
+  flex-shrink: 0;
+  display: none;
+}
+.search-bar.open { display: block; }
+
+.search-bar input {
+  width: 100%;
+  height: 26px;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.82rem;
+  padding: 0 8px;
+  transition: border-color 0.15s;
+}
+.search-bar input:focus { outline: none; border-color: var(--border-focus); }
+.search-bar input::placeholder { color: var(--text-secondary); opacity: 0.6; }
+
+/* ── Tag filter (only visible when active) ──────────── */
+.tag-strip {
+  padding: 0 6px 5px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  flex-shrink: 0;
+}
+.tag-strip:empty { display: none; padding: 0; }
+
+.tag-chip {
+  font-size: 0.68rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: rgba(0,0,0,0.25);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.tag-chip:hover { border-color: var(--border-focus); color: var(--text); }
+.tag-chip.active {
+  background: var(--accent-dim);
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+
+/* ── Bulk bar (replaces toolbar in bulk mode) ───────── */
+.bulk-bar {
+  display: none;
+  align-items: center;
+  gap: 3px;
+  padding: 6px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.bulk-bar.open { display: flex; }
+
+.bulk-bar .count {
+  flex: 1;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  padding: 0 4px;
+  text-align: center;
+}
+
+.bulk-bar .icon-btn.danger:hover { background: var(--danger-dim); color: var(--danger); }
+
+/* ── Character list ─────────────────────────────────── */
+.char-list {
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  gap: 1px;
+}
+.char-list::-webkit-scrollbar { width: 4px; }
+.char-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+.char-list::-webkit-scrollbar-track { background: transparent; }
+
+/* ── Character row ──────────────────────────────────── */
+.char-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border-radius: var(--row-radius);
+  cursor: pointer;
+  transition: background 0.12s;
+  position: relative;
+  border: 1px solid transparent;
+}
+.char-row:hover { background: var(--surface-hover); }
+
+.char-row.is-active {
+  background: var(--active-dim);
+  border-color: var(--active-border);
+}
+.char-row.is-active .avatar-wrap { box-shadow: 0 0 0 1.5px var(--active); }
+
+/* ── Avatar ─────────────────────────────────────────── */
+.avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  overflow: visible;
+}
+.avatar-wrap img {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  object-fit: cover;
+  display: block;
+  background: var(--surface);
+}
+
+.fav-star {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 14px;
+  height: 14px;
+  background: var(--panel-bg);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 7px;
+  color: var(--accent);
+  box-shadow: 0 0 0 1px var(--panel-bg);
+}
+
+/* ── Row content ────────────────────────────────────── */
+.char-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.char-name {
+  font-weight: 600;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.char-name.is-fav { color: var(--accent); }
+
+.char-desc {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.8;
+}
+
+.char-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  opacity: 0.6;
+  overflow: hidden;
+  max-height: 16px;
+}
+.char-tag {
+  font-size: 0.65rem;
+  padding: 0px 4px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  background: rgba(0,0,0,0.2);
+  white-space: nowrap;
+}
+
+/* ── Empty state ────────────────────────────────────── */
+.empty-state {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  opacity: 0.3;
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+/* ── Bulk mode ──────────────────────────────────────── */
+.bulk-checkbox {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.char-row.useless { opacity: 0.2; }
+
+.char-row.is-selected {
+  background: var(--accent-dim);
+  border-color: var(--accent-border);
+}
+
+/* ── Bottom controls (grid / bulk) ──────────────────── */
+.bottom-bar {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 6px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.bottom-bar .spacer { flex: 1; }
+</style>
+</head>
+<body>
+
+<script>
+function avatar(seed) {
+  const colors = ['#2a1e14','#141e2a','#1e142a','#142a1e','#2a141e','#1e2a14'];
+  const c = colors[seed % colors.length];
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const l = letters[seed % 26];
+  return `data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40'><rect width='40' height='40' rx='6' fill='${encodeURIComponent(c)}'/><text x='20' y='27' font-size='16' font-weight='600' font-family='system-ui,sans-serif' fill='%23888' text-anchor='middle'>${l}</text></svg>`;
+}
+</script>
+
+<!-- ═══════════════════ 1. Normal ═══════════════════ -->
+<div class="demo-col">
+  <div class="demo-label">1. Normal</div>
+  <div class="panel">
+    <div class="toolbar">
+      <div class="icon-btn" title="Create">+</div>
+      <div class="icon-btn" title="Import">↑</div>
+      <div class="icon-btn" title="Groups">⊞</div>
+      <select class="sort-select">
+        <option>Recent</option>
+        <option>A → Z</option>
+        <option>Favorites</option>
+      </select>
+      <div class="icon-btn" title="Search">⌕</div>
+      <div class="icon-btn" title="Grid">▦</div>
+    </div>
+    <div class="search-bar">
+      <input type="search" placeholder="Search…" />
+    </div>
+    <div class="tag-strip">
+      <span class="tag-chip active">Fantasy</span>
+      <span class="tag-chip">Sci-Fi</span>
+      <span class="tag-chip">Assistant</span>
+    </div>
+    <div class="char-list">
+      <div class="char-row is-active">
+        <div class="avatar-wrap">
+          <img id="av0" alt="Aria" />
+          <div class="fav-star">★</div>
+        </div>
+        <div class="char-info">
+          <span class="char-name is-fav">Aria</span>
+          <div class="char-desc">A wandering mage from the northern reaches</div>
+          <div class="char-tags">
+            <span class="char-tag">Fantasy</span>
+            <span class="char-tag">Mage</span>
+          </div>
+        </div>
+      </div>
+      <div class="char-row">
+        <div class="avatar-wrap">
+          <img id="av1" alt="Blake" />
+          <div class="fav-star">★</div>
+        </div>
+        <div class="char-info">
+          <span class="char-name is-fav">Blake</span>
+          <div class="char-desc">Ship captain, pragmatic and weathered</div>
+          <div class="char-tags">
+            <span class="char-tag">Sci-Fi</span>
+          </div>
+        </div>
+      </div>
+      <div class="char-row">
+        <div class="avatar-wrap"><img id="av2" alt="Clara" /></div>
+        <div class="char-info">
+          <span class="char-name">Clara</span>
+          <div class="char-desc">Research assistant, detail-oriented</div>
+        </div>
+      </div>
+      <div class="char-row">
+        <div class="avatar-wrap"><img id="av3" alt="Derek" /></div>
+        <div class="char-info">
+          <span class="char-name">Derek</span>
+          <div class="char-tags">
+            <span class="char-tag">Assistant</span>
+            <span class="char-tag">Coding</span>
+          </div>
+        </div>
+      </div>
+      <div class="char-row useless">
+        <div class="avatar-wrap"><img id="av4" alt="Eve" /></div>
+        <div class="char-info">
+          <span class="char-name">Eve</span>
+          <div class="char-desc">Hidden by active tag filter</div>
+        </div>
+      </div>
+    </div>
+    <div class="bottom-bar">
+      <div class="icon-btn is-active" title="Bulk edit">✎</div>
+      <div class="spacer"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ 2. Empty ═══════════════════ -->
+<div class="demo-col">
+  <div class="demo-label">2. Empty</div>
+  <div class="panel">
+    <div class="toolbar">
+      <div class="icon-btn" title="Create">+</div>
+      <div class="icon-btn" title="Import">↑</div>
+      <div class="icon-btn" title="Groups">⊞</div>
+      <select class="sort-select">
+        <option>Recent</option>
+      </select>
+      <div class="icon-btn" title="Search">⌕</div>
+      <div class="icon-btn" title="Grid">▦</div>
+    </div>
+    <div class="char-list">
+      <div class="empty-state">No characters yet</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ 3. Search open ═══════════════════ -->
+<div class="demo-col">
+  <div class="demo-label">3. Search active</div>
+  <div class="panel">
+    <div class="toolbar">
+      <div class="icon-btn" title="Create">+</div>
+      <div class="icon-btn" title="Import">↑</div>
+      <div class="icon-btn" title="Groups">⊞</div>
+      <select class="sort-select">
+        <option>Search</option>
+      </select>
+      <div class="icon-btn is-active" title="Search">⌕</div>
+      <div class="icon-btn" title="Grid">▦</div>
+    </div>
+    <div class="search-bar open">
+      <input type="search" placeholder="Search…" value="Aria" />
+    </div>
+    <div class="char-list">
+      <div class="char-row is-active">
+        <div class="avatar-wrap">
+          <img id="av5" alt="Aria" />
+          <div class="fav-star">★</div>
+        </div>
+        <div class="char-info">
+          <span class="char-name is-fav">Aria</span>
+          <div class="char-desc">A wandering mage from the northern reaches</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ 4. Bulk mode ═══════════════════ -->
+<div class="demo-col">
+  <div class="demo-label">4. Bulk edit</div>
+  <div class="panel">
+    <div class="bulk-bar open">
+      <div class="icon-btn" title="Cancel">✕</div>
+      <div class="icon-btn" title="Select all">☑</div>
+      <span class="count">3 / 5</span>
+      <div class="icon-btn" title="Tag">⊕</div>
+      <div class="icon-btn danger" title="Delete">✕</div>
+    </div>
+    <div class="char-list">
+      <div class="char-row is-selected">
+        <input type="checkbox" class="bulk-checkbox" checked />
+        <div class="avatar-wrap">
+          <img id="av6" alt="Aria" />
+          <div class="fav-star">★</div>
+        </div>
+        <div class="char-info">
+          <span class="char-name is-fav">Aria</span>
+          <div class="char-desc">A wandering mage from the northern reaches</div>
+        </div>
+      </div>
+      <div class="char-row is-selected">
+        <input type="checkbox" class="bulk-checkbox" checked />
+        <div class="avatar-wrap">
+          <img id="av7" alt="Blake" />
+          <div class="fav-star">★</div>
+        </div>
+        <div class="char-info">
+          <span class="char-name is-fav">Blake</span>
+          <div class="char-desc">Ship captain, pragmatic and weathered</div>
+        </div>
+      </div>
+      <div class="char-row">
+        <input type="checkbox" class="bulk-checkbox" />
+        <div class="avatar-wrap"><img id="av8" alt="Clara" /></div>
+        <div class="char-info">
+          <span class="char-name">Clara</span>
+          <div class="char-desc">Research assistant, detail-oriented</div>
+        </div>
+      </div>
+      <div class="char-row is-selected">
+        <input type="checkbox" class="bulk-checkbox" checked />
+        <div class="avatar-wrap"><img id="av9" alt="Derek" /></div>
+        <div class="char-info">
+          <span class="char-name">Derek</span>
+          <div class="char-tags">
+            <span class="char-tag">Assistant</span>
+            <span class="char-tag">Coding</span>
+          </div>
+        </div>
+      </div>
+      <div class="char-row">
+        <input type="checkbox" class="bulk-checkbox" />
+        <div class="avatar-wrap"><img id="av10" alt="Eve" /></div>
+        <div class="char-info">
+          <span class="char-name">Eve</span>
+          <div class="char-desc">Minimal info</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.querySelectorAll('.avatar-wrap img').forEach((img, i) => { img.src = avatar(i); });
+</script>
+
+</body>
+</html>
