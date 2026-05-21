@@ -35,8 +35,8 @@ export function scanImportedCharacter(character) {
 
     // Tags
     const tagNames = (character?.tags ?? data?.tags ?? [])
-        .map(t => String(t).trim())
-        .filter(t => t && !EXCLUDED_TAGS.includes(t));
+        .map(tag => String(tag).trim())
+        .filter(tag => tag && !EXCLUDED_TAGS.includes(tag));
     const hasTags = tagNames.length > 0;
 
     // World book
@@ -102,60 +102,84 @@ export async function showUnifiedImportConfirm(results) {
         return null;
     }
 
-    const characterNames = results.map(r => r.name).join(', ');
-    const shortNames = results.length > 3
-        ? results.slice(0, 3).map(r => r.name).join(', ') + ` +${results.length - 3}`
-        : characterNames;
-    let html = `<div class="import-confirm-dialog">
-        <h3>${t`Import Options for ${shortNames}`}</h3>
-        <p>${t`This character contains embedded content. Choose what to import:`}</p>
-        <div class="import-confirm-options">`;
+    const nameList = results.map(r => `<span class="import-opt-char">${escapeHtml(r.name)}</span>`);
+    const titleHtml = results.length > 3
+        ? nameList.slice(0, 3).join(', ') + ` +${results.length - 3}`
+        : nameList.join(', ');
+    const style = `<style>
+        .import-opt-title{font-size:1.05rem;font-weight:600;margin-bottom:10px;line-height:1.3}
+        .import-opt-char{color:#E88A24}
+        .import-opt-list{display:flex;flex-direction:column;gap:2px}
+        .import-opt-item{display:flex;align-items:flex-start;gap:8px;padding:5px 6px;border-radius:5px;cursor:pointer;transition:background .12s}
+        .import-opt-item:hover{background:rgba(255,255,255,.04)}
+        .import-opt-item+.import-opt-item{border-top:1px solid rgba(255,255,255,.04)}
+        .import-opt-item input[type=checkbox]{margin-top:3px;accent-color:#E88A24;flex-shrink:0}
+        .import-opt-body{display:flex;flex-direction:column;gap:1px;min-width:0}
+        .import-opt-label{font-size:.9rem;font-weight:500;line-height:1.3}
+        .import-opt-meta{font-size:.8rem;color:#919191;line-height:1.3}
+        .import-opt-chip{display:inline-block;background:rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.08);border-radius:3px;padding:0 4px;font-size:.78rem;margin-right:3px;line-height:1.5}
+        .import-opt-overwrite{color:#D78872;font-weight:500}
+    </style>`;
+    let html = `${style}<div class="import-confirm-dialog">
+        <div class="import-opt-title">${titleHtml}</div>
+        <div class="import-opt-list">`;
 
     if (showTags) {
         const allTags = [...new Set(results.flatMap(r => r.tagNames))];
-        const tagPreview = escapeHtml(allTags.slice(0, 5).join(', ')) + (allTags.length > 5 ? '...' : '');
-        html += `<label class="checkbox_label import-confirm-option">
+        const chips = allTags.slice(0, 5).map(tag => `<span class="import-opt-chip">${escapeHtml(tag)}</span>`).join('')
+            + (allTags.length > 5 ? `<span class="import-opt-chip">+${allTags.length - 5}</span>` : '');
+        html += `<label class="import-opt-item">
             <input type="checkbox" id="import_opt_tags" checked />
-            <span>${t`Import tags` + ` (${allTags.length}: ${tagPreview})`}</span>
+            <div class="import-opt-body">
+                <span class="import-opt-label">${t`Tags`}</span>
+                <span class="import-opt-meta">${chips}</span>
+            </div>
         </label>`;
     }
 
     if (showWorldBook) {
         const worlds = results.filter(r => r.hasWorldBook);
-        const worldList = worlds.map(w => {
-            const willOverwrite = world_names.includes(w.worldBookName);
-            const nameHtml = escapeHtml(w.worldBookName);
-            return willOverwrite
-                ? `${nameHtml} <span class="import-overwrite-warning">${t`(will overwrite)`}</span>`
-                : nameHtml;
-        }).join(', ');
-        const worldLabel = worlds.length > 1 ? t`Import World/Lorebooks` : t`Import World/Lorebook`;
-        html += `<label class="checkbox_label import-confirm-option">
+        const metaParts = worlds.map(w => {
+            const name = escapeHtml(w.worldBookName);
+            return world_names.includes(w.worldBookName)
+                ? `${name} <span class="import-opt-overwrite">${t`will overwrite`}</span>`
+                : name;
+        });
+        const label = worlds.length > 1 ? t`World Books` : t`World Book`;
+        html += `<label class="import-opt-item">
             <input type="checkbox" id="import_opt_world" />
-            <span>${worldLabel} (${worldList})</span>
+            <div class="import-opt-body">
+                <span class="import-opt-label">${label}</span>
+                <span class="import-opt-meta">${metaParts.join(', ')}</span>
+            </div>
         </label>`;
     }
 
     if (showRegex) {
         const total = results.reduce((sum, r) => sum + r.regexScriptCount, 0);
-        const scriptLabel = total > 1 ? t`Enable embedded regex scripts` : t`Enable embedded regex script`;
-        html += `<label class="checkbox_label import-confirm-option">
+        html += `<label class="import-opt-item">
             <input type="checkbox" id="import_opt_regex" />
-            <span>${scriptLabel} (${total})</span>
+            <div class="import-opt-body">
+                <span class="import-opt-label">${t`Regex Scripts`}</span>
+                <span class="import-opt-meta">${t`${String(total)} script(s)`}</span>
+            </div>
         </label>`;
     }
 
     if (showCSS) {
-        html += `<label class="checkbox_label import-confirm-option">
+        html += `<label class="import-opt-item">
             <input type="checkbox" id="import_opt_css" />
-            <span>${t`Apply Creator Notes CSS to entire app`}</span>
+            <div class="import-opt-body">
+                <span class="import-opt-label">${t`Creator CSS`}</span>
+                <span class="import-opt-meta">${t`Apply to entire app`}</span>
+            </div>
         </label>`;
     }
 
-    html += `</div><style>.import-overwrite-warning{color:var(--warning,#f0ad40);font-weight:bold}</style></div>`;
+    html += `</div></div>`;
 
     const result = await callGenericPopup(html, POPUP_TYPE.CONFIRM, '', {
-        okButton: t`Apply Selected`,
+        okButton: t`Apply`,
         cancelButton: t`Skip All`,
         wide: false,
     });

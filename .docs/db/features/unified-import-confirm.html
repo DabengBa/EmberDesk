@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>Unified Import Confirm — Visual Demo</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Noto Sans', system-ui, sans-serif;
+    font-size: 15px;
+    background: #111;
+    color: #DCDCD2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 40px;
+    padding: 40px 20px;
+  }
+  h1 { font-size: 1.2rem; font-weight: 600; opacity: 0.6; letter-spacing: 0.05em; text-transform: uppercase; }
+  .demo-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    opacity: 0.35;
+    margin-bottom: 10px;
+  }
+
+  /* ── Popup shell ─────────────────────────────────────── */
+  .popup-demo {
+    width: 420px;
+    background: #171717;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    padding: 16px 18px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.5);
+  }
+
+  /* ── Character name (compact) ────────────────────────── */
+  .import-dialog-title {
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin-bottom: 12px;
+    line-height: 1.3;
+  }
+  .import-dialog-title .char-name {
+    color: #E88A24;
+  }
+
+  /* ── Option items ────────────────────────────────────── */
+  .import-options {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .import-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+  .import-option:hover {
+    background: rgba(255,255,255,0.04);
+  }
+  .import-option input[type="checkbox"] {
+    margin-top: 3px;
+    accent-color: #E88A24;
+    flex-shrink: 0;
+  }
+  .import-option-body {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+  }
+  .import-option-label {
+    font-size: 0.9rem;
+    font-weight: 500;
+    line-height: 1.3;
+  }
+  .import-option-meta {
+    font-size: 0.8rem;
+    color: #919191;
+    line-height: 1.3;
+  }
+  .import-option-meta .tag-list {
+    display: inline;
+  }
+  .import-option-meta .tag-chip {
+    display: inline-block;
+    background: rgba(0,0,0,0.4);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 3px;
+    padding: 0 4px;
+    font-size: 0.78rem;
+    margin-right: 3px;
+    line-height: 1.5;
+  }
+  .import-option-meta .overwrite {
+    color: #D78872;
+    font-weight: 500;
+  }
+
+  /* ── Divider between groups ──────────────────────────── */
+  .import-options .import-option + .import-option {
+    border-top: 1px solid rgba(255,255,255,0.04);
+  }
+
+  /* ── Buttons ─────────────────────────────────────────── */
+  .dialog-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  .btn {
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: 500;
+    padding: 5px 14px;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background 0.15s;
+    background: #171717;
+    color: #DCDCD2;
+  }
+  .btn:hover { background: #2a2a2a; }
+  .btn-primary {
+    background: #171717;
+    border-color: rgba(232,138,36,0.4);
+  }
+  .btn-primary:hover { background: #2a2a2a; border-color: rgba(232,138,36,0.6); }
+</style>
+</head>
+<body>
+
+<h1>Unified Import Confirm — Visual Demo</h1>
+
+<!-- ════════ Demo 1: Single character, all 4 types ════════ -->
+<div>
+  <div class="demo-label">1. Single character, 4 content types</div>
+  <div class="popup-demo">
+    <div class="import-dialog-title">
+      <span class="char-name">Aria Nightshade</span>
+    </div>
+    <div class="import-options">
+      <label class="import-option">
+        <input type="checkbox" checked />
+        <div class="import-option-body">
+          <span class="import-option-label">Tags</span>
+          <span class="import-option-meta">
+            <span class="tag-chip">fantasy</span><span class="tag-chip">elf</span><span class="tag-chip">mage</span>
+          </span>
+        </div>
+      </label>
+      <label class="import-option">
+        <input type="checkbox" />
+        <div class="import-option-body">
+          <span class="import-option-label">World Book</span>
+          <span class="import-option-meta">Elven Kingdoms Lorebook</span>
+        </div>
+      </label>
+      <label class="import-option">
+        <input type="checkbox" />
+        <div class="import-option-body">
+          <span class="import-option-label">Regex Scripts</span>
+          <span class="import-option-meta">3 scripts</span>
+        </div>
+      </label>
+      <label class="import-option">
+        <input type="checkbox" />
+        <div class="import-option-body">
+          <span class="import-option-label">Creator CSS</span>
+          <span class="import-option-meta">Custom styling in creator notes</span>
+        </div>
+      </label>
+    </div>
+    <div class="dialog-buttons">
+      <button class="btn">Skip All</button>
+      <button class="btn btn-primary">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ Demo 2: Overwrite warning ════════ -->
+<div>
+  <div class="demo-label">2. World book overwrite warning</div>
+  <div class="popup-demo">
+    <div class="import-dialog-title">
+      <span class="char-name">Elven Knight</span>
+    </div>
+    <div class="import-options">
+      <label class="import-option">
+        <input type="checkbox" checked />
+        <div class="import-option-body">
+          <span class="import-option-label">Tags</span>
+          <span class="import-option-meta">
+            <span class="tag-chip">fantasy</span><span class="tag-chip">knight</span>
+          </span>
+        </div>
+      </label>
+      <label class="import-option">
+        <input type="checkbox" />
+        <div class="import-option-body">
+          <span class="import-option-label">World Book</span>
+          <span class="import-option-meta">Elven Kingdoms Lorebook <span class="overwrite">will overwrite</span></span>
+        </div>
+      </label>
+    </div>
+    <div class="dialog-buttons">
+      <button class="btn">Skip All</button>
+      <button class="btn btn-primary">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ Demo 3: Tags only ════════ -->
+<div>
+  <div class="demo-label">3. Tags only (most common)</div>
+  <div class="popup-demo">
+    <div class="import-dialog-title">
+      <span class="char-name">Luna Starweaver</span>
+    </div>
+    <div class="import-options">
+      <label class="import-option">
+        <input type="checkbox" checked />
+        <div class="import-option-body">
+          <span class="import-option-label">Tags</span>
+          <span class="import-option-meta">
+            <span class="tag-chip">sci-fi</span><span class="tag-chip">pilot</span><span class="tag-chip">human</span><span class="tag-chip">rogue</span><span class="tag-chip">+2</span>
+          </span>
+        </div>
+      </label>
+    </div>
+    <div class="dialog-buttons">
+      <button class="btn">Skip All</button>
+      <button class="btn btn-primary">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ Demo 4: Batch import (3 characters) ════════ -->
+<div>
+  <div class="demo-label">4. Batch import, aggregated</div>
+  <div class="popup-demo">
+    <div class="import-dialog-title">
+      <span class="char-name">Alice</span>, <span class="char-name">Bob</span>, <span class="char-name">Charlie</span>
+    </div>
+    <div class="import-options">
+      <label class="import-option">
+        <input type="checkbox" checked />
+        <div class="import-option-body">
+          <span class="import-option-label">Tags</span>
+          <span class="import-option-meta">
+            <span class="tag-chip">adventure</span><span class="tag-chip">party</span><span class="tag-chip">healer</span><span class="tag-chip">+4</span>
+          </span>
+        </div>
+      </label>
+      <label class="import-option">
+        <input type="checkbox" />
+        <div class="import-option-body">
+          <span class="import-option-label">World Books</span>
+          <span class="import-option-meta">Dark Forest, Crystal Cave</span>
+        </div>
+      </label>
+      <label class="import-option">
+        <input type="checkbox" />
+        <div class="import-option-body">
+          <span class="import-option-label">Regex Scripts</span>
+          <span class="import-option-meta">5 scripts</span>
+        </div>
+      </label>
+    </div>
+    <div class="dialog-buttons">
+      <button class="btn">Skip All</button>
+      <button class="btn btn-primary">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ Demo 5: Batch with truncation ════════ -->
+<div>
+  <div class="demo-label">5. Batch truncation (5 characters)</div>
+  <div class="popup-demo">
+    <div class="import-dialog-title">
+      <span class="char-name">Alice</span>, <span class="char-name">Bob</span>, <span class="char-name">Charlie</span> +2
+    </div>
+    <div class="import-options">
+      <label class="import-option">
+        <input type="checkbox" checked />
+        <div class="import-option-body">
+          <span class="import-option-label">Tags</span>
+          <span class="import-option-meta">
+            <span class="tag-chip">fantasy</span><span class="tag-chip">adventure</span><span class="tag-chip">+8</span>
+          </span>
+        </div>
+      </label>
+    </div>
+    <div class="dialog-buttons">
+      <button class="btn">Skip All</button>
+      <button class="btn btn-primary">Apply</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
