@@ -224,6 +224,20 @@ export const reasoning_effort_types = {
     max: 'max',
 };
 
+function normalizeReasoningEffort(value) {
+    switch (value) {
+        case reasoning_effort_types.auto:
+        case reasoning_effort_types.low:
+        case reasoning_effort_types.medium:
+        case reasoning_effort_types.high:
+            return value;
+        case reasoning_effort_types.min:
+        case reasoning_effort_types.max:
+        default:
+            return reasoning_effort_types.high;
+    }
+}
+
 export const verbosity_levels = {
     auto: 'auto',
     low: 'low',
@@ -377,7 +391,7 @@ const default_settings = {
     continue_postfix: continue_postfix_types.SPACE,
     custom_prompt_post_processing: custom_prompt_post_processing_types.NONE,
     show_thoughts: true,
-    reasoning_effort: reasoning_effort_types.auto,
+    reasoning_effort: reasoning_effort_types.high,
     verbosity: verbosity_levels.auto,
     enable_web_search: false,
     request_images: false,
@@ -3041,6 +3055,8 @@ function migrateChatCompletionSettings(settings) {
     if (Object.hasOwn(settings, 'custom_model') && settings.custom_model && (!settings.openai_model || settings.openai_model === default_settings.openai_model)) {
         settings.openai_model = settings.custom_model;
     }
+
+    settings.reasoning_effort = normalizeReasoningEffort(settings.reasoning_effort);
 }
 
 /**
@@ -4674,7 +4690,8 @@ export function initOpenAI() {
     });
 
     $('#openai_reasoning_effort').on('input', function () {
-        oai_settings.reasoning_effort = String($(this).val());
+        oai_settings.reasoning_effort = normalizeReasoningEffort($(this).val());
+        $(this).val(oai_settings.reasoning_effort);
         syncSegmentedFromSelect('openai_reasoning_effort');
         saveSettingsDebounced();
     });

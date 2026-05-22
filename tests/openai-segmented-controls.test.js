@@ -22,4 +22,15 @@ describe('OpenAI segmented controls', () => {
         expect(loadSettingsIndex).toBeGreaterThan(-1);
         expect(helperIndex).toBeLessThan(loadSettingsIndex);
     });
+
+    test('reasoning effort falls back to high for invalid or unselectable values', () => {
+        const source = read('public/scripts/openai.js');
+
+        expect(source).toContain('function normalizeReasoningEffort(value)');
+        expect(source).toContain('case reasoning_effort_types.min:');
+        expect(source).toContain('case reasoning_effort_types.max:');
+        expect(source).toContain('return reasoning_effort_types.high;');
+        expect(source).toContain('settings.reasoning_effort = normalizeReasoningEffort(settings.reasoning_effort);');
+        expect(source).toContain('oai_settings.reasoning_effort = normalizeReasoningEffort($(this).val());');
+    });
 });
