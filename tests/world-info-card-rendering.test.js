@@ -116,6 +116,14 @@ describe('world info card rendering', () => {
         expect(css).toContain('.wi-settings-toggle');
     });
 
+    test('global world selector refreshes selected Select2 labels after option replay', () => {
+        const source = read('public/scripts/world-info.js');
+
+        expect(source).toContain('function refreshGlobalWorldInfoSelectorLabels()');
+        expect(source).toContain('worldInfoSelect.trigger(\'change.select2\');');
+        expect(source).not.toContain('worldInfoSelect.trigger(\'change\');');
+    });
+
     test('world info drawer keeps the remaining top menu drawers in the top bar', () => {
         const indexHtml = read('public/index.html');
 

@@ -1009,6 +1009,13 @@ export function setWorldInfoSettings(settings, data) {
     ensureWorldInfoRuntimeInitialized();
 }
 
+function refreshGlobalWorldInfoSelectorLabels() {
+    const worldInfoSelect = $('#world_info');
+    if (worldInfoSelect.data('select2')) {
+        worldInfoSelect.trigger('change.select2');
+    }
+}
+
 function syncWorldInfoSettingsUi({ preserveEditorSelection = true, syncGlobalSelect = true, syncEditorSelect = true } = {}) {
     const editorSelectedName = preserveEditorSelection
         ? String($('#world_editor_select').find(':selected').text() ?? '')
@@ -1024,6 +1031,7 @@ function syncWorldInfoSettingsUi({ preserveEditorSelection = true, syncGlobalSel
         for (const option of replayState.globalOptions) {
             $('#world_info').append(new Option(option.text, option.value, false, option.selected));
         }
+        refreshGlobalWorldInfoSelectorLabels();
     }
 
     if (syncEditorSelect) {
@@ -2116,6 +2124,7 @@ export async function updateWorldInfoList() {
             $('#world_info').append(globalListOption);
             $('#world_editor_select').append(editorListOption);
         });
+        refreshGlobalWorldInfoSelectorLabels();
     }
 }
 
@@ -6502,6 +6511,7 @@ export function initWorldInfo() {
                 allowClear: true,
                 closeOnSelect: false,
             });
+            refreshGlobalWorldInfoSelectorLabels();
 
             select2ChoiceClickSubscribe($('#world_info'), target => {
                 const name = $(target).text();
