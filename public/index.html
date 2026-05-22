@@ -3294,11 +3294,22 @@
                 <form class="world_entry_form wi-card-entry">
                     <div class="inline-drawer wide100p">
                         <div class="wi-card-header inline-drawer-header gap5px padding0">
-                            <div class="wi-card-status-light killSwitch" name="entryKillSwitch" title="Toggle entry active state" data-i18n="[title]Toggle entry active state"></div>
-                            <div class="wi-card-body-wrap" data-action="toggle">
+                            <div class="wi-card-expand-button fa-solid fa-chevron-right" role="button" tabindex="0" title="Expand entry" data-i18n="[title]Expand entry"></div>
+                            <div class="wi-card-body-wrap">
                                 <div class="wi-card-title-row flex-container alignitemscenter wide100p">
-                                    <textarea class="text_pole" rows="1" name="comment" data-i18n="[placeholder]Entry Title/Memo" placeholder="Entry Title/Memo"></textarea>
-                                    <span class="wi-card-position-tag wi-position-value" name="positionValue"></span>
+                                    <textarea class="wi-card-title-input text_pole" rows="1" name="comment" title="Edit entry title" data-i18n="[placeholder]Entry Title/Memo;[title]Edit entry title" placeholder="Entry Title/Memo"></textarea>
+                                    <select name="position" class="wi-card-position-control" title="Position" data-i18n="[title]Position">
+                                        <option value="0" data-role="">↑Char</option>
+                                        <option value="1" data-role="">↓Char</option>
+                                        <option value="5" data-role="">↑EM</option>
+                                        <option value="6" data-role="">↓EM</option>
+                                        <option value="2" data-role="">↑AN</option>
+                                        <option value="3" data-role="">↓AN</option>
+                                        <option value="4" data-role="0">@D ⚙️</option>
+                                        <option value="4" data-role="1">@D 👤</option>
+                                        <option value="4" data-role="2">@D 🤖</option>
+                                        <option value="7" data-role="">➡️ Outlet</option>
+                                    </select>
                                     <select name="entryStateSelector" class="text_pole widthNatural margin0" data-i18n="[title]WI Entry Status:🔵 Constant🟢 Normal🔗 Vectorized" title="WI Entry Status:&#13;🔵 Constant&#13;🟢 Normal&#13;🔗 Vectorized">
                                         <option value="constant" title="Constant" data-i18n="[title]WI_Entry_Status_Constant">🔵</option>
                                         <option value="normal" title="Normal" data-i18n="[title]WI_Entry_Status_Normal">🟢</option>
@@ -3307,7 +3318,11 @@
                                 </div>
                                 <div class="wi-card-keywords-preview" name="keywordsPreview"></div>
                             </div>
-                            <div class="wi-card-expand-button fa-solid fa-circle-chevron-down" role="button" tabindex="0" title="Expand entry" data-i18n="[title]Expand entry"></div>
+                            <button type="button" class="wi-card-active-toggle killSwitch" name="entryKillSwitch" title="Toggle entry active state" data-i18n="[title]Toggle entry active state" aria-pressed="true">
+                                <span class="wi-card-active-toggle-track">
+                                    <span class="wi-card-active-toggle-knob"></span>
+                                </span>
+                            </button>
                         </div>
                         <div class="inline-drawer-content inline-drawer-outlet flex-container paddingBottom5px wide100p">
                             <!-- Outlet for world_entry_edit (accordion form) -->

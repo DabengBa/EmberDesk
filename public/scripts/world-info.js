@@ -86,7 +86,10 @@ export let world_info_character_strategy = world_info_insertion_strategy.charact
 export let world_info_budget_cap = 0;
 export let world_info_max_recursion_steps = 0;
 const saveWorldDebounced = debounce(async (name, data) => await _save(name, data), debounce_timeout.relaxed);
-function closeMoreMenu() { $('#world_more_menu_dropdown').hide(); }
+function closeMoreMenu() {
+    $('#world_more_menu_dropdown').hide();
+    $('#WorldInfo').removeClass('wi-more-menu-open');
+}
 const saveSettingsDebounced = debounce(() => {
     Object.assign(world_info, { globalSelect: selected_world_info });
     saveSettings();
@@ -2607,7 +2610,7 @@ async function displayWorldEntries(name, data, navigation = navigation_option.no
                 }
 
                 // Click-to-expand handlers
-                worldEntriesList.find('.wi-card-body-wrap, .wi-card-expand-button').off('click.wiExpand').on('click.wiExpand', function (e) {
+                worldEntriesList.find('.wi-card-expand-button').off('click.wiExpand').on('click.wiExpand', function (e) {
                     if (window.getSelection().toString().length > 0) return;
                     if ($(e.target).is('textarea, input, select, button, a') || $(e.target).closest('textarea, input, select, button, a').length > 0) return;
 
@@ -2761,13 +2764,6 @@ async function displayWorldEntries(name, data, navigation = navigation_option.no
     if (worldEntriesList.sortable('instance') !== undefined) {
         worldEntriesList.sortable('destroy');
     }
-
-    // Close more menu when clicking outside
-    $(document).off('click.worldMoreMenu').on('click.worldMoreMenu', function (e) {
-        if (!$(e.target).closest('#world_more_menu_wrapper').length) {
-            $('#world_more_menu_dropdown').hide();
-        }
-    });
 
     // Refresh button
     $('#world_refresh').off('click').on('click', () => {
@@ -3446,6 +3442,52 @@ function setCommentPlaceholder(keys, commentInput) {
 }
 
 /**
+ * Selects the position option that matches an entry, including at-depth role.
+ * @param {JQuery<HTMLElement>} $select The position select.
+ * @param {object} entry The WI entry.
+ */
+function selectEntryPositionOption($select, entry) {
+    const roleValue = entry.position === world_info_position.atDepth ? String(entry.role ?? extension_prompt_roles.SYSTEM) : '';
+    const $option = $select.find(`option[value="${entry.position}"][data-role="${roleValue}"]`);
+    ($option.length ? $option : $select.find('option').first()).prop('selected', true);
+}
+
+/**
+ * Persists position changes made from a compact WI card control.
+ * @param {JQuery<HTMLElement>} $select The position select.
+ * @param {object} entry The WI entry.
+ * @param {object} data The world info data.
+ * @param {string} name The world info name.
+ * @param {JQuery<HTMLElement>} template The rendered card template.
+ * @param {boolean} noSave Whether to skip saving.
+ */
+async function updateEntryPositionFromSelect($select, entry, data, name, template, noSave = false) {
+    const uid = entry.uid;
+    const value = Number($select.val());
+    const position = Number.isNaN(value) ? world_info_position.before : value;
+    const role = position === world_info_position.atDepth
+        ? Number($select.find(':selected').data('role'))
+        : null;
+
+    data.entries[uid].position = position;
+    data.entries[uid].role = role;
+    entry.position = position;
+    entry.role = role;
+
+    setWIOriginalDataValue(data, uid, 'position', position == world_info_position.before ? 'before_char' : 'after_char');
+    setWIOriginalDataValue(data, uid, 'extensions.position', position);
+    setWIOriginalDataValue(data, uid, 'extensions.role', role);
+
+    const $expandedPosition = template.find('.inline-drawer-outlet select[name="position"]');
+    if ($expandedPosition.length > 0 && $expandedPosition[0] !== $select[0]) {
+        selectEntryPositionOption($expandedPosition, data.entries[uid]);
+        $expandedPosition.trigger('input', { noSave: true });
+    }
+
+    !noSave && await saveWorldInfo(name, data);
+}
+
+/**
  * Main function to build the WI entry editor template.
  * @param {string} name - The name of the world info file.
  * @param {object} data - The world info data object.
@@ -3484,13 +3526,15 @@ export function renderCollapsedCard(name, data, entry) {
     commentInput.val(entry.comment).trigger('input', { skipReset: true, noSave: true });
     commentInput.on('click', e => e.stopPropagation());
 
-    // Position tag
-    const posLabels = {
-        0: '↑Char', 1: '↓Char', 2: '↑AN', 3: '↓AN',
-        4: `@D${enumIcons.getRoleIcon(entry.role) || ''}`, 5: '↑EM', 6: '↓EM', 7: '→Outlet',
-    };
-    const posTag = template.find('.wi-card-position-tag');
-    posTag.text(posLabels[entry.position] ?? '');
+    // Position selector
+    if (entry.position === undefined) entry.position = world_info_position.before;
+    const positionControl = template.find('.wi-card-position-control');
+    positionControl.data('uid', entry.uid);
+    selectEntryPositionOption(positionControl, entry);
+    positionControl.on('click', e => e.stopPropagation());
+    positionControl.on('input', async function (_, { noSave = false } = {}) {
+        await updateEntryPositionFromSelect($(this), entry, data, name, template, noSave);
+    });
 
     // Entry state selector
     const stateSelector = template.find('select[name="entryStateSelector"]');
@@ -3516,8 +3560,8 @@ export function renderCollapsedCard(name, data, entry) {
 
     // Status light
     updateStatusLight(template, entry);
-    const statusLight = template.find('.wi-card-status-light');
-    statusLight.on('click', async function (e) {
+    const statusToggle = template.find('.wi-card-active-toggle');
+    statusToggle.on('click', async function (e) {
         e.stopPropagation();
         data.entries[entry.uid].disable = !data.entries[entry.uid].disable;
         setWIOriginalDataValue(data, entry.uid, 'enabled', data.entries[entry.uid].disable !== true);
@@ -3556,8 +3600,9 @@ export function renderCollapsedCard(name, data, entry) {
  * Updates the status light CSS class based on entry state.
  */
 function updateStatusLight($template, entry) {
-    const light = $template.find('.wi-card-status-light');
+    const light = $template.find('.wi-card-active-toggle');
     light.removeClass('wi-status-enabled-constant wi-status-enabled-keyword wi-status-disabled');
+    light.attr('aria-pressed', entry.disable === true ? 'false' : 'true');
     if (entry.disable === true) {
         light.addClass('wi-status-disabled');
     } else if (entry.constant === true) {
@@ -3689,10 +3734,11 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
         setWIOriginalDataValue(data, uid, 'position', data.entries[uid].position == 0 ? 'before_char' : 'after_char');
         setWIOriginalDataValue(data, uid, 'extensions.position', data.entries[uid].position);
         setWIOriginalDataValue(data, uid, 'extensions.role', data.entries[uid].role);
+        const $cardPositionControl = outlet.closest('.world_entry').find('.wi-card-position-control');
+        selectEntryPositionOption($cardPositionControl, data.entries[uid]);
         !noSave && await saveWorldInfo(name, data);
     });
-    const roleValue = entry.position === world_info_position.atDepth ? String(entry.role ?? extension_prompt_roles.SYSTEM) : '';
-    $posSelect.find(`option[value="${entry.position}"][data-role="${roleValue}"]`).prop('selected', true);
+    selectEntryPositionOption($posSelect, entry);
     $posControl.append($posSelect);
     $injectionControls.append($posControl);
 
@@ -6458,9 +6504,17 @@ export function initWorldInfo() {
         });
 
         // More menu toggle
-        $('#world_more_menu').on('click', function (e) {
+        $('#world_more_menu').off('click.worldMoreMenuToggle').on('click.worldMoreMenuToggle', function (e) {
             e.stopPropagation();
-            $('#world_more_menu_dropdown').toggle();
+            const menu = $('#world_more_menu_dropdown');
+            menu.toggle();
+            $('#WorldInfo').toggleClass('wi-more-menu-open', menu.is(':visible'));
+        });
+
+        $(document).off('click.worldMoreMenu').on('click.worldMoreMenu', function (e) {
+            if (!$(e.target).closest('#world_more_menu_wrapper').length) {
+                closeMoreMenu();
+            }
         });
 
         // More menu: create new world (uses separate ID to avoid conflict with new-entry button)

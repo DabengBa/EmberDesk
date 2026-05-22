@@ -48,4 +48,15 @@ describe('world info card rendering', () => {
         expect(entryTemplate).toContain('data-i18n="[title]Expand entry"');
         expect(entryTemplate).toContain('<div class="inline-drawer-content inline-drawer-outlet flex-container paddingBottom5px wide100p">');
     });
+
+    test('collapsed cards expose explicit controls instead of hidden click targets', () => {
+        const indexHtml = read('public/index.html');
+        const source = read('public/scripts/world-info.js');
+
+        expect(indexHtml).toContain('class="wi-card-position-control"');
+        expect(indexHtml).toContain('name="position"');
+        expect(indexHtml).toContain('class="wi-card-active-toggle');
+        expect(source).toContain('worldEntriesList.find(\'.wi-card-expand-button\')');
+        expect(source).not.toContain('worldEntriesList.find(\'.wi-card-body-wrap, .wi-card-expand-button\')');
+    });
 });

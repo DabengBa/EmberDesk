@@ -3,43 +3,47 @@
                         <div id="world_info_pagination"></div>
                         <div id="world_toolbar" class="flex-container alignitemscenter">
                             <input type="file" id="world_import_file" accept=".json,.lorebook,.png" name="avatar" hidden>
-                            <select id="world_editor_select">
-                                <option value="" data-i18n="--- Pick to Edit ---">--- Pick to Edit ---</option>
-                            </select>
-                            <div id="world_create_button" class="menu_button fa-solid fa-plus" title="New Entry" data-i18n="[title]New Entry"></div>
-                            <input type="search" class="text_pole textarea_compact" data-i18n="[placeholder]Search..." id="world_info_search" placeholder="Search...">
-                            <select id="world_info_sort_order" class="text_pole textarea_compact">
-                                <option data-rule="search" value="14" data-i18n="Search" hidden>Search</option>
-                                <option data-rule="priority" value="0" data-i18n="Priority">Priority</option>
-                                <option data-rule="custom" value="13" data-i18n="Custom">Custom</option>
-                                <option data-order="asc" data-field="comment" value="1" data-i18n="Title A-Z">Title A-Z</option>
-                                <option data-order="desc" data-field="comment" value="2" data-i18n="Title Z-A">Title Z-A</option>
-                                <option data-order="asc" data-field="content" data-rule="length" value="3" data-i18n="Tokens ↗">Tokens ↗</option>
-                                <option data-order="desc" data-field="content" data-rule="length" value="4" data-i18n="Tokens ↘">Tokens ↘</option>
-                                <option data-order="asc" data-field="depth" value="5" data-i18n="Depth ↗">Depth ↗</option>
-                                <option data-order="desc" data-field="depth" value="6" data-i18n="Depth ↘">Depth ↘</option>
-                                <option data-order="asc" data-field="order" value="7" data-i18n="Order ↗">Order ↗</option>
-                                <option data-order="desc" data-field="order" value="8" data-i18n="Order ↘">Order ↘</option>
-                                <option data-order="asc" data-field="uid" value="9" data-i18n="UID ↗">UID ↗</option>
-                                <option data-order="desc" data-field="uid" value="10" data-i18n="UID ↘">UID ↘</option>
-                                <option data-order="asc" data-field="probability" value="11" data-i18n="Trigger% ↗">Trigger% ↗</option>
-                                <option data-order="desc" data-field="probability" value="12" data-i18n="Trigger% ↘">Trigger% ↘</option>
-                            </select>
-                            <div id="world_multi_select" class="menu_button" data-i18n="Multi-select" title="Multi-select" style="display:none;">多选</div>
-                            <div id="world_more_menu_wrapper" class="menu_button_icon">
-                                <div id="world_more_menu" class="menu_button fa-solid fa-ellipsis" title="More" data-i18n="[title]More"></div>
-                                <div id="world_more_menu_dropdown" class="options-content" style="display:none;">
-                                    <div class="options-menu" data-i18n="Create New World" id="world_create_world"><i class="fa-solid fa-globe fa-fw"></i> Create New World</div>
-                                    <div class="options-menu" data-i18n="Import World Info" id="world_import_menu_item"><i class="fa-solid fa-file-import fa-fw"></i> Import</div>
-                                    <div class="options-menu" data-i18n="Export World Info" id="world_export_menu_item"><i class="fa-solid fa-file-export fa-fw"></i> Export</div>
-                                    <div class="options-menu" data-i18n="Rename World Info" id="world_rename_menu_item"><i class="fa-solid fa-pencil fa-fw"></i> Rename</div>
-                                    <div class="options-menu" data-i18n="Duplicate World Info" id="world_duplicate_menu_item"><i class="fa-solid fa-paste fa-fw"></i> Duplicate</div>
-                                    <hr class="options-content-hr">
-                                    <div class="options-menu redWarningBG" data-i18n="Delete World Info" id="world_delete_menu_item"><i class="fa-solid fa-trash-can fa-fw"></i> Delete</div>
-                                    <hr class="options-content-hr">
-                                    <div class="options-menu" data-i18n="Fill empty Memo/Titles with Keywords" id="world_backfill_memos"><i class="fa-solid fa-notes-medical fa-fw"></i> Backfill Memos</div>
-                                    <div class="options-menu" data-i18n="Apply current sorting as Order" id="world_apply_current_sorting"><i class="fa-solid fa-arrow-down-9-1 fa-fw"></i> Apply Sorting</div>
-                                    <div class="options-menu" data-i18n="Refresh" id="world_refresh"><i class="fa-solid fa-arrows-rotate fa-fw"></i> Refresh</div>
+                            <div class="wi-toolbar-world-group">
+                                <select id="world_editor_select">
+                                    <option value="" data-i18n="--- Pick to Edit ---">--- Pick to Edit ---</option>
+                                </select>
+                                <div id="world_create_button" class="menu_button fa-solid fa-plus" title="New Entry" data-i18n="[title]New Entry"></div>
+                            </div>
+                            <div class="wi-toolbar-filter-group">
+                                <input type="search" class="text_pole textarea_compact" data-i18n="[placeholder]Search..." id="world_info_search" placeholder="Search...">
+                                <select id="world_info_sort_order" class="text_pole textarea_compact">
+                                    <option data-rule="search" value="14" data-i18n="Search" hidden>Search</option>
+                                    <option data-rule="priority" value="0" data-i18n="Priority">Priority</option>
+                                    <option data-rule="custom" value="13" data-i18n="Custom">Custom</option>
+                                    <option data-order="asc" data-field="comment" value="1" data-i18n="Title A-Z">Title A-Z</option>
+                                    <option data-order="desc" data-field="comment" value="2" data-i18n="Title Z-A">Title Z-A</option>
+                                    <option data-order="asc" data-field="content" data-rule="length" value="3" data-i18n="Tokens ↗">Tokens ↗</option>
+                                    <option data-order="desc" data-field="content" data-rule="length" value="4" data-i18n="Tokens ↘">Tokens ↘</option>
+                                    <option data-order="asc" data-field="depth" value="5" data-i18n="Depth ↗">Depth ↗</option>
+                                    <option data-order="desc" data-field="depth" value="6" data-i18n="Depth ↘">Depth ↘</option>
+                                    <option data-order="asc" data-field="order" value="7" data-i18n="Order ↗">Order ↗</option>
+                                    <option data-order="desc" data-field="order" value="8" data-i18n="Order ↘">Order ↘</option>
+                                    <option data-order="asc" data-field="uid" value="9" data-i18n="UID ↗">UID ↗</option>
+                                    <option data-order="desc" data-field="uid" value="10" data-i18n="UID ↘">UID ↘</option>
+                                    <option data-order="asc" data-field="probability" value="11" data-i18n="Trigger% ↗">Trigger% ↗</option>
+                                    <option data-order="desc" data-field="probability" value="12" data-i18n="Trigger% ↘">Trigger% ↘</option>
+                                </select>
+                                <div id="world_multi_select" class="menu_button" data-i18n="Multi-select" title="Multi-select" style="display:none;">多选</div>
+                                <div id="world_more_menu_wrapper" class="menu_button_icon">
+                                    <div id="world_more_menu" class="menu_button fa-solid fa-ellipsis" title="More" data-i18n="[title]More"></div>
+                                    <div id="world_more_menu_dropdown" class="options-content" style="display:none;">
+                                        <div class="options-menu" data-i18n="Create New World" id="world_create_world"><i class="fa-solid fa-globe fa-fw"></i> <span data-i18n="Create New World">Create New World</span></div>
+                                        <div class="options-menu" data-i18n="Import World Info" id="world_import_menu_item"><i class="fa-solid fa-file-import fa-fw"></i> <span data-i18n="Import World Info">Import</span></div>
+                                        <div class="options-menu" data-i18n="Export World Info" id="world_export_menu_item"><i class="fa-solid fa-file-export fa-fw"></i> <span data-i18n="Export World Info">Export</span></div>
+                                        <div class="options-menu" data-i18n="Rename World Info" id="world_rename_menu_item"><i class="fa-solid fa-pencil fa-fw"></i> <span data-i18n="Rename World Info">Rename</span></div>
+                                        <div class="options-menu" data-i18n="Duplicate World Info" id="world_duplicate_menu_item"><i class="fa-solid fa-paste fa-fw"></i> <span data-i18n="Duplicate World Info">Duplicate</span></div>
+                                        <hr class="options-content-hr">
+                                        <div class="options-menu redWarningBG" data-i18n="Delete World Info" id="world_delete_menu_item"><i class="fa-solid fa-trash-can fa-fw"></i> <span data-i18n="Delete World Info">Delete</span></div>
+                                        <hr class="options-content-hr">
+                                        <div class="options-menu" data-i18n="Fill empty Memo/Titles with Keywords" id="world_backfill_memos"><i class="fa-solid fa-notes-medical fa-fw"></i> <span data-i18n="Fill empty Memo/Titles with Keywords">Backfill Memos</span></div>
+                                        <div class="options-menu" data-i18n="Apply current sorting as Order" id="world_apply_current_sorting"><i class="fa-solid fa-arrow-down-9-1 fa-fw"></i> <span data-i18n="Apply current sorting as Order">Apply Sorting</span></div>
+                                        <div class="options-menu" data-i18n="Refresh" id="world_refresh"><i class="fa-solid fa-arrows-rotate fa-fw"></i> <span data-i18n="Refresh">Refresh</span></div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
