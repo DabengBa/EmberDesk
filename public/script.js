@@ -12210,6 +12210,7 @@ jQuery(async function () {
             '.text_pole',
             '#toast-container',
             '.select2-results',
+            '.wi-content-editor-modal',
         ];
 
         for (const id of forbiddenTargets) {

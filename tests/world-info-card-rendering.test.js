@@ -59,4 +59,29 @@ describe('world info card rendering', () => {
         expect(source).toContain('worldEntriesList.find(\'.wi-card-expand-button\')');
         expect(source).not.toContain('worldEntriesList.find(\'.wi-card-body-wrap, .wi-card-expand-button\')');
     });
+
+    test('expanded card uses explicit edit affordances and dense content layout', () => {
+        const indexHtml = read('public/index.html');
+        const css = read('public/css/world-info.css');
+
+        expect(indexHtml).toContain('class="wi-card-title-edit fa-solid fa-pencil"');
+        expect(indexHtml).toContain('class="world_entry_thin_controls wi-content-grid flex2"');
+        expect(indexHtml).toContain('class="wi-content-open"');
+        expect(indexHtml).toContain('class="wi-content-preview is-empty"');
+        expect(indexHtml).toContain('class="wi-content-editor-modal"');
+        expect(indexHtml).toContain('class="wi-content-editor-meta"');
+        expect(indexHtml).toContain('class="wi-content-flags flex-container flexFlowColumn"');
+        expect(indexHtml).not.toContain('data-i18n="Content" class="mdhotkey_location"');
+        expect(css).toContain('.wi-content-grid');
+        expect(css).toContain('.wi-content-open');
+        expect(css).toContain('.wi-content-editor-modal');
+        expect(css).toContain('grid-template-columns: repeat(2, minmax(220px, 1fr));');
+        expect(css).toContain('.wi-content-flags .checkbox:hover');
+        expect(css).toContain('flex: 1 1 100% !important;');
+        expect(css).toContain('.wi-content-editor-panel textarea[name="content"]');
+        expect(css).toContain('.world_entry_form_horizontal[name="WIEntryBottomControls"]');
+        expect(css).toContain('border-top: 1px solid color-mix(in oklch, var(--SmartThemeBorderColor), transparent 48%);');
+        expect(css).not.toContain('grid-template-columns: minmax(0, 1fr) minmax(150px, 0.38fr);');
+        expect(css).not.toContain('.wi-accordion {\n    border: 1px solid var(--SmartThemeBorderColor);');
+    });
 });

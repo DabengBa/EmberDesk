@@ -3297,7 +3297,10 @@
                             <div class="wi-card-expand-button fa-solid fa-chevron-right" role="button" tabindex="0" title="Expand entry" data-i18n="[title]Expand entry"></div>
                             <div class="wi-card-body-wrap">
                                 <div class="wi-card-title-row flex-container alignitemscenter wide100p">
-                                    <textarea class="wi-card-title-input text_pole" rows="1" name="comment" title="Edit entry title" data-i18n="[placeholder]Entry Title/Memo;[title]Edit entry title" placeholder="Entry Title/Memo"></textarea>
+                                    <div class="wi-card-title-field">
+                                        <textarea class="wi-card-title-input text_pole" rows="1" name="comment" title="Edit entry title" data-i18n="[placeholder]Entry Title/Memo;[title]Edit entry title" placeholder="Entry Title/Memo"></textarea>
+                                        <i class="wi-card-title-edit fa-solid fa-pencil" aria-hidden="true"></i>
+                                    </div>
                                     <select name="position" class="wi-card-position-control" title="Position" data-i18n="[title]Position">
                                         <option value="0" data-role="">↑Char</option>
                                         <option value="1" data-role="">↓Char</option>
@@ -3316,9 +3319,8 @@
                                         <option value="vectorized" title="Vectorized" data-i18n="[title]WI_Entry_Status_Vectorized">🔗</option>
                                     </select>
                                 </div>
-                                <div class="wi-card-keywords-preview" name="keywordsPreview"></div>
                             </div>
-                            <button type="button" class="wi-card-active-toggle killSwitch" name="entryKillSwitch" title="Toggle entry active state" data-i18n="[title]Toggle entry active state" aria-pressed="true">
+                            <button type="button" class="wi-card-active-toggle killSwitch" name="entryKillSwitch" title="Toggle entry active state" data-i18n="[title]Toggle entry active state" aria-label="Toggle entry active state" aria-pressed="true">
                                 <span class="wi-card-active-toggle-track">
                                     <span class="wi-card-active-toggle-knob"></span>
                                 </span>
@@ -3408,22 +3410,35 @@
                     <div class="wi-accordion" data-group="content" data-default="open">
                     <div class="wi-accordion-header" data-i18n="Content">Content</div>
                     <div class="wi-accordion-content">
-                    <div name="contentAndCharFilterBlock" class="world_entry_thin_controls flex2">
+                    <div name="contentAndCharFilterBlock" class="world_entry_thin_controls wi-content-grid flex2">
                         <div class="world_entry_form_control flex1">
-                            <label for="content ">
-                                <small>
-                                    <span class="alignitemscenter flex-container flexnowrap wide100p justifySpaceBetween">
-                                        <span class="alignitemscenter flex-container">
-                                            <span data-i18n="Content" class="mdhotkey_location">
-                                                Content
+                            <button type="button" class="wi-content-open" title="Open content editor" data-i18n="[title]Open content editor">
+                                <span class="wi-content-preview is-empty" data-i18n="No content yet">No content yet</span>
+                                <span class="wi-content-summary-meta">
+                                    <span class="wi-content-counter">
+                                        <span data-i18n="extension_token_counter">Tokens:</span>&nbsp;<span class="world_entry_form_token_counter" data-first-run="true">counting...</span>
+                                    </span>
+                                    <span class="wi-content-summary-icon fa-solid fa-maximize" aria-hidden="true"></span>
+                                </span>
+                            </button>
+                            <div class="wi-content-editor-modal" role="dialog" aria-modal="true" aria-hidden="true" hidden>
+                                <div class="wi-content-editor-backdrop"></div>
+                                <div class="wi-content-editor-panel">
+                                    <div class="wi-content-editor-header">
+                                        <div class="wi-content-editor-heading">
+                                            <strong class="wi-content-editor-title" data-i18n="Content editor">Content editor</strong>
+                                            <span class="wi-content-editor-meta">
+                                                <span data-i18n="extension_token_counter">Tokens:</span>&nbsp;<span class="world_entry_form_token_counter" data-first-run="true">counting...</span>
+                                                <span class="world_entry_form_uid_value" data-first-run="true"></span>
                                             </span>
-                                            <i class="editor_maximize fa-solid fa-maximize right_menu_button" title="Expand the editor" data-i18n="[title]Expand the editor"></i>
-                                        </span>
-                                        <span>
-                                            (<span data-i18n="extension_token_counter">Tokens:</span>&nbsp; <span class="world_entry_form_token_counter" data-first-run="true">counting...</span>)&nbsp;
-                                            <span class="world_entry_form_uid_value" data-first-run="true"></span>
-                                        </span>
-                                        <div class="flex-container flexFlowColumn" style="gap:2px;">
+                                        </div>
+                                        <button type="button" class="menu_button menu_button_icon wi-content-editor-close" title="Close" data-i18n="[title]Close">
+                                            <i class="fa-solid fa-xmark"></i>
+                                        </button>
+                                    </div>
+                                    <textarea class="text_pole mdHotkeys" name="content" rows="16" data-i18n="[placeholder]What this keyword should mean to the AI, sent verbatim" placeholder="What this keyword should mean to the AI, sent verbatim"></textarea>
+                                    <div class="wi-content-editor-footer">
+                                        <div class="wi-content-flags flex-container flexFlowColumn">
                                             <label class="checkbox flex-container alignitemscenter flexNoGap" data-i18n="[title]This entry will not be recursively activated by other entries." title="This entry will not be recursively activated by other entries.">
                                                 <input type="checkbox" name="excludeRecursion" />
                                                 <span data-i18n="Non-recursable">Non-recursable</span>
@@ -3441,10 +3456,9 @@
                                                 <span data-i18n="Ignore budget">Ignore budget</span>
                                             </label>
                                         </div>
-                                    </span>
-                                </small>
-                            </label>
-                            <textarea class="text_pole mdHotkeys" name="content" rows="8" data-i18n="[placeholder]What this keyword should mean to the AI, sent verbatim" placeholder="What this keyword should mean to the AI, sent verbatim"></textarea>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     </div></div>

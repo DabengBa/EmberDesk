@@ -3495,7 +3495,7 @@ async function updateEntryPositionFromSelect($select, entry, data, name, templat
  */
 /**
  * Renders a collapsed card header for a world info entry.
- * The card shows: title, position tag, status light, and keywords preview.
+ * The card shows: title, position tag, and status light.
  * Clicking the card expands it to the full edit form via getWorldEntry.
  *
  * @param {string} name - World book name
@@ -3569,15 +3569,6 @@ export function renderCollapsedCard(name, data, entry) {
         template.toggleClass('disabledWIEntry', data.entries[entry.uid].disable === true);
         await saveWorldInfo(name, data);
     });
-
-    // Keywords preview
-    const preview = template.find('.wi-card-keywords-preview');
-    if (entry.key && entry.key.length > 0) {
-        const isConstant = entry.constant === true;
-        if (!isConstant) {
-            preview.text(entry.key.join(', '));
-        }
-    }
 
     // Disabled state
     if (entry.disable === true) {
@@ -3872,19 +3863,64 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
     }, debounce_timeout.relaxed);
     const contentInputId = `world_entry_content_${entry.uid}`;
     const contentInput = editTemplate.find('textarea[name="content"]');
+    const contentPreview = editTemplate.find('.wi-content-preview');
+    const contentEditor = editTemplate.find('.wi-content-editor-modal');
+    const contentOpenButton = editTemplate.find('.wi-content-open');
+    const contentCloseButton = editTemplate.find('.wi-content-editor-close');
+    const updateContentPreview = (value) => {
+        const preview = String(value || '').replace(/\s+/g, ' ').trim();
+        contentPreview.text(preview || t`No content yet`);
+        contentPreview.toggleClass('is-empty', !preview);
+    };
+    const openContentEditor = () => {
+        contentEditor.removeAttr('hidden').attr('aria-hidden', 'false').addClass('is-open');
+        contentOpenButton.attr('aria-expanded', 'true');
+        requestAnimationFrame(() => contentInput.trigger('focus'));
+    };
+    const closeContentEditor = () => {
+        contentEditor.attr('hidden', '').attr('aria-hidden', 'true').removeClass('is-open');
+        contentOpenButton.attr('aria-expanded', 'false').trigger('focus');
+    };
+
+    contentOpenButton.attr('aria-controls', `world_entry_content_editor_${entry.uid}`).attr('aria-expanded', 'false');
+    contentEditor.attr('id', `world_entry_content_editor_${entry.uid}`);
+    contentOpenButton.off('click.wiContentEditor').on('click.wiContentEditor', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        openContentEditor();
+    });
+    contentCloseButton.off('click.wiContentEditor').on('click.wiContentEditor', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        closeContentEditor();
+    });
+    contentEditor.find('.wi-content-editor-backdrop').off('click.wiContentEditor').on('click.wiContentEditor', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        closeContentEditor();
+    });
+    contentEditor.find('.wi-content-editor-panel').off('click.wiContentEditor').on('click.wiContentEditor', function (e) {
+        e.stopPropagation();
+    });
+    contentEditor.off('keydown.wiContentEditor').on('keydown.wiContentEditor', function (e) {
+        if (e.key === 'Escape') {
+            e.stopPropagation();
+            closeContentEditor();
+        }
+    });
     contentInput.data('uid', entry.uid);
     contentInput.attr('id', contentInputId);
     contentInput[0].dataset.macros = '';
     contentInput.on('input', async function (_, { skipCount, noSave } = {}) {
         const uid = $(this).data('uid');
         const value = $(this).val();
+        updateContentPreview(value);
         data.entries[uid].content = value;
         setWIOriginalDataValue(data, uid, 'content', data.entries[uid].content);
         !noSave && await saveWorldInfo(name, data);
         if (!skipCount) countTokensDebounced(counter, value);
     });
     contentInput.val(entry.content).trigger('input', { skipCount: true, noSave: true });
-    editTemplate.find('.editor_maximize').attr('data-for', contentInputId);
 
     // Outlet name
     const outletNameInput = editTemplate.find('input[name="outletName"]');
