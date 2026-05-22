@@ -1207,43 +1207,36 @@
                         </a>
                     </h3>
                 </div>
-                <div id="wi-holder" class="margin5">
-                    <div id="wiTopBlock" class="flex-container">
-                        <div id="WIMultiSelector" class="flex1 flex alignSelfStart range-block">
-                            <div class="range-block-title justifyLeft">
-                                <span>
-                                    <small data-i18n="Active World(s) for all chats">
-                                        Active World(s) for all chats
-                                    </small>
-                                </span>
+                <div id="wi-holder" class="margin5 wi-workbench">
+                    <section id="wiGlobalPanel" class="wi-section wi-global-panel" aria-labelledby="wiGlobalPanelTitle">
+                        <div class="wi-section-header">
+                            <div class="wi-section-heading">
+                                <span id="wiGlobalPanelTitle" class="wi-section-title" data-i18n="Global World Info">Global World Info</span>
+                                <span class="wi-section-subtitle" data-i18n="Applies to all chats">Applies to all chats</span>
                             </div>
-                            <div class="range-block-range">
-                                <select id="world_info" multiple>
+                        </div>
+                        <div id="wiTopBlock" class="wi-global-grid inline-drawer wide100p">
+                            <div id="WIMultiSelector" class="wi-global-control">
+                                <select id="world_info" multiple aria-label="Global World Info">
                                     <option value="" data-i18n="-- World Info not found --">-- World Info not found -- </option>
                                 </select>
                             </div>
-                        </div>
-                        <div class="flex1 flex alignSelfStart range-block">
-                            <div class="range-block-title justifyLeft">
-                                <small data-i18n="Global World Info/Lorebook activation settings">
-                                    Global World Info/Lorebook activation settings
-                                </small>
-                            </div>
-                            <div class="inline-drawer wide100p flexFlowColumn">
-                                <div class="standoutHeader inline-drawer-toggle inline-drawer-header">
-                                    <b><span data-i18n="Click to expand">Click to expand</span></b>
+                            <div class="wi-global-settings">
+                                <div class="wi-settings-toggle inline-drawer-toggle inline-drawer-header">
+                                    <span data-i18n="Activation Rules">Activation Rules</span>
                                     <div class="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
                                 </div>
-                                <div class="inline-drawer-content">
-                                    <div id="wiActivationSettings" class="flex-container">
-                                        <div id="wiSliders" class="flex2 flex-container">
-                                            <div class="alignitemscenter flex-container flexFlowColumn flexGrow flexShrink gap0 flexBasis48p">
-                                                <small>
-                                                    <span data-i18n="Scan Depth">Scan Depth</span>
-                                                </small>
-                                                <input class="neo-range-slider" type="range" id="world_info_depth" name="world_info_depth" min="0" max="1000" step="1">
-                                                <input class="neo-range-input" type="number" min="0" max="1000" step="1" data-for="world_info_depth" id="world_info_depth_counter">
-                                            </div>
+                            </div>
+                            <div class="inline-drawer-content wi-global-rules-content">
+                                <div id="wiActivationSettings" class="flex-container">
+                                    <div id="wiSliders" class="flex2 flex-container">
+                                        <div class="alignitemscenter flex-container flexFlowColumn flexGrow flexShrink gap0 flexBasis48p">
+                                            <small>
+                                                <span data-i18n="Scan Depth">Scan Depth</span>
+                                            </small>
+                                            <input class="neo-range-slider" type="range" id="world_info_depth" name="world_info_depth" min="0" max="1000" step="1">
+                                            <input class="neo-range-input" type="number" min="0" max="1000" step="1" data-for="world_info_depth" id="world_info_depth_counter">
+                                        </div>
 
                                             <div class="alignitemscenter flex-container flexFlowColumn flexGrow flexShrink gap0 flexBasis48p">
                                                 <small>
@@ -1341,14 +1334,21 @@
                                 </div>
                             </div>
                         </div>
-                    </div>
-                    <div id="world_popup" data-deferred-panel="world-info-body">
-                        <div class="deferred-panel-placeholder" style="padding:1em;color:var(--SmartThemeQuoteColor);text-align:center;">
-                            <i class="fa-solid fa-spinner fa-spin"></i> <span data-i18n="Loading…">Loading…</span>
+                    </section>
+                    <section id="wiEditorPanel" class="wi-section wi-editor-panel" aria-labelledby="wiEditorPanelTitle">
+                        <div class="wi-section-header">
+                            <div class="wi-section-heading">
+                                <span id="wiEditorPanelTitle" class="wi-section-title" data-i18n="World Info Editor">World Info Editor</span>
+                                <span class="wi-section-subtitle" data-i18n="Edit entries">Edit entries</span>
+                            </div>
                         </div>
-                    </div>
+                        <div id="world_popup" data-deferred-panel="world-info-body">
+                            <div class="deferred-panel-placeholder" style="padding:1em;color:var(--SmartThemeQuoteColor);text-align:center;">
+                                <i class="fa-solid fa-spinner fa-spin"></i> <span data-i18n="Loading…">Loading…</span>
+                            </div>
+                        </div>
+                    </section>
                 </div>
-            </div>
         </div>
         <div id="user-settings-button" class="drawer">
             <div class="drawer-toggle">

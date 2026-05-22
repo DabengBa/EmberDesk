@@ -3588,18 +3588,16 @@ export function renderCollapsedCard(name, data, entry) {
 }
 
 /**
- * Updates the status light CSS class based on entry state.
+ * Updates the active toggle CSS class based on whether the entry is enabled.
  */
 function updateStatusLight($template, entry) {
     const light = $template.find('.wi-card-active-toggle');
-    light.removeClass('wi-status-enabled-constant wi-status-enabled-keyword wi-status-disabled');
+    light.removeClass('wi-status-enabled wi-status-enabled-constant wi-status-enabled-keyword wi-status-disabled');
     light.attr('aria-pressed', entry.disable === true ? 'false' : 'true');
     if (entry.disable === true) {
         light.addClass('wi-status-disabled');
-    } else if (entry.constant === true) {
-        light.addClass('wi-status-enabled-constant');
     } else {
-        light.addClass('wi-status-enabled-keyword');
+        light.addClass('wi-status-enabled');
     }
 }
 

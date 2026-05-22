@@ -12,6 +12,42 @@ function read(relativePath) {
     return fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
 }
 
+function getTopSettingsDrawerIds(indexHtml) {
+    const tagPattern = /<\/?div\b[^>]*>/gi;
+    const stack = [];
+    const drawers = [];
+    let inTopSettings = false;
+    let topSettingsDepth = -1;
+    let match;
+
+    while ((match = tagPattern.exec(indexHtml)) !== null) {
+        const tag = match[0];
+        const isClose = tag.startsWith('</');
+
+        if (!isClose) {
+            const id = tag.match(/id="([^"]+)"/)?.[1] ?? '';
+            const className = tag.match(/class="([^"]+)"/)?.[1] ?? '';
+
+            if (id === 'top-settings-holder') {
+                inTopSettings = true;
+                topSettingsDepth = stack.length;
+            } else if (inTopSettings && stack.length === topSettingsDepth + 1 && /\bdrawer\b/.test(className)) {
+                drawers.push(id);
+            }
+
+            stack.push({ id, className });
+        } else {
+            const openTag = stack.pop();
+
+            if (openTag?.id === 'top-settings-holder') {
+                break;
+            }
+        }
+    }
+
+    return drawers;
+}
+
 describe('world info card rendering', () => {
     test('pagination appends card DOM nodes, not raw jQuery wrapper arrays', () => {
         const source = read('public/scripts/world-info.js');
@@ -58,6 +94,54 @@ describe('world info card rendering', () => {
         expect(indexHtml).toContain('class="wi-card-active-toggle');
         expect(source).toContain('worldEntriesList.find(\'.wi-card-expand-button\')');
         expect(source).not.toContain('worldEntriesList.find(\'.wi-card-body-wrap, .wi-card-expand-button\')');
+    });
+
+    test('world info panel separates global activation from entry editing', () => {
+        const indexHtml = read('public/index.html');
+        const panelHtml = read('public/panels/world-info-body.html');
+        const css = read('public/css/world-info.css');
+
+        expect(indexHtml).toContain('id="wiGlobalPanel"');
+        expect(indexHtml).toContain('data-i18n="Global World Info"');
+        expect(indexHtml).not.toContain('data-i18n="Enabled worlds"');
+        expect(indexHtml).toContain('data-i18n="Activation Rules"');
+        expect(indexHtml).toContain('id="wiEditorPanel"');
+        expect(indexHtml).toContain('data-i18n="World Info Editor"');
+        expect(indexHtml).toContain('id="wiTopBlock" class="wi-global-grid inline-drawer wide100p"');
+        expect(indexHtml).toContain('class="inline-drawer-content wi-global-rules-content"');
+        expect(panelHtml).toContain('id="world_editor_select"');
+        expect(css).toContain('.wi-global-grid');
+        expect(css).toContain('.wi-global-rules-content');
+        expect(css).toContain('grid-column: 1 / -1;');
+        expect(css).toContain('.wi-settings-toggle');
+    });
+
+    test('world info drawer keeps the remaining top menu drawers in the top bar', () => {
+        const indexHtml = read('public/index.html');
+
+        expect(getTopSettingsDrawerIds(indexHtml)).toEqual([
+            'ai-config-button',
+            'sys-settings-button',
+            'advanced-formatting-button',
+            'WI-SP-button',
+            'user-settings-button',
+            'backgrounds-button',
+            'extensions-settings-button',
+            'persona-management-button',
+            'rightNavHolder',
+        ]);
+    });
+
+    test('entry active toggle color is independent from entry state', () => {
+        const source = read('public/scripts/world-info.js');
+        const css = read('public/css/world-info.css');
+
+        expect(source).toContain('light.addClass(\'wi-status-enabled\');');
+        expect(source).not.toContain('light.addClass(\'wi-status-enabled-constant\');');
+        expect(source).not.toContain('light.addClass(\'wi-status-enabled-keyword\');');
+        expect(css).toContain('.wi-card-active-toggle.wi-status-enabled .wi-card-active-toggle-track');
+        expect(css).not.toContain('.wi-card-active-toggle.wi-status-enabled-constant .wi-card-active-toggle-track');
+        expect(css).not.toContain('.wi-card-active-toggle.wi-status-enabled-keyword .wi-card-active-toggle-track');
     });
 
     test('expanded card uses explicit edit affordances and dense content layout', () => {
