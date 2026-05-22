@@ -3872,6 +3872,7 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
     const contentInput = editTemplate.find('textarea[name="content"]');
     const contentPreview = editTemplate.find('.wi-content-preview');
     const contentEditor = editTemplate.find('.wi-content-editor-modal');
+    const contentEditorPlaceholder = $('<span class="wi-content-editor-placeholder" hidden></span>');
     const contentOpenButton = editTemplate.find('.wi-content-open');
     const contentCloseButton = editTemplate.find('.wi-content-editor-close');
     const updateContentPreview = (value) => {
@@ -3880,12 +3881,22 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
         contentPreview.toggleClass('is-empty', !preview);
     };
     const openContentEditor = () => {
+        if (contentEditor.hasClass('is-open')) {
+            contentInput.trigger('focus');
+            return;
+        }
+        contentEditorPlaceholder.insertBefore(contentEditor);
+        contentEditor.appendTo(document.body);
         contentEditor.removeAttr('hidden').attr('aria-hidden', 'false').addClass('is-open');
         contentOpenButton.attr('aria-expanded', 'true');
         requestAnimationFrame(() => contentInput.trigger('focus'));
     };
     const closeContentEditor = () => {
         contentEditor.attr('hidden', '').attr('aria-hidden', 'true').removeClass('is-open');
+        if (contentEditorPlaceholder.parent().length) {
+            contentEditor.insertAfter(contentEditorPlaceholder);
+            contentEditorPlaceholder.detach();
+        }
         contentOpenButton.attr('aria-expanded', 'false').trigger('focus');
     };
 

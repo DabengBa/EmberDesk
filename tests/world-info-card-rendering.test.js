@@ -176,4 +176,14 @@ describe('world info card rendering', () => {
         expect(css).not.toContain('grid-template-columns: minmax(0, 1fr) minmax(150px, 0.38fr);');
         expect(css).not.toContain('.wi-accordion {\n    border: 1px solid var(--SmartThemeBorderColor);');
     });
+
+    test('content editor modal is portaled while open to avoid drawer clipping', () => {
+        const source = read('public/scripts/world-info.js');
+
+        expect(source).toContain('const contentEditorPlaceholder = $(\'<span class="wi-content-editor-placeholder" hidden></span>\');');
+        expect(source).toContain('contentEditorPlaceholder.insertBefore(contentEditor);');
+        expect(source).toContain('contentEditor.appendTo(document.body);');
+        expect(source).toContain('contentEditor.insertAfter(contentEditorPlaceholder);');
+        expect(source).toContain('contentEditorPlaceholder.detach();');
+    });
 });
