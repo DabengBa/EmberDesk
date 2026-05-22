@@ -98,19 +98,22 @@
 }
 
 #world_editor_select + span.select2-container .select2-selection--single .select2-selection__rendered {
-    padding-right: 34px;
+    padding-right: 58px;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
 #world_editor_select + span.select2-container .select2-selection__clear {
-    right: 18px;
-    width: 14px;
+    right: 30px;
+    width: 18px;
+    height: 100%;
+    line-height: 1;
     text-align: center;
 }
 
 #world_editor_select + span.select2-container .select2-selection__arrow {
-    right: 2px;
+    right: 4px;
+    width: 22px;
 }
 
 #world_info_search {
