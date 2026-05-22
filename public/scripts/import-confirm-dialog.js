@@ -1,6 +1,6 @@
 import { characters, converter, substituteParams } from '../script.js';
 import { accountStorage } from './util/AccountStorage.js';
-import { callGenericPopup, POPUP_TYPE } from './popup.js';
+import { callGenericPopup, POPUP_RESULT, POPUP_TYPE } from './popup.js';
 import { power_user } from './power-user.js';
 import { tag_import_setting } from './tags.js';
 import { isScopedScriptsAllowed, allowScopedScripts } from './extensions/regex/engine.js';
@@ -186,6 +186,7 @@ export async function showUnifiedImportConfirm(results) {
         wide: false,
         customButtons: [{
             text: t`Import All`,
+            result: POPUP_RESULT.AFFIRMATIVE,
             classes: ['import-all-btn'],
             action: () => {
                 document.querySelectorAll('.import-opt-item input[type=checkbox]').forEach(cb => { cb.checked = true; });

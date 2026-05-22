@@ -2524,27 +2524,82 @@
                 <!-- end group peeking cope structure-->
 
                 <div class="scrollableInner">
-                    <div name="Solo Char Create/Edit Panel" id="rm_ch_create_block" class="right_menu flex-container flexFlowColumn" style="display: none;">
+                    <div name="Solo Char Create/Edit Panel" id="rm_ch_create_block" class="right_menu flex-container flexFlowColumn character-detail-panel" style="display: none;">
                         <form id="form_create" action="javascript:void(null);" method="post" enctype="multipart/form-data">
-                            <div id="avatar-and-name-block">
-                                <div id="name_div">
+                            <div id="avatar-and-name-block" class="character-detail-identity">
+                                <div id="name_div" class="character-detail-name">
                                     <input id="character_name_pole" name="ch_name" class="text_pole" data-i18n="[placeholder]Name this character" placeholder="Name this character" value="" autocomplete="off">
-                                    <div class="extension_token_counter">
+                                    <div class="extension_token_counter character-detail-name-meta">
                                         <span data-i18n="extension_token_counter">Tokens:</span> <span data-token-counter="character_name_pole" data-token-permanent="true">counting...</span>
                                     </div>
                                 </div>
-                                <div class="flex-container flexFlowColumn expander flexNoGap">
-                                    <div id="avatar_div" class="avatar_div buttons_block alignitemsflexstart justifySpaceBetween flexnowrap">
-                                        <label id="avatar_div_div" class="add_avatar avatar" for="add_avatar_button" title="Click to select a new avatar for this character" data-i18n="[title]Click to select a new avatar for this character">
+                                <div class="flex-container flexFlowColumn expander flexNoGap character-detail-main">
+                                    <div id="avatar_div" class="avatar_div buttons_block alignitemsflexstart justifySpaceBetween flexnowrap character-detail-hero">
+                                        <label id="avatar_div_div" class="add_avatar avatar character-detail-avatar" for="add_avatar_button" title="Click to select a new avatar for this character" data-i18n="[title]Click to select a new avatar for this character">
                                             <img id="avatar_load_preview" src="img/ai4.png" alt="avatar">
                                             <input hidden type="file" id="add_avatar_button" name="avatar" accept="image/*">
                                         </label>
                                         <div class="flex-container" id="avatar_controls">
-                                            <div class="form_create_bottom_buttons_block buttons_block">
+                                            <div class="form_create_bottom_buttons_block buttons_block character-detail-primary-actions">
                                                 <div id="rm_button_back" class="menu_button fa-solid fa-left-long "></div>
                                                 <!-- <div id="renameCharButton" class="menu_button fa-solid fa-user-pen" title="Rename Character"></div> -->
                                                 <div id="favorite_button" class="menu_button fa-solid fa-star" title="Add to Favorites" data-i18n="[title]Add to Favorites"></div>
                                                 <input type="hidden" id="fav_checkbox" name="fav" />
+                                                <label for="create_button" id="create_button_label" class="menu_button fa-solid fa-user-check" title="Create Character" data-i18n="[title]Create Character">
+                                                    <input type="submit" id="create_button" name="create_button">
+                                                </label>
+                                                <label class="character-detail-more" for="char-management-dropdown">
+                                                    <select id="char-management-dropdown" class="text_pole">
+                                                        <option value="default" disabled selected data-i18n="More...">More...</option>
+                                                        <option id="character_action_advanced" data-i18n="Advanced Definition">
+                                                            Advanced Definition
+                                                        </option>
+                                                        <option id="set_character_world" data-i18n="Link to World Info">
+                                                            Link to World Info
+                                                        </option>
+                                                        <option id="character_action_chat_lorebook" data-i18n="Chat Lore">
+                                                            Chat Lore
+                                                        </option>
+                                                        <option id="import_character_info" data-i18n="Import Card Lore">
+                                                            Import Card Lore
+                                                        </option>
+                                                        <option id="set_chat_character_settings" data-i18n="Character Settings Overrides">
+                                                            Character Settings Overrides
+                                                        </option>
+                                                        <option id="character_action_connected_personas" class="character-detail-edit-action" data-i18n="Connected Personas">
+                                                            Connected Personas
+                                                        </option>
+                                                        <option id="convert_to_persona" data-i18n="Convert to Persona">
+                                                            Convert to Persona
+                                                        </option>
+                                                        <option id="renameCharButton" data-i18n="Rename">
+                                                            Rename
+                                                        </option>
+                                                        <option id="character_source" data-i18n="Link to Source">
+                                                            Link to Source
+                                                        </option>
+                                                        <option id="replace_update" data-i18n="Replace / Update">
+                                                            Replace / Update
+                                                        </option>
+                                                        <option id="import_tags" data-i18n="Import Tags">
+                                                            Import Tags
+                                                        </option>
+                                                        <option id="set_as_assistant" data-i18n="Set / Unset as Welcome Page Assistant">
+                                                            Set / Unset as Welcome Page Assistant
+                                                        </option>
+                                                        <option id="character_action_export" class="character-detail-edit-action" data-i18n="Export and Download">
+                                                            Export
+                                                        </option>
+                                                        <option id="character_action_duplicate" class="character-detail-edit-action" data-i18n="Duplicate Character">
+                                                            Duplicate
+                                                        </option>
+                                                        <option id="delete_from_dropdown" class="red_button character-detail-edit-action" data-i18n="Delete Character">
+                                                            Delete Character
+                                                        </option>
+                                                    </select>
+                                                </label>
+                                            </div>
+                                            <div class="character-detail-hidden-actions" aria-hidden="true">
                                                 <div id="advanced_div" class="menu_button fa-solid fa-book " title="Advanced Definitions" data-i18n="[title]Advanced Definition"></div>
                                                 <div id="world_button" class="menu_button fa-solid fa-globe" title="Character Lore&#10;&#10;Click to load&#10;Shift/Alt-click or long-press to open 'Link to World Info' popup" data-i18n="[title]world_button_title"></div>
                                                 <div class="chat_lorebook_button menu_button fa-solid fa-passport" title="Chat Lore&#10;&#10;Click to load&#10;Shift/Alt-click or long-press to open 'Link to Chat Lorebook' popup" data-i18n="[title]chat_lorebook_button_title"></div>
@@ -2553,52 +2608,8 @@
                                                 <!-- <div id="set_chat_character_settings" class="menu_button fa-solid fa-scroll" title="Set a chat scenario override"></div> -->
                                                 <!-- <div id="set_character_world" class="menu_button fa-solid fa-globe" title="Set a character World Info / Lorebook"></div> -->
                                                 <div id="dupe_button" class="menu_button fa-solid fa-clone " title="Duplicate Character" data-i18n="[title]Duplicate Character"></div>
-                                                <label for="create_button" id="create_button_label" class="menu_button fa-solid fa-user-check" title="Create Character" data-i18n="[title]Create Character">
-                                                    <input type="submit" id="create_button" name="create_button">
-                                                </label>
                                                 <div id="delete_button" class="menu_button fa-solid fa-skull red_button" title="Delete Character" data-i18n="[title]Delete Character"></div>
                                             </div>
-                                            <label class="flex1 height100p" for="char-management-dropdown">
-                                                <select id="char-management-dropdown" class="text_pole">
-                                                    <option value="default" disabled selected data-i18n="More...">More...</option>
-                                                    <option id="set_character_world" data-i18n="Link to World Info">
-                                                        Link to World Info
-                                                    </option>
-                                                    <option id="import_character_info" data-i18n="Import Card Lore">
-                                                        Import Card Lore
-                                                    </option>
-                                                    <option id="set_chat_character_settings" data-i18n="Character Settings Overrides">
-                                                        Character Settings Overrides
-                                                    </option>
-                                                    <option id="convert_to_persona" data-i18n="Convert to Persona">
-                                                        Convert to Persona
-                                                    </option>
-                                                    <option id="renameCharButton" data-i18n="Rename">
-                                                        Rename
-                                                    </option>
-                                                    <option id="character_source" data-i18n="Link to Source">
-                                                        Link to Source
-                                                    </option>
-                                                    <option id="replace_update" data-i18n="Replace / Update">
-                                                        Replace / Update
-                                                    </option>
-                                                    <option id="import_tags" data-i18n="Import Tags">
-                                                        Import Tags
-                                                    </option>
-                                                    <option id="set_as_assistant" data-i18n="Set / Unset as Welcome Page Assistant">
-                                                        Set / Unset as Welcome Page Assistant
-                                                    </option>
-                                                    <option id="delete_from_dropdown" class="red_button" data-i18n="Delete Character">
-                                                        Delete Character
-                                                    </option>
-                                                    <!--<option id="dupe_button">
-                                                            Duplicate
-                                                        </option>
-                                                        <option id="export_button">
-                                                            Export
-                                                        </option>-->
-                                                </select>
-                                            </label>
                                         </div>
                                     </div>
                                     <div id="tags_div">
@@ -2610,9 +2621,9 @@
                                     </div>
                                 </div>
                             </div>
-                            <div id="spoiler_free_desc" class="inline-drawer flex-container flexFlowColumn flexNoGap">
+                            <div id="spoiler_free_desc" class="inline-drawer flex-container flexFlowColumn flexNoGap character-detail-section character-detail-notes">
                                 <div class="inline-drawer-toggle inline-drawer-header padding0 gap5px standoutHeader">
-                                    <div id="creators_notes_div" class="title_restorable flexGap5 wide100p ">
+                                    <div id="creators_notes_div" class="title_restorable flexGap5 wide100p character-detail-section-header">
                                         <span class="flex1" data-i18n="Creator's Notes">Creator's Notes</span>
                                         <div id="creators_note_styles_button" class="margin0 menu_button fa-solid fa-palette fa-fw" title="Allow / Forbid the use of global styles for this character." data-i18n="[title]Allow / Forbid the use of global styles for this character."></div>
                                         <div id="spoiler_free_desc_button" class="margin0 menu_button fa-solid fa-eye fa-fw" title="Show / Hide Description and First Message" data-i18n="[title]Show / Hide Description and First Message"></div>
@@ -2629,8 +2640,8 @@
                                 </div>
                             </div>
                             <small id="creators_note_desc_hidden" data-i18n="Character details are hidden.">Character details are hidden.</small>
-                            <div id="descriptionWrapper" class="flex-container flexFlowColumn flex1">
-                                <div id="description_div" class="title_restorable">
+                            <div id="descriptionWrapper" class="flex-container flexFlowColumn flex1 character-detail-section">
+                                <div id="description_div" class="title_restorable character-detail-section-header">
                                     <div class="flex-container alignitemscenter">
                                         <span data-i18n="Character Description" class="mdhotkey_location">Description</span>
                                         <i class="editor_maximize fa-solid fa-maximize right_menu_button" data-for="description_textarea" title="Expand the editor" data-i18n="[title]Expand the editor"></i>
@@ -2638,7 +2649,7 @@
                                             <span class="fa-solid fa-circle-question note-link-span"></span>
                                         </a>
                                     </div>
-                                    <div id="character_open_media_overrides" class="menu_button menu_button_icon open_media_overrides" title="Click to allow/forbid the use of external media for this character." data-i18n="[title]Click to allow/forbid the use of external media for this character.">
+                                    <div id="character_open_media_overrides" class="menu_button menu_button_icon open_media_overrides" title="Click to allow/forbid the use of external media for this character." aria-label="External media" data-i18n="[title]Click to allow/forbid the use of external media for this character.">
                                         <i id="character_media_allowed_icon" class="fa-solid fa-fw fa-link"></i>
                                         <i id="character_media_forbidden_icon" class="fa-solid fa-fw fa-link-slash"></i>
                                         <span data-i18n="Ext. Media">
@@ -2646,13 +2657,13 @@
                                         </span>
                                     </div>
                                 </div>
-                                <textarea id="description_textarea" class="mdHotkeys" data-macros data-i18n="[placeholder]Describe your character's physical and mental traits here." placeholder="Describe your character's physical and mental traits here." name="description" placeholder=""></textarea>
+                                <textarea id="description_textarea" class="mdHotkeys" data-macros data-i18n="[placeholder]Description" placeholder="Description" name="description"></textarea>
                                 <div class="extension_token_counter">
                                     <span data-i18n="extension_token_counter">Tokens:</span> <span data-token-counter="description_textarea" data-token-permanent="true">counting...</span>
                                 </div>
                             </div>
-                            <div id="firstMessageWrapper" class="flex-container flexFlowColumn flex1">
-                                <div id="first_message_div" class="title_restorable">
+                            <div id="firstMessageWrapper" class="flex-container flexFlowColumn flex1 character-detail-section">
+                                <div id="first_message_div" class="title_restorable character-detail-section-header">
                                     <div class="flex-container alignitemscenter flex1">
                                         <span data-i18n="First message" class="mdhotkey_location">First message</span>
                                         <i class="editor_maximize fa-solid fa-maximize right_menu_button" data-for="firstmessage_textarea" title="Expand the editor" data-i18n="[title]Expand the editor"></i>
@@ -2660,13 +2671,13 @@
                                             <span class="fa-solid fa-circle-question note-link-span"></span>
                                         </a>
                                     </div>
-                                    <div class="menu_button menu_button_icon open_alternate_greetings margin0" title="Click to set additional greeting messages" data-i18n="[title]Click to set additional greeting messages">
+                                    <div class="menu_button menu_button_icon open_alternate_greetings margin0 fa-solid fa-message" title="Click to set additional greeting messages" aria-label="Alternate greetings" data-i18n="[title]Click to set additional greeting messages">
                                         <span data-i18n="Alt. Greetings">
                                             Alt. Greetings
                                         </span>
                                     </div>
                                 </div>
-                                <textarea id="firstmessage_textarea" class="mdHotkeys" data-macros data-i18n="[placeholder]This will be the first message from the character that starts every chat." placeholder="This will be the first message from the character that starts every chat." name="first_mes" placeholder=""></textarea>
+                                <textarea id="firstmessage_textarea" class="mdHotkeys" data-macros data-i18n="[placeholder]First message" placeholder="First message" name="first_mes"></textarea>
                                 <div class="extension_token_counter">
                                     <span data-i18n="extension_token_counter">Tokens:</span> <span data-token-counter="firstmessage_textarea">counting...</span>
                                 </div>

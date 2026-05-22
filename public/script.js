@@ -245,7 +245,7 @@ import { addChatBackupsBrowser } from './scripts/chat-backups.js';
 import { onboardingExperimentalMacroEngine } from './scripts/macros/engine/MacroDiagnostics.js';
 import { compressRequest, setRequestCompressionConfig } from './scripts/request-compression.js';
 import { canJumpToSwipeForMessage, canOpenSwipePickerForMessage, initSwipePicker } from './scripts/swipe-picker.js';
-import { removeCharactersFromState } from './scripts/character-list-state.js';
+import { getCharacterDeleteCandidates, removeCharactersFromState } from './scripts/character-list-state.js';
 import { runDeleteCharacterClosePreflight } from './scripts/delete-character-preflight.js';
 
 // API OBJECT FOR EXTERNAL WIRING
@@ -466,6 +466,22 @@ let exportPopper = Popper.createPopper(document.getElementById('export_button'),
     placement: 'left',
 });
 let isExportPopupOpen = false;
+
+function toggleCharacterExportPopup(referenceElement = document.getElementById('export_button')) {
+    const exportPopup = document.getElementById('export_format_popup');
+    if (!(referenceElement instanceof HTMLElement) || !(exportPopup instanceof HTMLElement)) {
+        return;
+    }
+
+    exportPopper?.destroy();
+    exportPopper = Popper.createPopper(referenceElement, exportPopup, {
+        placement: 'left',
+    });
+
+    isExportPopupOpen = !isExportPopupOpen;
+    $(exportPopup).toggle(isExportPopupOpen);
+    exportPopper.update();
+}
 
 // Saved here for performance reasons
 const messageTemplate = $('#message_template .mes');
@@ -8628,6 +8644,7 @@ export function select_selected_character(chid, { switchMenu = true } = {}) {
     $('#dupe_button').show();
     $('#create_button_label').css('display', 'none');
     $('#char_connections_button').show();
+    $('.character-detail-edit-action').show();
 
     // Hide the chat scenario button if we're peeking the group member defs
     $('#set_chat_character_settings').toggle(!selected_group);
@@ -8720,6 +8737,7 @@ function select_rm_create({ switchMenu = true } = {}) {
     $('#create_button').attr('value', 'Create');
     $('#dupe_button').hide();
     $('#char_connections_button').hide();
+    $('.character-detail-edit-action').hide();
 
     //create text poles
     $('#rm_button_back').css('display', '');
@@ -10762,6 +10780,7 @@ export async function deleteCharacter(characterKey, { deleteChats = true, delete
     if (!Array.isArray(characterKey)) {
         characterKey = [characterKey];
     }
+    const deleteCandidates = getCharacterDeleteCandidates(characters, characterKey);
 
     const inTempChat = this_chid === undefined && name2 === neutralCharacterName;
     if (inTempChat) {
@@ -10808,22 +10827,13 @@ export async function deleteCharacter(characterKey, { deleteChats = true, delete
 
     let deleted = false;
     const deletedAvatars = [];
-    let lastSuccessfulMsg = null;
-    let lastSuccessfulResponse = null;
 
-    for (const key of characterKey) {
-        const character = characters.find(x => x.avatar == key);
-        if (!character) {
-            toastr.warning(t`Character ${key} not found. Skipping deletion.`);
-            continue;
-        }
-
-        const chid = characters.indexOf(character);
+    for (const { avatar, character, index: chid } of deleteCandidates) {
         const chatLookupStartedAt = performance.now();
-        const pastChats = await getPastCharacterChats(chid);
+        const pastChats = character ? await getPastCharacterChats(chid) : [];
         markPerfInteractionMetric('preDeleteChatLookupMs', performance.now() - chatLookupStartedAt);
 
-        const msg = { avatar_url: character.avatar, delete_chats: deleteChats };
+        const msg = { avatar_url: avatar, delete_chats: deleteChats };
 
         const deleteRequestStartedAt = performance.now();
         const response = await fetch('/api/characters/delete', {
@@ -10839,14 +10849,11 @@ export async function deleteCharacter(characterKey, { deleteChats = true, delete
             continue;
         }
 
-        lastSuccessfulMsg = msg;
-        lastSuccessfulResponse = response;
-
-        accountStorage.removeItem(`AlertWI_${character.avatar}`);
-        accountStorage.removeItem(`AlertRegex_${character.avatar}`);
-        accountStorage.removeItem(`mediaWarningShown:${character.avatar}`);
-        delete tag_map[character.avatar];
-        select_rm_info('char_delete', character.name);
+        accountStorage.removeItem(`AlertWI_${avatar}`);
+        accountStorage.removeItem(`AlertRegex_${avatar}`);
+        accountStorage.removeItem(`mediaWarningShown:${avatar}`);
+        delete tag_map[avatar];
+        select_rm_info('char_delete', character?.name ?? avatar);
 
         if (deleteChats) {
             for (const chat of pastChats) {
@@ -10855,8 +10862,8 @@ export async function deleteCharacter(characterKey, { deleteChats = true, delete
             }
         }
 
-        await eventSource.emit(event_types.CHARACTER_DELETED, { id: chid, character: character });
-        deletedAvatars.push(character.avatar);
+        await eventSource.emit(event_types.CHARACTER_DELETED, { id: chid, character: character ?? { avatar } });
+        deletedAvatars.push(avatar);
         deleted = true;
     }
 
@@ -11414,6 +11421,7 @@ jQuery(async function () {
             toastr.warning('No character selected.');
             return;
         }
+        const avatarToDelete = characters[this_chid].avatar;
 
         // Auto-stop generation if active
         if (is_send_press !== false) {
@@ -11431,7 +11439,7 @@ jQuery(async function () {
             const resp = await fetch('/api/characters/delete-preflight', {
                 method: 'POST',
                 headers: getRequestHeaders(),
-                body: JSON.stringify({ avatars: [characters[this_chid].avatar] }),
+                body: JSON.stringify({ avatars: [avatarToDelete] }),
                 cache: 'no-cache',
             });
             if (resp.ok) {
@@ -11456,7 +11464,7 @@ jQuery(async function () {
             if (!dialogResult.confirmed) {
                 return;
             }
-            await deleteCharacter(characters[this_chid].avatar, {
+            await deleteCharacter(avatarToDelete, {
                 deleteChats: dialogResult.deleteChats,
                 deleteWorlds: dialogResult.deleteWorlds,
                 clearWorldReferences: dialogResult.clearWorldReferences,
@@ -11470,7 +11478,7 @@ jQuery(async function () {
             if (!confirm) {
                 return;
             }
-            await deleteCharacter(characters[this_chid].avatar, { deleteChats });
+            await deleteCharacter(avatarToDelete, { deleteChats });
         }
     });
 
@@ -12070,9 +12078,7 @@ jQuery(async function () {
     });
 
     $('#export_button').on('click', function () {
-        isExportPopupOpen = !isExportPopupOpen;
-        $('#export_format_popup').toggle(isExportPopupOpen);
-        exportPopper.update();
+        toggleCharacterExportPopup(this);
     });
 
     $(document).on('click', '.export_format', async function () {
@@ -12398,8 +12404,17 @@ jQuery(async function () {
             case 'set_character_world':
                 await openCharacterWorldPopup();
                 break;
+            case 'character_action_advanced':
+                $('#advanced_div').trigger('click');
+                break;
+            case 'character_action_chat_lorebook':
+                $('.chat_lorebook_button').first().trigger('click');
+                break;
             case 'set_chat_character_settings':
                 await setCharacterSettingsOverrides();
+                break;
+            case 'character_action_connected_personas':
+                $('#char_connections_button').trigger('click');
                 break;
             case 'renameCharButton':
                 await renameCharacter();
@@ -12485,6 +12500,12 @@ jQuery(async function () {
             } break;
             case 'import_tags': {
                 await importTags(characters[this_chid], { importSetting: tag_import_setting.ASK });
+            } break;
+            case 'character_action_export': {
+                toggleCharacterExportPopup(targetElement);
+            } break;
+            case 'character_action_duplicate': {
+                await duplicateCharacter();
             } break;
             case 'delete_from_dropdown': {
                 $('#delete_button').trigger('click');

@@ -20,7 +20,11 @@ import {
 import { write as writeCharacterCardPngData } from '../src/character-card-parser.js';
 import encodePngChunks from '../src/png/encode.js';
 import { setConfigFilePath } from '../src/util.js';
-import { removeCharactersFromState } from '../public/scripts/character-list-state.js';
+import {
+    getCharacterDeleteCandidates,
+    removeCharactersFromState,
+    resolveCharacterAvatarsByIds,
+} from '../public/scripts/character-list-state.js';
 
 /**
  * @param {string} prefix
@@ -646,6 +650,32 @@ describe('character index', () => {
         expect(characters).toEqual([
             { avatar: 'alpha.png', name: 'Alpha' },
             { avatar: 'gamma.png', name: 'Gamma' },
+        ]);
+    });
+
+    test('captures avatar keys from selected character ids before delete dialogs mutate state', () => {
+        const characters = [
+            { avatar: 'alpha.png', name: 'Alpha' },
+            { avatar: 'beta.png', name: 'Beta' },
+            { avatar: 'gamma.png', name: 'Gamma' },
+        ];
+
+        const avatars = resolveCharacterAvatarsByIds(characters, [2, 0, 99]);
+
+        expect(avatars).toEqual(['gamma.png', 'alpha.png']);
+    });
+
+    test('keeps explicit delete avatar keys even when the local character list no longer contains them', () => {
+        const characters = [
+            { avatar: 'alpha.png', name: 'Alpha' },
+            { avatar: 'gamma.png', name: 'Gamma' },
+        ];
+
+        const candidates = getCharacterDeleteCandidates(characters, ['beta.png', 'gamma.png']);
+
+        expect(candidates).toEqual([
+            { avatar: 'beta.png', character: null, index: -1 },
+            { avatar: 'gamma.png', character: { avatar: 'gamma.png', name: 'Gamma' }, index: 1 },
         ]);
     });
 

@@ -25,6 +25,7 @@ import { POPUP_TYPE, POPUP_RESULT, Popup } from './popup.js';
 import { buildCascadeSectionHtml, captureCascadeChoices } from './world-cascade-dialog.js';
 import { waitUntilCondition } from './utils.js';
 import { debounce_timeout } from './constants.js';
+import { resolveCharacterAvatarsByIds } from './character-list-state.js';
 import { createTagInput, getTagKeyForEntity, getTagsList, printTagList, tag_map, compareTagsForSort, removeTagFromMap, importTags, tag_import_setting } from './tags.js';
 import { t } from './i18n.js';
 
@@ -872,8 +873,12 @@ class BulkEditOverlay {
      * @returns {Promise<void>}
      */
     handleContextMenuDelete = async () => {
-        const characterIds = this.selectedCharacters;
-        const count = characterIds.length;
+        const characterIds = [...this.selectedCharacters];
+        const avatarList = resolveCharacterAvatarsByIds(characters, characterIds);
+        const count = avatarList.length;
+        if (count === 0) {
+            return;
+        }
 
         // 1. Detect state before showing dialog
         const inTempChat = this_chid === undefined && name2 === neutralCharacterName;
@@ -881,7 +886,6 @@ class BulkEditOverlay {
         // 2. Pre-fetch world info data (does NOT close chat or change state)
         let worldInfos = [];
         try {
-            const avatarList = characterIds.map(id => characters[id]?.avatar).filter(a => a);
             const resp = await fetch('/api/characters/delete-preflight', {
                 method: 'POST',
                 headers: getRequestHeaders(),
@@ -957,7 +961,6 @@ class BulkEditOverlay {
 
         try {
             await BulkEditOverlay.#stopGenerationAndWait();
-            const avatarList = characterIds.map(id => characters[id]?.avatar).filter(a => a);
             await deleteCharacter(avatarList, {
                 deleteChats,
                 deleteWorlds: capturedCascade.deleteWorlds,
