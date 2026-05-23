@@ -2,7 +2,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import util from 'node:util';
-import net from 'node:net';
 import dns from 'node:dns';
 import process from 'node:process';
 import http from 'node:http';
@@ -78,14 +77,6 @@ import { disposeCharacterIndexDatabases } from './endpoints/character-index.js';
 import { migrateFlatSecrets } from './endpoints/secrets.js';
 import { migrateGroupChatsMetadataFormat } from './endpoints/groups.js';
 import { createServerStartupProfiler } from './server-startup-profiler.js';
-
-// Work around a node v20.0.0, v20.1.0, and v20.2.0 bug. The issue was fixed in v20.3.0.
-// https://github.com/nodejs/node/issues/47822#issuecomment-1564708870
-// Safe to remove once support for Node v20 is dropped.
-if (process.versions && process.versions.node && process.versions.node.match(/20\.[0-2]\.0/)) {
-    // @ts-ignore
-    if (net.setDefaultAutoSelectFamily) net.setDefaultAutoSelectFamily(false);
-}
 
 // Unrestrict console logs display limit
 util.inspect.defaultOptions.maxArrayLength = null;
@@ -373,7 +364,7 @@ async function postSetupTasks(result) {
 
     if (cliArgs.browserLaunchEnabled) {
         try {
-            // TODO: This should be converted to a regular import when support for Node 18 is dropped
+            // Keep this lazy so startup can continue even when browser launching is not available.
             const openModule = await import('open');
             const { default: open, apps } = openModule;
 
@@ -485,7 +476,7 @@ function setDnsResolutionOrder() {
             console.log('Preferring IPv4 for DNS resolution');
         }
     } catch (error) {
-        console.warn('Failed to set DNS resolution order. Possibly unsupported in this Node version.');
+        console.warn('Failed to set DNS resolution order.', error);
     }
 }
 
