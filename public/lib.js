@@ -19,12 +19,14 @@ import seedrandom from 'seedrandom';
 import * as Popper from '@popperjs/core';
 import droll from 'droll';
 import morphdom from 'morphdom';
-import { toggle as slideToggle } from 'slidetoggle';
+import * as slideTogglePackage from 'slidetoggle';
 import chalk from 'chalk';
 import yaml from 'yaml';
 import * as chevrotain from 'chevrotain';
 import { gzipSync, gzip } from 'fflate';
 import { sha256 } from 'js-sha256';
+
+const { toggle: slideToggle } = slideTogglePackage;
 
 /**
  * Expose the libraries to the 'window' object.
