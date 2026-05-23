@@ -3889,7 +3889,23 @@ textarea:focus-visible {
 }
 
 #avatar-and-name-block.character-detail-identity .character-detail-primary-actions .menu_button {
+    flex: 0 0 auto;
     margin: 0;
+}
+
+#avatar-and-name-block.character-detail-identity .character-detail-action-icons {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 4px;
+    align-items: center;
+    justify-content: center;
+}
+
+#avatar-and-name-block.character-detail-identity .character-detail-action-icons #favorite_button,
+#avatar-and-name-block.character-detail-identity .character-detail-action-icons #world_button,
+#avatar-and-name-block.character-detail-identity .character-detail-action-icons #delete_button {
+    min-width: 2.15rem;
+    aspect-ratio: 1;
 }
 
 #avatar-and-name-block.character-detail-identity .character-detail-more {

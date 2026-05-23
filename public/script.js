@@ -8636,6 +8636,7 @@ export function select_selected_character(chid, { switchMenu = true } = {}) {
     switchMenu && setMenuType('character_edit');
     $('#delete_button').css('display', 'flex');
     $('#export_button').css('display', 'flex');
+    $('#world_button').css('display', 'flex');
 
     //create text poles
     $('#rm_button_back').css('display', 'none');
@@ -8733,6 +8734,7 @@ function select_rm_create({ switchMenu = true } = {}) {
     $('#delete_button_div').css('display', 'none');
     $('#delete_button').css('display', 'none');
     $('#export_button').css('display', 'none');
+    $('#world_button').css('display', 'none');
     $('#create_button_label').css('display', '');
     $('#create_button').attr('value', 'Create');
     $('#dupe_button').hide();
