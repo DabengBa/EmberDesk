@@ -16,7 +16,7 @@ The codebase is in an **early transition stage**. Much of the original SillyTave
 
 | Layer | Technology |
 |-------|-----------|
-| Runtime | Node.js >= 20 |
+| Runtime | Node.js 24 LTS (`>=24 <25`) |
 | Language | JavaScript (ES modules) |
 | Server | Express.js |
 | Frontend | HTML / CSS / jQuery (no framework yet) |

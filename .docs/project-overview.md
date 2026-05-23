@@ -26,7 +26,7 @@ It is not optimized for users who want a managed cloud product or a minimal one-
 
 ## Architecture And Boundaries
 
-- Runtime: Node.js `>= 20`
+- Runtime: Node.js 24 LTS (`>=24 <25`)
 - Server: Express-based API and startup pipeline
 - Frontend: HTML/CSS/jQuery main shell with progressive performance refactors
 - Build: Webpack for client-side libraries
