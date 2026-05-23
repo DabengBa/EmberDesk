@@ -60,6 +60,7 @@ Use concise, descriptive commit messages. Prefix with a category when relevant:
 - `src/` contains server-side modules.
 - `default/` holds default configuration and scaffold files.
 - The frontend is jQuery-based with no SPA framework. Be cautious with frontend changes.
+- Long-form upgrade plans live under `docs/specs/`; keep this file as a concise index.
 
 ### Things to Avoid
 
