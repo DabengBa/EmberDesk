@@ -55,6 +55,12 @@ import corsProxyMiddleware from './middleware/corsProxy.js';
 import hostWhitelistMiddleware from './middleware/hostWhitelist.js';
 import userCssMiddleware from './middleware/userCss.js';
 import {
+    CORS_PROXY_ROUTE,
+    OAUTH_CALLBACK_ROUTE,
+    disabledCorsProxyMiddleware,
+    oauthCallbackMiddleware,
+} from './express-route-compat.js';
+import {
     getVersion,
     color,
     removeColorFormatting,
@@ -232,15 +238,7 @@ async function registerMiddleware(app, cli) {
     });
 
     // Callback endpoint for OAuth PKCE flows (e.g. OpenRouter)
-    app.get('/callback/:source?', (request, response) => {
-        const source = request.params.source;
-        const query = request.url.split('?')[1];
-        const searchParams = new URLSearchParams();
-        source && searchParams.set('source', source);
-        query && searchParams.set('query', query);
-        const path = `/?${searchParams.toString()}`;
-        return response.redirect(307, path);
-    });
+    app.get(OAUTH_CALLBACK_ROUTE, oauthCallbackMiddleware);
 
     // Host setup page (first-time admin account creation)
     app.get('/setup', setupPageMiddleware);
@@ -268,13 +266,9 @@ async function registerMiddleware(app, cli) {
     });
 
     if (cli.enableCorsProxy) {
-        app.use('/proxy/:url(*)', corsProxyMiddleware);
+        app.use(CORS_PROXY_ROUTE, corsProxyMiddleware);
     } else {
-        app.use('/proxy/:url(*)', async (_, res) => {
-            const message = 'CORS proxy is disabled. Enable it in config.yaml or use the --corsProxy flag.';
-            console.log(message);
-            res.status(404).send(message);
-        });
+        app.use(CORS_PROXY_ROUTE, disabledCorsProxyMiddleware);
     }
 
     // File uploads

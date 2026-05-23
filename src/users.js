@@ -304,7 +304,7 @@ function createRouteHandler(directoryFn) {
     return async (req, res) => {
         try {
             const directory = directoryFn(req);
-            const filePath = decodeURIComponent(req.params[0]);
+            const filePath = getWildcardFilePath(req);
             const fullPath = path.join(directory, filePath);
             if (!isPathUnderParent(directory, path.resolve(fullPath))) {
                 return res.sendStatus(403);
@@ -331,7 +331,7 @@ function createExtensionsRouteHandler(directoryFn) {
     return async (req, res) => {
         try {
             const directory = directoryFn(req);
-            const filePath = decodeURIComponent(req.params[0]);
+            const filePath = getWildcardFilePath(req);
             const localPath = path.join(directory, filePath);
             if (!isPathUnderParent(directory, path.resolve(localPath))) {
                 return res.sendStatus(403);
@@ -355,6 +355,17 @@ function createExtensionsRouteHandler(directoryFn) {
             return res.sendStatus(500);
         }
     };
+}
+
+/**
+ * Gets the wildcard file path captured by Express 4 or Express 5 route syntax.
+ * @param {import('express').Request} req Request object
+ * @returns {string} File path
+ */
+export function getWildcardFilePath(req) {
+    const captured = req.params.filePath ?? req.params[0] ?? '';
+    const filePath = Array.isArray(captured) ? captured.join('/') : captured;
+    return decodeURIComponent(filePath);
 }
 
 /**
@@ -424,10 +435,10 @@ export async function createBackupArchive(handle, response) {
  * Express router for serving files from the user's directories.
  */
 export const router = express.Router();
-router.use('/backgrounds/*', createRouteHandler(req => req.user.directories.backgrounds));
-router.use('/characters/*', createRouteHandler(req => req.user.directories.characters));
-router.use('/User%20Avatars/*', createRouteHandler(req => req.user.directories.avatars));
-router.use('/assets/*', createRouteHandler(req => req.user.directories.assets));
-router.use('/user/images/*', createRouteHandler(req => req.user.directories.userImages));
-router.use('/user/files/*', createRouteHandler(req => req.user.directories.files));
-router.use('/scripts/extensions/third-party/*', extensionsEnabledFeatureGuard, createExtensionsRouteHandler(req => req.user.directories.extensions));
+router.use('/backgrounds/*filePath', createRouteHandler(req => req.user.directories.backgrounds));
+router.use('/characters/*filePath', createRouteHandler(req => req.user.directories.characters));
+router.use('/User%20Avatars/*filePath', createRouteHandler(req => req.user.directories.avatars));
+router.use('/assets/*filePath', createRouteHandler(req => req.user.directories.assets));
+router.use('/user/images/*filePath', createRouteHandler(req => req.user.directories.userImages));
+router.use('/user/files/*filePath', createRouteHandler(req => req.user.directories.files));
+router.use('/scripts/extensions/third-party/*filePath', extensionsEnabledFeatureGuard, createExtensionsRouteHandler(req => req.user.directories.extensions));
