@@ -1,3 +1,4 @@
+/* global globalThis */
 import { describe, test, expect, beforeAll, afterAll, afterEach } from '@jest/globals';
 import express from 'express';
 import path from 'node:path';
@@ -8,6 +9,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { setConfigFilePath } from '../src/util.js';
 import corsProxyMiddleware from '../src/middleware/corsProxy.js';
+import errorHandlerMiddleware from '../src/middleware/errorHandler.js';
 import {
     CORS_PROXY_ROUTE,
     OAUTH_CALLBACK_ROUTE,
@@ -110,11 +112,15 @@ describe('Express 5 route compatibility', () => {
         await usingApp(app, async (url) => {
             const rootResponse = await fetch(`${url}/callback`, { redirect: 'manual' });
             expect(rootResponse.status).toBe(307);
-            expect(rootResponse.headers.get('location')).toBe('/?');
+            expect(rootResponse.headers.get('location')).toBe('/');
 
-            const sourceResponse = await fetch(`${url}/callback/openrouter?code=abc&state=xyz`, { redirect: 'manual' });
+            const sourceResponse = await fetch(`${url}/callback/openrouter?code=abc&state=xyz&redirect_uri=https%3A%2F%2Fevil.test`, { redirect: 'manual' });
             expect(sourceResponse.status).toBe(307);
-            expect(sourceResponse.headers.get('location')).toBe('/?source=openrouter&query=code%3Dabc%26state%3Dxyz');
+            expect(sourceResponse.headers.get('location')).toBe('/?source=openrouter&code=abc&state=xyz');
+
+            const errorResponse = await fetch(`${url}/callback?error=access_denied&error_description=Denied&unexpected=value`, { redirect: 'manual' });
+            expect(errorResponse.status).toBe(307);
+            expect(errorResponse.headers.get('location')).toBe('/?error=access_denied&error_description=Denied');
         });
     });
 
@@ -132,6 +138,22 @@ describe('Express 5 route compatibility', () => {
                 const response = await fetch(`${url}/proxy/${upstreamUrl}/a/b?x=1`);
                 expect(response.status).toBe(200);
                 expect(await response.text()).toBe('proxied 1');
+
+                const circular = await fetch(`${url}/proxy/${url}/loop`);
+                expect(circular.status).toBe(400);
+                expect(await circular.text()).toContain('Circular requests are not allowed');
+
+                const usernameBypass = await fetch(`${url}/proxy/http://example.test@127.0.0.1:${new URL(url).port}/loop`);
+                expect(usernameBypass.status).toBe(400);
+                expect(await usernameBypass.text()).toContain('Circular requests are not allowed');
+
+                const encodedHost = await fetch(`${url}/proxy/http://%31%32%37.0.0.1:${new URL(url).port}/loop`);
+                expect(encodedHost.status).toBe(400);
+                expect(await encodedHost.text()).toContain('Circular requests are not allowed');
+
+                const invalidTarget = await fetch(`${url}/proxy/http://example.test%40127.0.0.1:${new URL(url).port}/loop`);
+                expect(invalidTarget.status).toBe(400);
+                expect(await invalidTarget.text()).toContain('Invalid CORS proxy target URL');
             });
         });
 
@@ -189,10 +211,38 @@ describe('Express 5 route compatibility', () => {
             expect(await globalExtension.text()).toBe('global extension');
 
             const traversal = await fetch(`${url}/characters/%252e%252e%252fsecret.txt`);
-            expect(traversal.status).toBe(403);
+            expect(traversal.status).toBe(404);
+
+            const emptyWildcard = await fetch(`${url}/characters/`);
+            expect(emptyWildcard.status).toBe(404);
 
             const missing = await fetch(`${url}/characters/missing.png`);
             expect(missing.status).toBe(404);
+        });
+    });
+
+    test('global error handler keeps async errors out of Express default HTML responses', async () => {
+        const app = express();
+        app.get('/api/fails', async () => {
+            throw new Error('Async failure');
+        });
+        app.get('/page-fails', async () => {
+            throw new Error('Page failure');
+        });
+        app.use(errorHandlerMiddleware);
+
+        await usingApp(app, async (url) => {
+            const apiResponse = await fetch(`${url}/api/fails`, {
+                headers: { accept: 'application/json' },
+            });
+            expect(apiResponse.status).toBe(500);
+            expect(apiResponse.headers.get('content-type')).toContain('application/json');
+            expect(await apiResponse.json()).toEqual({ error: 'Internal Server Error' });
+
+            const pageResponse = await fetch(`${url}/page-fails`);
+            expect(pageResponse.status).toBe(500);
+            expect(pageResponse.headers.get('content-type')).toContain('text/plain');
+            expect(await pageResponse.text()).toBe('Internal Server Error');
         });
     });
 

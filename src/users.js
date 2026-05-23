@@ -363,9 +363,16 @@ function createExtensionsRouteHandler(directoryFn) {
  * @returns {string} File path
  */
 export function getWildcardFilePath(req) {
-    const captured = req.params.filePath ?? req.params[0] ?? '';
-    const filePath = Array.isArray(captured) ? captured.join('/') : captured;
-    return decodeURIComponent(filePath);
+    if (Array.isArray(req.params.filePath)) {
+        return req.params.filePath.join('/');
+    }
+
+    if (typeof req.params.filePath === 'string') {
+        return req.params.filePath;
+    }
+
+    const legacyCaptured = req.params[0] ?? '';
+    return decodeURIComponent(legacyCaptured);
 }
 
 /**

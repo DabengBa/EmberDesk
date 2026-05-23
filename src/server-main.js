@@ -52,6 +52,7 @@ import initRequestProxy from './request-proxy.js';
 import initPrivateRequestFilter from './private-request-filter.js';
 import cacheBuster from './middleware/cacheBuster.js';
 import corsProxyMiddleware from './middleware/corsProxy.js';
+import errorHandlerMiddleware from './middleware/errorHandler.js';
 import hostWhitelistMiddleware from './middleware/hostWhitelist.js';
 import userCssMiddleware from './middleware/userCss.js';
 import {
@@ -524,6 +525,7 @@ async function main() {
         exitProcess();
     });
     await initRemainingServices();
+    app.use(errorHandlerMiddleware);
     await startupProfiler.measure('apply404Middleware', () => Promise.resolve(apply404Middleware()));
     const result = await startupProfiler.measure('serverStartup.start', () => new ServerStartup(app, cliArgs).start());
     await postSetupTasks(result);
