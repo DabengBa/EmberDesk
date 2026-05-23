@@ -71,6 +71,15 @@
     --form-control-menu-bg: color-mix(in srgb, var(--SmartThemeBlurTintColor) 62%, var(--black70a) 38%);
     --form-control-border-color: color-mix(in srgb, var(--SmartThemeBorderColor) 72%, var(--SmartThemeBodyColor) 28%);
     --form-control-border-color-focus: color-mix(in srgb, var(--SmartThemeQuoteColor) 62%, var(--SmartThemeBorderColor) 38%);
+    --chat-workspace-bg: color-mix(in srgb, var(--SmartThemeChatTintColor) 78%, var(--black70a) 22%);
+    --chat-workspace-border: color-mix(in srgb, var(--SmartThemeBorderColor) 68%, var(--SmartThemeBodyColor) 12%);
+    --chat-user-bubble-bg: color-mix(in srgb, var(--SmartThemeUserMesBlurTintColor) 72%, var(--black70a) 28%);
+    --chat-bot-bubble-bg: color-mix(in srgb, var(--SmartThemeBotMesBlurTintColor) 78%, var(--SmartThemeBlurTintColor) 22%);
+    --chat-system-bubble-bg: color-mix(in srgb, var(--SmartThemeBlurTintColor) 70%, var(--SmartThemeBorderColor) 30%);
+    --chat-message-border: color-mix(in srgb, var(--SmartThemeBorderColor) 72%, var(--SmartThemeBodyColor) 12%);
+    --chat-message-border-subtle: color-mix(in srgb, var(--SmartThemeBorderColor) 82%, transparent);
+    --chat-message-hover-bg: color-mix(in srgb, var(--SmartThemeBodyColor) 5%, transparent);
+    --chat-meta-color: color-mix(in srgb, var(--SmartThemeBodyColor) 68%, var(--SmartThemeBlurTintColor) 32%);
 
     --reasoning-body-color: var(--SmartThemeEmColor);
     --reasoning-em-color: color-mix(in srgb, var(--SmartThemeEmColor) 67%, var(--SmartThemeBlurTintColor) 33%);
@@ -433,12 +442,12 @@ input[type='checkbox']:focus-visible {
 
 .mes_reasoning {
     display: block;
-    border-radius: 2px;
-    padding: 5px;
-    padding-left: 14px;
-    margin-bottom: 0.5em;
+    border: 1px solid color-mix(in srgb, var(--reasoning-body-color) 18%, var(--SmartThemeBorderColor) 82%);
+    border-radius: 5px;
+    padding: 7px 10px;
+    margin: 4px 0 0.5em;
     overflow-y: auto;
-    background-color: color-mix(in oklch, var(--reasoning-body-color) 6%, transparent);
+    background-color: color-mix(in oklch, var(--reasoning-body-color) 6%, var(--SmartThemeBlurTintColor));
     color: hsl(from var(--reasoning-body-color) h calc(s * var(--reasoning-saturation)) l);
 }
 
@@ -467,11 +476,12 @@ input[type='checkbox']:focus-visible {
     cursor: pointer;
     position: relative;
     user-select: none;
-    margin: 0.5em 2px;
-    padding: 7px 14px;
+    margin: 4px 0;
+    padding: 5px 12px;
     padding-right: calc(0.7em + 14px);
     border-radius: 5px;
-    background-color: var(--SmartThemeBlurTintColor);
+    border: 1px solid color-mix(in srgb, var(--reasoning-body-color) 14%, var(--SmartThemeBorderColor) 86%);
+    background-color: color-mix(in srgb, var(--SmartThemeBlurTintColor) 82%, var(--reasoning-body-color) 18%);
     font-size: calc(var(--mainFontSize) * 0.9);
     align-items: baseline;
 }
@@ -586,10 +596,11 @@ input[type='checkbox']:focus-visible {
 
 .mes_text blockquote,
 .mes_reasoning blockquote {
-    padding-left: 10px;
-    background-color: color-mix(in oklch, var(--SmartThemeQuoteColor) 8%, transparent);
-    border-radius: 2px;
-    margin: 0;
+    padding: 6px 10px;
+    background-color: color-mix(in oklch, var(--SmartThemeQuoteColor) 8%, var(--SmartThemeBlurTintColor));
+    border: 1px solid color-mix(in srgb, var(--SmartThemeQuoteColor) 18%, var(--SmartThemeBorderColor) 82%);
+    border-radius: 5px;
+    margin: 5px 0;
 }
 
 .mes_text strong em,
@@ -609,6 +620,9 @@ input[type='checkbox']:focus-visible {
     display: block;
     overflow-x: auto;
     padding: 1em;
+    border-radius: 5px;
+    background-color: color-mix(in srgb, var(--SmartThemeBlurTintColor) 78%, var(--black90a) 22%);
+    border: 1px solid var(--chat-message-border-subtle);
 }
 
 .mes_text img:not(.mes_img),
@@ -899,25 +913,27 @@ body .panelControlBar {
 #chat {
     max-height: calc(100vh - calc(var(--topBarBlockSize) + var(--bottomFormBlockSize)));
     overflow-x: hidden;
-    padding-bottom: 0;
+    padding: 5px;
     overflow-y: scroll;
     display: flex;
     bottom: 10px;
-    /*     border-bottom: 1px solid var(--SmartThemeBorderColor);
-    border-left: 1px solid var(--SmartThemeBorderColor);
-    border-right: 1px solid var(--SmartThemeBorderColor); */
+    border: 1px solid var(--chat-workspace-border);
+    border-bottom: 0;
+    border-radius: 10px 10px 0 0;
     backdrop-filter: blur(var(--SmartThemeBlurStrength));
-    background-color: var(--SmartThemeChatTintColor);
+    background-color: var(--chat-workspace-bg);
     -webkit-backdrop-filter: blur(var(--SmartThemeBlurStrength));
     flex-direction: column;
     z-index: 30;
     flex-grow: 1;
+    gap: 2px;
+    scrollbar-gutter: stable;
 }
 
 #form_sheld {
     white-space: nowrap;
     width: 100%;
-    margin: 1px auto 0 auto;
+    margin: 0 auto;
     z-index: 30;
 }
 
@@ -934,10 +950,10 @@ body .panelControlBar {
     align-items: center;
     width: 100%;
     margin: 0 auto 0 auto;
-    border: 1px solid var(--SmartThemeBorderColor);
-    border-top: none;
+    border: 1px solid var(--chat-workspace-border);
+    border-top-color: var(--chat-message-border-subtle);
     border-radius: 0 0 8px 8px;
-    background-color: var(--SmartThemeBlurTintColor);
+    background-color: color-mix(in srgb, var(--SmartThemeBlurTintColor) 84%, var(--black70a) 16%);
     backdrop-filter: blur(var(--SmartThemeBlurStrength));
 }
 
@@ -1225,30 +1241,46 @@ body .panelControlBar {
 .mes {
     display: flex;
     align-items: flex-start;
-    padding: 10px 10px 4px 10px;
+    padding: 5px;
     margin-top: 0;
     width: 100%;
     color: var(--SmartThemeBodyColor);
     position: relative;
+    border-radius: 8px;
+    transition:
+        background-color var(--animation-duration-2x) ease-out,
+        border-color var(--animation-duration-2x) ease-out;
 }
 
 .mes[is_user="true"]:has(+ .mes[is_user="true"]),
 .mes:not([is_user="true"]):not([is_system="true"]):has(+ .mes:not([is_user="true"]):not([is_system="true"])) {
-    padding-bottom: 8px;
+    padding-bottom: 5px;
+}
+
+.mes:hover,
+.mes:focus-within {
+    background-color: var(--chat-message-hover-bg);
+}
+
+.mes[is_user="true"] .mes_block,
+.mes:not([is_user="true"]):not([is_system="true"]) .mes_block,
+.mes[is_system="true"] .mes_block {
+    border: 1px solid var(--chat-message-border-subtle);
+    border-radius: 8px;
+    padding: 5px 10px;
 }
 
 .mes[is_user="true"] .mes_block {
-    background-color: var(--SmartThemeUserMesBlurTintColor);
-    border-radius: 8px;
-    padding-top: 6px;
-    padding-bottom: 2px;
+    background-color: var(--chat-user-bubble-bg);
 }
 
 .mes:not([is_user="true"]):not([is_system="true"]) .mes_block {
-    background-color: var(--SmartThemeBotMesBlurTintColor);
-    border-radius: 8px;
-    padding-top: 6px;
-    padding-bottom: 2px;
+    background-color: var(--chat-bot-bubble-bg);
+}
+
+.mes[is_system="true"] .mes_block {
+    background-color: var(--chat-system-bubble-bg);
+    border-style: dashed;
 }
 
 #chat .mes.selected {
@@ -1475,12 +1507,27 @@ body.hideAllSwipeButtons :is(.swipe_left, .swipe_right),
     transition: var(--animation-duration-2x);
 }
 
+.mesAvatarWrapper {
+    flex: 0 0 calc(var(--avatar-base-width) + 4px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
 .last_mes .mesAvatarWrapper {
     padding-bottom: var(--avatar-base-height);
 }
 
 .mes .avatar {
     cursor: pointer;
+    opacity: 0.92;
+    transition: opacity var(--animation-duration-2x) ease-out, filter var(--animation-duration-2x) ease-out;
+}
+
+.mes:hover .avatar,
+.mes:focus-within .avatar {
+    opacity: 1;
 }
 
 .hotswap {
@@ -1578,25 +1625,27 @@ body.hideAllSwipeButtons :is(.swipe_left, .swipe_right),
 
 .mes_block {
     padding-top: 0;
-    padding-left: 10px;
     width: 100%;
     overflow: hidden;
+    min-width: 0;
 }
 
 .mes_text,
 .mes_reasoning {
     font-weight: 500;
-    line-height: calc(var(--mainFontSize) + .5rem);
+    line-height: calc(var(--mainFontSize) + 0.55rem);
     max-width: 100%;
     overflow-wrap: anywhere;
     text-shadow: 0px 0px calc(var(--shadowWidth) * 1px) var(--SmartThemeShadowColor);
+    text-wrap: pretty;
 }
 
 .mes_text {
     padding-left: 0;
-    padding-top: 5px;
-    padding-bottom: 5px;
+    padding-top: 4px;
+    padding-bottom: 4px;
     padding-right: var(--mes-right-spacing);
+    max-width: min(74ch, 100%);
 }
 
 .mes_text hr {
@@ -3439,6 +3488,45 @@ input[type=search]:focus::-webkit-search-cancel-button {
     max-width: 100%;
     min-height: 22px;
     align-items: flex-start;
+    gap: 8px;
+    min-width: 0;
+    color: var(--chat-meta-color);
+    font-weight: 600;
+}
+
+.mes_block .ch_name .flex1 {
+    min-width: 0;
+}
+
+.mes_block .ch_name .alignItemsBaseline {
+    min-width: 0;
+    gap: 5px;
+}
+
+.mes_block .ch_name .name_text {
+    color: var(--SmartThemeBodyColor);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mes_block .ch_name .timestamp {
+    flex: 0 1 auto;
+    color: var(--chat-meta-color);
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.mes[is_user="true"] .mes_block .ch_name .name_text {
+    color: color-mix(in srgb, var(--SmartThemeBodyColor) 90%, var(--SmartThemeUnderlineColor) 10%);
+}
+
+.mes:not([is_user="true"]):not([is_system="true"]) .mes_block .ch_name .name_text {
+    color: color-mix(in srgb, var(--SmartThemeBodyColor) 88%, var(--SmartThemeQuoteColor) 12%);
+}
+
+.mes[is_system="true"] .mes_block .ch_name .name_text {
+    color: color-mix(in srgb, var(--SmartThemeBodyColor) 82%, var(--SmartThemeEmColor) 18%);
 }
 
 /*applies to both groups and solos chars in the char list*/
@@ -4838,11 +4926,14 @@ input[type="range"]::-webkit-slider-thumb {
     position: relative;
     display: flex;
     gap: 4px;
+    align-items: center;
+    flex: 0 0 auto;
     flex-wrap: nowrap;
     justify-content: flex-end;
     transition: opacity var(--animation-duration-2x), filter var(--animation-duration-2x);
     overflow-x: hidden;
     padding: 1px;
+    opacity: 0.34;
 }
 
 .extraMesButtons {
@@ -4852,22 +4943,55 @@ input[type="range"]::-webkit-slider-thumb {
 .mes_button,
 .extraMesButtons>div {
     cursor: pointer;
-    transition: opacity var(--animation-duration-2x) ease-in-out;
-    filter: drop-shadow(0px 0px 2px black);
-    padding: 1px 3px;
+    transition:
+        opacity var(--animation-duration-2x) ease-out,
+        background-color var(--animation-duration-2x) ease-out,
+        color var(--animation-duration-2x) ease-out;
+    filter: none;
+    min-width: calc(var(--mainFontSize) * 1.45);
+    min-height: calc(var(--mainFontSize) * 1.45);
+    padding: 2px 4px;
+    border-radius: 5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .mes_button {
-    opacity: 0.5;
+    opacity: 0.68;
 }
 
 .extraMesButtons>div {
-    opacity: 0.3;
+    opacity: 0.55;
+}
+
+.mes:hover .mes_buttons,
+.mes:focus-within .mes_buttons,
+.mes_buttons:has(.mes_button:hover),
+.mes_buttons:has(.mes_button:focus-visible) {
+    opacity: 1;
 }
 
 .mes_button:hover,
-.extraMesButtons>div:hover {
+.mes_button:focus-visible,
+.extraMesButtons>div:hover,
+.extraMesButtons>div:focus-visible {
     opacity: 1;
+    background-color: color-mix(in srgb, var(--SmartThemeBodyColor) 10%, transparent);
+    color: var(--SmartThemeBodyColor);
+    outline: none;
+}
+
+.mes_button:active,
+.extraMesButtons>div:active {
+    background-color: color-mix(in srgb, var(--SmartThemeBodyColor) 14%, transparent);
+    color: var(--SmartThemeBodyColor);
+}
+
+.mes_button:focus-visible,
+.extraMesButtons>div:focus-visible {
+    outline: 1px solid var(--interactable-outline-color-faint);
+    outline-offset: 1px;
 }
 
 .mes_bookmark {
@@ -4889,7 +5013,7 @@ input[type="range"]::-webkit-slider-thumb {
     float: right;
     cursor: pointer;
     padding-bottom: 5px;
-    filter: drop-shadow(0px 0px 2px black);
+    filter: none;
     transition: var(--animation-duration-2x) ease-in-out;
 }
 
@@ -7056,9 +7180,81 @@ body:not(.movingUI) .drawer-content.maximized {
         border: 2px solid var(--SmartThemeBorderColor);
     }
 
+    .mes_block,
+    #chat,
+    #send_form {
+        border-width: 2px;
+    }
+
     .menu_button,
     .popup {
         border-width: 2px;
+    }
+}
+
+@media screen and (max-width: 768px) {
+    #chat {
+        padding: 5px;
+        border-radius: 8px 8px 0 0;
+    }
+
+    .mes {
+        padding: 5px 0;
+        gap: 5px;
+    }
+
+    .mesAvatarWrapper {
+        flex-basis: calc(var(--avatar-base-width) * 0.82);
+    }
+
+    .mes .avatar,
+    .mes .avatar img {
+        width: calc(var(--avatar-base-width) * 0.82);
+        height: calc(var(--avatar-base-height) * 0.82);
+    }
+
+    .last_mes .mesAvatarWrapper {
+        padding-bottom: calc(var(--avatar-base-height) * 0.5);
+    }
+
+    .mes_block {
+        padding: 5px;
+    }
+
+    .mes_block .ch_name {
+        align-items: flex-start;
+    }
+
+    .mes_block .ch_name .alignItemsBaseline {
+        flex-wrap: wrap;
+        gap: 2px 5px;
+    }
+
+    .mes_block .ch_name .timestamp {
+        white-space: normal;
+    }
+
+    .mes_buttons {
+        opacity: 0.78;
+    }
+
+    .mes_button,
+    .extraMesButtons>div {
+        min-width: calc(var(--mainFontSize) * 1.7);
+        min-height: calc(var(--mainFontSize) * 1.7);
+    }
+
+    .mes_text {
+        padding-right: 10px;
+        max-width: 100%;
+    }
+
+    .swipe_left {
+        left: 10px;
+    }
+
+    .swipe_right {
+        right: 2px;
     }
 }
 
