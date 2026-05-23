@@ -12,5 +12,5 @@ echo "Installing Node Modules..."
 export NODE_ENV=production
 npm install --no-save --no-audit --no-fund --loglevel=error --no-progress --omit=dev --ignore-scripts
 
-echo "Entering SillyTavern..."
+echo "Entering EmberDesk..."
 node "server.js" "$@"

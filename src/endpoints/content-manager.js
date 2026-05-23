@@ -13,6 +13,7 @@ import { write } from '../character-card-parser.js';
 import { serverDirectory } from '../server-directory.js';
 import { Jimp, JimpMime } from '../jimp.js';
 import { DEFAULT_AVATAR_PATH } from '../constants.js';
+import { invalidateDirectory } from './settings-cache.js';
 
 const contentDirectory = path.join(serverDirectory, 'default/content');
 const scaffoldDirectory = path.join(serverDirectory, 'default/scaffold');
@@ -20,7 +21,7 @@ const contentIndexPath = path.join(contentDirectory, 'index.json');
 const scaffoldIndexPath = path.join(scaffoldDirectory, 'index.json');
 
 const WHITELIST_GENERIC_URL_DOWNLOAD_SOURCES = getConfigValue('whitelistImportDomains', []);
-const USER_AGENT = 'SillyTavern';
+const USER_AGENT = 'EmberDesk';
 
 /**
  * @typedef {Object} ContentItem
@@ -46,7 +47,6 @@ export const CONTENT_TYPES = {
     KOBOLD_PRESET: 'kobold_preset',
     OPENAI_PRESET: 'openai_preset',
     NOVEL_PRESET: 'novel_preset',
-    TEXTGEN_PRESET: 'textgen_preset',
     INSTRUCT: 'instruct',
     CONTEXT: 'context',
     MOVING_UI: 'moving_ui',
@@ -135,6 +135,7 @@ export function getDefaultPresetFile(filename) {
 function seedContent(contentIndex, contentLogPath, resolveTarget, forceCategories) {
     let anyContentAdded = false;
     const contentLog = getContentLog(contentLogPath);
+    const affectedTargets = new Set();
 
     for (const contentItem of contentIndex) {
         if (contentLog.includes(contentItem.filename) && !forceCategories?.includes(contentItem.type)) {
@@ -174,10 +175,11 @@ function seedContent(contentIndex, contentLogPath, resolveTarget, forceCategorie
         setPermissionsSync(targetPath);
         console.info(`Content file ${contentItem.filename} copied to ${contentTarget}`);
         anyContentAdded = true;
+        affectedTargets.add(contentTarget);
     }
 
     writeFileAtomicSync(contentLogPath, contentLog.join('\n'));
-    return anyContentAdded;
+    return { anyContentAdded, affectedTargets };
 }
 
 /**
@@ -193,7 +195,11 @@ async function seedContentForUser(contentIndex, directories, forceCategories) {
     }
 
     const contentLogPath = path.join(directories.root, 'content.log');
-    return seedContent(contentIndex, contentLogPath, (type) => getUserTargetByType(type, directories), forceCategories);
+    const { anyContentAdded, affectedTargets } = seedContent(contentIndex, contentLogPath, (type) => getUserTargetByType(type, directories), forceCategories);
+    for (const dir of affectedTargets) {
+        invalidateDirectory(dir);
+    }
+    return anyContentAdded;
 }
 
 /**
@@ -203,7 +209,8 @@ async function seedContentForUser(contentIndex, directories, forceCategories) {
  */
 async function seedGlobalContent(contentIndex) {
     const contentLogPath = path.join(globalThis.DATA_ROOT, 'content.log');
-    return seedContent(contentIndex, contentLogPath, getGlobalTargetByType);
+    const { anyContentAdded } = seedContent(contentIndex, contentLogPath, getGlobalTargetByType);
+    return anyContentAdded;
 }
 
 /**
@@ -347,8 +354,6 @@ export function getUserTargetByType(type, directories) {
             return directories.openAI_Settings;
         case CONTENT_TYPES.NOVEL_PRESET:
             return directories.novelAI_Settings;
-        case CONTENT_TYPES.TEXTGEN_PRESET:
-            return directories.textGen_Settings;
         case CONTENT_TYPES.INSTRUCT:
             return directories.instruct;
         case CONTENT_TYPES.CONTEXT:

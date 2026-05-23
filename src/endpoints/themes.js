@@ -5,6 +5,8 @@ import express from 'express';
 import sanitize from 'sanitize-filename';
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
 
+import { invalidateDirectory } from './settings-cache.js';
+
 export const router = express.Router();
 
 router.post('/save', (request, response) => {
@@ -14,6 +16,7 @@ router.post('/save', (request, response) => {
 
     const filename = path.join(request.user.directories.themes, sanitize(`${request.body.name}.json`));
     writeFileAtomicSync(filename, JSON.stringify(request.body, null, 4), 'utf8');
+    invalidateDirectory(request.user.directories.themes);
 
     return response.sendStatus(200);
 });
@@ -30,6 +33,7 @@ router.post('/delete', (request, response) => {
             return response.sendStatus(404);
         }
         fs.unlinkSync(filename);
+        invalidateDirectory(request.user.directories.themes);
         return response.sendStatus(200);
     } catch (error) {
         console.error(error);

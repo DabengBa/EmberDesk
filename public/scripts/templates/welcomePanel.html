@@ -1,6 +1,6 @@
 <div class="welcomePanel">
     <div class="welcomeHeaderTitle">
-        <img src="img/logo.png" alt="SillyTavern Logo" data-i18n="[alt]SillyTavern Logo" class="welcomeHeaderLogo">
+        <img src="img/logo.png" alt="EmberDesk Logo" data-i18n="[alt]EmberDesk Logo" class="welcomeHeaderLogo">
         <span class="welcomeHeaderVersionDisplay">{{version}}</span>
         <div class="mes_button showRecentChats" title="Show recent chats" data-i18n="[title]Show recent chats">
             <i class="fa-solid fa-circle-chevron-down fa-fw fa-lg"></i>
@@ -17,15 +17,15 @@
             Recent Chats
         </div>
         <div class="welcomeShortcuts">
-            <a class="menu_button menu_button_icon" target="_blank" href="https://docs.sillytavern.app/">
+            <a class="menu_button menu_button_icon" target="_blank" href="#">
                 <i class="fa-solid fa-question-circle"></i>
                 <span data-i18n="Docs">Docs</span>
             </a>
-            <a class="menu_button menu_button_icon" target="_blank" href="https://github.com/SillyTavern/SillyTavern">
+            <a class="menu_button menu_button_icon" target="_blank" href="https://github.com/DabengBa/EmberDesk">
                 <i class="fa-brands fa-github"></i>
                 <span data-i18n="GitHub">GitHub</span>
             </a>
-            <a class="menu_button menu_button_icon" target="_blank" href="https://discord.gg/sillytavern">
+            <a class="menu_button menu_button_icon" target="_blank" href="#">
                 <i class="fa-brands fa-discord"></i>
                 <span data-i18n="Discord">Discord</span>
             </a>
@@ -53,7 +53,7 @@
                     </div>
                 {{/if}}
                 <div class="avatar" title="[Character] {{char_name}}&#10;File: {{avatar}}">
-                    <img src="{{char_thumbnail}}" alt="{{char_name}}">
+                    <img src="{{char_thumbnail}}" alt="{{char_name}}" loading="lazy" decoding="async">
                 </div>
                 <div class="recentChatInfo">
                     <div class="chatNameContainer">

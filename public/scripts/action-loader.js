@@ -14,6 +14,7 @@
 import { t } from './i18n.js';
 import { stopGeneration } from '../script.js';
 import { Popup, POPUP_RESULT, POPUP_TYPE } from './popup.js';
+import { shouldAnimateOverlayHide } from './startup-helpers.js';
 
 /**
  * Enum representing the toast display mode for the action loader.
@@ -38,6 +39,7 @@ export const ActionLoaderToastMode = {
  * @property {string} [title] - Optional title for the toast notification
  * @property {string} [stopTooltip='Stop'] - Tooltip text for the stop button
  * @property {HTMLElement|string|null} [overlayContent=null] - Custom content for the overlay (replaces default spinner)
+ * @property {'auto'|'immediate'} [overlayHideMode='auto'] - Whether overlay removal should animate or hide immediately
  * @property {(() => void)|null} [onStop=null] - Custom stop handler. If null, calls `stopGeneration()`
  * @property {(() => void)|null} [onHide=null] - Custom hide handler. Called when the loader is hidden (not stopped).
  */
@@ -101,6 +103,9 @@ export class ActionLoaderHandle {
     /** @type {boolean} Whether this loader blocks the UI with an overlay */
     #blocking = true;
 
+    /** @type {'auto'|'immediate'} Whether overlay removal should animate */
+    #overlayHideMode = 'auto';
+
     /** @type {boolean} Whether this handle has been disposed */
     #disposed = false;
 
@@ -115,6 +120,7 @@ export class ActionLoaderHandle {
      * @param {string} [options.stopTooltip='Stop'] - Tooltip for the stop button
      * @param {boolean} [options.predisposed=false] - Whether this handle is already disposed (for special use)
      * @param {HTMLElement|string|null} [options.overlayContent] - Custom content for the overlay (replaces default spinner)
+     * @param {'auto'|'immediate'} [options.overlayHideMode] - Whether overlay removal should animate or hide immediately
      * @param {(() => void)|null} [options.onStop] - Custom stop handler
      * @param {(() => void)|null} [options.onHide] - Custom hide handler
      */
@@ -126,6 +132,7 @@ export class ActionLoaderHandle {
         title = '',
         stopTooltip = t`Stop`,
         overlayContent = null,
+        overlayHideMode = 'auto',
         onStop = null,
         onHide = null,
         predisposed = false,
@@ -138,6 +145,7 @@ export class ActionLoaderHandle {
         this.#id = generateLoaderId();
         this.#slug = slug;
         this.#blocking = blocking;
+        this.#overlayHideMode = overlayHideMode;
         this.#onStop = onStop;
         this.#onHide = onHide;
 
@@ -226,7 +234,9 @@ export class ActionLoaderHandle {
 
         // Hide the overlay if this was the last blocking handle
         if (this.#blocking && !hasBlockingLoaders()) {
-            await hideOverlay();
+            await hideOverlay({
+                immediate: this.#overlayHideMode === 'immediate',
+            });
         }
     }
 
@@ -552,7 +562,7 @@ function showOverlay(customContent = null) {
  * Internal function - use hideActionLoader() instead.
  * @returns {Promise<void>}
  */
-async function hideOverlay() {
+async function hideOverlay({ immediate = false } = {}) {
     if (!loaderPopup) {
         return Promise.resolve();
     }
@@ -569,7 +579,10 @@ async function hideOverlay() {
 
         // Check if transitions are enabled on spinner (which has the transition property)
         const transitionDuration = spinner.length && spinner[0] ? getComputedStyle(spinner[0]).transitionDuration : '0s';
-        const hasTransitions = parseFloat(transitionDuration) > 0;
+        const hasTransitions = shouldAnimateOverlayHide({
+            transitionDuration,
+            immediate,
+        });
 
         if (hasTransitions) {
             Promise.race([

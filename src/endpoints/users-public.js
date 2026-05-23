@@ -2,15 +2,21 @@ import crypto from 'node:crypto';
 
 import storage from 'node-persist';
 import express from 'express';
+import lodash from 'lodash';
 import { RateLimiterMemory, RateLimiterRes } from 'rate-limiter-flexible';
 import { getIpAddress, retryAfter } from '../express-common.js';
 import { color, Cache, getConfigValue } from '../util.js';
-import { KEY_PREFIX, getUserAvatar, toKey, getPasswordHash, getPasswordSalt, getAccountVersion } from '../users.js';
+import { checkForNewContent, CONTENT_TYPES } from './content-manager.js';
+import {
+    KEY_PREFIX, getUserAvatar, toKey, getPasswordHash, getPasswordSalt, getAccountVersion,
+    needsSetup, ensurePublicDirectoriesExist, getUserDirectories, getAllUserHandles,
+} from '../users.js';
 
 const DISCREET_LOGIN = getConfigValue('enableDiscreetLogin', false, 'boolean');
 const PREFER_REAL_IP_HEADER = getConfigValue('rateLimiting.preferRealIpHeader', false, 'boolean');
 const LOGIN_POINTS = getConfigValue('rateLimiting.accountsLoginMaxAttempts', 5, 'number');
 const RECOVER_POINTS = getConfigValue('rateLimiting.accountsRecoverMaxAttempts', 5, 'number');
+const LOCKOUT_DURATION = getConfigValue('rateLimiting.accountsLoginLockoutDuration', 300, 'number');
 const MFA_CACHE = new Cache(5 * 60 * 1000);
 
 const generateRecoveryCode = () => Array.from({ length: 6 }, () => crypto.randomInt(0, 10)).join('');
@@ -19,6 +25,11 @@ export const router = express.Router();
 const loginLimiter = new RateLimiterMemory({
     points: LOGIN_POINTS > 0 ? LOGIN_POINTS : Number.MAX_SAFE_INTEGER,
     duration: 60,
+});
+const accountLimiter = new RateLimiterMemory({
+    points: LOGIN_POINTS > 0 ? LOGIN_POINTS : Number.MAX_SAFE_INTEGER,
+    duration: LOCKOUT_DURATION,
+    keyPrefix: 'account:',
 });
 const recoverLimiter = new RateLimiterMemory({
     points: RECOVER_POINTS > 0 ? RECOVER_POINTS : Number.MAX_SAFE_INTEGER,
@@ -66,7 +77,27 @@ router.post('/login', async (request, response) => {
         }
 
         const ip = getIpAddress(request, PREFER_REAL_IP_HEADER);
-        await loginLimiter.consume(ip);
+
+        try {
+            await loginLimiter.consume(ip);
+        } catch (error) {
+            if (error instanceof RateLimiterRes) {
+                console.error('Login failed: Rate limited from', ip);
+                return retryAfter(response, error).status(429).send({ error: 'Too many attempts. Try again later or recover your password.' });
+            }
+            throw error;
+        }
+
+        try {
+            await accountLimiter.consume(request.body.handle);
+        } catch (error) {
+            if (error instanceof RateLimiterRes) {
+                const lockoutSeconds = Math.ceil(error.msBeforeNext / 1000);
+                console.error('Login failed: Account locked for', request.body.handle);
+                return retryAfter(response, error).status(429).send({ error: `Account locked. Try again in ${lockoutSeconds} seconds.` });
+            }
+            throw error;
+        }
 
         /** @type {import('../users.js').User} */
         const user = await storage.getItem(toKey(request.body.handle));
@@ -92,16 +123,12 @@ router.post('/login', async (request, response) => {
         }
 
         await loginLimiter.delete(ip);
+        await accountLimiter.delete(request.body.handle);
         request.session.handle = user.handle;
         request.session.version = getAccountVersion(user);
         console.info('Login successful:', user.handle, 'from', ip, 'at', new Date().toLocaleString());
         return response.json({ handle: user.handle });
     } catch (error) {
-        if (error instanceof RateLimiterRes) {
-            console.error('Login failed: Rate limited from', getIpAddress(request, PREFER_REAL_IP_HEADER));
-            return retryAfter(response, error).status(429).send({ error: 'Too many attempts. Try again later or recover your password.' });
-        }
-
         console.error('Login failed:', error);
         return response.sendStatus(500);
     }
@@ -206,6 +233,118 @@ router.post('/recover-step2', async (request, response) => {
         }
 
         console.error('Recover step 2 failed:', error);
+        return response.sendStatus(500);
+    }
+});
+
+/**
+ * Slugifies a string for use as a user handle.
+ * @param {string} text Text to slugify
+ * @returns {string} Slugified text
+ */
+function slugify(text) {
+    return lodash.deburr(String(text ?? '').toLowerCase().trim()).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+router.get('/setup-mode', async (_request, response) => {
+    try {
+        const handles = await getAllUserHandles();
+        if (handles.length === 1) {
+            const user = await storage.getItem(toKey(handles[0]));
+            if (user && !user.password) {
+                return response.json({ mode: 'set-password' });
+            }
+        }
+        return response.json({ mode: 'fresh' });
+    } catch (error) {
+        console.error('Setup mode check failed:', error);
+        return response.json({ mode: 'fresh' });
+    }
+});
+
+router.post('/setup', async (request, response) => {
+    try {
+        if (!(await needsSetup())) {
+            console.warn('Setup rejected: already completed');
+            return response.status(403).json({ error: 'Setup already completed' });
+        }
+
+        if (!request.body.password) {
+            console.warn('Setup failed: Missing password');
+            return response.status(400).json({ error: 'Missing required fields' });
+        }
+
+        // Mode 1: Existing passwordless user — set password only
+        const handles = await getAllUserHandles();
+        if (handles.length === 1) {
+            const user = await storage.getItem(toKey(handles[0]));
+            if (user && !user.password) {
+                const salt = getPasswordSalt();
+                user.password = getPasswordHash(request.body.password, salt);
+                user.salt = salt;
+                await storage.setItem(toKey(user.handle), user);
+
+                if (!request.session) {
+                    console.error('Session not available');
+                    return response.sendStatus(500);
+                }
+
+                request.session.handle = user.handle;
+                request.session.version = getAccountVersion(user);
+                console.info('Password set for existing user:', user.handle);
+                return response.json({ handle: user.handle });
+            }
+        }
+
+        // Mode 2: Fresh deploy — create new admin account
+        if (!request.body.handle) {
+            console.warn('Setup failed: Missing required fields');
+            return response.status(400).json({ error: 'Missing required fields' });
+        }
+
+        const handle = slugify(request.body.handle);
+
+        if (!handle) {
+            console.warn('Setup failed: Invalid handle');
+            return response.status(400).json({ error: 'Invalid handle' });
+        }
+
+        if (handles.some(x => x === handle)) {
+            console.warn('Setup failed: User already exists');
+            return response.status(409).json({ error: 'User already exists' });
+        }
+
+        const salt = getPasswordSalt();
+        const password = getPasswordHash(request.body.password, salt);
+
+        const newUser = {
+            handle: handle,
+            name: request.body.name || handle,
+            created: Date.now(),
+            password: password,
+            salt: salt,
+            admin: true,
+            enabled: true,
+        };
+
+        await storage.setItem(toKey(handle), newUser);
+
+        console.info('Creating data directories for', newUser.handle);
+        await ensurePublicDirectoriesExist();
+        const directories = getUserDirectories(newUser.handle);
+        await checkForNewContent([directories], [CONTENT_TYPES.SETTINGS]);
+
+        if (!request.session) {
+            console.error('Session not available');
+            return response.sendStatus(500);
+        }
+
+        request.session.handle = newUser.handle;
+        request.session.version = getAccountVersion(newUser);
+        console.info('Setup completed for admin:', newUser.handle);
+        return response.json({ handle: newUser.handle });
+    } catch (error) {
+        console.error('Setup failed:', error);
         return response.sendStatus(500);
     }
 });

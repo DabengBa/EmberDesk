@@ -12,28 +12,8 @@ import {
 } from './lib.js';
 
 import { humanizedDateTime, favsToHotswap, getMessageTimeStamp, dragElement, isMobile, initRossMods } from './scripts/RossAscends-mods.js';
+import { applyResetChatState } from './scripts/chat-state-reset.js';
 import { userStatsHandler, statMesProcess, initStats } from './scripts/stats.js';
-import {
-    generateKoboldWithStreaming,
-    kai_settings,
-    loadKoboldSettings,
-    getKoboldGenerationData,
-    kai_flags,
-    koboldai_settings,
-    koboldai_setting_names,
-    initKoboldSettings,
-} from './scripts/kai-settings.js';
-
-import {
-    textgenerationwebui_settings as textgen_settings,
-    loadTextGenSettings,
-    generateTextGenWithStreaming,
-    getTextGenGenerationData,
-    textgen_types,
-    parseTextgenLogprobs,
-    parseTabbyLogprobs,
-    initTextGenSettings,
-} from './scripts/textgen-settings.js';
 
 import {
     world_info,
@@ -47,9 +27,13 @@ import {
     wi_anchor_position,
     world_info_include_names,
     initWorldInfo,
+    rehydrateWorldInfoPanel,
     charUpdatePrimaryWorld,
     charSetAuxWorlds,
+    updateWorldInfoList,
+    flushDeletedWorldsFromUI,
 } from './scripts/world-info.js';
+import { scanImportedCharacter, showUnifiedImportConfirm, applyImportChoices, buildSkipAllChoices } from './scripts/import-confirm-dialog.js';
 
 import {
     groups,
@@ -107,42 +91,14 @@ import {
     openai_messages_count,
     chat_completion_sources,
     getChatCompletionModel,
-    proxies,
-    loadProxyPresets,
-    selected_proxy,
     initOpenAI,
 } from './scripts/openai.js';
-
-import {
-    generateNovelWithStreaming,
-    getNovelGenerationData,
-    getKayraMaxContextTokens,
-    loadNovelSettings,
-    nai_settings,
-    adjustNovelInstructionPrompt,
-    parseNovelAILogprobs,
-    novelai_settings,
-    novelai_setting_names,
-    initNovelAISettings,
-} from './scripts/nai-settings.js';
 
 import {
     initBookmarks,
     showBookmarksButtons,
     updateBookmarkDisplay,
 } from './scripts/bookmarks.js';
-
-import {
-    horde_settings,
-    loadHordeSettings,
-    generateHorde,
-    getStatusHorde,
-    getHordeModels,
-    adjustHordeGenerationParams,
-    isHordeGenerationNotAllowed,
-    MIN_LENGTH,
-    initHorde,
-} from './scripts/horde.js';
 
 import {
     debounce,
@@ -155,7 +111,6 @@ import {
     download,
     isDataURL,
     getCharaFilename,
-    PAGINATION_TEMPLATE,
     waitUntilCondition,
     escapeRegex,
     resetScrollHeight,
@@ -187,7 +142,7 @@ import {
 } from './scripts/utils.js';
 import { debounce_timeout, GENERATION_TYPE_TRIGGERS, IGNORE_SYMBOL, inject_ids, MEDIA_DISPLAY, MEDIA_SOURCE, MEDIA_TYPE, OVERSWIPE_BEHAVIOR, SCROLL_BEHAVIOR, SWIPE_DIRECTION, SWIPE_SOURCE, SWIPE_STATE } from './scripts/constants.js';
 
-import { cancelDebouncedMetadataSave, doDailyExtensionUpdatesCheck, extension_settings, initExtensions, loadExtensionSettings, runGenerationInterceptors } from './scripts/extensions.js';
+import { cancelDebouncedMetadataSave, doDailyExtensionUpdatesCheck, extension_settings, initExtensions, loadExtensionSettings, runGenerationInterceptors, setDeferredExtensionLoader } from './scripts/extensions.js';
 import { COMMENT_NAME_DEFAULT, CONNECT_API_MAP, executeSlashCommandsOnChatInput, initDefaultSlashCommands, initSlashCommandAutoComplete, isExecutingCommandsFromChatInput, pauseScriptExecution, stopScriptExecution, UNIQUE_APIS } from './scripts/slash-commands.js';
 import { initMacroAutoComplete } from './scripts/autocomplete/MacroAutoComplete.js';
 import {
@@ -245,8 +200,10 @@ import {
 } from './scripts/personas.js';
 import { getBackgrounds, initBackgrounds, loadBackgroundSettings, background_settings } from './scripts/backgrounds.js';
 import { loader } from './scripts/action-loader.js';
+import { createSingleFlightTask, resolvePersistedCurrentVersion, resolveStartupSettingsPlan } from './scripts/startup-helpers.js';
+import { ensurePanel, registerPanelHook } from './scripts/deferred-panels.js';
+import { getCharacterCardTagId } from './scripts/deferred-panel-replays.js';
 import { BulkEditOverlay } from './scripts/BulkEditOverlay.js';
-import { initTextGenModels } from './scripts/textgen-models.js';
 import { appendFileContent, hasPendingFileAttachment, populateFileAttachment, decodeStyleTags, encodeStyleTags, isExternalMediaAllowed, preserveNeutralChat, restoreNeutralChat, formatCreatorNotes, initChatUtilities, addDOMPurifyHooks } from './scripts/chats.js';
 import { getPresetManager, initPresetManager } from './scripts/preset-manager.js';
 import { evaluateMacros, getLastMessageId, initMacros } from './scripts/macros.js';
@@ -257,6 +214,7 @@ import { initScrapers } from './scripts/scrapers.js';
 import { initCustomSelectedSamplers, validateDisabledSamplers } from './scripts/samplerSelect.js';
 import { DragAndDropHandler } from './scripts/dragdrop.js';
 import { INTERACTABLE_CONTROL_CLASS, initKeyboard } from './scripts/keyboard.js';
+import { buildCascadeSectionHtml, showDeleteConfirmWithCascade, showWorldInfoCascadeDialog } from './scripts/world-cascade-dialog.js';
 import { initDynamicStyles } from './scripts/dynamic-styles.js';
 import { initInputMarkdown } from './scripts/input-md-formatting.js';
 import { AbortReason } from './scripts/util/AbortReason.js';
@@ -271,7 +229,7 @@ import { initBulkEdit } from './scripts/bulk-edit.js';
 import { getContext } from './scripts/st-context.js';
 import { extractReasoningFromData, extractReasoningSignatureFromData, initReasoning, parseReasoningInSwipes, PromptReasoning, ReasoningHandler, removeReasoningFromString, updateReasoningUI } from './scripts/reasoning.js';
 import { accountStorage } from './scripts/util/AccountStorage.js';
-import { initWelcomeScreen, openPermanentAssistantChat, openPermanentAssistantCard, getPermanentAssistantAvatar } from './scripts/welcome-screen.js';
+import { initWelcomeScreen, openPermanentAssistantChat, openPermanentAssistantCard, getPermanentAssistantAvatar, suppressNextChatChangedWelcomeScreen } from './scripts/welcome-screen.js';
 import { initDataMaid } from './scripts/data-maid.js';
 import { clearItemizedPrompts, deleteItemizedPromptForMessage, deleteItemizedPrompts, findItemizedPromptSet, initItemizedPrompts, itemizedParams, itemizedPrompts, loadItemizedPrompts, promptItemize, replaceItemizedPromptText, saveItemizedPrompts, swapItemizedPrompts } from './scripts/itemized-prompts.js';
 import { getSystemMessageByType, initSystemMessages, SAFETY_CHAT, sendSystemMessage, system_message_types, system_messages } from './scripts/system-messages.js';
@@ -287,6 +245,8 @@ import { addChatBackupsBrowser } from './scripts/chat-backups.js';
 import { onboardingExperimentalMacroEngine } from './scripts/macros/engine/MacroDiagnostics.js';
 import { compressRequest, setRequestCompressionConfig } from './scripts/request-compression.js';
 import { canJumpToSwipeForMessage, canOpenSwipePickerForMessage, initSwipePicker } from './scripts/swipe-picker.js';
+import { getCharacterDeleteCandidates, removeCharactersFromState } from './scripts/character-list-state.js';
+import { runDeleteCharacterClosePreflight } from './scripts/delete-character-preflight.js';
 
 // API OBJECT FOR EXTERNAL WIRING
 globalThis.SillyTavern = {
@@ -294,12 +254,74 @@ globalThis.SillyTavern = {
     getContext,
 };
 
+if (globalThis.location?.pathname === '/' && globalThis.location?.search.includes('emberdesk_perf_hooks=1')) {
+    globalThis.__emberDeskPerf = {
+        deleteCharacter,
+        getPastCharacterChats,
+        printCharacters,
+    };
+}
+
+function getPerfInteractionTrace() {
+    return globalThis.__emberDeskPerf?.interactionTrace ?? null;
+}
+
+function markPerfInteractionMetric(name, value) {
+    const trace = getPerfInteractionTrace();
+    if (!trace || typeof value !== 'number' || !Number.isFinite(value)) {
+        return;
+    }
+
+    trace.metrics[name] = Math.round(value * 100) / 100;
+}
+
+const startupProfile = globalThis.__emberDeskStartup ??= {
+    stages: [],
+    marks: [],
+};
+startupProfile.scriptModuleStartMs = roundStartupTime(performance.now());
+markStartup('script:module-start');
+
+function roundStartupTime(value) {
+    return Math.round(value * 100) / 100;
+}
+
+function markStartup(name, details = {}) {
+    startupProfile.marks.push({
+        name,
+        timeMs: roundStartupTime(performance.now()),
+        ...details,
+    });
+}
+
+function pushStartupStage(name, startTimeMs, endTimeMs, error = null) {
+    startupProfile.stages.push({
+        name,
+        startTimeMs: roundStartupTime(startTimeMs),
+        endTimeMs: roundStartupTime(endTimeMs),
+        durationMs: roundStartupTime(endTimeMs - startTimeMs),
+        error,
+    });
+}
+
+async function measureStartupStage(name, fn) {
+    const startTimeMs = performance.now();
+
+    try {
+        const result = await fn();
+        pushStartupStage(name, startTimeMs, performance.now());
+        return result;
+    } catch (error) {
+        pushStartupStage(name, startTimeMs, performance.now(), String(error?.message ?? error));
+        throw error;
+    }
+}
+
 export {
     user_avatar,
     setUserAvatar,
     getUserAvatars,
     getUserAvatar,
-    nai_settings,
     isOdd,
     countOccurrences,
     renderTemplate,
@@ -312,10 +334,6 @@ export {
     replaceItemizedPromptText,
     deleteItemizedPrompts,
     findItemizedPromptSet,
-    koboldai_settings,
-    koboldai_setting_names,
-    novelai_settings,
-    novelai_setting_names,
     UNIQUE_APIS,
     CONNECT_API_MAP,
     system_messages,
@@ -335,6 +353,7 @@ export {
 /**
  * Wait for page to load before continuing the app initialization.
  */
+const waitForLoadStartedAtMs = performance.now();
 await new Promise((resolve) => {
     if (document.readyState === 'complete') {
         resolve();
@@ -342,6 +361,8 @@ await new Promise((resolve) => {
         window.addEventListener('load', resolve);
     }
 });
+pushStartupStage('awaitWindowLoad', waitForLoadStartedAtMs, performance.now());
+markStartup('window:load-ready');
 
 // Configure toast library:
 toastr.options = {
@@ -401,7 +422,7 @@ export let converter;
 
 // array for prompt token calculations
 
-export const systemUserName = 'SillyTavern System';
+export const systemUserName = 'EmberDesk System';
 export const neutralCharacterName = 'Assistant';
 let default_user_name = 'User';
 export let name1 = default_user_name;
@@ -419,7 +440,10 @@ export let isChatSaving = false;
 let firstRun = false;
 export let settingsReady = false;
 let currentVersion = '0.0.0';
-export let displayVersion = 'SillyTavern';
+export let displayVersion = 'EmberDesk';
+let deferredExtensionTask = null;
+const deferredVersionTask = createSingleFlightTask(() => measureStartupStage('deferred.getClientVersion', () => getClientVersion()));
+const deferredBackgroundTask = createSingleFlightTask(() => measureStartupStage('deferred.getBackgrounds', () => getBackgrounds()));
 
 let generation_started = new Date();
 /** @type {Character[]} */
@@ -434,7 +458,7 @@ export const default_avatar = 'img/ai4.png';
 export const system_avatar = 'img/five.png';
 export const comment_avatar = 'img/quill.png';
 export const default_user_avatar = 'img/user-default.png';
-export let CLIENT_VERSION = 'SillyTavern:UNKNOWN:Cohee#1207'; // For Horde header
+export let CLIENT_VERSION = 'EmberDesk:UNKNOWN:dev'; // For Horde header
 let optionsPopper = Popper.createPopper(document.getElementById('options_button'), document.getElementById('options'), {
     placement: 'top-start',
 });
@@ -442,6 +466,22 @@ let exportPopper = Popper.createPopper(document.getElementById('export_button'),
     placement: 'left',
 });
 let isExportPopupOpen = false;
+
+function toggleCharacterExportPopup(referenceElement = document.getElementById('export_button')) {
+    const exportPopup = document.getElementById('export_format_popup');
+    if (!(referenceElement instanceof HTMLElement) || !(exportPopup instanceof HTMLElement)) {
+        return;
+    }
+
+    exportPopper?.destroy();
+    exportPopper = Popper.createPopper(referenceElement, exportPopup, {
+        placement: 'left',
+    });
+
+    isExportPopupOpen = !isExportPopupOpen;
+    $(exportPopup).toggle(isExportPopupOpen);
+    exportPopper.update();
+}
 
 // Saved here for performance reasons
 const messageTemplate = $('#message_template .mes');
@@ -503,7 +543,7 @@ async function getClientVersion() {
         const response = await fetch('/version');
         const data = await response.json();
         CLIENT_VERSION = data.agent;
-        displayVersion = `SillyTavern ${data.pkgVersion}`;
+        displayVersion = `EmberDesk ${data.pkgVersion}`;
         currentVersion = data.pkgVersion;
 
         if (data.gitRevision && data.gitBranch) {
@@ -516,6 +556,66 @@ async function getClientVersion() {
         console.error('Couldn\'t get client version', err);
     }
 }
+
+function configureDeferredStartupTasks(settingsPlan) {
+    deferredExtensionTask = null;
+    setDeferredExtensionLoader(null);
+
+    if (!settingsPlan?.extensionPlan?.shouldLoadDeferred) {
+        return;
+    }
+
+    deferredExtensionTask = createSingleFlightTask(async () => {
+        try {
+            await deferredVersionTask.ensure();
+
+            const isVersionChanged = settingsPlan.extensionPlan.savedVersion !== currentVersion;
+            await measureStartupStage('deferred.loadExtensionSettings', async () => {
+                await loadExtensionSettings(settingsPlan.settings, isVersionChanged, settingsPlan.extensionPlan.enableAutoUpdate);
+                await eventSource.emit(event_types.EXTENSION_SETTINGS_LOADED);
+            });
+
+            doDailyExtensionUpdatesCheck();
+            setDeferredExtensionLoader(null);
+        } catch (error) {
+            if (error && typeof error === 'object') {
+                error.__emberDeskDeferredExtensionToastShown = true;
+            }
+
+            setDeferredExtensionLoader(() => deferredExtensionTask.ensure(), { state: 'failed' });
+            toastr.error(
+                t`Extensions could not be loaded right now. Open the extensions panel to retry.`,
+                t`Extensions failed to load`,
+            );
+            throw error;
+        }
+    });
+
+    setDeferredExtensionLoader(() => deferredExtensionTask.ensure());
+}
+
+function startDeferredStartupTasks() {
+    void deferredVersionTask.ensure().catch(error => console.error('Deferred client version startup failed.', error));
+    void deferredBackgroundTask.ensure().catch(error => console.error('Deferred background startup failed.', error));
+
+    if (deferredExtensionTask) {
+        void deferredExtensionTask.ensure().catch(error => console.error('Deferred extension startup failed.', error));
+    }
+
+    // Idle warmup for deferred panels after APP_READY
+    requestIdleCallback(() => {
+        ensurePanel('world-info-body').catch(() => {});
+    });
+}
+
+/**
+ * Replay stored startup settings into a deferred panel's DOM after it loads.
+ */
+function _replayWorldInfoSettings() {
+    initWorldInfo();
+    rehydrateWorldInfoPanel();
+}
+
 
 export function reloadMarkdownProcessor() {
     converter = new showdown.Converter({
@@ -630,8 +730,6 @@ let abortController = new AbortController();
 //css
 var css_send_form_display = $('<div id=send_form></div>').css('display');
 
-var kobold_horde_model = '';
-
 export let token;
 
 
@@ -690,10 +788,13 @@ export async function pingServer() {
 
 //MARK: firstLoadInit
 async function firstLoadInit() {
+    markStartup('firstLoadInit:start');
     try {
-        const tokenResponse = await fetch('/csrf-token');
-        const tokenData = await tokenResponse.json();
-        token = tokenData.token;
+        await measureStartupStage('csrfToken', async () => {
+            const tokenResponse = await fetch('/csrf-token');
+            const tokenData = await tokenResponse.json();
+            token = tokenData.token;
+        });
     } catch {
         toastr.error(t`Couldn't get CSRF token. Please refresh the page.`, t`Error`, { timeOut: 0, extendedTimeOut: 0, preventDuplicates: true });
         throw new Error('Initialization failed');
@@ -704,9 +805,9 @@ async function firstLoadInit() {
 
     const splashLogo = document.createElement('img');
     splashLogo.src = '/img/logo.png';
-    splashLogo.alt = 'SillyTavern';
+    splashLogo.alt = 'EmberDesk';
     splashLogo.className = 'splash-logo';
-    splashLogo.ariaLabel = t`SillyTavern Logo`;
+    splashLogo.ariaLabel = 'EmberDesk Logo';
 
     const splashMessage = document.createElement('h2');
     splashMessage.className = 'splash-message';
@@ -720,72 +821,83 @@ async function firstLoadInit() {
         slug: 'app-init',
         toastMode: loader.ToastMode.NONE,
         overlayContent: initLoaderOverlay,
+        overlayHideMode: 'immediate',
     });
 
-    registerPromptManagerMigration();
-    initDomHandlers();
-    initStandaloneMode();
-    initLibraryShims();
-    addShowdownPatch(showdown);
-    addDOMPurifyHooks();
-    reloadMarkdownProcessor();
-    applyBrowserFixes();
-    await getClientVersion();
-    await initSecrets();
-    await readSecretState();
-    await initLocales();
-    initChatUtilities();
-    initDefaultSlashCommands();
-    initTextGenModels();
-    initOpenAI();
-    initTextGenSettings();
-    initKoboldSettings();
-    initNovelAISettings();
-    initSystemPrompts();
-    await initExtensions();
-    initExtensionSlashCommands();
-    ToolManager.initToolSlashCommands();
-    await initPresetManager();
-    await initSystemMessages();
+    await measureStartupStage('bootstrapUi', () => Promise.resolve().then(() => {
+        registerPromptManagerMigration();
+        initDomHandlers();
+        initStandaloneMode();
+        initLibraryShims();
+        addShowdownPatch(showdown);
+        addDOMPurifyHooks();
+        reloadMarkdownProcessor();
+        applyBrowserFixes();
+    }));
+    await measureStartupStage('initSecrets', () => initSecrets());
+    await measureStartupStage('readSecretState', () => readSecretState());
+    await measureStartupStage('initLocales', () => initLocales());
+    await measureStartupStage('registerCoreModules', () => Promise.resolve().then(() => {
+        initChatUtilities();
+        initDefaultSlashCommands();
+        initOpenAI();
+        initSystemPrompts();
+    }));
+    await measureStartupStage('initExtensions', () => initExtensions());
+    await measureStartupStage('registerExtensionSlashCommands', () => Promise.resolve().then(() => {
+        initExtensionSlashCommands();
+        ToolManager.initToolSlashCommands();
+    }));
+    await measureStartupStage('initPresetManager', () => initPresetManager());
+    await measureStartupStage('initSystemMessages', () => initSystemMessages());
     await getSettings(initLoaderHandle);
-    await checkOpenRouterAuth();
-    initKeyboard();
-    initDynamicStyles();
-    initTags();
-    initBookmarks();
-    await getUserAvatars(true, user_avatar);
-    await getCharacters();
-    await getBackgrounds();
-    await initTokenizers();
-    initBackgrounds();
-    initAuthorsNote();
-    await initPersonas();
-    await initSlashCommandAutoComplete();
-    initMacroAutoComplete();
-    initWorldInfo();
-    initHorde();
-    initRossMods();
-    initStats();
-    initCfg();
-    initLogprobs();
-    initInputMarkdown();
-    initServerHistory();
-    initSettingsSearch();
-    initBulkEdit();
-    initReasoning();
-    initWelcomeScreen();
-    await initScrapers();
-    initCustomSelectedSamplers();
-    initDataMaid();
-    initItemizedPrompts();
-    initAccessibility();
-    initSwipePicker();
-    addDebugFunctions();
-    doDailyExtensionUpdatesCheck();
-    await eventSource.emit(event_types.APP_INITIALIZED);
-    await initLoaderHandle.hide();
-    await fixViewport();
-    await eventSource.emit(event_types.APP_READY);
+    await measureStartupStage('checkOpenRouterAuth', () => checkOpenRouterAuth());
+    await measureStartupStage('bindPostSettingsUi', () => Promise.resolve().then(() => {
+        initKeyboard();
+        initDynamicStyles();
+        initTags();
+        initBookmarks();
+    }));
+    await measureStartupStage('getUserAvatars', () => getUserAvatars(true, user_avatar));
+    await measureStartupStage('getCharacters', () => getCharacters());
+    await measureStartupStage('initTokenizers', () => initTokenizers());
+    await measureStartupStage('hydrateFeatureModules', async () => {
+        initBackgrounds();
+        initAuthorsNote();
+        await initPersonas();
+        await initSlashCommandAutoComplete();
+        initMacroAutoComplete();
+        // Register deferred panel hooks before initWorldInfo so they capture any needed state
+        registerPanelHook('world-info-body', _replayWorldInfoSettings);
+        initWorldInfo();
+        initRossMods();
+        initStats();
+        initCfg();
+        initLogprobs();
+        initInputMarkdown();
+        initServerHistory();
+        initSettingsSearch();
+        initBulkEdit();
+        initReasoning();
+        initWelcomeScreen();
+    });
+    await measureStartupStage('initScrapers', () => initScrapers());
+    await measureStartupStage('lateFeatureInit', () => Promise.resolve().then(() => {
+        initCustomSelectedSamplers();
+        initDataMaid();
+        initItemizedPrompts();
+        initAccessibility();
+        initSwipePicker();
+        addDebugFunctions();
+    }));
+    await measureStartupStage('emitAppInitialized', () => eventSource.emit(event_types.APP_INITIALIZED));
+    markStartup('app:initialized');
+    await measureStartupStage('hideInitLoader', () => initLoaderHandle.hide());
+    await measureStartupStage('fixViewport', () => fixViewport());
+    await measureStartupStage('emitAppReady', () => eventSource.emit(event_types.APP_READY));
+    startupProfile.appReadyAtMs = roundStartupTime(performance.now());
+    markStartup('app:ready');
+    queueMicrotask(startDeferredStartupTasks);
 }
 
 async function fixViewport() {
@@ -935,49 +1047,138 @@ async function getHiddenBlock(hidden) {
 }
 
 function getCharacterBlock(item, id) {
+    return $(buildCharacterRowHtml(item, id));
+}
+
+/**
+ * Builds a character row as an HTML string, replacing the jQuery clone/find/append path.
+ * @param {object} item Character data object
+ * @param {string|number} id Character index
+ * @returns {string} HTML string for the character row
+ */
+function buildCharacterRowHtml(item, id) {
     let this_avatar = default_avatar;
     if (item.avatar != 'none') {
         this_avatar = getThumbnailUrl('avatar', item.avatar);
     }
-    // Populate the template
-    const template = $('#character_template .character_select').clone();
-    template.attr({ 'data-chid': id, 'id': `CharID${id}` });
-    template.find('img').attr('src', this_avatar).attr('alt', item.name);
-    template.find('.avatar').attr('title', `[Character] ${item.name}\nFile: ${item.avatar}`);
-    template.find('.ch_name').text(item.name).attr('title', `[Character] ${item.name}`);
-    if (power_user.show_card_avatar_urls) {
-        template.find('.ch_avatar_url').text(item.avatar);
-    }
-    template.find('.ch_fav_icon').css('display', 'none');
-    template.toggleClass('is_fav', item.fav || item.fav == 'true');
-    template.find('.ch_fav').val(item.fav);
 
+    const isFav = item.fav || item.fav == 'true';
+    const isActive = !selected_group && this_chid !== undefined && String(this_chid) === String(id);
     const isAssistant = item.avatar === getPermanentAssistantAvatar();
-    if (!isAssistant) {
-        template.find('.ch_assistant').remove();
-    }
-
     const description = item.data?.creator_notes || '';
-    if (description) {
-        template.find('.ch_description').text(description);
-    } else {
-        template.find('.ch_description').hide();
-    }
-
     const auxFieldName = power_user.aux_field || 'character_version';
     const auxFieldValue = (item.data && item.data[auxFieldName]) || '';
-    if (auxFieldValue) {
-        template.find('.character_version').text(auxFieldValue);
-    } else {
-        template.find('.character_version').hide();
+    const showAvatarUrl = power_user.show_card_avatar_urls;
+
+    const escapedName = escapeHtml(item.name);
+    const escapedAvatar = escapeHtml(item.avatar);
+    const escapedDescription = escapeHtml(description);
+    const escapedAuxField = escapeHtml(auxFieldValue);
+
+    // Build inline tag markup as string using exported tag_map and tags
+    const tagKey = getTagKeyForEntity(id);
+    let printableTags = [];
+    if (tagKey != null && Array.isArray(tag_map[tagKey])) {
+        printableTags = tag_map[tagKey]
+            .map(x => tags.find(y => y.id === x))
+            .filter(x => x)
+            .filter(tag => !tag.is_hidden_on_character_card)
+            .sort(compareTagsForSort);
     }
 
-    // Display inline tags
-    const tagsElement = template.find('.tags');
-    printTagList(tagsElement, { forEntityOrKey: id, tagOptions: { isCharacterList: true } });
+    const DEFAULT_TAGS_LIMIT = 50;
+    const tagsDisplayLimit = DEFAULT_TAGS_LIMIT;
+    const isFilterActive = (tag) => tag.filter_state && !isFilterState(tag.filter_state, FILTER_STATES.UNDEFINED);
+    const shouldPrintTag = (tag) => isBogusFolder(tag) || isFilterActive(tag);    const mandatoryPrintTagsCount = printableTags.filter(shouldPrintTag).length;
+    const availableSlotsForAdditionalTags = Math.max(tagsDisplayLimit - mandatoryPrintTagsCount, 0);
+    let additionalTagsPrinted = 0;
+    let tagsSkipped = 0;
 
-    // Add to the list
-    return template;
+    let tagsHtml = '';
+    for (const tag of printableTags) {
+        if (shouldPrintTag(tag) || additionalTagsPrinted++ < availableSlotsForAdditionalTags) {
+            const tagName = escapeHtml(tag.name);
+            tagsHtml += `<span class="tag" id="${escapeHtml(getCharacterCardTagId(tag.id))}"><span class="tag_name">${tagName}</span></span>`;
+        } else {
+            tagsSkipped++;
+        }
+    }
+    if (tagsSkipped > 0) {
+        tagsHtml += `<span class="tag tag_placeholder"><span class="tag_name">+${tagsSkipped}</span></span>`;
+    }
+
+    return `<div class="character_select entity_block flex-container wide100p alignitemsflexstart${isFav ? ' is_fav' : ''}${isActive ? ' is_active' : ''}" data-chid="${id}" id="CharID${id}">
+                <div class="avatar" title="[Character] ${escapedName}\nFile: ${escapedAvatar}">
+                    <img src="${this_avatar}" alt="${escapedName}" loading="lazy" decoding="async">
+                    <i class="ch_fav_icon fa-solid fa-star" aria-hidden="true"></i>
+                </div>
+                <div class="flex-container wide100pLess70px character_select_container">
+                    <div class="wide100p character_name_block">
+                        <span class="ch_name" title="[Character] ${escapedName}">${escapedName}</span>
+                        <small class="ch_additional_info ch_add_placeholder">+++</small>
+                        ${isAssistant ? '<small class="ch_assistant" title="This character will be used as a welcome page assistant." data-i18n="[title]This character will be used as a welcome page assistant."><i class="fa-solid fa-sm fa-user-graduate"></i></small>' : ''}
+                        ${auxFieldValue ? `<small class="ch_additional_info character_version">${escapedAuxField}</small>` : '<small class="ch_additional_info character_version" style="display:none"></small>'}
+                        ${showAvatarUrl ? `<small class="ch_additional_info ch_avatar_url">${escapedAvatar}</small>` : ''}
+                    </div>
+                    <input class="ch_fav" value="${isFav}" hidden />
+                    <div class="ch_description"${description ? '' : ' style="display:none"'}>${description ? escapedDescription : ''}</div>
+                    <div class="tags tags_inline">${tagsHtml}</div>
+                </div>
+            </div>`;
+}
+
+/**
+ * Patches a visible character row in place for a narrow set of safe metadata updates.
+ * Returns true if patched, false if the row is not visible or conditions are not met.
+ * @param {string|number} chid Character index
+ * @param {object} patch Patch object with optional fields: fav, avatar, avatarTitle, description, tags, auxField
+ * @returns {boolean}
+ */
+export function updateCharacterRow(chid, patch) {
+    const $row = $(`#CharID${chid}`);
+    if (!$row.length) return false;
+
+    // Only patch in unfiltered main list, no bogus-folder drilldown
+    if (entitiesFilter.hasAnyFilter()) return false;
+    if (power_user.bogus_folders && isBogusFolderOpen()) return false;
+
+    if ('fav' in patch) {
+        const isFav = patch.fav || patch.fav === 'true';
+        $row.toggleClass('is_fav', isFav);
+        $row.find('.ch_fav').val(String(isFav));
+    }
+    if ('avatar' in patch) {
+        let src = default_avatar;
+        if (patch.avatar !== 'none') {
+            src = getThumbnailUrl('avatar', patch.avatar);
+        }
+        $row.find('.avatar img').attr('src', src).attr('alt', patch.name || $row.find('.ch_name').text());
+        $row.find('.avatar').attr('title', patch.avatarTitle || `[Character] ${$row.find('.ch_name').text()}\nFile: ${patch.avatar}`);
+    }
+    if ('description' in patch) {
+        const $desc = $row.find('.ch_description');
+        if (patch.description) {
+            $desc.text(patch.description).show();
+        } else {
+            $desc.hide();
+        }
+    }
+    if ('tags' in patch) {
+        // Fall back to full tag re-render via printTagList for the row's tag container
+        printTagList($row.find('.tags'), { forEntityOrKey: chid, tagOptions: { isCharacterList: true } });
+    }
+    if ('auxField' in patch) {
+        const $ver = $row.find('.character_version');
+        if (patch.auxField) {
+            $ver.text(patch.auxField).show();
+        } else {
+            $ver.hide();
+        }
+    }
+
+    favsToHotswap();
+    updatePersonaConnectionsAvatarList();
+    return true;
 }
 
 /**
@@ -1026,7 +1227,12 @@ export async function printCharacters(fullRefresh = false) {
         showSizeChanger: true,
         prevText: '<',
         nextText: '>',
-        formatNavigator: PAGINATION_TEMPLATE,
+        formatNavigator: function (currentPage, totalPage, totalNumber) {
+            const actualTotal = totalNumber || entities.length;
+            const rangeStart = actualTotal > 0 ? (currentPage - 1) * pageSize + 1 : 0;
+            const rangeEnd = Math.min(currentPage * pageSize, actualTotal);
+            return `${rangeStart}-${rangeEnd} .. ${actualTotal}`;
+        },
         formatSizeChanger: renderPaginationDropdown(pageSize, sizeChangerOptions),
         showNavigator: true,
         callback: async function (/** @type {Entity[]} */ data) {
@@ -3457,13 +3663,10 @@ export function parseMesExamples(examplesStr, isInstruct) {
 
 export function isStreamingEnabled() {
     return (
-        (main_api == 'openai' &&
-            oai_settings.stream_openai &&
-            !(oai_settings.chat_completion_source == chat_completion_sources.OPENAI && ['o1-2024-12-17', 'o1'].includes(oai_settings.openai_model))
-        )
-        || (main_api == 'kobold' && kai_settings.streaming_kobold && kai_flags.can_use_streaming)
-        || (main_api == 'novel' && nai_settings.streaming_novel)
-        || (main_api == 'textgenerationwebui' && textgen_settings.streaming));
+        main_api == 'openai' &&
+        oai_settings.stream_openai &&
+        !(oai_settings.chat_completion_source == chat_completion_sources.OPENAI && ['o1-2024-12-17', 'o1'].includes(oai_settings.openai_model))
+    );
 }
 
 function showStopButton() {
@@ -3863,7 +4066,7 @@ class StreamingProcessor {
  * @returns {string | object[]} Prompt ready for use in generation. If using TC, this will be a string. If using CC, this will be an array of chat-style messages.
  */
 export function createRawPrompt(prompt, api, instructOverride, quietToLoud, systemPrompt, prefill) {
-    const isInstruct = power_user.instruct.enabled && api !== 'openai' && api !== 'novel' && !instructOverride;
+    const isInstruct = power_user.instruct.enabled && api !== 'openai' && !instructOverride;
 
     // If the prompt was given as a string, convert to a message-style object assuming user role
     if (typeof prompt === 'string') {
@@ -3912,7 +4115,6 @@ export function createRawPrompt(prompt, api, instructOverride, quietToLoud, syst
     if (api !== 'openai') {
         const joiner = isInstruct ? '' : '\n';
         prompt = prompt.map(message => message.content).join(joiner);
-        prompt = api === 'novel' ? adjustNovelInstructionPrompt(prompt) : prompt;
         prompt = prompt + (isInstruct ? formatInstructModePrompt(name2, false, prefill, name1, name2, true, quietToLoud) : `\n${prefill}`);  // add last line
     }
 
@@ -3983,55 +4185,13 @@ export async function generateRawData({ prompt = '', api = null, instructOverrid
         eventAbortController.signal.throwIfAborted();
 
         switch (api) {
-            case 'kobold':
-            case 'koboldhorde':
-                if (kai_settings.preset_settings === 'gui') {
-                    generateData = { prompt: prompt, gui_settings: true, max_length: amount_gen, max_context_length: max_context, api_server: kai_settings.api_server };
-                } else {
-                    const isHorde = api === 'koboldhorde';
-                    const koboldSettings = koboldai_settings[koboldai_setting_names[kai_settings.preset_settings]];
-                    generateData = getKoboldGenerationData(prompt.toString(), koboldSettings, amount_gen, max_context, isHorde, 'quiet');
-                }
-                TempResponseLength.restore(api);
-                break;
-            case 'novel': {
-                const novelSettings = novelai_settings[novelai_setting_names[nai_settings.preset_settings_novel]];
-                generateData = getNovelGenerationData(prompt, novelSettings, amount_gen, false, false, null, 'quiet');
-                TempResponseLength.restore(api);
-                break;
-            }
-            case 'textgenerationwebui':
-                generateData = await getTextGenGenerationData(prompt, amount_gen, false, false, null, 'quiet');
-                TempResponseLength.restore(api);
-                break;
             case 'openai': {
                 generateData = prompt;  // generateData is just the chat message object
                 eventHook = TempResponseLength.setupEventHook(api);
             } break;
         }
 
-        let data = {};
-
-        if (api === 'koboldhorde') {
-            data = await generateHorde(prompt.toString(), generateData, abortController.signal, false);
-        } else if (api === 'openai') {
-            data = await sendOpenAIRequest('quiet', generateData, abortController.signal, { jsonSchema });
-        } else {
-            const generateUrl = getGenerateUrl(api);
-            const response = await fetch(generateUrl, {
-                method: 'POST',
-                headers: getRequestHeaders(),
-                cache: 'no-cache',
-                body: JSON.stringify(generateData),
-                signal: abortController.signal,
-            });
-
-            if (!response.ok) {
-                throw await response.json();
-            }
-
-            data = await response.json();
-        }
+        const data = await sendOpenAIRequest('quiet', generateData, abortController.signal, { jsonSchema });
 
         // should only happen for text completions
         // other frontend paths do not return data if calling the backend fails,
@@ -4261,17 +4421,6 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
     // Occurs only if the generation is not aborted due to slash commands execution
     await eventSource.emit(event_types.GENERATION_AFTER_COMMANDS, type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, force_chid, signal, quietImage }, dryRun);
 
-    if (main_api == 'kobold' && kai_settings.streaming_kobold && !kai_flags.can_use_streaming) {
-        toastr.error(t`Streaming is enabled, but the version of Kobold used does not support token streaming.`, undefined, { timeOut: 10000, preventDuplicates: true });
-        unblockGeneration(type);
-        return Promise.resolve();
-    }
-
-    if (isHordeGenerationNotAllowed()) {
-        unblockGeneration(type);
-        return Promise.resolve();
-    }
-
     if (!dryRun) {
         // Ping server to make sure it is still alive
         const pingResult = await pingServer();
@@ -4319,10 +4468,9 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
     }
 
     //#########QUIET PROMPT STUFF##############
-    //this function just gives special care to novel quiet instruction prompts
+    // process quiet prompt params
     if (quiet_prompt) {
         quiet_prompt = substituteParams(quiet_prompt);
-        quiet_prompt = main_api == 'novel' && !quietToLoud ? adjustNovelInstructionPrompt(quiet_prompt) : quiet_prompt;
     }
 
     const hasBackendConnection = online_status !== 'no_connection';
@@ -4513,20 +4661,6 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
         console.debug('Skipping extension interceptors for dry run');
     }
 
-    // Adjust token limit for Horde
-    let adjustedParams;
-    if (main_api == 'koboldhorde' && (horde_settings.auto_adjust_context_length || horde_settings.auto_adjust_response_length)) {
-        try {
-            adjustedParams = await adjustHordeGenerationParams(max_context, amount_gen);
-        } catch {
-            unblockGeneration(type);
-            return Promise.resolve();
-        }
-        if (horde_settings.auto_adjust_context_length) {
-            this_max_context = (adjustedParams.maxContextLength - adjustedParams.maxLength);
-        }
-    }
-
     // Fetches the combined prompt for both negative and positive prompts
     const cfgGuidanceScale = getGuidanceScale();
     const useCfgPrompt = cfgGuidanceScale && cfgGuidanceScale.value !== 1;
@@ -4546,7 +4680,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
 
     console.log(`Core/all messages: ${coreChat.length}/${chat.length}`);
 
-    if ((promptBias && !isUserPromptBias) || power_user.always_force_name2 || main_api == 'novel') {
+    if ((promptBias && !isUserPromptBias) || power_user.always_force_name2) {
         force_name2 = true;
     }
 
@@ -4782,7 +4916,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
     }
 
     let examplesString = '';
-    let chatString = addChatsPreamble(addChatsSeparator(''));
+    let chatString = addChatsSeparator('');
     let cyclePrompt = '';
 
     async function getMessagesTokenCount() {
@@ -5038,7 +5172,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
         const prompt = [
             combinedStoryString,
             mesExmString,
-            addChatsPreamble(addChatsSeparator(jointMessages)),
+            addChatsSeparator(jointMessages),
             '\n',
             modifyLastPromptLine(''),
             generatedPromptCache,
@@ -5127,8 +5261,6 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
             // add a custom dingus (if defined)
             mesSendString = addChatsSeparator(mesSendString);
 
-            // add chat preamble
-            mesSendString = addChatsPreamble(mesSendString);
 
             let combinedPrompt = [
                 combinedStoryString,
@@ -5168,7 +5300,6 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
             generatedPromptCache,
             main: system,
             jailbreak,
-            naiPreamble: nai_settings.preamble,
         };
 
         // Before returning the combined prompt, give available context related information to all subscribers.
@@ -5189,39 +5320,6 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
 
     let generate_data;
     switch (main_api) {
-        case 'koboldhorde':
-        case 'kobold':
-            if (main_api == 'koboldhorde' && horde_settings.auto_adjust_response_length) {
-                maxLength = Math.min(maxLength, adjustedParams.maxLength);
-                maxLength = Math.max(maxLength, MIN_LENGTH); // prevent validation errors
-            }
-
-            generate_data = {
-                prompt: finalPrompt,
-                gui_settings: true,
-                max_length: maxLength,
-                max_context_length: max_context,
-                api_server: kai_settings.api_server,
-            };
-
-            if (kai_settings.preset_settings != 'gui') {
-                const isHorde = main_api == 'koboldhorde';
-                const presetSettings = koboldai_settings[koboldai_setting_names[kai_settings.preset_settings]];
-                const maxContext = (adjustedParams && horde_settings.auto_adjust_context_length) ? adjustedParams.maxContextLength : max_context;
-                generate_data = getKoboldGenerationData(finalPrompt, presetSettings, maxLength, maxContext, isHorde, type);
-            }
-            break;
-        case 'textgenerationwebui': {
-            const cfgValues = useCfgPrompt ? { guidanceScale: cfgGuidanceScale, negativePrompt: await getCombinedPrompt(true) } : null;
-            generate_data = await getTextGenGenerationData(finalPrompt, maxLength, isImpersonate, isContinue, cfgValues, type);
-            break;
-        }
-        case 'novel': {
-            const cfgValues = useCfgPrompt ? { guidanceScale: cfgGuidanceScale } : null;
-            const presetSettings = novelai_settings[novelai_setting_names[nai_settings.preset_settings_novel]];
-            generate_data = getNovelGenerationData(finalPrompt, presetSettings, maxLength, isImpersonate, isContinue, cfgValues, type);
-            break;
-        }
         case 'openai': {
             let [prompt, counts] = await prepareOpenAIMessages({
                 name2: name2,
@@ -5265,7 +5363,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
     /**
      * Saves itemized prompt bits and calls streaming or non-streaming generation API.
      * @returns {Promise<void|*|Awaited<*>|String|{fromStream}|string|undefined|Object>}
-     * @throws {Error|object} Error with message text, or Error with response JSON (OAI/Horde), or the actual response JSON (novel|textgenerationwebui|kobold)
+     * @throws {Error|object} Error with message text, or Error with response JSON
      */
     async function finishGenerating() {
         if (power_user.console_log_prompts) {
@@ -5408,7 +5506,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
 
         let messageChunk = '';
 
-        // if an error was returned in data (textgenwebui), show it and throw it
+        // if an error was returned in data, show it and throw it
         if (data.error) {
             unblockGeneration(type);
 
@@ -5429,7 +5527,6 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
         let reasoning = extractReasoningFromData(data);
         let imageUrls = extractImagesFromData(data);
         const reasoningSignature = extractReasoningSignatureFromData(data);
-        kobold_horde_model = title;
 
         const swipes = extractMultiSwipes(data, type);
 
@@ -5529,7 +5626,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
      * @throws {Error|object} Re-throws the exception
      */
     function onError(exception) {
-        // if the response JSON was thrown (novel|textgenerationwebui|kobold), show the error message
+        // if the response JSON was thrown, show the error message
         if (typeof exception?.error?.message === 'string') {
             toastr.error(exception.error.message, t`Text generation error`, { timeOut: 10000, extendedTimeOut: 20000 });
         }
@@ -5868,36 +5965,10 @@ export async function sendMessageAsUser(messageText, messageBias, insertAt = nul
  * @returns {number} The maximum context token limit for the current API.
  */
 export function getMaxContextTokens() {
-    if (main_api == 'kobold' || main_api == 'koboldhorde' || main_api == 'textgenerationwebui') {
-        return max_context;
-    }
-    if (main_api == 'novel') {
-        let this_max_context = Number(max_context);
-        if (nai_settings.model_novel.includes('clio')) {
-            this_max_context = Math.min(max_context, 8192);
-        }
-        if (nai_settings.model_novel.includes('kayra')) {
-            this_max_context = Math.min(max_context, 8192);
-
-            const subscriptionLimit = getKayraMaxContextTokens();
-            if (typeof subscriptionLimit === 'number' && this_max_context > subscriptionLimit) {
-                this_max_context = subscriptionLimit;
-                console.log(`NovelAI subscription limit reached. Max context size is now ${this_max_context}`);
-            }
-        }
-        if (nai_settings.model_novel.includes('erato')) {
-            // subscriber limits coming soon
-            this_max_context = Math.min(max_context, 8192);
-
-            // Added special tokens and whatnot
-            this_max_context -= 10;
-        }
-        return this_max_context;
-    }
     if (main_api == 'openai') {
         return oai_settings.openai_max_context;
     }
-    return 1487;
+    return max_context;
 }
 
 /**
@@ -5905,13 +5976,10 @@ export function getMaxContextTokens() {
  * @returns {number} The maximum response token limit for the current API.
  */
 export function getMaxResponseTokens() {
-    if (main_api == 'kobold' || main_api == 'koboldhorde' || main_api == 'textgenerationwebui' || main_api == 'novel') {
-        return amount_gen;
-    }
     if (main_api == 'openai') {
         return oai_settings.openai_max_tokens;
     }
-    return 0;
+    return amount_gen;
 }
 
 /**
@@ -5949,12 +6017,6 @@ function parseTokenCounts(counts, thisPromptBits) {
         oaiMainTokens: counts?.main || 0,
         oaiTotalTokens: total,
     });
-}
-
-function addChatsPreamble(mesSendString) {
-    return main_api === 'novel'
-        ? substituteParams(nai_settings.preamble) + '\n' + mesSendString
-        : mesSendString;
 }
 
 function addChatsSeparator(mesSendString) {
@@ -6059,23 +6121,7 @@ export async function sendGenerationRequest(type, data, options = {}) {
         return await sendOpenAIRequest(type, data.prompt, abortController.signal, options);
     }
 
-    if (main_api === 'koboldhorde') {
-        return await generateHorde(data.prompt, data, abortController.signal, true);
-    }
-
-    const response = await fetch(getGenerateUrl(main_api), {
-        method: 'POST',
-        headers: getRequestHeaders(),
-        cache: 'no-cache',
-        body: JSON.stringify(data),
-        signal: abortController.signal,
-    });
-
-    if (!response.ok) {
-        throw await response.json();
-    }
-
-    return await response.json();
+    throw new Error(`sendGenerationRequest: unsupported API: ${main_api}`);
 }
 
 /**
@@ -6093,43 +6139,12 @@ export async function sendStreamingRequest(type, data, options = {}) {
     switch (main_api) {
         case 'openai':
             return await sendOpenAIRequest(type, data.prompt, streamingProcessor.abortController.signal, options);
-        case 'textgenerationwebui':
-            return await generateTextGenWithStreaming(data, streamingProcessor.abortController.signal);
-        case 'novel':
-            return await generateNovelWithStreaming(data, streamingProcessor.abortController.signal);
-        case 'kobold':
-            return await generateKoboldWithStreaming(data, streamingProcessor.abortController.signal);
         default:
             throw new Error('Streaming is enabled, but the current API does not support streaming.');
     }
 }
 
-/**
- * Gets the generation endpoint URL for the specified API.
- * @param {string} api API name
- * @returns {string} Generation URL
- * @throws {Error} If the API is unknown
- */
-export function getGenerateUrl(api) {
-    switch (api) {
-        case 'kobold':
-            return '/api/backends/kobold/generate';
-        case 'koboldhorde':
-            return '/api/backends/koboldhorde/generate';
-        case 'textgenerationwebui':
-            return '/api/backends/text-completions/generate';
-        case 'novel':
-            return '/api/novelai/generate';
-        default:
-            throw new Error(`Unknown API: ${api}`);
-    }
-}
-
 function extractTitleFromData(data) {
-    if (main_api == 'koboldhorde') {
-        return data.workerName;
-    }
-
     return undefined;
 }
 
@@ -6174,38 +6189,10 @@ function extractImagesFromData(data, { mainApi = null, chatCompletionSource = nu
  * @param {string} continueFrom - for 'continue' generations, the prompt
  *  */
 function parseAndSaveLogprobs(data, continueFrom) {
-    /** @type {import('./scripts/logprobs.js').TokenLogprobs[] | null} */
-    let logprobs = null;
-
-    switch (main_api) {
-        case 'novel':
-            // parser only handles one token/logprob pair at a time
-            logprobs = data.logprobs?.map(parseNovelAILogprobs) || null;
-            break;
-        case 'openai':
-            // OAI and other chat completion APIs must handle this earlier in
-            // `sendOpenAIRequest`. `data` for these APIs is just a string with
-            // the text of the generated message, logprobs are not included.
-            return;
-        case 'textgenerationwebui':
-            switch (textgen_settings.type) {
-                case textgen_types.LLAMACPP: {
-                    logprobs = data?.completion_probabilities?.map(x => parseTextgenLogprobs(x.content, [x])) || null;
-                } break;
-                case textgen_types.KOBOLDCPP:
-                case textgen_types.VLLM:
-                case textgen_types.INFERMATICAI:
-                case textgen_types.APHRODITE:
-                case textgen_types.MANCER:
-                case textgen_types.TABBY: {
-                    logprobs = parseTabbyLogprobs(data) || null;
-                } break;
-            } break;
-        default:
-            return;
-    }
-
-    saveLogprobsForActiveMessage(logprobs, continueFrom);
+    // OAI and other chat completion APIs handle logprobs earlier in
+    // `sendOpenAIRequest`. `data` for these APIs is just a string with
+    // the text of the generated message, logprobs are not included.
+    return;
 }
 
 /**
@@ -6221,14 +6208,6 @@ export function extractMessageFromData(data, activeApi = null) {
         }
 
         switch (activeApi ?? main_api) {
-            case 'kobold':
-                return data.results[0].text;
-            case 'koboldhorde':
-                return data.text;
-            case 'textgenerationwebui':
-                return data.choices?.[0]?.text ?? data.choices?.[0]?.message?.content ?? data.content ?? data.response ?? data[0]?.content ?? '';
-            case 'novel':
-                return data.output;
             case 'openai':
                 return data?.content?.filter(p => p.type === 'text')?.map(p => p.text)?.join('\n\n') ?? data?.choices?.[0]?.message?.content ?? data?.choices?.[0]?.text ?? data?.text ?? data?.message?.content?.[0]?.text ?? data?.message?.tool_plan ?? '';
             default:
@@ -6323,23 +6302,7 @@ function extractMultiSwipes(data, type) {
         return swipes;
     }
 
-    if (main_api === 'textgenerationwebui' && textgen_settings.type === textgen_types.LLAMACPP) {
-        if (!Array.isArray(data)) {
-            return swipes;
-        }
-
-        const multiSwipeCount = data.length - 1;
-        if (multiSwipeCount <= 0) {
-            return swipes;
-        }
-
-        for (let i = 1; i < data.length; i++) {
-            const text = data?.[i]?.content ?? '';
-            swipes.push(text);
-        }
-    }
-
-    if (main_api === 'openai' || (main_api === 'textgenerationwebui' && [textgen_types.MANCER, textgen_types.VLLM, textgen_types.APHRODITE, textgen_types.TABBY, textgen_types.INFERMATICAI].includes(textgen_settings.type))) {
+    if (main_api === 'openai') {
         if (!Array.isArray(data.choices)) {
             return swipes;
         }
@@ -6981,8 +6944,6 @@ export function getGeneratingApi() {
     switch (main_api) {
         case 'openai':
             return oai_settings.chat_completion_source || 'openai';
-        case 'textgenerationwebui':
-            return textgen_settings.type === textgen_types.OOBA ? 'textgenerationwebui' : textgen_settings.type;
         default:
             return main_api;
     }
@@ -6991,20 +6952,8 @@ export function getGeneratingApi() {
 export function getGeneratingModel(mes) {
     let model = '';
     switch (main_api) {
-        case 'kobold':
-            model = online_status;
-            break;
-        case 'novel':
-            model = nai_settings.model_novel;
-            break;
         case 'openai':
             model = getChatCompletionModel();
-            break;
-        case 'textgenerationwebui':
-            model = online_status;
-            break;
-        case 'koboldhorde':
-            model = kobold_horde_model;
             break;
     }
     return model;
@@ -7030,16 +6979,22 @@ export function deactivateSendButtons() {
 }
 
 export function resetChatState() {
-    // replaces deleted charcter name with system user since it will be displayed next.
-    name2 = (this_chid === undefined && neutralCharacterName) ? neutralCharacterName : systemUserName;
-    //unsets expected chid before reloading (related to getCharacters/printCharacters from using old arrays)
-    setCharacterId(undefined);
-    // sets up system user to tell user about having deleted a character
-    chat.splice(0, chat.length, ...SAFETY_CHAT);
-    // resets chat metadata
+    resetChatStateWithOptions();
+}
+
+function resetChatStateWithOptions({ clearCharacters = true } = {}) {
+    name2 = applyResetChatState({
+        currentCharacterId: this_chid,
+        neutralCharacterName,
+        systemUserName,
+        chat,
+        safetyChat: SAFETY_CHAT,
+        characters,
+        setCharacterId,
+        clearCharacters,
+    });
+
     chat_metadata = {};
-    // resets the characters array, forcing getcharacters to reset
-    characters.length = 0;
 }
 
 /**
@@ -7695,53 +7650,14 @@ export async function openCharacterChat(file_name) {
 ////////// OPTIMZED MAIN API CHANGE FUNCTION ////////////
 
 export function changeMainAPI(api = null) {
-    const selectedVal = api ?? $('#main_api').val();
-    //console.log(selectedVal);
+    const selectedVal = api ?? main_api ?? 'openai';
     const apiElements = {
-        'koboldhorde': {
-            apiStreaming: $('#NULL_SELECTOR'),
-            apiSettings: $('#kobold_api-settings'),
-            apiConnector: $('#kobold_horde'),
-            apiPresets: $('#kobold_api-presets'),
-            apiRanges: $('#range_block'),
-            maxContextElem: $('#max_context_block'),
-            amountGenElem: $('#amount_gen_block'),
-        },
-        'kobold': {
-            apiStreaming: $('#streaming_kobold_block'),
-            apiSettings: $('#kobold_api-settings'),
-            apiConnector: $('#kobold_api'),
-            apiPresets: $('#kobold_api-presets'),
-            apiRanges: $('#range_block'),
-            maxContextElem: $('#max_context_block'),
-            amountGenElem: $('#amount_gen_block'),
-        },
-        'textgenerationwebui': {
-            apiStreaming: $('#streaming_textgenerationwebui_block'),
-            apiSettings: $('#textgenerationwebui_api-settings'),
-            apiConnector: $('#textgenerationwebui_api'),
-            apiPresets: $('#textgenerationwebui_api-presets'),
-            apiRanges: $('#range_block_textgenerationwebui'),
-            maxContextElem: $('#max_context_block'),
-            amountGenElem: $('#amount_gen_block'),
-        },
-        'novel': {
-            apiStreaming: $('#streaming_novel_block'),
-            apiSettings: $('#novel_api-settings'),
-            apiConnector: $('#novel_api'),
-            apiPresets: $('#novel_api-presets'),
-            apiRanges: $('#range_block_novel'),
-            maxContextElem: $('#max_context_block'),
-            amountGenElem: $('#amount_gen_block'),
-        },
         'openai': {
             apiStreaming: $('#NULL_SELECTOR'),
             apiSettings: $('#openai_settings'),
-            apiConnector: $('#openai_api'),
+            apiConnector: $('#api_connection_form'),
             apiPresets: $('#openai_api-presets'),
             apiRanges: $('#range_block_openai'),
-            maxContextElem: $('#max_context_block'),
-            amountGenElem: $('#amount_gen_block'),
         },
     };
     //console.log('--- apiElements--- ');
@@ -7775,37 +7691,8 @@ export function changeMainAPI(api = null) {
         activeItem.apiPresets.css('display', 'flex');
     }
 
-    if (selectedVal === 'textgenerationwebui' || selectedVal === 'novel') {
-        console.debug('enabling amount_gen for ooba/novel');
-        activeItem.amountGenElem.find('input').prop('disabled', false);
-        activeItem.amountGenElem.css('opacity', 1.0);
-    }
-
-    //custom because streaming has been moved up under response tokens, which exists inside common settings block
-    if (selectedVal === 'novel') {
-        $('#ai_module_block_novel').css('display', 'block');
-    } else {
-        $('#ai_module_block_novel').css('display', 'none');
-    }
-
-    $('#prompt_cost_block').toggle(selectedVal === 'textgenerationwebui' && textgen_settings.type === textgen_types.OPENROUTER);
-
-    // Hide common settings for OpenAI
-    console.debug('value?', selectedVal);
-    if (selectedVal == 'openai') {
-        console.debug('hiding settings?');
-        $('#common-gen-settings-block').css('display', 'none');
-    } else {
-        $('#common-gen-settings-block').css('display', 'block');
-    }
-
     main_api = selectedVal;
     setOnlineStatus('no_connection');
-
-    if (main_api == 'koboldhorde') {
-        getStatusHorde();
-        getHordeModels(true);
-    }
     validateDisabledSamplers();
     setupChatCompletionPromptManager(oai_settings);
     forceCharacterEditorTokenize();
@@ -7824,14 +7711,27 @@ export function setUserName(value, { toastPersonaNameChange = true } = {}) {
 }
 
 async function doOnboarding(avatarId) {
-    const template = $('#onboarding_template .onboarding');
-    let userName = await callGenericPopup(template, POPUP_TYPE.INPUT, currentUser?.name || name1, { wider: true, cancelButton: false });
+    const userName = currentUser?.name
+        ? String(currentUser.name).replace('\n', ' ')
+        : null;
 
     if (userName) {
-        userName = String(userName).replace('\n', ' ');
         setUserName(userName);
-        console.log(`Binding persona ${avatarId} to name ${userName}`);
         power_user.personas[avatarId] = userName;
+        power_user.persona_descriptions[avatarId] = {
+            description: '',
+            position: persona_description_positions.IN_PROMPT,
+        };
+        return;
+    }
+
+    const template = $('#onboarding_template .onboarding');
+    let inputName = await callGenericPopup(template, POPUP_TYPE.INPUT, name1, { wider: true, cancelButton: false });
+
+    if (inputName) {
+        inputName = String(inputName).replace('\n', ' ');
+        setUserName(inputName);
+        power_user.personas[avatarId] = inputName;
         power_user.persona_descriptions[avatarId] = {
             description: '',
             position: persona_description_positions.IN_PROMPT,
@@ -7851,7 +7751,7 @@ function reloadLoop() {
 
 //MARK: getSettings()
 ///////////////////////////////////////////
-export async function getSettings(initLoaderHandle = null) {
+async function fetchStartupSettings() {
     const response = await fetch('/api/settings/get', {
         method: 'POST',
         headers: getRequestHeaders(),
@@ -7865,9 +7765,40 @@ export async function getSettings(initLoaderHandle = null) {
         throw new Error('Error getting settings');
     }
 
-    const data = await response.json();
-    if (data.result != 'file not find' && data.settings) {
-        settings = JSON.parse(data.settings);
+    return response.json();
+}
+
+function applyDeferredExtensionBootstrapState({ disableUi }) {
+    $('#extensions_url').val(extension_settings.apiUrl);
+    $('#extensions_api_key').val(extension_settings.apiKey);
+    $('#extensions_autoconnect').prop('checked', extension_settings.autoConnect);
+    $('#extensions_notify_updates').prop('checked', extension_settings.notifyUpdates);
+
+    if (disableUi) {
+        $('#third_party_extension_button').addClass('disabled');
+        $('#extensions_details').addClass('disabled');
+        $('#extensions_connect').addClass('disabled');
+        $('#extensions_notify_updates').attr('disabled', 'disabled');
+        $('#extensions_autoconnect').attr('disabled', 'disabled');
+        $('#extensions_url').attr('disabled', 'disabled');
+        $('#extensions_api_key').attr('disabled', 'disabled');
+        return;
+    }
+
+    $('#third_party_extension_button').removeClass('disabled');
+    $('#extensions_details').removeClass('disabled');
+    $('#extensions_connect').removeClass('disabled');
+    $('#extensions_notify_updates').removeAttr('disabled');
+    $('#extensions_autoconnect').removeAttr('disabled');
+    $('#extensions_url').removeAttr('disabled');
+    $('#extensions_api_key').removeAttr('disabled');
+}
+
+async function applyStartupSettingsCore(data, initLoaderHandle = null) {
+    const settingsPlan = resolveStartupSettingsPlan({ data });
+
+    if (settingsPlan.hasSettings && settingsPlan.settings) {
+        settings = settingsPlan.settings;
         if (settings.username !== undefined && settings.username !== '') {
             name1 = settings.username;
             $('#your_name').text(name1);
@@ -7889,20 +7820,8 @@ export async function getSettings(initLoaderHandle = null) {
         $('#swipes-checkbox').prop('checked', swipes); /// swipecode
         refreshSwipeButtons();
 
-        // Kobold
-        loadKoboldSettings(data, settings.kai_settings ?? settings, settings);
-
-        // Novel
-        loadNovelSettings(data, settings.nai_settings ?? settings);
-
-        // TextGen
-        await loadTextGenSettings(data, settings);
-
         // OpenAI
         loadOpenAISettings(data, settings.oai_settings ?? settings);
-
-        // Horde
-        loadHordeSettings(settings);
 
         // Load power user settings
         await loadPowerUserSettings(settings, data);
@@ -7916,9 +7835,6 @@ export async function getSettings(initLoaderHandle = null) {
         // Load background
         loadBackgroundSettings(settings);
 
-        // Load proxy presets
-        loadProxyPresets(settings);
-
         // Allow subscribers to mutate settings
         await eventSource.emit(event_types.SETTINGS_LOADED_AFTER, settings);
 
@@ -7931,17 +7847,15 @@ export async function getSettings(initLoaderHandle = null) {
 
         //Load which API we are using
         if (settings.main_api == undefined) {
-            settings.main_api = 'kobold';
+            settings.main_api = 'openai';
         }
 
-        if (settings.main_api == 'poe') {
+        if (['poe', 'kobold', 'koboldhorde', 'novel', 'textgenerationwebui'].includes(settings.main_api)) {
             settings.main_api = 'openai';
         }
 
         main_api = settings.main_api;
-        $('#main_api').val(main_api);
-        $(`#main_api option[value=${main_api}]`).attr('selected', 'true');
-        changeMainAPI();
+        changeMainAPI('openai');
 
         //Load User's Name and Avatar
         initUserAvatar(settings.user_avatar);
@@ -7959,21 +7873,10 @@ export async function getSettings(initLoaderHandle = null) {
         // power_user.experimental_macro_engine
         initMacros();
 
-        if (data.enable_extensions) {
-            const enableAutoUpdate = Boolean(data.enable_extensions_auto_update);
-            const isVersionChanged = settings.currentVersion !== currentVersion;
-            await loadExtensionSettings(settings, isVersionChanged, enableAutoUpdate);
-            await eventSource.emit(event_types.EXTENSION_SETTINGS_LOADED);
-        } else {
-            Object.assign(extension_settings, (settings.extension_settings ?? {}));
-            $('#third_party_extension_button').addClass('disabled');
-            $('#extensions_details').addClass('disabled');
-            $('#extensions_connect').addClass('disabled');
-            $('#extensions_notify_updates').attr('disabled', 'disabled');
-            $('#extensions_autoconnect').attr('disabled', 'disabled');
-            $('#extensions_url').attr('disabled', 'disabled');
-            $('#extensions_api_key').attr('disabled', 'disabled');
-        }
+        Object.assign(extension_settings, (settings.extension_settings ?? {}));
+        applyDeferredExtensionBootstrapState({
+            disableUi: settingsPlan.extensionPlan.disableUi,
+        });
 
         firstRun = !!settings.firstRun;
 
@@ -7983,9 +7886,20 @@ export async function getSettings(initLoaderHandle = null) {
             firstRun = false;
         }
     }
+
+    configureDeferredStartupTasks(settingsPlan);
     await validateDisabledSamplers();
     settingsReady = true;
     await eventSource.emit(event_types.SETTINGS_LOADED);
+
+    return settingsPlan;
+}
+
+export async function getSettings(initLoaderHandle = null) {
+    return measureStartupStage('getSettings', async () => {
+        const data = await measureStartupStage('getSettings.fetch', () => fetchStartupSettings());
+        return measureStartupStage('getSettings.applyCore', () => applyStartupSettingsCore(data, initLoaderHandle));
+    });
 }
 
 //MARK: saveSettings()
@@ -8007,10 +7921,23 @@ export async function saveSettings(loopCounter = 0) {
         TempResponseLength.restore(null);
     }
 
+    if (currentVersion === '0.0.0') {
+        try {
+            await deferredVersionTask.ensure();
+        } catch (error) {
+            console.warn('Saving settings before client version resolved.', error);
+        }
+    }
+
+    const persistedCurrentVersion = resolvePersistedCurrentVersion({
+        currentVersion,
+        settingsVersion: settings?.currentVersion ?? null,
+    });
+
     const payload = {
         firstRun: firstRun,
         accountStorage: accountStorage.getState(),
-        currentVersion: currentVersion,
+        currentVersion: persistedCurrentVersion ?? undefined,
         username: name1,
         active_character: active_character,
         active_group: active_group,
@@ -8019,19 +7946,13 @@ export async function saveSettings(loopCounter = 0) {
         max_context: max_context,
         main_api: main_api,
         world_info_settings: getWorldInfoSettings(),
-        textgenerationwebui_settings: textgen_settings,
         swipes: swipes,
-        horde_settings: horde_settings,
         power_user: power_user,
         extension_settings: extension_settings,
         tags: tags,
         tag_map: tag_map,
-        nai_settings: nai_settings,
-        kai_settings: kai_settings,
         oai_settings: oai_settings,
         background: background_settings,
-        proxies: proxies,
-        selected_proxy: selected_proxy,
     };
 
     try {
@@ -8060,9 +7981,6 @@ export async function saveSettings(loopCounter = 0) {
  * @param {{ genamt?: number, max_length?: number }} preset Preset object
  */
 export function setGenerationParamsFromPreset(preset) {
-    const needsUnlock = (preset.max_length ?? max_context) > MAX_CONTEXT_DEFAULT || (preset.genamt ?? amount_gen) > MAX_RESPONSE_DEFAULT;
-    $('#max_context_unlocked').prop('checked', needsUnlock).trigger('change');
-
     if (preset.genamt !== undefined) {
         amount_gen = preset.genamt;
         $('#amount_gen').val(amount_gen);
@@ -8477,7 +8395,7 @@ export function getCurrentChatDetails() {
     const group = selected_group ? groups.find(x => x.id === selected_group) : null;
     const currentChat = selected_group ? group?.chat_id : characters[this_chid].chat;
     const displayName = selected_group ? group?.name : characters[this_chid].name;
-    const avatarImg = selected_group ? group?.avatar_url : getThumbnailUrl('avatar', characters[this_chid].avatar);
+    const avatarImg = selected_group ? '' : getThumbnailUrl('avatar', characters[this_chid].avatar);
     return { sessionName: currentChat, group: group, characterName: displayName, avatarImgURL: avatarImg };
 }
 
@@ -8496,11 +8414,12 @@ export async function displayPastChats(hightlightNames = []) {
     const currentChat = chatDetails.sessionName;
     const displayName = chatDetails.characterName;
     const avatarImg = chatDetails.avatarImgURL;
+    const groupAvatar = selected_group && chatDetails.group ? getGroupAvatar(chatDetails.group) : null;
 
-    await displayChats('', currentChat, displayName, avatarImg, selected_group, hightlightNames);
+    await displayChats('', currentChat, displayName, avatarImg, groupAvatar, selected_group, hightlightNames);
 
     const debouncedDisplay = debounce((searchQuery) => {
-        displayChats(searchQuery, currentChat, displayName, avatarImg, selected_group, []);
+        displayChats(searchQuery, currentChat, displayName, avatarImg, groupAvatar, selected_group, []);
     });
 
     // Define the search input listener
@@ -8518,7 +8437,7 @@ export async function displayPastChats(hightlightNames = []) {
     addChatBackupsBrowser();
 }
 
-async function displayChats(searchQuery, currentChat, displayName, avatarImg, selected_group, highlightNames) {
+async function displayChats(searchQuery, currentChat, displayName, avatarImg, groupAvatar, selected_group, highlightNames) {
     try {
         const response = await fetch('/api/chats/search', {
             method: 'POST',
@@ -8543,7 +8462,15 @@ async function displayChats(searchQuery, currentChat, displayName, avatarImg, se
             const isSelected = currentChat === chat.file_name;
             const template = $('#past_chat_template .select_chat_block_wrapper').clone();
             template.find('.select_chat_block').attr('file_name', chat.file_name);
-            template.find('.avatar img').attr('src', avatarImg);
+            if (selected_group) {
+                if (groupAvatar) {
+                    template.find('.avatar').replaceWith(groupAvatar.clone());
+                } else {
+                    template.find('.avatar').remove();
+                }
+            } else {
+                template.find('.avatar img').attr('src', avatarImg);
+            }
             template.find('.select_chat_block_filename').text(chat.file_name);
             template.find('.chat_file_size').text(`(${chat.file_size},`);
             template.find('.chat_messages_num').text(`${chat.message_count} 💬)`);
@@ -8702,6 +8629,9 @@ export function select_rm_info(type, charId, previousCharId = null) {
 export function select_selected_character(chid, { switchMenu = true } = {}) {
     //character select
     //console.log('select_selected_character() -- starting with input of -- ' + chid + ' (name:' + characters[chid].name + ')');
+    $('#rm_print_characters_block .character_select').removeClass('is_active');
+    $(`#CharID${chid}`).addClass('is_active');
+
     select_rm_create({ switchMenu });
     switchMenu && setMenuType('character_edit');
     $('#delete_button').css('display', 'flex');
@@ -8714,6 +8644,7 @@ export function select_selected_character(chid, { switchMenu = true } = {}) {
     $('#dupe_button').show();
     $('#create_button_label').css('display', 'none');
     $('#char_connections_button').show();
+    $('.character-detail-edit-action').show();
 
     // Hide the chat scenario button if we're peeking the group member defs
     $('#set_chat_character_settings').toggle(!selected_group);
@@ -8806,6 +8737,7 @@ function select_rm_create({ switchMenu = true } = {}) {
     $('#create_button').attr('value', 'Create');
     $('#dupe_button').hide();
     $('#char_connections_button').hide();
+    $('.character-detail-edit-action').hide();
 
     //create text poles
     $('#rm_button_back').css('display', '');
@@ -9496,6 +9428,10 @@ async function openCharacterWorldPopup() {
         return;
     }
 
+    if (menu_type !== 'create') {
+        await unshallowCharacter(String(chid));
+    }
+
     // TODO: Maybe make this utility function not use the window context?
     const fileName = getCharaFilename(chid);
     const charName = (menu_type == 'create' ? create_save.name : characters[chid]?.data?.name) || 'Nameless';
@@ -9559,12 +9495,14 @@ async function openCharacterWorldPopup() {
     await popup.show();
 }
 
-function openAlternateGreetings() {
+async function openAlternateGreetings() {
     const chid = $('.open_alternate_greetings').data('chid');
 
     if (menu_type != 'create' && chid === undefined) {
         toastr.error('Does not have an Id for this character in editor menu.');
         return;
+    } else if (menu_type !== 'create') {
+        await unshallowCharacter(String(chid));
     } else {
         // If the character does not have alternate greetings, create an empty array
         if (characters[chid] && !Array.isArray(characters[chid].data.alternate_greetings)) {
@@ -10270,10 +10208,6 @@ export async function swipe(event, direction, { source, repeated, message = chat
         streamingProcessor.onStopStreaming();
     }
 
-    if (isHordeGenerationNotAllowed()) {
-        return unblockGeneration();
-    }
-
     //If the swipe is not being deleted.
     if (source != SWIPE_SOURCE.DELETE && source != SWIPE_SOURCE.BACK) {
         // Make sure ad-hoc changes to extras are saved before swiping away
@@ -10428,7 +10362,7 @@ export async function processDroppedFiles(files, data = new Map()) {
     }
 
     if (avatarFileNames.length > 0) {
-        await importCharactersTags(avatarFileNames);
+        await handleUnifiedImport(avatarFileNames);
         selectImportedChar(avatarFileNames[avatarFileNames.length - 1]);
     }
 }
@@ -10436,15 +10370,52 @@ export async function processDroppedFiles(files, data = new Map()) {
 /**
  * Imports tags for the given characters
  * @param {string[]} avatarFileNames character avatar filenames whose tags are to import
+ * @param {object} [options]
+ * @param {import('./scripts/tags.js').tag_import_setting} [options.importSetting] Override tag import setting
  */
-async function importCharactersTags(avatarFileNames) {
+async function importCharactersTags(avatarFileNames, { importSetting = null } = {}) {
     await getCharacters();
+    const effectiveSetting = importSetting ?? power_user.tag_import_setting;
+    if (effectiveSetting === tag_import_setting.NONE) return;
     for (let i = 0; i < avatarFileNames.length; i++) {
-        if (power_user.tag_import_setting !== tag_import_setting.NONE) {
-            const importedCharacter = characters.find(character => character.avatar === avatarFileNames[i]);
-            await importTags(importedCharacter);
-        }
+        const importedCharacter = characters.find(character => character.avatar === avatarFileNames[i]);
+        await importTags(importedCharacter, { importSetting: effectiveSetting });
     }
+}
+
+/**
+ * Show unified import confirmation dialog and apply choices for imported characters.
+ * @param {string[]} avatarFileNames character avatar filenames
+ */
+async function handleUnifiedImport(avatarFileNames) {
+    await getCharacters();
+
+    const scanResults = avatarFileNames.map(av => {
+        const ch = characters.find(c => c.avatar === av);
+        if (!ch) {
+            console.warn(`[unified-import] Character not found after refresh: ${av}`);
+            return null;
+        }
+        return scanImportedCharacter(ch);
+    }).filter(Boolean);
+
+    let tagImportSetting = null;
+    if (scanResults.some(r => r.hasAnyContent)) {
+        const importChoices = await showUnifiedImportConfirm(scanResults);
+        const effectiveChoices = importChoices ?? buildSkipAllChoices();
+        for (const result of scanResults) {
+            const ch = characters.find(c => c.avatar === result.avatar);
+            if (ch) {
+                try {
+                    await applyImportChoices(ch, effectiveChoices);
+                } catch (e) {
+                    console.error(`[unified-import] Failed to apply choices for ${result.avatar}`, e);
+                }
+            }
+        }
+        tagImportSetting = effectiveChoices.tagImportSetting;
+    }
+    await importCharactersTags(avatarFileNames, { importSetting: tagImportSetting });
 }
 
 /**
@@ -10705,6 +10676,43 @@ export async function closeCurrentChat() {
     }
 }
 
+async function closeCurrentChatForDelete() {
+    return await runDeleteCharacterClosePreflight({
+        isGenerationInProgress: () => is_send_press !== false,
+        onGenerationBlocked: () => {
+            toastr.info(t`Please stop the message generation first.`);
+        },
+        waitForPendingChatSave: async () => {
+            await waitUntilCondition(() => !isChatSaving, debounce_timeout.extended, 10);
+        },
+        clearCurrentChat: async () => {
+            await clearChat({ clearData: true });
+        },
+        resetSelectedGroup: () => {
+            resetSelectedGroup();
+        },
+        resetSelectionState: () => {
+            setCharacterId(undefined);
+            setCharacterName('');
+            setActiveCharacter(null);
+            setActiveGroup(null);
+            this_edit_mes_id = undefined;
+            chat_metadata = {};
+            selected_button = 'characters';
+        },
+        selectCharactersView: () => {
+            $('#rm_button_selected_ch').children('h2').text('');
+            select_rm_characters();
+        },
+        suppressWelcomeScreen: () => {
+            suppressNextChatChangedWelcomeScreen();
+        },
+        emitChatChanged: async () => {
+            await eventSource.emit(event_types.CHAT_CHANGED, getCurrentChatId());
+        },
+    });
+}
+
 /**
  * Forces the update of the chat name for a remote character.
  * @param {string|number} characterId Character ID to update chat name for
@@ -10763,12 +10771,16 @@ export async function handleDeleteCharacter(this_chid, delete_chats) {
  * @param {string|string[]} characterKey - The key (avatar) of the character to be deleted
  * @param {Object} [options] - Optional parameters for the deletion
  * @param {boolean} [options.deleteChats=true] - Whether to delete associated chats or not
+ * @param {string[]} [options.deleteWorlds] - World info names to delete (from caller's preflight)
+ * @param {boolean} [options.clearWorldReferences] - Whether to clear world references in remaining characters
  * @return {Promise<boolean>} - A promise that resolves when the character is successfully deleted
  */
-export async function deleteCharacter(characterKey, { deleteChats = true } = {}) {
+export async function deleteCharacter(characterKey, { deleteChats = true, deleteWorlds, clearWorldReferences } = {}) {
+    const deleteFlowStartedAt = performance.now();
     if (!Array.isArray(characterKey)) {
         characterKey = [characterKey];
     }
+    const deleteCandidates = getCharacterDeleteCandidates(characters, characterKey);
 
     const inTempChat = this_chid === undefined && name2 === neutralCharacterName;
     if (inTempChat) {
@@ -10781,42 +10793,67 @@ export async function deleteCharacter(characterKey, { deleteChats = true } = {})
         }
     }
 
-    const closeChatResult = await closeCurrentChat();
+    const closeChatResult = await closeCurrentChatForDelete();
     if (!closeChatResult) {
         return false;
     }
 
-    let deleted = false;
-
-    for (const key of characterKey) {
-        const character = characters.find(x => x.avatar == key);
-        if (!character) {
-            toastr.warning(t`Character ${key} not found. Skipping deletion.`);
-            continue;
+    // World info cascade preflight — only when caller did not provide choices
+    let resolvedDeleteWorlds = deleteWorlds ?? [];
+    let resolvedClearRefs = clearWorldReferences ?? false;
+    if (deleteWorlds === undefined) {
+        try {
+            const preflightResponse = await fetch('/api/characters/delete-preflight', {
+                method: 'POST',
+                headers: getRequestHeaders(),
+                body: JSON.stringify({ avatars: characterKey }),
+                cache: 'no-cache',
+            });
+            if (preflightResponse.ok) {
+                const preflightData = await preflightResponse.json();
+                if (preflightData.worldInfos && preflightData.worldInfos.length > 0) {
+                    const cascadeResult = await showWorldInfoCascadeDialog(preflightData.worldInfos);
+                    if (cascadeResult === null) {
+                        return false;
+                    }
+                    resolvedDeleteWorlds = cascadeResult.deleteWorlds;
+                    resolvedClearRefs = cascadeResult.clearWorldReferences;
+                }
+            }
+        } catch {
+            // Preflight failure should not block deletion
         }
+    }
 
-        const chid = characters.indexOf(character);
-        const pastChats = await getPastCharacterChats(chid);
+    let deleted = false;
+    const deletedAvatars = [];
 
-        const msg = { avatar_url: character.avatar, delete_chats: deleteChats };
+    for (const { avatar, character, index: chid } of deleteCandidates) {
+        const chatLookupStartedAt = performance.now();
+        const pastChats = character ? await getPastCharacterChats(chid) : [];
+        markPerfInteractionMetric('preDeleteChatLookupMs', performance.now() - chatLookupStartedAt);
 
+        const msg = { avatar_url: avatar, delete_chats: deleteChats };
+
+        const deleteRequestStartedAt = performance.now();
         const response = await fetch('/api/characters/delete', {
             method: 'POST',
             headers: getRequestHeaders(),
             body: JSON.stringify(msg),
             cache: 'no-cache',
         });
+        markPerfInteractionMetric('deleteRequestMs', performance.now() - deleteRequestStartedAt);
 
         if (!response.ok) {
             toastr.error(`${response.status} ${response.statusText}`, t`Failed to delete character`);
             continue;
         }
 
-        accountStorage.removeItem(`AlertWI_${character.avatar}`);
-        accountStorage.removeItem(`AlertRegex_${character.avatar}`);
-        accountStorage.removeItem(`mediaWarningShown:${character.avatar}`);
-        delete tag_map[character.avatar];
-        select_rm_info('char_delete', character.name);
+        accountStorage.removeItem(`AlertWI_${avatar}`);
+        accountStorage.removeItem(`AlertRegex_${avatar}`);
+        accountStorage.removeItem(`mediaWarningShown:${avatar}`);
+        delete tag_map[avatar];
+        select_rm_info('char_delete', character?.name ?? avatar);
 
         if (deleteChats) {
             for (const chat of pastChats) {
@@ -10825,11 +10862,33 @@ export async function deleteCharacter(characterKey, { deleteChats = true } = {})
             }
         }
 
-        await eventSource.emit(event_types.CHARACTER_DELETED, { id: chid, character: character });
+        await eventSource.emit(event_types.CHARACTER_DELETED, { id: chid, character: character ?? { avatar } });
+        deletedAvatars.push(avatar);
         deleted = true;
     }
 
-    await removeCharacterFromUI();
+    // World info cascade: delete world files and clear references after all characters are deleted
+    if (deleted && resolvedDeleteWorlds.length > 0) {
+        try {
+            const cascadeResp = await fetch('/api/worldinfo/delete-cascade', {
+                method: 'POST',
+                headers: getRequestHeaders(),
+                body: JSON.stringify({
+                    worlds: resolvedDeleteWorlds,
+                    clear_references: resolvedClearRefs,
+                }),
+                cache: 'no-cache',
+            });
+            if (cascadeResp.ok) {
+                await flushDeletedWorldsFromUI(resolvedDeleteWorlds);
+            }
+        } catch {
+            // Cascade failure should not block the UI cleanup
+        }
+    }
+
+    await removeCharacterFromUI(deletedAvatars);
+    markPerfInteractionMetric('deleteFlowMs', performance.now() - deleteFlowStartedAt);
     return deleted;
 }
 
@@ -10837,20 +10896,28 @@ export async function deleteCharacter(characterKey, { deleteChats = true } = {})
  * Function to delete a character from UI after character deletion API success.
  * It manages necessary UI changes such as closing advanced editing popup, unsetting
  * character ID, resetting characters array and chat metadata, deselecting character's tab
- * panel, removing character name from navigation tabs, clearing chat, fetching updated list of characters.
+ * panel, removing deleted characters from the in-memory list, refreshing groups, and reprinting the list.
  * It also ensures to save the settings after all the operations.
  */
-async function removeCharacterFromUI() {
+async function removeCharacterFromUI(deletedAvatars = []) {
+    const refreshStartedAt = performance.now();
     preserveNeutralChat();
     await clearChat();
     $('#character_cross').trigger('click');
-    resetChatState();
+    resetChatStateWithOptions({ clearCharacters: false });
     $(document.getElementById('rm_button_selected_ch')).children('h2').text('');
     restoreNeutralChat();
-    await getCharacters();
+    removeCharactersFromState(characters, deletedAvatars);
+    const groupsRefreshStartedAt = performance.now();
+    await getGroups();
+    markPerfInteractionMetric('groupsRefreshMs', performance.now() - groupsRefreshStartedAt);
+    const printCharactersStartedAt = performance.now();
+    await printCharacters(true);
+    markPerfInteractionMetric('characterPrintMs', performance.now() - printCharactersStartedAt);
     await printMessages();
     saveSettingsDebounced();
     await eventSource.emit(event_types.CHAT_CHANGED, getCurrentChatId());
+    markPerfInteractionMetric('removeCharacterFromUIMs', performance.now() - refreshStartedAt);
 }
 
 /**
@@ -11354,17 +11421,65 @@ jQuery(async function () {
             toastr.warning('No character selected.');
             return;
         }
+        const avatarToDelete = characters[this_chid].avatar;
 
-        let deleteChats = false;
-
-        const confirm = await Popup.show.confirm(t`Delete the character?`, await renderTemplateAsync('deleteConfirm'), {
-            onClose: () => { deleteChats = !!$('#del_char_checkbox').prop('checked'); },
-        });
-        if (!confirm) {
-            return;
+        // Auto-stop generation if active
+        if (is_send_press !== false) {
+            stopGeneration();
+            try {
+                await waitUntilCondition(() => is_send_press === false, debounce_timeout.extended, 10);
+            } catch {
+                // Timeout — proceed anyway
+            }
         }
 
-        await deleteCharacter(characters[this_chid].avatar, { deleteChats: deleteChats });
+        // Preflight: gather world info metadata before showing confirmation
+        let worldInfos = [];
+        try {
+            const resp = await fetch('/api/characters/delete-preflight', {
+                method: 'POST',
+                headers: getRequestHeaders(),
+                body: JSON.stringify({ avatars: [avatarToDelete] }),
+                cache: 'no-cache',
+            });
+            if (resp.ok) {
+                const data = await resp.json();
+                worldInfos = data.worldInfos ?? [];
+            }
+        } catch {
+            // Preflight failure should not block deletion
+        }
+
+        // Build dialog content: original deleteConfirm template + world info section
+        let content = await renderTemplateAsync('deleteConfirm');
+        const cascadeHtml = buildCascadeSectionHtml(worldInfos);
+        if (cascadeHtml) {
+            content += cascadeHtml;
+        }
+
+        // When world infos exist, use the integrated dialog with "Delete All" button;
+        // otherwise fall back to the standard confirm dialog.
+        if (cascadeHtml) {
+            const dialogResult = await showDeleteConfirmWithCascade(t`Delete the character?`, content);
+            if (!dialogResult.confirmed) {
+                return;
+            }
+            await deleteCharacter(avatarToDelete, {
+                deleteChats: dialogResult.deleteChats,
+                deleteWorlds: dialogResult.deleteWorlds,
+                clearWorldReferences: dialogResult.clearWorldReferences,
+            });
+        } else {
+            let deleteChats = false;
+            const confirm = await Popup.show.confirm(t`Delete the character?`, content, {
+                leftAlign: true,
+                onClose: () => { deleteChats = !!$('#del_char_checkbox').prop('checked'); },
+            });
+            if (!confirm) {
+                return;
+            }
+            await deleteCharacter(avatarToDelete, { deleteChats });
+        }
     });
 
     //////// OPTIMIZED ALL CHAR CREATION/EDITING TEXTAREA LISTENERS ///////////////
@@ -11410,8 +11525,10 @@ jQuery(async function () {
     });
 
     $('#favorite_button').on('click', function () {
-        updateFavButtonState(!fav_ch_checked);
+        const newFavState = !fav_ch_checked;
+        updateFavButtonState(newFavState);
         if (menu_type != 'create') {
+            updateCharacterRow(this_chid, { fav: newFavState });
             saveCharacterDebounced();
         }
     });
@@ -11679,13 +11796,6 @@ jQuery(async function () {
         showSwipeButtons();
         this_del_mes = -1;
         is_delete_mode = false;
-    });
-
-    $('#main_api').on('change', async function () {
-        cancelStatusCheck('Canceled because main api changed');
-        changeMainAPI();
-        saveSettingsDebounced();
-        await eventSource.emit(event_types.MAIN_API_CHANGED, { apiId: main_api });
     });
 
     ////////////////// OPTIMIZED RANGE SLIDER LISTENERS////////////////
@@ -11959,7 +12069,7 @@ jQuery(async function () {
         }
 
         if (avatarFileNames.length > 0) {
-            await importCharactersTags(avatarFileNames);
+            await handleUnifiedImport(avatarFileNames);
             selectImportedChar(avatarFileNames[avatarFileNames.length - 1]);
         }
 
@@ -11968,9 +12078,7 @@ jQuery(async function () {
     });
 
     $('#export_button').on('click', function () {
-        isExportPopupOpen = !isExportPopupOpen;
-        $('#export_format_popup').toggle(isExportPopupOpen);
-        exportPopper.update();
+        toggleCharacterExportPopup(this);
     });
 
     $(document).on('click', '.export_format', async function () {
@@ -12030,7 +12138,7 @@ jQuery(async function () {
             }
 
             if (selected_group && format === 'json') {
-                toastr.warning(t`Only SillyTavern's own format is supported for group chat imports. Sorry!`);
+                toastr.warning(t`Only EmberDesk's own format is supported for group chat imports. Sorry!`);
                 continue;
             }
 
@@ -12108,6 +12216,7 @@ jQuery(async function () {
             '.text_pole',
             '#toast-container',
             '.select2-results',
+            '.wi-content-editor-modal',
         ];
 
         for (const id of forbiddenTargets) {
@@ -12295,8 +12404,17 @@ jQuery(async function () {
             case 'set_character_world':
                 await openCharacterWorldPopup();
                 break;
+            case 'character_action_advanced':
+                $('#advanced_div').trigger('click');
+                break;
+            case 'character_action_chat_lorebook':
+                $('.chat_lorebook_button').first().trigger('click');
+                break;
             case 'set_chat_character_settings':
                 await setCharacterSettingsOverrides();
+                break;
+            case 'character_action_connected_personas':
+                $('#char_connections_button').trigger('click');
                 break;
             case 'renameCharButton':
                 await renameCharacter();
@@ -12382,6 +12500,15 @@ jQuery(async function () {
             } break;
             case 'import_tags': {
                 await importTags(characters[this_chid], { importSetting: tag_import_setting.ASK });
+            } break;
+            case 'character_action_export': {
+                toggleCharacterExportPopup(targetElement);
+            } break;
+            case 'character_action_duplicate': {
+                await duplicateCharacter();
+            } break;
+            case 'delete_from_dropdown': {
+                $('#delete_button').trigger('click');
             } break;
             /*case 'delete_button':
                 popup_type = "del_ch";
@@ -12523,6 +12650,24 @@ jQuery(async function () {
     $(document).on('click', '.open_characters_library', async function () {
         await getCharacters();
         await eventSource.emit(event_types.OPEN_CHARACTER_LIBRARY);
+    });
+
+    // Show regenerate button for empty AI replies
+    eventSource.on(event_types.CHARACTER_MESSAGE_RENDERED, (messageId) => {
+        if (messageId !== chat.length - 1) return;
+        const message = chat[messageId];
+        if (!message || message.is_user || message.is_system) return;
+        const visibleText = (message.extra?.display_text ?? message.mes ?? '').trim();
+        if (visibleText.length > 0) return;
+        const mesBlock = $(`.mes[mesid="${messageId}"] .mes_block`);
+        if (mesBlock.length === 0 || mesBlock.find('.empty_reply_regenerate').length > 0) return;
+        mesBlock.append(
+            $('<div>')
+                .addClass('empty_reply_regenerate')
+                .append($('<i>').addClass('fa-solid fa-arrow-rotate-right'))
+                .append($('<span>').text('重新生成'))
+                .on('click', () => { $('#option_regenerate').trigger('click'); }),
+        );
     });
 
     // Added here to prevent execution before script.js is loaded and get rid of quirky timeouts

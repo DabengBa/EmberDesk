@@ -48,25 +48,25 @@
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: rgb(225, 138, 36);
+    background: var(--SmartThemeQuoteColor);
     animation: streaming-display-pulse 1.5s ease-in-out infinite;
     flex-shrink: 0;
 }
 
 /* Completed state: solid green LED */
 .streaming-display-complete .streaming-display-led {
-    background: #4caf50;
+    background: var(--success-green);
     animation: none;
     opacity: 1;
-    box-shadow: 0 0 8px rgba(76, 175, 80, 0.6);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--success-green) 60%, transparent);
 }
 
 /* Stopped state: solid red LED */
 .streaming-display-stopped .streaming-display-led {
-    background: #f44336;
+    background: var(--ember-red);
     animation: none;
     opacity: 1;
-    box-shadow: 0 0 8px rgba(244, 67, 54, 0.6);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--ember-red) 60%, transparent);
 }
 
 @keyframes streaming-display-pulse {
@@ -116,7 +116,7 @@
 }
 
 .streaming-display-btn-close:hover {
-    background-color: rgba(244, 67, 54, 0.2);
+    background-color: color-mix(in srgb, var(--ember-red) 20%, transparent);
 }
 
 .streaming-display-btn-stop {
@@ -124,8 +124,8 @@
 }
 
 .streaming-display-btn-stop:hover {
-    background-color: rgba(244, 150, 36, 0.2);
-    color: rgb(225, 138, 36);
+    background-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 20%, transparent);
+    color: var(--SmartThemeQuoteColor);
 }
 
 /* Content container - collapsible for minimize */
@@ -134,13 +134,16 @@
     flex-direction: column;
     gap: 10px;
     overflow: hidden;
-    transition: max-height var(--animation-duration, 125ms) ease, opacity var(--animation-duration, 125ms) ease;
+    transform-origin: top;
+    transition: opacity var(--animation-duration, 125ms) ease, transform var(--animation-duration, 125ms) ease;
 }
 
 /* Minimized state - hide content sections */
 .streaming-display-minimized .streaming-display-content {
     max-height: 0;
     opacity: 0;
+    transform: scaleY(0.98);
+    pointer-events: none;
 }
 
 .streaming-display-minimized {
@@ -162,9 +165,9 @@
 /* Reasoning (thinking) section */
 .streaming-display-reasoning {
     background: color-mix(in srgb, var(--SmartThemeBodyColor) 5%, transparent);
-    border-radius: 6px;
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBodyColor) 20%, var(--SmartThemeBorderColor) 80%);
+    border-radius: 5px;
     padding: 8px 10px;
-    border-left: 3px solid color-mix(in srgb, var(--SmartThemeBodyColor) 25%, transparent);
 }
 
 .streaming-display-reasoning-label {

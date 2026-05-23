@@ -8,7 +8,7 @@
     margin: 0.25em auto;
     padding: 0 0.75em;
     border: 2px solid var(--SmartThemeBorderColor);
-    border-radius: 15px;
+    border-radius: 10px;
     background-color: var(--white20a);
 }
 
@@ -22,7 +22,7 @@
     background-color: var(--white20a);
     border: 2px solid var(--SmartThemeBorderColor);
     padding: 0.5em 1em;
-    border-radius: 15px;
+    border-radius: 10px;
 }
 
 .mes .mes_file_wrapper:empty {
@@ -77,7 +77,7 @@
     background-color: var(--white20a);
     border: 2px solid var(--SmartThemeBorderColor);
     padding: 0.5em 1em;
-    border-radius: 15px;
+    border-radius: 10px;
 }
 
 .mes_audio_container .mes_img_swipes {
@@ -145,7 +145,7 @@
 .audio-player-progress {
     flex: 1;
     height: 6px;
-    background-color: var(--black30a);
+    background-color: var(--form-control-bg);
     border-radius: 3px;
     cursor: pointer;
     position: relative;
@@ -156,6 +156,8 @@
     height: 100%;
     background-color: var(--SmartThemeEmColor);
     border-radius: 3px;
-    transition: width 0.1s linear;
-    width: 0%;
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform 0.1s linear;
+    width: 100%;
 }

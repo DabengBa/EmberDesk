@@ -11,7 +11,6 @@ import { SlashCommandExecutor } from './slash-commands/SlashCommandExecutor.js';
 import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
 import { SlashCommandScope } from './slash-commands/SlashCommandScope.js';
 import { renderTemplateAsync } from './templates.js';
-import { textgen_types } from './textgen-settings.js';
 import { getCurrentUserHandle } from './user.js';
 import { copyText, isTrueBoolean, uuidv4 } from './utils.js';
 import { accountStorage } from './util/AccountStorage.js';
@@ -95,7 +94,6 @@ const FRIENDLY_NAMES = {
     [SECRET_KEYS.APHRODITE]: 'Aphrodite',
     [SECRET_KEYS.TABBY]: 'TabbyAPI',
     [SECRET_KEYS.MISTRALAI]: 'MistralAI',
-    [SECRET_KEYS.CUSTOM]: 'Custom (OpenAI-compatible)',
     [SECRET_KEYS.TOGETHERAI]: 'TogetherAI',
     [SECRET_KEYS.OOBA]: 'Text Generation WebUI',
     [SECRET_KEYS.INFERMATICAI]: 'InfermaticAI',
@@ -160,7 +158,6 @@ const INPUT_MAP = {
     [SECRET_KEYS.APHRODITE]: '#api_key_aphrodite',
     [SECRET_KEYS.TABBY]: '#api_key_tabby',
     [SECRET_KEYS.MISTRALAI]: '#api_key_mistralai',
-    [SECRET_KEYS.CUSTOM]: '#api_key_custom',
     [SECRET_KEYS.TOGETHERAI]: '#api_key_togetherai',
     [SECRET_KEYS.OOBA]: '#api_key_ooba',
     [SECRET_KEYS.INFERMATICAI]: '#api_key_infermaticai',
@@ -188,7 +185,6 @@ const INPUT_MAP = {
     [SECRET_KEYS.SILICONFLOW]: '#api_key_siliconflow',
     [SECRET_KEYS.MINIMAX]: '#api_key_minimax',
     [SECRET_KEYS.POLLINATIONS]: '#api_key_pollinations',
-    [SECRET_KEYS.WORKERS_AI]: '#api_key_workers_ai',
 };
 
 const getLabel = () => moment().format('L LT');
@@ -198,9 +194,8 @@ const getLabel = () => moment().format('L LT');
  * @returns {string|null} The secret key corresponding to the selected API, or null if no key is found.
  */
 export function resolveSecretKey() {
-    const { mainApi, chatCompletionSettings, textCompletionSettings } = SillyTavern.getContext();
+    const { mainApi, chatCompletionSettings } = SillyTavern.getContext();
     const chatCompletionSource = chatCompletionSettings.chat_completion_source;
-    const textCompletionType = textCompletionSettings.type;
 
     if (mainApi === 'koboldhorde') {
         return SECRET_KEYS.HORDE;
@@ -210,15 +205,10 @@ export function resolveSecretKey() {
         return SECRET_KEYS.NOVEL;
     }
 
-    if (mainApi === 'textgenerationwebui') {
-        const [key] = Object.entries(textgen_types).find(([, value]) => value === textCompletionType) ?? [null];
-        if (key && SECRET_KEYS[key]) {
-            return SECRET_KEYS[key];
-        }
-    }
-
     if (mainApi === 'openai') {
-        if (chatCompletionSource === chat_completion_sources.VERTEXAI) {
+        const isVertexAI = chatCompletionSource === chat_completion_sources.VERTEXAI
+            || (chatCompletionSource === chat_completion_sources.MAKERSUITE && chatCompletionSettings.use_vertexai);
+        if (isVertexAI) {
             switch (chatCompletionSettings.vertexai_auth_mode) {
                 case 'express':
                     return SECRET_KEYS.VERTEXAI;
@@ -256,9 +246,11 @@ export function getSecretLabelById(id) {
 }
 
 export function updateSecretDisplay() {
+    const savedText = t`Key saved`;
+    const missingText = t`Missing key`;
     for (const [secret_key, input_selector] of Object.entries(INPUT_MAP)) {
         const validSecret = !!secret_state[secret_key];
-        const placeholder = $('#viewSecrets').attr(validSecret ? 'key_saved_text' : 'missing_key_text');
+        const placeholder = validSecret ? savedText : missingText;
         const label = getActiveSecretLabel(secret_key);
         const placeholderWithLabel = label ? `${placeholder} (${label})` : placeholder;
         $(input_selector).attr('placeholder', placeholderWithLabel);
@@ -305,32 +297,6 @@ export async function canViewSecrets() {
     }
 }
 
-async function viewSecrets() {
-    const response = await fetch('/api/secrets/view', {
-        method: 'POST',
-        headers: getRequestHeaders({ omitContentType: true }),
-    });
-
-    if (response.status == 403) {
-        await Popup.show.text(t`Forbidden`, t`To view your API keys here, set the value of allowKeysExposure to true in config.yaml file and restart the SillyTavern server.`);
-        return;
-    }
-
-    if (!response.ok) {
-        return;
-    }
-
-    const data = await response.json();
-    const table = document.createElement('table');
-    table.classList.add('responsiveTable');
-    $(table).append('<thead><th>Key</th><th>Value</th></thead>');
-
-    for (const [key, value] of Object.entries(data)) {
-        $(table).append(`<tr><td>${DOMPurify.sanitize(key)}</td><td>${DOMPurify.sanitize(value)}</td></tr>`);
-    }
-
-    await callGenericPopup(table.outerHTML, POPUP_TYPE.TEXT, '', { wide: true, large: true, allowVerticalScrolling: true });
-}
 
 /**
  * @type {import('../../src/endpoints/secrets.js').SecretStateMap}
@@ -395,8 +361,7 @@ export async function deleteSecret(key, id) {
 
         if (response.ok) {
             await readSecretState();
-            // Force reconnection to the API with the new key
-            $('#main_api').trigger('change');
+            await eventSource.emit(event_types.MAIN_API_CHANGED, { apiId: 'openai' });
             await eventSource.emit(event_types.SECRET_DELETED, key);
         }
     } catch (error) {
@@ -466,8 +431,7 @@ export async function rotateSecret(key, id) {
 
         if (response.ok) {
             await readSecretState();
-            // Force reconnection to the API with the new key
-            $('#main_api').trigger('change');
+            await eventSource.emit(event_types.MAIN_API_CHANGED, { apiId: 'openai' });
             await eventSource.emit(event_types.SECRET_ROTATED, key);
         }
     } catch (error) {
@@ -1135,7 +1099,6 @@ function registerSecretSlashCommands() {
 }
 
 export async function initSecrets() {
-    $('#viewSecrets').on('click', viewSecrets);
     $(document).on('click', '.manage-api-keys', async function () {
         const key = $(this).data('key');
         if (!key || !Object.values(SECRET_KEYS).includes(key)) {

@@ -27,14 +27,19 @@
     text-overflow: ellipsis;
     width: 100%;
     opacity: 0.8;
-    background-color: var(--black30a);
-    border: 1px solid var(--SmartThemeBorderColor);
+    background-color: var(--form-control-bg);
+    border: 1px solid var(--form-control-border-color);
     background-image: url(/img/down-arrow.svg);
     background-repeat: no-repeat;
     background-position: right 6px center;
     background-size: 8px 5px;
     padding-right: 20px;
     margin-bottom: 0;
+}
+
+.gallery-sort-select:focus-visible {
+    background-color: var(--form-control-bg-focus);
+    border-color: var(--form-control-border-color-focus);
 }
 
 #gallery .dragTitle {

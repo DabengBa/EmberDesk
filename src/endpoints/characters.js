@@ -2,6 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { promises as fsPromises } from 'node:fs';
 import { Buffer } from 'node:buffer';
+import { performance } from 'node:perf_hooks';
 
 import express from 'express';
 import sanitize from 'sanitize-filename';
@@ -18,13 +19,24 @@ import { deepMerge, humanizedDateTime, tryParse, MemoryLimitedMap, getConfigValu
 import { TavernCardValidator } from '../validator/TavernCardValidator.js';
 import { parse, read, write } from '../character-card-parser.js';
 import { readWorldInfoFile } from './worldinfo.js';
-import { invalidateThumbnail } from './thumbnails.js';
+
+import { areThumbnailsEnabled, generateThumbnail, invalidateThumbnail } from './thumbnails.js';
 import { importRisuSprites } from './sprites.js';
 import { getUserDirectories } from '../users.js';
 import { getChatInfo } from './chats.js';
 import { ByafParser } from '../byaf.js';
 import { CharXParser, persistCharXAssets } from '../charx.js';
 import cacheBuster from '../middleware/cacheBuster.js';
+import {
+    deleteCharacterIndexEntry,
+    findCharactersBoundToWorld,
+    getFreshIndexedCharacterFullPayload,
+    isCharacterIndexSupported,
+    listIndexedCharacterPayloads,
+    upsertCharacterIndexEntry,
+} from './character-index.js';
+
+const CHARACTER_INDEX_REFRESH_CONCURRENCY = 10;
 
 // With 100 MB limit it would take roughly 3000 characters to reach this limit
 const memoryCacheCapacity = getConfigValue('performance.memoryCacheCapacity', '100mb');
@@ -34,6 +46,20 @@ const isAndroid = process.platform === 'android';
 // Use shallow character data for the character list
 const useShallowCharacters = !!getConfigValue('performance.lazyLoadCharacters', false, 'boolean');
 const useDiskCache = !!getConfigValue('performance.useDiskCache', true, 'boolean');
+
+function isInteractionPerfModeEnabled() {
+    return process.env.EMBERDESK_INTERACTION_PERF_MODE === '1';
+}
+
+function applyInteractionPerfHeaders(response, pathName, startedAt) {
+    if (!isInteractionPerfModeEnabled()) {
+        return;
+    }
+
+    const durationMs = Math.max(0, performance.now() - startedAt);
+    response.set('X-EmberDesk-Interaction-Path', pathName);
+    response.set('Server-Timing', `route;dur=${durationMs.toFixed(1)}`);
+}
 
 class DiskCache {
     /**
@@ -215,10 +241,15 @@ async function readCharacterData(inputFile, inputFormat = 'png') {
  * @param {string} outputFile - Target image file name
  * @param {import('express').Request} request - Express request obejct
  * @param {Crop|undefined} crop - Crop parameters
+ * @param {{ shouldRegenerateThumbnail?: boolean }} [options] - Thumbnail regeneration options
  * @returns {Promise<boolean>} - True if the operation was successful
  */
-async function writeCharacterData(inputFile, data, outputFile, request, crop = undefined) {
+async function writeCharacterData(inputFile, data, outputFile, request, crop = undefined, options = {}) {
     try {
+        const outputImagePath = path.join(request.user.directories.characters, `${outputFile}.png`);
+        const outputAvatarName = path.parse(outputImagePath).base;
+        const shouldRegenerateThumbnail = options.shouldRegenerateThumbnail ?? true;
+
         // Reset the cache
         for (const key of memoryCache.keys()) {
             if (Buffer.isBuffer(inputFile)) {
@@ -250,18 +281,40 @@ async function writeCharacterData(inputFile, data, outputFile, request, crop = u
             }
         }
 
+        if (shouldRegenerateThumbnail && fs.existsSync(outputImagePath)) {
+            invalidateThumbnail(request.user.directories, 'avatar', outputAvatarName);
+        }
+
         const inputImage = await getInputImage();
 
         // Get the chunks
         const outputImage = write(inputImage, data);
-        const outputImagePath = path.join(request.user.directories.characters, `${outputFile}.png`);
 
         writeFileAtomicSync(outputImagePath, outputImage);
+        startThumbnailPregeneration(request.user.directories, 'avatar', outputAvatarName, false, shouldRegenerateThumbnail);
         return true;
     } catch (err) {
         console.error(err);
         return false;
     }
+}
+
+/**
+ * Starts thumbnail pregeneration without blocking the caller.
+ * @param {import('../users.js').UserDirectoryList} directories
+ * @param {'avatar' | 'persona'} type
+ * @param {string} file
+ * @param {boolean|null} isKnownAnimated
+ * @param {boolean} shouldRegenerateThumbnail
+ */
+function startThumbnailPregeneration(directories, type, file, isKnownAnimated, shouldRegenerateThumbnail = true) {
+    if (!shouldRegenerateThumbnail || !areThumbnailsEnabled()) {
+        return;
+    }
+
+    void generateThumbnail(directories, type, file, true, isKnownAnimated).catch(error => {
+        console.warn(`Thumbnail pregeneration skipped for ${type}/${file}:`, error);
+    });
 }
 
 /**
@@ -380,15 +433,29 @@ const toShallow = (character) => {
         chat_size: character.chat_size,
         data_size: character.data_size,
         tags: character.tags,
+        description: _.get(character, 'description', _.get(character, 'data.description', '')),
+        personality: _.get(character, 'personality', _.get(character, 'data.personality', '')),
+        scenario: _.get(character, 'scenario', _.get(character, 'data.scenario', '')),
+        first_mes: _.get(character, 'first_mes', _.get(character, 'data.first_mes', '')),
+        mes_example: _.get(character, 'mes_example', _.get(character, 'data.mes_example', '')),
+        creatorcomment: _.get(character, 'creatorcomment', _.get(character, 'data.creator_notes', '')),
+        talkativeness: _.get(character, 'talkativeness', _.get(character, 'data.extensions.talkativeness', 0)),
         data: {
             name: _.get(character, 'data.name', ''),
             character_version: _.get(character, 'data.character_version', ''),
             creator: _.get(character, 'data.creator', ''),
             creator_notes: _.get(character, 'data.creator_notes', ''),
+            description: _.get(character, 'data.description', ''),
+            mes_example: _.get(character, 'data.mes_example', ''),
+            scenario: _.get(character, 'data.scenario', ''),
+            personality: _.get(character, 'data.personality', ''),
+            first_mes: _.get(character, 'data.first_mes', ''),
+            alternate_greetings: _.get(character, 'data.alternate_greetings', []),
             tags: _.get(character, 'data.tags', []),
             extensions: {
                 fav: _.get(character, 'data.extensions.fav', false),
                 world: _.get(character, 'data.extensions.world', ''),
+                talkativeness: _.get(character, 'data.extensions.talkativeness', _.get(character, 'talkativeness', 0)),
             },
         },
     };
@@ -441,6 +508,227 @@ const processCharacter = async (item, directories, { shallow }) => {
 };
 
 /**
+ * @param {import('../users.js').UserDirectoryList} directories
+ * @param {object} fullPayload
+ * @returns {{
+ *   sourceWorldName: string,
+ *   sourceWorldMtimeMs: number,
+ *   sourceWorldSize: number,
+ * }}
+ */
+function getCharacterIndexWorldMetadata(directories, fullPayload) {
+    let sourceWorldName = '';
+    let sourceWorldMtimeMs = -1;
+    let sourceWorldSize = -1;
+    let rawCard;
+
+    try {
+        rawCard = JSON.parse(fullPayload.json_data);
+    } catch (error) {
+        console.warn(`Character index world metadata skipped for ${fullPayload.avatar ?? '(unknown avatar)'}:`, error);
+        return {
+            sourceWorldName,
+            sourceWorldMtimeMs,
+            sourceWorldSize,
+        };
+    }
+
+    if (!rawCard?.spec && typeof rawCard?.world === 'string' && rawCard.world) {
+        sourceWorldName = sanitize(rawCard.world);
+        if (!sourceWorldName) {
+            return {
+                sourceWorldName: '',
+                sourceWorldMtimeMs,
+                sourceWorldSize,
+            };
+        }
+
+        try {
+            const worldFileName = `${sourceWorldName}.json`;
+            const worldFilePath = path.join(directories.worlds, worldFileName);
+            const worldStat = fs.statSync(worldFilePath);
+            sourceWorldMtimeMs = worldStat.mtimeMs;
+            sourceWorldSize = worldStat.size;
+        } catch (error) {
+            if (error?.code !== 'ENOENT') {
+                console.warn(`Character index world metadata skipped for ${fullPayload.avatar ?? '(unknown avatar)'}:`, error);
+            }
+        }
+    }
+
+    return {
+        sourceWorldName,
+        sourceWorldMtimeMs,
+        sourceWorldSize,
+    };
+}
+
+/**
+ * @param {string} filePath
+ * @returns {{ mtimeMs: number, size: number }}
+ */
+function statCharacterFile(filePath) {
+    const fileStat = fs.statSync(filePath);
+    return {
+        mtimeMs: fileStat.mtimeMs,
+        size: fileStat.size,
+    };
+}
+
+/**
+ * @param {import('../users.js').UserDirectoryList} directories
+ * @param {string} avatar
+ * @returns {Promise<{
+ *   avatar: string,
+ *   fullPayload: object,
+ *   shallowPayload: object,
+ *   sourceMtimeMs: number,
+ *   sourceSize: number,
+ *   sourceWorldName: string,
+ *   sourceWorldMtimeMs: number,
+ *   sourceWorldSize: number,
+ * }>}
+ */
+async function buildCharacterIndexRow(directories, avatar) {
+    const fullPayload = await processCharacter(avatar, directories, { shallow: false });
+
+    if (!fullPayload?.name) {
+        throw new Error(`Could not build character index row for ${avatar}`);
+    }
+
+    const filePath = path.join(directories.characters, avatar);
+    const stat = statCharacterFile(filePath);
+    const worldMetadata = getCharacterIndexWorldMetadata(directories, fullPayload);
+
+    return {
+        avatar,
+        fullPayload,
+        shallowPayload: toShallow(fullPayload),
+        sourceMtimeMs: stat.mtimeMs,
+        sourceSize: stat.size,
+        ...worldMetadata,
+    };
+}
+
+/**
+ * @param {import('../users.js').UserDirectoryList} directories
+ * @param {string} avatar
+ * @returns {Promise<void>}
+ */
+async function refreshCharacterIndexEntry(directories, avatar) {
+    const row = await buildCharacterIndexRow(directories, avatar);
+    upsertCharacterIndexEntry(directories.root, avatar, row);
+}
+
+/**
+ * @param {import('../users.js').UserDirectoryList} directories
+ * @param {string} avatar
+ * @param {string} operation
+ * @returns {Promise<void>}
+ */
+async function refreshCharacterIndexEntrySafe(directories, avatar, operation) {
+    if (!isCharacterIndexSupported() || !avatar) {
+        return;
+    }
+
+    try {
+        await refreshCharacterIndexEntry(directories, avatar);
+    } catch (error) {
+        console.warn(`Character index refresh skipped after ${operation} for ${avatar}:`, error);
+    }
+}
+
+/**
+ * @param {import('../users.js').UserDirectoryList} directories
+ * @param {string[]} avatars
+ * @param {string} operation
+ * @returns {Promise<void>}
+ */
+async function refreshCharacterIndexEntriesSafe(directories, avatars, operation) {
+    const uniqueAvatars = [...new Set(avatars.filter(Boolean))];
+    if (!uniqueAvatars.length || !isCharacterIndexSupported()) {
+        return;
+    }
+
+    for (let index = 0; index < uniqueAvatars.length; index += CHARACTER_INDEX_REFRESH_CONCURRENCY) {
+        const batch = uniqueAvatars.slice(index, index + CHARACTER_INDEX_REFRESH_CONCURRENCY);
+        const results = await Promise.allSettled(batch.map(avatar => refreshCharacterIndexEntry(directories, avatar)));
+
+        for (let batchIndex = 0; batchIndex < results.length; batchIndex++) {
+            if (results[batchIndex].status === 'rejected') {
+                console.warn(`Character index refresh skipped after ${operation} for ${batch[batchIndex]}:`, results[batchIndex].reason);
+            }
+        }
+    }
+}
+
+/**
+ * @param {import('../users.js').UserDirectoryList} directories
+ * @param {string} avatar
+ * @param {string} operation
+ * @returns {void}
+ */
+function deleteCharacterIndexEntrySafe(directories, avatar, operation) {
+    if (!isCharacterIndexSupported() || !avatar) {
+        return;
+    }
+
+    try {
+        deleteCharacterIndexEntry(directories.root, avatar);
+    } catch (error) {
+        console.warn(`Character index delete skipped after ${operation} for ${avatar}:`, error);
+    }
+}
+
+/**
+ * @param {import('../users.js').UserDirectoryList} directories
+ * @param {boolean} shallow
+ * @returns {Promise<object[]>}
+ */
+async function listCharactersFromFiles(directories, shallow) {
+    const files = fs.readdirSync(directories.characters);
+    const pngFiles = files.filter(file => file.endsWith('.png'));
+    const processingPromises = pngFiles.map(file => processCharacter(file, directories, { shallow }));
+    return (await Promise.all(processingPromises)).filter(character => character.name);
+}
+
+/**
+ * @param {import("express").Request} request
+ * @param {import("express").Response} response
+ * @returns {Promise<void>}
+ */
+async function sendCharacterListResponse(request, response) {
+    try {
+        let data = [];
+
+        if (isCharacterIndexSupported()) {
+            try {
+                const files = fs.readdirSync(request.user.directories.characters);
+                const pngFiles = files.filter(file => file.endsWith('.png')).sort((left, right) => left.localeCompare(right));
+                data = await listIndexedCharacterPayloads({
+                    userRoot: request.user.directories.root,
+                    directories: request.user.directories,
+                    avatarFiles: pngFiles,
+                    useShallowPayload: true,
+                    buildRow: avatar => buildCharacterIndexRow(request.user.directories, avatar),
+                });
+            } catch (error) {
+                console.warn('Falling back to filesystem-backed character summary list after index read failure:', error);
+                data = await listCharactersFromFiles(request.user.directories, true);
+            }
+        } else {
+            data = await listCharactersFromFiles(request.user.directories, true);
+        }
+
+        response.send(data);
+    } catch (err) {
+        console.error(err);
+        const isRangeError = err instanceof RangeError;
+        response.status(500).send({ overflow: isRangeError, error: true });
+    }
+}
+
+/**
  * Convert a character object to Spec V2 format.
  * @param {object} jsonObject Character object
  * @param {import('../users.js').UserDirectoryList} directories User directories
@@ -481,6 +769,7 @@ function convertToV2(char, directories) {
         fav: char.fav,
         creator: char.creator,
         tags: char.tags,
+        world: char.world,
         depth_prompt_prompt: char.depth_prompt_prompt,
         depth_prompt_depth: char.depth_prompt_depth,
         depth_prompt_role: char.depth_prompt_role,
@@ -1036,12 +1325,14 @@ router.post('/create', getFileNameValidationFunction('file_name'), async functio
 
         if (!request.file) {
             await writeCharacterData(DEFAULT_AVATAR_PATH, char, internalName, request);
+            await refreshCharacterIndexEntrySafe(request.user.directories, avatarName, 'create');
             return response.send(avatarName);
         } else {
             const crop = tryParse(request.query.crop);
             const uploadPath = path.join(request.file.destination, request.file.filename);
             await writeCharacterData(uploadPath, char, internalName, request, crop);
             fs.unlinkSync(uploadPath);
+            await refreshCharacterIndexEntrySafe(request.user.directories, avatarName, 'create');
             return response.send(avatarName);
         }
     } catch (err) {
@@ -1088,6 +1379,9 @@ router.post('/rename', validateAvatarUrlMiddleware, async function (request, res
         // Remove the old character file
         fs.unlinkSync(oldAvatarPath);
 
+        deleteCharacterIndexEntrySafe(request.user.directories, oldAvatarName, 'rename');
+        await refreshCharacterIndexEntrySafe(request.user.directories, newAvatarName, 'rename');
+
         // Return new avatar name to ST
         return response.send({ avatar: newAvatarName });
     } catch (err) {
@@ -1118,11 +1412,10 @@ router.post('/edit', validateAvatarUrlMiddleware, async function (request, respo
     try {
         if (!request.file) {
             const avatarPath = path.join(request.user.directories.characters, request.body.avatar_url);
-            await writeCharacterData(avatarPath, char, targetFile, request);
+            await writeCharacterData(avatarPath, char, targetFile, request, undefined, { shouldRegenerateThumbnail: false });
         } else {
             const crop = tryParse(request.query.crop);
             const newAvatarPath = path.join(request.file.destination, request.file.filename);
-            invalidateThumbnail(request.user.directories, 'avatar', request.body.avatar_url);
             await writeCharacterData(newAvatarPath, char, targetFile, request, crop);
             fs.unlinkSync(newAvatarPath);
 
@@ -1130,6 +1423,7 @@ router.post('/edit', validateAvatarUrlMiddleware, async function (request, respo
             cacheBuster.bust(request, response);
         }
 
+        await refreshCharacterIndexEntrySafe(request.user.directories, request.body.avatar_url, 'edit');
         return response.sendStatus(200);
     } catch (err) {
         console.error('An error occurred, character edit invalidated.', err);
@@ -1169,8 +1463,8 @@ router.post('/edit-avatar', validateAvatarUrlMiddleware, async function (request
 
         // Reset images caches
         cacheBuster.bust(request, response);
-        invalidateThumbnail(request.user.directories, 'avatar', request.body.avatar_url);
 
+        await refreshCharacterIndexEntrySafe(request.user.directories, request.body.avatar_url, 'edit-avatar');
         return response.sendStatus(200);
     } catch (err) {
         console.error('An error occurred while editing avatar', err);
@@ -1221,7 +1515,8 @@ router.post('/edit-attribute', validateAvatarUrlMiddleware, async function (requ
         char.data[request.body.field] = request.body.value;
         let newCharJSON = JSON.stringify(char);
         const targetFile = (request.body.avatar_url).replace('.png', '');
-        await writeCharacterData(avatarPath, newCharJSON, targetFile, request);
+        await writeCharacterData(avatarPath, newCharJSON, targetFile, request, undefined, { shouldRegenerateThumbnail: false });
+        await refreshCharacterIndexEntrySafe(request.user.directories, request.body.avatar_url, 'edit-attribute');
         return response.sendStatus(200);
     } catch (err) {
         console.error('An error occurred, character edit invalidated.', err);
@@ -1297,7 +1592,7 @@ async function mergeCharacterUpdate(avatarPath, avatar, updateData, request, sho
     }
 
     const targetImg = avatar.replace('.png', '');
-    await writeCharacterData(avatarPath, JSON.stringify(character), targetImg, request);
+    await writeCharacterData(avatarPath, JSON.stringify(character), targetImg, request, undefined, { shouldRegenerateThumbnail: false });
     return { ok: true };
 }
 
@@ -1392,6 +1687,8 @@ router.post('/merge-attributes', getFileNameValidationFunction('avatar'), async 
                 await Promise.allSettled(batch.map(processOne));
             }
 
+            await refreshCharacterIndexEntriesSafe(request.user.directories, updated, 'merge-attributes bulk');
+
             return response.send({ updated, skipped, failed });
         }
 
@@ -1401,6 +1698,7 @@ router.post('/merge-attributes', getFileNameValidationFunction('avatar'), async 
 
         const result = await mergeCharacterUpdate(avatarPath, update.avatar, update, request);
         if (result.ok) {
+            await refreshCharacterIndexEntrySafe(request.user.directories, update.avatar, 'merge-attributes');
             response.sendStatus(200);
         } else {
             console.warn(result.error);
@@ -1408,6 +1706,81 @@ router.post('/merge-attributes', getFileNameValidationFunction('avatar'), async 
         }
     } catch (exception) {
         response.status(500).send({ message: 'Unexpected error while saving character.', error: exception.toString() });
+    }
+});
+
+router.post('/delete-preflight', async function (request, response) {
+    try {
+        const avatars = request.body?.avatars;
+        if (!Array.isArray(avatars) || avatars.length === 0) {
+            return response.send({ worldInfos: [] });
+        }
+
+        const directories = request.user.directories;
+        const worldNameToAvatars = new Map();
+
+        // Read each character to extract extensions.world
+        for (const avatar of avatars) {
+            const safeName = sanitize(avatar);
+            if (!safeName || safeName !== avatar) continue;
+            const charPath = path.join(directories.characters, avatar);
+            if (!fs.existsSync(charPath)) continue;
+
+            try {
+                const rawData = await readCharacterData(charPath);
+                const charData = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+                const worldName = charData?.data?.extensions?.world;
+                if (worldName && typeof worldName === 'string' && worldName.trim()) {
+                    if (!worldNameToAvatars.has(worldName)) {
+                        worldNameToAvatars.set(worldName, []);
+                    }
+                    worldNameToAvatars.get(worldName).push(avatar);
+                }
+            } catch {
+                // Skip characters that can't be read
+            }
+        }
+
+        if (worldNameToAvatars.size === 0) {
+            return response.send({ worldInfos: [] });
+        }
+
+        const worldInfos = [];
+
+        for (const [worldName, deleteCandidateAvatars] of worldNameToAvatars) {
+            const worldFilename = sanitize(`${worldName}.json`);
+            const worldPath = path.join(directories.worlds, worldFilename);
+            if (!fs.existsSync(worldPath)) continue;
+
+            let entryCount = 0;
+            try {
+                const worldData = JSON.parse(fs.readFileSync(worldPath, 'utf8'));
+                entryCount = worldData.entries ? Object.keys(worldData.entries).length : 0;
+            } catch {
+                // If we can't parse, still show with 0 entries
+            }
+
+            let boundCharacters = [];
+            if (isCharacterIndexSupported()) {
+                try {
+                    boundCharacters = findCharactersBoundToWorld(directories.root, worldName);
+                } catch {
+                    // Fallback: only show delete candidates
+                }
+            }
+
+            worldInfos.push({
+                name: worldName,
+                entryCount,
+                boundCharacters,
+                deleteCandidateAvatars,
+            });
+        }
+
+        return response.send({ worldInfos });
+    } catch (error) {
+        console.error('Delete preflight error:', error);
+        return response.status(500).send({ error: 'Failed to gather world info metadata.' });
     }
 });
 
@@ -1444,6 +1817,8 @@ router.post('/delete', validateAvatarUrlMiddleware, async function (request, res
         }
     }
 
+    deleteCharacterIndexEntrySafe(request.user.directories, request.body.avatar_url, 'delete');
+
     return response.sendStatus(200);
 });
 
@@ -1462,34 +1837,106 @@ router.post('/delete', validateAvatarUrlMiddleware, async function (request, res
  * @return {void}
  */
 router.post('/all', async function (request, response) {
+    const startedAt = performance.now();
     try {
-        const files = fs.readdirSync(request.user.directories.characters);
-        const pngFiles = files.filter(file => file.endsWith('.png'));
-        const processingPromises = pngFiles.map(file => processCharacter(file, request.user.directories, { shallow: useShallowCharacters }));
-        const data = (await Promise.all(processingPromises)).filter(c => c.name);
+        let data = [];
+        let interactionPath = 'characters_all:filesystem';
+
+        if (isCharacterIndexSupported()) {
+            try {
+                const files = fs.readdirSync(request.user.directories.characters);
+                const pngFiles = files.filter(file => file.endsWith('.png')).sort((left, right) => left.localeCompare(right));
+                data = await listIndexedCharacterPayloads({
+                    userRoot: request.user.directories.root,
+                    directories: request.user.directories,
+                    avatarFiles: pngFiles,
+                    useShallowPayload: useShallowCharacters,
+                    buildRow: avatar => buildCharacterIndexRow(request.user.directories, avatar),
+                });
+                interactionPath = 'characters_all:indexed';
+            } catch (error) {
+                console.warn('Falling back to filesystem-backed character list after index read failure:', error);
+                data = await listCharactersFromFiles(request.user.directories, useShallowCharacters);
+            }
+        } else {
+            data = await listCharactersFromFiles(request.user.directories, useShallowCharacters);
+        }
+
+        applyInteractionPerfHeaders(response, interactionPath, startedAt);
         return response.send(data);
     } catch (err) {
         console.error(err);
         const isRangeError = err instanceof RangeError;
+        applyInteractionPerfHeaders(response, 'characters_all:error', startedAt);
         response.status(500).send({ overflow: isRangeError, error: true });
     }
 });
 
+router.post('/list', async function (request, response) {
+    await sendCharacterListResponse(request, response);
+});
+
 router.post('/get', validateAvatarUrlMiddleware, async function (request, response) {
+    const startedAt = performance.now();
     try {
         if (!request.body) return response.sendStatus(400);
         const item = request.body.avatar_url;
         const filePath = path.join(request.user.directories.characters, item);
+        let interactionPath = 'characters_get:filesystem';
 
-        if (!fs.existsSync(filePath)) {
-            return response.sendStatus(404);
+        let fileStat;
+        try {
+            fileStat = statCharacterFile(filePath);
+        } catch (error) {
+            if (error?.code === 'ENOENT') {
+                return response.sendStatus(404);
+            }
+            throw error;
+        }
+
+        if (isCharacterIndexSupported()) {
+            try {
+                const indexedPayload = getFreshIndexedCharacterFullPayload(
+                    request.user.directories.root,
+                    request.user.directories,
+                    item,
+                    fileStat,
+                );
+
+                if (indexedPayload) {
+                    applyInteractionPerfHeaders(response, 'characters_get:indexed', startedAt);
+                    return response.send(indexedPayload);
+                }
+            } catch (error) {
+                console.warn(`Character index lookup skipped for ${item}:`, error);
+            }
         }
 
         const data = await processCharacter(item, request.user.directories, { shallow: false });
 
+        if (isCharacterIndexSupported() && data?.name) {
+            try {
+                fileStat = statCharacterFile(filePath);
+                upsertCharacterIndexEntry(request.user.directories.root, item, {
+                    avatar: item,
+                    fullPayload: data,
+                    shallowPayload: toShallow(data),
+                    sourceMtimeMs: fileStat.mtimeMs,
+                    sourceSize: fileStat.size,
+                    ...getCharacterIndexWorldMetadata(request.user.directories, data),
+                });
+            } catch (error) {
+                if (error?.code !== 'ENOENT') {
+                    console.warn(`Character index refresh skipped after get for ${item}:`, error);
+                }
+            }
+        }
+
+        applyInteractionPerfHeaders(response, interactionPath, startedAt);
         return response.send(data);
     } catch (err) {
         console.error(err);
+        applyInteractionPerfHeaders(response, 'characters_get:error', startedAt);
         response.sendStatus(500);
     }
 });
@@ -1585,10 +2032,8 @@ router.post('/import', async function (request, response) {
             return response.sendStatus(400);
         }
 
-        if (preservedFileName) {
-            invalidateThumbnail(request.user.directories, 'avatar', `${preservedFileName}.png`);
-        }
-
+        const avatarName = fileName.endsWith('.png') ? fileName : `${fileName}.png`;
+        await refreshCharacterIndexEntrySafe(request.user.directories, avatarName, 'import');
         response.send({ file_name: fileName });
     } catch (err) {
         console.error(err);
@@ -1634,6 +2079,8 @@ router.post('/duplicate', validateAvatarUrlMiddleware, async function (request, 
 
         fs.copyFileSync(filename, newFilename);
         console.info(`${filename} was copied to ${newFilename}`);
+        startThumbnailPregeneration(request.user.directories, 'avatar', path.parse(newFilename).base, false);
+        await refreshCharacterIndexEntrySafe(request.user.directories, path.parse(newFilename).base, 'duplicate');
         response.send({ path: path.parse(newFilename).base });
     } catch (error) {
         console.error(error);

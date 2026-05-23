@@ -6,6 +6,9 @@ import sanitize from 'sanitize-filename';
 import _ from 'lodash';
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import { tryParse } from '../util.js';
+import { invalidateDirectory } from './settings-cache.js';
+import { findCharactersBoundToWorld, isCharacterIndexSupported } from './character-index.js';
+import { parse, write } from '../character-card-parser.js';
 
 /**
  * Reads a World Info file and returns its contents
@@ -78,6 +81,52 @@ router.post('/get', (request, response) => {
     return response.send(file);
 });
 
+router.post('/delete-preflight', (request, response) => {
+    try {
+        const worldName = request.body?.name;
+        if (!worldName || typeof worldName !== 'string') {
+            return response.status(400).send({ error: 'World name is required.' });
+        }
+
+        const directories = request.user.directories;
+        const worldFilename = sanitize(`${worldName}.json`);
+        const worldPath = path.join(directories.worlds, worldFilename);
+
+        if (!fs.existsSync(worldPath)) {
+            return response.send({ worldInfos: [] });
+        }
+
+        let entryCount = 0;
+        try {
+            const worldData = JSON.parse(fs.readFileSync(worldPath, 'utf8'));
+            entryCount = worldData.entries ? Object.keys(worldData.entries).length : 0;
+        } catch {
+            // If we can't parse, still show with 0 entries
+        }
+
+        let boundCharacters = [];
+        if (isCharacterIndexSupported()) {
+            try {
+                boundCharacters = findCharactersBoundToWorld(directories.root, worldName);
+            } catch {
+                // Fallback: only show the world itself
+            }
+        }
+
+        return response.send({
+            worldInfos: [{
+                name: worldName,
+                entryCount,
+                boundCharacters,
+                deleteCandidateAvatars: [],
+            }],
+        });
+    } catch (error) {
+        console.error('World delete preflight error:', error);
+        return response.status(500).send({ error: 'Failed to gather world info metadata.' });
+    }
+});
+
 router.post('/delete', (request, response) => {
     if (!request.body?.name) {
         return response.sendStatus(400);
@@ -92,6 +141,7 @@ router.post('/delete', (request, response) => {
     }
 
     fs.unlinkSync(pathToWorldInfo);
+    invalidateDirectory(request.user.directories.worlds);
 
     return response.sendStatus(200);
 });
@@ -128,6 +178,7 @@ router.post('/import', (request, response) => {
     }
 
     writeFileAtomicSync(pathToNewFile, fileContents);
+    invalidateDirectory(request.user.directories.worlds);
     return response.send({ name: worldName });
 });
 
@@ -152,6 +203,60 @@ router.post('/edit', (request, response) => {
     const pathToFile = path.join(request.user.directories.worlds, filename);
 
     writeFileAtomicSync(pathToFile, JSON.stringify(request.body.data, null, 4));
+    invalidateDirectory(request.user.directories.worlds);
 
     return response.send({ ok: true });
+});
+
+router.post('/delete-cascade', async (request, response) => {
+    try {
+        const worlds = request.body?.worlds;
+        if (!Array.isArray(worlds) || worlds.length === 0) {
+            return response.sendStatus(400);
+        }
+
+        const clearReferences = request.body.clear_references === true;
+        const directories = request.user.directories;
+
+        for (const worldName of worlds) {
+            if (typeof worldName !== 'string' || !worldName.trim()) continue;
+
+            if (clearReferences && isCharacterIndexSupported()) {
+                try {
+                    const boundCharacters = findCharactersBoundToWorld(directories.root, worldName);
+                    for (const { avatar } of boundCharacters) {
+                        const charPath = path.join(directories.characters, avatar);
+                        if (!fs.existsSync(charPath)) continue;
+
+                        try {
+                            const imageBuffer = fs.readFileSync(charPath);
+                            const jsonString = await parse(charPath);
+                            const card = JSON.parse(jsonString);
+                            if (card?.data?.extensions?.world === worldName) {
+                                card.data.extensions.world = '';
+                                const newBuffer = write(imageBuffer, JSON.stringify(card));
+                                fs.writeFileSync(charPath, newBuffer);
+                            }
+                        } catch {
+                            // Skip characters that can't be updated
+                        }
+                    }
+                } catch {
+                    // If index lookup fails, still delete the world file
+                }
+            }
+
+            const worldFilename = sanitize(`${worldName}.json`);
+            const worldPath = path.join(directories.worlds, worldFilename);
+            if (fs.existsSync(worldPath)) {
+                fs.unlinkSync(worldPath);
+            }
+        }
+
+        invalidateDirectory(directories.worlds);
+        return response.sendStatus(200);
+    } catch (error) {
+        console.error('World info cascade delete error:', error);
+        return response.status(500).send({ error: 'Failed to cascade-delete world info files.' });
+    }
 });

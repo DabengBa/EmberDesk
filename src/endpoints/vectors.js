@@ -17,6 +17,7 @@ import { getCohereVector, getCohereBatchVector } from '../vectors/cohere-vectors
 import { getLlamaCppVector, getLlamaCppBatchVector } from '../vectors/llamacpp-vectors.js';
 import { getVllmVector, getVllmBatchVector } from '../vectors/vllm-vectors.js';
 import { getOllamaVector, getOllamaBatchVector } from '../vectors/ollama-vectors.js';
+import { getKoboldCppVector, getKoboldCppBatchVector } from '../vectors/koboldcpp-vectors.js';
 
 // Don't forget to add new sources to the SOURCES array
 const SOURCES = [
@@ -82,7 +83,7 @@ async function getVector(source, sourceSettings, text, isQuery, directories) {
         case 'webllm':
             return sourceSettings.embeddings[text];
         case 'koboldcpp':
-            return sourceSettings.embeddings[text];
+            return getKoboldCppVector(text, sourceSettings.apiUrl, directories);
         case 'chutes':
             return getOpenAIVector(text, source, directories, sourceSettings.model);
         case 'nanogpt':
@@ -154,7 +155,7 @@ async function getBatchVector(source, sourceSettings, texts, isQuery, directorie
                 results.push(...texts.map(x => sourceSettings.embeddings[x]));
                 break;
             case 'koboldcpp':
-                results.push(...texts.map(x => sourceSettings.embeddings[x]));
+                results.push(...await getKoboldCppBatchVector(batch, sourceSettings.apiUrl, directories));
                 break;
             case 'chutes':
                 results.push(...await getOpenAIBatchVector(batch, source, directories, sourceSettings.model));
@@ -250,7 +251,7 @@ function getSourceSettings(source, request) {
         case 'koboldcpp':
             return {
                 model: String(request.body.model),
-                embeddings: request.body.embeddings ?? {},
+                apiUrl: String(request.body.apiUrl || ''),
             };
         case 'chutes':
             return {

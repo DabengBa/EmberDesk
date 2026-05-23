@@ -10,10 +10,16 @@ import { SETTINGS_FILE } from '../constants.js';
 import { getConfigValue, generateTimestamp, removeOldBackups } from '../util.js';
 import { getAllUserHandles, getUserDirectories } from '../users.js';
 import { getFileNameValidationFunction } from '../middleware/validateFileName.js';
+import {
+    readAndParseFromDirectoryAsync,
+    readPresetsFromDirectoryAsync,
+    readWorldNamesAsync,
+    getCachedPayload,
+} from './settings-cache.js';
 
 const ENABLE_EXTENSIONS = !!getConfigValue('extensions.enabled', true, 'boolean');
 const ENABLE_EXTENSIONS_AUTO_UPDATE = !!getConfigValue('extensions.autoUpdate', true, 'boolean');
-const ENABLE_ACCOUNTS = !!getConfigValue('enableUserAccounts', false, 'boolean');
+const ENABLE_ACCOUNTS = !!getConfigValue('enableUserAccounts', true, 'boolean');
 const ENABLE_REQUEST_COMPRESSION = !!getConfigValue('performance.requestCompression.enabled', false, 'boolean');
 const REQUEST_COMPRESSION_MIN = bytes.parse(getConfigValue('performance.requestCompression.minPayloadSize', '256kb'));
 const REQUEST_COMPRESSION_MAX = bytes.parse(getConfigValue('performance.requestCompression.maxPayloadSize', '8mb'));
@@ -46,73 +52,12 @@ function triggerAutoSave(handle) {
 }
 
 /**
- * Reads and parses files from a directory.
- * @param {string} directoryPath Path to the directory
- * @param {string} fileExtension File extension
- * @returns {Array} Parsed files
- */
-function readAndParseFromDirectory(directoryPath, fileExtension = '.json') {
-    const files = fs
-        .readdirSync(directoryPath)
-        .filter(x => path.parse(x).ext == fileExtension)
-        .sort();
-
-    const parsedFiles = [];
-
-    files.forEach(item => {
-        try {
-            const file = fs.readFileSync(path.join(directoryPath, item), 'utf-8');
-            parsedFiles.push(fileExtension == '.json' ? JSON.parse(file) : file);
-        } catch {
-            // skip
-        }
-    });
-
-    return parsedFiles;
-}
-
-/**
- * Gets a sort function for sorting strings.
- * @param {*} _
- * @returns {(a: string, b: string) => number} Sort function
- */
-function sortByName(_) {
-    return (a, b) => a.localeCompare(b);
-}
-
-/**
  * Gets backup file prefix for user settings.
  * @param {string} handle User handle
  * @returns {string} File prefix
  */
 export function getSettingsBackupFilePrefix(handle) {
     return `settings_${handle}_`;
-}
-
-function readPresetsFromDirectory(directoryPath, options = {}) {
-    const {
-        sortFunction,
-        removeFileExtension = false,
-        fileExtension = '.json',
-    } = options;
-
-    const files = fs.readdirSync(directoryPath).sort(sortFunction).filter(x => path.parse(x).ext == fileExtension);
-    const fileContents = [];
-    const fileNames = [];
-
-    files.forEach(item => {
-        try {
-            const file = fs.readFileSync(path.join(directoryPath, item), 'utf8');
-            JSON.parse(file);
-            fileContents.push(file);
-            fileNames.push(removeFileExtension ? item.replace(/\.[^/.]+$/, '') : item);
-        } catch {
-            // skip
-            console.warn(`${item} is not a valid JSON`);
-        }
-    });
-
-    return { fileContents, fileNames };
 }
 
 async function backupSettings() {
@@ -216,54 +161,45 @@ router.post('/save', function (request, response) {
 });
 
 // Wintermute's code
-router.post('/get', (request, response) => {
+router.post('/get', async (request, response) => {
     let settings;
     try {
         const pathToSettings = path.join(request.user.directories.root, SETTINGS_FILE);
-        settings = fs.readFileSync(pathToSettings, 'utf8');
-    } catch (e) {
+        settings = await fs.promises.readFile(pathToSettings, 'utf8');
+    } catch {
         return response.sendStatus(500);
     }
 
-    // NovelAI Settings
-    const { fileContents: novelai_settings, fileNames: novelai_setting_names }
-        = readPresetsFromDirectory(request.user.directories.novelAI_Settings, {
-            sortFunction: sortByName(request.user.directories.novelAI_Settings),
-            removeFileExtension: true,
-        });
+    const dirs = request.user.directories;
+    const sortFn = () => (a, b) => a.localeCompare(b);
 
-    // OpenAI Settings
-    const { fileContents: openai_settings, fileNames: openai_setting_names }
-        = readPresetsFromDirectory(request.user.directories.openAI_Settings, {
-            sortFunction: sortByName(request.user.directories.openAI_Settings), removeFileExtension: true,
-        });
+    const presetOpts = (dir) => ({ sortFunction: sortFn(), removeFileExtension: true });
 
-    // TextGenerationWebUI Settings
-    const { fileContents: textgenerationwebui_presets, fileNames: textgenerationwebui_preset_names }
-        = readPresetsFromDirectory(request.user.directories.textGen_Settings, {
-            sortFunction: sortByName(request.user.directories.textGen_Settings), removeFileExtension: true,
-        });
-
-    //Kobold
-    const { fileContents: koboldai_settings, fileNames: koboldai_setting_names }
-        = readPresetsFromDirectory(request.user.directories.koboldAI_Settings, {
-            sortFunction: sortByName(request.user.directories.koboldAI_Settings), removeFileExtension: true,
-        });
-
-    const worldFiles = fs
-        .readdirSync(request.user.directories.worlds)
-        .filter(file => path.extname(file).toLowerCase() === '.json')
-        .sort((a, b) => a.localeCompare(b));
-    const world_names = worldFiles.map(item => path.parse(item).name);
-
-    const themes = readAndParseFromDirectory(request.user.directories.themes);
-    const movingUIPresets = readAndParseFromDirectory(request.user.directories.movingUI);
-    const quickReplyPresets = readAndParseFromDirectory(request.user.directories.quickreplies);
-
-    const instruct = readAndParseFromDirectory(request.user.directories.instruct);
-    const context = readAndParseFromDirectory(request.user.directories.context);
-    const sysprompt = readAndParseFromDirectory(request.user.directories.sysprompt);
-    const reasoning = readAndParseFromDirectory(request.user.directories.reasoning);
+    const [
+        { fileContents: novelai_settings, fileNames: novelai_setting_names },
+        { fileContents: openai_settings, fileNames: openai_setting_names },
+        { fileContents: koboldai_settings, fileNames: koboldai_setting_names },
+        world_names,
+        themes,
+        movingUIPresets,
+        quickReplyPresets,
+        instruct,
+        context,
+        sysprompt,
+        reasoning,
+    ] = await Promise.all([
+        getCachedPayload(dirs.novelAI_Settings, () => readPresetsFromDirectoryAsync(dirs.novelAI_Settings, presetOpts(dirs.novelAI_Settings))),
+        getCachedPayload(dirs.openAI_Settings, () => readPresetsFromDirectoryAsync(dirs.openAI_Settings, presetOpts(dirs.openAI_Settings))),
+        getCachedPayload(dirs.koboldAI_Settings, () => readPresetsFromDirectoryAsync(dirs.koboldAI_Settings, presetOpts(dirs.koboldAI_Settings))),
+        getCachedPayload(dirs.worlds, () => readWorldNamesAsync(dirs.worlds)),
+        getCachedPayload(dirs.themes, () => readAndParseFromDirectoryAsync(dirs.themes)),
+        getCachedPayload(dirs.movingUI, () => readAndParseFromDirectoryAsync(dirs.movingUI)),
+        getCachedPayload(dirs.quickreplies, () => readAndParseFromDirectoryAsync(dirs.quickreplies)),
+        getCachedPayload(dirs.instruct, () => readAndParseFromDirectoryAsync(dirs.instruct)),
+        getCachedPayload(dirs.context, () => readAndParseFromDirectoryAsync(dirs.context)),
+        getCachedPayload(dirs.sysprompt, () => readAndParseFromDirectoryAsync(dirs.sysprompt)),
+        getCachedPayload(dirs.reasoning, () => readAndParseFromDirectoryAsync(dirs.reasoning)),
+    ]);
 
     response.send({
         settings,
@@ -274,8 +210,6 @@ router.post('/get', (request, response) => {
         novelai_setting_names,
         openai_settings,
         openai_setting_names,
-        textgenerationwebui_presets,
-        textgenerationwebui_preset_names,
         themes,
         movingUIPresets,
         quickReplyPresets,

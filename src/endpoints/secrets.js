@@ -416,6 +416,33 @@ export class SecretManager {
         this._writeSecretsFile(migratedSecrets);
         console.info(color.green('Secrets migrated successfully, old secrets backed up to:'), backupFilePath);
     }
+
+    /**
+     * Migrates CUSTOM secret key to OPENAI key if OPENAI is empty.
+     * Runs once per user directory.
+     */
+    migrateCustomToOpenAI() {
+        if (!fs.existsSync(this.filePath)) {
+            return;
+        }
+
+        const secrets = this._readSecretsFile();
+        const openaiKey = SECRET_KEYS.OPENAI;
+        const customKey = SECRET_KEYS.CUSTOM;
+
+        const openaiSecrets = secrets[openaiKey];
+        const customSecrets = secrets[customKey];
+
+        const hasOpenAI = Array.isArray(openaiSecrets) && openaiSecrets.length > 0;
+        const hasCustom = Array.isArray(customSecrets) && customSecrets.length > 0;
+
+        if (!hasOpenAI && hasCustom) {
+            secrets[openaiKey] = customSecrets;
+            delete secrets[customKey];
+            this._writeSecretsFile(secrets);
+            console.info(color.green('Migrated CUSTOM API key to OPENAI key.'));
+        }
+    }
 }
 
 //#region Backwards compatibility
@@ -500,6 +527,7 @@ export function migrateFlatSecrets(directoriesList) {
         try {
             const manager = new SecretManager(directories);
             manager.migrateFlatSecrets();
+            manager.migrateCustomToOpenAI();
         } catch (error) {
             console.warn(color.red(`Failed to migrate secrets for ${directories.root}:`), error);
         }

@@ -112,11 +112,12 @@ body.hideChatAvatars .welcomePanel .recentChatList .recentChat .avatar {
     flex-direction: row;
     align-items: center;
     padding: 5px 10px;
-    border-radius: 10px;
+    border-radius: 5px;
     cursor: pointer;
     gap: 10px;
     border: 1px solid var(--SmartThemeBorderColor);
     position: relative;
+    transition: background-color 250ms ease-out;
 }
 
 .welcomeRecent .recentChatList .recentChat .avatar {

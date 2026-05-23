@@ -11,12 +11,21 @@ import {
     characterToEntity,
     printCharactersDebounced,
     deleteCharacter,
+    stopGeneration,
+    is_send_press,
+    this_chid,
+    name2,
+    neutralCharacterName,
 } from '../script.js';
 
 import { favsToHotswap } from './RossAscends-mods.js';
 import { loader } from './action-loader.js';
 import { convertCharacterToPersona } from './personas.js';
-import { callGenericPopup, POPUP_TYPE } from './popup.js';
+import { POPUP_TYPE, POPUP_RESULT, Popup } from './popup.js';
+import { buildCascadeSectionHtml, captureCascadeChoices } from './world-cascade-dialog.js';
+import { waitUntilCondition } from './utils.js';
+import { debounce_timeout } from './constants.js';
+import { resolveCharacterAvatarsByIds } from './character-list-state.js';
 import { createTagInput, getTagKeyForEntity, getTagsList, printTagList, tag_map, compareTagsForSort, removeTagFromMap, importTags, tag_import_setting } from './tags.js';
 import { t } from './i18n.js';
 
@@ -809,61 +818,159 @@ class BulkEditOverlay {
     };
 
     /**
-     * Gets the HTML as a string that is displayed inside the popup for the bulk delete
+     * Builds the unified delete confirmation dialog HTML.
      *
-     * @param {Array<number>} characterIds - The characters that are shown inside the popup
-     * @returns String containing the html for the popup content
+     * @param {object} options
+     * @param {number} options.count - Number of characters to delete
+     * @param {string} options.nameTagsHtml - Pre-rendered character name tag HTML
+     * @param {boolean} options.isTempChat - Whether the user is in a temporary chat
+     * @param {string|null} options.cascadeHtml - World info cascade section HTML, or null
+     * @returns {string}
      */
-    static #getDeletePopupContentHtml = (characterIds) => {
-        return `
-            <h3 class="marginBot5">Delete ${characterIds.length} characters?</h3>
-            <span class="bulk_delete_note">
-                <i class="fa-solid fa-triangle-exclamation warning margin-r5"></i>
-                <b>THIS IS PERMANENT!</b>
-            </span>
-            <div id="bulk_delete_avatars_block" class="avatars_inline avatars_inline_small tags tags_inline m-t-1"></div>
-            <br>
-            <div id="bulk_delete_options" class="m-b-1">
-                <label for="del_char_checkbox" class="checkbox_label justifyCenter">
-                    <input type="checkbox" id="del_char_checkbox" />
-                    <span>Also delete the chat files</span>
-                </label>
+    static #buildUnifiedDeleteDialogHtml = ({ count, nameTagsHtml, isTempChat, cascadeHtml }) => {
+        let html = `
+            <h3>${t`Delete`} ${count} ${t`characters?`}</h3>
+            <div class="delete-dialog-names">${nameTagsHtml}</div>
+            <label class="delete-dialog-option" for="del_char_checkbox">
+                <input type="checkbox" id="del_char_checkbox" checked />
+                <span>${t`Also delete the chat files`}</span>
+            </label>`;
+
+        if (isTempChat) {
+            html += `
+            <div class="delete-dialog-info">
+                <span>${t`temporary chat — unsaved messages will be lost`}</span>
             </div>`;
+        }
+
+        if (cascadeHtml) {
+            html += cascadeHtml;
+        }
+
+        return html;
     };
 
     /**
-     * Request user input before concurrently handle deletion
-     * requests.
+     * Stops generation and waits for the send state to clear.
      *
-     * @returns {Promise<number>}
+     * @returns {Promise<boolean>} Whether generation was stopped
      */
-    handleContextMenuDelete = () => {
-        const characterIds = this.selectedCharacters;
-        const popupContent = $(BulkEditOverlay.#getDeletePopupContentHtml(characterIds));
-        const checkbox = popupContent.find('#del_char_checkbox');
-        const promise = callGenericPopup(popupContent, POPUP_TYPE.CONFIRM)
-            .then((accept) => {
-                if (!accept) return;
+    static #stopGenerationAndWait = async () => {
+        if (is_send_press === false) return false;
+        stopGeneration();
+        try {
+            await waitUntilCondition(() => is_send_press === false, debounce_timeout.extended, 10);
+        } catch {
+            // Timeout — proceed anyway, the toastr in closeCurrentChatForDelete is non-blocking
+        }
+        return true;
+    };
 
-                const deleteChats = checkbox.prop('checked') ?? false;
+    /**
+     * Shows a unified delete confirmation dialog with character names,
+     * inline info banners, and optional world info cascade section.
+     *
+     * @returns {Promise<void>}
+     */
+    handleContextMenuDelete = async () => {
+        const characterIds = [...this.selectedCharacters];
+        const avatarList = resolveCharacterAvatarsByIds(characters, characterIds);
+        const count = avatarList.length;
+        if (count === 0) {
+            return;
+        }
 
-                const loaderHandle = loader.show({
-                    slug: 'bulk-delete',
-                    title: t`Bulk Delete`,
-                    message: t`Deleting ${characterIds.length} character(s)…`,
-                    toastMode: loader.ToastMode.STATIC,
-                });
-                const avatarList = characterIds.map(id => characters[id]?.avatar).filter(a => a);
-                return CharacterContextMenu.delete(avatarList, deleteChats)
-                    .then(() => this.browseState())
-                    .finally(() => loaderHandle.hide());
+        // 1. Detect state before showing dialog
+        const inTempChat = this_chid === undefined && name2 === neutralCharacterName;
+
+        // 2. Pre-fetch world info data (does NOT close chat or change state)
+        let worldInfos = [];
+        try {
+            const resp = await fetch('/api/characters/delete-preflight', {
+                method: 'POST',
+                headers: getRequestHeaders(),
+                body: JSON.stringify({ avatars: avatarList }),
+                cache: 'no-cache',
             });
+            if (resp.ok) {
+                const data = await resp.json();
+                worldInfos = data.worldInfos ?? [];
+            }
+        } catch {
+            // Preflight failure — degrade to dialog without world info section
+        }
 
-        // At this moment the popup is already changed in the dom, but not yet closed/resolved. We build the avatar list here
-        const entities = characterIds.map(id => characterToEntity(characters[id], id)).filter(entity => entity.item !== undefined);
-        buildAvatarList($('#bulk_delete_avatars_block'), entities);
+        // 3. Build dialog HTML
+        const nameTagsHtml = characterIds
+            .map(id => characters[id]?.name)
+            .filter(Boolean)
+            .map(name => {
+                const escaped = name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                return `<span class="tag">${escaped}</span>`;
+            })
+            .join('');
+        const cascadeHtml = buildCascadeSectionHtml(worldInfos);
+        const dialogHtml = BulkEditOverlay.#buildUnifiedDeleteDialogHtml({
+            count,
+            nameTagsHtml,
+            isTempChat: inTempChat,
+            cascadeHtml,
+        });
 
-        return promise;
+        // 4. Configure popup
+        let deleteChats = false;
+        let capturedCascade = { deleteWorlds: [], clearWorldReferences: false };
+        const hasWorldInfos = worldInfos.length > 0;
+
+        const popup = new Popup(dialogHtml, POPUP_TYPE.CONFIRM, '', {
+            okButton: t`Delete`,
+            wider: true,
+            leftAlign: true,
+            customButtons: hasWorldInfos
+                ? [{ text: t`Delete All`, result: POPUP_RESULT.CUSTOM1, classes: ['popup-button-danger'] }]
+                : [],
+            onClosing: () => {
+                deleteChats = !!document.getElementById('del_char_checkbox')?.checked;
+                capturedCascade = captureCascadeChoices();
+                return true;
+            },
+            onOpen: (p) => {
+                if (!hasWorldInfos) return;
+                const btn = p.dlg.querySelector('[data-result="' + POPUP_RESULT.CUSTOM1 + '"]');
+                if (btn) {
+                    btn.addEventListener('click', () => {
+                        const chatCb = document.getElementById('del_char_checkbox');
+                        if (chatCb) chatCb.checked = true;
+                        document.querySelectorAll('.world-cascade-checkbox').forEach((cb) => { cb.checked = true; });
+                        p.complete(POPUP_RESULT.AFFIRMATIVE);
+                    });
+                }
+            },
+        });
+
+        const result = await popup.show();
+        if (!result) return;
+
+        // 5. Execute deletion
+        const loaderHandle = loader.show({
+            slug: 'bulk-delete',
+            title: t`Bulk Delete`,
+            message: t`Deleting ${count} character(s)…`,
+            toastMode: loader.ToastMode.STATIC,
+        });
+
+        try {
+            await BulkEditOverlay.#stopGenerationAndWait();
+            await deleteCharacter(avatarList, {
+                deleteChats,
+                deleteWorlds: capturedCascade.deleteWorlds,
+                clearWorldReferences: capturedCascade.clearWorldReferences,
+            });
+            toastr.success(t`Deleted ${count} character(s)`);
+        } finally {
+            loaderHandle.hide();
+            this.browseState();
+        }
     };
 
     /**

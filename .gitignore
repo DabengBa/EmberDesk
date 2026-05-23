@@ -58,3 +58,8 @@ public/scripts/extensions/third-party
 yarn.lock
 *.code-workspace
 test-results/
+/artifacts/
+.docs/db/dist/
+.playwright-cli/
+.tmp/
+config.dev-local.yaml

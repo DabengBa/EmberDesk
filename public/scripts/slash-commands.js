@@ -73,7 +73,6 @@ import { findGroupMemberId, groups, is_group_generating, openGroupById, regenera
 import { chat_completion_sources, MINIMAX_ENDPOINT, oai_settings, promptManager, SILICONFLOW_ENDPOINT, ZAI_ENDPOINT } from './openai.js';
 import { user_avatar } from './personas.js';
 import { addEphemeralStoppingString, chat_styles, context_presets, flushEphemeralStoppingStrings, playMessageSound, power_user } from './power-user.js';
-import { SERVER_INPUTS, textgen_types, textgenerationwebui_settings } from './textgen-settings.js';
 import { decodeTextTokens, getAvailableTokenizers, getFriendlyTokenizerName, getTextTokens, getTokenCountAsync, selectTokenizer } from './tokenizers.js';
 import { debounce, delay, equalsIgnoreCaseAndAccents, findChar, getCharIndex, isFalseBoolean, isTrueBoolean, onlyUnique, regexFromString, showFontAwesomePicker, stringToRange, trimToEndSentence, trimToStartSentence, waitUntilCondition } from './utils.js';
 import { registerVariableCommands, resolveVariable } from './variables.js';
@@ -96,7 +95,6 @@ import { accountStorage } from './util/AccountStorage.js';
 import { SlashCommandDebugController } from './slash-commands/SlashCommandDebugController.js';
 import { SlashCommandScope } from './slash-commands/SlashCommandScope.js';
 import { t } from './i18n.js';
-import { kai_settings } from './kai-settings.js';
 import { instruct_presets, selectContextPreset, selectInstructPreset } from './instruct-mode.js';
 import { debounce_timeout, SWIPE_DIRECTION, SWIPE_SOURCE } from './constants.js';
 export {
@@ -131,7 +129,7 @@ function closureToFilter(closure) {
 
 /**
  * @typedef {object} ConnectAPIMap
- * @property {string} selected - API name (e.g. "textgenerationwebui", "openai")
+ * @property {string} selected - API name (e.g. "openai")
  * @property {string?} [button] - CSS selector for the API button
  * @property {string?} [type] - API type, mostly used by text completion. (e.g. "openrouter")
  * @property {string?} [source] - API source, mostly used by chat completion. (e.g. "openai")
@@ -146,29 +144,6 @@ export const UNIQUE_APIS = [];
 function setupConnectAPIMap() {
     /** @type {Record<string, ConnectAPIMap>} */
     const result = {
-        // Default APIs not contained inside text gen / chat gen
-        'kobold': {
-            selected: 'kobold',
-            button: '#api_button',
-        },
-        'horde': {
-            selected: 'koboldhorde',
-        },
-        'novel': {
-            selected: 'novel',
-            button: '#api_button_novel',
-        },
-        'koboldcpp': {
-            selected: 'textgenerationwebui',
-            button: '#api_button_textgenerationwebui',
-            type: textgen_types.KOBOLDCPP,
-        },
-        // KoboldCpp alias
-        'kcpp': {
-            selected: 'textgenerationwebui',
-            button: '#api_button_textgenerationwebui',
-            type: textgen_types.KOBOLDCPP,
-        },
         'openai': {
             selected: 'openai',
             button: '#api_button_openai',
@@ -186,29 +161,9 @@ function setupConnectAPIMap() {
             button: '#api_button_openai',
             source: chat_completion_sources.MAKERSUITE,
         },
-        // OpenRouter special naming, to differentiate between chat comp and text comp
-        'openrouter': {
-            selected: 'openai',
-            button: '#api_button_openai',
-            source: chat_completion_sources.OPENROUTER,
-        },
-        'openrouter-text': {
-            selected: 'textgenerationwebui',
-            button: '#api_button_textgenerationwebui',
-            type: textgen_types.OPENROUTER,
-        },
     };
 
-    // Fill connections map from textgen_types and chat_completion_sources
-    for (const textGenType of Object.values(textgen_types)) {
-        if (result[textGenType]) continue;
-        result[textGenType] = {
-            selected: 'textgenerationwebui',
-            button: '#api_button_textgenerationwebui',
-            type: textGenType,
-        };
-    }
-
+    // Fill connections map from chat_completion_sources
     for (const chatCompletionSource of Object.values(chat_completion_sources)) {
         if (result[chatCompletionSource]) continue;
         result[chatCompletionSource] = {
@@ -251,14 +206,6 @@ export function initDefaultSlashCommands() {
                         }
                     }
 
-                    if (config.type) {
-                        if (textgenerationwebui_settings.type === config.type) {
-                            return key;
-                        } else {
-                            continue;
-                        }
-                    }
-
                     return key;
                 }
 
@@ -274,21 +221,9 @@ export function initDefaultSlashCommands() {
 
             let connectionRequired = false;
 
-            if (main_api !== apiConfig.selected) {
-                $(`#main_api option[value='${apiConfig.selected || text}']`).prop('selected', true);
-                $('#main_api').trigger('change');
-                connectionRequired = true;
-            }
-
             if (apiConfig.source && oai_settings.chat_completion_source !== apiConfig.source) {
                 $(`#chat_completion_source option[value='${apiConfig.source}']`).prop('selected', true);
                 $('#chat_completion_source').trigger('change');
-                connectionRequired = true;
-            }
-
-            if (apiConfig.type && textgenerationwebui_settings.type !== apiConfig.type) {
-                $(`#textgen_type option[value='${apiConfig.type}']`).prop('selected', true);
-                $('#textgen_type').trigger('change');
                 connectionRequired = true;
             }
 
@@ -929,7 +864,7 @@ export function initDefaultSlashCommands() {
             </ul>
         </div>
         <div>
-            <strong>${t`Note on tags:`}</strong> ${t`The <code>tags</code> argument sets character card tags (embedded in the character file), not SillyTavern's folder/filter tags. To add ST tags after creation, use <code>/tag-add</code>. To import card tags as ST tags, use <code>/tag-import</code>.`}
+            <strong>${t`Note on tags:`}</strong> ${t`The <code>tags</code> argument sets character card tags (embedded in the character file), not EmberDesk's folder/filter tags. To add ST tags after creation, use <code>/tag-add</code>. To import card tags as ST tags, use <code>/tag-import</code>.`}
         </div>
         <div>
             <strong>${t`Note on avatar:`}</strong> ${t`The <code>avatar</code> argument accepts <code>prompt</code> to open a file picker, or a local ST file path. Supported paths include: <code>characters/Name.png</code>, <code>backgrounds/image.png</code>, <code>User Avatars/avatar.png</code>, <code>assets/category/file.png</code>. This can also be the return value from the /imagine command. External URLs are not supported.`}
@@ -972,7 +907,7 @@ export function initDefaultSlashCommands() {
             ${t`If no <code>char</code> argument is provided, updates the currently selected character.`}
         </div>
         <div>
-            <strong>${t`Note on tags:`}</strong> ${t`The <code>tags</code> argument sets character card tags (embedded in the PNG), not SillyTavern's folder/filter tags. To add ST tags, use <code>/tag-add</code>. To import card tags as ST tags, use <code>/tag-import</code>.`}
+            <strong>${t`Note on tags:`}</strong> ${t`The <code>tags</code> argument sets character card tags (embedded in the PNG), not EmberDesk's folder/filter tags. To add ST tags, use <code>/tag-add</code>. To import card tags as ST tags, use <code>/tag-import</code>.`}
         </div>
         <div>
             <strong>${t`Note on avatar:`}</strong> ${t`The <code>avatar</code> argument accepts <code>prompt</code> to open a file picker, or a local ST file path. Supported paths: <code>characters/Name.png</code>, <code>backgrounds/image.png</code>, <code>User Avatars/avatar.png</code>, <code>assets/category/file.png</code>. This can also be the return value from the /imagine command. External URLs are not supported.`}
@@ -3136,7 +3071,6 @@ export function initDefaultSlashCommands() {
                     new SlashCommandEnumValue('siliconflow', 'SiliconFlow', enumTypes.getBasedOnIndex(UNIQUE_APIS.findIndex(x => x === 'siliconflow')), 'S'),
                     new SlashCommandEnumValue('minimax', 'MiniMax', enumTypes.getBasedOnIndex(UNIQUE_APIS.findIndex(x => x === 'minimax')), 'M'),
                     new SlashCommandEnumValue('kobold', 'KoboldAI Classic', enumTypes.getBasedOnIndex(UNIQUE_APIS.findIndex(x => x === 'kobold')), 'K'),
-                    ...Object.values(textgen_types).filter(api => Object.keys(SERVER_INPUTS).includes(api)).map(api => new SlashCommandEnumValue(api, null, enumTypes.getBasedOnIndex(UNIQUE_APIS.findIndex(x => x === 'textgenerationwebui')), 'T')),
                 ],
             }),
             SlashCommandNamedArgument.fromProps({
@@ -3168,7 +3102,7 @@ export function initDefaultSlashCommands() {
                 ${t`If a manual API is provided to <b>set</b> the URL, make sure to set <code>connect=false</code>, as auto-connect only works for the currently selected API, or consider switching to it with <code>/api</code> first.`}
             </div>
             <div>
-                ${t`This slash command works for most of the Text Completion sources, KoboldAI Classic, and also Custom OpenAI compatible, Z.AI, SiliconFlow, MiniMax, and Google Vertex AI for the Chat Completion sources. If unsure which APIs are supported, check the auto-completion of the optional <code>api</code> argument of this command.`}
+                ${t`This slash command works for KoboldAI Classic, Custom OpenAI compatible, Z.AI, SiliconFlow, MiniMax, and Google Vertex AI. If unsure which APIs are supported, check the auto-completion of the optional <code>api</code> argument of this command.`}
             </div>
         `,
     }));
@@ -6236,19 +6170,6 @@ function setBackgroundCallback(_, bg) {
 function getModelOptions(quiet) {
     const nullResult = { control: null, options: null };
     const modelSelectMap = [
-        { id: 'generic_model_textgenerationwebui', api: 'textgenerationwebui', type: textgen_types.GENERIC },
-        { id: 'custom_model_textgenerationwebui', api: 'textgenerationwebui', type: textgen_types.OOBA },
-        { id: 'model_togetherai_select', api: 'textgenerationwebui', type: textgen_types.TOGETHERAI },
-        { id: 'openrouter_model', api: 'textgenerationwebui', type: textgen_types.OPENROUTER },
-        { id: 'model_infermaticai_select', api: 'textgenerationwebui', type: textgen_types.INFERMATICAI },
-        { id: 'model_dreamgen_select', api: 'textgenerationwebui', type: textgen_types.DREAMGEN },
-        { id: 'mancer_model', api: 'textgenerationwebui', type: textgen_types.MANCER },
-        { id: 'vllm_model', api: 'textgenerationwebui', type: textgen_types.VLLM },
-        { id: 'aphrodite_model', api: 'textgenerationwebui', type: textgen_types.APHRODITE },
-        { id: 'ollama_model', api: 'textgenerationwebui', type: textgen_types.OLLAMA },
-        { id: 'tabby_model', api: 'textgenerationwebui', type: textgen_types.TABBY },
-        { id: 'llamacpp_model', api: 'textgenerationwebui', type: textgen_types.LLAMACPP },
-        { id: 'featherless_model', api: 'textgenerationwebui', type: textgen_types.FEATHERLESS },
         { id: 'model_openai_select', api: 'openai', type: chat_completion_sources.OPENAI },
         { id: 'model_claude_select', api: 'openai', type: chat_completion_sources.CLAUDE },
         { id: 'model_openrouter_select', api: 'openai', type: chat_completion_sources.OPENROUTER },
@@ -6256,7 +6177,6 @@ function getModelOptions(quiet) {
         { id: 'model_google_select', api: 'openai', type: chat_completion_sources.MAKERSUITE },
         { id: 'model_vertexai_select', api: 'openai', type: chat_completion_sources.VERTEXAI },
         { id: 'model_mistralai_select', api: 'openai', type: chat_completion_sources.MISTRALAI },
-        { id: 'custom_model_id', api: 'openai', type: chat_completion_sources.CUSTOM },
         { id: 'model_cohere_select', api: 'openai', type: chat_completion_sources.COHERE },
         { id: 'model_perplexity_select', api: 'openai', type: chat_completion_sources.PERPLEXITY },
         { id: 'model_groq_select', api: 'openai', type: chat_completion_sources.GROQ },
@@ -6280,8 +6200,6 @@ function getModelOptions(quiet) {
 
     function getSubType() {
         switch (main_api) {
-            case 'textgenerationwebui':
-                return textgenerationwebui_settings.type;
             case 'openai':
                 return oai_settings.chat_completion_source;
             default:
@@ -6557,19 +6475,19 @@ async function setApiUrlCallback({ api = null, connect = 'true', quiet = 'false'
     const isQuiet = isTrueBoolean(quiet);
     const autoConnect = isTrueBoolean(connect);
 
-    // Special handling for Chat Completion Custom OpenAI compatible, that one can also support API url handling
-    const isCurrentlyCustomOpenai = main_api === 'openai' && oai_settings.chat_completion_source === chat_completion_sources.CUSTOM;
-    if (api === chat_completion_sources.CUSTOM || (!api && isCurrentlyCustomOpenai)) {
+    // Special handling for OpenAI with custom URL
+    const isCurrentlyOpenai = main_api === 'openai' && oai_settings.chat_completion_source === chat_completion_sources.OPENAI;
+    if (api === chat_completion_sources.OPENAI || (!api && isCurrentlyOpenai)) {
         if (!url) {
             return oai_settings.custom_url ?? '';
         }
 
-        if (!isCurrentlyCustomOpenai && autoConnect) {
-            toastr.warning(t`Custom OpenAI API is not the currently selected API, so we cannot do an auto-connect. Consider switching to it via /api beforehand.`);
+        if (!isCurrentlyOpenai && autoConnect) {
+            toastr.warning(t`OpenAI API is not the currently selected API, so we cannot do an auto-connect. Consider switching to it via /api beforehand.`);
             return '';
         }
 
-        $('#custom_api_url_text').val(url).trigger('input');
+        $('#openai_reverse_proxy').val(url).trigger('input');
 
         if (autoConnect) {
             $('#api_button_openai').trigger('click');
@@ -6686,71 +6604,9 @@ async function setApiUrlCallback({ api = null, connect = 'true', quiet = 'false'
         return oai_settings.vertexai_region || defaultRegion;
     }
 
-    // Special handling for Kobold Classic API
-    const isCurrentlyKoboldClassic = main_api === 'kobold';
-    if (api === 'kobold' || (!api && isCurrentlyKoboldClassic)) {
-        if (!url) {
-            return kai_settings.api_server ?? '';
-        }
-
-        if (!isCurrentlyKoboldClassic && autoConnect) {
-            toastr.warning(t`Kobold Classic API is not the currently selected API, so we cannot do an auto-connect. Consider switching to it via /api beforehand.`);
-            return '';
-        }
-
-        $('#api_url_text').val(url).trigger('input');
-        // trigger blur debounced, so we hide the autocomplete menu
-        setTimeout(() => $('#api_url_text').trigger('blur'), 1);
-
-        if (autoConnect) {
-            $('#api_button').trigger('click');
-        }
-
-        return kai_settings.api_server ?? '';
-    }
-
-    // Do some checks and get the api type we are targeting with this command
-    if (api && !Object.values(textgen_types).includes(api)) {
-        !isQuiet && toastr.warning(t`API '${api}' is not a valid text_gen API.`);
-        return '';
-    }
-    if (!api && !Object.values(textgen_types).includes(textgenerationwebui_settings.type)) {
-        !isQuiet && toastr.warning(t`API '${textgenerationwebui_settings.type}' is not a valid text_gen API.`);
-        return '';
-    }
-    if (!api && main_api !== 'textgenerationwebui') {
-        !isQuiet && toastr.warning(t`API type '${main_api}' does not support setting the server URL.`);
-        return '';
-    }
-    if (api && url && autoConnect && api !== textgenerationwebui_settings.type) {
-        !isQuiet && toastr.warning(t`API '${api}' is not the currently selected API, so we cannot do an auto-connect. Consider switching to it via /api beforehand.`);
-        return '';
-    }
-    const type = api || textgenerationwebui_settings.type;
-
-    const inputSelector = SERVER_INPUTS[type];
-    if (!inputSelector) {
-        !isQuiet && toastr.warning(t`API '${type}' does not have a server url input.`);
-        return '';
-    }
-
-    // If no url was provided, return the current one
-    if (!url) {
-        return textgenerationwebui_settings.server_urls[type] ?? '';
-    }
-
-    // else, we want to actually set the url
-    $(inputSelector).val(url).trigger('input');
-    // trigger blur debounced, so we hide the autocomplete menu
-    setTimeout(() => $(inputSelector).trigger('blur'), 1);
-
-    // Trigger the auto connect via connect button, if requested
-    if (autoConnect) {
-        $('#api_button_textgenerationwebui').trigger('click');
-    }
-
-    // We still re-acquire the value, as it might have been modified by the validation on connect
-    return textgenerationwebui_settings.server_urls[type] ?? '';
+    // The requested API is not supported for server URL configuration
+    !isQuiet && toastr.warning(t`API '${api || main_api}' does not support setting the server URL via this command.`);
+    return '';
 }
 
 async function selectTokenizerCallback(_, name) {

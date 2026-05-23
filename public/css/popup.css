@@ -180,15 +180,15 @@ body.no-blur .popup[open]::backdrop {
 }
 
 .menu_button.menu_button_default {
-    box-shadow: 0 0 5px var(--white20a);
+    border-color: var(--white30a);
 }
 
 .menu_button.popup-button-ok {
-    background-color: var(--crimson70a);
+    background-color: var(--SmartThemeBlurTintColor);
 }
 
 .menu_button.popup-button-ok:hover {
-    background-color: var(--crimson-hover);
+    background-color: var(--white20a);
 }
 
 .popup-controls .menu_button {

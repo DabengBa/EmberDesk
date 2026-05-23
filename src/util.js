@@ -33,9 +33,9 @@ let CONFIG_PATH = null;
  * Converts a configuration key to an environment variable key.
  * @param {string} key Configuration key
  * @returns {string} Environment variable key
- * @example keyToEnv('extensions.models.speechToText') // 'SILLYTAVERN_EXTENSIONS_MODELS_SPEECHTOTEXT'
+ * @example keyToEnv('extensions.models.speechToText') // 'EMBERDESK_EXTENSIONS_MODELS_SPEECHTOTEXT'
  */
-export const keyToEnv = (key) => 'SILLYTAVERN_' + String(key).toUpperCase().replace(/\./g, '_');
+export const keyToEnv = (key) => 'EMBERDESK_' + String(key).toUpperCase().replace(/\./g, '_');
 
 /**
  * Set the config file path.
@@ -161,7 +161,7 @@ export async function getVersion() {
         // suppress exception
     }
 
-    const agent = `SillyTavern:${pkgVersion}:Cohee#1207`;
+    const agent = `EmberDesk:${pkgVersion}:dev`;
     return { agent, pkgVersion, gitRevision, gitBranch, commitDate: commitDate?.trim() ?? null, isLatest };
 }
 

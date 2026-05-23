@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>Character Library Panel — Design Demo</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:          oklch(14% 0.006 60);
+  --surface:     oklch(17% 0.007 60);
+  --surface-2:   oklch(20% 0.007 60);
+  --hover:       oklch(24% 0.007 60);
+  --border:      oklch(28% 0.006 60);
+  --border-hi:   oklch(38% 0.006 60);
+  --text:        oklch(87% 0.006 80);
+  --text-dim:    oklch(60% 0.005 80);
+  --text-faint:  oklch(45% 0.004 80);
+  --amber:       oklch(68% 0.14 60);
+  --amber-dim:   oklch(68% 0.14 60 / 0.12);
+  --amber-ring:  oklch(68% 0.14 60 / 0.35);
+  --green:       oklch(62% 0.16 145);
+  --green-dim:   oklch(62% 0.16 145 / 0.10);
+  --green-ring:  oklch(62% 0.16 145 / 0.28);
+  --red:         oklch(48% 0.18 25);
+  --red-dim:     oklch(48% 0.18 25 / 0.15);
+  --r-ctrl:      5px;
+  --r-panel:     10px;
+}
+
+body {
+  font-family: 'Noto Sans', system-ui, sans-serif;
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  gap: 28px;
+  padding: 36px 24px;
+  align-items: flex-start;
+  justify-content: center;
+  -webkit-font-smoothing: antialiased;
+}
+
+.col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.col-label {
+  font-size: 0.65rem; font-weight: 500; text-transform: uppercase;
+  letter-spacing: 0.1em; color: var(--text-faint);
+}
+
+/* ── Panel shell ─────────────────────────────────────── */
+.panel {
+  width: 272px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-panel);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  max-height: 520px;
+  box-shadow: 0 4px 20px oklch(0% 0 0 / 0.45);
+}
+
+/* ── Toolbar ─────────────────────────────────────────── */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 5px 5px 5px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.sep {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+.ib {
+  width: 26px; height: 26px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--r-ctrl);
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+.ib:hover { background: var(--hover); color: var(--text); }
+.ib.on { color: var(--amber); background: var(--amber-dim); }
+.ib.danger:hover { background: var(--red-dim); color: var(--red); }
+
+.sort-sel {
+  flex: 1; min-width: 0; height: 26px;
+  background: transparent;
+  color: var(--text-dim);
+  border: none;
+  border-radius: var(--r-ctrl);
+  font-family: inherit;
+  font-size: 0.75rem;
+  padding: 0 3px;
+  cursor: pointer;
+  appearance: none;
+  transition: color 0.15s;
+}
+.sort-sel:hover, .sort-sel:focus { color: var(--text); outline: none; }
+
+/* ── Search bar (collapsible) ────────────────────────── */
+.search-bar { padding: 0 5px 5px; flex-shrink: 0; display: none; }
+.search-bar.open { display: block; }
+.search-bar input {
+  width: 100%; height: 26px;
+  background: oklch(10% 0.005 60);
+  border: 1px solid var(--border);
+  border-radius: var(--r-ctrl);
+  color: var(--text);
+  font-family: inherit; font-size: 0.82rem;
+  padding: 0 8px;
+  transition: border-color 0.15s;
+}
+.search-bar input:focus { outline: none; border-color: var(--border-hi); }
+.search-bar input::placeholder { color: var(--text-faint); }
+
+/* ── Tag strip ───────────────────────────────────────── */
+.tag-strip {
+  padding: 0 5px 4px;
+  display: flex; flex-wrap: wrap; gap: 3px;
+  flex-shrink: 0;
+}
+.tag-strip:empty { display: none; padding: 0; }
+.chip {
+  font-size: 0.67rem; padding: 1px 6px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  background: oklch(10% 0.005 60 / 0.6);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.chip:hover { border-color: var(--border-hi); color: var(--text); }
+.chip.on { background: var(--amber-dim); border-color: var(--amber-ring); color: var(--amber); }
+
+/* ── Bulk bar ────────────────────────────────────────── */
+.bulk-bar {
+  display: none; align-items: center; gap: 2px;
+  padding: 5px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.bulk-bar.open { display: flex; }
+.bulk-count {
+  flex: 1; font-size: 0.75rem; color: var(--text-dim);
+  text-align: center; padding: 0 4px;
+}
+
+/* ── Character list ──────────────────────────────────── */
+.char-list {
+  overflow-y: auto; flex: 1;
+  display: flex; flex-direction: column;
+  padding: 3px; gap: 1px;
+}
+.char-list::-webkit-scrollbar { width: 3px; }
+.char-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.char-list::-webkit-scrollbar-track { background: transparent; }
+
+/* ── Character row ───────────────────────────────────── */
+.row {
+  display: flex; align-items: center; gap: 7px;
+  padding: 5px 6px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 0.12s;
+  border: 1px solid transparent;
+  position: relative;
+}
+.row:hover { background: var(--hover); }
+.row.active {
+  background: var(--green-dim);
+  border-color: var(--green-ring);
+}
+.row.active .av { box-shadow: 0 0 0 1.5px var(--green); }
+.row.selected {
+  background: var(--amber-dim);
+  border-color: var(--amber-ring);
+}
+.row.dim { opacity: 0.22; pointer-events: none; }
+
+/* ── Avatar ──────────────────────────────────────────── */
+.av-wrap { position: relative; flex-shrink: 0; width: 38px; height: 38px; }
+.av {
+  width: 38px; height: 38px;
+  border-radius: 6px;
+  object-fit: cover; display: block;
+  background: var(--surface-2);
+}
+.fav-badge {
+  position: absolute; bottom: -2px; right: -2px;
+  width: 13px; height: 13px;
+  background: var(--surface);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 7px; color: var(--amber);
+  box-shadow: 0 0 0 1px var(--surface);
+}
+
+/* ── Row content ─────────────────────────────────────── */
+.info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.name {
+  font-weight: 600; font-size: 0.84rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.name.fav { color: var(--amber); }
+.desc {
+  font-size: 0.74rem; color: var(--text-dim);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.row-tags { display: flex; flex-wrap: wrap; gap: 2px; overflow: hidden; max-height: 15px; }
+.rtag {
+  font-size: 0.63rem; padding: 0 4px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  background: oklch(10% 0.005 60 / 0.5);
+  white-space: nowrap; color: var(--text-faint);
+}
+
+/* ── Empty state ─────────────────────────────────────── */
+.empty {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  padding: 32px 16px; opacity: 0.28;
+  font-size: 0.8rem; text-align: center;
+}
+
+/* ── Bulk checkbox ───────────────────────────────────── */
+.bchk { width: 13px; height: 13px; flex-shrink: 0; accent-color: var(--amber); cursor: pointer; }
+
+/* ── Bottom bar ──────────────────────────────────────── */
+.bottom-bar {
+  display: flex; align-items: center; gap: 2px;
+  padding: 3px 5px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.page-info { font-size: 0.7rem; color: var(--text-faint); padding: 0 4px; flex: 1; }
+</style>
+</head>
+<body>
+
+<script>
+function av(seed) {
+  const bg = ['#1e1408','#0e1a26','#1a0e26','#0e261a','#26100e','#1a260e'];
+  const b = bg[seed % bg.length];
+  const l = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[seed % 26];
+  return `data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='38' height='38'><rect width='38' height='38' rx='6' fill='${encodeURIComponent(b)}'/><text x='19' y='26' font-size='14' font-weight='600' font-family='system-ui' fill='%23666' text-anchor='middle'>${l}</text></svg>`;
+}
+</script>
+
+<!-- ═══════════════════ 1. Normal ════════════════════════ -->
+<div class="col">
+  <div class="col-label">1. Normal</div>
+  <div class="panel">
+    <div class="toolbar">
+      <button class="ib" title="新建角色">＋</button>
+      <button class="ib" title="导入文件">↑</button>
+      <button class="ib" title="从 URL 导入">⬇</button>
+      <button class="ib" title="新建群聊">⊞</button>
+      <div class="sep"></div>
+      <select class="sort-sel">
+        <option>最近</option><option>A-Z</option><option>收藏夹</option>
+      </select>
+      <button class="ib" title="搜索">⌕</button>
+      <button class="ib" title="切换网格视图">▦</button>
+      <button class="ib" title="批量编辑">✎</button>
+    </div>
+    <div class="tag-strip">
+      <span class="chip on">Fantasy</span>
+      <span class="chip">Sci-Fi</span>
+      <span class="chip">Assistant</span>
+    </div>
+    <div class="char-list">
+      <div class="row active">
+        <div class="av-wrap"><img class="av" id="a0" /><div class="fav-badge">★</div></div>
+        <div class="info">
+          <span class="name fav">Aria</span>
+          <div class="desc">A wandering mage from the northern reaches</div>
+          <div class="row-tags"><span class="rtag">Fantasy</span><span class="rtag">Mage</span></div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="av-wrap"><img class="av" id="a1" /><div class="fav-badge">★</div></div>
+        <div class="info">
+          <span class="name fav">Blake</span>
+          <div class="desc">Ship captain, pragmatic and weathered</div>
+          <div class="row-tags"><span class="rtag">Sci-Fi</span></div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="av-wrap"><img class="av" id="a2" /></div>
+        <div class="info">
+          <span class="name">Clara</span>
+          <div class="desc">Research assistant, detail-oriented</div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="av-wrap"><img class="av" id="a3" /></div>
+        <div class="info">
+          <span class="name">Derek</span>
+          <div class="row-tags"><span class="rtag">Assistant</span><span class="rtag">Coding</span></div>
+        </div>
+      </div>
+      <div class="row dim">
+        <div class="av-wrap"><img class="av" id="a4" /></div>
+        <div class="info"><span class="name">Eve</span></div>
+      </div>
+    </div>
+    <div class="bottom-bar">
+      <span class="page-info">5 角色</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ 2. Search active ════════════════ -->
+<div class="col">
+  <div class="col-label">2. 搜索</div>
+  <div class="panel">
+    <div class="toolbar">
+      <button class="ib" title="新建角色">＋</button>
+      <button class="ib" title="导入文件">↑</button>
+      <button class="ib" title="从 URL 导入">⬇</button>
+      <button class="ib" title="新建群聊">⊞</button>
+      <div class="sep"></div>
+      <select class="sort-sel"><option>搜索</option></select>
+      <button class="ib on" title="搜索">⌕</button>
+      <button class="ib" title="切换网格视图">▦</button>
+      <button class="ib" title="批量编辑">✎</button>
+    </div>
+    <div class="search-bar open">
+      <input type="search" placeholder="搜索…" value="Aria" />
+    </div>
+    <div class="char-list">
+      <div class="row active">
+        <div class="av-wrap"><img class="av" id="b0" /><div class="fav-badge">★</div></div>
+        <div class="info">
+          <span class="name fav">Aria</span>
+          <div class="desc">A wandering mage from the northern reaches</div>
+        </div>
+      </div>
+    </div>
+    <div class="bottom-bar">
+      <span class="page-info">1 结果</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ 3. Bulk edit ════════════════════ -->
+<div class="col">
+  <div class="col-label">3. 批量编辑</div>
+  <div class="panel">
+    <div class="bulk-bar open">
+      <button class="ib" title="取消">✕</button>
+      <button class="ib" title="全选">☑</button>
+      <span class="bulk-count">3 / 5</span>
+      <button class="ib" title="添加标签">⊕</button>
+      <button class="ib danger" title="删除">🗑</button>
+    </div>
+    <div class="char-list">
+      <div class="row selected">
+        <input type="checkbox" class="bchk" checked />
+        <div class="av-wrap"><img class="av" id="c0" /><div class="fav-badge">★</div></div>
+        <div class="info"><span class="name fav">Aria</span><div class="desc">A wandering mage from the northern reaches</div></div>
+      </div>
+      <div class="row selected">
+        <input type="checkbox" class="bchk" checked />
+        <div class="av-wrap"><img class="av" id="c1" /><div class="fav-badge">★</div></div>
+        <div class="info"><span class="name fav">Blake</span><div class="desc">Ship captain, pragmatic and weathered</div></div>
+      </div>
+      <div class="row">
+        <input type="checkbox" class="bchk" />
+        <div class="av-wrap"><img class="av" id="c2" /></div>
+        <div class="info"><span class="name">Clara</span><div class="desc">Research assistant, detail-oriented</div></div>
+      </div>
+      <div class="row selected">
+        <input type="checkbox" class="bchk" checked />
+        <div class="av-wrap"><img class="av" id="c3" /></div>
+        <div class="info"><span class="name">Derek</span><div class="row-tags"><span class="rtag">Assistant</span></div></div>
+      </div>
+      <div class="row">
+        <input type="checkbox" class="bchk" />
+        <div class="av-wrap"><img class="av" id="c4" /></div>
+        <div class="info"><span class="name">Eve</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ 4. Empty ════════════════════════ -->
+<div class="col">
+  <div class="col-label">4. 空状态</div>
+  <div class="panel">
+    <div class="toolbar">
+      <button class="ib" title="新建角色">＋</button>
+      <button class="ib" title="导入文件">↑</button>
+      <button class="ib" title="从 URL 导入">⬇</button>
+      <button class="ib" title="新建群聊">⊞</button>
+      <div class="sep"></div>
+      <select class="sort-sel"><option>最近</option></select>
+      <button class="ib" title="搜索">⌕</button>
+      <button class="ib" title="切换网格视图">▦</button>
+      <button class="ib" title="批量编辑">✎</button>
+    </div>
+    <div class="char-list">
+      <div class="empty">尚无角色</div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.querySelectorAll('.av').forEach((img, i) => { img.src = av(i); });
+</script>
+</body>
+</html>

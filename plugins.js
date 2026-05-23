@@ -15,7 +15,7 @@ import { color } from './src/util.js';
 const __dirname = import.meta.dirname ?? path.dirname(fileURLToPath(import.meta.url));
 process.chdir(__dirname);
 const pluginsPath = './plugins';
-const gitBackend = process.env.SILLYTAVERN_GIT_BACKEND || 'auto';
+const gitBackend = process.env.EMBERDESK_GIT_BACKEND || 'auto';
 
 const command = process.argv[2];
 

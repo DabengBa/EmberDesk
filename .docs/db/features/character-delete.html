@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>Delete Dialog Demo</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Noto Sans', system-ui, sans-serif;
+    font-size: 15px;
+    background: #111;
+    color: #DCDCD2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 40px;
+    padding: 40px 20px;
+  }
+  h1 { font-size: 1.2rem; font-weight: 600; opacity: 0.6; letter-spacing: 0.05em; text-transform: uppercase; }
+  .demo-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    opacity: 0.35;
+    margin-bottom: 10px;
+  }
+
+  /* ── Popup shell ─────────────────────────────────────── */
+  .popup-demo {
+    width: 500px;
+    background: #171717;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.5);
+  }
+
+  /* ── Delete dialog ───────────────────────────────────── */
+  .delete-dialog-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+    cursor: pointer;
+    font-size: 0.9rem;
+  }
+  .delete-dialog-option input[type="checkbox"] { transform: none; }
+
+  /* ── Info line (low-visual-weight) ────────────────────── */
+  .delete-dialog-info {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 0 5px 10px;
+    margin-bottom: 10px;
+    margin-top: 4px;
+    border-left: 2px solid #92BEFC;
+    font-size: 0.85rem;
+    color: #BCBCB4;
+  }
+
+  /* ── Character name list ─────────────────────────────── */
+  .delete-dialog-names {
+    max-height: 120px;
+    overflow-y: auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 8px;
+    margin: 8px 0;
+    background: rgba(0, 0, 0, 0.15);
+    border-radius: 5px;
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .delete-dialog-names .tag {
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    background: #000;
+    color: #DCDCD2;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 5px;
+    padding: 0.1rem 0.4rem;
+    font-size: 0.9rem;
+  }
+
+  /* ── World cascade section ───────────────────────────── */
+  .world-cascade-section {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .world-cascade-section-header {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 8px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: 0.55;
+  }
+  .world-cascade-list { display: flex; flex-direction: column; gap: 4px; }
+  .world-cascade-item {
+    border-radius: 5px;
+    padding: 7px 10px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .world-cascade-item.world-cascade-warn {
+    background: rgba(215, 136, 114, 0.07);
+    border-color: rgba(215, 136, 114, 0.3);
+  }
+  .world-cascade-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+  }
+  .world-cascade-label strong { font-weight: 500; flex: 1; }
+  .world-cascade-meta { font-size: 0.8rem; opacity: 0.5; }
+  .world-cascade-warning {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 5px;
+    padding-left: 26px;
+    font-size: 0.8rem;
+    color: #D78872;
+  }
+  .world-cascade-global {
+    margin-top: 8px;
+    padding: 8px 10px;
+    background: rgba(0, 0, 0, 0.15);
+    border-radius: 5px;
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .world-cascade-global label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+  }
+  .world-cascade-global label input[type="checkbox"] { transform: none; }
+  .world-cascade-global small {
+    display: block;
+    margin-top: 4px;
+    padding-left: 26px;
+    font-size: 0.78rem;
+    line-height: 1.4;
+    opacity: 0.5;
+  }
+
+  /* ── Buttons ─────────────────────────────────────────── */
+  .dialog-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
+  }
+  .btn {
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: 500;
+    padding: 6px 16px;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .btn-cancel { background: #171717; color: #DCDCD2; }
+  .btn-cancel:hover { background: #2a2a2a; }
+  .btn-delete { background: #171717; color: #DCDCD2; }
+  .btn-delete:hover { background: #7F7F7F; }
+  .btn-delete-all {
+    background: rgba(100,0,0,0.6);
+    color: #DCDCD2;
+    border-color: rgba(100,0,0,0.8);
+  }
+  .btn-delete-all:hover { background: rgba(100,0,0,0.85); }
+</style>
+</head>
+<body>
+
+<h1>Delete Dialog — Visual Demo</h1>
+
+<!-- ════════ Demo 1: Simple (no world info, no warnings) ════════ -->
+<div>
+  <div class="demo-label">1. Simple — 3 characters, no world info</div>
+  <div class="popup-demo">
+    <h3 style="font-size:1.05rem;font-weight:600;margin-bottom:10px">Delete 3 characters?</h3>
+    <div class="delete-dialog-names">
+      <span class="tag">Alice</span>
+      <span class="tag">Bob</span>
+      <span class="tag">Charlie</span>
+    </div>
+    <label class="delete-dialog-option">
+      <input type="checkbox" checked />
+      <span>Also delete the chat files</span>
+    </label>
+    <div class="dialog-buttons">
+      <button class="btn btn-cancel">Cancel</button>
+      <button class="btn btn-delete">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ Demo 2: With world info ════════ -->
+<div>
+  <div class="demo-label">2. With world info</div>
+  <div class="popup-demo">
+    <h3 style="font-size:1.05rem;font-weight:600;margin-bottom:10px">Delete 5 characters?</h3>
+    <div class="delete-dialog-names">
+      <span class="tag">Alice</span>
+      <span class="tag">Bob</span>
+      <span class="tag">Charlie</span>
+      <span class="tag">Diana</span>
+      <span class="tag">Eve</span>
+    </div>
+    <label class="delete-dialog-option">
+      <input type="checkbox" checked />
+      <span>Also delete the chat files</span>
+    </label>
+    <div class="world-cascade-section">
+      <div class="world-cascade-section-header">
+        <i style="font-style:normal">📖</i>
+        <span>Linked World Info</span>
+      </div>
+      <div class="world-cascade-list">
+        <div class="world-cascade-item">
+          <label class="world-cascade-label">
+            <input type="checkbox" />
+            <strong>ForestWorld</strong>
+            <span class="world-cascade-meta">12 entries</span>
+          </label>
+        </div>
+        <div class="world-cascade-item world-cascade-warn">
+          <label class="world-cascade-label">
+            <input type="checkbox" />
+            <strong>CityLore</strong>
+            <span class="world-cascade-meta">5 entries</span>
+          </label>
+          <div class="world-cascade-warning">
+            <i style="font-style:normal">⚠</i>
+            <span>2 other character(s) are still using this world info.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="dialog-buttons">
+      <button class="btn btn-cancel">Cancel</button>
+      <button class="btn btn-delete">Delete</button>
+      <button class="btn btn-delete-all">Delete All</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ Demo 3: Many characters (50+) ════════ -->
+<div>
+  <div class="demo-label">3. Many characters — scrollable name list</div>
+  <div class="popup-demo">
+    <h3 style="font-size:1.05rem;font-weight:600;margin-bottom:10px">Delete 52 characters?</h3>
+    <div class="delete-dialog-names">
+      <span class="tag">Aiden</span><span class="tag">Bella</span><span class="tag">Caleb</span>
+      <span class="tag">Diana</span><span class="tag">Ethan</span><span class="tag">Fiona</span>
+      <span class="tag">George</span><span class="tag">Hannah</span><span class="tag">Ivan</span>
+      <span class="tag">Julia</span><span class="tag">Kevin</span><span class="tag">Luna</span>
+      <span class="tag">Mason</span><span class="tag">Nora</span><span class="tag">Oscar</span>
+      <span class="tag">Penelope</span><span class="tag">Quinn</span><span class="tag">Ryan</span>
+      <span class="tag">Sophia</span><span class="tag">Tyler</span><span class="tag">Uma</span>
+      <span class="tag">Victor</span><span class="tag">Wendy</span><span class="tag">Xavier</span>
+      <span class="tag">Yara</span><span class="tag">Zane</span><span class="tag">Aria</span>
+      <span class="tag">Blake</span><span class="tag">Clara</span><span class="tag">Derek</span>
+      <span class="tag">Elena</span><span class="tag">Felix</span><span class="tag">Grace</span>
+      <span class="tag">Henry</span><span class="tag">Iris</span><span class="tag">Jake</span>
+      <span class="tag">Kira</span><span class="tag">Leo</span><span class="tag">Maya</span>
+      <span class="tag">Noah</span><span class="tag">Olivia</span><span class="tag">Piper</span>
+      <span class="tag">Rex</span><span class="tag">Stella</span><span class="tag">Troy</span>
+      <span class="tag">Uri</span><span class="tag">Vera</span><span class="tag">Will</span>
+      <span class="tag">Xena</span><span class="tag">Yuki</span><span class="tag">Zoe</span>
+      <span class="tag">Atlas</span><span class="tag">Briar</span>
+    </div>
+    <label class="delete-dialog-option">
+      <input type="checkbox" checked />
+      <span>Also delete the chat files</span>
+    </label>
+    <div class="dialog-buttons">
+      <button class="btn btn-cancel">Cancel</button>
+      <button class="btn btn-delete">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ Demo 4: Temp chat warning ════════ -->
+<div>
+  <div class="demo-label">4. Temp chat warning</div>
+  <div class="popup-demo">
+    <h3 style="font-size:1.05rem;font-weight:600;margin-bottom:10px">Delete 2 characters?</h3>
+    <div class="delete-dialog-names">
+      <span class="tag">Alice</span>
+      <span class="tag">Bob</span>
+    </div>
+    <label class="delete-dialog-option">
+      <input type="checkbox" checked />
+      <span>Also delete the chat files</span>
+    </label>
+    <div class="delete-dialog-info">
+      <span>temporary chat — unsaved messages will be lost</span>
+    </div>
+    <div class="dialog-buttons">
+      <button class="btn btn-cancel">Cancel</button>
+      <button class="btn btn-delete">Delete</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

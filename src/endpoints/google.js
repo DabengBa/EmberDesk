@@ -8,7 +8,7 @@ import urlJoin from 'url-join';
 import lodash from 'lodash';
 
 import { readSecret, SECRET_KEYS } from './secrets.js';
-import { GEMINI_SAFETY, VERTEX_SAFETY } from '../constants.js';
+import { CHAT_COMPLETION_SOURCES, GEMINI_SAFETY, VERTEX_SAFETY } from '../constants.js';
 import { delay, getConfigValue, trimTrailingSlash } from '../util.js';
 
 const API_MAKERSUITE = 'https://generativelanguage.googleapis.com';
@@ -49,7 +49,7 @@ export async function getVertexAIAuth(request) {
     }
 
     if (authMode === 'express') {
-        const apiKey = readSecret(request.user.directories, SECRET_KEYS.VERTEXAI);
+        const apiKey = readSecret(request.user.directories, SECRET_KEYS.VERTEXAI, request.body.secret_id);
         if (apiKey) {
             return {
                 authHeader: `Bearer ${apiKey}`,
@@ -59,7 +59,7 @@ export async function getVertexAIAuth(request) {
         throw new Error('API key is required for Vertex AI Express mode');
     } else if (authMode === 'full') {
         // Get service account JSON from backend storage
-        const serviceAccountJson = readSecret(request.user.directories, SECRET_KEYS.VERTEXAI_SERVICE_ACCOUNT);
+        const serviceAccountJson = readSecret(request.user.directories, SECRET_KEYS.VERTEXAI_SERVICE_ACCOUNT, request.body.secret_id);
 
         if (serviceAccountJson) {
             try {
@@ -162,7 +162,7 @@ export function getProjectIdFromServiceAccount(serviceAccount) {
  * @returns {Promise<{url: string, headers: object, apiName: string, baseUrl: string, safetySettings: object[]}>} URL, headers, and API name
  */
 export async function getGoogleApiConfig(request, model, endpoint = 'generateContent') {
-    const useVertexAi = request.body.api === 'vertexai';
+    const useVertexAi = request.body.api === 'vertexai' || request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.VERTEXAI;
     const region = request.body.vertexai_region || 'us-central1';
     const apiName = useVertexAi ? 'Google Vertex AI' : 'Google AI Studio';
     const safetySettings = [...GEMINI_SAFETY, ...(useVertexAi ? VERTEX_SAFETY : [])];
@@ -180,18 +180,12 @@ export async function getGoogleApiConfig(request, model, endpoint = 'generateCon
         if (authType === 'express') {
             // Express mode: use API key parameter
             const keyParam = authHeader.replace('Bearer ', '');
-            const projectId = request.body.vertexai_express_project_id;
-            baseUrl = region === 'global'
-                ? 'https://aiplatform.googleapis.com/v1'
-                : `https://${region}-aiplatform.googleapis.com/v1`;
-            url = projectId
-                ? `${baseUrl}/projects/${projectId}/locations/${region}/publishers/google/models/${model}:${endpoint}`
-                : `${baseUrl}/publishers/google/models/${model}:${endpoint}`;
-            headers['x-goog-api-key'] = keyParam;
+            baseUrl = 'https://aiplatform.googleapis.com/v1';
+            url = `${baseUrl}/publishers/google/models/${model}:${endpoint}?key=${encodeURIComponent(keyParam)}`;
         } else if (authType === 'full') {
             // Full mode: use project-specific URL with Authorization header
             // Get project ID from Service Account JSON
-            const serviceAccountJson = readSecret(request.user.directories, SECRET_KEYS.VERTEXAI_SERVICE_ACCOUNT);
+            const serviceAccountJson = readSecret(request.user.directories, SECRET_KEYS.VERTEXAI_SERVICE_ACCOUNT, request.body.secret_id);
             if (!serviceAccountJson) {
                 throw new Error('Vertex AI Service Account JSON is missing.');
             }

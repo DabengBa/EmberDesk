@@ -42,8 +42,6 @@ import { router as searchRouter } from './endpoints/search.js';
 import { router as openRouterRouter } from './endpoints/openrouter.js';
 import { router as nanogptRouter } from './endpoints/nanogpt.js';
 import { router as chatCompletionsRouter } from './endpoints/backends/chat-completions.js';
-import { router as koboldRouter } from './endpoints/backends/kobold.js';
-import { router as textCompletionsRouter } from './endpoints/backends/text-completions.js';
 import { router as speechRouter } from './endpoints/speech.js';
 import { router as azureRouter } from './endpoints/azure.js';
 import { router as minimaxRouter } from './endpoints/minimax.js';
@@ -173,10 +171,8 @@ export function setupPrivateEndpoints(app) {
     app.use('/api/extra/classify', classifyRouter);
     app.use('/api/extra/caption', captionRouter);
     app.use('/api/search', searchRouter);
-    app.use('/api/backends/text-completions', textCompletionsRouter);
     app.use('/api/openrouter', openRouterRouter);
     app.use('/api/nanogpt', nanogptRouter);
-    app.use('/api/backends/kobold', koboldRouter);
     app.use('/api/backends/chat-completions', chatCompletionsRouter);
     app.use('/api/speech', speechRouter);
     app.use('/api/azure', azureRouter);
@@ -238,7 +234,7 @@ export class ServerStartup {
      */
     #getAddressInUseMessage(url, ipVersion) {
         const listenAddress = this.#getListenAddress(url, ipVersion);
-        return `Address ${listenAddress} is already in use. Another SillyTavern instance may already be running. Stop the other process or change "port" in config.yaml.`;
+        return `Address ${listenAddress} is already in use. Another EmberDesk instance may already be running. Stop the other process or change "port" in config.yaml.`;
     }
 
     /**

@@ -1,4 +1,4 @@
-# How to contribute to SillyTavern
+# How to contribute to EmberDesk
 
 ## Setting up the dev environment
 
@@ -81,5 +81,5 @@ We do not prohibit nor encourage the use of AI tools for coding assistance to he
 
 ## Further reading
 
-1. [How to write UI extensions](https://docs.sillytavern.app/for-contributors/writing-extensions/)
-2. [How to write server plugins](https://docs.sillytavern.app/for-contributors/server-plugins)
+1. [How to write UI extensions](https://docs.sillytavern.app/for-contributors/writing-extensions/) (upstream SillyTavern docs)
+2. [How to write server plugins](https://docs.sillytavern.app/for-contributors/server-plugins) (upstream SillyTavern docs)

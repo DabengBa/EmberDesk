@@ -1,6 +1,10 @@
 /**
- * When applied, this middleware will ensure the request contains the required header for basic authentication and only
- * allow access to the endpoint after successful authentication.
+ * @deprecated This middleware implements the legacy basicAuthMode HTTP-layer authentication.
+ * It is retained only for backward compatibility. New deployments should use enableUserAccounts exclusively.
+ * When enableUserAccounts is active, this middleware adds a redundant credential check before the app-level login page.
+ *
+ * To enable: set basicAuthMode: true in config.yaml (or pass --basicAuth on the CLI).
+ * When both basicAuthMode and enableUserAccounts are active, users must pass Basic Auth first, then log in via the login page.
  */
 import { Buffer } from 'node:buffer';
 import path from 'node:path';
@@ -11,7 +15,7 @@ import { getConfigValue, safeReadFileSync } from '../util.js';
 import { getIpAddress, retryAfter } from '../express-common.js';
 
 const PER_USER_BASIC_AUTH = !!getConfigValue('perUserBasicAuth', false, 'boolean');
-const ENABLE_ACCOUNTS = !!getConfigValue('enableUserAccounts', false, 'boolean');
+const ENABLE_ACCOUNTS = !!getConfigValue('enableUserAccounts', true, 'boolean');
 const PREFER_REAL_IP_HEADER = !!getConfigValue('rateLimiting.preferRealIpHeader', false, 'boolean');
 const BASIC_AUTH_ATTEMPTS = getConfigValue('rateLimiting.basicAuthMaxAttempts', 5, 'number');
 
@@ -23,7 +27,7 @@ const basicAuthLimiter = new RateLimiterMemory({
 const basicAuthMiddleware = async function (request, response, callback) {
     const unauthorizedResponse = (res) => {
         const unauthorizedWebpage = safeReadFileSync(path.join(globalThis.DATA_ROOT, '_errors', 'unauthorized.html')) ?? '';
-        res.set('WWW-Authenticate', 'Basic realm="SillyTavern", charset="UTF-8"');
+        res.set('WWW-Authenticate', 'Basic realm="EmberDesk", charset="UTF-8"');
         return res.status(401).send(unauthorizedWebpage);
     };
 

@@ -22,6 +22,7 @@ import {
     readFirstLine,
     isPathUnderParent,
 } from '../util.js';
+import { isCharacterIndexSupported, markCharacterChatStatsDirty } from './character-index.js';
 
 const isBackupEnabled = !!getConfigValue('backups.chat.enabled', true, 'boolean');
 const maxTotalChatBackups = Number(getConfigValue('backups.chat.maxTotalBackups', -1, 'number'));
@@ -29,6 +30,44 @@ const throttleInterval = Number(getConfigValue('backups.chat.throttleInterval', 
 const checkIntegrity = !!getConfigValue('backups.chat.checkIntegrity', true, 'boolean');
 
 export const CHAT_BACKUPS_PREFIX = 'chat_';
+
+/**
+ * @param {import('../users.js').UserDirectoryList} directories
+ * @param {string | undefined} avatar
+ * @param {string} operation
+ * @returns {void}
+ */
+function markCharacterChatStatsDirtySafe(directories, avatar, operation) {
+    if (!avatar || !isCharacterIndexSupported()) {
+        return;
+    }
+
+    try {
+        markCharacterChatStatsDirty(directories.root, avatar);
+    } catch (error) {
+        console.warn(`Character index chat-stat invalidation skipped after ${operation} for ${avatar}:`, error);
+    }
+}
+
+function getInteractionPerfChatTimestampMs() {
+    if (process.env.EMBERDESK_INTERACTION_PERF_MODE !== '1') {
+        return null;
+    }
+
+    const rawValue = process.env.EMBERDESK_INTERACTION_PERF_CHAT_MTIME_MS;
+    const timestampMs = Number(rawValue);
+    return Number.isFinite(timestampMs) ? timestampMs : null;
+}
+
+function applyInteractionPerfChatTimestamp(filePath) {
+    const timestampMs = getInteractionPerfChatTimestampMs();
+    if (timestampMs === null) {
+        return;
+    }
+
+    const timestamp = new Date(timestampMs);
+    fs.utimesSync(filePath, timestamp, timestamp);
+}
 
 /**
  * Saves a chat to the backups directory.
@@ -480,6 +519,8 @@ router.post('/save', validateAvatarUrlMiddleware, async function (request, respo
 
         if (Array.isArray(chatData)) {
             await trySaveChat(chatData, chatFilePath, request.body.force, handle, cardName, request.user.directories.backups);
+            applyInteractionPerfChatTimestamp(chatFilePath);
+            markCharacterChatStatsDirtySafe(request.user.directories, request.body.avatar_url, 'chat save');
             return response.send({ ok: true });
         } else {
             return response.status(400).send({ error: 'The request\'s body.chat is not an array.' });
@@ -569,6 +610,9 @@ router.post('/rename', validateAvatarUrlMiddleware, async function (request, res
         fs.copyFileSync(pathToOriginalFile, pathToRenamedFile);
         fs.unlinkSync(pathToOriginalFile);
         console.info('Successfully renamed chat file.');
+        if (!request.body.is_group) {
+            markCharacterChatStatsDirtySafe(request.user.directories, request.body.avatar_url, 'chat rename');
+        }
         return response.send({ ok: true, sanitizedFileName });
     } catch (error) {
         console.error('Error renaming chat file:', error);
@@ -590,6 +634,7 @@ router.post('/delete', validateAvatarUrlMiddleware, function (request, response)
         }
         //Return success if the file was deleted.
         if (tryDeleteFile(chatFilePath)) {
+            markCharacterChatStatsDirtySafe(request.user.directories, request.body.avatar_url, 'chat delete');
             return response.send({ ok: true });
         } else {
             console.error('The chat file was not deleted.');
@@ -752,6 +797,7 @@ router.post('/import', validateAvatarUrlMiddleware, function (request, response)
                 handleChat(chat);
             }
 
+            markCharacterChatStatsDirtySafe(request.user.directories, request.body.avatar_url, 'chat import');
             return response.send({ res: true, fileNames });
         }
 
@@ -786,6 +832,7 @@ router.post('/import', validateAvatarUrlMiddleware, function (request, response)
                 fs.copyFileSync(pathToUpload, filePath);
             }
             fs.unlinkSync(pathToUpload);
+            markCharacterChatStatsDirtySafe(request.user.directories, request.body.avatar_url, 'chat import');
             response.send({ res: true, fileNames });
         }
     } catch (error) {

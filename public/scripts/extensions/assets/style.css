@@ -70,8 +70,8 @@
 
 .asset-download-button-text {
     font: bold 20px "Quicksand", san-serif;
-    color: #ffffff;
-    transition: all var(--animation-duration-2x);
+    color: var(--SmartThemeBodyColor);
+    transition: opacity var(--animation-duration-2x);
 }
 
 .asset-download-button-loading .asset-download-button-text {
@@ -133,7 +133,7 @@
     padding: 10px;
     gap: 10px;
     border: 1px solid var(--SmartThemeBorderColor);
-    background-color: var(--black30a);
+    background-color: color-mix(in srgb, var(--SmartThemeBlurTintColor) 72%, var(--black70a) 28%);
     border-radius: 10px;
     width: 17%;
     min-width: 150px;

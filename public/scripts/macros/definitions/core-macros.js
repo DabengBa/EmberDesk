@@ -1,7 +1,6 @@
 import { seedrandom, droll } from '../../../lib.js';
 import { chat_metadata, main_api, getMaxPromptTokens, getMaxContextTokens, getMaxResponseTokens, extension_prompts, getCurrentChatId } from '../../../script.js';
 import { getStringHash, isFalseBoolean } from '../../utils.js';
-import { textgenerationwebui_banned_in_macros } from '../../textgen-settings.js';
 import { inject_ids } from '../../constants.js';
 import { MacroRegistry, MacroCategory, MacroValueType } from '../engine/MacroRegistry.js';
 import { MACRO_VARIABLE_SHORTHAND_PATTERN } from '../engine/MacroLexer.js';
@@ -432,16 +431,12 @@ export function registerCoreMacros() {
                 type: 'string',
             },
         ],
-        description: 'Bans a word for Text Completion backend. (Strips quotes surrounding the banned word, if present)',
+        description: 'Bans a word. (Strips quotes surrounding the banned word, if present)',
         returns: '',
         exampleUsage: ['{{banned::delve}}'],
         handler: ({ unnamedArgs: [bannedWord] }) => {
             // Strip quotes via regex, which were allowed in legacy syntax
             bannedWord = bannedWord.replace(/^"|"$/g, '');
-            if (main_api === 'textgenerationwebui') {
-                console.log('Found banned word in macros: ' + bannedWord);
-                textgenerationwebui_banned_in_macros.push(bannedWord);
-            }
             return '';
         },
     });
