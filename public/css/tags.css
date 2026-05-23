@@ -49,8 +49,8 @@
     border-width: 1px;
     box-sizing: border-box;
     color: var(--SmartThemeBodyColor);
-    background-color: var(--black30a);
-    border-color: var(--white50a);
+    background-color: color-mix(in srgb, var(--SmartThemeBlurTintColor) 48%, var(--black70a) 52%);
+    border-color: var(--form-control-border-color);
     padding: 0.1rem 0.2rem;
     font-size: calc(var(--mainFontSize) - 5%);
     display: flex;

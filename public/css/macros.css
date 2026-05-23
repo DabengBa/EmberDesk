@@ -127,7 +127,7 @@
 }
 
 .macroBrowser .macro-item:hover {
-    background: var(--black30a);
+    background: var(--form-control-bg);
 }
 
 .macroBrowser .macro-item.selected {
@@ -194,7 +194,7 @@
     font-family: var(--monoFontFamily);
     font-size: 1.1em;
     color: var(--SmartThemeQuoteColor);
-    background: var(--black30a);
+    background: var(--form-control-bg);
     padding: 0.15em 0.4em 0.3em;
     border-radius: 4px;
     word-break: break-all;
@@ -274,7 +274,7 @@
     font-size: 0.75em;
     padding: 0.1em 0.4em;
     border-radius: 3px;
-    background: var(--black30a);
+    background: var(--form-control-bg);
     color: var(--SmartThemeEmColor);
 }
 
@@ -312,7 +312,7 @@
 
 .macro-details .macro-example-list code {
     font-family: var(--monoFontFamily);
-    background: var(--black30a);
+    background: var(--form-control-bg);
     padding: 0.1em 0.3em;
     border-radius: 3px;
 }
@@ -337,7 +337,7 @@
     gap: 0.5em;
     margin: 0.5em 0;
     padding: 0.4em 0.6em;
-    background: var(--black30a);
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor) 72%, var(--black70a) 28%);
     border-radius: 4px;
     font-size: 0.9em;
     opacity: 0.9;
@@ -351,7 +351,7 @@
 
 .macro-details .macro-alias-of code {
     font-family: var(--monoFontFamily);
-    background: var(--black30a);
+    background: var(--form-control-bg);
     padding: 0.1em 0.4em;
     border-radius: 3px;
 }
@@ -374,7 +374,7 @@
 
 .macro-details .macro-alias-item code {
     font-family: var(--monoFontFamily);
-    background: var(--black30a);
+    background: var(--form-control-bg);
     padding: 0.2em 0.5em;
     border-radius: 3px;
 }
@@ -462,7 +462,7 @@
 
 /* Third-party source indicator */
 .autoComplete > .item.macro-ac-item > .macro-source.isThirdParty {
-    color: #F89406;
+    color: var(--SmartThemeQuoteColor);
 }
 
 /* Arity warning banner in details */
@@ -471,12 +471,12 @@
     align-items: baseline;
     gap: 0.5em;
     padding: 0.5em 0.75em;
-    background: linear-gradient(90deg, rgba(248, 148, 6, 0.2), transparent);
-    border-left: 3px solid #F89406;
-    border-radius: 0 4px 4px 0;
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--SmartThemeQuoteColor) 45%, var(--SmartThemeBorderColor) 55%);
+    border-radius: 5px;
     margin-bottom: 0.5em;
     font-size: 0.9em;
-    color: #F89406;
+    color: var(--SmartThemeQuoteColor);
 }
 
 .macro-ac-warning i {
@@ -489,12 +489,12 @@
     align-items: baseline;
     gap: 0.5em;
     padding: 0.5em 0.75em;
-    background: linear-gradient(90deg, rgba(91, 192, 222, 0.2), transparent);
-    border-left: 3px solid #5BC0DE;
-    border-radius: 0 4px 4px 0;
+    background: color-mix(in srgb, var(--frost-blue) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--frost-blue) 45%, var(--SmartThemeBorderColor) 55%);
+    border-radius: 5px;
     margin-bottom: 0.5em;
     font-size: 0.9em;
-    color: #5BC0DE;
+    color: var(--frost-blue);
 }
 
 .macro-ac-scoped-info i {
@@ -502,7 +502,7 @@
 }
 
 .macro-ac-scoped-info code {
-    background: rgba(91, 192, 222, 0.15);
+    background: color-mix(in srgb, var(--frost-blue) 15%, transparent);
     padding: 0.1em 0.3em;
     border-radius: 3px;
 }
@@ -510,8 +510,9 @@
 /* OPTIONAL badge for optional scoped content */
 .macro-ac-optional-badge {
     display: inline-block;
-    background: linear-gradient(135deg, #f0ad4e, #ec971f);
-    color: #000;
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 28%, var(--SmartThemeBlurTintColor) 72%);
+    border: 1px solid color-mix(in srgb, var(--SmartThemeQuoteColor) 45%, var(--SmartThemeBorderColor) 55%);
+    color: var(--SmartThemeBodyColor);
     font-weight: bold;
     font-size: 0.75em;
     padding: 0.15em 0.5em;
@@ -526,7 +527,7 @@
     font-size: 0.65em;
     padding: 0.1em 0.35em;
     vertical-align: middle;
-    color: #f0ad4e;
+    color: var(--SmartThemeQuoteColor);
 }
 
 /* Closing tag autocomplete option */
@@ -554,9 +555,9 @@
     align-items: baseline;
     gap: 0.5em;
     padding: 0.5em 0.75em;
-    background: linear-gradient(90deg, var(--ac-color-selectedBackground, var(--SmartThemeQuoteColor)), transparent);
-    border-left: 3px solid var(--ac-color-matchedText, var(--SmartThemeBorderColor));
-    border-radius: 0 4px 4px 0;
+    background: color-mix(in srgb, var(--ac-color-selectedBackground, var(--SmartThemeQuoteColor)) 18%, transparent);
+    border: 1px solid color-mix(in srgb, var(--ac-color-matchedText, var(--SmartThemeBorderColor)) 45%, var(--SmartThemeBorderColor) 55%);
+    border-radius: 5px;
     margin-bottom: 0.5em;
     font-size: 0.9em;
 }

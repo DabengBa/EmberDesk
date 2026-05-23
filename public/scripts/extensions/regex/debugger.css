@@ -19,7 +19,7 @@
     border: 1px solid var(--SmartThemeBorderColor);
     border-radius: 5px;
     cursor: pointer;
-    background-color: var(--black30a);
+    background-color: var(--form-control-bg);
     gap: 5px;
     margin-bottom: 5px;
 }
@@ -69,7 +69,7 @@
     font-size: 0.8em;
     padding: 2px 6px;
     border-radius: 5px;
-    background-color: var(--black30a);
+    background-color: var(--form-control-bg);
     margin-left: auto;
     margin-right: 10px;
 }
@@ -89,7 +89,7 @@
     border: 1px solid var(--SmartThemeBorderColor);
     border-radius: 5px;
     padding: 5px;
-    background-color: var(--black30a);
+    background-color: var(--form-control-bg);
     font-family: var(--monoFontFamily);
     font-size: 0.9em;
 }
@@ -101,7 +101,7 @@
     border: 1px solid var(--SmartThemeBorderColor);
     border-radius: 5px;
     padding: 5px;
-    background-color: var(--black30a);
+    background-color: var(--form-control-bg);
     white-space: pre-wrap;
     word-break: break-word;
     text-align: left;
@@ -116,7 +116,7 @@
     white-space: pre-wrap;
     word-break: break-all;
     padding: 5px;
-    background-color: var(--black30a);
+    background-color: var(--form-control-bg);
     border-radius: 5px;
     text-align: left;
 }
@@ -150,7 +150,7 @@
     padding: 8px;
     margin-bottom: 10px;
     border: 1px solid var(--SmartThemeBorderColor);
-    background-color: var(--black30a);
+    background-color: color-mix(in srgb, var(--SmartThemeBlurTintColor) 72%, var(--black70a) 28%);
     border-radius: 5px;
     text-align: center;
     font-size: 0.9em;
@@ -187,7 +187,7 @@
     padding: 8px;
     margin-bottom: 10px;
     border: 1px solid var(--SmartThemeBorderColor);
-    background-color: var(--black30a);
+    background-color: color-mix(in srgb, var(--SmartThemeBlurTintColor) 72%, var(--black70a) 28%);
     border-radius: 5px;
     text-align: center;
     font-size: 0.9em;
@@ -195,16 +195,14 @@
 
 /* New highlight color for added text */
 mark.green_hl {
-    background-color: #28a745;
-    /* A standard green color */
-    color: white;
+    background-color: var(--success-green);
+    color: var(--grey10);
 }
 
 /* New highlight color for deleted text */
 mark.red_hl {
-    background-color: #dc3545;
-    /* A standard red color */
-    color: white;
+    background-color: var(--ember-red);
+    color: var(--SmartThemeBodyColor);
     text-decoration: line-through;
 }
 
@@ -222,7 +220,7 @@ mark.red_hl {
     border-right: 1px solid var(--SmartThemeBorderColor);
     padding: 5px;
     overflow-y: auto;
-    background-color: var(--black30a);
+    background-color: color-mix(in srgb, var(--SmartThemeBlurTintColor) 72%, var(--black70a) 28%);
 }
 
 .expanded-regex-nav a {

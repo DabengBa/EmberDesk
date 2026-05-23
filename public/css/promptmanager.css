@@ -283,14 +283,52 @@
     align-items: center;
     gap: 0.25em;
     padding: 0 0.25em;
-    width: 100%
+    width: 100%;
+    min-width: 0;
+    flex-wrap: nowrap;
 }
 
 #completion_prompt_manager .completion_prompt_manager_footer a {
     font-size: 12px;
+    flex: 0 0 auto;
+}
+
+#completion_prompt_manager_footer_append_prompt {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+#completion_prompt_manager .completion_prompt_manager_footer .pm-toolbar-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: calc(var(--mainFontSize) * 1.7);
+    min-width: calc(var(--mainFontSize) * 1.7);
+    height: calc(var(--mainFontSize) * 1.7);
+    padding: 0;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+#completion_prompt_manager .completion_prompt_manager_footer .pm-toolbar-btn i {
+    margin: 0;
+    line-height: 1;
+}
+
+#completion_prompt_manager .completion_prompt_manager_footer .pm-toolbar-btn .pm-btn-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
 }
 
 #completion_prompt_manager .completion_prompt_manager_footer .pm-toolbar-sep {
+    flex: 0 0 auto;
     width: 1px;
     height: 16px;
     background: var(--SmartThemeBorderColor);

@@ -400,7 +400,7 @@ body.waifuMode #sheld {
 
 body.waifuMode #chat {
     border-top: 1px solid var(--SmartThemeBorderColor);
-    border-radius: 20px 20px 0 0;
+    border-radius: 10px 10px 0 0;
 }
 
 body.waifuMode #expression-wrapper {

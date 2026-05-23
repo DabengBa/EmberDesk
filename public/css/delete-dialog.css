@@ -87,9 +87,11 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 5px 0 5px 10px;
+    padding: 5px 10px;
     margin-bottom: 10px;
-    border-left: 2px solid var(--SmartThemeFrostBlueColor, #92BEFC);
+    background: color-mix(in srgb, var(--frost-blue) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--frost-blue) 35%, var(--SmartThemeBorderColor) 65%);
+    border-radius: 5px;
     font-size: 0.85rem;
     color: var(--SmartThemeFadedColor, #BCBCB4);
 }
@@ -120,7 +122,7 @@
 
 .popup-button-danger {
     background: var(--crimson70a, #640000) !important;
-    color: var(--SmartThemeEm_Color, #DCDCD2) !important;
+    color: var(--SmartThemeBodyColor, #DCDCD2) !important;
 }
 
 /* ── Checkbox alignment fix ───────────────────────────────────── */

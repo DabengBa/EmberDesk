@@ -104,7 +104,7 @@
     border: 1px solid var(--SmartThemeBorderColor);
     padding: 5px;
     border-radius: 10px;
-    background-color: var(--black30a);
+    background-color: color-mix(in srgb, var(--SmartThemeBlurTintColor) 72%, var(--black70a) 28%);
     margin: 10px 0;
 }
 

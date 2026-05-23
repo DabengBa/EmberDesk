@@ -5,7 +5,7 @@
   }
   25%,
   75% {
-    color: #51a351;
+    color: var(--success-green);
   }
 }
 .qr--success {
@@ -59,7 +59,7 @@
   aspect-ratio: 1 / 1;
   font-size: 20px;
   opacity: 0.5;
-  transition: all var(--animation-duration-2x);
+  transition: opacity var(--animation-duration-2x);
 }
 #qr--popout > .qr--body {
   overflow-y: auto;
@@ -82,8 +82,7 @@
 #qr--bar > .qr--buttons.qr--borderColor,
 #qr--popout > .qr--body > .qr--buttons.qr--borderColor {
   background-color: transparent;
-  border-left: 5px solid var(--qr--color);
-  border-right: 5px solid var(--qr--color);
+  border: 1px solid var(--qr--color);
 }
 #qr--bar > .qr--buttons:has(.qr--buttons.qr--color),
 #qr--popout > .qr--body > .qr--buttons:has(.qr--buttons.qr--color) {
@@ -474,7 +473,7 @@
   animation-iteration-count: infinite;
 }
 .popup:has(#qr--modalEditor) .popup-content > #qr--modalEditor.qr--isExecuting.qr--isPaused #qr--modal-debugButtons .menu_button:not(#qr--modal-minimize, #qr--modal-maximize)#qr--modal-resume {
-  border-color: #51a351;
+  border-color: var(--success-green);
 }
 .popup:has(#qr--modalEditor) .popup-content > #qr--modalEditor.qr--isExecuting.qr--isPaused #qr--modal-debugButtons .menu_button:not(#qr--modal-minimize, #qr--modal-maximize)#qr--modal-step {
   border-color: var(--SmartThemeQuoteColor);
@@ -742,7 +741,7 @@
   filter: grayscale(1);
 }
 .popup:has(#qr--modalEditor) .popup-content > #qr--modalEditor #qr--modal-executeButtons #qr--modal-execute {
-  border-color: #51a351;
+  border-color: var(--success-green);
 }
 .popup:has(#qr--modalEditor) .popup-content > #qr--modalEditor #qr--modal-executeButtons #qr--modal-pause,
 .popup:has(#qr--modalEditor) .popup-content > #qr--modalEditor #qr--modal-executeButtons #qr--modal-stop {
@@ -759,10 +758,10 @@
   pointer-events: all;
 }
 .popup:has(#qr--modalEditor) .popup-content > #qr--modalEditor #qr--modal-executeButtons #qr--modal-pause {
-  border-color: #92befc;
+  border-color: var(--frost-blue);
 }
 .popup:has(#qr--modalEditor) .popup-content > #qr--modalEditor #qr--modal-executeButtons #qr--modal-stop {
-  border-color: #d78872;
+  border-color: var(--clay-warning);
 }
 .popup:has(#qr--modalEditor) .popup-content > #qr--modalEditor #qr--modal-debugButtons {
   display: none;
@@ -806,11 +805,11 @@
 }
 .popup:has(#qr--modalEditor) .popup-content > #qr--modalEditor #qr--modal-executeProgress {
   --prog: 0;
-  --progColor: #92befc;
-  --progFlashColor: #d78872;
-  --progSuccessColor: #51a351;
-  --progErrorColor: #bd362f;
-  --progAbortedColor: #d78872;
+  --progColor: var(--frost-blue);
+  --progFlashColor: var(--clay-warning);
+  --progSuccessColor: var(--success-green);
+  --progErrorColor: var(--ember-red);
+  --progAbortedColor: var(--clay-warning);
   flex: 0 0 auto;
   height: 0.5em;
   background-color: var(--black50a);
@@ -844,8 +843,8 @@
   display: none;
   text-align: left;
   font-size: smaller;
-  background-color: #bd362f;
-  color: white;
+  background-color: var(--ember-red);
+  color: var(--SmartThemeBodyColor);
   padding: 0.5em;
   overflow: auto;
   min-width: 100%;
@@ -858,8 +857,8 @@
   display: none;
   text-align: left;
   font-size: smaller;
-  background-color: #51a351;
-  color: white;
+  background-color: var(--success-green);
+  color: var(--grey10);
   padding: 0.5em;
   overflow: auto;
   min-width: 100%;
@@ -1028,10 +1027,10 @@
 @keyframes qr--debugPulse {
   0%,
   100% {
-    border-color: #51a351;
+    border-color: var(--success-green);
   }
   50% {
-    border-color: #92befc;
+    border-color: var(--frost-blue);
   }
 }
 .popup.qr--hide {

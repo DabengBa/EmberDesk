@@ -5,10 +5,10 @@
 
 /* Customize the dropdown */
 .select2-dropdown {
-    background-color: var(--SmartThemeBlurTintColor);
-    border: 1px solid var(--SmartThemeBorderColor) !important;
+    background-color: var(--form-control-menu-bg);
+    border: 1px solid var(--form-control-border-color) !important;
     border-radius: 10px;
-    box-shadow: 0 0 5px black;
+    box-shadow: 0 0 5px var(--SmartThemeShadowColor);
     text-shadow: 0px 0px calc(var(--shadowWidth) * 1px) var(--SmartThemeShadowColor);
     backdrop-filter: blur(calc(var(--SmartThemeBlurStrength)*2));
     color: var(--SmartThemeBodyColor);
@@ -66,20 +66,25 @@
 
 /* Customize the search input */
 .select2-search__field {
-    background-color: var(--black30a);
+    background-color: var(--form-control-bg);
     color: var(--SmartThemeBodyColor);
-    border: 1px solid var(--SmartThemeBorderColor);
+    border: 1px solid var(--form-control-border-color);
     font-family: var(--mainFontFamily);
     padding: 3px 5px;
     display: unset;  /* override the ST textarea display style */
     border-radius: 0;  /* border radius was interfering with cursor */
 }
 
+.select2-container .select2-search--dropdown .select2-search__field {
+    background-color: var(--form-control-bg);
+    border: 1px solid var(--form-control-border-color);
+}
+
 /* Customize the selected option */
 .select2-selection--single {
-    border: 1px solid var(--SmartThemeShadowColor);
-    border-radius: 4px;
-    background-color: var(--SmartThemeBlurTintColor);
+    border: 1px solid var(--form-control-border-color);
+    border-radius: 5px;
+    background-color: var(--form-control-bg);
 }
 
 /* Customize the selected option text */
@@ -95,10 +100,10 @@
 
 .select2-container .select2-selection--multiple,
 .select2-container .select2-selection--single {
-    background-color: var(--black30a);
+    background-color: var(--form-control-bg);
     color: var(--SmartThemeBodyColor);
-    border: 1px solid var(--SmartThemeBorderColor);
-    border-radius: 7px;
+    border: 1px solid var(--form-control-border-color);
+    border-radius: 5px;
     font-family: var(--mainFontFamily);
 }
 
@@ -108,7 +113,8 @@
 
 .select2-container.select2-container--focus .select2-selection--multiple,
 .select2-container.select2-container--focus .select2-selection--single {
-    border: 1px solid var(--SmartThemeBorderColor);
+    background-color: var(--form-control-bg-focus);
+    border: 1px solid var(--form-control-border-color-focus);
 }
 
 .select2-container .select2-results .select2-results__option--disabled {
@@ -125,8 +131,8 @@
     border-width: 1px;
     box-sizing: border-box;
     color: var(--SmartThemeBodyColor);
-    background-color: var(--black30a);
-    border-color: var(--SmartThemeBorderColor);
+    background-color: var(--form-control-bg);
+    border-color: var(--form-control-border-color);
     font-size: calc(var(--mainFontSize) - 5%);
     text-shadow: none !important;
 }
@@ -141,7 +147,7 @@
 
 .select2-results .select2-results__option--group {
     color: var(--SmartThemeBodyColor);
-    background-color: var(--SmartThemeBlurTintColor);
+    background-color: var(--form-control-menu-bg);
     position: relative;
 }
 
@@ -176,8 +182,8 @@
     margin-top: -7px;
     width: 14px;
     height: 14px;
-    border: 1px solid var(--SmartThemeBorderColor);
-    background-color: var(--SmartThemeBlurTintColor);
+    border: 1px solid var(--form-control-border-color);
+    background-color: var(--form-control-bg);
     border-radius: 2px;
 }
 
@@ -191,7 +197,8 @@
     content: '\2713';
     font-weight: bold;
     color: var(--SmartThemeBodyColor);
-    background-color: var(--SmartThemeBlurTintColor);
+    background-color: var(--form-control-bg-focus);
+    border-color: var(--form-control-border-color-focus);
     text-align: center;
     line-height: 14px;
 }

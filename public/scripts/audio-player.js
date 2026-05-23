@@ -213,7 +213,7 @@ export class AudioPlayer {
 
         const percent = (this.audio.currentTime / this.audio.duration) * 100 || 0;
         if (this.elements.progressBar) {
-            /** @type {HTMLElement} */ (this.elements.progressBar).style.width = percent + '%';
+            /** @type {HTMLElement} */ (this.elements.progressBar).style.transform = `scaleX(${percent / 100})`;
         }
         if (this.elements.currentTime) {
             this.elements.currentTime.textContent = formatTime(this.audio.currentTime);
@@ -395,7 +395,7 @@ export class AudioPlayer {
         const percent = Math.max(0, Math.min(100, (offsetX / width) * 100));
 
         if (this.elements.progressBar) {
-            /** @type {HTMLElement} */ (this.elements.progressBar).style.width = percent + '%';
+            /** @type {HTMLElement} */ (this.elements.progressBar).style.transform = `scaleX(${percent / 100})`;
         }
 
         const seekTime = (percent / 100) * this.audio.duration;

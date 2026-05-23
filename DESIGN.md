@@ -80,7 +80,11 @@ components:
     backgroundColor: "{colors.ember-deep}"
     textColor: "{colors.ivory}"
   input:
-    backgroundColor: "#000000"
+    backgroundColor: "var(--form-control-bg)"
+    focusBackgroundColor: "var(--form-control-bg-focus)"
+    menuBackgroundColor: "var(--form-control-menu-bg)"
+    borderColor: "var(--form-control-border-color)"
+    focusBorderColor: "var(--form-control-border-color-focus)"
     textColor: "{colors.ivory}"
     rounded: "{rounded.md}"
     padding: "3px 5px"
@@ -97,7 +101,7 @@ components:
     padding: "4px 14px"
     width: "500px"
   tag:
-    backgroundColor: "#000000"
+    backgroundColor: "color-mix(in srgb, var(--SmartThemeBlurTintColor) 48%, var(--black70a) 52%)"
     textColor: "{colors.ivory}"
     rounded: "{rounded.md}"
     padding: "0.1rem 0.2rem"
@@ -105,7 +109,7 @@ components:
     rounded: "{rounded.pill}"
     size: "2rem"
   chat-bubble:
-    backgroundColor: "#000000"
+    backgroundColor: "var(--SmartThemeUserMesBlurTintColor) / var(--SmartThemeBotMesBlurTintColor)"
     textColor: "{colors.ivory}"
     padding: "10px"
 ---
@@ -254,7 +258,7 @@ Avatars have three shape modes: square (`2px`), rounded (`10px`), and round (`50
 
 **Buttons** (`menu_button`) are compact, bordered, and semi-transparent. Background is the surface tint with a 50% grayscale filter that lifts on hover to full brightness. The transition duration is 250ms. Disabled buttons reduce opacity to 0.5 and add `grayscale(0.5)`.
 
-**Inputs and Textareas** share a consistent treatment: `rgba(0, 0, 0, 0.3)` background, 1px border in the theme border color, 5px radius. On focus, the border lightens to `rgba(255, 255, 255, 0.2)` — a subtle but visible focus indicator that works against both light and dark backgrounds.
+**Inputs, Textareas, Selects, and Select2 controls** use dedicated form-control tokens rather than raw panel colors: `--form-control-bg`, `--form-control-bg-focus`, `--form-control-menu-bg`, `--form-control-border-color`, and `--form-control-border-color-focus`. Controls sit visibly darker than the surrounding panel surface, with a 1px border and 5px radius so editable fields read as embedded work areas. Focus states deepen the fill and shift the border toward the quote/accent color, making active fields clear without adding decorative glow.
 
 **Tags** are inline pill-like labels with a semi-transparent background and 1px border. Actionable filter tags are circular (50% radius, aspect-ratio 1:1) and sized to `2x` the base font size for comfortable touch targets.
 

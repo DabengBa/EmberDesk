@@ -43,7 +43,7 @@
     height: 25px;
     margin-left: 5px;
     opacity: 0.5;
-    transition: all var(--animation-duration-2x);
+    transition: opacity var(--animation-duration-2x);
     position: unset !important;
 }
 
@@ -108,7 +108,7 @@
 }
 
 .logprobs_top_candidate:not([disabled]):hover {
-    background-color: rgba(0, 0, 0, 0.3);
+    background-color: var(--form-control-bg);
 }
 
 .logprobs_tint_0 {

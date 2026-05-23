@@ -121,7 +121,7 @@ img.expression.default {
     left: 0;
     text-align: center;
     font-weight: 600;
-    background-color: #000000a8;
+    background-color: color-mix(in srgb, var(--SmartThemeBlurTintColor) 42%, var(--black90a) 58%);
     width: 100%;
     height: 20%;
     display: flex;

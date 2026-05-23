@@ -147,10 +147,10 @@
 #world_info + span.select2-container .select2-selection--multiple {
     min-height: 30px;
     max-height: 30px;
-    background-color: rgba(255, 255, 255, 0.035);
+    background-color: var(--form-control-bg);
     border: none;
     border-radius: var(--rounded-md, 5px);
-    box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--SmartThemeBorderColor), transparent 62%);
+    box-shadow: inset 0 0 0 1px var(--form-control-border-color);
     overflow: hidden;
 }
 
@@ -434,10 +434,10 @@
     resize: none;
     overflow: hidden;
     min-height: 28px;
-    background: rgba(255, 255, 255, 0.025);
+    background: var(--form-control-bg);
     border: none;
     border-radius: var(--rounded-md, 5px);
-    box-shadow: inset 0 -1px 0 color-mix(in oklch, var(--SmartThemeBorderColor), transparent 35%);
+    box-shadow: inset 0 0 0 1px var(--form-control-border-color);
     padding: 4px 24px 4px var(--spacing-sm, 5px);
     font-size: 0.95rem;
     font-weight: 600;
@@ -459,8 +459,8 @@
 }
 
 .wi-card-title-field:hover .wi-card-title-input {
-    background-color: rgba(255, 255, 255, 0.04);
-    box-shadow: inset 0 -1px 0 var(--SmartThemeBorderColor);
+    background-color: var(--form-control-bg-focus);
+    box-shadow: inset 0 0 0 1px var(--form-control-border-color-focus);
 }
 
 .wi-card-title-field:hover .wi-card-title-edit,
@@ -470,9 +470,8 @@
 }
 
 .wi-card-title-input:focus {
-    background-color: var(--black30a, rgba(0, 0, 0, 0.3));
-    box-shadow: inset 0 -1px 0 var(--SmartThemeQuoteColor);
-    outline: none;
+    background-color: var(--form-control-bg-focus);
+    box-shadow: inset 0 0 0 1px var(--form-control-border-color-focus);
 }
 
 .wi-card-position-control {
@@ -783,14 +782,14 @@
 .world_entry_form_control input[type="text"],
 .world_entry_form_control input[type="number"],
 .world_entry_form_control select {
-    background-color: var(--black30a, rgba(0, 0, 0, 0.3)) !important;
+    background-color: var(--form-control-bg) !important;
     border: none !important;
     border-radius: var(--rounded-md, 5px) !important;
     color: var(--SmartThemeBodyColor) !important;
     padding: 3px var(--spacing-sm, 5px) !important;
     font-size: 0.9rem;
     min-height: 28px;
-    box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--SmartThemeBorderColor), transparent 42%);
+    box-shadow: inset 0 0 0 1px var(--form-control-border-color);
     transition: box-shadow 0.2s ease, background-color 0.2s ease;
 }
 
@@ -798,9 +797,10 @@
 .world_entry_form_control input[type="text"]:focus,
 .world_entry_form_control input[type="number"]:focus,
 .world_entry_form_control select:focus {
-    background-color: rgba(0, 0, 0, 0.38) !important;
-    box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--SmartThemeQuoteColor), transparent 25%);
-    outline: none !important;
+    background-color: var(--form-control-bg-focus) !important;
+    box-shadow: inset 0 0 0 1px var(--form-control-border-color-focus);
+    outline: 1px solid var(--interactable-outline-color-faint);
+    outline-offset: 1px;
 }
 
 .world_entry_form_control textarea {
@@ -839,9 +839,9 @@
     padding: var(--spacing-sm, 5px) var(--spacing-md, 10px);
     border: 0;
     border-radius: var(--rounded-md, 5px);
-    background: color-mix(in oklch, var(--black30a, rgba(0, 0, 0, 0.3)), var(--SmartThemeBlurTintColor) 18%);
+    background: var(--form-control-bg);
     color: var(--SmartThemeBodyColor);
-    box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--SmartThemeBorderColor), transparent 64%);
+    box-shadow: inset 0 0 0 1px var(--form-control-border-color);
     cursor: pointer;
     text-align: left;
     transition: background-color 0.2s ease, box-shadow 0.2s ease;
@@ -849,9 +849,10 @@
 
 .wi-content-open:hover,
 .wi-content-open:focus-visible {
-    background: color-mix(in oklch, var(--black30a, rgba(0, 0, 0, 0.3)), var(--SmartThemeQuoteColor) 7%);
-    box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--SmartThemeQuoteColor), transparent 38%);
-    outline: none;
+    background: var(--form-control-bg-focus);
+    box-shadow: inset 0 0 0 1px var(--form-control-border-color-focus);
+    outline: 1px solid var(--interactable-outline-color-faint);
+    outline-offset: 1px;
 }
 
 .wi-content-preview {
