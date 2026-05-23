@@ -69,7 +69,7 @@ This feature lets a user remove unwanted characters and immediately see the work
 - The "Also delete the chat files" checkbox is checked by default.
 - World info files are unchecked by default in the cascade section — the user must actively opt in to delete them (or use "Delete All").
 - "Delete All" selects all world info checkboxes — it means complete world info cleanup, not selective deletion.
-- Deleting a character does not affect other characters' world info references. See [ADR-0005](../adr/0005-delete-no-cross-character-world-ref-cleanup.md). For the inverse flow (deleting a world book and optionally clearing bound character references), see [Delete World Book](world-book-delete.md).
+- Deleting a character does not affect other characters' world info references. See [ADR-0005](../adr/0005-delete-no-cross-character-world-ref-cleanup.md). For the inverse flow (deleting a world book and optionally clearing bound character references), see [Delete World Book](feature.world_book_delete).
 - A failed cascade (world file deletion) does not block the character deletion itself.
 - If the World Info editor panel is open showing a world that gets cascade-deleted, EmberDesk closes the editor and clears all related client-side references (cache, global selection, character world field, persona lorebook).
 - If generation is in progress when deletion is triggered, it is stopped automatically without blocking the user.

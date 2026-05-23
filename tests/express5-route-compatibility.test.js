@@ -1,6 +1,7 @@
 /* global globalThis */
 import { describe, test, expect, beforeAll, afterAll, afterEach } from '@jest/globals';
 import express from 'express';
+import multer from 'multer';
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
@@ -18,6 +19,7 @@ import {
 } from '../src/express-route-compat.js';
 import getWebpackServeMiddleware from '../src/middleware/webpack-serve.js';
 import userCssMiddleware from '../src/middleware/userCss.js';
+import multerMonkeyPatch from '../src/middleware/multerMonkeyPatch.js';
 import getPublicLibConfig from '../webpack.config.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -29,8 +31,9 @@ const configPath = path.join(configTmpDir, 'config.yaml');
 fs.writeFileSync(configPath, 'extensions:\n  enabled: true\n', 'utf8');
 setConfigFilePath(configPath);
 
-const { router: userDataRouter } = await import('../src/users.js');
+const { router: userDataRouter, requireLoginMiddleware } = await import('../src/users.js');
 const { router: imagesRouter } = await import('../src/endpoints/images.js');
+const { redirectDeprecatedEndpoints } = await import('../src/server-startup.js');
 
 function listen(app) {
     const server = http.createServer(app);
@@ -116,7 +119,10 @@ describe('Express 5 route compatibility', () => {
 
             const sourceResponse = await fetch(`${url}/callback/openrouter?code=abc&state=xyz&redirect_uri=https%3A%2F%2Fevil.test`, { redirect: 'manual' });
             expect(sourceResponse.status).toBe(307);
-            expect(sourceResponse.headers.get('location')).toBe('/?source=openrouter&code=abc&state=xyz');
+            const sourceRedirect = new URL(sourceResponse.headers.get('location'), url);
+            expect(sourceRedirect.pathname).toBe('/');
+            expect(sourceRedirect.searchParams.get('source')).toBe('openrouter');
+            expect(sourceRedirect.searchParams.get('query')).toBe('code=abc&state=xyz');
 
             const errorResponse = await fetch(`${url}/callback?error=access_denied&error_description=Denied&unexpected=value`, { redirect: 'manual' });
             expect(errorResponse.status).toBe(307);
@@ -265,6 +271,109 @@ describe('Express 5 route compatibility', () => {
             });
             expect(response.status).toBe(200);
             expect(await response.json()).toEqual([]);
+        });
+    });
+
+    test('deprecated endpoint redirects preserve methods under Express 5', async () => {
+        const app = express();
+        redirectDeprecatedEndpoints(app);
+
+        await usingApp(app, async (url) => {
+            const response = await fetch(`${url}/getcharacters`, {
+                method: 'POST',
+                redirect: 'manual',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({}),
+            });
+
+            expect(response.status).toBe(308);
+            expect(response.headers.get('location')).toBe('/api/characters/all');
+        });
+    });
+
+    test('private routes stay behind the login wall and final 404 stays last', async () => {
+        const app = express();
+        app.get('/login', (_request, response) => response.type('text/plain').send('login page'));
+        app.use((request, _response, next) => {
+            if (request.get('x-test-user')) {
+                request.user = { profile: { handle: 'test-user' }, directories: {} };
+            }
+            next();
+        });
+        app.use(requireLoginMiddleware);
+        app.get('/api/private', (_request, response) => response.json({ ok: true }));
+        app.get('/api/fails', async () => {
+            throw new Error('Route failure');
+        });
+        app.use(errorHandlerMiddleware);
+        app.use((_request, response) => response.status(404).type('text/plain').send('custom not found'));
+
+        await usingApp(app, async (url) => {
+            const loginResponse = await fetch(`${url}/login`);
+            expect(loginResponse.status).toBe(200);
+            expect(await loginResponse.text()).toBe('login page');
+
+            const blockedPrivate = await fetch(`${url}/api/private`);
+            expect(blockedPrivate.status).toBe(403);
+
+            const allowedPrivate = await fetch(`${url}/api/private`, { headers: { 'x-test-user': '1' } });
+            expect(allowedPrivate.status).toBe(200);
+            expect(await allowedPrivate.json()).toEqual({ ok: true });
+
+            const routeError = await fetch(`${url}/api/fails`, { headers: { 'x-test-user': '1' } });
+            expect(routeError.status).toBe(500);
+            expect(routeError.headers.get('content-type')).toContain('application/json');
+            expect(await routeError.json()).toEqual({ error: 'Internal Server Error' });
+
+            const missing = await fetch(`${url}/missing`, { headers: { 'x-test-user': '1' } });
+            expect(missing.status).toBe(404);
+            expect(await missing.text()).toBe('custom not found');
+        });
+    });
+
+    test('avatar upload parsing runs after the private route gate', async () => {
+        const uploadRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-express5-upload-'));
+        tmpRoots.push(uploadRoot);
+        const app = express();
+        app.use((request, _response, next) => {
+            if (request.get('x-test-user')) {
+                request.user = { profile: { handle: 'test-user' }, directories: {} };
+            }
+            next();
+        });
+        app.use(requireLoginMiddleware);
+        app.use(multer({ dest: uploadRoot }).single('avatar'));
+        app.use(multerMonkeyPatch);
+        app.post('/api/upload-inspection', (request, response) => {
+            response.json({
+                hasFile: Boolean(request.file),
+                fieldName: request.file?.fieldname,
+                originalName: request.file?.originalname,
+            });
+        });
+
+        await usingApp(app, async (url) => {
+            const blockedForm = new FormData();
+            blockedForm.append('avatar', new Blob(['blocked']), 'blocked.png');
+            const blocked = await fetch(`${url}/api/upload-inspection`, {
+                method: 'POST',
+                body: blockedForm,
+            });
+            expect(blocked.status).toBe(403);
+
+            const allowedForm = new FormData();
+            allowedForm.append('avatar', new Blob(['allowed']), 'avatar.png');
+            const allowed = await fetch(`${url}/api/upload-inspection`, {
+                method: 'POST',
+                headers: { 'x-test-user': '1' },
+                body: allowedForm,
+            });
+            expect(allowed.status).toBe(200);
+            expect(await allowed.json()).toEqual({
+                hasFile: true,
+                fieldName: 'avatar',
+                originalName: 'avatar.png',
+            });
         });
     });
 

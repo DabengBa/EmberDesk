@@ -20,10 +20,20 @@ export function oauthCallbackMiddleware(request, response) {
     const source = request.params.source;
     const callbackUrl = new URL(request.originalUrl, `${request.protocol}://${request.get('host')}`);
     const searchParams = new URLSearchParams();
+    const callbackParams = new URLSearchParams();
     source && searchParams.set('source', source);
 
     for (const [key, value] of callbackUrl.searchParams) {
         if (OAUTH_CALLBACK_QUERY_KEYS.has(key)) {
+            callbackParams.set(key, value);
+        }
+    }
+
+    if (source) {
+        const callbackQuery = callbackParams.toString();
+        callbackQuery && searchParams.set('query', callbackQuery);
+    } else {
+        for (const [key, value] of callbackParams) {
             searchParams.set(key, value);
         }
     }
