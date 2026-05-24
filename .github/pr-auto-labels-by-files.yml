@@ -39,8 +39,10 @@
   - any-glob-to-any-file:
     - "public/lib/**" # Every frontend lib counts as a dependency as well
     - "package.json"
-    - "package-lock.json"
+    - "bun.lock"
+    - "bunfig.toml"
     - "tests/package.json"
-    - "tests/package-lock.json"
+    - "tests/bun.lock"
+    - "tests/bunfig.toml"
     - "src/electron/package.json"
     - "src/electron/package-lock.json"

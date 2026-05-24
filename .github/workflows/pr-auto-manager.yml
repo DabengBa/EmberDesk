@@ -54,7 +54,9 @@ jobs:
           xl_label: '🟥 ⬤⬤⬤⬤⬤'
           fail_if_xl: 'false'
           files_to_ignore: |
-            "package-lock.json"
+            "bun.lock"
+            "tests/bun.lock"
+            "src/electron/package-lock.json"
             "public/lib/*"
 
   label-by-branches:

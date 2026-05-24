@@ -18,6 +18,7 @@ The codebase is in an **early transition stage**. Much of the original SillyTave
 |-------|-----------|
 | Runtime | Node.js 24 LTS (`>=24 <25`) |
 | Language | JavaScript (ES modules) |
+| Package Manager / Task Runner | Bun 1.3.14 (`packageManager`) |
 | Server | Express.js |
 | Frontend | HTML / CSS / jQuery (no framework yet) |
 | Build | Webpack (client-side libs) |
@@ -61,6 +62,7 @@ Use concise, descriptive commit messages. Prefix with a category when relevant:
 - `default/` holds default configuration and scaffold files.
 - The frontend is jQuery-based with no SPA framework. Be cautious with frontend changes.
 - Long-form upgrade plans live under `docs/specs/`; keep this file as a concise index.
+- Bun install, CI, Docker, and release workflow notes live in `docs/bun-workflow.md`.
 
 ### Things to Avoid
 

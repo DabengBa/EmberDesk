@@ -26,6 +26,7 @@
 /data
 /dist
 /node_modules
+**/node_modules
 /tests
 
 # --- Sensitive Info ---

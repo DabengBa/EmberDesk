@@ -1,3 +1,5 @@
+FROM oven/bun:1.3.14-alpine AS bun
+
 FROM node:lts-alpine3.23
 
 # Arguments
@@ -6,6 +8,8 @@ ARG APP_HOME=/home/node/app
 # Install system dependencies
 # "Don't rely on the base image for tools; if you call it, you install it." ;)
 RUN apk add --no-cache gcompat tini git git-lfs su-exec shadow dos2unix
+
+COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
 
 # Create app directory and set ownership
 WORKDIR ${APP_HOME}
@@ -18,8 +22,8 @@ ENV NODE_ENV=production
 COPY --chown=node:node . ./
 
 RUN \
-  echo "*** Install npm packages ***" && \
-  npm ci --no-audit --no-fund --loglevel=error --no-progress --omit=dev --ignore-scripts && npm cache clean --force
+  echo "*** Install Bun packages ***" && \
+  bun install --frozen-lockfile --production --no-progress
 
 # Create config directory and link config.yaml. Added hardcoded dirs(constants.js?)
 # that must be present for Non-Root Mode and volumeless docker runs.
