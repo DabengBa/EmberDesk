@@ -1,9 +1,6 @@
 import { initAccessibility } from './a11y.js';
 
-let csrfToken = '';
-let lockoutTimer = null;
-
-const messages = {
+export const loginMessages = {
     handleRequired: '请输入用户名',
     codeRequired: '请输入恢复码',
     genericError: '发生错误，请稍后重试',
@@ -15,29 +12,127 @@ const messages = {
     tooManyLoginAttempts: '尝试次数过多，请稍后重试或重置密码。',
     tooManyRecoveryAttempts: '尝试次数过多，请稍后重试或联系管理员。',
     signingIn: '登录中...',
-    locked: (remaining) => `账号已锁定，请在 ${remaining} 秒后重试。`,
     showPassword: '显示密码',
     hidePassword: '隐藏密码',
 };
 
 const serverErrorMessages = new Map([
-    ['Incorrect credentials', messages.incorrectCredentials],
-    ['User is disabled', messages.userDisabled],
-    ['User not found', messages.userNotFound],
-    ['Incorrect code', messages.incorrectCode],
-    ['Missing required fields', messages.missingFields],
-    ['Too many attempts. Try again later or recover your password.', messages.tooManyLoginAttempts],
-    ['Too many attempts. Try again later or contact your admin.', messages.tooManyRecoveryAttempts],
+    ['Incorrect credentials', loginMessages.incorrectCredentials],
+    ['User is disabled', loginMessages.userDisabled],
+    ['User not found', loginMessages.userNotFound],
+    ['Incorrect code', loginMessages.incorrectCode],
+    ['Missing required fields', loginMessages.missingFields],
+    ['Too many attempts. Try again later or recover your password.', loginMessages.tooManyLoginAttempts],
+    ['Too many attempts. Try again later or contact your admin.', loginMessages.tooManyRecoveryAttempts],
 ]);
 
+const requiredElementIds = [
+    'loginCard',
+    'loginForm',
+    'handle',
+    'password',
+    'passwordToggle',
+    'loginButton',
+    'errorMessage',
+    'forgotLink',
+    'recoveryCard',
+    'recoveryForm',
+    'recoverHandle',
+    'recoveryStep1',
+    'recoveryStep2',
+    'recoveryCode',
+    'newPassword',
+    'recoveryError',
+    'cancelRecovery',
+];
+
+const defaultDependencies = {
+    fetch: (...args) => fetch(...args),
+    getLocationHref: () => window.location.href,
+    redirect: (href) => {
+        window.location.href = href;
+    },
+    setInterval: (...args) => setInterval(...args),
+    clearInterval: (...args) => clearInterval(...args),
+    initAccessibility,
+};
+
 /**
- * Gets a CSRF token from the server.
- * @returns {Promise<string>} CSRF token
+ * Returns user-facing Chinese copy for known auth API errors.
+ * @param {unknown} message Server error message
+ * @returns {string} Localized error message
  */
-async function getCsrfToken() {
-    const response = await fetch('/csrf-token');
-    const data = await response.json();
-    return data.token;
+export function getLoginErrorMessage(message) {
+    if (typeof message !== 'string') {
+        return loginMessages.genericError;
+    }
+
+    return serverErrorMessages.get(message) || message || loginMessages.genericError;
+}
+
+/**
+ * Builds the post-login home URL, preserving all query params except noauto.
+ * @param {string} href Current location href
+ * @returns {string} Redirect href
+ */
+export function buildHomeRedirectUrl(href) {
+    const currentUrl = new URL(href);
+    currentUrl.searchParams.delete('noauto');
+    currentUrl.pathname = '/';
+    return currentUrl.toString();
+}
+
+/**
+ * Gets the next visible state for the password field and toggle button.
+ * @param {string} currentType Current password input type
+ * @returns {{type: string, iconClassName: string, ariaPressed: string, ariaLabel: string}}
+ */
+export function getPasswordVisibilityState(currentType) {
+    if (currentType === 'password') {
+        return {
+            type: 'text',
+            iconClassName: 'fa-solid fa-eye-slash',
+            ariaPressed: 'true',
+            ariaLabel: loginMessages.hidePassword,
+        };
+    }
+
+    return {
+        type: 'password',
+        iconClassName: 'fa-solid fa-eye',
+        ariaPressed: 'false',
+        ariaLabel: loginMessages.showPassword,
+    };
+}
+
+/**
+ * Determines which recovery step is active.
+ * @param {{step1Display: string, step2Display: string}} state Recovery section display state
+ * @returns {1|2}
+ */
+export function getRecoveryStep(state) {
+    return state.step1Display === 'none' && state.step2Display !== 'none' ? 2 : 1;
+}
+
+/**
+ * Formats the login lockout countdown copy.
+ * @param {number} remaining Seconds remaining
+ * @returns {string}
+ */
+export function formatLockoutMessage(remaining) {
+    return `账号已锁定，请在 ${remaining} 秒后重试。`;
+}
+
+function getRequiredElement(root, id) {
+    const element = root.getElementById?.(id) ?? root.querySelector?.(`#${id}`);
+    if (!element) {
+        throw new Error(`Missing login page element: #${id}`);
+    }
+    return element;
+}
+
+function collectElements(root) {
+    return Object.fromEntries(requiredElementIds.map(id => [id, getRequiredElement(root, id)]));
 }
 
 /**
@@ -51,7 +146,6 @@ function showError(errorBlock, message, shake = false) {
     errorBlock.classList.add('login-error--visible');
     if (shake) {
         errorBlock.classList.remove('login-error--shake');
-        // Force reflow to restart animation
         void errorBlock.offsetWidth;
         errorBlock.classList.add('login-error--shake');
     }
@@ -67,292 +161,273 @@ function hideError(errorBlock) {
 }
 
 /**
- * Returns user-facing Chinese copy for known auth API errors.
- * @param {unknown} message Server error message
- * @returns {string} Localized error message
+ * Creates a page-owned login controller.
+ * @param {Document|HTMLElement} root Root containing login page elements
+ * @param {Partial<typeof defaultDependencies>} [dependencyOverrides] Runtime dependency overrides
+ * @returns {{init: () => Promise<void>, cleanup: () => void}}
  */
-function getErrorMessage(message) {
-    if (typeof message !== 'string') {
-        return messages.genericError;
+export function createLoginController(root = document, dependencyOverrides = {}) {
+    const dependencies = { ...defaultDependencies, ...dependencyOverrides };
+    const elements = collectElements(root);
+    const abortController = new AbortController();
+    const listenerOptions = { signal: abortController.signal };
+    let csrfToken = '';
+    let lockoutTimer = null;
+
+    function setFormEnabled(enabled) {
+        elements.handle.disabled = !enabled;
+        elements.password.disabled = !enabled;
+        elements.loginButton.disabled = !enabled;
     }
 
-    return serverErrorMessages.get(message) || message || messages.genericError;
-}
-
-/**
- * Hides a visible login error when the user changes credentials.
- */
-function hideLoginErrorAfterCredentialChange() {
-    if (lockoutTimer) {
-        return;
+    function clearLockoutTimer() {
+        if (!lockoutTimer) {
+            return;
+        }
+        dependencies.clearInterval(lockoutTimer);
+        lockoutTimer = null;
     }
 
-    hideError(document.getElementById('errorMessage'));
-}
-
-/**
- * Sets the login form enabled/disabled state.
- * @param {boolean} enabled Whether the form should be enabled
- */
-function setFormEnabled(enabled) {
-    const handle = document.getElementById('handle');
-    const password = document.getElementById('password');
-    const loginBtn = document.getElementById('loginButton');
-
-    handle.disabled = !enabled;
-    password.disabled = !enabled;
-    loginBtn.disabled = !enabled;
-}
-
-/**
- * Starts a lockout countdown timer.
- * @param {number} seconds Number of seconds to count down
- */
-function startLockoutCountdown(seconds) {
-    const errorBlock = document.getElementById('errorMessage');
-    setFormEnabled(false);
-
-    let remaining = seconds;
-    showError(errorBlock, messages.locked(remaining));
-
-    lockoutTimer = setInterval(() => {
-        remaining--;
-        if (remaining <= 0) {
-            clearInterval(lockoutTimer);
-            lockoutTimer = null;
-            hideError(errorBlock);
-            setFormEnabled(true);
-        } else {
-            showError(errorBlock, messages.locked(remaining));
-        }
-    }, 1000);
-}
-
-/**
- * Attempts to log in the user.
- * @param {string} handle User's handle
- * @param {string} password User's password
- * @returns {Promise<void>}
- */
-async function performLogin(handle, password) {
-    const errorBlock = document.getElementById('errorMessage');
-    hideError(errorBlock);
-    setFormEnabled(false);
-
-    const loginBtn = document.getElementById('loginButton');
-    const originalText = loginBtn.textContent;
-    loginBtn.textContent = messages.signingIn;
-
-    try {
-        const response = await fetch('/api/users/login', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': csrfToken,
-            },
-            body: JSON.stringify({ handle, password }),
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-
-            if (response.status === 429) {
-                const retryAfter = parseInt(response.headers.get('Retry-After') || '60', 10);
-                loginBtn.textContent = originalText;
-                startLockoutCountdown(retryAfter);
-                return;
-            }
-
-            loginBtn.textContent = originalText;
-            setFormEnabled(true);
-            return showError(errorBlock, getErrorMessage(errorData.error), true);
-        }
-
-        const data = await response.json();
-        if (data.handle) {
-            redirectToHome();
-        }
-    } catch (error) {
-        loginBtn.textContent = originalText;
-        setFormEnabled(true);
-        showError(errorBlock, String(error), true);
-    }
-}
-
-/**
- * Requests a recovery code for the user.
- * @param {string} handle User handle
- * @returns {Promise<void>}
- */
-async function sendRecoveryPart1(handle) {
-    const errorBlock = document.getElementById('recoveryError');
-    hideError(errorBlock);
-
-    try {
-        const response = await fetch('/api/users/recover-step1', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': csrfToken,
-            },
-            body: JSON.stringify({ handle }),
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            return showError(errorBlock, getErrorMessage(errorData.error), true);
-        }
-
-        document.getElementById('recoveryStep1').style.display = 'none';
-        document.getElementById('recoveryStep2').style.display = 'block';
-        document.getElementById('recoverHandle').disabled = true;
-    } catch (error) {
-        showError(errorBlock, String(error), true);
-    }
-}
-
-/**
- * Sets a new password for the user using the recovery code.
- * @param {string} handle User handle
- * @param {string} code Recovery code
- * @param {string} newPassword New password
- * @returns {Promise<void>}
- */
-async function sendRecoveryPart2(handle, code, newPassword) {
-    const errorBlock = document.getElementById('recoveryError');
-    hideError(errorBlock);
-
-    try {
-        const response = await fetch('/api/users/recover-step2', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': csrfToken,
-            },
-            body: JSON.stringify({ handle, code, newPassword }),
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            return showError(errorBlock, getErrorMessage(errorData.error), true);
-        }
-
-        await performLogin(handle, newPassword || '');
-    } catch (error) {
-        showError(errorBlock, String(error), true);
-    }
-}
-
-/**
- * Redirects to the home page, preserving query string except noauto.
- */
-function redirectToHome() {
-    const currentUrl = new URL(window.location.href);
-    currentUrl.searchParams.delete('noauto');
-    currentUrl.pathname = '/';
-    window.location.href = currentUrl.toString();
-}
-
-/**
- * Switches from login card to recovery card.
- */
-function showRecovery() {
-    document.getElementById('loginCard').style.display = 'none';
-    document.getElementById('recoveryCard').style.display = 'block';
-    document.getElementById('recoveryStep1').style.display = 'block';
-    document.getElementById('recoveryStep2').style.display = 'none';
-    document.getElementById('recoverHandle').disabled = false;
-    document.getElementById('recoverHandle').value = document.getElementById('handle').value;
-    hideError(document.getElementById('recoveryError'));
-}
-
-/**
- * Switches from recovery card back to login card.
- */
-function showLogin() {
-    document.getElementById('recoveryCard').style.display = 'none';
-    document.getElementById('loginCard').style.display = 'block';
-    hideError(document.getElementById('errorMessage'));
-}
-
-/**
- * Toggles password visibility.
- */
-function togglePasswordVisibility() {
-    const input = document.getElementById('password');
-    const btn = document.getElementById('passwordToggle');
-    const icon = btn.querySelector('i');
-
-    if (input.type === 'password') {
-        input.type = 'text';
-        icon.className = 'fa-solid fa-eye-slash';
-        btn.setAttribute('aria-pressed', 'true');
-        btn.setAttribute('aria-label', messages.hidePassword);
-    } else {
-        input.type = 'password';
-        icon.className = 'fa-solid fa-eye';
-        btn.setAttribute('aria-pressed', 'false');
-        btn.setAttribute('aria-label', messages.showPassword);
-    }
-}
-
-(async function () {
-    initAccessibility();
-
-    csrfToken = await getCsrfToken();
-
-    // Login form submit
-    document.getElementById('loginForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const handle = String($('#handle').val()).trim();
-        const password = String($('#password').val());
-        if (!handle) {
-            return showError(document.getElementById('errorMessage'), messages.handleRequired, true);
-        }
-        await performLogin(handle, password);
-    });
-
-    document.getElementById('handle').addEventListener('input', hideLoginErrorAfterCredentialChange);
-    document.getElementById('password').addEventListener('input', hideLoginErrorAfterCredentialChange);
-
-    // Password toggle
-    document.getElementById('passwordToggle').addEventListener('click', togglePasswordVisibility);
-
-    // Forgot password
-    document.getElementById('forgotLink').addEventListener('click', (e) => {
-        e.preventDefault();
-        showRecovery();
-    });
-
-    // Recovery form submit
-    document.getElementById('recoveryForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const handle = String($('#recoverHandle').val()).trim();
-
-        if (!handle) {
-            return showError(document.getElementById('recoveryError'), messages.handleRequired, true);
-        }
-
-        // Step 1 is visible → send code
-        if (document.getElementById('recoveryStep1').style.display !== 'none') {
-            await sendRecoveryPart1(handle);
+    function hideLoginErrorAfterCredentialChange() {
+        if (lockoutTimer) {
             return;
         }
 
-        // Step 2 is visible → reset password
-        const code = String($('#recoveryCode').val()).trim();
-        const newPassword = String($('#newPassword').val());
-        if (!code) {
-            return showError(document.getElementById('recoveryError'), messages.codeRequired, true);
+        hideError(elements.errorMessage);
+    }
+
+    async function getCsrfToken() {
+        const response = await dependencies.fetch('/csrf-token');
+        const data = await response.json();
+        return data.token;
+    }
+
+    function redirectToHome() {
+        dependencies.redirect(buildHomeRedirectUrl(dependencies.getLocationHref()));
+    }
+
+    function startLockoutCountdown(seconds) {
+        setFormEnabled(false);
+
+        let remaining = seconds;
+        showError(elements.errorMessage, formatLockoutMessage(remaining));
+
+        clearLockoutTimer();
+        lockoutTimer = dependencies.setInterval(() => {
+            remaining--;
+            if (remaining <= 0) {
+                clearLockoutTimer();
+                hideError(elements.errorMessage);
+                setFormEnabled(true);
+            } else {
+                showError(elements.errorMessage, formatLockoutMessage(remaining));
+            }
+        }, 1000);
+    }
+
+    async function performLogin(handle, password) {
+        hideError(elements.errorMessage);
+        setFormEnabled(false);
+
+        const originalText = elements.loginButton.textContent;
+        elements.loginButton.textContent = loginMessages.signingIn;
+
+        try {
+            const response = await dependencies.fetch('/api/users/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken,
+                },
+                body: JSON.stringify({ handle, password }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+
+                if (response.status === 429) {
+                    const retryAfter = parseInt(response.headers.get('Retry-After') || '60', 10);
+                    elements.loginButton.textContent = originalText;
+                    startLockoutCountdown(retryAfter);
+                    return;
+                }
+
+                elements.loginButton.textContent = originalText;
+                setFormEnabled(true);
+                showError(elements.errorMessage, getLoginErrorMessage(errorData.error), true);
+                return;
+            }
+
+            const data = await response.json();
+            if (data.handle) {
+                redirectToHome();
+            }
+        } catch (error) {
+            elements.loginButton.textContent = originalText;
+            setFormEnabled(true);
+            showError(elements.errorMessage, String(error), true);
         }
-        await sendRecoveryPart2(handle, code, newPassword);
-    });
+    }
 
-    // Cancel recovery
-    document.getElementById('cancelRecovery').addEventListener('click', (e) => {
-        e.preventDefault();
-        showLogin();
-    });
+    async function sendRecoveryPart1(handle) {
+        hideError(elements.recoveryError);
 
-    // Enter key from inputs triggers form submit (handled by form submit event)
-})();
+        try {
+            const response = await dependencies.fetch('/api/users/recover-step1', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken,
+                },
+                body: JSON.stringify({ handle }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                showError(elements.recoveryError, getLoginErrorMessage(errorData.error), true);
+                return;
+            }
+
+            elements.recoveryStep1.style.display = 'none';
+            elements.recoveryStep2.style.display = 'block';
+            elements.recoverHandle.disabled = true;
+        } catch (error) {
+            showError(elements.recoveryError, String(error), true);
+        }
+    }
+
+    async function sendRecoveryPart2(handle, code, newPassword) {
+        hideError(elements.recoveryError);
+
+        try {
+            const response = await dependencies.fetch('/api/users/recover-step2', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken,
+                },
+                body: JSON.stringify({ handle, code, newPassword }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                showError(elements.recoveryError, getLoginErrorMessage(errorData.error), true);
+                return;
+            }
+
+            showLogin();
+        } catch (error) {
+            showError(elements.recoveryError, String(error), true);
+        }
+    }
+
+    function showRecovery() {
+        elements.loginCard.style.display = 'none';
+        elements.recoveryCard.style.display = 'block';
+        elements.recoveryStep1.style.display = 'block';
+        elements.recoveryStep2.style.display = 'none';
+        elements.recoverHandle.disabled = false;
+        elements.recoverHandle.value = elements.handle.value;
+        hideError(elements.recoveryError);
+    }
+
+    function showLogin() {
+        elements.recoveryCard.style.display = 'none';
+        elements.loginCard.style.display = 'block';
+        hideError(elements.errorMessage);
+    }
+
+    function togglePasswordVisibility() {
+        const icon = elements.passwordToggle.querySelector('i');
+        const nextState = getPasswordVisibilityState(elements.password.type);
+
+        elements.password.type = nextState.type;
+        if (icon) {
+            icon.className = nextState.iconClassName;
+        }
+        elements.passwordToggle.setAttribute('aria-pressed', nextState.ariaPressed);
+        elements.passwordToggle.setAttribute('aria-label', nextState.ariaLabel);
+    }
+
+    async function init() {
+        dependencies.initAccessibility();
+        csrfToken = await getCsrfToken();
+
+        elements.loginForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const handle = elements.handle.value.trim();
+            const password = elements.password.value;
+            if (!handle) {
+                showError(elements.errorMessage, loginMessages.handleRequired, true);
+                return;
+            }
+            await performLogin(handle, password);
+        }, listenerOptions);
+
+        elements.handle.addEventListener('input', hideLoginErrorAfterCredentialChange, listenerOptions);
+        elements.password.addEventListener('input', hideLoginErrorAfterCredentialChange, listenerOptions);
+
+        elements.passwordToggle.addEventListener('click', togglePasswordVisibility, listenerOptions);
+
+        elements.forgotLink.addEventListener('click', (event) => {
+            event.preventDefault();
+            showRecovery();
+        }, listenerOptions);
+
+        elements.recoveryForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const handle = elements.recoverHandle.value.trim();
+
+            if (!handle) {
+                showError(elements.recoveryError, loginMessages.handleRequired, true);
+                return;
+            }
+
+            const step = getRecoveryStep({
+                step1Display: elements.recoveryStep1.style.display,
+                step2Display: elements.recoveryStep2.style.display,
+            });
+
+            if (step === 1) {
+                await sendRecoveryPart1(handle);
+                return;
+            }
+
+            const code = elements.recoveryCode.value.trim();
+            const newPassword = elements.newPassword.value;
+            if (!code) {
+                showError(elements.recoveryError, loginMessages.codeRequired, true);
+                return;
+            }
+            await sendRecoveryPart2(handle, code, newPassword);
+        }, listenerOptions);
+
+        elements.cancelRecovery.addEventListener('click', (event) => {
+            event.preventDefault();
+            showLogin();
+        }, listenerOptions);
+    }
+
+    function cleanup() {
+        abortController.abort();
+        clearLockoutTimer();
+    }
+
+    return { init, cleanup };
+}
+
+/**
+ * Initializes the login page.
+ * @param {Document|HTMLElement} [root] Root containing login page elements
+ * @param {Partial<typeof defaultDependencies>} [dependencies] Runtime dependency overrides
+ * @returns {Promise<() => void>} Cleanup function
+ */
+export async function initLoginPage(root = document, dependencies = {}) {
+    const controller = createLoginController(root, dependencies);
+    await controller.init();
+    return controller.cleanup;
+}
+
+if (!globalThis.EMBERDESK_LOGIN_TEST_MODE) {
+    await initLoginPage(document);
+}
