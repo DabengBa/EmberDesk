@@ -14,6 +14,7 @@ The boundary covers:
 - the bundled local copy of `N0VI028/JS-Slash-Runner` under `public/scripts/extensions/third-party/JS-Slash-Runner/`
 - the `@sillytavern/*` browser import aliases used by Tavern Helper
 - the event and data shapes that Tavern Helper reads from SillyTavern modules
+- the character list DOM identity contract that frontend slices must preserve for first-party modules and extension-adjacent scripts
 
 This is a compatibility contract, not a request to refactor the extension or regex engine.
 
@@ -32,6 +33,27 @@ Keep these DOM surfaces stable unless a migration plan updates both first-party 
 `#extensionsMenuButton` and `#extensionsMenu` are rendered from `wandButton.html` and `wandMenu.html`, not from static `index.html`.
 
 Tavern Helper currently mounts its Vue panel by appending `#tavern_helper` to `#extensions_settings`.
+
+## Character List DOM Contract
+
+The character library panel is a shared DOM surface for selection, tags, keyboard navigation, bulk edit, and extension-adjacent scripts.
+
+Keep these selectors and identity attributes stable unless a migration plan updates first-party code and compatibility proof together:
+
+- `#rm_characters_block`
+- `#rm_print_characters_block`
+- `.character_select`
+- `.group_select`
+- `.bogus_folder_select`
+- `.character_select[data-chid]`
+- `.character_select[chid]`
+- `id="CharID${chid}"`
+- `.character_selected`
+- `.bulk_select_checkbox`
+- `.tags_inline`
+- `.ch_fav`
+
+`data-chid` is the standard row identity for new code. The legacy `chid` attribute remains a compatibility affordance because existing selectors still use `.character_select[chid="..."]`. New code should not prefer `chid` over `data-chid`.
 
 ## Protected Module Surface
 
@@ -126,3 +148,4 @@ Pop-Location
 ```
 
 This test verifies mount points, Tavern Helper manifest and distributable files, `@sillytavern/*` import resolution, key module exports, event values, and regex placement values.
+It also verifies the generated character-list row identity contract used by character library slices.

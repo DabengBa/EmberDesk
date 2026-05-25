@@ -1108,7 +1108,7 @@ function buildCharacterRowHtml(item, id) {
         tagsHtml += `<span class="tag tag_placeholder"><span class="tag_name">+${tagsSkipped}</span></span>`;
     }
 
-    return `<div class="character_select entity_block flex-container wide100p alignitemsflexstart${isFav ? ' is_fav' : ''}${isActive ? ' is_active' : ''}" data-chid="${id}" id="CharID${id}">
+    return `<div class="character_select entity_block flex-container wide100p alignitemsflexstart${isFav ? ' is_fav' : ''}${isActive ? ' is_active' : ''}" data-chid="${id}" chid="${id}" id="CharID${id}">
                 <div class="avatar" title="[Character] ${escapedName}\nFile: ${escapedAvatar}">
                     <img src="${this_avatar}" alt="${escapedName}" loading="lazy" decoding="async">
                     <i class="ch_fav_icon fa-solid fa-star" aria-hidden="true"></i>

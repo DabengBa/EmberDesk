@@ -179,6 +179,16 @@ describe('third-party extension compatibility boundary', () => {
         expectNamedExports(readPublicFile('scripts', 'extensions', 'regex', 'engine.js'), requiredRegexExports);
     });
 
+    test('keeps generated character list rows compatible with legacy selector contracts', () => {
+        const scriptSource = readPublicFile('script.js');
+
+        expect(scriptSource).toContain('function buildCharacterRowHtml(item, id)');
+        expect(scriptSource).toMatch(/return `<div class="character_select entity_block[^`]+data-chid="\$\{id\}" chid="\$\{id\}" id="CharID\$\{id\}"/);
+        expect(scriptSource).toContain('<input class="ch_fav"');
+        expect(scriptSource).toContain('<div class="tags tags_inline">');
+        expect(scriptSource).toContain("$(document).on('click', '.character_select'");
+    });
+
     test('keeps event emitter methods and event and regex placement values stable for Tavern Helper integrations', async () => {
         const { eventSource, event_types } = await import('../public/scripts/events.js');
         const eventSourceCode = readPublicFile('scripts', 'events.js');

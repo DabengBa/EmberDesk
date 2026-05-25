@@ -332,7 +332,7 @@ The delete flow now also uses a dedicated preflight helper before the delete req
 `public/script.js` now replaces the per-row jQuery `clone()` / `.find()` / `.append()` path in `getCharacterBlock()` with a string-based builder for `type === 'character'` entities.
 
 `buildCharacterRowHtml(item, id)` produces the full character-row HTML string using `escapeHtml` from `public/scripts/utils.js` for all text fields, preserving the same visible summary contract:
-- `data-chid` and `id="CharID${chid}"`
+- `data-chid`, legacy `chid`, and `id="CharID${chid}"`
 - avatar `src`/`alt`/title via `getThumbnailUrl`
 - name text and title
 - `is_fav` row class and `.ch_fav` value
