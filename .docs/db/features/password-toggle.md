@@ -2,22 +2,22 @@
 id: feature.password_toggle
 type: feature
 name: Password Visibility Toggle
-related: [page.login, feature.login_submit]
+related: [page.login, page.setup, feature.login_submit, feature.first_time_setup]
 ---
 
 # Feature: Password Visibility Toggle
 
 ## ID 解释
 
-`feature.password_toggle` represents the small inline control on the login page that lets a user temporarily reveal or hide their password text while typing. It covers the toggle button, the icon change, and the input type switch. It does not affect password storage, authentication, or recovery.
+`feature.password_toggle` represents the small inline control on authentication pages that lets a user temporarily reveal or hide password text while typing. It covers the toggle button, the icon change, and the input type switch on login and setup surfaces. It does not affect password storage, authentication, setup submission, or recovery.
 
 ## Feature Purpose
 
-This feature helps a user verify what they typed before submitting, reducing failed login attempts caused by typos.
+This feature helps a user verify what they typed before submitting, reducing failed login or setup attempts caused by typos.
 
 ## Trigger Entry
 
-- **Primary entry**: press the eye icon button inside the password field.
+- **Primary entry**: press the eye icon button inside a password field.
 
 ## Interaction IDs
 
@@ -41,9 +41,14 @@ This feature helps a user verify what they typed before submitting, reducing fai
 
 ## ID Boundary Notes
 
-This feature is narrow enough to stand alone because the toggle interaction is self-contained and has no side effects on authentication or other login-page behaviors.
+This feature is narrow enough to stand alone because the toggle interaction is self-contained and has no side effects on authentication, setup, or recovery behaviors.
 
 ## Outcomes
 
 - **Reveal**: the user can read their password text and the icon reflects the revealed state.
 - **Hide**: the password text is masked again and the icon reflects the hidden state.
+
+## Code Binding Points
+
+- `getPasswordVisibilityState()` in `public/scripts/login.js` owns the login password toggle state calculation.
+- `getSetupPasswordVisibilityState()` in `public/scripts/setup.js` owns setup password toggle state calculation for password and confirm-password fields.

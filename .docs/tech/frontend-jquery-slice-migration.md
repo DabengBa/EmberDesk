@@ -4,12 +4,15 @@
 
 This document records EmberDesk's repeatable migration pattern for shrinking legacy jQuery page scripts into narrow, testable page controllers.
 
-The first shipped slice is the login page controller:
+The shipped slices are:
 
 - `public/scripts/login.js` - login page behavior, exported helpers, controller initializer, and production auto-init wrapper
 - `public/login.html` - stable login page markup and script host
 - `tests/login-page-controller.test.js` - focused helper and controller regression proof
 - `tests/login.e2e.js` - Playwright proof for user-visible login and recovery behavior
+- `public/scripts/setup.js` - setup page behavior, exported helpers, controller initializer, and production auto-init wrapper
+- `public/setup.html` - stable setup page markup and script host
+- `tests/setup-page-controller.test.js` - focused helper and controller regression proof for `fresh` and `set-password` setup modes
 
 This is not a framework migration. EmberDesk still uses the existing HTML/CSS/jQuery frontend, and this pattern only removes page-local jQuery dependencies when the slice can stay small and independently validated.
 
@@ -39,6 +42,23 @@ The login slice keeps the existing API boundary:
 
 It does not remove the global jQuery script tag from `public/login.html`; that cleanup has a broader compatibility surface than this page-controller extraction.
 
+For the setup page, the controller owns the static DOM surface under `public/setup.html`:
+
+- setup card and setup form
+- handle and display-name fields in `fresh` mode
+- password and confirm-password inputs
+- password visibility toggles
+- setup mode application for the single passwordless-user `set-password` path
+- setup error block
+
+The setup slice keeps the existing API boundary:
+
+- `GET /csrf-token`
+- `GET /api/users/setup-mode`
+- `POST /api/users/setup`
+
+It does not remove the global jQuery script tag from `public/setup.html`; that cleanup has a broader compatibility surface than this page-controller extraction.
+
 ## Core Implementation
 
 `public/scripts/login.js` now follows this shape:
@@ -63,6 +83,8 @@ The exported pure helpers cover behavior that should remain testable without a l
 
 The recovery success behavior now matches the semantic contract: after a successful password reset, the user returns to the login card and must sign in again. The recovery flow does not auto-authenticate.
 
+`public/scripts/setup.js` follows the same shape with `createSetupController(root, dependencies)`, `initSetupPage(root, dependencies)`, `globalThis.EMBERDESK_SETUP_TEST_MODE`, focused setup helper exports, and page-owned listener cleanup.
+
 ## Migration Rules For Future Slices
 
 Use this pattern only for small, bounded frontend surfaces:
@@ -85,6 +107,7 @@ Focused proof for this slice:
 ```powershell
 cd tests
 bun run test:unit -- login-page-controller.test.js --runInBand
+bun run test:unit -- setup-page-controller.test.js --runInBand
 bun run test:e2e -- login.e2e.js
 bun run test:e2e -- sample.e2e.js
 ```
@@ -107,6 +130,8 @@ Semantic IDs:
 - `feature.password_toggle`
 - `feature.password_recovery`
 - `feature.account_lockout`
+- `page.setup`
+- `feature.first_time_setup`
 
 Stable binding points:
 
@@ -114,8 +139,13 @@ Stable binding points:
 - `createLoginController()` in `public/scripts/login.js`
 - `globalThis.EMBERDESK_LOGIN_TEST_MODE` import guard in `public/scripts/login.js`
 - login page markup IDs in `public/login.html`
+- `initSetupPage()` in `public/scripts/setup.js`
+- `createSetupController()` in `public/scripts/setup.js`
+- `globalThis.EMBERDESK_SETUP_TEST_MODE` import guard in `public/scripts/setup.js`
+- setup page markup IDs in `public/setup.html`
 
 Related docs:
 
 - [Login Page](../db/pages/login.md)
+- [Setup Page](../db/pages/setup.md)
 - [Password Recovery](../db/features/password-recovery.md)
