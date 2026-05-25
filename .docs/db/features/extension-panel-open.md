@@ -2,7 +2,7 @@
 id: feature.extension_panel_open
 type: feature
 name: Extensions Panel Open
-related: [page.chat_workspace]
+related: [page.chat_workspace, term.shared_browser_library]
 ---
 
 # Feature: Extensions Panel Open
@@ -37,6 +37,7 @@ This feature allows users to access extension controls without forcing the whole
 
 - Extension loading should not keep the entire workspace blocked.
 - A loading failure must not leave the user with a permanent spinner and no next action.
+- ES-module extensions should treat [Shared Browser Library](term.shared_browser_library) as the stable source for documented common browser utilities.
 - This feature describes the visible panel behavior, not extension activation internals.
 
 ## ID Boundary Notes

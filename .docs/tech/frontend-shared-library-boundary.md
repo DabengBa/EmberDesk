@@ -22,6 +22,13 @@ Browser ES modules do not automatically leak imported names to `window`. Any glo
 
 Webpack remains the bundler for this boundary. It is currently scoped to `public/lib.js` and emits module output with `experiments.outputModule` and `libraryTarget: 'module'`.
 
+The same source file is also imported directly by Node/Jest tests. Dependency export interop therefore has to work in two environments:
+
+- Webpack's browser module build, where packages such as `slidetoggle` can expose ESM-style named exports.
+- Node's direct source import path, where a CommonJS package can appear under `default`, `slidetoggle`, or `module.exports`.
+
+This dual boundary is intentional and recorded in [ADR-0006](../adr/0006-preserve-dual-libjs-source-and-bundled-boundary.md).
+
 ## Module Export Contract
 
 The default export object and named exports are expected to expose the same keys:
@@ -60,6 +67,17 @@ import { DOMPurify, Fuse, gzip } from '../lib.js';
 
 Use absolute `/lib.js` imports only where the existing module location already follows that style or where relative paths would be brittle.
 
+### `slideToggle` interop rule
+
+`slideToggle` is exported as a named value and as `default.slideToggle`. It currently resolves from the imported `slidetoggle` namespace in this order:
+
+1. `toggle`
+2. `default.toggle`
+3. `slidetoggle.toggle`
+4. `module.exports.toggle`
+
+Fallback containers are read with `Reflect.get()` so Webpack does not treat Node-only CommonJS fallback names as required static exports. The documented boundary is that source imports and bundled output both expose a callable `slideToggle` function.
+
 ## Legacy Global Shim Contract
 
 `initLibraryShims()` installs the following globals when they are absent:
@@ -95,13 +113,19 @@ Removing a global requires a deprecation cycle and extension-facing migration no
 Focused boundary proof:
 
 ```powershell
-npm run test:unit -- frontend-shared-library-boundary.test.js --runInBand
+bun run test:unit -- frontend-shared-library-boundary.test.js --runInBand
 ```
 
 Touched-file lint:
 
 ```powershell
-npx eslint public/lib.js tests/frontend-shared-library-boundary.test.js
+bunx eslint public/lib.js tests/frontend-shared-library-boundary.test.js
+```
+
+Logic-description proof:
+
+```powershell
+uv run python .docs/logic-description/frontend_shared_library_boundary_sandbox_proof.py
 ```
 
 Docs check:
@@ -112,14 +136,18 @@ npm run docs:check
 
 ## Related Semantic IDs And Code Binding Points
 
-This boundary has no user-facing semantic ID. It supports the browser shell and extension surfaces described by:
+This boundary supports the browser shell and extension surfaces described by:
 
 - `page.chat_workspace`
 - `feature.extension_panel_open`
+- `term.shared_browser_library`
 
 Stability-sensitive binding points:
 
 - `initLibraryShims()` in `public/lib.js`
 - `initLibraryShims()` call during `public/script.js` startup
+- `slideToggle` resolver in `public/lib.js`
 - `getPublicLibConfig()` in `webpack.config.js`
 - `getWebpackServeMiddleware()` in `src/middleware/webpack-serve.js`
+
+Current processing rules are documented in [Frontend Shared Library Boundary Processing Flow](../logic-description/frontend_shared_library_boundary_processing_flow.md).

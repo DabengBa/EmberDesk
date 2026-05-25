@@ -26,7 +26,10 @@ import * as chevrotain from 'chevrotain';
 import { gzipSync, gzip } from 'fflate';
 import { sha256 } from 'js-sha256';
 
-const { toggle: slideToggle } = slideTogglePackage;
+const slideToggle = slideTogglePackage.toggle
+    ?? Reflect.get(slideTogglePackage, 'default')?.toggle
+    ?? Reflect.get(slideTogglePackage, 'slidetoggle')?.toggle
+    ?? Reflect.get(slideTogglePackage, 'module.exports')?.toggle;
 
 /**
  * Expose the libraries to the 'window' object.

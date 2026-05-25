@@ -3,7 +3,7 @@ id: page.chat_workspace
 type: page
 name: Chat Workspace
 route: /
-related: [feature.startup_bootstrap, feature.character_library_panel, feature.character_delete, feature.background_library_panel, feature.extension_panel_open, term.character_card, page.login]
+related: [feature.startup_bootstrap, feature.character_library_panel, feature.character_delete, feature.background_library_panel, feature.extension_panel_open, term.character_card, term.shared_browser_library, page.login]
 ---
 
 # Page: Chat Workspace
@@ -32,6 +32,7 @@ This page exists so a user can run their daily LLM workflow from one browser sur
 - `feature.background_library_panel`: opening and refreshing the background library inside the workspace.
 - `feature.extension_panel_open`: opening the extensions surface and handling its loading state.
 - `term.character_card`: the core object users browse and operate on in the character library.
+- `term.shared_browser_library`: the stable browser utility surface used by first-party modules and ES-module extensions.
 
 ## Included Features
 
@@ -49,6 +50,7 @@ This page exists so a user can run their daily LLM workflow from one browser sur
 - **Thumbnail paint state**: avatar-heavy list surfaces can show a theme-tinted placeholder on the image box before thumbnail pixels fully paint, reducing harsh flashes without changing the page flow.
 - **Thumbnail cache state**: newly regenerated JPEG thumbnails only pick up the lower shipped default after two separate conditions are satisfied where relevant: an existing install with an explicit `thumbnails.quality` override must first change or remove that config value, and already-cached thumbnail files must still be cleared before regeneration can produce lower-quality replacements.
 - **Post-write thumbnail warm state**: after character-avatar or persona-image writes succeed, EmberDesk can kick off best-effort thumbnail pregeneration in the background so the next normal workspace revisit is less likely to stall on first thumbnail generation; if that background work fails, the existing on-demand thumbnail route still remains the fallback.
+- **Shared-library state**: the workspace loads a shared browser library during startup so first-party modules and compatible extensions can use documented imports and legacy globals without each surface bundling its own copy.
 
 ## Navigation
 

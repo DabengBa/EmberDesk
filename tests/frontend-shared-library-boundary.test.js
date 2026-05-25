@@ -142,6 +142,7 @@ describe('frontend shared library boundary', () => {
             expect(lib).toHaveProperty(exportName);
             expect(lib.default[exportName]).toBe(lib[exportName]);
         }
+        expect(lib.slideToggle).toEqual(expect.any(Function));
     });
 
     test('installs documented legacy globals without clobbering existing values', async () => {

@@ -50,6 +50,7 @@ Key module structure within `src/`:
   - `plugin-updater.js` — standalone git auto-update for repo-backed plugins
 - `server-main.js` — boot pipeline coordinator with six sequenced phases (see [server-startup-orchestration](tech/server-startup-orchestration.md))
 - `server-startup.js` — transport layer: IP detection, HTTP/HTTPS creation, listen failure handling
+- `public/lib.js` — browser shared-library boundary for first-party modules and extensions; it preserves both source imports and bundled `/lib.js` output (see [frontend-shared-library-boundary](tech/frontend-shared-library-boundary.md) and [ADR-0006](adr/0006-preserve-dual-libjs-source-and-bundled-boundary.md))
 
 The project still carries substantial upstream SillyTavern structure. EmberDesk is in a transition stage, not a clean-room rewrite.
 
@@ -62,6 +63,7 @@ EmberDesk currently provides:
 - chat history storage and recovery
 - world info / lorebook workflows
 - background and extension surfaces inside the main shell
+- a documented shared browser library for common frontend utilities and extension compatibility
 - Docker-friendly deployment and browser access across devices
 - focused startup and interaction performance work for daily-use paths
 
@@ -87,6 +89,7 @@ EmberDesk does not currently aim to:
 - Prefer deletion, narrowing, or derived-state acceleration before adding new core systems.
 - Keep migrations incremental and reversible where practical.
 - Separate user-facing product semantics from implementation notes.
+- Keep `/lib.js` compatibility decisions centralized in `public/lib.js` and its boundary tests.
 - Validate performance claims with repeatable tooling and browser evidence.
 - Do not let internal caches or indexes become the canonical user-data source by accident.
 - Keep derived caches scoped to proven hot paths; do not broaden them into general persistence without clear user-visible ROI.
