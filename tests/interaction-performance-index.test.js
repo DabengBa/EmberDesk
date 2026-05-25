@@ -27,6 +27,8 @@ import {
     resolveCharacterAvatarsByIds,
 } from '../public/scripts/character-list-state.js';
 
+const repoRoot = fileURLToPath(new URL('..', import.meta.url));
+
 /**
  * @param {string} prefix
  * @returns {{root: string, characters: string, chats: string}}
@@ -270,7 +272,7 @@ function createMockResponse(statusCode = 200) {
 }
 
 test('frontend getCharacters implementation uses /api/characters/all to preserve eager payload mode', () => {
-    const scriptSource = fs.readFileSync(path.join(process.cwd(), 'public', 'script.js'), 'utf8');
+    const scriptSource = fs.readFileSync(path.join(repoRoot, 'public', 'script.js'), 'utf8');
     const getCharactersStart = scriptSource.indexOf('export async function getCharacters()');
 
     expect(getCharactersStart).toBeGreaterThanOrEqual(0);

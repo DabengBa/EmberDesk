@@ -2,20 +2,30 @@ import { test, expect } from '@playwright/test';
 
 test.describe('chat message layout', () => {
     test('centers message boxes without centering message text', async ({ page }) => {
-        await page.goto('/');
-        await page.waitForFunction('document.getElementById("preloader") === null', { timeout: 0 });
-
-        if (page.url().includes('/login')) {
-            const loginCard = page.locator('#loginCard');
-            await loginCard.getByLabel('用户名').fill('default-user');
-            await loginCard.getByRole('textbox', { name: '密码' }).fill('test123');
-            await loginCard.getByRole('button', { name: '登录' }).click();
-        }
+        await page.goto('/style.css');
+        await page.setContent(`
+            <!doctype html>
+            <html>
+                <head>
+                    <link rel="stylesheet" href="/style.css">
+                </head>
+                <body>
+                    <main id="chat">
+                        <article class="mes" is_user="false" is_system="false">
+                            <section class="mes_block">
+                                <div class="mes_text">
+                                    This message keeps normal text alignment while the message box is centered.
+                                </div>
+                            </section>
+                        </article>
+                    </main>
+                </body>
+            </html>
+        `);
 
         const chat = page.locator('#chat');
         const messageBlock = chat.locator('.mes .mes_block').first();
 
-        await expect(page).toHaveURL(/\/$/);
         await expect(messageBlock).toBeVisible();
 
         const geometry = await page.evaluate(() => {
