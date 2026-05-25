@@ -117,6 +117,7 @@
         "init": "node src/server-init.js",
         "test": "bun run --cwd tests test:unit",
         "test:unit": "bun run --cwd tests test:unit",
+        "test:compat": "bun run --cwd tests test:unit -- third-party-extension-compatibility.test.js --runInBand",
         "test:e2e": "bun run --cwd tests test:e2e",
         "start": "node server.js",
         "debug": "node --inspect server.js",

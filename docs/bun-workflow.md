@@ -21,9 +21,12 @@ Use Bun for local install and task execution:
 bun ci
 bun run docs:build
 bun run test:unit
+bun run test:compat
 bun run test:e2e
 Push-Location tests; bun ci; Pop-Location
 ```
+
+Use `bun run test:compat` before and after frontend jQuery slices that must preserve regex and Tavern Helper / JS-Slash-Runner compatibility. It delegates to the focused Jest proof in the `tests` package and is a compatibility gate, not a replacement for slice-specific tests.
 
 Docker and release install verification also use Bun:
 
