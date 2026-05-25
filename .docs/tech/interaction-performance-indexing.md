@@ -316,6 +316,10 @@ Instead it now:
 
 This preserves the existing chat reset semantics while avoiding a second full character-list request in the delete success path.
 
+The delete flow also cancels `saveCharacterDebounced` at the start of `deleteCharacter()`. This prevents a pending delayed edit save from submitting after the user has already committed a destructive delete.
+
+Character edit completion now guards the post-save refresh with `shouldRefreshCharacterAfterEdit(characters, editedAvatar)`. The refresh only runs when the submitted avatar key is still a non-empty string and still exists in the local `characters` array. If a delete already removed that avatar locally, the edit response returns without calling `getOneCharacter()`, so stale edit completion cannot reinsert the deleted card into the visible list.
+
 The delete flow now also uses a dedicated preflight helper before the delete request:
 
 - `closeCurrentChatForDelete()` reuses the existing save/generation guards and low-level chat cleanup
@@ -368,6 +372,11 @@ Stability-sensitive binding points:
 - `performance.lazyLoadCharacters`
 - `<user root>/_cache/character-index.sqlite`
 - `SCHEMA_VERSION` in `src/endpoints/character-index.js`
+- `removeCharactersFromState()` in `public/scripts/character-list-state.js`
+- `shouldRefreshCharacterAfterEdit()` in `public/scripts/character-list-state.js`
+- `cancelDebounce(saveCharacterDebounced)` at the start of `deleteCharacter()`
+
+Current client-side state rules are documented in [Character List State Processing Flow](../logic-description/character_list_state_processing_flow.md).
 
 ## Performance And Caching
 

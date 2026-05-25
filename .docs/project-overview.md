@@ -39,7 +39,7 @@ Current architectural boundaries:
 - `.docs/tech/` owns implementation and architecture notes
 - `.docs/db/` owns user-facing semantic product docs for pages, features, and terms
 
-Key module structure within `src/`:
+Key module structure:
 
 - `users.js` — barrel re-export plus middleware, routes, backup, security verification. Delegates to:
   - `user-storage.js` — `node-persist` CRUD, lazy `getEnableAccounts()` config read
@@ -66,6 +66,7 @@ EmberDesk currently provides:
 - a documented shared browser library for common frontend utilities and extension compatibility
 - Docker-friendly deployment and browser access across devices
 - focused startup and interaction performance work for daily-use paths
+- client-side character-list consistency guards so delayed edit/save responses do not undo confirmed deletion actions
 
 Current derived-cache scope is intentionally narrow:
 
@@ -93,6 +94,7 @@ EmberDesk does not currently aim to:
 - Validate performance claims with repeatable tooling and browser evidence.
 - Do not let internal caches or indexes become the canonical user-data source by accident.
 - Keep derived caches scoped to proven hot paths; do not broaden them into general persistence without clear user-visible ROI.
+- Treat client-side derived lists as disposable views over canonical files; after destructive actions, stale delayed responses must not restore removed rows.
 
 ## One-Line Summary
 

@@ -139,6 +139,7 @@ import {
     clamp,
     shakeElement,
     createTimeout,
+    cancelDebounce,
 } from './scripts/utils.js';
 import { debounce_timeout, GENERATION_TYPE_TRIGGERS, IGNORE_SYMBOL, inject_ids, MEDIA_DISPLAY, MEDIA_SOURCE, MEDIA_TYPE, OVERSWIPE_BEHAVIOR, SCROLL_BEHAVIOR, SWIPE_DIRECTION, SWIPE_SOURCE, SWIPE_STATE } from './scripts/constants.js';
 
@@ -245,7 +246,7 @@ import { addChatBackupsBrowser } from './scripts/chat-backups.js';
 import { onboardingExperimentalMacroEngine } from './scripts/macros/engine/MacroDiagnostics.js';
 import { compressRequest, setRequestCompressionConfig } from './scripts/request-compression.js';
 import { canJumpToSwipeForMessage, canOpenSwipePickerForMessage, initSwipePicker } from './scripts/swipe-picker.js';
-import { getCharacterDeleteCandidates, removeCharactersFromState } from './scripts/character-list-state.js';
+import { getCharacterDeleteCandidates, removeCharactersFromState, shouldRefreshCharacterAfterEdit } from './scripts/character-list-state.js';
 import { runDeleteCharacterClosePreflight } from './scripts/delete-character-preflight.js';
 
 // API OBJECT FOR EXTERNAL WIRING
@@ -9771,7 +9772,12 @@ export async function createOrEditCharacter(e) {
                 throw new Error('Fetch result is not ok');
             }
 
-            await getOneCharacter(formData.get('avatar_url'));
+            const editedAvatar = formData.get('avatar_url');
+            if (!shouldRefreshCharacterAfterEdit(characters, editedAvatar)) {
+                return;
+            }
+
+            await getOneCharacter(editedAvatar);
             favsToHotswap(); // Update fav state
 
             $('#add_avatar_button').replaceWith(
@@ -10779,6 +10785,7 @@ export async function handleDeleteCharacter(this_chid, delete_chats) {
  */
 export async function deleteCharacter(characterKey, { deleteChats = true, deleteWorlds, clearWorldReferences } = {}) {
     const deleteFlowStartedAt = performance.now();
+    cancelDebounce(saveCharacterDebounced);
     if (!Array.isArray(characterKey)) {
         characterKey = [characterKey];
     }

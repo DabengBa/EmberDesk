@@ -22,6 +22,7 @@ import encodePngChunks from '../src/png/encode.js';
 import { setConfigFilePath } from '../src/util.js';
 import {
     getCharacterDeleteCandidates,
+    shouldRefreshCharacterAfterEdit,
     removeCharactersFromState,
     resolveCharacterAvatarsByIds,
 } from '../public/scripts/character-list-state.js';
@@ -677,6 +678,18 @@ describe('character index', () => {
             { avatar: 'beta.png', character: null, index: -1 },
             { avatar: 'gamma.png', character: { avatar: 'gamma.png', name: 'Gamma' }, index: 1 },
         ]);
+    });
+
+    test('does not refresh an edited character after it was removed locally', () => {
+        const characters = [
+            { avatar: 'alpha.png', name: 'Alpha' },
+            { avatar: 'beta.png', name: 'Beta' },
+        ];
+
+        removeCharactersFromState(characters, ['beta.png']);
+
+        expect(shouldRefreshCharacterAfterEdit(characters, 'beta.png')).toBe(false);
+        expect(shouldRefreshCharacterAfterEdit(characters, 'alpha.png')).toBe(true);
     });
 
     test('serves /api/characters/get from a fresh indexed full payload without reparsing the avatar file', async () => {

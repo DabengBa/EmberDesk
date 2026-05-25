@@ -43,6 +43,7 @@ This feature lets users work with large character libraries without leaving the 
 - List-style avatar surfaces in the library flow may use native browser lazy-loading and async decoding so offscreen thumbnails do less upfront work without changing the card-selection flow.
 - Those same list-style avatar images now also paint a themed placeholder background on the `<img>` surface, reducing stark white or transparent flashes while thumbnails are still loading or decoding.
 - When a character card image is newly created, imported, duplicated, edited, or overwritten, EmberDesk now starts best-effort avatar thumbnail pregeneration immediately after the canonical write succeeds so the next ordinary library open is more likely to hit a ready file instead of triggering first-read thumbnail work.
+- If a delayed edit response targets a card that has already been deleted from the local library, EmberDesk skips refreshing that row so the visible list stays aligned with the user's delete action.
 - Browsing and selecting cards belong to this feature; destructive removal belongs to [Delete Character](feature.character_delete).
 
 ## ID Boundary Notes

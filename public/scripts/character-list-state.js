@@ -54,3 +54,16 @@ export function removeCharactersFromState(characters, avatars) {
 
     return removed;
 }
+
+/**
+ * Checks whether a character edit response should refresh the local character list entry.
+ *
+ * @param {Array<{avatar?: string}>} characters
+ * @param {FormDataEntryValue|null} avatar
+ * @returns {boolean}
+ */
+export function shouldRefreshCharacterAfterEdit(characters, avatar) {
+    return typeof avatar === 'string'
+        && avatar.length > 0
+        && characters.some(character => character?.avatar === avatar);
+}
