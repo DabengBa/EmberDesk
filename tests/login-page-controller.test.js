@@ -1,18 +1,18 @@
 import { describe, test, expect, afterEach, jest } from '@jest/globals';
 
-const originalLoginTestMode = globalThis.EMBERDESK_LOGIN_TEST_MODE;
+const originalLoginTestMode = global.EMBERDESK_LOGIN_TEST_MODE;
 
 async function importFreshLoginModule() {
-    globalThis.EMBERDESK_LOGIN_TEST_MODE = true;
+    global.EMBERDESK_LOGIN_TEST_MODE = true;
     return import(`../public/scripts/login.js?cacheBust=${Date.now()}-${Math.random()}`);
 }
 
 describe('login page controller helpers', () => {
     afterEach(() => {
         if (originalLoginTestMode === undefined) {
-            delete globalThis.EMBERDESK_LOGIN_TEST_MODE;
+            delete global.EMBERDESK_LOGIN_TEST_MODE;
         } else {
-            globalThis.EMBERDESK_LOGIN_TEST_MODE = originalLoginTestMode;
+            global.EMBERDESK_LOGIN_TEST_MODE = originalLoginTestMode;
         }
     });
 

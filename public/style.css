@@ -1241,6 +1241,7 @@ body .panelControlBar {
 .mes {
     display: flex;
     align-items: flex-start;
+    justify-content: center;
     padding: 5px;
     margin-top: 0;
     width: 100%;
@@ -1625,9 +1626,10 @@ body.hideAllSwipeButtons :is(.swipe_left, .swipe_right),
 
 .mes_block {
     padding-top: 0;
-    width: 100%;
+    width: min(100%, 74ch);
     overflow: hidden;
     min-width: 0;
+    flex: 0 1 auto;
 }
 
 .mes_text,

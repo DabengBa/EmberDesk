@@ -62,6 +62,7 @@ Use concise, descriptive commit messages. Prefix with a category when relevant:
 - `default/` holds default configuration and scaffold files.
 - The frontend is jQuery-based with no SPA framework. Be cautious with frontend changes.
 - Long-form upgrade plans live under `docs/specs/`; keep this file as a concise index.
+- Shared runtime environment notes, including the remote test server, live in `docs/environments.md`.
 - Bun install, CI, Docker, and release workflow notes live in `docs/bun-workflow.md`.
 - Regex and Tavern Helper compatibility boundaries live in `docs/third-party-extension-compatibility.md`.
 
@@ -71,4 +72,3 @@ Use concise, descriptive commit messages. Prefix with a category when relevant:
 - Do not modify the `release` branch directly.
 - Do not add dependencies without justification.
 - Do not change the license.
-
