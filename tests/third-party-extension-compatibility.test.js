@@ -64,6 +64,25 @@ function readPublicFile(...segments) {
     return fs.readFileSync(path.join(publicRoot, ...segments), 'utf8');
 }
 
+function extractFunctionSource(source, functionName) {
+    const functionStart = source.indexOf(`function ${functionName}`);
+    expect(functionStart).toBeGreaterThanOrEqual(0);
+
+    const bodyStart = source.indexOf('{', functionStart);
+    expect(bodyStart).toBeGreaterThanOrEqual(0);
+
+    let depth = 0;
+    for (let i = bodyStart; i < source.length; i++) {
+        if (source[i] === '{') depth++;
+        if (source[i] === '}') depth--;
+        if (depth === 0) {
+            return source.slice(functionStart, i + 1);
+        }
+    }
+
+    throw new Error(`Could not extract function source for ${functionName}`);
+}
+
 function listSourceFiles(root) {
     const entries = fs.readdirSync(root, { withFileTypes: true });
     return entries.flatMap((entry) => {
@@ -181,12 +200,20 @@ describe('third-party extension compatibility boundary', () => {
 
     test('keeps generated character list rows compatible with legacy selector contracts', () => {
         const scriptSource = readPublicFile('script.js');
+        const rowSource = extractFunctionSource(scriptSource, 'buildCharacterRowHtml');
+        const bulkEditSource = readPublicFile('scripts', 'bulk-edit.js');
+        const enableBulkSelectSource = extractFunctionSource(bulkEditSource, 'enableBulkSelect');
+        const disableBulkSelectSource = extractFunctionSource(bulkEditSource, 'disableBulkSelect');
 
-        expect(scriptSource).toContain('function buildCharacterRowHtml(item, id)');
-        expect(scriptSource).toMatch(/return `<div class="character_select entity_block[^`]+data-chid="\$\{id\}" chid="\$\{id\}" id="CharID\$\{id\}"/);
-        expect(scriptSource).toContain('<input class="ch_fav"');
-        expect(scriptSource).toContain('<div class="tags tags_inline">');
+        expect(rowSource).toMatch(/return `<div class="character_select entity_block flex-container wide100p alignitemsflexstart\$\{isFav \? ' is_fav' : ''\}\$\{isActive \? ' is_active' : ''\}" data-chid="\$\{id\}" chid="\$\{id\}" id="CharID\$\{id\}">/);
+        expect(rowSource).toMatch(/const isFav = item\.fav \|\| item\.fav == 'true';/);
+        expect(rowSource).toMatch(/<input class="ch_fav" value="\$\{isFav\}" hidden \/>/);
+        expect(rowSource).toMatch(/<div class="tags tags_inline">\$\{tagsHtml\}<\/div>/);
+        expect(rowSource).toMatch(/tagsHtml \+= `<span class="tag tag_placeholder"><span class="tag_name">\+\$\{tagsSkipped\}<\/span><\/span>`;/);
         expect(scriptSource).toContain("$(document).on('click', '.character_select'");
+        expect(enableBulkSelectSource).toMatch(/\$\(\'#rm_print_characters_block \.character_select\'\)\.each/);
+        expect(enableBulkSelectSource).toMatch(/const checkbox = \$\('<input type=\\'checkbox\\' class=\\'bulk_select_checkbox\\'>'\);/);
+        expect(disableBulkSelectSource).toContain("$('.bulk_select_checkbox').remove()");
     });
 
     test('keeps event emitter methods and event and regex placement values stable for Tavern Helper integrations', async () => {
