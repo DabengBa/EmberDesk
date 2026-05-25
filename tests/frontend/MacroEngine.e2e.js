@@ -494,7 +494,7 @@ test.describe('MacroEngine', () => {
             // Register a temporary macro with explicit list bounds: exactly 1 required + 1-2 list args
             await page.evaluate(async () => {
                 /** @type {import('../../public/scripts/macros/engine/MacroRegistry.js')} */
-                const { MacroRegistry } = await import('./scripts/macros/engine/MacroRegistry.js');
+                const { MacroRegistry } = await import('/scripts/macros/engine/MacroRegistry.js');
 
                 MacroRegistry.unregisterMacro('test-list-bounds');
                 MacroRegistry.registerMacro('test-list-bounds', {
@@ -542,7 +542,7 @@ test.describe('MacroEngine', () => {
 
             await page.evaluate(async () => {
                 /** @type {import('../../public/scripts/macros/engine/MacroRegistry.js')} */
-                const { MacroRegistry } = await import('./scripts/macros/engine/MacroRegistry.js');
+                const { MacroRegistry } = await import('/scripts/macros/engine/MacroRegistry.js');
 
                 MacroRegistry.unregisterMacro('test-int-strict');
                 MacroRegistry.registerMacro('test-int-strict', {
@@ -576,7 +576,7 @@ test.describe('MacroEngine', () => {
 
             await page.evaluate(async () => {
                 /** @type {import('../../public/scripts/macros/engine/MacroRegistry.js')} */
-                const { MacroRegistry } = await import('./scripts/macros/engine/MacroRegistry.js');
+                const { MacroRegistry } = await import('/scripts/macros/engine/MacroRegistry.js');
 
                 MacroRegistry.unregisterMacro('test-int-nonstrict');
                 MacroRegistry.registerMacro('test-int-nonstrict', {
@@ -607,11 +607,11 @@ test.describe('MacroEngine', () => {
 
             const output = await page.evaluate(async ({ input, originalContent }) => {
                 /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                 /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
                 /** @type {import('../../public/scripts/macros/engine/MacroRegistry.js')} */
-                const { MacroRegistry } = await import('./scripts/macros/engine/MacroRegistry.js');
+                const { MacroRegistry } = await import('/scripts/macros/engine/MacroRegistry.js');
 
                 MacroRegistry.unregisterMacro('env-content');
                 MacroRegistry.registerMacro('env-content', {
@@ -645,13 +645,13 @@ test.describe('MacroEngine', () => {
         async function registerTestablePick(page) {
             await page.evaluate(async () => {
                 /** @type {import('../../public/scripts/macros/engine/MacroRegistry.js')} */
-                const { MacroRegistry, MacroCategory } = await import('./scripts/macros/engine/MacroRegistry.js');
+                const { MacroRegistry, MacroCategory } = await import('/scripts/macros/engine/MacroRegistry.js');
                 /** @type {import('../../public/scripts/utils.js')} */
-                const { getStringHash } = await import('./scripts/utils.js');
+                const { getStringHash } = await import('/scripts/utils.js');
                 /** @type {import('../../public/script.js')} */
-                const { chat_metadata } = await import('./script.js');
+                const { chat_metadata } = await import('/script.js');
                 /** @type {import('../../public/lib.js')} */
-                const { seedrandom } = await import('./lib.js');
+                const { seedrandom } = await import('/lib.js');
 
                 // Only register once
                 if (MacroRegistry.getMacro('testablePick')) return;
@@ -680,7 +680,7 @@ test.describe('MacroEngine', () => {
             // Set consistent chat ID hash for all tests
             await page.evaluate(async (hash) => {
                 /** @type {import('../../public/script.js')} */
-                const { chat_metadata } = await import('./script.js');
+                const { chat_metadata } = await import('/script.js');
                 chat_metadata.chat_id_hash = hash;
             }, TEST_CHAT_ID_HASH);
         });
@@ -712,9 +712,9 @@ test.describe('MacroEngine', () => {
 
             const output = await page.evaluate(async () => {
                 /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                 /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
 
                 const input = '{{testablePick::A::B::C}}###{{testablePick::A::B::C}}';
                 const env = MacroEnvBuilder.buildFromRawEnv({ content: input });
@@ -747,9 +747,9 @@ test.describe('MacroEngine', () => {
             // Key regression test: picks inside scoped content must use global offsets
             const output = await page.evaluate(async () => {
                 /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                 /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
 
                 // Two identical pick macros inside different setvar scopes
                 // Before the fix, both would get startOffset=0 relative to their argument
@@ -776,9 +776,9 @@ test.describe('MacroEngine', () => {
 
             const output = await page.evaluate(async () => {
                 /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                 /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
 
                 // Two identical pick macros inside different setvar inline arguments
                 const input = '{{setvar::first::{{testablePick::A::B::C}}}}{{setvar::second::{{testablePick::A::B::C}}}}{{.first}}###{{.second}}';
@@ -802,9 +802,9 @@ test.describe('MacroEngine', () => {
             // Picks inside scoped content should still be deterministic (same result each time)
             const outputs = await page.evaluate(async () => {
                 /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                 /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
 
                 const input = '{{setvar::val}}{{pick::X::Y::Z}}{{/setvar}}{{.val}}';
                 const env1 = MacroEnvBuilder.buildFromRawEnv({ content: input });
@@ -827,9 +827,9 @@ test.describe('MacroEngine', () => {
             // This tests the fix for macros with delayArgResolution that call resolve() internally
             const output = await page.evaluate(async () => {
                 /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                 /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
 
                 // Two identical pick macros inside different if blocks
                 // Before the fix, both would get contextOffset=0 when resolve() was called
@@ -855,9 +855,9 @@ test.describe('MacroEngine', () => {
             // Picks inside if blocks should still be deterministic
             const outputs = await page.evaluate(async () => {
                 /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                 /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
 
                 const input = '{{if true}}{{pick::X::Y::Z}}{{/if}}';
                 const env1 = MacroEnvBuilder.buildFromRawEnv({ content: input });
@@ -879,9 +879,9 @@ test.describe('MacroEngine', () => {
             test('should resolve dynamic macro with string value', async ({ page }) => {
                 const output = await page.evaluate(async () => {
                     /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                    const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                    const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                     /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                    const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                    const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
 
                     const rawEnv = {
                         content: 'Test: {{myvalue}}',
@@ -899,9 +899,9 @@ test.describe('MacroEngine', () => {
             test('should resolve dynamic macro with numeric value converted to string', async ({ page }) => {
                 const output = await page.evaluate(async () => {
                     /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                    const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                    const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                     /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                    const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                    const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
 
                     const rawEnv = {
                         content: '',
@@ -925,9 +925,9 @@ test.describe('MacroEngine', () => {
                 const input = 'Dyn: {{myvalue::extra}}';
                 const output = await page.evaluate(async (input) => {
                     /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                    const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                    const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                     /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                    const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                    const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
 
                     const rawEnv = {
                         content: input,
@@ -946,9 +946,9 @@ test.describe('MacroEngine', () => {
             test('should resolve dynamic macro with handler function', async ({ page }) => {
                 const output = await page.evaluate(async () => {
                     /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                    const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                    const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                     /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                    const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                    const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
 
                     const rawEnv = {
                         content: '',
@@ -966,9 +966,9 @@ test.describe('MacroEngine', () => {
             test('should pass execution context to handler function', async ({ page }) => {
                 const output = await page.evaluate(async () => {
                     /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                    const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                    const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                     /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                    const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                    const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
 
                     const rawEnv = {
                         content: 'full content here',
@@ -992,9 +992,9 @@ test.describe('MacroEngine', () => {
                 const input = 'Dyn: {{dyn::extra}}';
                 const output = await page.evaluate(async (input) => {
                     /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                    const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                    const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                     /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                    const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                    const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
 
                     const rawEnv = {
                         content: input,
@@ -1015,9 +1015,9 @@ test.describe('MacroEngine', () => {
             test('should resolve dynamic macro with MacroDefinitionOptions', async ({ page }) => {
                 const output = await page.evaluate(async () => {
                     /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                    const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                    const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                     /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                    const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                    const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
 
                     const rawEnv = {
                         content: '',
@@ -1038,9 +1038,9 @@ test.describe('MacroEngine', () => {
             test('should support unnamed arguments in dynamic macro with options', async ({ page }) => {
                 const output = await page.evaluate(async () => {
                     /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                    const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                    const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                     /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                    const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                    const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
 
                     const rawEnv = {
                         content: '',
@@ -1061,9 +1061,9 @@ test.describe('MacroEngine', () => {
             test('should support multiple unnamed arguments in dynamic macro', async ({ page }) => {
                 const output = await page.evaluate(async () => {
                     /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                    const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                    const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                     /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                    const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                    const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
 
                     const rawEnv = {
                         content: '',
@@ -1088,9 +1088,9 @@ test.describe('MacroEngine', () => {
             test('should support optional arguments in dynamic macro', async ({ page }) => {
                 const output = await page.evaluate(async () => {
                     /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                    const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                    const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                     /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                    const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                    const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
 
                     const rawEnv = {
                         content: '',
@@ -1118,9 +1118,9 @@ test.describe('MacroEngine', () => {
             test('should support list arguments in dynamic macro', async ({ page }) => {
                 const output = await page.evaluate(async () => {
                     /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                    const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                    const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                     /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                    const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                    const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
 
                     const rawEnv = {
                         content: '',
@@ -1148,9 +1148,9 @@ test.describe('MacroEngine', () => {
                 const input = '{{calc::abc}}';
                 const output = await page.evaluate(async (input) => {
                     /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                    const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                    const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                     /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                    const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                    const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
 
                     const rawEnv = {
                         content: input,
@@ -1178,9 +1178,9 @@ test.describe('MacroEngine', () => {
 
                 const output = await page.evaluate(async () => {
                     /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                    const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                    const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                     /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                    const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                    const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
 
                     const rawEnv = {
                         content: '',
@@ -1209,9 +1209,9 @@ test.describe('MacroEngine', () => {
                 const input = '{{greet}}';
                 const output = await page.evaluate(async (input) => {
                     /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                    const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                    const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                     /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                    const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                    const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
 
                     const rawEnv = {
                         content: input,
@@ -1239,9 +1239,9 @@ test.describe('MacroEngine', () => {
                 const input = '{{greet::one::two}}';
                 const output = await page.evaluate(async (input) => {
                     /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                    const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                    const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                     /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                    const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                    const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
 
                     const rawEnv = {
                         content: input,
@@ -1269,9 +1269,9 @@ test.describe('MacroEngine', () => {
                 const input = '{{bad}}';
                 const output = await page.evaluate(async (input) => {
                     /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                    const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                    const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                     /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                    const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                    const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
 
                     /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js').MacroEnvRawContext} */
                     const rawEnv = {
@@ -1297,9 +1297,9 @@ test.describe('MacroEngine', () => {
             test('should override registered macro with dynamic macro of same name', async ({ page }) => {
                 const output = await page.evaluate(async () => {
                     /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                    const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                    const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                     /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                    const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                    const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
 
                     const rawEnv = {
                         content: '',
@@ -1318,9 +1318,9 @@ test.describe('MacroEngine', () => {
             test('should match dynamic macro names case-insensitively', async ({ page }) => {
                 const output = await page.evaluate(async () => {
                     /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                    const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                    const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                     /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                    const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                    const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
 
                     const rawEnv = {
                         content: '',
@@ -1344,9 +1344,9 @@ test.describe('MacroEngine', () => {
             test('should resolve multiple different dynamic macros in same evaluation', async ({ page }) => {
                 const output = await page.evaluate(async () => {
                     /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                    const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                    const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                     /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                    const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                    const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
 
                     const rawEnv = {
                         content: '',
@@ -1414,11 +1414,11 @@ test.describe('MacroEngine', () => {
             // Register a test macro that returns its flags
             const output = await page.evaluate(async () => {
                 /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                 /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
                 /** @type {import('../../public/scripts/macros/engine/MacroRegistry.js')} */
-                const { MacroRegistry } = await import('./scripts/macros/engine/MacroRegistry.js');
+                const { MacroRegistry } = await import('/scripts/macros/engine/MacroRegistry.js');
 
                 MacroRegistry.unregisterMacro('test-flags');
                 MacroRegistry.registerMacro('test-flags', {
@@ -1441,11 +1441,11 @@ test.describe('MacroEngine', () => {
         test('should correctly identify individual flags in handler', async ({ page }) => {
             const output = await page.evaluate(async () => {
                 /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                 /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
                 /** @type {import('../../public/scripts/macros/engine/MacroRegistry.js')} */
-                const { MacroRegistry } = await import('./scripts/macros/engine/MacroRegistry.js');
+                const { MacroRegistry } = await import('/scripts/macros/engine/MacroRegistry.js');
 
                 MacroRegistry.unregisterMacro('test-flag-check');
                 MacroRegistry.registerMacro('test-flag-check', {
@@ -1490,11 +1490,11 @@ test.describe('MacroEngine', () => {
         test('should handle multiple flags with whitespace', async ({ page }) => {
             const output = await page.evaluate(async () => {
                 /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                 /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
                 /** @type {import('../../public/scripts/macros/engine/MacroRegistry.js')} */
-                const { MacroRegistry } = await import('./scripts/macros/engine/MacroRegistry.js');
+                const { MacroRegistry } = await import('/scripts/macros/engine/MacroRegistry.js');
 
                 MacroRegistry.unregisterMacro('test-flags-ws');
                 MacroRegistry.registerMacro('test-flags-ws', {
@@ -1612,11 +1612,11 @@ test.describe('MacroEngine', () => {
         test('should set isScoped to true for scoped macro invocation', async ({ page }) => {
             const output = await page.evaluate(async () => {
                 /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                 /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
                 /** @type {import('../../public/scripts/macros/engine/MacroRegistry.js')} */
-                const { MacroRegistry } = await import('./scripts/macros/engine/MacroRegistry.js');
+                const { MacroRegistry } = await import('/scripts/macros/engine/MacroRegistry.js');
 
                 MacroRegistry.unregisterMacro('test-isscoped');
                 MacroRegistry.registerMacro('test-isscoped', {
@@ -1635,11 +1635,11 @@ test.describe('MacroEngine', () => {
         test('should set isScoped to false for inline argument syntax', async ({ page }) => {
             const output = await page.evaluate(async () => {
                 /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                 /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
                 /** @type {import('../../public/scripts/macros/engine/MacroRegistry.js')} */
-                const { MacroRegistry } = await import('./scripts/macros/engine/MacroRegistry.js');
+                const { MacroRegistry } = await import('/scripts/macros/engine/MacroRegistry.js');
 
                 MacroRegistry.unregisterMacro('test-isscoped');
                 MacroRegistry.registerMacro('test-isscoped', {
@@ -1674,11 +1674,11 @@ test.describe('MacroEngine', () => {
         test('should keep scoped macro raw when argument count is below minimum', async ({ page }) => {
             const output = await page.evaluate(async () => {
                 /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                 /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
                 /** @type {import('../../public/scripts/macros/engine/MacroRegistry.js')} */
-                const { MacroRegistry } = await import('./scripts/macros/engine/MacroRegistry.js');
+                const { MacroRegistry } = await import('/scripts/macros/engine/MacroRegistry.js');
 
                 // Register a macro that requires exactly 3 arguments
                 MacroRegistry.unregisterMacro('test-3args');
@@ -1703,11 +1703,11 @@ test.describe('MacroEngine', () => {
         test('should evaluate inner macros before outer macro in scoped content', async ({ page }) => {
             const output = await page.evaluate(async () => {
                 /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                 /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
                 /** @type {import('../../public/scripts/macros/engine/MacroRegistry.js')} */
-                const { MacroRegistry } = await import('./scripts/macros/engine/MacroRegistry.js');
+                const { MacroRegistry } = await import('/scripts/macros/engine/MacroRegistry.js');
 
                 // Track evaluation order
                 const evalOrder = [];
@@ -2291,9 +2291,9 @@ test.describe('MacroEngine', () => {
         test('should run custom pre-processor before macro evaluation', async ({ page }) => {
             const output = await page.evaluate(async () => {
                 /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                 /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
 
                 // Add a pre-processor that replaces [[USER]] with {{user}}
                 const handler = (text) => text.replace(/\[\[USER\]\]/g, '{{user}}');
@@ -2314,9 +2314,9 @@ test.describe('MacroEngine', () => {
         test('should run custom post-processor after macro evaluation', async ({ page }) => {
             const output = await page.evaluate(async () => {
                 /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                 /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
 
                 // Add a post-processor that wraps output in brackets
                 const handler = (text) => `[${text}]`;
@@ -2337,9 +2337,9 @@ test.describe('MacroEngine', () => {
         test('should execute pre-processors in priority order (lower first)', async ({ page }) => {
             const output = await page.evaluate(async () => {
                 /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                 /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
 
                 // First handler (priority 200) appends 'B'
                 const handlerB = (text) => text + 'B';
@@ -2366,9 +2366,9 @@ test.describe('MacroEngine', () => {
         test('should execute post-processors in priority order (lower first)', async ({ page }) => {
             const output = await page.evaluate(async () => {
                 /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                 /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
 
                 // First handler (priority 200) wraps with ()
                 const handlerParen = (text) => `(${text})`;
@@ -2395,9 +2395,9 @@ test.describe('MacroEngine', () => {
         test('should successfully remove a registered pre-processor', async ({ page }) => {
             const output = await page.evaluate(async () => {
                 /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                 /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
 
                 const handler = (text) => text + '-ADDED';
                 MacroEngine.addPreProcessor(handler, { priority: 100, source: 'test:to-remove' });
@@ -2419,7 +2419,7 @@ test.describe('MacroEngine', () => {
         test('should return false when removing non-existent processor', async ({ page }) => {
             const removed = await page.evaluate(async () => {
                 /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
 
                 const handler = () => 'never registered';
                 return MacroEngine.removePreProcessor(handler);
@@ -2431,9 +2431,9 @@ test.describe('MacroEngine', () => {
         test('should pass env to pre-processor handlers', async ({ page }) => {
             const output = await page.evaluate(async () => {
                 /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                 /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
 
                 // Pre-processor that uses env to get the user name
                 /** @param {string} text @param {import('../../public/scripts/macros/engine/MacroEnv.types.js').MacroEnv} env */
@@ -2455,9 +2455,9 @@ test.describe('MacroEngine', () => {
         test('should pass env to post-processor handlers', async ({ page }) => {
             const output = await page.evaluate(async () => {
                 /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-                const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+                const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
                 /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-                const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
 
                 // Post-processor that appends the character name from env
                 /** @param {string} text @param {import('../../public/scripts/macros/engine/MacroEnv.types.js').MacroEnv} env */
@@ -3074,8 +3074,8 @@ test.describe('MacroEngine', () => {
         test('should NOT execute setvar in false branch', async ({ page }) => {
             const id = getUniqueVariableId();
             const output = await page.evaluate(async (id) => {
-                const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
-                const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
+                const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
                 const ctx = SillyTavern.getContext();
 
                 ctx.variables.local.del(id);
@@ -3097,8 +3097,8 @@ test.describe('MacroEngine', () => {
         test('should execute setvar in true branch', async ({ page }) => {
             const id = getUniqueVariableId();
             const output = await page.evaluate(async (id) => {
-                const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
-                const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
+                const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
                 const ctx = SillyTavern.getContext();
 
                 ctx.variables.local.del(id);
@@ -3119,8 +3119,8 @@ test.describe('MacroEngine', () => {
         test('should only execute setvar in chosen else branch', async ({ page }) => {
             const id = getUniqueVariableId();
             const output = await page.evaluate(async (id) => {
-                const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
-                const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
+                const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
                 const ctx = SillyTavern.getContext();
 
                 ctx.variables.local.del(id);
@@ -3141,8 +3141,8 @@ test.describe('MacroEngine', () => {
         test('should only execute setvar in chosen then branch', async ({ page }) => {
             const id = getUniqueVariableId();
             const output = await page.evaluate(async (id) => {
-                const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
-                const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
+                const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
                 const ctx = SillyTavern.getContext();
 
                 ctx.variables.local.del(id);
@@ -3163,8 +3163,8 @@ test.describe('MacroEngine', () => {
         test('should execute multiple setvars only in chosen branch', async ({ page }) => {
             const id = getUniqueVariableId();
             const output = await page.evaluate(async (id) => {
-                const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
-                const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
+                const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
                 const ctx = SillyTavern.getContext();
 
                 ctx.variables.local.del(`${id}_a`);
@@ -3188,8 +3188,8 @@ test.describe('MacroEngine', () => {
         test('should handle nested if with delayed resolution', async ({ page }) => {
             const id = `dt_nested_${Date.now()}_${Math.random().toString(36).slice(2)}`;
             const output = await page.evaluate(async (id) => {
-                const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
-                const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
+                const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
                 const ctx = SillyTavern.getContext();
 
                 ctx.variables.local.del(`${id}_outer`);
@@ -3214,8 +3214,8 @@ test.describe('MacroEngine', () => {
         test('should work with variable shorthand condition and delayed resolution', async ({ page }) => {
             const id = `dt_varsh_${Date.now()}_${Math.random().toString(36).slice(2)}`;
             const output = await page.evaluate(async (id) => {
-                const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
-                const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+                const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
+                const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
                 const ctx = SillyTavern.getContext();
 
                 ctx.variables.local.set(`${id}_flag`, '');
@@ -3305,10 +3305,10 @@ test.describe('MacroEngine', () => {
  */
 async function evaluateWithEngine(page, input) {
     const result = await page.evaluate(async (input) => {
-        /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-        const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+        /** @type {import('../../public/scripts/macros/macro-system.js')} */
+        const macroSystem = await import('/scripts/macros/macro-system.js');
         /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-        const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+        const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
 
         /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js').MacroEnvRawContext} */
         const rawEnv = {
@@ -3318,7 +3318,7 @@ async function evaluateWithEngine(page, input) {
         };
         const env = MacroEnvBuilder.buildFromRawEnv(rawEnv);
 
-        const output = await MacroEngine.evaluate(input, env);
+        const output = await macroSystem.macros.engine.evaluate(input, env);
         return output;
     }, input);
 
@@ -3375,9 +3375,9 @@ async function evaluateWithEngineAndCaptureMacroLogs(page, input) {
 async function evaluateWithEngineAndVariables(page, input, variables) {
     const result = await page.evaluate(async ({ input, variables }) => {
         /** @type {import('../../public/scripts/macros/engine/MacroEngine.js')} */
-        const { MacroEngine } = await import('./scripts/macros/engine/MacroEngine.js');
+        const { MacroEngine } = await import('/scripts/macros/engine/MacroEngine.js');
         /** @type {import('../../public/scripts/macros/engine/MacroEnvBuilder.js')} */
-        const { MacroEnvBuilder } = await import('./scripts/macros/engine/MacroEnvBuilder.js');
+        const { MacroEnvBuilder } = await import('/scripts/macros/engine/MacroEnvBuilder.js');
 
         // Get the SillyTavern context for variable access
         const ctx = SillyTavern.getContext();

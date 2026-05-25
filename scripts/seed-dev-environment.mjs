@@ -1,7 +1,10 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+
+import storage from 'node-persist';
 
 import { write as writeCharacterCardPngData } from '../src/character-card-parser.js';
 import { DEFAULT_USER, SETTINGS_FILE, USER_DIRECTORY_TEMPLATE } from '../src/constants.js';
@@ -50,10 +53,12 @@ if (!profile) {
 const defaultDataRoot = path.join(repoRoot, 'data', 'dev-local');
 const dataRoot = path.resolve(repoRoot, options.dataRoot ?? defaultDataRoot);
 const configPath = path.resolve(repoRoot, options.configPath ?? path.join(repoRoot, 'config.dev-local.yaml'));
-const userRoot = path.join(dataRoot, DEFAULT_USER.handle);
+const seededUserHandle = options.userHandle ?? DEFAULT_USER.handle;
+const userRoot = path.join(dataRoot, seededUserHandle);
 const defaultAvatarBuffer = fs.readFileSync(new URL('../public/img/ai4.png', import.meta.url));
 const defaultSettingsPath = path.join(repoRoot, 'default', 'content', SETTINGS_FILE);
 const defaultSettings = JSON.parse(fs.readFileSync(defaultSettingsPath, 'utf8'));
+const USER_KEY_PREFIX = 'user:';
 
 const rng = createRng(Number(options.seed ?? 260512));
 const directories = createUserDirectories(userRoot);
@@ -66,6 +71,7 @@ for (const dir of Object.values(directories)) {
 await seedBootstrapContent();
 await seedSettings();
 await seedBackgroundsAndThemes();
+await seedUserAccount();
 
 const worldNames = await seedWorlds();
 const characterRecords = await seedCharacters(worldNames);
@@ -83,6 +89,7 @@ const summary = {
         groups: profile.groups,
         groupChatsPerGroup: profile.groupChatsPerGroup,
     },
+    user: options.userHandle ? { handle: options.userHandle } : null,
 };
 
 process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
@@ -114,6 +121,28 @@ async function seedBootstrapContent() {
         path.join(repoRoot, 'default', 'content', 'presets', 'quick-replies', 'Default.json'),
         path.join(directories.quickreplies, 'Default.json'),
     );
+}
+
+async function seedUserAccount() {
+    if (!options.userHandle || !options.userPassword) {
+        return;
+    }
+
+    const salt = crypto.randomBytes(16).toString('base64');
+    await storage.init({
+        dir: path.join(dataRoot, '_storage'),
+        ttl: false,
+        expiredInterval: 0,
+    });
+    await storage.setItem(`${USER_KEY_PREFIX}${options.userHandle}`, {
+        handle: options.userHandle,
+        name: options.userName ?? options.userHandle,
+        created: Date.now(),
+        password: crypto.scryptSync(options.userPassword.normalize(), salt, 64).toString('base64'),
+        salt,
+        admin: true,
+        enabled: true,
+    });
 }
 
 async function seedBackgroundsAndThemes() {
@@ -502,6 +531,18 @@ function parseCliOptions(args) {
         }
         if (arg === '--seed') {
             options.seed = args[++index];
+            continue;
+        }
+        if (arg === '--user-handle') {
+            options.userHandle = args[++index];
+            continue;
+        }
+        if (arg === '--user-password') {
+            options.userPassword = args[++index];
+            continue;
+        }
+        if (arg === '--user-name') {
+            options.userName = args[++index];
         }
     }
     return options;

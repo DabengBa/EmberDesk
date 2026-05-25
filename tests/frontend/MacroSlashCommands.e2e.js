@@ -89,53 +89,25 @@ test.describe('MacroSlashCommands', () => {
 
     test.describe('{{arg}} Macro', () => {
         test('should support {{arg}} macro with plain value', async ({ page }) => {
-            const output = await page.evaluate(async () => {
-                const { executeSlashCommandsWithOptions } = await import('./scripts/slash-commands.js');
-                const { power_user } = await import('./scripts/power-user.js');
-
-                power_user.experimental_macro_engine = true;
-
-                return (await executeSlashCommandsWithOptions('/qr-arg hello world || /pass {{arg::hello}}')).pipe;
-            });
+            const output = await executeQuickReplySlashCommands(page, '/qr-arg hello world || /pass {{arg::hello}}');
 
             expect(output).toBe('world');
         });
 
         test('should support {{arg}} macro with closure value', async ({ page }) => {
-            const output = await page.evaluate(async () => {
-                const { executeSlashCommandsWithOptions } = await import('./scripts/slash-commands.js');
-                const { power_user } = await import('./scripts/power-user.js');
-
-                power_user.experimental_macro_engine = true;
-
-                return (await executeSlashCommandsWithOptions('/qr-arg x {: /echo test :} || /echo {{arg::x}}')).pipe;
-            });
+            const output = await executeQuickReplySlashCommands(page, '/qr-arg x {: /echo test :} || /echo {{arg::x}}');
 
             expect(output).toBe('[Closure]');
         });
 
         test('should support mixed type {{arg}} macro values', async ({ page }) => {
-            const output = await page.evaluate(async () => {
-                const { executeSlashCommandsWithOptions } = await import('./scripts/slash-commands.js');
-                const { power_user } = await import('./scripts/power-user.js');
-
-                power_user.experimental_macro_engine = true;
-
-                return (await executeSlashCommandsWithOptions('/qr-arg a simple || /qr-arg b {: /echo closure :} || /echo {{arg::a}} and {{arg::b}}')).pipe;
-            });
+            const output = await executeQuickReplySlashCommands(page, '/qr-arg a simple || /qr-arg b {: /echo closure :} || /echo {{arg::a}} and {{arg::b}}');
 
             expect(output).toBe('simple and ,[Closure]');
         });
 
         test('should support wildcard {{arg}} macro', async ({ page }) => {
-            const output = await page.evaluate(async () => {
-                const { executeSlashCommandsWithOptions } = await import('./scripts/slash-commands.js');
-                const { power_user } = await import('./scripts/power-user.js');
-
-                power_user.experimental_macro_engine = true;
-
-                return (await executeSlashCommandsWithOptions('/qr-arg * wildcard || /pass {{arg::any}}')).pipe;
-            });
+            const output = await executeQuickReplySlashCommands(page, '/qr-arg * wildcard || /pass {{arg::any}}');
 
             expect(output).toBe('wildcard');
         });
@@ -175,3 +147,20 @@ test.describe('MacroSlashCommands', () => {
         });
     });
 });
+
+async function executeQuickReplySlashCommands(page, command) {
+    return page.evaluate(async (command) => {
+        const { SlashCommandParser } = await import('/scripts/slash-commands/SlashCommandParser.js');
+        if (!SlashCommandParser.commands['qr-arg']) {
+            const { SlashCommandHandler } = await import('/scripts/extensions/quick-reply/src/SlashCommandHandler.js');
+            new SlashCommandHandler({ settings: { config: { setList: [] } } }).init();
+        }
+
+        const { executeSlashCommandsWithOptions } = await import('/scripts/slash-commands.js');
+        const { power_user } = await import('/scripts/power-user.js');
+
+        power_user.experimental_macro_engine = true;
+
+        return (await executeSlashCommandsWithOptions(command)).pipe;
+    }, command);
+}
