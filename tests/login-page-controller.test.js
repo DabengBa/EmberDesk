@@ -80,6 +80,8 @@ describe('login page controller helpers', () => {
                 this.classList = new FakeClassList();
                 this.attributes = new Map();
                 this.listeners = new Map();
+                this.focused = false;
+                this.offsetWidth = 0;
             }
 
             addEventListener(type, callback, options = {}) {
@@ -99,6 +101,14 @@ describe('login page controller helpers', () => {
 
             setAttribute(name, value) {
                 this.attributes.set(name, value);
+            }
+
+            removeAttribute(name) {
+                this.attributes.delete(name);
+            }
+
+            focus() {
+                this.focused = true;
             }
 
             querySelector(selector) {
@@ -241,6 +251,112 @@ describe('login page controller helpers', () => {
         expect(fetchMock).not.toHaveBeenCalledWith('/api/users/login', expect.anything());
         expect(elements.loginCard.style.display).toBe('block');
         expect(elements.recoveryCard.style.display).toBe('none');
+
+        cleanup();
+    });
+
+    test('marks login validation errors as field-associated and focusable', async () => {
+        const { initLoginPage } = await importFreshLoginModule();
+        class FakeClassList {
+            add() {}
+            remove() {}
+        }
+
+        class FakeElement {
+            constructor(id) {
+                this.id = id;
+                this.value = '';
+                this.type = '';
+                this.textContent = '';
+                this.disabled = false;
+                this.style = { display: '' };
+                this.classList = new FakeClassList();
+                this.attributes = new Map();
+                this.listeners = new Map();
+                this.focused = false;
+                this.offsetWidth = 0;
+            }
+
+            addEventListener(type, callback, options = {}) {
+                const listeners = this.listeners.get(type) ?? [];
+                listeners.push(callback);
+                this.listeners.set(type, listeners);
+                options.signal?.addEventListener('abort', () => {
+                    this.listeners.set(type, (this.listeners.get(type) ?? []).filter(listener => listener !== callback));
+                }, { once: true });
+            }
+
+            async submit() {
+                for (const listener of this.listeners.get('submit') ?? []) {
+                    await listener({ preventDefault: () => {} });
+                }
+            }
+
+            setAttribute(name, value) {
+                this.attributes.set(name, value);
+            }
+
+            removeAttribute(name) {
+                this.attributes.delete(name);
+            }
+
+            focus() {
+                this.focused = true;
+            }
+
+            querySelector(selector) {
+                return selector === 'i' ? { className: '' } : null;
+            }
+        }
+
+        const elements = Object.fromEntries([
+            'loginCard',
+            'loginForm',
+            'handle',
+            'password',
+            'passwordToggle',
+            'loginButton',
+            'errorMessage',
+            'forgotLink',
+            'recoveryCard',
+            'recoveryForm',
+            'recoverHandle',
+            'recoveryStep1',
+            'recoveryStep2',
+            'recoveryCode',
+            'newPassword',
+            'recoveryError',
+            'cancelRecovery',
+        ].map(id => [id, new FakeElement(id)]));
+        elements.password.type = 'password';
+        const root = {
+            getElementById: id => elements[id] ?? null,
+        };
+        const fetchMock = jest.fn(async (url) => {
+            if (url === '/csrf-token') {
+                return { json: async () => ({ token: 'csrf-token' }) };
+            }
+            throw new Error(`Unexpected fetch: ${url}`);
+        });
+
+        const cleanup = await initLoginPage(root, {
+            fetch: fetchMock,
+            initAccessibility: () => {},
+        });
+
+        await elements.loginForm.submit();
+
+        expect(elements.errorMessage.textContent).toBe('请输入用户名');
+        expect(elements.errorMessage.attributes.get('tabindex')).toBe('-1');
+        expect(elements.errorMessage.focused).toBe(true);
+        expect(elements.handle.attributes.get('aria-invalid')).toBe('true');
+        expect(elements.handle.attributes.get('aria-describedby')).toBe('errorMessage');
+
+        elements.handle.value = 'default-user';
+        elements.handle.listeners.get('input')[0]();
+
+        expect(elements.handle.attributes.has('aria-invalid')).toBe(false);
+        expect(elements.handle.attributes.has('aria-describedby')).toBe(false);
 
         cleanup();
     });
