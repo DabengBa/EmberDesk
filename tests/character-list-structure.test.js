@@ -142,16 +142,28 @@ describe('character list structure', () => {
     test('keeps character list controls readable on narrow screens', () => {
         const styleSource = read('public/style.css');
 
-        expect(styleSource).toMatch(/#rm_button_bar \.character-list-action/);
-        expect(styleSource).toMatch(/#rm_button_bar \.character-list-action-label/);
-        expect(styleSource).toMatch(/#rm_button_bar \.character-list-tool-group/);
-        expect(styleSource).toMatch(/#rm_button_bar \.character-list-sort-group/);
-        expect(styleSource).toMatch(/#rm_button_bar \.character-list-bulk-actions/);
+        expect(styleSource).toMatch(/#rm_button_bar\s*\{[\s\S]*display:\s*grid/);
+        expect(styleSource).toMatch(/#rm_button_bar\s*\{[\s\S]*grid-template-areas:\s*["']create sort["'][\s\S]*["']view bulk["']/);
+        expect(styleSource).toMatch(/#rm_button_bar \.character-list-create-group\s*\{[\s\S]*grid-area:\s*create/);
+        expect(styleSource).toMatch(/#rm_button_bar \.character-list-sort-group\s*\{[\s\S]*grid-area:\s*sort/);
+        expect(styleSource).toMatch(/#rm_button_bar \.character-list-view-group\s*\{[\s\S]*grid-area:\s*view/);
+        expect(styleSource).toMatch(/#rm_button_bar \.character-list-bulk-actions\s*\{[\s\S]*grid-area:\s*bulk/);
+        expect(styleSource).toMatch(/#rm_button_bar \.character-list-action-label\s*\{[\s\S]*text-overflow:\s*ellipsis/);
         expect(styleSource).toMatch(/#bulkSelectedCount/);
         expect(styleSource).toMatch(/#rm_print_characters_block \.entity_type_badge/);
-        expect(styleSource).toMatch(/@media screen and \(max-width: 600px\)[\s\S]*#rm_button_bar[\s\S]*flex-wrap: wrap/);
-        expect(styleSource).toMatch(/@media screen and \(max-width: 600px\)[\s\S]*#rm_button_bar \.character-list-sort-group[\s\S]*flex-basis: 100%/);
-        expect(styleSource).toMatch(/@media screen and \(max-width: 600px\)[\s\S]*#rm_button_bar \.character-list-bulk-actions[\s\S]*flex-basis: 100%/);
+        expect(styleSource).toMatch(/@media screen and \(max-width: 600px\)[\s\S]*#rm_button_bar\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+        expect(styleSource).toMatch(/@media screen and \(max-width: 600px\)[\s\S]*grid-template-areas:\s*["']create["'][\s\S]*["']sort["'][\s\S]*["']view["'][\s\S]*["']bulk["']/);
+    });
+
+    test('keeps ordinary character type badges quiet while group badges remain visible', () => {
+        const styleSource = read('public/style.css');
+
+        const characterBadgeRule = styleSource.match(/#rm_print_characters_block \.character_type_badge\s*\{(?<body>[^}]+)\}/)?.groups?.body;
+        const groupBadgeRule = styleSource.match(/#rm_print_characters_block \.group_type_badge\s*\{(?<body>[^}]+)\}/)?.groups?.body;
+
+        expect(characterBadgeRule).toContain('display: none');
+        expect(groupBadgeRule).toContain('display: inline-flex');
+        expect(groupBadgeRule).toContain('color: var(--SmartThemeUnderlineColor)');
     });
 
     test('keeps character list pagination state synchronized after page-size changes', () => {

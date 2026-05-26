@@ -45,6 +45,10 @@ This feature lets users work with large character libraries without leaving the 
 - When a character card image is newly created, imported, duplicated, edited, or overwritten, EmberDesk now starts best-effort avatar thumbnail pregeneration immediately after the canonical write succeeds so the next ordinary library open is more likely to hit a ready file instead of triggering first-read thumbnail work.
 - If a delayed edit response targets a card that has already been deleted from the local library, EmberDesk skips refreshing that row so the visible list stays aligned with the user's delete action.
 - Character rows expose a stable DOM identity contract for list browsing and extension-adjacent scripts: `data-chid` is the standard identity, legacy `chid` remains available for older selectors, and `id="CharID${chid}"` remains the active-row and bulk-edit hook.
+- The character-list toolbar is grouped for scanning as a compact control surface: creation/import/group and sort controls read first, while search, grid/list, bulk edit, selected count, select-all, and delete controls stay together as the follow-up action row.
+- Bulk delete remains unavailable until at least one character is selected, even when the compact toolbar keeps the bulk status controls visible in the same operation context.
+- Ordinary character rows keep their Character type badge in the DOM for localization and compatibility, but it is visually quiet by default so users can scan names, avatars, and tags first.
+- Group rows continue to show their Group badge so mixed character/group lists remain distinguishable.
 - Browsing and selecting cards belong to this feature; destructive removal belongs to [Delete Character](feature.character_delete).
 
 ## ID Boundary Notes

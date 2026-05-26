@@ -3071,10 +3071,13 @@ input[type="file"] {
 }
 
 #rm_button_bar {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+        "create sort"
+        "view bulk";
     gap: 5px;
     align-items: center;
-    flex-wrap: wrap;
 }
 
 #rm_button_bar .character-list-tool-group {
@@ -3085,22 +3088,31 @@ input[type="file"] {
 }
 
 #rm_button_bar .character-list-create-group {
-    flex: 1 1 210px;
-    flex-wrap: wrap;
+    grid-area: create;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+#rm_button_bar .character-list-create-group::-webkit-scrollbar {
+    display: none;
 }
 
 #rm_button_bar .character-list-sort-group {
-    flex: 1 1 135px;
+    grid-area: sort;
+    justify-self: end;
+    min-width: min(100%, calc(var(--mainFontSize) * 9));
 }
 
-#rm_button_bar .character-list-view-group,
-#rm_button_bar .character-list-bulk-actions {
-    flex: 0 1 auto;
-    flex-wrap: wrap;
+#rm_button_bar .character-list-view-group {
+    grid-area: view;
+    flex-wrap: nowrap;
 }
 
 #rm_button_bar .character-list-bulk-actions {
-    margin-left: auto;
+    grid-area: bulk;
+    justify-self: end;
+    flex-wrap: nowrap;
 }
 
 #rm_button_bar .character-list-sort-label {
@@ -3130,6 +3142,10 @@ input[type="file"] {
     font-weight: 600;
     line-height: 1;
     letter-spacing: 0;
+    max-width: calc(var(--mainFontSize) * 5.8);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 #bulkSelectedCount {
@@ -3570,11 +3586,12 @@ input[type=search]:focus::-webkit-search-cancel-button {
 }
 
 #rm_print_characters_block .group_type_badge {
+    display: inline-flex;
     color: var(--SmartThemeUnderlineColor);
 }
 
 #rm_print_characters_block .character_type_badge {
-    color: var(--SmartThemeQuoteColor);
+    display: none;
 }
 
 .character_name_block_sub_line {
@@ -6715,18 +6732,17 @@ body:not(.movingUI) .drawer-content.maximized {
 
 @media screen and (max-width: 600px) {
     #rm_button_bar {
-        flex-wrap: wrap;
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas:
+            "create"
+            "sort"
+            "view"
+            "bulk";
     }
 
-    #rm_button_bar .character-list-create-group,
     #rm_button_bar .character-list-sort-group,
-    #rm_button_bar .character-list-view-group,
     #rm_button_bar .character-list-bulk-actions {
-        flex-basis: 100%;
-    }
-
-    #rm_button_bar .character-list-bulk-actions {
-        margin-left: 0;
+        justify-self: stretch;
     }
 
     #character_sort_order {
