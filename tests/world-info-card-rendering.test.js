@@ -196,7 +196,8 @@ describe('world info card rendering', () => {
         expect(indexHtml).toContain('class="world_entry_thin_controls wi-content-grid flex2"');
         expect(indexHtml).toContain('class="wi-content-open"');
         expect(indexHtml).toContain('class="wi-content-preview is-empty"');
-        expect(indexHtml).toContain('class="wi-content-editor-modal"');
+        expect(indexHtml).toContain('class="wi-content-editor-modal" role="dialog" aria-modal="true" aria-labelledby="wi-content-editor-title"');
+        expect(indexHtml).toContain('class="wi-content-editor-title" id="wi-content-editor-title"');
         expect(indexHtml).toContain('class="wi-content-editor-meta"');
         expect(indexHtml).toContain('class="wi-content-flags flex-container flexFlowColumn"');
         expect(indexHtml).not.toContain('data-i18n="Content" class="mdhotkey_location"');
@@ -221,5 +222,10 @@ describe('world info card rendering', () => {
         expect(source).toContain('contentEditor.appendTo(document.body);');
         expect(source).toContain('contentEditor.insertAfter(contentEditorPlaceholder);');
         expect(source).toContain('contentEditorPlaceholder.detach();');
+        expect(source).toContain("const contentEditorTitle = editTemplate.find('.wi-content-editor-title');");
+        expect(source).toContain('contentEditorTitle.attr(\'id\', `world_entry_content_editor_title_${entry.uid}`);');
+        expect(source).toContain('contentEditor.attr(\'aria-labelledby\', `world_entry_content_editor_title_${entry.uid}`);');
+        expect(source).toContain("contentOpenButton.attr('aria-expanded', 'false').trigger('focus');");
+        expect(source).toContain("if (e.key === 'Escape')");
     });
 });

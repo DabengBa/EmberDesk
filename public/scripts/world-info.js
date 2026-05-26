@@ -3875,6 +3875,7 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
     const contentEditorPlaceholder = $('<span class="wi-content-editor-placeholder" hidden></span>');
     const contentOpenButton = editTemplate.find('.wi-content-open');
     const contentCloseButton = editTemplate.find('.wi-content-editor-close');
+    const contentEditorTitle = editTemplate.find('.wi-content-editor-title');
     const updateContentPreview = (value) => {
         const preview = String(value || '').replace(/\s+/g, ' ').trim();
         contentPreview.text(preview || t`No content yet`);
@@ -3902,6 +3903,8 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
 
     contentOpenButton.attr('aria-controls', `world_entry_content_editor_${entry.uid}`).attr('aria-expanded', 'false');
     contentEditor.attr('id', `world_entry_content_editor_${entry.uid}`);
+    contentEditorTitle.attr('id', `world_entry_content_editor_title_${entry.uid}`);
+    contentEditor.attr('aria-labelledby', `world_entry_content_editor_title_${entry.uid}`);
     contentOpenButton.off('click.wiContentEditor').on('click.wiContentEditor', function (e) {
         e.preventDefault();
         e.stopPropagation();
