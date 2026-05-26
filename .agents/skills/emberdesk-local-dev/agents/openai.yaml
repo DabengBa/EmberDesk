@@ -1,0 +1,4 @@
+interface:
+  display_name: "EmberDesk Local Dev"
+  short_description: "Run EmberDesk locally with the correct Bun and Node workflow."
+  default_prompt: "Use this when installing, starting, configuring, Docker-building, or troubleshooting the local EmberDesk development environment."

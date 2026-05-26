@@ -1,0 +1,4 @@
+interface:
+  display_name: "EmberDesk Testing Debugging"
+  short_description: "Choose focused EmberDesk tests and debug failing validation."
+  default_prompt: "Use this when adding regression proof, running focused Jest or Playwright tests, or diagnosing EmberDesk test and lint failures."
