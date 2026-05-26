@@ -67,3 +67,54 @@ export function shouldRefreshCharacterAfterEdit(characters, avatar) {
         && avatar.length > 0
         && characters.some(character => character?.avatar === avatar);
 }
+
+/**
+ * Updates the delete affordance for character bulk edit selection.
+ *
+ * @param {HTMLElement|null} deleteButton
+ * @param {boolean} hasSelection
+ * @param {{focus?: Function}|null} [fallbackFocusElement]
+ * @returns {void}
+ */
+export function updateBulkDeleteButtonState(deleteButton, hasSelection, fallbackFocusElement = null) {
+    if (!deleteButton) {
+        return;
+    }
+
+    const isDisabled = !hasSelection;
+    deleteButton.classList.toggle('disabled', isDisabled);
+    deleteButton.setAttribute('aria-disabled', String(isDisabled));
+
+    if (isDisabled) {
+        deleteButton.setAttribute('tabindex', '-1');
+        if (globalThis.document?.activeElement === deleteButton) {
+            deleteButton.blur();
+            fallbackFocusElement?.focus?.();
+        }
+        return;
+    }
+
+    deleteButton.setAttribute('tabindex', '0');
+}
+
+/**
+ * Updates the visible bulk selection count and any actions tied to that count.
+ *
+ * @param {object} options
+ * @param {HTMLElement|null} options.selectedCount
+ * @param {HTMLElement|null} options.deleteButton
+ * @param {HTMLElement|null} [options.fallbackFocusElement]
+ * @param {number} count
+ * @returns {void}
+ */
+export function updateBulkSelectionCountState({ selectedCount, deleteButton, fallbackFocusElement = null }, count) {
+    updateBulkDeleteButtonState(deleteButton, count > 0, fallbackFocusElement);
+
+    if (!selectedCount) {
+        return;
+    }
+
+    selectedCount.textContent = String(count);
+    selectedCount.setAttribute('title', `${count} characters selected`);
+    selectedCount.setAttribute('aria-label', `${count} characters selected`);
+}

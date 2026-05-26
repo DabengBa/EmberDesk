@@ -25,7 +25,7 @@ import { POPUP_TYPE, POPUP_RESULT, Popup } from './popup.js';
 import { buildCascadeSectionHtml, captureCascadeChoices } from './world-cascade-dialog.js';
 import { waitUntilCondition } from './utils.js';
 import { debounce_timeout } from './constants.js';
-import { resolveCharacterAvatarsByIds } from './character-list-state.js';
+import { resolveCharacterAvatarsByIds, updateBulkDeleteButtonState, updateBulkSelectionCountState } from './character-list-state.js';
 import { createTagInput, getTagKeyForEntity, getTagsList, printTagList, tag_map, compareTagsForSort, removeTagFromMap, importTags, tag_import_setting } from './tags.js';
 import { t } from './i18n.js';
 
@@ -736,13 +736,9 @@ class BulkEditOverlay {
     updateSelectedCount = (countOverride = undefined) => {
         const count = countOverride ?? this.selectedCharacters.length;
         const selectedCount = document.getElementById(BulkEditOverlay.bulkSelectedCountId);
-        this.updateBulkActionStates(count);
-        if (!selectedCount) {
-            return;
-        }
-        selectedCount.textContent = String(count);
-        selectedCount.setAttribute('title', `${count} characters selected`);
-        selectedCount.setAttribute('aria-label', `${count} characters selected`);
+        const deleteButton = document.getElementById(BulkEditOverlay.bulkDeleteButtonId);
+        const fallbackFocusElement = document.getElementById('bulkEditButton');
+        updateBulkSelectionCountState({ selectedCount, deleteButton, fallbackFocusElement }, count);
     };
 
     /**
@@ -754,11 +750,8 @@ class BulkEditOverlay {
         const count = countOverride ?? this.selectedCharacters.length;
         const hasSelection = count > 0;
         const deleteButton = document.getElementById(BulkEditOverlay.bulkDeleteButtonId);
-        if (!deleteButton) {
-            return;
-        }
-        deleteButton.classList.toggle('disabled', !hasSelection);
-        deleteButton.setAttribute('aria-disabled', String(!hasSelection));
+        const fallbackFocusElement = document.getElementById('bulkEditButton');
+        updateBulkDeleteButtonState(deleteButton, hasSelection, fallbackFocusElement);
     };
 
     /**

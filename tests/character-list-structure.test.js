@@ -13,7 +13,10 @@ function read(relativePath) {
 }
 
 function extractFunctionSource(source, functionName) {
-    const functionStart = source.indexOf(`function ${functionName}`);
+    const functionStart = Math.max(
+        source.indexOf(`function ${functionName}`),
+        source.indexOf(`const ${functionName} =`),
+    );
     expect(functionStart).toBeGreaterThanOrEqual(0);
 
     const bodyStart = source.indexOf('{', functionStart);
@@ -161,6 +164,7 @@ describe('character list structure', () => {
         const scriptSource = read('public/script.js');
         const bulkEditSource = read('public/scripts/bulk-edit.js');
         const overlaySource = read('public/scripts/BulkEditOverlay.js');
+        const stateSource = read('public/scripts/character-list-state.js');
         const styleSource = read('public/style.css');
         const zhCnLocale = read('public/locales/zh-cn.json');
 
@@ -170,6 +174,7 @@ describe('character list structure', () => {
         expect(indexHtml).toContain('data-i18n="Import URL">Import URL</span>');
         expect(indexHtml).toContain('data-i18n="Group">Group</span>');
         expect(indexHtml).toContain('data-i18n="Bulk Edit">Bulk Edit</span>');
+        expect(indexHtml).toMatch(/id="bulkEditButton"[^>]*tabindex="0"/);
         expect(scriptSource).toContain("setCharacterSearchBusy(true)");
         expect(scriptSource).toContain("setCharacterSearchBusy(false)");
         expect(scriptSource).toContain("updateCharListGridToggleLabel()");
@@ -177,10 +182,11 @@ describe('character list structure', () => {
         expect(bulkEditSource).toMatch(/const checkbox = \$\('<input type=\\'checkbox\\' class=\\'bulk_select_checkbox\\' aria-label=\\'Select character for bulk edit\\'>'\);/);
         expect(overlaySource).toContain("character.setAttribute('aria-selected', 'true')");
         expect(overlaySource).toContain("character.setAttribute('aria-selected', 'false')");
-        expect(overlaySource).toContain('if (!selectedCount)');
-        expect(overlaySource).toMatch(/selectedCount\.textContent = String\(count\);/);
-        expect(overlaySource).toContain("selectedCount.setAttribute('aria-label',");
-        expect(overlaySource).toContain('this.updateBulkActionStates(count)');
+        expect(overlaySource).toContain('updateBulkSelectionCountState({ selectedCount, deleteButton, fallbackFocusElement }, count)');
+        expect(stateSource).toContain('if (!selectedCount)');
+        expect(stateSource).toMatch(/selectedCount\.textContent = String\(count\);/);
+        expect(stateSource).toContain("selectedCount.setAttribute('aria-label',");
+        expect(stateSource).toContain('updateBulkDeleteButtonState(deleteButton, count > 0, fallbackFocusElement)');
         expect(styleSource).toMatch(/#character_search_status/);
         expect(styleSource).toMatch(/#rm_print_characters_block \.character_select\.character_selected/);
         expect(styleSource).toMatch(/#rm_print_characters_block \.character_select\.character_selected::after/);
@@ -209,13 +215,20 @@ describe('character list structure', () => {
         const bulkEditSource = read('public/scripts/bulk-edit.js');
         const overlaySource = read('public/scripts/BulkEditOverlay.js');
         const deleteButtonSource = extractFunctionSource(bulkEditSource, 'onDeleteButtonClick');
+        const enableBulkEditSource = extractFunctionSource(bulkEditSource, 'enableBulkEdit');
+        const disableBulkEditSource = extractFunctionSource(bulkEditSource, 'disableBulkEdit');
 
         expect(overlaySource).toContain("static bulkDeleteButtonId = 'bulkDeleteButton'");
         expect(overlaySource).toContain('updateBulkActionStates = (countOverride = undefined) => {');
-        expect(overlaySource).toContain("deleteButton.classList.toggle('disabled', !hasSelection)");
-        expect(overlaySource).toContain("deleteButton.setAttribute('aria-disabled', String(!hasSelection))");
-        expect(bulkEditSource).toContain('characterGroupOverlay.updateBulkActionStates(0)');
+        expect(overlaySource).toContain('updateBulkDeleteButtonState(deleteButton, hasSelection, fallbackFocusElement)');
+        expect(overlaySource).toContain('updateBulkSelectionCountState({ selectedCount, deleteButton, fallbackFocusElement }, count)');
+        expect(read('public/scripts/character-list-state.js')).toContain("deleteButton.setAttribute('tabindex', '0')");
+        expect(enableBulkEditSource).toContain('characterGroupOverlay.updateSelectedCount(0)');
+        expect(enableBulkEditSource).not.toContain('characterGroupOverlay.updateBulkActionStates(0)');
+        expect(disableBulkEditSource).toContain('characterGroupOverlay.updateSelectedCount(0)');
+        expect(disableBulkEditSource).not.toContain('characterGroupOverlay.updateBulkActionStates(0)');
         expect(deleteButtonSource).toContain("if ($('#bulkDeleteButton').hasClass('disabled'))");
         expect(deleteButtonSource).toContain('return;');
+        expect(deleteButtonSource).toContain("Reuse the overlay's delete flow; it also no-ops when selection is empty.");
     });
 });
