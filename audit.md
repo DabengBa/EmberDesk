@@ -2,24 +2,26 @@
 
 ## Scope
 
-Review feedback landing for `c24714042` (`fix: guard character bulk delete actions`).
+Review feedback landing for `e640bbae2` (`fix: associate login errors with fields`).
 
 ## Findings
 
-- Addressed: disabled bulk delete control now leaves the Tab order with `tabindex="-1"` and restores `tabindex="0"` when enabled.
-- Addressed: focus moves from the disabled delete control to the now-explicitly focusable bulk edit toggle when selection count drops to zero.
-- Addressed: redundant `updateBulkActionStates(0)` calls were removed from bulk edit enable/disable paths.
-- Addressed: delete button path comment now points to the overlay no-op guard instead of implying the button is the only protection.
-- Addressed: behavior tests now cover count-to-delete-state linkage, focus migration, keyboard reachability, and missing DOM guard.
+- Addressed: login error regions now use `role="alert"` with `aria-live="assertive"` in `public/login.html`.
+- Addressed: client validation remains field-associated for `handle` only.
+- Addressed: authentication and network failures now stay form-level and no longer mark the handle field.
+- Addressed: `hideError()` clears `tabindex`, so empty error blocks are not left tabbable.
+- Addressed: repeated lockout updates no longer refocus the error block when it is already active.
+- Addressed: `showError()` now uses an options object and the credential field list is internal to the controller.
+- Addressed: login controller tests now share a single fake DOM harness and use event dispatch instead of listener indexing.
 
 ## Verification
 
-- Red proof: `bun run --cwd tests test:unit -- character-list-state.test.js --runInBand` failed before implementation because `updateBulkDeleteButtonState` was not exported.
-- `bun run --cwd tests test:unit -- character-list-state.test.js character-list-structure.test.js --runInBand`
+- Red proof: `bun run --cwd tests test:unit -- login-page-controller.test.js --runInBand` failed before the implementation update.
+- `bun run --cwd tests test:unit -- login-page-controller.test.js --runInBand`
 - `bun run test:compat`
-- `node tests/node_modules/eslint/bin/eslint.js tests/character-list-state.test.js public/scripts/character-list-state.js public/scripts/BulkEditOverlay.js public/scripts/bulk-edit.js`
+- `node tests/node_modules/eslint/bin/eslint.js tests/login-page-controller.test.js public/scripts/login.js`
 - `git diff --check`
 
 ## Notes
 
-- `bun run --cwd tests lint -- ...` still runs the repository-wide `eslint "**/*.js" ./*.js"` script and fails on pre-existing unrelated test lint debt. The targeted eslint command above passes for this change set.
+- The repository-wide `bun run --cwd tests lint -- ...` script still reports unrelated legacy lint debt outside this change set. The targeted eslint command above passes for the touched login files.

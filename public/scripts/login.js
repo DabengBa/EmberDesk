@@ -139,10 +139,11 @@ function collectElements(root) {
  * Displays an error message in the specified error block.
  * @param {HTMLElement} errorBlock The error block element
  * @param {string} message Error message to display
- * @param {boolean} [shake=false] Whether to apply shake animation
- * @param {HTMLElement|null} [field=null] Field associated with the error
+ * @param {object} [options] Display options
+ * @param {boolean} [options.shake=false] Whether to apply shake animation
+ * @param {HTMLElement|null} [options.field=null] Field associated with the error
  */
-function showError(errorBlock, message, shake = false, field = null) {
+function showError(errorBlock, message, { shake = false, field = null } = {}) {
     errorBlock.textContent = message;
     errorBlock.classList.add('login-error--visible');
     errorBlock.setAttribute('tabindex', '-1');
@@ -155,7 +156,9 @@ function showError(errorBlock, message, shake = false, field = null) {
         void errorBlock.offsetWidth;
         errorBlock.classList.add('login-error--shake');
     }
-    errorBlock.focus?.();
+    if (document.activeElement !== errorBlock) {
+        errorBlock.focus();
+    }
 }
 
 /**
@@ -166,6 +169,7 @@ function showError(errorBlock, message, shake = false, field = null) {
 function hideError(errorBlock, fields = []) {
     errorBlock.textContent = '';
     errorBlock.classList.remove('login-error--visible', 'login-error--shake');
+    errorBlock.removeAttribute('tabindex');
     for (const field of fields) {
         field.removeAttribute('aria-invalid');
         field.removeAttribute('aria-describedby');
@@ -185,6 +189,7 @@ export function createLoginController(root = document, dependencyOverrides = {})
     const listenerOptions = { signal: abortController.signal };
     let csrfToken = '';
     let lockoutTimer = null;
+    const credentialFields = [elements.handle, elements.password];
 
     function setFormEnabled(enabled) {
         elements.handle.disabled = !enabled;
@@ -205,7 +210,11 @@ export function createLoginController(root = document, dependencyOverrides = {})
             return;
         }
 
-        hideError(elements.errorMessage, [elements.handle, elements.password]);
+        hideLoginError();
+    }
+
+    function hideLoginError() {
+        hideError(elements.errorMessage, credentialFields);
     }
 
     async function getCsrfToken() {
@@ -229,7 +238,7 @@ export function createLoginController(root = document, dependencyOverrides = {})
             remaining--;
             if (remaining <= 0) {
                 clearLockoutTimer();
-                hideError(elements.errorMessage);
+                hideLoginError();
                 setFormEnabled(true);
             } else {
                 showError(elements.errorMessage, formatLockoutMessage(remaining));
@@ -238,7 +247,7 @@ export function createLoginController(root = document, dependencyOverrides = {})
     }
 
     async function performLogin(handle, password) {
-        hideError(elements.errorMessage, [elements.handle, elements.password]);
+        hideLoginError();
         setFormEnabled(false);
 
         const originalText = elements.loginButton.textContent;
@@ -266,7 +275,7 @@ export function createLoginController(root = document, dependencyOverrides = {})
 
                 elements.loginButton.textContent = originalText;
                 setFormEnabled(true);
-                showError(elements.errorMessage, getLoginErrorMessage(errorData.error), true, elements.handle);
+                showError(elements.errorMessage, getLoginErrorMessage(errorData.error), { shake: true });
                 return;
             }
 
@@ -277,7 +286,7 @@ export function createLoginController(root = document, dependencyOverrides = {})
         } catch (error) {
             elements.loginButton.textContent = originalText;
             setFormEnabled(true);
-            showError(elements.errorMessage, String(error), true, elements.handle);
+            showError(elements.errorMessage, String(error), { shake: true });
         }
     }
 
@@ -296,7 +305,7 @@ export function createLoginController(root = document, dependencyOverrides = {})
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
-                showError(elements.recoveryError, getLoginErrorMessage(errorData.error), true);
+                showError(elements.recoveryError, getLoginErrorMessage(errorData.error), { shake: true });
                 return;
             }
 
@@ -304,7 +313,7 @@ export function createLoginController(root = document, dependencyOverrides = {})
             elements.recoveryStep2.style.display = 'block';
             elements.recoverHandle.disabled = true;
         } catch (error) {
-            showError(elements.recoveryError, String(error), true);
+            showError(elements.recoveryError, String(error), { shake: true });
         }
     }
 
@@ -323,13 +332,13 @@ export function createLoginController(root = document, dependencyOverrides = {})
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
-                showError(elements.recoveryError, getLoginErrorMessage(errorData.error), true);
+                showError(elements.recoveryError, getLoginErrorMessage(errorData.error), { shake: true });
                 return;
             }
 
             showLogin();
         } catch (error) {
-            showError(elements.recoveryError, String(error), true);
+            showError(elements.recoveryError, String(error), { shake: true });
         }
     }
 
@@ -346,7 +355,7 @@ export function createLoginController(root = document, dependencyOverrides = {})
     function showLogin() {
         elements.recoveryCard.style.display = 'none';
         elements.loginCard.style.display = 'block';
-        hideError(elements.errorMessage);
+        hideLoginError();
     }
 
     function togglePasswordVisibility() {
@@ -370,7 +379,7 @@ export function createLoginController(root = document, dependencyOverrides = {})
             const handle = elements.handle.value.trim();
             const password = elements.password.value;
             if (!handle) {
-                showError(elements.errorMessage, loginMessages.handleRequired, true, elements.handle);
+                showError(elements.errorMessage, loginMessages.handleRequired, { shake: true, field: elements.handle });
                 return;
             }
             await performLogin(handle, password);
@@ -391,7 +400,7 @@ export function createLoginController(root = document, dependencyOverrides = {})
             const handle = elements.recoverHandle.value.trim();
 
             if (!handle) {
-                showError(elements.recoveryError, loginMessages.handleRequired, true);
+                showError(elements.recoveryError, loginMessages.handleRequired, { shake: true });
                 return;
             }
 
@@ -408,7 +417,7 @@ export function createLoginController(root = document, dependencyOverrides = {})
             const code = elements.recoveryCode.value.trim();
             const newPassword = elements.newPassword.value;
             if (!code) {
-                showError(elements.recoveryError, loginMessages.codeRequired, true);
+                showError(elements.recoveryError, loginMessages.codeRequired, { shake: true });
                 return;
             }
             await sendRecoveryPart2(handle, code, newPassword);

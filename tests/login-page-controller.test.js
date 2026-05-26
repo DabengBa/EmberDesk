@@ -1,10 +1,138 @@
 import { describe, test, expect, afterEach, jest } from '@jest/globals';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const originalLoginTestMode = global.EMBERDESK_LOGIN_TEST_MODE;
+const originalDocument = global.document;
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const repoRoot = path.resolve(__dirname, '..');
 
 async function importFreshLoginModule() {
     global.EMBERDESK_LOGIN_TEST_MODE = true;
     return import(`../public/scripts/login.js?cacheBust=${Date.now()}-${Math.random()}`);
+}
+
+class FakeClassList {
+    constructor() {
+        this.classes = new Set();
+    }
+
+    add(...classNames) {
+        for (const className of classNames) {
+            this.classes.add(className);
+        }
+    }
+
+    remove(...classNames) {
+        for (const className of classNames) {
+            this.classes.delete(className);
+        }
+    }
+
+    contains(className) {
+        return this.classes.has(className);
+    }
+}
+
+class FakeElement {
+    constructor(id) {
+        this.id = id;
+        this.value = '';
+        this.type = '';
+        this.textContent = '';
+        this.disabled = false;
+        this.style = { display: '' };
+        this.classList = new FakeClassList();
+        this.attributes = new Map();
+        this.listeners = new Map();
+        this.focused = false;
+        this.focusCount = 0;
+        this.offsetWidth = 0;
+    }
+
+    addEventListener(type, callback, options = {}) {
+        const listeners = this.listeners.get(type) ?? [];
+        listeners.push(callback);
+        this.listeners.set(type, listeners);
+        options.signal?.addEventListener('abort', () => {
+            this.listeners.set(type, (this.listeners.get(type) ?? []).filter(listener => listener !== callback));
+        }, { once: true });
+    }
+
+    async dispatchEvent(type, event = {}) {
+        const eventWithDefault = { preventDefault: () => {}, ...event };
+        for (const listener of this.listeners.get(type) ?? []) {
+            await listener(eventWithDefault);
+        }
+    }
+
+    click() {
+        void this.dispatchEvent('click');
+    }
+
+    submit() {
+        return this.dispatchEvent('submit');
+    }
+
+    setAttribute(name, value) {
+        this.attributes.set(name, String(value));
+    }
+
+    removeAttribute(name) {
+        this.attributes.delete(name);
+    }
+
+    focus() {
+        this.focused = true;
+        this.focusCount++;
+        if (global.document) {
+            global.document.activeElement = this;
+        }
+    }
+
+    querySelector(selector) {
+        return selector === 'i' ? { className: '' } : null;
+    }
+}
+
+function createLoginElements() {
+    const elements = Object.fromEntries([
+        'loginCard',
+        'loginForm',
+        'handle',
+        'password',
+        'passwordToggle',
+        'loginButton',
+        'errorMessage',
+        'forgotLink',
+        'recoveryCard',
+        'recoveryForm',
+        'recoverHandle',
+        'recoveryStep1',
+        'recoveryStep2',
+        'recoveryCode',
+        'newPassword',
+        'recoveryError',
+        'cancelRecovery',
+    ].map(id => [id, new FakeElement(id)]));
+    elements.password.type = 'password';
+    return elements;
+}
+
+function createLoginRoot(elements = createLoginElements()) {
+    if (!global.document) {
+        global.document = { activeElement: null };
+    } else if (!('activeElement' in global.document)) {
+        global.document.activeElement = null;
+    }
+    return {
+        elements,
+        root: {
+            getElementById: id => elements[id] ?? null,
+        },
+    };
 }
 
 describe('login page controller helpers', () => {
@@ -13,6 +141,11 @@ describe('login page controller helpers', () => {
             delete global.EMBERDESK_LOGIN_TEST_MODE;
         } else {
             global.EMBERDESK_LOGIN_TEST_MODE = originalLoginTestMode;
+        }
+        if (originalDocument === undefined) {
+            delete global.document;
+        } else {
+            global.document = originalDocument;
         }
     });
 
@@ -62,83 +195,16 @@ describe('login page controller helpers', () => {
         expect(formatLockoutMessage(3)).toBe('账号已锁定，请在 3 秒后重试。');
     });
 
+    test('keeps login error regions assertive alerts for dynamic updates', () => {
+        const loginHtml = fs.readFileSync(path.join(repoRoot, 'public/login.html'), 'utf8');
+
+        expect(loginHtml).toContain('<div class="login-error" id="errorMessage" role="alert" aria-live="assertive"></div>');
+        expect(loginHtml).toContain('<div class="login-error" id="recoveryError" role="alert" aria-live="assertive"></div>');
+    });
+
     test('initializes deliberately and cleanup removes page-owned listeners', async () => {
         const { initLoginPage } = await importFreshLoginModule();
-        class FakeClassList {
-            add() {}
-            remove() {}
-        }
-
-        class FakeElement {
-            constructor(id) {
-                this.id = id;
-                this.value = '';
-                this.type = '';
-                this.textContent = '';
-                this.disabled = false;
-                this.style = { display: '' };
-                this.classList = new FakeClassList();
-                this.attributes = new Map();
-                this.listeners = new Map();
-                this.focused = false;
-                this.offsetWidth = 0;
-            }
-
-            addEventListener(type, callback, options = {}) {
-                const listeners = this.listeners.get(type) ?? [];
-                listeners.push(callback);
-                this.listeners.set(type, listeners);
-                options.signal?.addEventListener('abort', () => {
-                    this.listeners.set(type, (this.listeners.get(type) ?? []).filter(listener => listener !== callback));
-                }, { once: true });
-            }
-
-            click() {
-                for (const listener of this.listeners.get('click') ?? []) {
-                    listener({ preventDefault: () => {} });
-                }
-            }
-
-            setAttribute(name, value) {
-                this.attributes.set(name, value);
-            }
-
-            removeAttribute(name) {
-                this.attributes.delete(name);
-            }
-
-            focus() {
-                this.focused = true;
-            }
-
-            querySelector(selector) {
-                return selector === 'i' ? { className: '' } : null;
-            }
-        }
-
-        const elements = Object.fromEntries([
-            'loginCard',
-            'loginForm',
-            'handle',
-            'password',
-            'passwordToggle',
-            'loginButton',
-            'errorMessage',
-            'forgotLink',
-            'recoveryCard',
-            'recoveryForm',
-            'recoverHandle',
-            'recoveryStep1',
-            'recoveryStep2',
-            'recoveryCode',
-            'newPassword',
-            'recoveryError',
-            'cancelRecovery',
-        ].map(id => [id, new FakeElement(id)]));
-        elements.password.type = 'password';
-        const root = {
-            getElementById: id => elements[id] ?? null,
-        };
+        const { root, elements } = createLoginRoot();
         const fetchMock = jest.fn(async (url) => {
             if (url === '/csrf-token') {
                 return { json: async () => ({ token: 'csrf-token' }) };
@@ -162,64 +228,7 @@ describe('login page controller helpers', () => {
 
     test('successful password recovery returns to the login card without auto-login', async () => {
         const { initLoginPage } = await importFreshLoginModule();
-        class FakeClassList {
-            add() {}
-            remove() {}
-        }
-
-        class FakeElement {
-            constructor(id) {
-                this.id = id;
-                this.value = '';
-                this.type = '';
-                this.textContent = '';
-                this.disabled = false;
-                this.style = { display: '' };
-                this.classList = new FakeClassList();
-                this.listeners = new Map();
-            }
-
-            addEventListener(type, callback, options = {}) {
-                const listeners = this.listeners.get(type) ?? [];
-                listeners.push(callback);
-                this.listeners.set(type, listeners);
-                options.signal?.addEventListener('abort', () => {
-                    this.listeners.set(type, (this.listeners.get(type) ?? []).filter(listener => listener !== callback));
-                }, { once: true });
-            }
-
-            async submit() {
-                for (const listener of this.listeners.get('submit') ?? []) {
-                    await listener({ preventDefault: () => {} });
-                }
-            }
-
-            setAttribute() {}
-
-            querySelector(selector) {
-                return selector === 'i' ? { className: '' } : null;
-            }
-        }
-
-        const elements = Object.fromEntries([
-            'loginCard',
-            'loginForm',
-            'handle',
-            'password',
-            'passwordToggle',
-            'loginButton',
-            'errorMessage',
-            'forgotLink',
-            'recoveryCard',
-            'recoveryForm',
-            'recoverHandle',
-            'recoveryStep1',
-            'recoveryStep2',
-            'recoveryCode',
-            'newPassword',
-            'recoveryError',
-            'cancelRecovery',
-        ].map(id => [id, new FakeElement(id)]));
+        const { root, elements } = createLoginRoot();
         elements.loginCard.style.display = 'none';
         elements.recoveryCard.style.display = 'block';
         elements.recoveryStep1.style.display = 'none';
@@ -227,9 +236,6 @@ describe('login page controller helpers', () => {
         elements.recoverHandle.value = 'default-user';
         elements.recoveryCode.value = '123456';
         elements.newPassword.value = 'new-password';
-        const root = {
-            getElementById: id => elements[id] ?? null,
-        };
         const fetchMock = jest.fn(async (url) => {
             if (url === '/csrf-token') {
                 return { json: async () => ({ token: 'csrf-token' }) };
@@ -257,81 +263,7 @@ describe('login page controller helpers', () => {
 
     test('marks login validation errors as field-associated and focusable', async () => {
         const { initLoginPage } = await importFreshLoginModule();
-        class FakeClassList {
-            add() {}
-            remove() {}
-        }
-
-        class FakeElement {
-            constructor(id) {
-                this.id = id;
-                this.value = '';
-                this.type = '';
-                this.textContent = '';
-                this.disabled = false;
-                this.style = { display: '' };
-                this.classList = new FakeClassList();
-                this.attributes = new Map();
-                this.listeners = new Map();
-                this.focused = false;
-                this.offsetWidth = 0;
-            }
-
-            addEventListener(type, callback, options = {}) {
-                const listeners = this.listeners.get(type) ?? [];
-                listeners.push(callback);
-                this.listeners.set(type, listeners);
-                options.signal?.addEventListener('abort', () => {
-                    this.listeners.set(type, (this.listeners.get(type) ?? []).filter(listener => listener !== callback));
-                }, { once: true });
-            }
-
-            async submit() {
-                for (const listener of this.listeners.get('submit') ?? []) {
-                    await listener({ preventDefault: () => {} });
-                }
-            }
-
-            setAttribute(name, value) {
-                this.attributes.set(name, value);
-            }
-
-            removeAttribute(name) {
-                this.attributes.delete(name);
-            }
-
-            focus() {
-                this.focused = true;
-            }
-
-            querySelector(selector) {
-                return selector === 'i' ? { className: '' } : null;
-            }
-        }
-
-        const elements = Object.fromEntries([
-            'loginCard',
-            'loginForm',
-            'handle',
-            'password',
-            'passwordToggle',
-            'loginButton',
-            'errorMessage',
-            'forgotLink',
-            'recoveryCard',
-            'recoveryForm',
-            'recoverHandle',
-            'recoveryStep1',
-            'recoveryStep2',
-            'recoveryCode',
-            'newPassword',
-            'recoveryError',
-            'cancelRecovery',
-        ].map(id => [id, new FakeElement(id)]));
-        elements.password.type = 'password';
-        const root = {
-            getElementById: id => elements[id] ?? null,
-        };
+        const { root, elements } = createLoginRoot();
         const fetchMock = jest.fn(async (url) => {
             if (url === '/csrf-token') {
                 return { json: async () => ({ token: 'csrf-token' }) };
@@ -353,10 +285,120 @@ describe('login page controller helpers', () => {
         expect(elements.handle.attributes.get('aria-describedby')).toBe('errorMessage');
 
         elements.handle.value = 'default-user';
-        elements.handle.listeners.get('input')[0]();
+        await elements.handle.dispatchEvent('input');
 
+        expect(elements.errorMessage.textContent).toBe('');
+        expect(elements.errorMessage.attributes.has('tabindex')).toBe(false);
         expect(elements.handle.attributes.has('aria-invalid')).toBe(false);
         expect(elements.handle.attributes.has('aria-describedby')).toBe(false);
+
+        cleanup();
+    });
+
+    test('treats credential rejection as a form-level error', async () => {
+        const { initLoginPage } = await importFreshLoginModule();
+        const { root, elements } = createLoginRoot();
+        elements.handle.value = 'default-user';
+        elements.password.value = 'wrong-password';
+        const fetchMock = jest.fn(async (url) => {
+            if (url === '/csrf-token') {
+                return { json: async () => ({ token: 'csrf-token' }) };
+            }
+            if (url === '/api/users/login') {
+                return {
+                    ok: false,
+                    status: 401,
+                    json: async () => ({ error: 'Incorrect credentials' }),
+                };
+            }
+            throw new Error(`Unexpected fetch: ${url}`);
+        });
+
+        const cleanup = await initLoginPage(root, {
+            fetch: fetchMock,
+            initAccessibility: () => {},
+        });
+
+        await elements.loginForm.submit();
+
+        expect(elements.errorMessage.textContent).toBe('账号或密码不正确');
+        expect(elements.errorMessage.attributes.get('tabindex')).toBe('-1');
+        expect(elements.handle.attributes.has('aria-invalid')).toBe(false);
+        expect(elements.handle.attributes.has('aria-describedby')).toBe(false);
+        expect(elements.password.attributes.has('aria-invalid')).toBe(false);
+        expect(elements.password.attributes.has('aria-describedby')).toBe(false);
+        expect(elements.handle.disabled).toBe(false);
+        expect(elements.password.disabled).toBe(false);
+
+        cleanup();
+    });
+
+    test('keeps network failures form-level instead of blaming the handle field', async () => {
+        const { initLoginPage } = await importFreshLoginModule();
+        const { root, elements } = createLoginRoot();
+        elements.handle.value = 'default-user';
+        elements.password.value = 'password';
+        const fetchMock = jest.fn(async (url) => {
+            if (url === '/csrf-token') {
+                return { json: async () => ({ token: 'csrf-token' }) };
+            }
+            throw new Error('network down');
+        });
+
+        const cleanup = await initLoginPage(root, {
+            fetch: fetchMock,
+            initAccessibility: () => {},
+        });
+
+        await elements.loginForm.submit();
+
+        expect(elements.errorMessage.textContent).toBe('Error: network down');
+        expect(elements.handle.attributes.has('aria-invalid')).toBe(false);
+        expect(elements.password.attributes.has('aria-invalid')).toBe(false);
+
+        cleanup();
+    });
+
+    test('does not steal focus repeatedly while updating an already focused lockout error', async () => {
+        const { initLoginPage } = await importFreshLoginModule();
+        const { root, elements } = createLoginRoot();
+        elements.handle.value = 'default-user';
+        elements.password.value = 'password';
+        let intervalCallback = null;
+        const fetchMock = jest.fn(async (url) => {
+            if (url === '/csrf-token') {
+                return { json: async () => ({ token: 'csrf-token' }) };
+            }
+            if (url === '/api/users/login') {
+                return {
+                    ok: false,
+                    status: 429,
+                    headers: { get: () => '2' },
+                    json: async () => ({ error: 'Too many attempts. Try again later or recover your password.' }),
+                };
+            }
+            throw new Error(`Unexpected fetch: ${url}`);
+        });
+
+        const cleanup = await initLoginPage(root, {
+            fetch: fetchMock,
+            initAccessibility: () => {},
+            setInterval: (callback) => {
+                intervalCallback = callback;
+                return 1;
+            },
+            clearInterval: () => {},
+        });
+
+        await elements.loginForm.submit();
+        expect(elements.errorMessage.focusCount).toBe(1);
+        expect(elements.handle.attributes.has('aria-invalid')).toBe(false);
+        expect(elements.password.attributes.has('aria-invalid')).toBe(false);
+
+        intervalCallback();
+
+        expect(elements.errorMessage.textContent).toBe('账号已锁定，请在 1 秒后重试。');
+        expect(elements.errorMessage.focusCount).toBe(1);
 
         cleanup();
     });
