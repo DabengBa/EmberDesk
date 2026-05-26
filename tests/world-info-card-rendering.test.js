@@ -59,7 +59,7 @@ describe('world info card rendering', () => {
     test('collapsed cards can rebuild the lazy edit form after being collapsed', () => {
         const source = read('public/scripts/world-info.js');
         const createCardStart = source.indexOf('export function createWorldEntryCard');
-        const createCardEnd = source.indexOf('/**\n * Builds the edit form', createCardStart);
+        const createCardEnd = source.indexOf('function buildAutocompleteCallback', createCardStart);
         const createCardSource = source.slice(createCardStart, createCardEnd);
 
         expect(createCardStart).toBeGreaterThanOrEqual(0);
@@ -122,6 +122,42 @@ describe('world info card rendering', () => {
         expect(source).toContain('function refreshGlobalWorldInfoSelectorLabels()');
         expect(source).toContain('worldInfoSelect.trigger(\'change.select2\');');
         expect(source).not.toContain('worldInfoSelect.trigger(\'change\');');
+    });
+
+    test('global world selector exposes a clear empty prompt and closes after direct selection changes', () => {
+        const indexHtml = read('public/index.html');
+        const source = read('public/scripts/world-info.js');
+
+        expect(indexHtml).toContain('aria-label="Global World Info active in all chats"');
+        expect(indexHtml).toContain('data-placeholder="No global worlds active. Select one or more worlds."');
+        expect(source).toContain('const globalWorldInfoSelector = $(\'#world_info\');');
+        expect(source).toContain('placeholder: globalWorldInfoSelector.attr(\'data-placeholder\')');
+        expect(source).toContain('globalWorldInfoSelector.on(\'select2:select select2:unselect\', () => {');
+        expect(source).toContain('globalWorldInfoSelector.select2(\'close\');');
+        expect(source).toContain('setTimeout(() => {');
+        expect(source).toContain('globalWorldInfoSelector.next(\'span.select2-container\').find(\'textarea\').trigger(\'blur\');');
+    });
+
+    test('world info drawer takes precedence over the character drawer when opened from the top bar', () => {
+        const source = read('public/script.js');
+
+        expect(source).toContain('const isOpeningWorldInfoDrawer = targetDrawerID === \'WorldInfo\' && !drawerWasOpenAlready;');
+        expect(source).toContain('const $openDrawers = isOpeningWorldInfoDrawer');
+        expect(source).toContain('$(\'#right-nav-panel.openDrawer\').not(drawer)');
+        expect(source).toContain('const $openIcons = isOpeningWorldInfoDrawer');
+        expect(source).toContain('$(\'#rm_button_panel_pin_div .openIcon, #rightNavDrawerIcon.openIcon\')');
+    });
+
+    test('world info drawer stays reachable on mobile and tablet widths', () => {
+        const css = read('public/css/world-info.css');
+
+        expect(css).toContain('#WorldInfo.openDrawer');
+        expect(css).toContain('z-index: 4010;');
+        expect(css).toContain('width: 100vw !important;');
+        expect(css).toContain('width: 100dvw !important;');
+        expect(css).toContain('max-height: calc(100dvh - var(--topBarBlockSize));');
+        expect(css).toContain('#WorldInfo.openDrawer #wi-holder');
+        expect(css).toContain('overflow-y: auto;');
     });
 
     test('world info drawer keeps the remaining top menu drawers in the top bar', () => {

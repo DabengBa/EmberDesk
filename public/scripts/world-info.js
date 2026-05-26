@@ -6382,7 +6382,9 @@ function updateAuxBooks(fileName, computeNext) {
 
 export function initWorldInfo() {
     if (!worldInfoCoreInitialized) {
-        $('#world_info').on('mousedown change', async function (e) {
+        const globalWorldInfoSelector = $('#world_info');
+
+        globalWorldInfoSelector.on('mousedown change', async function (e) {
             // If there's no world names, don't do anything
             if (world_names.length === 0) {
                 e.preventDefault();
@@ -6515,16 +6517,23 @@ export function initWorldInfo() {
             await assignLorebookToChat({ shiftKey: true, altKey: false });
         });
 
-        if (!isMobile()) {
-            $('#world_info').select2({
+        if (!globalWorldInfoSelector.data('select2')) {
+            globalWorldInfoSelector.select2({
                 width: '100%',
-                placeholder: t`No Worlds active. Click here to select.`,
+                placeholder: globalWorldInfoSelector.attr('data-placeholder') || t`No global worlds active. Select one or more worlds.`,
                 allowClear: true,
                 closeOnSelect: false,
             });
+            globalWorldInfoSelector.on('select2:select select2:unselect', () => {
+                globalWorldInfoSelector.select2('close');
+                setTimeout(() => {
+                    globalWorldInfoSelector.select2('close');
+                    globalWorldInfoSelector.next('span.select2-container').find('textarea').trigger('blur');
+                }, debounce_timeout.quick);
+            });
             refreshGlobalWorldInfoSelectorLabels();
 
-            select2ChoiceClickSubscribe($('#world_info'), target => {
+            select2ChoiceClickSubscribe(globalWorldInfoSelector, target => {
                 const name = $(target).text();
                 const selectedIndex = world_names.indexOf(name);
                 const alreadySelectedInEditor = $('#world_editor_select option:selected').text() === name;

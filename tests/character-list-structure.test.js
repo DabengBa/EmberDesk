@@ -44,6 +44,7 @@ describe('character list structure', () => {
             'id="rm_characters_block"',
             'id="charListFixedTop"',
             'id="rm_button_bar"',
+            'class="character-list-action-label"',
             'id="rm_button_create"',
             'id="character_import_button"',
             'id="external_import_button"',
@@ -65,6 +66,20 @@ describe('character list structure', () => {
         ].forEach(marker => expect(indexHtml).toContain(marker));
 
         [
+            ['rm_button_create', 'Create'],
+            ['character_import_button', 'Import'],
+            ['external_import_button', 'URL'],
+            ['rm_button_group_chats', 'Group'],
+            ['rm_button_search', 'Search'],
+            ['charListGridToggle', 'Grid'],
+            ['bulkEditButton', 'Bulk'],
+            ['bulkSelectAllButton', 'Select All'],
+            ['bulkDeleteButton', 'Delete'],
+        ].forEach(([id, label]) => {
+            expect(indexHtml).toMatch(new RegExp(`id="${id}"[\\s\\S]*?<span class="character-list-action-label" data-i18n="${label}">${label}<\\/span>`));
+        });
+
+        [
             'rm_characters_block',
             'charListFixedTop',
             'rm_button_bar',
@@ -82,25 +97,48 @@ describe('character list structure', () => {
         const rowSource = extractFunctionSource(scriptSource, 'buildCharacterRowHtml');
 
         expect(rowSource).toMatch(/return `<div class="character_select entity_block flex-container wide100p alignitemsflexstart\$\{isFav \? ' is_fav' : ''\}\$\{isActive \? ' is_active' : ''\}" data-chid="\$\{id\}" chid="\$\{id\}" id="CharID\$\{id\}">/);
+        expect(rowSource).toMatch(/<small class="entity_type_badge character_type_badge" data-i18n="Character">Character<\/small>/);
         expect(rowSource).toMatch(/const isFav = item\.fav \|\| item\.fav == 'true';/);
         expect(rowSource).toMatch(/const isActive = !selected_group && this_chid !== undefined && String\(this_chid\) === String\(id\);/);
         expect(rowSource).toMatch(/<input class="ch_fav" value="\$\{isFav\}" hidden \/>/);
         expect(rowSource).toMatch(/<div class="tags tags_inline">\$\{tagsHtml\}<\/div>/);
         expect(scriptSource).toContain("$('#rm_print_characters_block .character_select').removeClass('is_active')");
         expect(scriptSource).toContain('$(`#CharID${chid}`).addClass(\'is_active\')');
+
+        const indexHtml = read('public/index.html');
+        expect(indexHtml).toMatch(/<small class="entity_type_badge group_type_badge" data-i18n="Group">Group<\/small>/);
     });
 
     test('keeps empty, hidden, and tag-overflow list states wired to the character list', () => {
         const scriptSource = read('public/script.js');
         const printCharactersSource = extractFunctionSource(scriptSource, 'printCharacters');
         const rowSource = extractFunctionSource(scriptSource, 'buildCharacterRowHtml');
+        const emptyBlockTemplate = read('public/scripts/templates/emptyBlock.html');
 
         expect(printCharactersSource).toMatch(/if \(!data\.length\) \{\s+const emptyBlock = await getEmptyBlock\(\);\s+\$\(listId\)\.append\(emptyBlock\);/);
         expect(printCharactersSource).toMatch(/const hidden = \(characters\.length \+ groups\.length\) - displayCount;/);
         expect(printCharactersSource).toMatch(/const hiddenBlock = await getHiddenBlock\(hidden\);\s+\$\(listId\)\.append\(hiddenBlock\);/);
+        expect(scriptSource).toMatch(/const hasActiveCharacterListFilter = entitiesFilter\.hasAnyFilter\(\);/);
+        expect(scriptSource).toMatch(/const searchQuery = entitiesFilter\.getFilterData\(FILTER_TYPES\.SEARCH\);/);
+        expect(scriptSource).toMatch(/\.find\('\.clear_character_filters'\)\.on\('click'/);
+        expect(scriptSource).toContain("$('#character_search_bar').val('').trigger('input')");
+        expect(scriptSource).toContain("$('.rm_tag_filter .clearAllFilters').trigger('click')");
+        expect(emptyBlockTemplate).toContain('class="empty_block_message"');
+        expect(emptyBlockTemplate).toContain('class="menu_button clear_character_filters"');
+        expect(emptyBlockTemplate).toContain('data-i18n="Clear search and filters"');
         expect(rowSource).toMatch(/const DEFAULT_TAGS_LIMIT = 50;/);
         expect(rowSource).toMatch(/let tagsSkipped = 0;/);
         expect(rowSource).toMatch(/tagsHtml \+= `<span class="tag tag_placeholder"><span class="tag_name">\+\$\{tagsSkipped\}<\/span><\/span>`;/);
+    });
+
+    test('keeps character list controls readable on narrow screens', () => {
+        const styleSource = read('public/style.css');
+
+        expect(styleSource).toMatch(/#rm_button_bar \.character-list-action/);
+        expect(styleSource).toMatch(/#rm_button_bar \.character-list-action-label/);
+        expect(styleSource).toMatch(/#rm_print_characters_block \.entity_type_badge/);
+        expect(styleSource).toMatch(/@media screen and \(max-width: 600px\)[\s\S]*#rm_button_bar[\s\S]*flex-wrap: wrap/);
+        expect(styleSource).toMatch(/@media screen and \(max-width: 600px\)[\s\S]*#character_sort_order[\s\S]*flex-basis: 100%/);
     });
 
     test('keeps bulk selection mounted on generated character rows', () => {

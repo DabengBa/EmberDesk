@@ -28,6 +28,10 @@
     overflow: visible;
 }
 
+#WorldInfo.openDrawer {
+    z-index: 4010;
+}
+
 #world_popup_entries_list {
     flex-grow: 1;
     overflow-y: auto;
@@ -1114,6 +1118,25 @@ select.keyselect + span.select2-container .select2-selection--multiple {
 
 /* --- Responsive --- */
 @media (max-width: 768px) {
+    #WorldInfo.openDrawer {
+        inset: var(--topBarBlockSize) 0 0 0 !important;
+        width: 100vw !important;
+        width: 100dvw !important;
+        min-width: 0 !important;
+        max-width: none !important;
+        height: calc(100vh - var(--topBarBlockSize)) !important;
+        height: calc(100dvh - var(--topBarBlockSize)) !important;
+        max-height: calc(100dvh - var(--topBarBlockSize));
+        margin: 0 !important;
+        border-radius: 0;
+        z-index: 4010;
+    }
+
+    #WorldInfo.openDrawer #wi-holder {
+        max-height: calc(100dvh - var(--topBarBlockSize) - 54px);
+        overflow-y: auto;
+    }
+
     #world_popup {
         border-radius: 0;
     }

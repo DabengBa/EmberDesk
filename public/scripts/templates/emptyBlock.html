@@ -1,7 +1,12 @@
 <div class="text_block empty_block">
     <i class="fa-solid {{icon}} fa-4x"></i>
     <h1>{{text}}</h1>
-    <p data-i18n="There are no items to display.">
-        There are no items to display.
+    <p class="empty_block_message" data-i18n="{{message}}">
+        {{message}}
     </p>
+    {{#if showClearFilters}}
+    <button type="button" class="menu_button clear_character_filters" data-i18n="Clear search and filters">
+        Clear search and filters
+    </button>
+    {{/if}}
 </div>

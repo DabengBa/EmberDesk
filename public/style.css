@@ -3022,6 +3022,17 @@ input[type="file"] {
     align-items: center;
 }
 
+#rm_print_characters_block .empty_block_message {
+    max-width: 42ch;
+    margin: 0;
+}
+
+#rm_print_characters_block .clear_character_filters {
+    width: auto;
+    min-height: calc(var(--mainFontSize) * 1.8);
+    padding-inline: 10px;
+}
+
 .hidden_block {
     cursor: default;
 }
@@ -3059,10 +3070,36 @@ input[type="file"] {
     flex-wrap: nowrap;
 }
 
+#rm_button_bar .character-list-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    width: auto;
+    min-width: calc(var(--mainFontSize) * 1.7);
+    min-height: calc(var(--mainFontSize) * 1.7);
+    aspect-ratio: auto;
+    padding: 3px 6px;
+    font-style: normal;
+}
+
+#rm_button_bar .character-list-action-label {
+    font-family: var(--mainFontFamily);
+    font-size: calc(var(--mainFontSize) * 0.72);
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: 0;
+}
+
 #rm_button_bar .menu_button {
     width: calc(var(--mainFontSize) * 1.7);
     aspect-ratio: 1;
     margin: 0;
+}
+
+#rm_button_bar .menu_button.character-list-action {
+    width: auto;
+    aspect-ratio: auto;
 }
 
 #rm_print_characters_pagination {
@@ -3453,6 +3490,33 @@ input[type=search]:focus::-webkit-search-cancel-button {
     flex-direction: row;
     gap: 5px;
     margin-bottom: 0;
+}
+
+#rm_print_characters_block .entity_type_badge {
+    flex: 0 0 auto;
+    align-self: baseline;
+    max-width: 7ch;
+    padding: 1px 4px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 5px;
+    background-color: color-mix(in srgb, var(--SmartThemeBlurTintColor) 70%, transparent);
+    color: var(--SmartThemeBodyColor);
+    font-size: calc(var(--mainFontSize) * 0.62);
+    font-weight: 700;
+    line-height: 1.25;
+    opacity: 0.75;
+    text-transform: uppercase;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+#rm_print_characters_block .group_type_badge {
+    color: var(--SmartThemeUnderlineColor);
+}
+
+#rm_print_characters_block .character_type_badge {
+    color: var(--SmartThemeQuoteColor);
 }
 
 .character_name_block_sub_line {
@@ -6569,6 +6633,18 @@ body:not(.movingUI) .drawer-content.maximized {
 }
 
 @media screen and (max-width: 600px) {
+    #rm_button_bar {
+        flex-wrap: wrap;
+    }
+
+    #character_sort_order {
+        flex-basis: 100%;
+    }
+
+    #rm_button_bar .character-list-action {
+        flex: 1 1 auto;
+    }
+
     .chat-completion-row {
         grid-template-columns: 1fr;
     }

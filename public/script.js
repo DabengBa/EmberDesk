@@ -1025,15 +1025,27 @@ function getBackBlock() {
 }
 
 async function getEmptyBlock() {
-    const icons = ['fa-dragon', 'fa-otter', 'fa-kiwi-bird', 'fa-crow', 'fa-frog'];
-    const texts = [t`Here be dragons`, t`Otterly empty`, t`Kiwibunga`, t`Pump-a-Rum`, t`Croak it`];
-    const roll = new Date().getMinutes() % icons.length;
+    const hasActiveCharacterListFilter = entitiesFilter.hasAnyFilter();
+    const searchQuery = entitiesFilter.getFilterData(FILTER_TYPES.SEARCH);
+    const isSearchEmptyState = Boolean(searchQuery);
+    const icons = hasActiveCharacterListFilter ? ['fa-magnifying-glass'] : ['fa-dragon', 'fa-otter', 'fa-kiwi-bird', 'fa-crow', 'fa-frog'];
+    const texts = hasActiveCharacterListFilter ? [t`No matching characters`] : [t`Here be dragons`, t`Otterly empty`, t`Kiwibunga`, t`Pump-a-Rum`, t`Croak it`];
+    const roll = hasActiveCharacterListFilter ? 0 : new Date().getMinutes() % icons.length;
     const params = {
         text: texts[roll],
         icon: icons[roll],
+        message: hasActiveCharacterListFilter
+            ? (isSearchEmptyState ? t`Clear search or filters to show the full list.` : t`Clear filters to show the full list.`)
+            : t`There are no items to display.`,
+        showClearFilters: hasActiveCharacterListFilter,
     };
     const emptyBlock = await renderTemplateAsync('emptyBlock', params);
-    return $(emptyBlock);
+    const emptyBlockElement = $(emptyBlock);
+    emptyBlockElement.find('.clear_character_filters').on('click', function () {
+        $('#character_search_bar').val('').trigger('input');
+        $('.rm_tag_filter .clearAllFilters').trigger('click');
+    });
+    return emptyBlockElement;
 }
 
 /**
@@ -1115,6 +1127,7 @@ function buildCharacterRowHtml(item, id) {
                 </div>
                 <div class="flex-container wide100pLess70px character_select_container">
                     <div class="wide100p character_name_block">
+                        <small class="entity_type_badge character_type_badge" data-i18n="Character">Character</small>
                         <span class="ch_name" title="[Character] ${escapedName}">${escapedName}</span>
                         <small class="ch_additional_info ch_add_placeholder">+++</small>
                         ${isAssistant ? '<small class="ch_assistant" title="This character will be used as a welcome page assistant." data-i18n="[title]This character will be used as a welcome page assistant."><i class="fa-solid fa-sm fa-user-graduate"></i></small>' : ''}
@@ -10971,10 +10984,17 @@ export async function doNavbarIconClick() {
     const drawer = $(this).parent().find('.drawer-content');
     const drawerWasOpenAlready = $(this).parent().find('.drawer-content').hasClass('openDrawer');
     const targetDrawerID = $(this).parent().find('.drawer-content').attr('id');
+    const isOpeningWorldInfoDrawer = targetDrawerID === 'WorldInfo' && !drawerWasOpenAlready;
 
     if (!drawerWasOpenAlready) {
-        const $openDrawers = $('.openDrawer:not(.pinnedOpen)');
-        const $openIcons = $('.openIcon:not(.drawerPinnedOpen)');
+        const $worldInfoBlockingDrawers = $('#right-nav-panel.openDrawer').not(drawer);
+        const $worldInfoBlockingIcons = $('#rm_button_panel_pin_div .openIcon, #rightNavDrawerIcon.openIcon');
+        const $openDrawers = isOpeningWorldInfoDrawer
+            ? $('.openDrawer').not(drawer).not($worldInfoBlockingDrawers).not('.pinnedOpen').add($worldInfoBlockingDrawers)
+            : $('.openDrawer:not(.pinnedOpen)');
+        const $openIcons = isOpeningWorldInfoDrawer
+            ? $('.openIcon').not($worldInfoBlockingIcons).not('.drawerPinnedOpen').add($worldInfoBlockingIcons)
+            : $('.openIcon:not(.drawerPinnedOpen)');
         for (const iconEl of $openIcons) {
             $(iconEl).toggleClass('closedIcon openIcon');
         }
