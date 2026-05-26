@@ -2,7 +2,7 @@
 id: feature.world_book_delete
 type: feature
 name: Delete World Book
-related: [page.chat_workspace, feature.character_delete, term.character_card]
+related: [page.chat_workspace, feature.world_info_panel, feature.character_delete, term.character_card]
 ---
 
 # Feature: Delete World Book
@@ -17,7 +17,7 @@ This feature lets a user remove an unwanted world book and, when other character
 
 ## Trigger Entry
 
-- **Delete button**: use the delete button in the World Info editor panel.
+- **Delete button**: use the delete button in the World Info editor panel documented by [World Info Panel](feature.world_info_panel).
 - **Preflight check**: EmberDesk calls `/api/worldinfo/delete-preflight` to determine whether any characters reference the world book.
 - **Dialog selection**: depending on the preflight result, EmberDesk shows either a cascade warning dialog or a simple confirmation.
 
@@ -61,6 +61,7 @@ This feature lets a user remove an unwanted world book and, when other character
 - Deletion must remain an explicit user-confirmed action.
 - When bound characters exist, the cascade warning dialog is mandatory; the simple confirmation is not shown.
 - The "clear references" checkbox is unchecked by default — the user must actively opt in to modify other characters.
+- This feature is initiated from the World Info editor surface documented by [World Info Panel](feature.world_info_panel).
 - This feature is separate from [Delete Character](feature.character_delete): deleting a character does not cascade to other characters' world references ([ADR-0005](../adr/0005-delete-no-cross-character-world-ref-cleanup.md)), but deleting a world book can optionally clear references because the referenced entity itself is being destroyed.
 - If the preflight request fails, deletion still proceeds via a simple confirmation dialog; the cascade warning is skipped gracefully.
 - The preflight endpoint uses the SQLite character index (when available) to find bound characters; if the index is not supported, the bound-characters list is empty and the simple confirmation is shown.

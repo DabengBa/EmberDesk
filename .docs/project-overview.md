@@ -27,9 +27,10 @@ It is not optimized for users who want a managed cloud product or a minimal one-
 ## Architecture And Boundaries
 
 - Runtime: Node.js 24 LTS (`>=24 <25`)
+- Package manager and task runner: Bun 1.3.14
 - Server: Express-based API and startup pipeline
 - Frontend: HTML/CSS/jQuery main shell with progressive performance refactors
-- Build: Webpack for client-side libraries
+- Build: Bun-managed scripts plus Webpack for client-side libraries
 - Entry point: `server.js` -> `src/server-main.js`
 
 Current architectural boundaries:
@@ -38,6 +39,7 @@ Current architectural boundaries:
 - `src/` owns server routing, startup, data access, and operational utilities
 - `.docs/tech/` owns implementation and architecture notes
 - `.docs/db/` owns user-facing semantic product docs for pages, features, and terms
+- `tests/` owns Jest unit/compatibility coverage and Playwright E2E proof run through root Bun scripts
 
 Key module structure:
 

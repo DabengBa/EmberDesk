@@ -2,7 +2,7 @@
 id: page.api_configuration
 type: page
 name: API Configuration
-route: / (drawer: openai / textgenerationwebui)
+route: / (drawer: rm_api_block)
 related: [feature.custom_base_url, feature.connection_profile, feature.chat_completion_select]
 ---
 
@@ -18,17 +18,13 @@ This page exists so a user can configure how EmberDesk connects to an LLM API pr
 
 ## Page Structure (UI Layout)
 
-1. **API type selector**: top-level toggle between Chat Completion and Text Completion modes.
-2. **Connection Profile bar**: dropdown and save/delete controls for named configuration snapshots at the top of the drawer.
-3. **Custom Base URL section**: collapsible drawer containing the base URL input and the unified API key input.
-4. **Preset bar**: preset dropdown with labeled action buttons (Save, Rename, Save As).
-5. **Options section**: streaming toggle and other basic completion switches.
-6. **Provider-specific section**: model selection dropdown and provider-specific controls (e.g., endpoint variant, auth mode). Shown/hidden based on the selected chat completion source.
-7. **Features section**: reasoning effort segmented control (Auto/Low/Medium/High), image request toggles, and provider-specific feature switches.
-8. **Prompt Manager section**: the inline prompt manager surface.
-9. **Advanced Sampling section**: collapsible drawer containing temperature, top P, frequency penalty, presence penalty, top K, and verbosity controls. Uses slider + number-input pairs for numeric values. Verbosity uses a segmented control (Auto/Low/Medium/High).
-10. **Image Generation section**: image request toggles and provider-specific image settings.
-11. **Settings section**: character names behavior, group nudge, and other general chat completion options.
+1. **Provider and model row**: Chat Completion provider selector (`OpenAI`, `Claude`, `Google`) plus the matching provider-specific model input backed by a datalist.
+2. **Unified credential row**: masked API key input with a visibility toggle.
+3. **Custom Base URL row**: optional base URL input shared by supported chat-completion providers.
+4. **Provider-specific section**: controls such as Vertex AI mode, credential type, region, and service account JSON shown when the selected provider needs them.
+5. **Prompt post-processing section**: collapsible selector for prompt post-processing behavior.
+6. **Connection actions**: Connect, Cancel, Additional Parameters, Test, and connection-status feedback.
+7. **Preset and sampling sections**: preset dropdown/actions, streaming, context/response limits, feature toggles, prompt manager, advanced sampling, image generation, and settings controls.
 
 ## Page-Level Semantic IDs
 
@@ -44,11 +40,11 @@ This page exists so a user can configure how EmberDesk connects to an LLM API pr
 
 ## Page States And Constraints
 
-- **Default state**: Chat Completion is the default API type for new installations.
+- **Default state**: OpenAI is the default chat-completion provider for new installations.
 - **Proxy mode**: when a custom base URL is entered, the unified API key acts as the gateway password for all providers.
 - **Direct mode**: when the base URL is empty, the unified API key stores the current provider's secret key in the server-side secret store.
 - **Provider switch**: changing the chat completion source updates the unified key field placeholder to reflect whether a saved key exists for the new provider.
-- **Legacy settings**: old `proxies[]` and `selected_proxy` fields in settings files are silently ignored on load and dropped on next save.
+- **Legacy settings**: old `proxies[]` and `selected_proxy` fields in settings files are silently ignored on load and dropped on next save; legacy main API values such as `kobold`, `koboldhorde`, `novel`, `poe`, and `textgenerationwebui` are redirected to the OpenAI chat-completion path during settings load.
 
 ## Navigation
 

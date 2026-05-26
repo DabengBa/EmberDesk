@@ -131,7 +131,7 @@ uv run python .docs/logic-description/frontend_shared_library_boundary_sandbox_p
 Docs check:
 
 ```powershell
-npm run docs:check
+bun run docs:check
 ```
 
 ## Related Semantic IDs And Code Binding Points

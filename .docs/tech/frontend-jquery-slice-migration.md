@@ -119,7 +119,7 @@ bun run docs:check
 bun run docs:build
 ```
 
-The Playwright E2E commands require the local EmberDesk server to be running because the current Playwright config does not define a `webServer`.
+The Playwright config starts its own seeded EmberDesk server through `tests/playwright.config.js`. It runs `scripts/seed-dev-environment.mjs` with a temporary data root and config path, then starts `node server.js` for the selected base URL. Use `PLAYWRIGHT_BASE_URL`, `PLAYWRIGHT_PORT`, `PLAYWRIGHT_DATA_ROOT`, `PLAYWRIGHT_CONFIG_PATH`, `PLAYWRIGHT_USER`, `PLAYWRIGHT_PASSWORD`, or `PLAYWRIGHT_REUSE_SERVER=0` only when overriding that default test server behavior.
 
 ## Related Semantic IDs And Code Binding Points
 

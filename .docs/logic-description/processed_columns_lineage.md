@@ -20,6 +20,9 @@ Current owning flow:
 | `deleteCandidates` | current `characters` array plus requested avatar keys | Keep valid avatar keys and attach current local row/index when present | Absent local rows are preserved as `{ character: null, index: -1 }` so delete remains keyed by avatar |
 | `removedCharacters` | current `characters` array plus removal avatar keys | Mutate the array in place from right to left and return removed rows in original order | Avatars not present locally remove nothing |
 | `shouldRefreshAfterEdit` | current `characters` array plus submitted edit avatar | Return true only for a non-empty string avatar still present locally | Invalid or already-deleted avatars suppress the edit refresh |
+| `bulkDeleteButtonState` | bulk delete button, selection boolean, optional fallback focus element | Toggle `disabled`, set `aria-disabled`, set `tabindex`, and move focus away when disabling the focused action | Missing button returns without throwing; disabled focused button blurs and focuses fallback when available |
+| `bulkSelectionCountState` | selected-count element, delete button, fallback focus element, numeric count | Update delete affordance from `count > 0`; write `"N selected"` text plus title and ARIA label | Missing count element skips text/label updates after delete affordance is updated |
+| `visibleBulkSelectionDomState` | visible character row container plus persisted selected character ids | Convert selected ids to numbers; toggle selected class, `aria-selected`, and checkbox checked state on visible rows; return visible selected count | Missing container returns `0`; hidden selected rows remain only in the model until rendered |
 
 ## Maintenance Constraints
 
