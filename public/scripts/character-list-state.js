@@ -114,7 +114,52 @@ export function updateBulkSelectionCountState({ selectedCount, deleteButton, fal
         return;
     }
 
-    selectedCount.textContent = String(count);
+    selectedCount.textContent = `${count} selected`;
     selectedCount.setAttribute('title', `${count} characters selected`);
     selectedCount.setAttribute('aria-label', `${count} characters selected`);
+}
+
+/**
+ * Synchronizes visible character rows with the persisted bulk selection model.
+ * Hidden filtered-out rows stay selected in the model, but visible rows always
+ * reflect the current model after sorting, filtering, or pagination redraws.
+ *
+ * @param {object} options
+ * @param {{getElementsByClassName: Function}|null} options.container
+ * @param {number[]} options.selectedCharacterIds
+ * @param {string} [options.characterClass]
+ * @param {string} [options.selectedClass]
+ * @param {string} [options.checkboxClass]
+ * @returns {number} Number of visible rows restored as selected
+ */
+export function syncBulkSelectionDomState({
+    container,
+    selectedCharacterIds,
+    characterClass = 'character_select',
+    selectedClass = 'character_selected',
+    checkboxClass = 'bulk_select_checkbox',
+}) {
+    if (!container) {
+        return 0;
+    }
+
+    const selectedIdSet = new Set(selectedCharacterIds.map(id => Number(id)));
+    let visibleSelectedCount = 0;
+
+    for (const character of container.getElementsByClassName(characterClass)) {
+        const characterId = Number(character.getAttribute('data-chid'));
+        const isSelected = selectedIdSet.has(characterId);
+        const checkbox = character.querySelector('.' + checkboxClass);
+
+        character.classList.toggle(selectedClass, isSelected);
+        character.setAttribute('aria-selected', String(isSelected));
+        if (checkbox) {
+            checkbox.checked = isSelected;
+        }
+        if (isSelected) {
+            visibleSelectedCount++;
+        }
+    }
+
+    return visibleSelectedCount;
 }

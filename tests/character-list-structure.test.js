@@ -47,6 +47,11 @@ describe('character list structure', () => {
             'id="rm_characters_block"',
             'id="charListFixedTop"',
             'id="rm_button_bar"',
+            'class="character-list-tool-group character-list-create-group"',
+            'class="character-list-tool-group character-list-sort-group"',
+            'class="character-list-tool-group character-list-view-group"',
+            'class="character-list-tool-group character-list-bulk-actions"',
+            'class="character-list-sort-label"',
             'class="character-list-action-label"',
             'id="rm_button_create"',
             'id="character_import_button"',
@@ -139,9 +144,14 @@ describe('character list structure', () => {
 
         expect(styleSource).toMatch(/#rm_button_bar \.character-list-action/);
         expect(styleSource).toMatch(/#rm_button_bar \.character-list-action-label/);
+        expect(styleSource).toMatch(/#rm_button_bar \.character-list-tool-group/);
+        expect(styleSource).toMatch(/#rm_button_bar \.character-list-sort-group/);
+        expect(styleSource).toMatch(/#rm_button_bar \.character-list-bulk-actions/);
+        expect(styleSource).toMatch(/#bulkSelectedCount/);
         expect(styleSource).toMatch(/#rm_print_characters_block \.entity_type_badge/);
         expect(styleSource).toMatch(/@media screen and \(max-width: 600px\)[\s\S]*#rm_button_bar[\s\S]*flex-wrap: wrap/);
-        expect(styleSource).toMatch(/@media screen and \(max-width: 600px\)[\s\S]*#character_sort_order[\s\S]*flex-basis: 100%/);
+        expect(styleSource).toMatch(/@media screen and \(max-width: 600px\)[\s\S]*#rm_button_bar \.character-list-sort-group[\s\S]*flex-basis: 100%/);
+        expect(styleSource).toMatch(/@media screen and \(max-width: 600px\)[\s\S]*#rm_button_bar \.character-list-bulk-actions[\s\S]*flex-basis: 100%/);
     });
 
     test('keeps character list pagination state synchronized after page-size changes', () => {
@@ -174,6 +184,9 @@ describe('character list structure', () => {
         expect(indexHtml).toContain('data-i18n="Import URL">Import URL</span>');
         expect(indexHtml).toContain('data-i18n="Group">Group</span>');
         expect(indexHtml).toContain('data-i18n="Bulk Edit">Bulk Edit</span>');
+        expect(indexHtml).toContain('data-i18n="Sort">Sort</label>');
+        expect(indexHtml).toMatch(/id="bulkSelectedCount"[^>]*style="display: none;"[^>]*role="status"/);
+        expect(indexHtml).toContain('role="status"');
         expect(indexHtml).toMatch(/id="bulkEditButton"[^>]*tabindex="0"/);
         expect(scriptSource).toContain("setCharacterSearchBusy(true)");
         expect(scriptSource).toContain("setCharacterSearchBusy(false)");
@@ -182,11 +195,14 @@ describe('character list structure', () => {
         expect(bulkEditSource).toMatch(/const checkbox = \$\('<input type=\\'checkbox\\' class=\\'bulk_select_checkbox\\' aria-label=\\'Select character for bulk edit\\'>'\);/);
         expect(overlaySource).toContain("character.setAttribute('aria-selected', 'true')");
         expect(overlaySource).toContain("character.setAttribute('aria-selected', 'false')");
+        expect(overlaySource).toContain('syncBulkSelectionDomState({');
+        expect(overlaySource).toContain('this.state !== BulkEditOverlayState.select');
         expect(overlaySource).toContain('updateBulkSelectionCountState({ selectedCount, deleteButton, fallbackFocusElement }, count)');
         expect(stateSource).toContain('if (!selectedCount)');
-        expect(stateSource).toMatch(/selectedCount\.textContent = String\(count\);/);
+        expect(stateSource).toContain('selectedCount.textContent = `${count} selected`;');
         expect(stateSource).toContain("selectedCount.setAttribute('aria-label',");
         expect(stateSource).toContain('updateBulkDeleteButtonState(deleteButton, count > 0, fallbackFocusElement)');
+        expect(stateSource).toContain('export function syncBulkSelectionDomState');
         expect(styleSource).toMatch(/#character_search_status/);
         expect(styleSource).toMatch(/#rm_print_characters_block \.character_select\.character_selected/);
         expect(styleSource).toMatch(/#rm_print_characters_block \.character_select\.character_selected::after/);
@@ -194,6 +210,7 @@ describe('character list structure', () => {
         expect(zhCnLocale).toContain('"Group": "群组"');
         expect(zhCnLocale).toContain('"Bulk Edit": "批量编辑"');
         expect(zhCnLocale).toContain('"List": "列表"');
+        expect(zhCnLocale).toContain('"Sort": "排序"');
         expect(zhCnLocale).toContain('"Filtering characters…": "正在筛选角色…"');
     });
 
@@ -206,9 +223,14 @@ describe('character list structure', () => {
         expect(enableBulkSelectSource).toMatch(/const checkbox = \$\('<input type=\\'checkbox\\' class=\\'bulk_select_checkbox\\' aria-label=\\'Select character for bulk edit\\'>'\);/);
         expect(enableBulkSelectSource).toContain("$(el).attr('aria-selected', 'false')");
         expect(enableBulkSelectSource).toContain("$('#rm_print_characters_block').addClass('bulk_select')");
+        expect(enableBulkSelectSource).toContain("$(document).off('click.bulkSelectCheckbox').on('click.bulkSelectCheckbox'");
+        expect(bulkEditSource).toContain('if (is_bulk_edit) {');
+        expect(bulkEditSource).toContain('characterGroupOverlay.onPageLoad();');
+        expect(bulkEditSource).toContain("$('#bulkSelectedCount').css('display', 'inline-flex')");
         expect(disableBulkSelectSource).toContain("$('.bulk_select_checkbox').remove()");
         expect(disableBulkSelectSource).toContain("$('#rm_print_characters_block .character_select').removeAttr('aria-selected')");
         expect(disableBulkSelectSource).toContain("$('#rm_print_characters_block').removeClass('bulk_select')");
+        expect(disableBulkSelectSource).toContain("$(document).off('click.bulkSelectCheckbox')");
     });
 
     test('keeps bulk destructive actions disabled until a selection exists', () => {

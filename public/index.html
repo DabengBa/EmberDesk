@@ -1213,6 +1213,7 @@
                             <div class="wi-section-heading">
                                 <span id="wiGlobalPanelTitle" class="wi-section-title" data-i18n="Global World Info">Global World Info</span>
                                 <span class="wi-section-subtitle" data-i18n="Applies to all chats">Applies to all chats</span>
+                                <span id="wiGlobalCount" class="wi-global-count" aria-live="polite">0 active</span>
                             </div>
                         </div>
                         <div id="wiTopBlock" class="wi-global-grid inline-drawer wide100p">
@@ -2855,33 +2856,42 @@
                     <div name="Character List Panel" id="rm_characters_block" class="right_menu">
                         <div id="charListFixedTop">
                             <div id="rm_button_bar">
-                                <div id="rm_button_create" title="Create New Character" data-i18n="[title]Create New Character" class="menu_button fa-solid fa-user-plus character-list-action" role="button" aria-label="Create New Character"><span class="character-list-action-label" data-i18n="Create">Create</span></div>
-                                <div id="character_import_button" title="Import Character from File" data-i18n="[title]Import Character from File" class="menu_button fa-solid fa-file-import character-list-action" role="button" aria-label="Import Character from File"><span class="character-list-action-label" data-i18n="Import">Import</span></div>
-                                <div id="external_import_button" title="Import content from external URL" data-i18n="[title]Import content from external URL" class="menu_button fa-solid fa-cloud-arrow-down character-list-action" role="button" aria-label="Import content from external URL"><span class="character-list-action-label" data-i18n="Import URL">Import URL</span></div>
-                                <div id="rm_button_group_chats" title="Create New Chat Group" data-i18n="[title]Create New Chat Group" class="menu_button fa-solid fa-users-gear character-list-action" role="button" aria-label="Create New Chat Group"><span class="character-list-action-label" data-i18n="Group">Group</span></div>
-                                <div id="rm_buttons_container">
-                                    <!-- Container for additional buttons added by extensions -->
+                                <div class="character-list-tool-group character-list-create-group">
+                                    <div id="rm_button_create" title="Create New Character" data-i18n="[title]Create New Character" class="menu_button fa-solid fa-user-plus character-list-action" role="button" aria-label="Create New Character"><span class="character-list-action-label" data-i18n="Create">Create</span></div>
+                                    <div id="character_import_button" title="Import Character from File" data-i18n="[title]Import Character from File" class="menu_button fa-solid fa-file-import character-list-action" role="button" aria-label="Import Character from File"><span class="character-list-action-label" data-i18n="Import">Import</span></div>
+                                    <div id="external_import_button" title="Import content from external URL" data-i18n="[title]Import content from external URL" class="menu_button fa-solid fa-cloud-arrow-down character-list-action" role="button" aria-label="Import content from external URL"><span class="character-list-action-label" data-i18n="Import URL">Import URL</span></div>
+                                    <div id="rm_button_group_chats" title="Create New Chat Group" data-i18n="[title]Create New Chat Group" class="menu_button fa-solid fa-users-gear character-list-action" role="button" aria-label="Create New Chat Group"><span class="character-list-action-label" data-i18n="Group">Group</span></div>
+                                    <div id="rm_buttons_container">
+                                        <!-- Container for additional buttons added by extensions -->
+                                    </div>
                                 </div>
-                                <select id="character_sort_order" class="flex1 text_pole textarea_compact" title="Characters sorting order" data-i18n="[title]Characters sorting order">
-                                    <option data-field="search" data-order="desc" data-i18n="Search" hidden>Search</option>
-                                    <option data-field="name" data-order="asc" data-i18n="A-Z">A-Z</option>
-                                    <option data-field="name" data-order="desc" data-i18n="Z-A">Z-A</option>
-                                    <option data-field="create_date" data-order="desc" data-i18n="Newest">Newest</option>
-                                    <option data-field="create_date" data-order="asc" data-i18n="Oldest">Oldest</option>
-                                    <option data-field="fav" data-order="desc" data-rule="boolean" data-i18n="Favorites">Favorites</option>
-                                    <option data-field="date_last_chat" data-order="desc" data-i18n="Recent">Recent</option>
-                                    <option data-field="chat_size" data-order="desc" data-i18n="Most chats">Most chats</option>
-                                    <option data-field="chat_size" data-order="asc" data-i18n="Least chats">Least chats</option>
-                                    <option data-field="data_size" data-order="desc" data-i18n="Most tokens">Most tokens</option>
-                                    <option data-field="data_size" data-order="asc" data-i18n="Least tokens">Least tokens</option>
-                                    <option data-field="name" data-order="random" data-i18n="Random">Random</option>
-                                </select>
-                                <div id="rm_button_search" class="right_menu_button fa-fw fa-solid fa-search character-list-action" title="Toggle search bar" data-i18n="[title]Toggle search bar" role="button" aria-label="Toggle search bar"><span class="character-list-action-label" data-i18n="Search">Search</span></div>
-                                <i id="charListGridToggle" class="fa-solid fa-table-cells-large menu_button character-list-action" title="Toggle character grid view" data-i18n="[title]Toggle character grid view" role="button" aria-label="Toggle character grid view"><span class="character-list-action-label" data-i18n="Grid">Grid</span></i>
-                                <i id="bulkEditButton" class="fa-solid fa-edit menu_button bulkEditButton character-list-action" title="Bulk edit characters&#13;&#13;Click to toggle characters&#13;Shift + Click to select/deselect a range of characters&#13;Right-click for actions" data-i18n="[title]Bulk_edit_characters" role="button" aria-label="Bulk edit characters" tabindex="0"><span class="character-list-action-label" data-i18n="Bulk Edit">Bulk Edit</span></i>
-                                <div id="bulkSelectedCount" class="bulkEditOptionElement paginationjs-nav"></div>
-                                <i id="bulkSelectAllButton" class="fa-solid fa-check-double menu_button bulkEditOptionElement bulkSelectAllButton character-list-action" title="Bulk select all characters" data-i18n="[title]Bulk select all characters" style="display: none;" role="button" aria-label="Bulk select all characters"><span class="character-list-action-label" data-i18n="Select All">Select All</span></i>
-                                <i id="bulkDeleteButton" class="fa-solid fa-trash menu_button bulkEditOptionElement bulkDeleteButton character-list-action" title="Bulk delete characters" data-i18n="[title]Bulk delete characters" style="display: none;" role="button" aria-label="Bulk delete characters"><span class="character-list-action-label" data-i18n="Delete">Delete</span></i>
+                                <div class="character-list-tool-group character-list-sort-group">
+                                    <label for="character_sort_order" class="character-list-sort-label" data-i18n="Sort">Sort</label>
+                                    <select id="character_sort_order" class="flex1 text_pole textarea_compact" title="Characters sorting order" data-i18n="[title]Characters sorting order">
+                                        <option data-field="search" data-order="desc" data-i18n="Search" hidden>Search</option>
+                                        <option data-field="name" data-order="asc" data-i18n="A-Z">A-Z</option>
+                                        <option data-field="name" data-order="desc" data-i18n="Z-A">Z-A</option>
+                                        <option data-field="create_date" data-order="desc" data-i18n="Newest">Newest</option>
+                                        <option data-field="create_date" data-order="asc" data-i18n="Oldest">Oldest</option>
+                                        <option data-field="fav" data-order="desc" data-rule="boolean" data-i18n="Favorites">Favorites</option>
+                                        <option data-field="date_last_chat" data-order="desc" data-i18n="Recent">Recent</option>
+                                        <option data-field="chat_size" data-order="desc" data-i18n="Most chats">Most chats</option>
+                                        <option data-field="chat_size" data-order="asc" data-i18n="Least chats">Least chats</option>
+                                        <option data-field="data_size" data-order="desc" data-i18n="Most tokens">Most tokens</option>
+                                        <option data-field="data_size" data-order="asc" data-i18n="Least tokens">Least tokens</option>
+                                        <option data-field="name" data-order="random" data-i18n="Random">Random</option>
+                                    </select>
+                                </div>
+                                <div class="character-list-tool-group character-list-view-group">
+                                    <div id="rm_button_search" class="right_menu_button fa-fw fa-solid fa-search character-list-action" title="Toggle search bar" data-i18n="[title]Toggle search bar" role="button" aria-label="Toggle search bar"><span class="character-list-action-label" data-i18n="Search">Search</span></div>
+                                    <i id="charListGridToggle" class="fa-solid fa-table-cells-large menu_button character-list-action" title="Toggle character grid view" data-i18n="[title]Toggle character grid view" role="button" aria-label="Toggle character grid view"><span class="character-list-action-label" data-i18n="Grid">Grid</span></i>
+                                    <i id="bulkEditButton" class="fa-solid fa-edit menu_button bulkEditButton character-list-action" title="Bulk edit characters&#13;&#13;Click to toggle characters&#13;Shift + Click to select/deselect a range of characters&#13;Right-click for actions" data-i18n="[title]Bulk_edit_characters" role="button" aria-label="Bulk edit characters" tabindex="0"><span class="character-list-action-label" data-i18n="Bulk Edit">Bulk Edit</span></i>
+                                </div>
+                                <div class="character-list-tool-group character-list-bulk-actions" aria-live="polite">
+                                    <div id="bulkSelectedCount" class="bulkEditOptionElement paginationjs-nav" style="display: none;" role="status"></div>
+                                    <i id="bulkSelectAllButton" class="fa-solid fa-check-double menu_button bulkEditOptionElement bulkSelectAllButton character-list-action" title="Bulk select all characters" data-i18n="[title]Bulk select all characters" style="display: none;" role="button" aria-label="Bulk select all characters"><span class="character-list-action-label" data-i18n="Select All">Select All</span></i>
+                                    <i id="bulkDeleteButton" class="fa-solid fa-trash menu_button bulkEditOptionElement bulkDeleteButton character-list-action" title="Bulk delete characters" data-i18n="[title]Bulk delete characters" style="display: none;" role="button" aria-label="Bulk delete characters"><span class="character-list-action-label" data-i18n="Delete">Delete</span></i>
+                                </div>
                             </div>
                             <div id="form_character_search_form">
                                 <input id="character_search_bar" class="text_pole textarea_compact width100p" type="search" data-i18n="[placeholder]Search..." placeholder="Search..." />
@@ -3308,7 +3318,7 @@
                 <form class="world_entry_form wi-card-entry">
                     <div class="inline-drawer wide100p">
                         <div class="wi-card-header inline-drawer-header gap5px padding0">
-                            <div class="wi-card-expand-button fa-solid fa-chevron-right" role="button" tabindex="0" title="Expand entry" data-i18n="[title]Expand entry"></div>
+                            <div class="wi-card-expand-button fa-solid fa-chevron-right" role="button" tabindex="0" title="Expand entry" aria-label="Expand entry" aria-expanded="false" data-i18n="[title]Expand entry"></div>
                             <div class="wi-card-body-wrap">
                                 <div class="wi-card-title-row flex-container alignitemscenter wide100p">
                                     <div class="wi-card-title-field">

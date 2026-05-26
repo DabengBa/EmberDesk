@@ -1,6 +1,7 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
 import {
+    syncBulkSelectionDomState,
     updateBulkDeleteButtonState,
     updateBulkSelectionCountState,
 } from '../public/scripts/character-list-state.js';
@@ -31,6 +32,35 @@ function createFakeButton() {
 
 function readAttribute(element, name) {
     return element.getAttribute(name);
+}
+
+function createFakeCharacterRow(characterId) {
+    const classes = new Set();
+    const attributes = new Map([['data-chid', String(characterId)]]);
+    const checkbox = { checked: false };
+
+    return {
+        checkbox,
+        classList: {
+            contains: className => classes.has(className),
+            toggle: (className, enabled) => {
+                if (enabled) {
+                    classes.add(className);
+                } else {
+                    classes.delete(className);
+                }
+            },
+        },
+        getAttribute: name => attributes.get(name) ?? null,
+        setAttribute: (name, value) => attributes.set(name, String(value)),
+        querySelector: selector => selector === '.bulk_select_checkbox' ? checkbox : null,
+    };
+}
+
+function createFakeCharacterContainer(rows) {
+    return {
+        getElementsByClassName: className => className === 'character_select' ? rows : [],
+    };
 }
 
 describe('updateBulkDeleteButtonState', () => {
@@ -81,7 +111,7 @@ describe('updateBulkSelectionCountState', () => {
 
         updateBulkSelectionCountState({ selectedCount, deleteButton }, 0);
 
-        expect(selectedCount.textContent).toBe('0');
+        expect(selectedCount.textContent).toBe('0 selected');
         expect(readAttribute(selectedCount, 'title')).toBe('0 characters selected');
         expect(readAttribute(selectedCount, 'aria-label')).toBe('0 characters selected');
         expect(deleteButton.classList.contains('disabled')).toBe(true);
@@ -95,11 +125,53 @@ describe('updateBulkSelectionCountState', () => {
 
         updateBulkSelectionCountState({ selectedCount, deleteButton }, 2);
 
-        expect(selectedCount.textContent).toBe('2');
+        expect(selectedCount.textContent).toBe('2 selected');
         expect(readAttribute(selectedCount, 'title')).toBe('2 characters selected');
         expect(readAttribute(selectedCount, 'aria-label')).toBe('2 characters selected');
         expect(deleteButton.classList.contains('disabled')).toBe(false);
         expect(readAttribute(deleteButton, 'aria-disabled')).toBe('false');
         expect(readAttribute(deleteButton, 'tabindex')).toBe('0');
+    });
+});
+
+describe('syncBulkSelectionDomState', () => {
+    test('restores visible selected rows after filtering or sorting reprints the list', () => {
+        const alpha = createFakeCharacterRow(0);
+        const beta = createFakeCharacterRow(1);
+        const gamma = createFakeCharacterRow(2);
+        const container = createFakeCharacterContainer([alpha, beta, gamma]);
+
+        const visibleSelectedCount = syncBulkSelectionDomState({
+            container,
+            selectedCharacterIds: [0, 2],
+        });
+
+        expect(visibleSelectedCount).toBe(2);
+        expect(alpha.classList.contains('character_selected')).toBe(true);
+        expect(readAttribute(alpha, 'aria-selected')).toBe('true');
+        expect(alpha.checkbox.checked).toBe(true);
+        expect(beta.classList.contains('character_selected')).toBe(false);
+        expect(readAttribute(beta, 'aria-selected')).toBe('false');
+        expect(beta.checkbox.checked).toBe(false);
+        expect(gamma.classList.contains('character_selected')).toBe(true);
+        expect(readAttribute(gamma, 'aria-selected')).toBe('true');
+        expect(gamma.checkbox.checked).toBe(true);
+    });
+
+    test('keeps hidden selected characters in the model while clearing unselected visible rows', () => {
+        const alpha = createFakeCharacterRow(0);
+        const beta = createFakeCharacterRow(1);
+        const container = createFakeCharacterContainer([alpha, beta]);
+
+        const visibleSelectedCount = syncBulkSelectionDomState({
+            container,
+            selectedCharacterIds: [2],
+        });
+
+        expect(visibleSelectedCount).toBe(0);
+        expect(alpha.classList.contains('character_selected')).toBe(false);
+        expect(readAttribute(alpha, 'aria-selected')).toBe('false');
+        expect(beta.classList.contains('character_selected')).toBe(false);
+        expect(readAttribute(beta, 'aria-selected')).toBe('false');
     });
 });

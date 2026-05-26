@@ -1,6 +1,13 @@
 import { describe, test, expect, afterEach, jest } from '@jest/globals';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const originalSetupTestMode = global.EMBERDESK_SETUP_TEST_MODE;
+const originalDocument = global.document;
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const repoRoot = path.resolve(__dirname, '..');
 
 async function importFreshSetupModule() {
     global.EMBERDESK_SETUP_TEST_MODE = true;
@@ -40,6 +47,8 @@ class FakeElement {
         this.classList = new FakeClassList();
         this.attributes = new Map();
         this.listeners = new Map();
+        this.focused = false;
+        this.focusCount = 0;
         this.offsetWidth = 0;
     }
 
@@ -71,7 +80,19 @@ class FakeElement {
     }
 
     setAttribute(name, value) {
-        this.attributes.set(name, value);
+        this.attributes.set(name, String(value));
+    }
+
+    removeAttribute(name) {
+        this.attributes.delete(name);
+    }
+
+    focus() {
+        this.focused = true;
+        this.focusCount++;
+        if (global.document) {
+            global.document.activeElement = this;
+        }
     }
 
     querySelector(selector) {
@@ -80,6 +101,12 @@ class FakeElement {
 }
 
 function createSetupRoot() {
+    if (!global.document) {
+        global.document = { activeElement: null };
+    } else if (!('activeElement' in global.document)) {
+        global.document.activeElement = null;
+    }
+
     const elements = Object.fromEntries([
         'setupCard',
         'setupForm',
@@ -122,6 +149,11 @@ describe('setup page controller helpers', () => {
             delete global.EMBERDESK_SETUP_TEST_MODE;
         } else {
             global.EMBERDESK_SETUP_TEST_MODE = originalSetupTestMode;
+        }
+        if (originalDocument === undefined) {
+            delete global.document;
+        } else {
+            global.document = originalDocument;
         }
     });
 
@@ -166,6 +198,12 @@ describe('setup page controller helpers', () => {
             name: 'Ignored',
             password: 'secret',
         })).toEqual({ password: 'secret' });
+    });
+
+    test('keeps setup error region an assertive alert for dynamic updates', () => {
+        const setupHtml = fs.readFileSync(path.join(repoRoot, 'public/setup.html'), 'utf8');
+
+        expect(setupHtml).toContain('<div class="login-error" id="errorMessage" role="alert" aria-live="assertive"></div>');
     });
 
     test('initializes in set-password mode and cleanup removes page-owned listeners', async () => {
@@ -337,15 +375,30 @@ describe('setup page controller helpers', () => {
 
         await elements.setupForm.submit();
         expect(elements.errorMessage.textContent).toBe('请输入用户名');
+        expect(elements.errorMessage.attributes.get('tabindex')).toBe('-1');
+        expect(elements.errorMessage.focused).toBe(true);
+        expect(elements.handle.attributes.get('aria-invalid')).toBe('true');
+        expect(elements.handle.attributes.get('aria-describedby')).toBe('errorMessage');
 
         elements.handle.value = 'admin';
+        elements.handle.input();
+        expect(elements.errorMessage.textContent).toBe('');
+        expect(elements.errorMessage.attributes.has('tabindex')).toBe(false);
+        expect(elements.handle.attributes.has('aria-invalid')).toBe(false);
+        expect(elements.handle.attributes.has('aria-describedby')).toBe(false);
+
         await elements.setupForm.submit();
         expect(elements.errorMessage.textContent).toBe('请输入密码');
+        expect(elements.password.attributes.get('aria-invalid')).toBe('true');
+        expect(elements.password.attributes.get('aria-describedby')).toBe('errorMessage');
 
         elements.password.value = 'secret';
         elements.confirmPassword.value = 'different';
+        elements.password.input();
         await elements.setupForm.submit();
         expect(elements.errorMessage.textContent).toBe('两次密码不一致');
+        expect(elements.confirmPassword.attributes.get('aria-invalid')).toBe('true');
+        expect(elements.confirmPassword.attributes.get('aria-describedby')).toBe('errorMessage');
 
         expect(fetchMock).toHaveBeenCalledTimes(2);
 
@@ -412,8 +465,46 @@ describe('setup page controller helpers', () => {
         await elements.setupForm.submit();
 
         expect(elements.errorMessage.textContent).toBe('用户名格式不正确');
+        expect(elements.errorMessage.attributes.get('tabindex')).toBe('-1');
+        expect(elements.handle.attributes.get('aria-invalid')).toBe('true');
+        expect(elements.handle.attributes.get('aria-describedby')).toBe('errorMessage');
         expect(elements.handle.disabled).toBe(false);
         expect(elements.name.disabled).toBe(false);
+        expect(elements.password.disabled).toBe(false);
+        expect(elements.confirmPassword.disabled).toBe(false);
+        expect(elements.setupButton.disabled).toBe(false);
+
+        cleanup();
+    });
+
+    test('keeps setup network failures form-level and re-enables controls', async () => {
+        const { initSetupPage } = await importFreshSetupModule();
+        const { root, elements } = createSetupRoot();
+        const fetchMock = jest.fn(async (url) => {
+            if (url === '/csrf-token') {
+                return jsonResponse({ token: 'csrf-token' });
+            }
+            if (url === '/api/users/setup-mode') {
+                return jsonResponse({ mode: 'fresh' });
+            }
+            throw new Error('network down');
+        });
+
+        const cleanup = await initSetupPage(root, {
+            fetch: fetchMock,
+            initAccessibility: () => {},
+        });
+        elements.handle.value = 'admin';
+        elements.password.value = 'secret';
+        elements.confirmPassword.value = 'secret';
+
+        await elements.setupForm.submit();
+
+        expect(elements.errorMessage.textContent).toBe('Error: network down');
+        expect(elements.handle.attributes.has('aria-invalid')).toBe(false);
+        expect(elements.password.attributes.has('aria-invalid')).toBe(false);
+        expect(elements.confirmPassword.attributes.has('aria-invalid')).toBe(false);
+        expect(elements.handle.disabled).toBe(false);
         expect(elements.password.disabled).toBe(false);
         expect(elements.confirmPassword.disabled).toBe(false);
         expect(elements.setupButton.disabled).toBe(false);

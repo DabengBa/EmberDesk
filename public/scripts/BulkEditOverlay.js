@@ -25,7 +25,7 @@ import { POPUP_TYPE, POPUP_RESULT, Popup } from './popup.js';
 import { buildCascadeSectionHtml, captureCascadeChoices } from './world-cascade-dialog.js';
 import { waitUntilCondition } from './utils.js';
 import { debounce_timeout } from './constants.js';
-import { resolveCharacterAvatarsByIds, updateBulkDeleteButtonState, updateBulkSelectionCountState } from './character-list-state.js';
+import { resolveCharacterAvatarsByIds, syncBulkSelectionDomState, updateBulkDeleteButtonState, updateBulkSelectionCountState } from './character-list-state.js';
 import { createTagInput, getTagKeyForEntity, getTagsList, printTagList, tag_map, compareTagsForSort, removeTagFromMap, importTags, tag_import_setting } from './tags.js';
 import { t } from './i18n.js';
 
@@ -501,7 +501,9 @@ class BulkEditOverlay {
      * Set up a Sortable grid for the loaded page
      */
     onPageLoad = () => {
-        this.browseState();
+        if (this.state !== BulkEditOverlayState.select) {
+            this.browseState();
+        }
 
         const elements = this.#getEnabledElements();
         elements.forEach(element => element.addEventListener('touchstart', this.handleHold));
@@ -512,6 +514,19 @@ class BulkEditOverlay {
         elements.forEach(element => element.addEventListener('mouseup', this.handleLongPressEnd));
         elements.forEach(element => element.addEventListener('dragend', this.handleLongPressEnd));
         elements.forEach(element => element.addEventListener('touchmove', this.handleLongPressEnd));
+
+        if (this.state === BulkEditOverlayState.select) {
+            syncBulkSelectionDomState({
+                container: this.container,
+                selectedCharacterIds: this.selectedCharacters,
+                characterClass: BulkEditOverlay.characterClass,
+                selectedClass: BulkEditOverlay.selectedClass,
+                checkboxClass: BulkEditOverlay.legacySelectedClass,
+            });
+            this.#disableClickEventsForCharacters();
+            this.#disableClickEventsForGroups();
+            this.updateSelectedCount();
+        }
 
         // Cohee: It only triggers when clicking on a margin between the elements?
         // Feel free to fix or remove this, I'm not sure how to.

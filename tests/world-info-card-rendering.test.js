@@ -81,6 +81,8 @@ describe('world info card rendering', () => {
         expect(cardIndex).toBeGreaterThanOrEqual(0);
         expect(editIndex).toBeGreaterThan(cardIndex);
         expect(entryTemplate).toContain('class="wi-card-expand-button');
+        expect(entryTemplate).toContain('aria-expanded="false"');
+        expect(entryTemplate).toContain('aria-label="Expand entry"');
         expect(entryTemplate).toContain('data-i18n="[title]Expand entry"');
         expect(entryTemplate).toContain('<div class="inline-drawer-content inline-drawer-outlet flex-container paddingBottom5px wide100p">');
     });
@@ -104,6 +106,7 @@ describe('world info card rendering', () => {
         expect(indexHtml).toContain('id="wiGlobalPanel"');
         expect(indexHtml).toContain('data-i18n="Global World Info"');
         expect(indexHtml).not.toContain('data-i18n="Enabled worlds"');
+        expect(indexHtml).toContain('id="wiGlobalCount"');
         expect(indexHtml).toContain('data-i18n="Activation Rules"');
         expect(indexHtml).toContain('id="wiEditorPanel"');
         expect(indexHtml).toContain('data-i18n="World Info Editor"');
@@ -111,6 +114,7 @@ describe('world info card rendering', () => {
         expect(indexHtml).toContain('class="inline-drawer-content wi-global-rules-content"');
         expect(panelHtml).toContain('id="world_editor_select"');
         expect(css).toContain('.wi-global-grid');
+        expect(css).toContain('.wi-global-count');
         expect(css).toContain('.wi-global-rules-content');
         expect(css).toContain('grid-column: 1 / -1;');
         expect(css).toContain('.wi-settings-toggle');
@@ -124,18 +128,19 @@ describe('world info card rendering', () => {
         expect(source).not.toContain('worldInfoSelect.trigger(\'change\');');
     });
 
-    test('global world selector exposes a clear empty prompt and closes after direct selection changes', () => {
+    test('global world selector exposes a clear empty prompt and keeps multi-select open for consecutive choices', () => {
         const indexHtml = read('public/index.html');
         const source = read('public/scripts/world-info.js');
 
         expect(indexHtml).toContain('aria-label="Global World Info active in all chats"');
         expect(indexHtml).toContain('data-placeholder="No global worlds active. Select one or more worlds."');
         expect(source).toContain('const globalWorldInfoSelector = $(\'#world_info\');');
+        expect(source).toContain('function refreshGlobalWorldInfoSelectorState()');
+        expect(source).toContain('$(\'#wiGlobalCount\').text');
         expect(source).toContain('placeholder: globalWorldInfoSelector.attr(\'data-placeholder\')');
-        expect(source).toContain('globalWorldInfoSelector.on(\'select2:select select2:unselect\', () => {');
-        expect(source).toContain('globalWorldInfoSelector.select2(\'close\');');
-        expect(source).toContain('setTimeout(() => {');
-        expect(source).toContain('globalWorldInfoSelector.next(\'span.select2-container\').find(\'textarea\').trigger(\'blur\');');
+        expect(source).toContain('globalWorldInfoSelector.on(\'select2:select select2:unselect\', () => refreshGlobalWorldInfoSelectorState());');
+        expect(source).not.toContain('globalWorldInfoSelector.select2(\'close\');');
+        expect(source).not.toContain('globalWorldInfoSelector.next(\'span.select2-container\').find(\'textarea\').trigger(\'blur\');');
     });
 
     test('world info drawer takes precedence over the character drawer when opened from the top bar', () => {
@@ -204,6 +209,7 @@ describe('world info card rendering', () => {
         expect(css).toContain('.wi-content-grid');
         expect(css).toContain('.wi-content-open');
         expect(css).toContain('.wi-content-editor-modal');
+        expect(css).toContain('body.wi-content-editor-open');
         expect(css).toContain('grid-template-columns: repeat(2, minmax(220px, 1fr));');
         expect(css).toContain('.wi-content-flags .checkbox:hover');
         expect(css).toContain('flex: 1 1 100% !important;');
@@ -218,14 +224,19 @@ describe('world info card rendering', () => {
         const source = read('public/scripts/world-info.js');
 
         expect(source).toContain('const contentEditorPlaceholder = $(\'<span class="wi-content-editor-placeholder" hidden></span>\');');
+        expect(source).toContain('let contentEditorReturnFocus = null;');
         expect(source).toContain('contentEditorPlaceholder.insertBefore(contentEditor);');
         expect(source).toContain('contentEditor.appendTo(document.body);');
+        expect(source).toContain('document.body.classList.add(\'wi-content-editor-open\');');
+        expect(source).toContain('document.body.classList.remove(\'wi-content-editor-open\');');
         expect(source).toContain('contentEditor.insertAfter(contentEditorPlaceholder);');
         expect(source).toContain('contentEditorPlaceholder.detach();');
         expect(source).toContain("const contentEditorTitle = editTemplate.find('.wi-content-editor-title');");
         expect(source).toContain('contentEditorTitle.attr(\'id\', `world_entry_content_editor_title_${entry.uid}`);');
         expect(source).toContain('contentEditor.attr(\'aria-labelledby\', `world_entry_content_editor_title_${entry.uid}`);');
-        expect(source).toContain("contentOpenButton.attr('aria-expanded', 'false').trigger('focus');");
+        expect(source).toContain('focusableControls[0]?.focus();');
+        expect(source).toContain('focusableControls[focusableControls.length - 1]?.focus();');
+        expect(source).toContain('$(contentEditorReturnFocus).trigger(\'focus\');');
         expect(source).toContain("if (e.key === 'Escape')");
     });
 });

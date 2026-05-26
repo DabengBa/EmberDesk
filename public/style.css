@@ -3074,7 +3074,41 @@ input[type="file"] {
     display: flex;
     gap: 5px;
     align-items: center;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
+}
+
+#rm_button_bar .character-list-tool-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+}
+
+#rm_button_bar .character-list-create-group {
+    flex: 1 1 210px;
+    flex-wrap: wrap;
+}
+
+#rm_button_bar .character-list-sort-group {
+    flex: 1 1 135px;
+}
+
+#rm_button_bar .character-list-view-group,
+#rm_button_bar .character-list-bulk-actions {
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+}
+
+#rm_button_bar .character-list-bulk-actions {
+    margin-left: auto;
+}
+
+#rm_button_bar .character-list-sort-label {
+    flex: 0 0 auto;
+    color: var(--SmartThemeEmColor);
+    font-size: calc(var(--mainFontSize) * 0.78);
+    font-weight: 600;
+    line-height: 1;
 }
 
 #rm_button_bar .character-list-action {
@@ -3096,6 +3130,23 @@ input[type="file"] {
     font-weight: 600;
     line-height: 1;
     letter-spacing: 0;
+}
+
+#bulkSelectedCount {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: calc(var(--mainFontSize) * 4.8);
+    min-height: calc(var(--mainFontSize) * 1.7);
+    margin: 0;
+    padding: 3px 6px;
+    color: var(--SmartThemeEmColor);
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 5px;
+    font-size: calc(var(--mainFontSize) * 0.78);
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
 }
 
 #rm_button_bar .menu_button {
@@ -6667,8 +6718,19 @@ body:not(.movingUI) .drawer-content.maximized {
         flex-wrap: wrap;
     }
 
-    #character_sort_order {
+    #rm_button_bar .character-list-create-group,
+    #rm_button_bar .character-list-sort-group,
+    #rm_button_bar .character-list-view-group,
+    #rm_button_bar .character-list-bulk-actions {
         flex-basis: 100%;
+    }
+
+    #rm_button_bar .character-list-bulk-actions {
+        margin-left: 0;
+    }
+
+    #character_sort_order {
+        flex-basis: auto;
     }
 
     #rm_button_bar .character-list-action {

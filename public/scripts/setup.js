@@ -112,25 +112,41 @@ function collectElements(root) {
  * Displays an error message in the setup error block.
  * @param {HTMLElement} errorBlock The error block element
  * @param {string} message Error message to display
- * @param {boolean} [shake=false] Whether to apply shake animation
+ * @param {object} [options] Display options
+ * @param {boolean} [options.shake=false] Whether to apply shake animation
+ * @param {HTMLElement|null} [options.field=null] Field associated with the error
  */
-function showError(errorBlock, message, shake = false) {
+function showError(errorBlock, message, { shake = false, field = null } = {}) {
     errorBlock.textContent = message;
     errorBlock.classList.add('login-error--visible');
+    errorBlock.setAttribute('tabindex', '-1');
+    if (field) {
+        field.setAttribute('aria-invalid', 'true');
+        field.setAttribute('aria-describedby', errorBlock.id);
+    }
     if (shake) {
         errorBlock.classList.remove('login-error--shake');
         void errorBlock.offsetWidth;
         errorBlock.classList.add('login-error--shake');
+    }
+    if (document.activeElement !== errorBlock) {
+        errorBlock.focus();
     }
 }
 
 /**
  * Hides the setup error message.
  * @param {HTMLElement} errorBlock The error block element
+ * @param {HTMLElement[]} [fields=[]] Fields associated with the error
  */
-function hideError(errorBlock) {
+function hideError(errorBlock, fields = []) {
     errorBlock.textContent = '';
     errorBlock.classList.remove('login-error--visible', 'login-error--shake');
+    errorBlock.removeAttribute('tabindex');
+    for (const field of fields) {
+        field.removeAttribute('aria-invalid');
+        field.removeAttribute('aria-describedby');
+    }
 }
 
 /**
@@ -147,6 +163,7 @@ export function createSetupController(root = document, dependencyOverrides = {})
     let csrfToken = '';
     /** @type {'fresh'|'set-password'} */
     let setupMode = 'fresh';
+    const setupFields = [elements.handle, elements.password, elements.confirmPassword];
 
     function setFormEnabled(enabled) {
         const shouldDisable = !enabled;
@@ -207,8 +224,16 @@ export function createSetupController(root = document, dependencyOverrides = {})
         button.setAttribute('aria-label', nextState.ariaLabel);
     }
 
+    function getSetupErrorField(message) {
+        if (setupMode === 'fresh' && (message === 'Invalid handle' || message === 'User already exists')) {
+            return elements.handle;
+        }
+
+        return null;
+    }
+
     async function performSetup(formData) {
-        hideError(elements.errorMessage);
+        hideError(elements.errorMessage, setupFields);
         setFormEnabled(false);
 
         const originalText = elements.setupButton.textContent;
@@ -234,7 +259,10 @@ export function createSetupController(root = document, dependencyOverrides = {})
                     return;
                 }
 
-                showError(elements.errorMessage, getSetupErrorMessage(errorData.error), true);
+                showError(elements.errorMessage, getSetupErrorMessage(errorData.error), {
+                    shake: true,
+                    field: getSetupErrorField(errorData.error),
+                });
                 return;
             }
 
@@ -246,7 +274,7 @@ export function createSetupController(root = document, dependencyOverrides = {})
         } catch (error) {
             elements.setupButton.textContent = originalText;
             setFormEnabled(true);
-            showError(elements.errorMessage, String(error), true);
+            showError(elements.errorMessage, String(error), { shake: true });
         }
     }
 
@@ -264,22 +292,22 @@ export function createSetupController(root = document, dependencyOverrides = {})
             const formData = getFormData();
 
             if (setupMode === 'fresh' && !formData.handle) {
-                showError(elements.errorMessage, setupMessages.handleRequired, true);
+                showError(elements.errorMessage, setupMessages.handleRequired, { shake: true, field: elements.handle });
                 return;
             }
             if (!formData.password) {
-                showError(elements.errorMessage, setupMessages.passwordRequired, true);
+                showError(elements.errorMessage, setupMessages.passwordRequired, { shake: true, field: elements.password });
                 return;
             }
             if (formData.password !== formData.confirmPassword) {
-                showError(elements.errorMessage, setupMessages.passwordMismatch, true);
+                showError(elements.errorMessage, setupMessages.passwordMismatch, { shake: true, field: elements.confirmPassword });
                 return;
             }
 
             await performSetup(formData);
         }, listenerOptions);
 
-        const hideOnInput = () => hideError(elements.errorMessage);
+        const hideOnInput = () => hideError(elements.errorMessage, setupFields);
         elements.handle.addEventListener('input', hideOnInput, listenerOptions);
         elements.password.addEventListener('input', hideOnInput, listenerOptions);
         elements.confirmPassword.addEventListener('input', hideOnInput, listenerOptions);

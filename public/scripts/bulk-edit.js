@@ -8,7 +8,8 @@ const enableBulkEdit = () => {
     enableBulkSelect();
     characterGroupOverlay.selectState();
     // show the bulk edit option buttons
-    $('.bulkEditOptionElement').show();
+    $('.bulkEditOptionElement').not('#bulkSelectedCount').show();
+    $('#bulkSelectedCount').css('display', 'inline-flex');
     is_bulk_edit = true;
     characterGroupOverlay.updateSelectedCount(0);
 };
@@ -56,7 +57,7 @@ function onSelectAllButtonClick() {
     if (!atLeastOneSelected) {
         // If none was selected, trigger click on all to deselect all of them
         for (const character of characters) {
-            const checked = $(character).find('.bulk_select_checkbox:checked') ?? false;
+            const checked = $(character).find('.bulk_select_checkbox:checked').length > 0;
             if (checked && character instanceof HTMLElement) {
                 characterGroupOverlay.toggleSingleCharacter(character);
             }
@@ -98,7 +99,7 @@ function enableBulkSelect() {
 
     $('#rm_print_characters_block').addClass('bulk_select');
     // We also need to disable the default click event for the character_select divs
-    $(document).on('click', '.bulk_select_checkbox', function (event) {
+    $(document).off('click.bulkSelectCheckbox').on('click.bulkSelectCheckbox', '.bulk_select_checkbox', function (event) {
         event.stopImmediatePropagation();
     });
 }
@@ -112,6 +113,7 @@ function disableBulkSelect() {
     $('#rm_print_characters_block.group_overlay_mode_select .bogus_folder_select, #rm_print_characters_block.group_overlay_mode_select .group_select')
         .removeClass('disabled');
     $('#rm_print_characters_block').removeClass('bulk_select');
+    $(document).off('click.bulkSelectCheckbox');
 }
 
 /**
@@ -128,6 +130,11 @@ export function initBulkEdit() {
     $('#bulkDeleteButton').on('click', onDeleteButtonClick);
 
     const characterContextMenu = new CharacterContextMenu(characterGroupOverlay);
-    eventSource.on(event_types.CHARACTER_PAGE_LOADED, characterGroupOverlay.onPageLoad);
+    eventSource.on(event_types.CHARACTER_PAGE_LOADED, () => {
+        if (is_bulk_edit) {
+            enableBulkSelect();
+        }
+        characterGroupOverlay.onPageLoad();
+    });
     console.debug('Character context menu initialized', characterContextMenu);
 }

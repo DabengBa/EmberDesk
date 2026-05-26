@@ -104,6 +104,18 @@
     opacity: 0.82;
 }
 
+.wi-global-count {
+    color: var(--SmartThemeFadedColor);
+    font-size: calc(var(--mainFontSize, 15px) * 0.78);
+    font-weight: 600;
+    line-height: 1.2;
+    padding: 1px var(--spacing-sm, 5px);
+    border-radius: var(--rounded-md, 5px);
+    background: rgba(255, 255, 255, 0.035);
+    box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--SmartThemeBorderColor), transparent 68%);
+    white-space: nowrap;
+}
+
 .wi-global-panel {
     padding-bottom: var(--spacing-xs, 2px);
 }
@@ -149,23 +161,24 @@
 }
 
 #world_info + span.select2-container .select2-selection--multiple {
-    min-height: 30px;
-    max-height: 30px;
+    min-height: 32px;
+    max-height: 84px;
     background-color: var(--form-control-bg);
     border: none;
     border-radius: var(--rounded-md, 5px);
     box-shadow: inset 0 0 0 1px var(--form-control-border-color);
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
 }
 
 #world_info + span.select2-container .select2-selection--multiple .select2-selection__rendered {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: var(--spacing-xs, 2px);
     min-height: 30px;
     padding: var(--spacing-xs, 2px) var(--spacing-sm, 5px);
-    flex-wrap: nowrap;
-    overflow: hidden;
+    flex-wrap: wrap;
+    overflow: visible;
 }
 
 #world_info + span.select2-container .select2-selection--multiple .select2-search__field {
@@ -890,10 +903,14 @@
     opacity: 0.86;
 }
 
+body.wi-content-editor-open {
+    overflow: hidden;
+}
+
 .wi-content-editor-modal {
     position: fixed;
     inset: 0 auto auto 0;
-    z-index: 4000;
+    z-index: 5000;
     display: none;
     align-items: center;
     justify-content: center;
@@ -922,6 +939,7 @@
     gap: var(--spacing-md, 10px);
     width: min(960px, calc(100vw - 40px));
     height: min(760px, calc(100vh - 40px));
+    height: min(760px, calc(100dvh - 40px));
     padding: var(--spacing-md, 10px);
     border-radius: var(--rounded-lg, 10px);
     background: color-mix(in oklch, var(--SmartThemeBlurTintColor), var(--black30a, rgba(0, 0, 0, 0.3)) 42%);
@@ -1154,6 +1172,10 @@ select.keyselect + span.select2-container .select2-selection--multiple {
         flex-wrap: wrap;
     }
 
+    .wi-global-count {
+        margin-left: 0;
+    }
+
     #world_toolbar {
         gap: var(--spacing-sm, 5px);
     }
@@ -1201,5 +1223,14 @@ select.keyselect + span.select2-container .select2-selection--multiple {
 
     .wi-accordion-content {
         padding: var(--spacing-xs, 2px) var(--spacing-sm, 5px) var(--spacing-sm, 5px);
+    }
+
+    .wi-content-editor-modal {
+        padding: var(--spacing-sm, 5px);
+    }
+
+    .wi-content-editor-panel {
+        width: calc(100vw - 10px);
+        height: calc(100dvh - 10px);
     }
 }

@@ -1014,6 +1014,13 @@ function refreshGlobalWorldInfoSelectorLabels() {
     if (worldInfoSelect.data('select2')) {
         worldInfoSelect.trigger('change.select2');
     }
+    refreshGlobalWorldInfoSelectorState();
+}
+
+function refreshGlobalWorldInfoSelectorState() {
+    const worldInfoSelect = $('#world_info');
+    const selectedCount = worldInfoSelect.find('option:selected').length;
+    $('#wiGlobalCount').text(selectedCount === 1 ? t`1 active` : t`${selectedCount} active`);
 }
 
 function syncWorldInfoSettingsUi({ preserveEditorSelection = true, syncGlobalSelect = true, syncEditorSelect = true } = {}) {
@@ -2607,13 +2614,24 @@ async function displayWorldEntries(name, data, navigation = navigation_option.no
                     if (!populate) return;
 
                     const $outlet = $card.find('.inline-drawer-outlet');
+                    const $expandButton = $card.find('.wi-card-expand-button');
 
                     if ($outlet.children().length > 0) {
                         $outlet.empty();
                         $card.find('.wi-card-header').removeClass('wi-card-expanded');
+                        $expandButton.attr({
+                            'aria-expanded': 'false',
+                            'aria-label': t`Expand entry`,
+                            title: t`Expand entry`,
+                        });
                     } else {
                         populate();
                         $card.find('.wi-card-header').addClass('wi-card-expanded');
+                        $expandButton.attr({
+                            'aria-expanded': 'true',
+                            'aria-label': t`Collapse entry`,
+                            title: t`Collapse entry`,
+                        });
                         $card[0]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                     }
                 }
@@ -3876,29 +3894,48 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
     const contentOpenButton = editTemplate.find('.wi-content-open');
     const contentCloseButton = editTemplate.find('.wi-content-editor-close');
     const contentEditorTitle = editTemplate.find('.wi-content-editor-title');
+    let contentEditorReturnFocus = null;
     const updateContentPreview = (value) => {
         const preview = String(value || '').replace(/\s+/g, ' ').trim();
         contentPreview.text(preview || t`No content yet`);
         contentPreview.toggleClass('is-empty', !preview);
     };
+    const getContentEditorFocusableControls = () => Array.from(contentEditor[0].querySelectorAll([
+        'button:not([disabled])',
+        'input:not([disabled])',
+        'textarea:not([disabled])',
+        'select:not([disabled])',
+        'a[href]',
+        '[tabindex]:not([tabindex="-1"])',
+    ].join(','))).filter(element => element.offsetParent !== null);
     const openContentEditor = () => {
         if (contentEditor.hasClass('is-open')) {
             contentInput.trigger('focus');
             return;
         }
+        contentEditorReturnFocus = document.activeElement;
         contentEditorPlaceholder.insertBefore(contentEditor);
         contentEditor.appendTo(document.body);
         contentEditor.removeAttr('hidden').attr('aria-hidden', 'false').addClass('is-open');
+        document.body.classList.add('wi-content-editor-open');
         contentOpenButton.attr('aria-expanded', 'true');
         requestAnimationFrame(() => contentInput.trigger('focus'));
     };
     const closeContentEditor = () => {
+        if (!contentEditor.hasClass('is-open')) return;
         contentEditor.attr('hidden', '').attr('aria-hidden', 'true').removeClass('is-open');
+        document.body.classList.remove('wi-content-editor-open');
         if (contentEditorPlaceholder.parent().length) {
             contentEditor.insertAfter(contentEditorPlaceholder);
             contentEditorPlaceholder.detach();
         }
-        contentOpenButton.attr('aria-expanded', 'false').trigger('focus');
+        contentOpenButton.attr('aria-expanded', 'false');
+        if (contentEditorReturnFocus instanceof HTMLElement && document.contains(contentEditorReturnFocus)) {
+            $(contentEditorReturnFocus).trigger('focus');
+        } else {
+            contentOpenButton.trigger('focus');
+        }
+        contentEditorReturnFocus = null;
     };
 
     contentOpenButton.attr('aria-controls', `world_entry_content_editor_${entry.uid}`).attr('aria-expanded', 'false');
@@ -3925,8 +3962,29 @@ function setupEditFormBindings(editTemplate, outlet, name, data, entry) {
     });
     contentEditor.off('keydown.wiContentEditor').on('keydown.wiContentEditor', function (e) {
         if (e.key === 'Escape') {
+            e.preventDefault();
             e.stopPropagation();
             closeContentEditor();
+            return;
+        }
+        if (e.key !== 'Tab') {
+            return;
+        }
+
+        const focusableControls = getContentEditorFocusableControls();
+        if (!focusableControls.length) {
+            e.preventDefault();
+            return;
+        }
+
+        const firstFocusableControl = focusableControls[0];
+        const lastFocusableControl = focusableControls[focusableControls.length - 1];
+        if (e.shiftKey && document.activeElement === firstFocusableControl) {
+            e.preventDefault();
+            focusableControls[focusableControls.length - 1]?.focus();
+        } else if (!e.shiftKey && document.activeElement === lastFocusableControl) {
+            e.preventDefault();
+            focusableControls[0]?.focus();
         }
     });
     contentInput.data('uid', entry.uid);
@@ -6527,13 +6585,7 @@ export function initWorldInfo() {
                 allowClear: true,
                 closeOnSelect: false,
             });
-            globalWorldInfoSelector.on('select2:select select2:unselect', () => {
-                globalWorldInfoSelector.select2('close');
-                setTimeout(() => {
-                    globalWorldInfoSelector.select2('close');
-                    globalWorldInfoSelector.next('span.select2-container').find('textarea').trigger('blur');
-                }, debounce_timeout.quick);
-            });
+            globalWorldInfoSelector.on('select2:select select2:unselect', () => refreshGlobalWorldInfoSelectorState());
             refreshGlobalWorldInfoSelectorLabels();
 
             select2ChoiceClickSubscribe(globalWorldInfoSelector, target => {
