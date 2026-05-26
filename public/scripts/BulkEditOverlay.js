@@ -394,6 +394,7 @@ class BulkEditOverlay {
     static selectedClass = 'character_selected';
     static legacySelectedClass = 'bulk_select_checkbox';
     static bulkSelectedCountId = 'bulkSelectedCount';
+    static bulkDeleteButtonId = 'bulkDeleteButton';
 
     static longPressDelay = 2500;
 
@@ -735,12 +736,29 @@ class BulkEditOverlay {
     updateSelectedCount = (countOverride = undefined) => {
         const count = countOverride ?? this.selectedCharacters.length;
         const selectedCount = document.getElementById(BulkEditOverlay.bulkSelectedCountId);
+        this.updateBulkActionStates(count);
         if (!selectedCount) {
             return;
         }
         selectedCount.textContent = String(count);
         selectedCount.setAttribute('title', `${count} characters selected`);
         selectedCount.setAttribute('aria-label', `${count} characters selected`);
+    };
+
+    /**
+     * Updates bulk action affordances that depend on the current selection.
+     *
+     * @param {number} [countOverride] - optional override for a manual number to set
+     */
+    updateBulkActionStates = (countOverride = undefined) => {
+        const count = countOverride ?? this.selectedCharacters.length;
+        const hasSelection = count > 0;
+        const deleteButton = document.getElementById(BulkEditOverlay.bulkDeleteButtonId);
+        if (!deleteButton) {
+            return;
+        }
+        deleteButton.classList.toggle('disabled', !hasSelection);
+        deleteButton.setAttribute('aria-disabled', String(!hasSelection));
     };
 
     /**

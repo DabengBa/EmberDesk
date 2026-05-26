@@ -180,6 +180,7 @@ describe('character list structure', () => {
         expect(overlaySource).toContain('if (!selectedCount)');
         expect(overlaySource).toMatch(/selectedCount\.textContent = String\(count\);/);
         expect(overlaySource).toContain("selectedCount.setAttribute('aria-label',");
+        expect(overlaySource).toContain('this.updateBulkActionStates(count)');
         expect(styleSource).toMatch(/#character_search_status/);
         expect(styleSource).toMatch(/#rm_print_characters_block \.character_select\.character_selected/);
         expect(styleSource).toMatch(/#rm_print_characters_block \.character_select\.character_selected::after/);
@@ -202,5 +203,19 @@ describe('character list structure', () => {
         expect(disableBulkSelectSource).toContain("$('.bulk_select_checkbox').remove()");
         expect(disableBulkSelectSource).toContain("$('#rm_print_characters_block .character_select').removeAttr('aria-selected')");
         expect(disableBulkSelectSource).toContain("$('#rm_print_characters_block').removeClass('bulk_select')");
+    });
+
+    test('keeps bulk destructive actions disabled until a selection exists', () => {
+        const bulkEditSource = read('public/scripts/bulk-edit.js');
+        const overlaySource = read('public/scripts/BulkEditOverlay.js');
+        const deleteButtonSource = extractFunctionSource(bulkEditSource, 'onDeleteButtonClick');
+
+        expect(overlaySource).toContain("static bulkDeleteButtonId = 'bulkDeleteButton'");
+        expect(overlaySource).toContain('updateBulkActionStates = (countOverride = undefined) => {');
+        expect(overlaySource).toContain("deleteButton.classList.toggle('disabled', !hasSelection)");
+        expect(overlaySource).toContain("deleteButton.setAttribute('aria-disabled', String(!hasSelection))");
+        expect(bulkEditSource).toContain('characterGroupOverlay.updateBulkActionStates(0)');
+        expect(deleteButtonSource).toContain("if ($('#bulkDeleteButton').hasClass('disabled'))");
+        expect(deleteButtonSource).toContain('return;');
     });
 });

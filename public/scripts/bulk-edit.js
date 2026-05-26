@@ -11,6 +11,7 @@ const enableBulkEdit = () => {
     $('.bulkEditOptionElement').show();
     is_bulk_edit = true;
     characterGroupOverlay.updateSelectedCount(0);
+    characterGroupOverlay.updateBulkActionStates(0);
 };
 
 const disableBulkEdit = () => {
@@ -20,6 +21,7 @@ const disableBulkEdit = () => {
     $('.bulkEditOptionElement').hide();
     is_bulk_edit = false;
     characterGroupOverlay.updateSelectedCount(0);
+    characterGroupOverlay.updateBulkActionStates(0);
 };
 
 const toggleBulkEditMode = (isBulkEdit) => {
@@ -69,6 +71,9 @@ function onSelectAllButtonClick() {
  */
 async function onDeleteButtonClick() {
     console.log('Delete button clicked');
+    if ($('#bulkDeleteButton').hasClass('disabled')) {
+        return;
+    }
 
     // We just let the button trigger the context menu delete option
     await characterGroupOverlay.handleContextMenuDelete();
