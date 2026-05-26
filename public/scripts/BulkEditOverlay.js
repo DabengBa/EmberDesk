@@ -709,10 +709,12 @@ class BulkEditOverlay {
 
         if (select) {
             character.classList.add(BulkEditOverlay.selectedClass);
+            character.setAttribute('aria-selected', 'true');
             if (legacyBulkEditCheckbox) legacyBulkEditCheckbox.checked = true;
             this.#selectedCharacters.push(characterId);
         } else {
             character.classList.remove(BulkEditOverlay.selectedClass);
+            character.setAttribute('aria-selected', 'false');
             if (legacyBulkEditCheckbox) legacyBulkEditCheckbox.checked = false;
             this.#selectedCharacters = this.#selectedCharacters.filter(item => characterId !== item);
         }
@@ -732,7 +734,13 @@ class BulkEditOverlay {
      */
     updateSelectedCount = (countOverride = undefined) => {
         const count = countOverride ?? this.selectedCharacters.length;
-        $(`#${BulkEditOverlay.bulkSelectedCountId}`).text(count).attr('title', `${count} characters selected`);
+        const selectedCount = document.getElementById(BulkEditOverlay.bulkSelectedCountId);
+        if (!selectedCount) {
+            return;
+        }
+        selectedCount.textContent = String(count);
+        selectedCount.setAttribute('title', `${count} characters selected`);
+        selectedCount.setAttribute('aria-label', `${count} characters selected`);
     };
 
     /**
@@ -989,7 +997,10 @@ class BulkEditOverlay {
      */
     clearSelectedCharacters = () => {
         document.querySelectorAll('#' + BulkEditOverlay.containerId + ' .' + BulkEditOverlay.selectedClass)
-            .forEach(element => element.classList.remove(BulkEditOverlay.selectedClass));
+            .forEach(element => {
+                element.classList.remove(BulkEditOverlay.selectedClass);
+                element.setAttribute('aria-selected', 'false');
+            });
         this.selectedCharacters.length = 0;
     };
 }

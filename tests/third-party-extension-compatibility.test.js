@@ -212,8 +212,10 @@ describe('third-party extension compatibility boundary', () => {
         expect(rowSource).toMatch(/tagsHtml \+= `<span class="tag tag_placeholder"><span class="tag_name">\+\$\{tagsSkipped\}<\/span><\/span>`;/);
         expect(scriptSource).toContain("$(document).on('click', '.character_select'");
         expect(enableBulkSelectSource).toMatch(/\$\(\'#rm_print_characters_block \.character_select\'\)\.each/);
-        expect(enableBulkSelectSource).toMatch(/const checkbox = \$\('<input type=\\'checkbox\\' class=\\'bulk_select_checkbox\\'>'\);/);
+        expect(enableBulkSelectSource).toMatch(/const checkbox = \$\('<input type=\\'checkbox\\' class=\\'bulk_select_checkbox\\' aria-label=\\'Select character for bulk edit\\'>'\);/);
+        expect(enableBulkSelectSource).toContain("$(el).attr('aria-selected', 'false')");
         expect(disableBulkSelectSource).toContain("$('.bulk_select_checkbox').remove()");
+        expect(disableBulkSelectSource).toContain("$('#rm_print_characters_block .character_select').removeAttr('aria-selected')");
     });
 
     test('keeps event emitter methods and event and regex placement values stable for Tavern Helper integrations', async () => {

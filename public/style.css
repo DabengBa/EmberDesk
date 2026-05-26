@@ -3005,6 +3005,13 @@ input[type="file"] {
     flex: 0 0 auto;
 }
 
+#character_search_status {
+    flex: 0 0 auto;
+    margin-top: 4px;
+    color: var(--SmartThemeEmColor);
+    font-size: calc(var(--mainFontSize) * 0.8);
+}
+
 #rm_print_characters_block .text_block {
     width: 100%;
     opacity: 0.5;
@@ -3751,6 +3758,29 @@ body:not(.hide-char-version) #rm_print_characters_block .character_version {
 
 .character_select.is_active .avatar {
     outline: 2px solid var(--active);
+}
+
+#rm_print_characters_block .character_select.character_selected {
+    background-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 16%, transparent);
+    border-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 55%, transparent);
+}
+
+#rm_print_characters_block .character_select.character_selected::after {
+    content: "\f00c";
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: calc(var(--mainFontSize) * 1.1);
+    height: calc(var(--mainFontSize) * 1.1);
+    border-radius: 50%;
+    background-color: var(--SmartThemeQuoteColor);
+    color: var(--SmartThemeBlurTintColor);
+    font-family: "Font Awesome 6 Free";
+    font-size: calc(var(--mainFontSize) * 0.7);
+    font-weight: 900;
 }
 
 .character_select.is_fav .ch_name,

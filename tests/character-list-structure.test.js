@@ -68,11 +68,11 @@ describe('character list structure', () => {
         [
             ['rm_button_create', 'Create'],
             ['character_import_button', 'Import'],
-            ['external_import_button', 'URL'],
+            ['external_import_button', 'Import URL'],
             ['rm_button_group_chats', 'Group'],
             ['rm_button_search', 'Search'],
             ['charListGridToggle', 'Grid'],
-            ['bulkEditButton', 'Bulk'],
+            ['bulkEditButton', 'Bulk Edit'],
             ['bulkSelectAllButton', 'Select All'],
             ['bulkDeleteButton', 'Delete'],
         ].forEach(([id, label]) => {
@@ -141,15 +141,66 @@ describe('character list structure', () => {
         expect(styleSource).toMatch(/@media screen and \(max-width: 600px\)[\s\S]*#character_sort_order[\s\S]*flex-basis: 100%/);
     });
 
+    test('keeps character list pagination state synchronized after page-size changes', () => {
+        const scriptSource = read('public/script.js');
+        const printCharactersSource = extractFunctionSource(scriptSource, 'printCharacters');
+
+        expect(printCharactersSource).toMatch(/let pageSize = Number\(accountStorage\.getItem\(storageKey\)\) \|\| per_page_default;/);
+        expect(printCharactersSource).toMatch(/const getCurrentPageSize = \(\) => pageSize;/);
+        expect(printCharactersSource).toMatch(/const getPaginationRangeLabel = \(currentPage, totalNumber\) => \{/);
+        expect(printCharactersSource).toMatch(/const currentPageSize = getCurrentPageSize\(\);/);
+        expect(printCharactersSource).toMatch(/return `\$\{rangeStart\}-\$\{rangeEnd\} \/ \$\{actualTotal\}`;/);
+        expect(printCharactersSource).toMatch(/formatNavigator: function \(currentPage, _totalPage, totalNumber\) \{\s+return getPaginationRangeLabel\(currentPage, totalNumber\);/);
+        expect(printCharactersSource).toMatch(/formatSizeChanger: function \(\) \{\s+return renderPaginationDropdown\(getCurrentPageSize\(\), sizeChangerOptions\);/);
+        expect(printCharactersSource).toMatch(/beforeSizeSelectorChange: function \(_e, size\) \{\s+pageSize = Number\(size\) \|\| per_page_default;\s+saveCharactersPage = 1;/);
+        expect(printCharactersSource).toMatch(/afterSizeSelectorChange: function \(e, size\) \{\s+accountStorage\.setItem\(storageKey, String\(pageSize\)\);/);
+    });
+
+    test('keeps search feedback, grid labels, and bulk selection semantics wired', () => {
+        const indexHtml = read('public/index.html');
+        const scriptSource = read('public/script.js');
+        const bulkEditSource = read('public/scripts/bulk-edit.js');
+        const overlaySource = read('public/scripts/BulkEditOverlay.js');
+        const styleSource = read('public/style.css');
+        const zhCnLocale = read('public/locales/zh-cn.json');
+
+        expect(indexHtml).toContain('id="character_search_status"');
+        expect(indexHtml).toContain('data-i18n="Filtering characters…"');
+        expect(indexHtml).toContain('aria-live="polite"');
+        expect(indexHtml).toContain('data-i18n="Import URL">Import URL</span>');
+        expect(indexHtml).toContain('data-i18n="Group">Group</span>');
+        expect(indexHtml).toContain('data-i18n="Bulk Edit">Bulk Edit</span>');
+        expect(scriptSource).toContain("setCharacterSearchBusy(true)");
+        expect(scriptSource).toContain("setCharacterSearchBusy(false)");
+        expect(scriptSource).toContain("updateCharListGridToggleLabel()");
+        expect(scriptSource).toContain("data-i18n', power_user.charListGrid ? 'List' : 'Grid'");
+        expect(bulkEditSource).toMatch(/const checkbox = \$\('<input type=\\'checkbox\\' class=\\'bulk_select_checkbox\\' aria-label=\\'Select character for bulk edit\\'>'\);/);
+        expect(overlaySource).toContain("character.setAttribute('aria-selected', 'true')");
+        expect(overlaySource).toContain("character.setAttribute('aria-selected', 'false')");
+        expect(overlaySource).toContain('if (!selectedCount)');
+        expect(overlaySource).toMatch(/selectedCount\.textContent = String\(count\);/);
+        expect(overlaySource).toContain("selectedCount.setAttribute('aria-label',");
+        expect(styleSource).toMatch(/#character_search_status/);
+        expect(styleSource).toMatch(/#rm_print_characters_block \.character_select\.character_selected/);
+        expect(styleSource).toMatch(/#rm_print_characters_block \.character_select\.character_selected::after/);
+        expect(zhCnLocale).toContain('"Import URL": "网址导入"');
+        expect(zhCnLocale).toContain('"Group": "群组"');
+        expect(zhCnLocale).toContain('"Bulk Edit": "批量编辑"');
+        expect(zhCnLocale).toContain('"List": "列表"');
+        expect(zhCnLocale).toContain('"Filtering characters…": "正在筛选角色…"');
+    });
+
     test('keeps bulk selection mounted on generated character rows', () => {
         const bulkEditSource = read('public/scripts/bulk-edit.js');
         const enableBulkSelectSource = extractFunctionSource(bulkEditSource, 'enableBulkSelect');
         const disableBulkSelectSource = extractFunctionSource(bulkEditSource, 'disableBulkSelect');
 
         expect(enableBulkSelectSource).toMatch(/\$\(\'#rm_print_characters_block \.character_select\'\)\.each/);
-        expect(enableBulkSelectSource).toMatch(/const checkbox = \$\('<input type=\\'checkbox\\' class=\\'bulk_select_checkbox\\'>'\);/);
+        expect(enableBulkSelectSource).toMatch(/const checkbox = \$\('<input type=\\'checkbox\\' class=\\'bulk_select_checkbox\\' aria-label=\\'Select character for bulk edit\\'>'\);/);
+        expect(enableBulkSelectSource).toContain("$(el).attr('aria-selected', 'false')");
         expect(enableBulkSelectSource).toContain("$('#rm_print_characters_block').addClass('bulk_select')");
         expect(disableBulkSelectSource).toContain("$('.bulk_select_checkbox').remove()");
+        expect(disableBulkSelectSource).toContain("$('#rm_print_characters_block .character_select').removeAttr('aria-selected')");
         expect(disableBulkSelectSource).toContain("$('#rm_print_characters_block').removeClass('bulk_select')");
     });
 });

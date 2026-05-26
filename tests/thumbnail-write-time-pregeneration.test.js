@@ -47,6 +47,7 @@ async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled 
     const mockToShallow = jest.fn(character => character);
     const mockGetFreshIndexedCharacterFullPayload = jest.fn(() => null);
     const mockListIndexedCharacterPayloads = jest.fn(async () => []);
+    const mockFindCharactersBoundToWorld = jest.fn(() => []);
     const mockWrite = jest.fn(() => Buffer.from('character-png'));
     const mockParse = jest.fn(async () => '{"spec":"chara_card_v2","data":{"name":"Character"}}');
 
@@ -163,6 +164,7 @@ async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled 
 
     jest.unstable_mockModule('../src/endpoints/character-index.js', () => ({
         deleteCharacterIndexEntry: mockDeleteCharacterIndexEntrySafe,
+        findCharactersBoundToWorld: mockFindCharactersBoundToWorld,
         getFreshIndexedCharacterFullPayload: mockGetFreshIndexedCharacterFullPayload,
         isCharacterIndexSupported: () => false,
         listIndexedCharacterPayloads: mockListIndexedCharacterPayloads,

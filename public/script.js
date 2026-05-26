@@ -1229,8 +1229,16 @@ export async function printCharacters(fullRefresh = false) {
 
     const entities = getEntitiesList({ doFilter: true });
 
-    const pageSize = Number(accountStorage.getItem(storageKey)) || per_page_default;
+    let pageSize = Number(accountStorage.getItem(storageKey)) || per_page_default;
     const sizeChangerOptions = [10, 25, 50, 100, 250, 500, 1000];
+    const getCurrentPageSize = () => pageSize;
+    const getPaginationRangeLabel = (currentPage, totalNumber) => {
+        const actualTotal = totalNumber || entities.length;
+        const currentPageSize = getCurrentPageSize();
+        const rangeStart = actualTotal > 0 ? (currentPage - 1) * currentPageSize + 1 : 0;
+        const rangeEnd = Math.min(currentPage * currentPageSize, actualTotal);
+        return `${rangeStart}-${rangeEnd} / ${actualTotal}`;
+    };
     $('#rm_print_characters_pagination').pagination({
         dataSource: entities,
         pageSize,
@@ -1241,13 +1249,12 @@ export async function printCharacters(fullRefresh = false) {
         showSizeChanger: true,
         prevText: '<',
         nextText: '>',
-        formatNavigator: function (currentPage, totalPage, totalNumber) {
-            const actualTotal = totalNumber || entities.length;
-            const rangeStart = actualTotal > 0 ? (currentPage - 1) * pageSize + 1 : 0;
-            const rangeEnd = Math.min(currentPage * pageSize, actualTotal);
-            return `${rangeStart}-${rangeEnd} .. ${actualTotal}`;
+        formatNavigator: function (currentPage, _totalPage, totalNumber) {
+            return getPaginationRangeLabel(currentPage, totalNumber);
         },
-        formatSizeChanger: renderPaginationDropdown(pageSize, sizeChangerOptions),
+        formatSizeChanger: function () {
+            return renderPaginationDropdown(getCurrentPageSize(), sizeChangerOptions);
+        },
         showNavigator: true,
         callback: async function (/** @type {Entity[]} */ data) {
             $(listId).empty();
@@ -1284,8 +1291,12 @@ export async function printCharacters(fullRefresh = false) {
 
             eventSource.emit(event_types.CHARACTER_PAGE_LOADED);
         },
+        beforeSizeSelectorChange: function (_e, size) {
+            pageSize = Number(size) || per_page_default;
+            saveCharactersPage = 1;
+        },
         afterSizeSelectorChange: function (e, size) {
-            accountStorage.setItem(storageKey, e.target.value);
+            accountStorage.setItem(storageKey, String(pageSize));
             paginationDropdownChangeHandler(e, size);
         },
         afterPaging: function (e) {
@@ -10765,7 +10776,15 @@ export async function updateRemoteChatName(characterId, newName) {
 function doCharListDisplaySwitch() {
     power_user.charListGrid = !power_user.charListGrid;
     document.body.classList.toggle('charListGrid', power_user.charListGrid);
+    updateCharListGridToggleLabel();
     saveSettingsDebounced();
+}
+
+function updateCharListGridToggleLabel() {
+    const toggle = $('#charListGridToggle');
+    const label = toggle.find('.character-list-action-label');
+    const nextLabel = power_user.charListGrid ? t`List` : t`Grid`;
+    label.attr('data-i18n', power_user.charListGrid ? 'List' : 'Grid').text(nextLabel);
 }
 
 /**
@@ -11103,16 +11122,24 @@ API Settings: ${JSON.stringify(getSettingsContents[getSettingsContents.main_api 
 function initCharacterSearch() {
     const debouncedCharacterSearch = debounce((searchQuery) => {
         entitiesFilter.setFilterData(FILTER_TYPES.SEARCH, searchQuery);
+        setCharacterSearchBusy(false);
     });
 
     const searchForm = $('#form_character_search_form');
     const searchInput = $('#character_search_bar');
     const searchButton = $('#rm_button_search');
+    const searchStatus = $('#character_search_status');
 
     const storageKey = 'characterSearchFormVisible';
 
+    function setCharacterSearchBusy(isBusy) {
+        searchInput.attr('aria-busy', String(isBusy));
+        searchStatus.prop('hidden', !isBusy);
+    }
+
     searchInput.on('input', function () {
         const searchQuery = String($(this).val());
+        setCharacterSearchBusy(true);
         debouncedCharacterSearch(searchQuery);
     });
 
@@ -12665,6 +12692,7 @@ jQuery(async function () {
     $('#charListGridToggle').on('click', async () => {
         doCharListDisplaySwitch();
     });
+    updateCharListGridToggleLabel();
 
     $('#hideCharPanelAvatarButton').on('click', () => {
         $('#avatar-and-name-block').slideToggle();
