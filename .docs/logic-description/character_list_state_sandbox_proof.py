@@ -48,6 +48,194 @@ def should_refresh_character_after_edit(characters, avatar):
     return isinstance(avatar, str) and bool(avatar) and any(character.get("avatar") == avatar for character in characters)
 
 
+def should_suppress_character_delete_list_reprint(is_reconcile_in_progress, started_at_generation, current_generation):
+    return is_reconcile_in_progress or started_at_generation < current_generation
+
+
+def get_character_list_entity_key(entity):
+    entity_type = entity.get("type", "unknown")
+    entity_id = entity.get("id", "unknown")
+    item = entity.get("item") or {}
+
+    if entity_type == "character":
+        return f"character:{item.get('avatar') or entity_id}"
+    if entity_type == "group":
+        return f"group:{item.get('id') or entity_id}"
+    if entity_type == "tag":
+        return f"tag:{item.get('id') or entity_id}"
+    return f"{entity_type}:{entity_id}"
+
+
+def create_character_list_entity_snapshot(entities):
+    snapshot_entities = []
+    for render_index, entity in enumerate(entities):
+        snapshot_entity = dict(entity)
+        snapshot_entity["renderIndex"] = render_index
+        snapshot_entity["renderKey"] = get_character_list_entity_key(entity)
+        snapshot_entities.append(snapshot_entity)
+
+    return {
+        "entities": snapshot_entities,
+        "total": len(snapshot_entities),
+        "keys": [entity["renderKey"] for entity in snapshot_entities],
+    }
+
+
+def get_character_list_pagination_range_label(current_page, total_number, page_size, fallback_total=0):
+    actual_total = total_number or fallback_total
+    current_page_size = page_size or 1
+    safe_current_page = current_page or 1
+    range_start = ((safe_current_page - 1) * current_page_size + 1) if actual_total > 0 else 0
+    range_end = min(safe_current_page * current_page_size, actual_total)
+    return f"{range_start}-{range_end} / {actual_total}"
+
+
+def create_character_list_page_render_plan(
+    page_entities,
+    include_back_block=False,
+    total_characters=0,
+    total_groups=0,
+    has_active_filter=False,
+):
+    display_count = sum(1 for entity in page_entities if entity.get("type") in {"character", "group"})
+    hidden_count = (total_characters + total_groups) - display_count
+
+    return {
+        "pageEntities": page_entities,
+        "includeBackBlock": include_back_block,
+        "displayCount": display_count,
+        "hiddenCount": hidden_count,
+        "showEmptyBlock": len(page_entities) == 0,
+        "showHiddenBlock": hidden_count > 0 and has_active_filter,
+    }
+
+
+def create_character_list_page_reconcile_plan(
+    before_page_entities,
+    after_snapshot,
+    page_entities,
+    current_page,
+    page_size,
+    total_characters,
+    total_groups,
+    has_active_filter=False,
+    include_back_block=False,
+):
+    def fallback(reason):
+        return {"mode": "fallback", "reason": reason}
+
+    if include_back_block:
+        return fallback("back-block")
+    if not isinstance(before_page_entities, list) or not isinstance(page_entities, list) or after_snapshot is None:
+        return fallback("missing-entity-data")
+
+    before_keys = [entity.get("renderKey") or get_character_list_entity_key(entity) for entity in before_page_entities]
+    after_keys = after_snapshot.get("keys", [])
+    ordered_keys = [entity.get("renderKey") or get_character_list_entity_key(entity) for entity in page_entities]
+
+    if len(set(before_keys)) != len(before_keys) or len(set(after_keys)) != len(after_keys) or len(set(ordered_keys)) != len(ordered_keys):
+        return fallback("duplicate-entity-key")
+
+    before_key_set = set(before_keys)
+    ordered_key_set = set(ordered_keys)
+    safe_page_size = page_size or 1
+    safe_current_page = max(current_page or 1, 1)
+
+    return {
+        "mode": "incremental",
+        "orderedKeys": ordered_keys,
+        "reusedKeys": [key for key in ordered_keys if key in before_key_set],
+        "insertedKeys": [key for key in ordered_keys if key not in before_key_set],
+        "removedKeys": [key for key in before_keys if key not in ordered_key_set],
+        "renderPlan": create_character_list_page_render_plan(
+            page_entities,
+            include_back_block=False,
+            total_characters=total_characters,
+            total_groups=total_groups,
+            has_active_filter=has_active_filter,
+        ),
+        "requiresIdentitySync": True,
+        "paginationLabel": get_character_list_pagination_range_label(
+            safe_current_page,
+            after_snapshot["total"],
+            safe_page_size,
+        ),
+        "currentPage": safe_current_page,
+        "pageSize": safe_page_size,
+    }
+
+
+def create_character_delete_reconcile_plan(
+    before_snapshot,
+    after_snapshot,
+    deleted_avatars,
+    current_page,
+    page_size,
+    has_active_filter=False,
+    is_bulk_edit=False,
+    is_bogus_folder_open=False,
+    is_print_pending=False,
+):
+    def fallback(reason):
+        return {"mode": "fallback", "reason": reason}
+
+    if not isinstance(deleted_avatars, list) or len(deleted_avatars) != 1:
+        return fallback("multi-delete")
+    if has_active_filter:
+        return fallback("active-filter")
+    if is_bulk_edit:
+        return fallback("bulk-edit")
+    if is_bogus_folder_open:
+        return fallback("bogus-folder")
+    if is_print_pending:
+        return fallback("print-pending")
+
+    deleted_key = f"character:{deleted_avatars[0]}"
+    if deleted_key not in before_snapshot.get("keys", []):
+        return fallback("missing-before-entity")
+    if deleted_key in after_snapshot.get("keys", []):
+        return fallback("still-present-after-delete")
+
+    safe_page_size = page_size or 1
+    total_pages = max((after_snapshot.get("total", 0) + safe_page_size - 1) // safe_page_size, 1)
+    safe_current_page = min(max(current_page or 1, 1), total_pages)
+    page_start = (safe_current_page - 1) * safe_page_size
+    page_entities = after_snapshot["entities"][page_start : page_start + safe_page_size]
+
+    return {
+        "mode": "incremental",
+        "deletedKeys": [deleted_key],
+        "pageEntities": page_entities,
+        "requiresIdentitySync": True,
+        "paginationLabel": get_character_list_pagination_range_label(
+            safe_current_page,
+            after_snapshot["total"],
+            safe_page_size,
+        ),
+        "currentPage": safe_current_page,
+        "pageSize": safe_page_size,
+    }
+
+
+def run_delete_character_close_preflight(is_generation_in_progress, calls):
+    if is_generation_in_progress:
+        calls.append("blocked")
+        return False
+
+    calls.extend(
+        [
+            "wait",
+            "clear",
+            "reset-group",
+            "reset-selection",
+            "select-characters-view",
+            "suppress-welcome-screen",
+            "emit-chat-changed",
+        ]
+    )
+    return True
+
+
 class FakeClassList:
     def __init__(self):
         self.values = set()
@@ -123,7 +311,11 @@ def update_bulk_delete_button_state(delete_button, has_selection, fallback_focus
     delete_button.set_attribute("tabindex", "0")
 
 
-def update_bulk_selection_count_state(options, count, active_element=None):
+def get_bulk_selection_short_count_text(count, locale="en"):
+    return f"{count}个" if str(locale).lower().startswith("zh") else f"{count} sel"
+
+
+def update_bulk_selection_count_state(options, count, active_element=None, locale="en"):
     update_bulk_delete_button_state(
         options.get("delete_button"),
         count > 0,
@@ -135,7 +327,7 @@ def update_bulk_selection_count_state(options, count, active_element=None):
     if selected_count is None:
         return
 
-    selected_count.text_content = f"{count} selected"
+    selected_count.text_content = get_bulk_selection_short_count_text(count, locale)
     selected_count.set_attribute("title", f"{count} characters selected")
     selected_count.set_attribute("aria-label", f"{count} characters selected")
 
@@ -200,6 +392,158 @@ def main():
     assert should_refresh_character_after_edit(characters, "") is False
     assert should_refresh_character_after_edit(characters, None) is False
 
+    assert should_suppress_character_delete_list_reprint(True, 3, 3) is True
+    assert should_suppress_character_delete_list_reprint(False, 2, 3) is True
+    assert should_suppress_character_delete_list_reprint(False, 3, 3) is False
+
+    blocked_calls = []
+    assert run_delete_character_close_preflight(True, blocked_calls) is False
+    assert blocked_calls == ["blocked"]
+
+    preflight_calls = []
+    assert run_delete_character_close_preflight(False, preflight_calls) is True
+    assert preflight_calls == [
+        "wait",
+        "clear",
+        "reset-group",
+        "reset-selection",
+        "select-characters-view",
+        "suppress-welcome-screen",
+        "emit-chat-changed",
+    ]
+
+    before_snapshot = create_character_list_entity_snapshot(
+        [
+            {"type": "character", "id": 0, "item": {"avatar": "alpha.png"}},
+            {"type": "character", "id": 1, "item": {"avatar": "beta.png"}},
+            {"type": "character", "id": 2, "item": {"avatar": "gamma.png"}},
+        ]
+    )
+    ordinary_after_snapshot = create_character_list_entity_snapshot(
+        [
+            {"type": "character", "id": 0, "item": {"avatar": "gamma.png"}},
+            {"type": "character", "id": 1, "item": {"avatar": "alpha.png"}},
+            {"type": "character", "id": 2, "item": {"avatar": "delta.png"}},
+        ]
+    )
+    page_reconcile_plan = create_character_list_page_reconcile_plan(
+        before_snapshot["entities"],
+        ordinary_after_snapshot,
+        ordinary_after_snapshot["entities"],
+        current_page=1,
+        page_size=3,
+        total_characters=3,
+        total_groups=0,
+    )
+    assert page_reconcile_plan["mode"] == "incremental"
+    assert page_reconcile_plan["orderedKeys"] == [
+        "character:gamma.png",
+        "character:alpha.png",
+        "character:delta.png",
+    ]
+    assert page_reconcile_plan["reusedKeys"] == ["character:gamma.png", "character:alpha.png"]
+    assert page_reconcile_plan["insertedKeys"] == ["character:delta.png"]
+    assert page_reconcile_plan["removedKeys"] == ["character:beta.png"]
+    assert page_reconcile_plan["renderPlan"]["showEmptyBlock"] is False
+    assert page_reconcile_plan["renderPlan"]["showHiddenBlock"] is False
+    assert page_reconcile_plan["paginationLabel"] == "1-3 / 3"
+
+    duplicate_snapshot = create_character_list_entity_snapshot(
+        [
+            {"type": "character", "id": 0, "item": {"avatar": "alpha.png"}},
+            {"type": "character", "id": 1, "item": {"avatar": "alpha.png"}},
+        ]
+    )
+    assert create_character_list_page_reconcile_plan(
+        before_snapshot["entities"],
+        duplicate_snapshot,
+        duplicate_snapshot["entities"],
+        current_page=1,
+        page_size=2,
+        total_characters=2,
+        total_groups=0,
+    ) == {"mode": "fallback", "reason": "duplicate-entity-key"}
+    assert create_character_list_page_reconcile_plan(
+        before_snapshot["entities"],
+        ordinary_after_snapshot,
+        ordinary_after_snapshot["entities"],
+        current_page=1,
+        page_size=3,
+        total_characters=3,
+        total_groups=0,
+        include_back_block=True,
+    ) == {"mode": "fallback", "reason": "back-block"}
+
+    after_snapshot = create_character_list_entity_snapshot(
+        [
+            {"type": "character", "id": 0, "item": {"avatar": "alpha.png"}},
+            {"type": "character", "id": 1, "item": {"avatar": "gamma.png"}},
+        ]
+    )
+    delete_plan = create_character_delete_reconcile_plan(
+        before_snapshot,
+        after_snapshot,
+        ["beta.png"],
+        current_page=1,
+        page_size=2,
+    )
+    assert delete_plan["mode"] == "incremental"
+    assert delete_plan["deletedKeys"] == ["character:beta.png"]
+    assert [entity["renderKey"] for entity in delete_plan["pageEntities"]] == [
+        "character:alpha.png",
+        "character:gamma.png",
+    ]
+    assert delete_plan["requiresIdentitySync"] is True
+    assert delete_plan["paginationLabel"] == "1-2 / 2"
+    assert delete_plan["currentPage"] == 1
+    assert delete_plan["pageSize"] == 2
+
+    assert create_character_delete_reconcile_plan(
+        before_snapshot,
+        after_snapshot,
+        ["beta.png", "gamma.png"],
+        current_page=1,
+        page_size=2,
+    ) == {"mode": "fallback", "reason": "multi-delete"}
+    assert create_character_delete_reconcile_plan(
+        before_snapshot,
+        after_snapshot,
+        ["beta.png"],
+        current_page=1,
+        page_size=2,
+        has_active_filter=True,
+    ) == {"mode": "fallback", "reason": "active-filter"}
+    assert create_character_delete_reconcile_plan(
+        before_snapshot,
+        after_snapshot,
+        ["beta.png"],
+        current_page=1,
+        page_size=2,
+        is_bulk_edit=True,
+    ) == {"mode": "fallback", "reason": "bulk-edit"}
+    assert create_character_delete_reconcile_plan(
+        before_snapshot,
+        after_snapshot,
+        ["beta.png"],
+        current_page=1,
+        page_size=2,
+        is_bogus_folder_open=True,
+    ) == {"mode": "fallback", "reason": "bogus-folder"}
+    assert create_character_delete_reconcile_plan(
+        before_snapshot,
+        after_snapshot,
+        ["missing.png"],
+        current_page=1,
+        page_size=2,
+    ) == {"mode": "fallback", "reason": "missing-before-entity"}
+    assert create_character_delete_reconcile_plan(
+        before_snapshot,
+        before_snapshot,
+        ["beta.png"],
+        current_page=1,
+        page_size=2,
+    ) == {"mode": "fallback", "reason": "still-present-after-delete"}
+
     delete_button = FakeElement()
     fallback = FakeElement()
     update_bulk_delete_button_state(delete_button, False, fallback, active_element=delete_button)
@@ -218,11 +562,13 @@ def main():
     update_bulk_selection_count_state(
         {"selected_count": selected_count, "delete_button": delete_button, "fallback_focus_element": fallback},
         2,
+        locale="en",
     )
-    assert selected_count.text_content == "2 selected"
+    assert selected_count.text_content == "2 sel"
     assert selected_count.get_attribute("title") == "2 characters selected"
     assert selected_count.get_attribute("aria-label") == "2 characters selected"
     assert delete_button.get_attribute("aria-disabled") == "false"
+    assert get_bulk_selection_short_count_text(3, "zh-cn") == "3个"
 
     alpha = FakeElement({"data-chid": "0"}, FakeCheckbox())
     beta = FakeElement({"data-chid": "1"}, FakeCheckbox())

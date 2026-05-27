@@ -68,7 +68,7 @@ EmberDesk currently provides:
 - a documented shared browser library for common frontend utilities and extension compatibility
 - Docker-friendly deployment and browser access across devices
 - focused startup and interaction performance work for daily-use paths
-- client-side character-list consistency guards so delayed edit/save responses do not undo confirmed deletion actions
+- client-side character-list incremental reconcile and consistency guards so ordinary browsing and delete flows keep visible rows, pagination, and bulk-selection hooks aligned without always redrawing the whole list, while delayed edit/save responses still cannot undo confirmed deletion actions
 
 Current derived-cache scope is intentionally narrow:
 

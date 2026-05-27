@@ -251,6 +251,7 @@ import {
     CHARACTER_LIST_PAGE_SIZE_OPTIONS,
     createCharacterDeleteReconcilePlan,
     createCharacterListEntitySnapshot,
+    createCharacterListPageReconcilePlan,
     createCharacterListPageRenderPlan,
     getCharacterListPaginationRangeLabel,
     syncCharacterListRowIdentity,
@@ -506,6 +507,7 @@ let crop_data = undefined;
 let is_delete_mode = false;
 let isCharacterDeleteReconcileInProgress = false;
 let characterDeleteReconcileGeneration = 0;
+let currentCharacterListPageEntities = [];
 let fav_ch_checked = false;
 let scrollLock = false;
 export let abortStatusCheck = new AbortController();
@@ -1282,7 +1284,7 @@ export async function printCharacters(fullRefresh = false) {
             if (suppressStaleReprint && shouldSuppressCharacterDeleteListReprint(deleteReconcileGenerationAtStart)) {
                 return;
             }
-            await renderCharacterListPage(data);
+            await renderCharacterListPage(data, { fullRefresh });
         },
         beforeSizeSelectorChange: function (_e, size) {
             pageSize = Number(size) || per_page_default;
@@ -1304,16 +1306,8 @@ export async function printCharacters(fullRefresh = false) {
     updatePersonaConnectionsAvatarList();
 }
 
-async function renderCharacterListPage(data) {
+async function renderCharacterListPageFull(renderPlan) {
     const listId = '#rm_print_characters_block';
-    const renderPlan = createCharacterListPageRenderPlan({
-        pageEntities: data,
-        includeBackBlock: power_user.bogus_folders && isBogusFolderOpen(),
-        totalCharacters: characters.length,
-        totalGroups: groups.length,
-        hasActiveFilter: entitiesFilter.hasAnyFilter(),
-    });
-
     $(listId).empty();
     if (renderPlan.includeBackBlock) {
         $(listId).append(getBackBlock());
@@ -1340,6 +1334,85 @@ async function renderCharacterListPage(data) {
         const hiddenBlock = await getHiddenBlock(renderPlan.hiddenCount);
         $(listId).append(hiddenBlock);
     }
+}
+
+async function applyCharacterListPageRenderPlan({ listElement, renderPlan, beforePageEntities }) {
+    const existingElements = indexExistingCharacterListElements(listElement, beforePageEntities);
+    const desiredElements = [];
+
+    if (renderPlan.showEmptyBlock) {
+        desiredElements.push((await getEmptyBlock())[0]);
+    }
+
+    for (const entity of renderPlan.pageEntities) {
+        const existingElement = existingElements.get(entity.renderKey);
+        if (existingElement) {
+            desiredElements.push(existingElement);
+        } else {
+            const $element = renderCharacterListEntityBlock(entity);
+            if (!$element?.length) {
+                return false;
+            }
+            desiredElements.push($element[0]);
+        }
+    }
+
+    if (renderPlan.showHiddenBlock) {
+        desiredElements.push((await getHiddenBlock(renderPlan.hiddenCount))[0]);
+    }
+
+    for (const child of Array.from(listElement.children)) {
+        if (!desiredElements.includes(child)) {
+            child.remove();
+        }
+    }
+    for (const element of desiredElements) {
+        listElement.appendChild(element);
+    }
+
+    syncCharacterListRowIdentity(listElement, renderPlan.pageEntities);
+    return true;
+}
+
+async function renderCharacterListPage(data, { fullRefresh = false } = {}) {
+    const listId = '#rm_print_characters_block';
+    const listElement = document.getElementById('rm_print_characters_block');
+    const renderPlan = createCharacterListPageRenderPlan({
+        pageEntities: data,
+        includeBackBlock: power_user.bogus_folders && isBogusFolderOpen(),
+        totalCharacters: characters.length,
+        totalGroups: groups.length,
+        hasActiveFilter: entitiesFilter.hasAnyFilter(),
+    });
+    const afterSnapshot = createCharacterListEntitySnapshot(getEntitiesList({ doFilter: true }));
+    const reconcilePlan = createCharacterListPageReconcilePlan({
+        beforePageEntities: currentCharacterListPageEntities,
+        afterSnapshot,
+        pageEntities: data,
+        currentPage: getCharacterListCurrentPage(),
+        pageSize: getCharacterListCurrentPageSize(),
+        totalCharacters: characters.length,
+        totalGroups: groups.length,
+        includeBackBlock: renderPlan.includeBackBlock,
+        hasActiveFilter: entitiesFilter.hasAnyFilter(),
+    });
+
+    if (!listElement) {
+        await renderCharacterListPageFull(renderPlan);
+    } else if (fullRefresh || reconcilePlan.mode !== 'incremental') {
+        await renderCharacterListPageFull(renderPlan);
+    } else {
+        const reconciled = await applyCharacterListPageRenderPlan({
+            listElement,
+            renderPlan: reconcilePlan.renderPlan,
+            beforePageEntities: currentCharacterListPageEntities,
+        });
+        if (!reconciled) {
+            await renderCharacterListPageFull(renderPlan);
+        }
+    }
+
+    currentCharacterListPageEntities = data;
     localizePagination($('#rm_print_characters_pagination'));
 
     eventSource.emit(event_types.CHARACTER_PAGE_LOADED);
@@ -1503,40 +1576,16 @@ async function reconcileCharacterListAfterDelete(options) {
             hasActiveFilter: entitiesFilter.hasAnyFilter(),
         });
         const beforePageEntities = getCharacterListPageEntities(beforeSnapshot, currentPage, pageSize);
-        const existingElements = indexExistingCharacterListElements(listElement, beforePageEntities);
-        const desiredElements = [];
-
-        if (renderPlan.showEmptyBlock) {
-            desiredElements.push((await getEmptyBlock())[0]);
+        const reconciled = await applyCharacterListPageRenderPlan({
+            listElement,
+            renderPlan,
+            beforePageEntities,
+        });
+        if (!reconciled) {
+            return false;
         }
 
-        for (const entity of renderPlan.pageEntities) {
-            const existingElement = entity.type === 'character' ? existingElements.get(entity.renderKey) : null;
-            if (existingElement) {
-                desiredElements.push(existingElement);
-            } else {
-                const $element = renderCharacterListEntityBlock(entity);
-                if (!$element?.length) {
-                    return false;
-                }
-                desiredElements.push($element[0]);
-            }
-        }
-
-        if (renderPlan.showHiddenBlock) {
-            desiredElements.push((await getHiddenBlock(renderPlan.hiddenCount))[0]);
-        }
-
-        for (const child of Array.from(listElement.children)) {
-            if (!desiredElements.includes(child)) {
-                child.remove();
-            }
-        }
-        for (const element of desiredElements) {
-            listElement.appendChild(element);
-        }
-
-        syncCharacterListRowIdentity(listElement, renderPlan.pageEntities);
+        currentCharacterListPageEntities = plan.pageEntities;
         updateCharacterListPaginationState(plan, afterSnapshot, { skipInitialCallback: true });
         favsToHotswap();
         updatePersonaConnectionsAvatarList();
@@ -11072,103 +11121,109 @@ export async function deleteCharacter(characterKey, { deleteChats = true, delete
         }
     }
 
-    const closeChatResult = await closeCurrentChatForDelete();
-    if (!closeChatResult) {
-        return false;
-    }
+    isCharacterDeleteReconcileInProgress = true;
+    try {
+        const closeChatResult = await closeCurrentChatForDelete();
+        if (!closeChatResult) {
+            return false;
+        }
 
-    // World info cascade preflight — only when caller did not provide choices
-    let resolvedDeleteWorlds = deleteWorlds ?? [];
-    let resolvedClearRefs = clearWorldReferences ?? false;
-    if (deleteWorlds === undefined) {
-        try {
-            const preflightResponse = await fetch('/api/characters/delete-preflight', {
+        // World info cascade preflight — only when caller did not provide choices
+        let resolvedDeleteWorlds = deleteWorlds ?? [];
+        let resolvedClearRefs = clearWorldReferences ?? false;
+        if (deleteWorlds === undefined) {
+            try {
+                const preflightResponse = await fetch('/api/characters/delete-preflight', {
+                    method: 'POST',
+                    headers: getRequestHeaders(),
+                    body: JSON.stringify({ avatars: characterKey }),
+                    cache: 'no-cache',
+                });
+                if (preflightResponse.ok) {
+                    const preflightData = await preflightResponse.json();
+                    if (preflightData.worldInfos && preflightData.worldInfos.length > 0) {
+                        const cascadeResult = await showWorldInfoCascadeDialog(preflightData.worldInfos);
+                        if (cascadeResult === null) {
+                            return false;
+                        }
+                        resolvedDeleteWorlds = cascadeResult.deleteWorlds;
+                        resolvedClearRefs = cascadeResult.clearWorldReferences;
+                    }
+                }
+            } catch {
+                // Preflight failure should not block deletion
+            }
+        }
+
+        let deleted = false;
+        const deletedAvatars = [];
+
+        for (const { avatar, character, index: chid } of deleteCandidates) {
+            const chatLookupStartedAt = performance.now();
+            const pastChats = character ? await getPastCharacterChats(chid) : [];
+            markPerfInteractionMetric('preDeleteChatLookupMs', performance.now() - chatLookupStartedAt);
+
+            const msg = { avatar_url: avatar, delete_chats: deleteChats };
+
+            const deleteRequestStartedAt = performance.now();
+            const response = await fetch('/api/characters/delete', {
                 method: 'POST',
                 headers: getRequestHeaders(),
-                body: JSON.stringify({ avatars: characterKey }),
+                body: JSON.stringify(msg),
                 cache: 'no-cache',
             });
-            if (preflightResponse.ok) {
-                const preflightData = await preflightResponse.json();
-                if (preflightData.worldInfos && preflightData.worldInfos.length > 0) {
-                    const cascadeResult = await showWorldInfoCascadeDialog(preflightData.worldInfos);
-                    if (cascadeResult === null) {
-                        return false;
-                    }
-                    resolvedDeleteWorlds = cascadeResult.deleteWorlds;
-                    resolvedClearRefs = cascadeResult.clearWorldReferences;
+            markPerfInteractionMetric('deleteRequestMs', performance.now() - deleteRequestStartedAt);
+
+            if (!response.ok) {
+                toastr.error(`${response.status} ${response.statusText}`, t`Failed to delete character`);
+                continue;
+            }
+
+            accountStorage.removeItem(`AlertWI_${avatar}`);
+            accountStorage.removeItem(`AlertRegex_${avatar}`);
+            accountStorage.removeItem(`mediaWarningShown:${avatar}`);
+            delete tag_map[avatar];
+            select_rm_info('char_delete', character?.name ?? avatar);
+
+            if (deleteChats) {
+                for (const chat of pastChats) {
+                    const name = chat.file_name.replace('.jsonl', '');
+                    await eventSource.emit(event_types.CHAT_DELETED, name);
                 }
             }
-        } catch {
-            // Preflight failure should not block deletion
-        }
-    }
 
-    let deleted = false;
-    const deletedAvatars = [];
-
-    for (const { avatar, character, index: chid } of deleteCandidates) {
-        const chatLookupStartedAt = performance.now();
-        const pastChats = character ? await getPastCharacterChats(chid) : [];
-        markPerfInteractionMetric('preDeleteChatLookupMs', performance.now() - chatLookupStartedAt);
-
-        const msg = { avatar_url: avatar, delete_chats: deleteChats };
-
-        const deleteRequestStartedAt = performance.now();
-        const response = await fetch('/api/characters/delete', {
-            method: 'POST',
-            headers: getRequestHeaders(),
-            body: JSON.stringify(msg),
-            cache: 'no-cache',
-        });
-        markPerfInteractionMetric('deleteRequestMs', performance.now() - deleteRequestStartedAt);
-
-        if (!response.ok) {
-            toastr.error(`${response.status} ${response.statusText}`, t`Failed to delete character`);
-            continue;
+            await eventSource.emit(event_types.CHARACTER_DELETED, { id: chid, character: character ?? { avatar } });
+            deletedAvatars.push(avatar);
+            deleted = true;
         }
 
-        accountStorage.removeItem(`AlertWI_${avatar}`);
-        accountStorage.removeItem(`AlertRegex_${avatar}`);
-        accountStorage.removeItem(`mediaWarningShown:${avatar}`);
-        delete tag_map[avatar];
-        select_rm_info('char_delete', character?.name ?? avatar);
-
-        if (deleteChats) {
-            for (const chat of pastChats) {
-                const name = chat.file_name.replace('.jsonl', '');
-                await eventSource.emit(event_types.CHAT_DELETED, name);
+        // World info cascade: delete world files and clear references after all characters are deleted
+        if (deleted && resolvedDeleteWorlds.length > 0) {
+            try {
+                const cascadeResp = await fetch('/api/worldinfo/delete-cascade', {
+                    method: 'POST',
+                    headers: getRequestHeaders(),
+                    body: JSON.stringify({
+                        worlds: resolvedDeleteWorlds,
+                        clear_references: resolvedClearRefs,
+                    }),
+                    cache: 'no-cache',
+                });
+                if (cascadeResp.ok) {
+                    await flushDeletedWorldsFromUI(resolvedDeleteWorlds);
+                }
+            } catch {
+                // Cascade failure should not block the UI cleanup
             }
         }
 
-        await eventSource.emit(event_types.CHARACTER_DELETED, { id: chid, character: character ?? { avatar } });
-        deletedAvatars.push(avatar);
-        deleted = true;
+        await removeCharacterFromUI(deletedAvatars);
+        markPerfInteractionMetric('deleteFlowMs', performance.now() - deleteFlowStartedAt);
+        return deleted;
+    } finally {
+        isCharacterDeleteReconcileInProgress = false;
+        characterDeleteReconcileGeneration++;
     }
-
-    // World info cascade: delete world files and clear references after all characters are deleted
-    if (deleted && resolvedDeleteWorlds.length > 0) {
-        try {
-            const cascadeResp = await fetch('/api/worldinfo/delete-cascade', {
-                method: 'POST',
-                headers: getRequestHeaders(),
-                body: JSON.stringify({
-                    worlds: resolvedDeleteWorlds,
-                    clear_references: resolvedClearRefs,
-                }),
-                cache: 'no-cache',
-            });
-            if (cascadeResp.ok) {
-                await flushDeletedWorldsFromUI(resolvedDeleteWorlds);
-            }
-        } catch {
-            // Cascade failure should not block the UI cleanup
-        }
-    }
-
-    await removeCharacterFromUI(deletedAvatars);
-    markPerfInteractionMetric('deleteFlowMs', performance.now() - deleteFlowStartedAt);
-    return deleted;
 }
 
 /**
@@ -11182,36 +11237,30 @@ async function removeCharacterFromUI(deletedAvatars = []) {
     const refreshStartedAt = performance.now();
     const beforeDeleteSnapshot = createCharacterListEntitySnapshot(getEntitiesList({ doFilter: true }));
     cancelDebounce(printCharactersDebounced);
-    isCharacterDeleteReconcileInProgress = true;
-    try {
-        preserveNeutralChat();
-        await clearChat();
-        $('#character_cross').trigger('click');
-        resetChatStateWithOptions({ clearCharacters: false });
-        $(document.getElementById('rm_button_selected_ch')).children('h2').text('');
-        restoreNeutralChat();
-        removeCharactersFromState(characters, deletedAvatars);
-        const groupsRefreshStartedAt = performance.now();
-        await getGroups();
-        markPerfInteractionMetric('groupsRefreshMs', performance.now() - groupsRefreshStartedAt);
-        const reconcileStartedAt = performance.now();
-        const reconciled = await reconcileCharacterListAfterDelete({
-            beforeSnapshot: beforeDeleteSnapshot,
-            deletedAvatars,
-        });
-        markPerfInteractionMetric('characterDeleteReconcileMs', performance.now() - reconcileStartedAt);
-        if (!reconciled) {
-            const printCharactersStartedAt = performance.now();
-            await printCharacters(true);
-            markPerfInteractionMetric('characterPrintMs', performance.now() - printCharactersStartedAt);
-        }
-        await printMessages();
-        saveSettingsDebounced();
-        await eventSource.emit(event_types.CHAT_CHANGED, getCurrentChatId());
-    } finally {
-        isCharacterDeleteReconcileInProgress = false;
-        characterDeleteReconcileGeneration++;
+    preserveNeutralChat();
+    await clearChat();
+    $('#character_cross').trigger('click');
+    resetChatStateWithOptions({ clearCharacters: false });
+    $(document.getElementById('rm_button_selected_ch')).children('h2').text('');
+    restoreNeutralChat();
+    removeCharactersFromState(characters, deletedAvatars);
+    const groupsRefreshStartedAt = performance.now();
+    await getGroups();
+    markPerfInteractionMetric('groupsRefreshMs', performance.now() - groupsRefreshStartedAt);
+    const reconcileStartedAt = performance.now();
+    const reconciled = await reconcileCharacterListAfterDelete({
+        beforeSnapshot: beforeDeleteSnapshot,
+        deletedAvatars,
+    });
+    markPerfInteractionMetric('characterDeleteReconcileMs', performance.now() - reconcileStartedAt);
+    if (!reconciled) {
+        const printCharactersStartedAt = performance.now();
+        await printCharacters(true);
+        markPerfInteractionMetric('characterPrintMs', performance.now() - printCharactersStartedAt);
     }
+    await printMessages();
+    saveSettingsDebounced();
+    await eventSource.emit(event_types.CHAT_CHANGED, getCurrentChatId());
     markPerfInteractionMetric('removeCharacterFromUIMs', performance.now() - refreshStartedAt);
 }
 

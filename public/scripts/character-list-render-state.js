@@ -105,6 +105,84 @@ function createCharacterDeleteFallback(reason) {
     };
 }
 
+function hasDuplicateValues(values) {
+    return new Set(values).size !== values.length;
+}
+
+/**
+ * Builds a generic safe reconcile plan for replacing the current visible
+ * character-list page with the next visible page.
+ * @param {object} options
+ * @param {Array<object>} options.beforePageEntities
+ * @param {{entities: Array<object>, total: number, keys: string[]}} options.afterSnapshot
+ * @param {Array<object>} options.pageEntities
+ * @param {number} options.currentPage
+ * @param {number} options.pageSize
+ * @param {number} options.totalCharacters
+ * @param {number} options.totalGroups
+ * @param {boolean} options.hasActiveFilter
+ * @param {boolean} [options.includeBackBlock]
+ * @returns {{mode: 'incremental', orderedKeys: string[], reusedKeys: string[], insertedKeys: string[], removedKeys: string[], pageEntities: Array<object>, renderPlan: object, requiresIdentitySync: boolean, paginationLabel: string, currentPage: number, pageSize: number}|{mode: 'fallback', reason: string}}
+ */
+export function createCharacterListPageReconcilePlan({
+    beforePageEntities,
+    afterSnapshot,
+    pageEntities,
+    currentPage,
+    pageSize,
+    totalCharacters,
+    totalGroups,
+    hasActiveFilter,
+    includeBackBlock = false,
+}) {
+    if (includeBackBlock) {
+        return createCharacterDeleteFallback('back-block');
+    }
+    if (!Array.isArray(beforePageEntities) || !Array.isArray(pageEntities) || !afterSnapshot) {
+        return createCharacterDeleteFallback('missing-entity-data');
+    }
+
+    const beforeKeys = beforePageEntities.map(entity => entity.renderKey ?? getCharacterListEntityKey(entity));
+    const afterKeys = Array.isArray(afterSnapshot.keys) ? afterSnapshot.keys : [];
+    const orderedKeys = pageEntities.map(entity => entity.renderKey ?? getCharacterListEntityKey(entity));
+
+    if (hasDuplicateValues(beforeKeys) || hasDuplicateValues(afterKeys) || hasDuplicateValues(orderedKeys)) {
+        return createCharacterDeleteFallback('duplicate-entity-key');
+    }
+
+    const beforeKeySet = new Set(beforeKeys);
+    const orderedKeySet = new Set(orderedKeys);
+    const reusedKeys = orderedKeys.filter(key => beforeKeySet.has(key));
+    const insertedKeys = orderedKeys.filter(key => !beforeKeySet.has(key));
+    const removedKeys = beforeKeys.filter(key => !orderedKeySet.has(key));
+    const safePageSize = Number(pageSize) || 1;
+    const safeCurrentPage = Math.max(Number(currentPage) || 1, 1);
+
+    return {
+        mode: 'incremental',
+        orderedKeys,
+        reusedKeys,
+        insertedKeys,
+        removedKeys,
+        pageEntities,
+        renderPlan: createCharacterListPageRenderPlan({
+            pageEntities,
+            includeBackBlock: false,
+            totalCharacters,
+            totalGroups,
+            hasActiveFilter,
+        }),
+        requiresIdentitySync: true,
+        paginationLabel: getCharacterListPaginationRangeLabel({
+            currentPage: safeCurrentPage,
+            totalNumber: afterSnapshot.total,
+            pageSize: safePageSize,
+        }),
+        currentPage: safeCurrentPage,
+        pageSize: safePageSize,
+    };
+}
+
 /**
  * Builds the safe ordinary single-delete reconcile plan for the current page.
  * Complex list states intentionally fall back to the existing full-refresh path.

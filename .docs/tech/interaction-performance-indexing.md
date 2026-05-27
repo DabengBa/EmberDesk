@@ -22,6 +22,7 @@ The goal of this slice is narrow:
 - reuse a fresh per-character cached `full_json` on `POST /api/characters/get` when the indexed row still matches the source PNG
 - keep canonical character and chat files on disk
 - reduce the visible lag after character deletion by removing the success-path full character-list refetch
+- reduce avoidable full-list redraws during ordinary character-library page changes when the next visible page can be reconciled safely
 - keep the indexed fast path self-healing when derived rows or SQLite state become inconsistent
 - add a reproducible local A/B runner that can prove whether the current SQLite slice is helping enough to justify its maintenance cost
 
@@ -318,9 +319,9 @@ Instead it now:
 
 This preserves the existing chat reset semantics while avoiding a second full character-list request in the delete success path.
 
-For the safe incremental path, `removeCharacterFromUI()` captures a pre-delete entity snapshot, cancels a pending delayed character print, refreshes canonical character/group state, then calls the local delete reconcile helper. The helper compares before/after entity snapshots, removes the deleted visible row, reuses existing DOM nodes where possible, fills the current page from the after-delete render plan, rewrites visible character row identity attributes, updates the pagination model/text, refreshes hotswap/persona avatar surfaces, and emits `CHARACTER_PAGE_LOADED` even though the list was not fully reprinted.
+For the safe incremental path, `deleteCharacter()` enters the delete-reconcile suppression window before `closeCurrentChatForDelete()` can switch the menu or emit chat-change callbacks. `removeCharacterFromUI()` then captures a pre-delete entity snapshot, cancels a pending delayed character print, refreshes canonical character/group state, then calls the local delete reconcile helper. The helper compares before/after entity snapshots, removes the deleted visible row, reuses existing DOM nodes where possible, fills the current page from the after-delete render plan, rewrites visible character row identity attributes, updates the pagination model/text, refreshes hotswap/persona avatar surfaces, and emits `CHARACTER_PAGE_LOADED` even though the list was not fully reprinted.
 
-The fallback boundary is intentionally conservative. Multi-delete, active search/tag filters, bulk edit mode, bogus-folder drilldown, pending list prints, missing-before entities, still-present deleted entities, and page-clamp changes use the existing full-refresh path instead of leaving a partial DOM patch behind. A generation guard also prevents non-full `printCharacters(false)` calls and pagination callbacks that started before the delete reconcile from clearing the just-reconciled list after the delete succeeds; new user-triggered list changes after the delete are not held behind a timer, and explicit full-refresh fallback remains allowed.
+The fallback boundary is intentionally conservative. Multi-delete, active search/tag filters, bulk edit mode, bogus-folder drilldown, pending list prints, missing-before entities, still-present deleted entities, and page-clamp changes use the existing full-refresh path instead of leaving a partial DOM patch behind. A generation guard prevents non-full `printCharacters(false)` calls and pagination callbacks from clearing the list while delete reconcile is in progress, and also rejects non-full prints that started before the latest delete-reconcile generation completed. New user-triggered list changes after the delete are not held behind a timer, and explicit full-refresh fallback remains allowed.
 
 The delete flow also cancels `saveCharacterDebounced` at the start of `deleteCharacter()`. This prevents a pending delayed edit save from submitting after the user has already committed a destructive delete.
 
@@ -329,9 +330,12 @@ Character edit completion now guards the post-save refresh with `shouldRefreshCh
 The delete flow now also uses a dedicated preflight helper before the delete request:
 
 - `closeCurrentChatForDelete()` reuses the existing save/generation guards and low-level chat cleanup
+- if generation is still active, `closeCurrentChatForDelete()` shows the existing stop-generation notice and returns without running destructive cleanup
 - the helper suppresses the next welcome-screen `CHAT_CHANGED` hydration attempt, then still emits a lightweight pre-delete `CHAT_CHANGED`
 - this preserves existing chat-scoped cleanup listeners such as TTS/gallery teardown without blocking the delete request on welcome-screen recent-chat hydration
 - the helper still reselects the characters view so the visible landing state matches the old flow
+
+The detailed client-side state rules for stable delete keys, edit-refresh suppression, bulk-selection DOM sync, and delete-reconcile fallback are captured in [character-list-state-flow](../logic-description/character_list_state_processing_flow.md). User-facing delete and library behavior stay owned by [character-delete](../db/features/character-delete.md) and [character-library-panel](../db/features/character-library-panel.md).
 
 ### Character-row string render fast path
 
@@ -370,9 +374,18 @@ The boundary is deliberately narrow:
   - character keys prefer `avatar`, because `chid` is an array index and can shift after deletion
   - group and tag keys use their stable ids
 - `createCharacterListPageRenderPlan()` describes the current page’s back-block, empty-block, display-count, and hidden-count decisions without rendering DOM.
+- `createCharacterListPageReconcilePlan()` compares the mounted visible page against the next page and either returns ordered/reused/inserted/removed keys plus a render plan, or returns a named fallback reason such as `back-block`, `missing-entity-data`, or `duplicate-entity-key`.
 - `getCharacterListPaginationRangeLabel()` keeps the navigator range formatting reusable while preserving the existing `1-14 / 14` style.
 
-`printCharacters()` still owns the refresh side effects: tag filters, character/group tag selectors, pagination widget setup, DOM insertion, `CHARACTER_PAGE_LOADED`, hotswap favorites, and persona avatar list updates. This slice does not enable local row deletion or partial DOM reconcile yet; it creates the tested state boundary that later deletion and incremental-render specs can reuse.
+`renderCharacterListPage()` now uses that boundary for ordinary page changes:
+
+- it builds the pure render plan for the next page
+- snapshots the current filtered entity list
+- attempts a page-level incremental reconcile unless `fullRefresh` was explicitly requested
+- reuses existing DOM nodes by stable entity key, creates only missing rows, removes stale rows, and rewrites visible character row identity after moves or inserts
+- falls back to the existing full-render path when a back block is active or the visible page keys are ambiguous
+
+The shared DOM apply helper now serves both ordinary list updates and the delete-specific reconcile path. `printCharacters()` still owns the broader refresh side effects: tag filters, character/group tag selectors, pagination widget setup, full-render fallback, `CHARACTER_PAGE_LOADED`, hotswap favorites, and persona avatar list updates.
 
 ## Related Semantic IDs And Code Binding Points
 

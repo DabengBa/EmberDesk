@@ -201,4 +201,27 @@ describe('syncBulkSelectionDomState', () => {
         expect(beta.classList.contains('character_selected')).toBe(false);
         expect(readAttribute(beta, 'aria-selected')).toBe('false');
     });
+
+    test('restores visible selection by data-chid after rows move on the page', () => {
+        const gamma = createFakeCharacterRow(2);
+        const alpha = createFakeCharacterRow(0);
+        const beta = createFakeCharacterRow(1);
+        const container = createFakeCharacterContainer([gamma, alpha, beta]);
+
+        const visibleSelectedCount = syncBulkSelectionDomState({
+            container,
+            selectedCharacterIds: [2, 1],
+        });
+
+        expect(visibleSelectedCount).toBe(2);
+        expect(gamma.classList.contains('character_selected')).toBe(true);
+        expect(readAttribute(gamma, 'aria-selected')).toBe('true');
+        expect(gamma.checkbox.checked).toBe(true);
+        expect(alpha.classList.contains('character_selected')).toBe(false);
+        expect(readAttribute(alpha, 'aria-selected')).toBe('false');
+        expect(alpha.checkbox.checked).toBe(false);
+        expect(beta.classList.contains('character_selected')).toBe(true);
+        expect(readAttribute(beta, 'aria-selected')).toBe('true');
+        expect(beta.checkbox.checked).toBe(true);
+    });
 });

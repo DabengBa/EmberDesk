@@ -3,6 +3,7 @@ import { describe, expect, test } from '@jest/globals';
 import {
     CHARACTER_LIST_PAGE_SIZE_OPTIONS,
     createCharacterListEntitySnapshot,
+    createCharacterListPageReconcilePlan,
     createCharacterListPageRenderPlan,
     createCharacterDeleteReconcilePlan,
     getCharacterListEntityKey,
@@ -123,6 +124,76 @@ describe('character list render state helpers', () => {
         expect(CHARACTER_LIST_PAGE_SIZE_OPTIONS).toEqual([10, 25, 50, 100, 250, 500, 1000]);
     });
 
+    test('plans a page reconcile by reusing, reordering, inserting, and removing entity rows', () => {
+        const beforeSnapshot = createCharacterListEntitySnapshot([
+            characterEntity(0, 'alpha.png'),
+            characterEntity(1, 'beta.png'),
+            characterEntity(2, 'gamma.png'),
+        ]);
+        const afterSnapshot = createCharacterListEntitySnapshot([
+            characterEntity(0, 'gamma.png'),
+            characterEntity(1, 'alpha.png'),
+            characterEntity(2, 'delta.png'),
+        ]);
+        const pageEntities = afterSnapshot.entities;
+
+        const plan = createCharacterListPageReconcilePlan({
+            beforePageEntities: beforeSnapshot.entities,
+            afterSnapshot,
+            pageEntities,
+            currentPage: 1,
+            pageSize: 3,
+            totalCharacters: 3,
+            totalGroups: 0,
+            hasActiveFilter: false,
+        });
+
+        expect(plan.mode).toBe('incremental');
+        expect(plan.orderedKeys).toEqual(['character:gamma.png', 'character:alpha.png', 'character:delta.png']);
+        expect(plan.reusedKeys).toEqual(['character:gamma.png', 'character:alpha.png']);
+        expect(plan.insertedKeys).toEqual(['character:delta.png']);
+        expect(plan.removedKeys).toEqual(['character:beta.png']);
+        expect(plan.requiresIdentitySync).toBe(true);
+        expect(plan.paginationLabel).toBe('1-3 / 3');
+        expect(plan.renderPlan.pageEntities.map(entity => entity.item.avatar)).toEqual(['gamma.png', 'alpha.png', 'delta.png']);
+    });
+
+    test('falls back from page reconcile for ambiguous or unsupported page states', () => {
+        const beforeSnapshot = createCharacterListEntitySnapshot([
+            characterEntity(0, 'alpha.png'),
+            characterEntity(1, 'beta.png'),
+        ]);
+        const afterSnapshot = createCharacterListEntitySnapshot([
+            characterEntity(0, 'alpha.png'),
+            characterEntity(1, 'alpha.png'),
+        ]);
+
+        expect(createCharacterListPageReconcilePlan({
+            beforePageEntities: beforeSnapshot.entities,
+            afterSnapshot,
+            pageEntities: afterSnapshot.entities,
+            currentPage: 1,
+            pageSize: 2,
+            totalCharacters: 2,
+            totalGroups: 0,
+            hasActiveFilter: false,
+        })).toMatchObject({ mode: 'fallback', reason: 'duplicate-entity-key' });
+
+        expect(createCharacterListPageReconcilePlan({
+            beforePageEntities: beforeSnapshot.entities,
+            afterSnapshot: createCharacterListEntitySnapshot([
+                characterEntity(0, 'alpha.png'),
+            ]),
+            pageEntities: [characterEntity(0, 'alpha.png')],
+            currentPage: 1,
+            pageSize: 2,
+            totalCharacters: 1,
+            totalGroups: 0,
+            includeBackBlock: true,
+            hasActiveFilter: false,
+        })).toMatchObject({ mode: 'fallback', reason: 'back-block' });
+    });
+
     test('plans ordinary single-delete reconcile with the current page filled from the after snapshot', () => {
         const beforeSnapshot = createCharacterListEntitySnapshot([
             characterEntity(0, 'alpha.png'),
@@ -215,5 +286,29 @@ describe('character list render state helpers', () => {
         expect(gamma.getAttribute('data-chid')).toBe('1');
         expect(gamma.getAttribute('chid')).toBe('1');
         expect(gamma.id).toBe('CharID1');
+    });
+
+    test('syncs visible character row identity after row moves and inserts', () => {
+        const gamma = createFakeRow(2, 'gamma.png');
+        const alpha = createFakeRow(0, 'alpha.png');
+        const delta = createFakeRow(99, 'delta.png');
+        const container = createFakeContainer([gamma, alpha, delta]);
+
+        const changed = syncCharacterListRowIdentity(container, [
+            characterEntity(0, 'gamma.png'),
+            characterEntity(1, 'alpha.png'),
+            characterEntity(2, 'delta.png'),
+        ]);
+
+        expect(changed).toBe(3);
+        expect(gamma.getAttribute('data-chid')).toBe('0');
+        expect(gamma.getAttribute('chid')).toBe('0');
+        expect(gamma.id).toBe('CharID0');
+        expect(alpha.getAttribute('data-chid')).toBe('1');
+        expect(alpha.getAttribute('chid')).toBe('1');
+        expect(alpha.id).toBe('CharID1');
+        expect(delta.getAttribute('data-chid')).toBe('2');
+        expect(delta.getAttribute('chid')).toBe('2');
+        expect(delta.id).toBe('CharID2');
     });
 });

@@ -14,7 +14,7 @@ function read(relativePath) {
 
 function extractFunctionSource(source, functionName) {
     const functionStart = Math.max(
-        source.indexOf(`function ${functionName}`),
+        source.indexOf(`function ${functionName}(`),
         source.indexOf(`const ${functionName} =`),
     );
     expect(functionStart).toBeGreaterThanOrEqual(0);
@@ -149,10 +149,14 @@ describe('character list structure', () => {
         const renderStateSource = read('public/scripts/character-list-render-state.js');
         const emptyBlockTemplate = read('public/scripts/templates/emptyBlock.html');
 
-        expect(printCharactersSource).toContain('await renderCharacterListPage(data);');
+        expect(printCharactersSource).toContain('await renderCharacterListPage(data, { fullRefresh });');
         expect(renderCharacterListPageSource).toContain('createCharacterListPageRenderPlan({');
-        expect(renderCharacterListPageSource).toMatch(/if \(renderPlan\.showEmptyBlock\) \{\s+const emptyBlock = await getEmptyBlock\(\);\s+\$\(listId\)\.append\(emptyBlock\);/);
-        expect(renderCharacterListPageSource).toMatch(/const hiddenBlock = await getHiddenBlock\(renderPlan\.hiddenCount\);\s+\$\(listId\)\.append\(hiddenBlock\);/);
+        expect(scriptSource).toContain('createCharacterListPageReconcilePlan');
+        expect(scriptSource).toContain('applyCharacterListPageRenderPlan({');
+        expect(scriptSource).toContain('let currentCharacterListPageEntities = [];');
+        expect(scriptSource).toMatch(/if \(fullRefresh \|\| reconcilePlan\.mode !== 'incremental'\) \{\s+await renderCharacterListPageFull\(renderPlan\);/);
+        expect(scriptSource).toMatch(/if \(renderPlan\.showEmptyBlock\) \{\s+desiredElements\.push\(\(await getEmptyBlock\(\)\)\[0\]\);/);
+        expect(scriptSource).toMatch(/desiredElements\.push\(\(await getHiddenBlock\(renderPlan\.hiddenCount\)\)\[0\]\);/);
         expect(renderStateSource).toMatch(/const displayCount = pageEntities\.filter\(entity => entity\.type === 'character' \|\| entity\.type === 'group'\)\.length;/);
         expect(renderStateSource).toMatch(/const hiddenCount = \(totalCharacters \+ totalGroups\) - displayCount;/);
         expect(scriptSource).toMatch(/const hasActiveCharacterListFilter = entitiesFilter\.hasAnyFilter\(\);/);
@@ -230,17 +234,18 @@ describe('character list structure', () => {
         expect(scriptSource).toContain('const deleteReconcileGenerationAtStart = characterDeleteReconcileGeneration;');
         expect(scriptSource).toMatch(/if \(suppressStaleReprint && shouldSuppressCharacterDeleteListReprint\(deleteReconcileGenerationAtStart\)\) \{\s+return;\s+\}/);
         expect(scriptSource).toMatch(/callback: async function \(\/\*\* @type \{Entity\[\]\} \*\/ data\) \{\s+if \(suppressStaleReprint && shouldSuppressCharacterDeleteListReprint\(deleteReconcileGenerationAtStart\)\) \{\s+return;\s+\}/);
+        const deleteCharacterSource = extractFunctionSource(scriptSource, 'deleteCharacter');
+        expect(deleteCharacterSource.indexOf('isCharacterDeleteReconcileInProgress = true;')).toBeLessThan(deleteCharacterSource.indexOf('const closeChatResult = await closeCurrentChatForDelete();'));
+        expect(deleteCharacterSource.indexOf('isCharacterDeleteReconcileInProgress = false;')).toBeGreaterThan(deleteCharacterSource.indexOf('await removeCharacterFromUI(deletedAvatars);'));
         expect(removeCharacterFromUISource).toContain('const beforeDeleteSnapshot = createCharacterListEntitySnapshot(getEntitiesList({ doFilter: true }));');
         expect(removeCharacterFromUISource).toContain('cancelDebounce(printCharactersDebounced);');
-        expect(removeCharacterFromUISource).toContain('isCharacterDeleteReconcileInProgress = true;');
-        expect(removeCharacterFromUISource).toContain('isCharacterDeleteReconcileInProgress = false;');
-        expect(removeCharacterFromUISource).toContain('characterDeleteReconcileGeneration++;');
         expect(removeCharacterFromUISource).toContain('const reconciled = await reconcileCharacterListAfterDelete({');
         expect(removeCharacterFromUISource).toMatch(/if \(!reconciled\) \{\s+const printCharactersStartedAt = performance\.now\(\);\s+await printCharacters\(true\);/);
         expect(reconcileSource).toContain('createCharacterDeleteReconcilePlan({');
         expect(reconcileSource).toContain('hasActiveFilter: entitiesFilter.hasAnyFilter()');
         expect(reconcileSource).toContain("isBulkEdit: $('#rm_print_characters_block').hasClass('bulk_select')");
-        expect(reconcileSource).toContain('syncCharacterListRowIdentity(listElement, renderPlan.pageEntities);');
+        expect(reconcileSource).toContain('applyCharacterListPageRenderPlan({');
+        expect(reconcileSource).toContain('currentCharacterListPageEntities = plan.pageEntities;');
         expect(reconcileSource).toContain('updateCharacterListPaginationState(plan, afterSnapshot, { skipInitialCallback: true });');
         expect(reconcileSource).toContain('await eventSource.emit(event_types.CHARACTER_PAGE_LOADED);');
 
@@ -248,6 +253,13 @@ describe('character list structure', () => {
         expect(updatePaginationSource).toContain("dataSource: afterSnapshot.entities");
         expect(updatePaginationSource).toContain('triggerPagingOnInit: !skipInitialCallback');
         expect(updatePaginationSource).not.toContain('paginationData.attributes.dataSource = afterSnapshot.entities;');
+    });
+
+    test('keeps the selected-character delete action directly discoverable and keyboard reachable', () => {
+        const indexHtml = read('public/index.html');
+
+        expect(indexHtml).toMatch(/<button id="delete_button"[^>]*type="button"[^>]*class="[^"]*\bmenu_button\b[^"]*\bred_button\b[^"]*"[^>]*title="Delete Character"[^>]*aria-label="Delete Character"[^>]*data-i18n="\[title\]\[aria-label\]Delete Character"[^>]*><\/button>/);
+        expect(indexHtml).toContain('<option id="delete_from_dropdown" class="red_button character-detail-edit-action" data-i18n="Delete Character">');
     });
 
     test('keeps search feedback, grid labels, and bulk selection semantics wired', () => {
