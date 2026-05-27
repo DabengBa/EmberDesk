@@ -247,6 +247,12 @@ import { onboardingExperimentalMacroEngine } from './scripts/macros/engine/Macro
 import { compressRequest, setRequestCompressionConfig } from './scripts/request-compression.js';
 import { canJumpToSwipeForMessage, canOpenSwipePickerForMessage, initSwipePicker } from './scripts/swipe-picker.js';
 import { getCharacterDeleteCandidates, removeCharactersFromState, shouldRefreshCharacterAfterEdit } from './scripts/character-list-state.js';
+import {
+    CHARACTER_LIST_PAGE_SIZE_OPTIONS,
+    createCharacterListEntitySnapshot,
+    createCharacterListPageRenderPlan,
+    getCharacterListPaginationRangeLabel,
+} from './scripts/character-list-render-state.js';
 import { runDeleteCharacterClosePreflight } from './scripts/delete-character-preflight.js';
 
 // API OBJECT FOR EXTERNAL WIRING
@@ -1227,17 +1233,19 @@ export async function printCharacters(fullRefresh = false) {
     applyTagsOnCharacterSelect();
     applyTagsOnGroupSelect();
 
-    const entities = getEntitiesList({ doFilter: true });
+    const entitySnapshot = createCharacterListEntitySnapshot(getEntitiesList({ doFilter: true }));
+    const entities = entitySnapshot.entities;
 
     let pageSize = Number(accountStorage.getItem(storageKey)) || per_page_default;
-    const sizeChangerOptions = [10, 25, 50, 100, 250, 500, 1000];
+    const sizeChangerOptions = CHARACTER_LIST_PAGE_SIZE_OPTIONS;
     const getCurrentPageSize = () => pageSize;
     const getPaginationRangeLabel = (currentPage, totalNumber) => {
-        const actualTotal = totalNumber || entities.length;
-        const currentPageSize = getCurrentPageSize();
-        const rangeStart = actualTotal > 0 ? (currentPage - 1) * currentPageSize + 1 : 0;
-        const rangeEnd = Math.min(currentPage * currentPageSize, actualTotal);
-        return `${rangeStart}-${rangeEnd} / ${actualTotal}`;
+        return getCharacterListPaginationRangeLabel({
+            currentPage,
+            totalNumber,
+            pageSize: getCurrentPageSize(),
+            fallbackTotal: entitySnapshot.total,
+        });
     };
     $('#rm_print_characters_pagination').pagination({
         dataSource: entities,
@@ -1257,24 +1265,29 @@ export async function printCharacters(fullRefresh = false) {
         },
         showNavigator: true,
         callback: async function (/** @type {Entity[]} */ data) {
+            const renderPlan = createCharacterListPageRenderPlan({
+                pageEntities: data,
+                includeBackBlock: power_user.bogus_folders && isBogusFolderOpen(),
+                totalCharacters: characters.length,
+                totalGroups: groups.length,
+                hasActiveFilter: entitiesFilter.hasAnyFilter(),
+            });
+
             $(listId).empty();
-            if (power_user.bogus_folders && isBogusFolderOpen()) {
+            if (renderPlan.includeBackBlock) {
                 $(listId).append(getBackBlock());
             }
-            if (!data.length) {
+            if (renderPlan.showEmptyBlock) {
                 const emptyBlock = await getEmptyBlock();
                 $(listId).append(emptyBlock);
             }
-            let displayCount = 0;
-            for (const i of data) {
+            for (const i of renderPlan.pageEntities) {
                 switch (i.type) {
                     case 'character':
                         $(listId).append(getCharacterBlock(i.item, i.id));
-                        displayCount++;
                         break;
                     case 'group':
                         $(listId).append(getGroupBlock(i.item));
-                        displayCount++;
                         break;
                     case 'tag':
                         $(listId).append(getTagBlock(i.item, i.entities, i.hidden, i.isUseless));
@@ -1282,9 +1295,8 @@ export async function printCharacters(fullRefresh = false) {
                 }
             }
 
-            const hidden = (characters.length + groups.length) - displayCount;
-            if (hidden > 0 && entitiesFilter.hasAnyFilter()) {
-                const hiddenBlock = await getHiddenBlock(hidden);
+            if (renderPlan.showHiddenBlock) {
+                const hiddenBlock = await getHiddenBlock(renderPlan.hiddenCount);
                 $(listId).append(hiddenBlock);
             }
             localizePagination($('#rm_print_characters_pagination'));

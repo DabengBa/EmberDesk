@@ -12,6 +12,7 @@ Primary files:
 - `src/interaction-performance-report.js`
 - `public/script.js`
 - `public/scripts/character-list-state.js`
+- `public/scripts/character-list-render-state.js`
 - `public/perf-harness.html`
 - `scripts/interaction-performance-runner.mjs`
 
@@ -352,6 +353,22 @@ Covered patch fields: favorite class/value, avatar thumbnail, creator-notes summ
 
 Not covered by row-local patching: `renameCharacter()` flows, filtered list states, bogus-folder drilldown views, or pages where the row is not visible — all of these keep the existing full-refresh fallback.
 
+### Character-list render-state foundation
+
+`public/scripts/character-list-render-state.js` now owns the pure render-planning helpers that sit between `getEntitiesList({ doFilter: true })` and the DOM work inside `printCharacters()`.
+
+The boundary is deliberately narrow:
+
+- `getEntitiesList()` remains the only source for character, group, and bogus-folder tag ordering, filtering, and sorting semantics.
+- `createCharacterListEntitySnapshot()` adds internal render metadata without changing entity order, ids, or row DOM identity.
+- `getCharacterListEntityKey()` provides stable internal keys for future reconcile work:
+  - character keys prefer `avatar`, because `chid` is an array index and can shift after deletion
+  - group and tag keys use their stable ids
+- `createCharacterListPageRenderPlan()` describes the current page’s back-block, empty-block, display-count, and hidden-count decisions without rendering DOM.
+- `getCharacterListPaginationRangeLabel()` keeps the navigator range formatting reusable while preserving the existing `1-14 / 14` style.
+
+`printCharacters()` still owns the refresh side effects: tag filters, character/group tag selectors, pagination widget setup, DOM insertion, `CHARACTER_PAGE_LOADED`, hotswap favorites, and persona avatar list updates. This slice does not enable local row deletion or partial DOM reconcile yet; it creates the tested state boundary that later deletion and incremental-render specs can reuse.
+
 ## Related Semantic IDs And Code Binding Points
 
 Relevant semantic docs now live in `.docs/db/`:
@@ -374,6 +391,9 @@ Stability-sensitive binding points:
 - `SCHEMA_VERSION` in `src/endpoints/character-index.js`
 - `removeCharactersFromState()` in `public/scripts/character-list-state.js`
 - `shouldRefreshCharacterAfterEdit()` in `public/scripts/character-list-state.js`
+- `getCharacterListEntityKey()` in `public/scripts/character-list-render-state.js`
+- `createCharacterListEntitySnapshot()` in `public/scripts/character-list-render-state.js`
+- `createCharacterListPageRenderPlan()` in `public/scripts/character-list-render-state.js`
 - `cancelDebounce(saveCharacterDebounced)` at the start of `deleteCharacter()`
 
 Current client-side state rules are documented in [Character List State Processing Flow](../logic-description/character_list_state_processing_flow.md).

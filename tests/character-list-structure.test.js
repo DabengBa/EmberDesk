@@ -136,11 +136,14 @@ describe('character list structure', () => {
         const scriptSource = read('public/script.js');
         const printCharactersSource = extractFunctionSource(scriptSource, 'printCharacters');
         const rowSource = extractFunctionSource(scriptSource, 'buildCharacterRowHtml');
+        const renderStateSource = read('public/scripts/character-list-render-state.js');
         const emptyBlockTemplate = read('public/scripts/templates/emptyBlock.html');
 
-        expect(printCharactersSource).toMatch(/if \(!data\.length\) \{\s+const emptyBlock = await getEmptyBlock\(\);\s+\$\(listId\)\.append\(emptyBlock\);/);
-        expect(printCharactersSource).toMatch(/const hidden = \(characters\.length \+ groups\.length\) - displayCount;/);
-        expect(printCharactersSource).toMatch(/const hiddenBlock = await getHiddenBlock\(hidden\);\s+\$\(listId\)\.append\(hiddenBlock\);/);
+        expect(printCharactersSource).toContain('createCharacterListPageRenderPlan({');
+        expect(printCharactersSource).toMatch(/if \(renderPlan\.showEmptyBlock\) \{\s+const emptyBlock = await getEmptyBlock\(\);\s+\$\(listId\)\.append\(emptyBlock\);/);
+        expect(printCharactersSource).toMatch(/const hiddenBlock = await getHiddenBlock\(renderPlan\.hiddenCount\);\s+\$\(listId\)\.append\(hiddenBlock\);/);
+        expect(renderStateSource).toMatch(/const displayCount = pageEntities\.filter\(entity => entity\.type === 'character' \|\| entity\.type === 'group'\)\.length;/);
+        expect(renderStateSource).toMatch(/const hiddenCount = \(totalCharacters \+ totalGroups\) - displayCount;/);
         expect(scriptSource).toMatch(/const hasActiveCharacterListFilter = entitiesFilter\.hasAnyFilter\(\);/);
         expect(scriptSource).toMatch(/const searchQuery = entitiesFilter\.getFilterData\(FILTER_TYPES\.SEARCH\);/);
         expect(scriptSource).toMatch(/\.find\('\.clear_character_filters'\)\.on\('click'/);
@@ -187,12 +190,15 @@ describe('character list structure', () => {
     test('keeps character list pagination state synchronized after page-size changes', () => {
         const scriptSource = read('public/script.js');
         const printCharactersSource = extractFunctionSource(scriptSource, 'printCharacters');
+        const renderStateSource = read('public/scripts/character-list-render-state.js');
 
         expect(printCharactersSource).toMatch(/let pageSize = Number\(accountStorage\.getItem\(storageKey\)\) \|\| per_page_default;/);
+        expect(printCharactersSource).toContain('const sizeChangerOptions = CHARACTER_LIST_PAGE_SIZE_OPTIONS;');
         expect(printCharactersSource).toMatch(/const getCurrentPageSize = \(\) => pageSize;/);
         expect(printCharactersSource).toMatch(/const getPaginationRangeLabel = \(currentPage, totalNumber\) => \{/);
-        expect(printCharactersSource).toMatch(/const currentPageSize = getCurrentPageSize\(\);/);
-        expect(printCharactersSource).toMatch(/return `\$\{rangeStart\}-\$\{rangeEnd\} \/ \$\{actualTotal\}`;/);
+        expect(printCharactersSource).toContain('return getCharacterListPaginationRangeLabel({');
+        expect(renderStateSource).toContain('export const CHARACTER_LIST_PAGE_SIZE_OPTIONS = Object.freeze([10, 25, 50, 100, 250, 500, 1000]);');
+        expect(renderStateSource).toMatch(/return `\$\{rangeStart\}-\$\{rangeEnd\} \/ \$\{actualTotal\}`;/);
         expect(printCharactersSource).toMatch(/formatNavigator: function \(currentPage, _totalPage, totalNumber\) \{\s+return getPaginationRangeLabel\(currentPage, totalNumber\);/);
         expect(printCharactersSource).toMatch(/formatSizeChanger: function \(\) \{\s+return renderPaginationDropdown\(getCurrentPageSize\(\), sizeChangerOptions\);/);
         expect(printCharactersSource).toMatch(/beforeSizeSelectorChange: function \(_e, size\) \{\s+pageSize = Number\(size\) \|\| per_page_default;\s+saveCharactersPage = 1;/);
