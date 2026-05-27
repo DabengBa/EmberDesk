@@ -4,9 +4,42 @@ import {
     CHARACTER_LIST_PAGE_SIZE_OPTIONS,
     createCharacterListEntitySnapshot,
     createCharacterListPageRenderPlan,
+    createCharacterDeleteReconcilePlan,
     getCharacterListEntityKey,
     getCharacterListPaginationRangeLabel,
+    syncCharacterListRowIdentity,
 } from '../public/scripts/character-list-render-state.js';
+
+function createFakeRow(id, avatar) {
+    const attributes = new Map([
+        ['data-chid', String(id)],
+        ['chid', String(id)],
+        ['data-avatar', avatar],
+    ]);
+
+    return {
+        id: `CharID${id}`,
+        getAttribute: name => attributes.get(name) ?? null,
+        setAttribute: (name, value) => {
+            attributes.set(name, String(value));
+        },
+    };
+}
+
+function createFakeContainer(rows) {
+    return {
+        rows,
+        querySelectorAll: selector => selector === '.character_select' ? rows : [],
+    };
+}
+
+function characterEntity(id, avatar) {
+    return {
+        type: 'character',
+        id,
+        item: { avatar },
+    };
+}
 
 describe('character list render state helpers', () => {
     test('creates stable internal keys while leaving DOM ids outside the helper', () => {
@@ -88,5 +121,99 @@ describe('character list render state helpers', () => {
 
     test('keeps the accepted character list page-size options stable', () => {
         expect(CHARACTER_LIST_PAGE_SIZE_OPTIONS).toEqual([10, 25, 50, 100, 250, 500, 1000]);
+    });
+
+    test('plans ordinary single-delete reconcile with the current page filled from the after snapshot', () => {
+        const beforeSnapshot = createCharacterListEntitySnapshot([
+            characterEntity(0, 'alpha.png'),
+            characterEntity(1, 'beta.png'),
+            characterEntity(2, 'gamma.png'),
+        ]);
+        const afterSnapshot = createCharacterListEntitySnapshot([
+            characterEntity(0, 'alpha.png'),
+            characterEntity(1, 'gamma.png'),
+        ]);
+
+        const plan = createCharacterDeleteReconcilePlan({
+            beforeSnapshot,
+            afterSnapshot,
+            deletedAvatars: ['beta.png'],
+            currentPage: 1,
+            pageSize: 2,
+            hasActiveFilter: false,
+            isBulkEdit: false,
+            isBogusFolderOpen: false,
+            isPrintPending: false,
+        });
+
+        expect(plan.mode).toBe('incremental');
+        expect(plan.deletedKeys).toEqual(['character:beta.png']);
+        expect(plan.pageEntities.map(entity => entity.item.avatar)).toEqual(['alpha.png', 'gamma.png']);
+        expect(plan.requiresIdentitySync).toBe(true);
+        expect(plan.paginationLabel).toBe('1-2 / 2');
+    });
+
+    test('falls back for complex or unsafe delete states', () => {
+        const beforeSnapshot = createCharacterListEntitySnapshot([
+            characterEntity(0, 'alpha.png'),
+            characterEntity(1, 'beta.png'),
+        ]);
+        const afterSnapshot = createCharacterListEntitySnapshot([
+            characterEntity(0, 'alpha.png'),
+        ]);
+
+        expect(createCharacterDeleteReconcilePlan({
+            beforeSnapshot,
+            afterSnapshot,
+            deletedAvatars: ['beta.png', 'gamma.png'],
+            currentPage: 1,
+            pageSize: 2,
+        })).toMatchObject({ mode: 'fallback', reason: 'multi-delete' });
+
+        expect(createCharacterDeleteReconcilePlan({
+            beforeSnapshot,
+            afterSnapshot,
+            deletedAvatars: ['beta.png'],
+            currentPage: 1,
+            pageSize: 2,
+            hasActiveFilter: true,
+        })).toMatchObject({ mode: 'fallback', reason: 'active-filter' });
+
+        expect(createCharacterDeleteReconcilePlan({
+            beforeSnapshot,
+            afterSnapshot,
+            deletedAvatars: ['beta.png'],
+            currentPage: 1,
+            pageSize: 2,
+            isBulkEdit: true,
+        })).toMatchObject({ mode: 'fallback', reason: 'bulk-edit' });
+
+        expect(createCharacterDeleteReconcilePlan({
+            beforeSnapshot,
+            afterSnapshot,
+            deletedAvatars: ['beta.png'],
+            currentPage: 1,
+            pageSize: 2,
+            isBogusFolderOpen: true,
+        })).toMatchObject({ mode: 'fallback', reason: 'bogus-folder' });
+    });
+
+    test('syncs visible character row identity after deleting a middle row', () => {
+        const alpha = createFakeRow(0, 'alpha.png');
+        const gamma = createFakeRow(2, 'gamma.png');
+        const container = createFakeContainer([alpha, gamma]);
+
+        const changed = syncCharacterListRowIdentity(container, [
+            characterEntity(0, 'alpha.png'),
+            characterEntity(1, 'gamma.png'),
+        ]);
+
+        expect(changed).toBe(2);
+        expect(alpha.getAttribute('data-chid')).toBe('0');
+        expect(alpha.getAttribute('chid')).toBe('0');
+        expect(alpha.id).toBe('CharID0');
+        expect(gamma.getAttribute('data-chid')).toBe('1');
+        expect(gamma.getAttribute('chid')).toBe('1');
+        expect(gamma.id).toBe('CharID1');
     });
 });

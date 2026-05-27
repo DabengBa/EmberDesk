@@ -249,9 +249,11 @@ import { canJumpToSwipeForMessage, canOpenSwipePickerForMessage, initSwipePicker
 import { getCharacterDeleteCandidates, removeCharactersFromState, shouldRefreshCharacterAfterEdit } from './scripts/character-list-state.js';
 import {
     CHARACTER_LIST_PAGE_SIZE_OPTIONS,
+    createCharacterDeleteReconcilePlan,
     createCharacterListEntitySnapshot,
     createCharacterListPageRenderPlan,
     getCharacterListPaginationRangeLabel,
+    syncCharacterListRowIdentity,
 } from './scripts/character-list-render-state.js';
 import { runDeleteCharacterClosePreflight } from './scripts/delete-character-preflight.js';
 
@@ -502,6 +504,8 @@ export let chat_metadata = {};
 export let streamingProcessor = null;
 let crop_data = undefined;
 let is_delete_mode = false;
+let isCharacterDeleteReconcileInProgress = false;
+let characterDeleteReconcileGeneration = 0;
 let fav_ch_checked = false;
 let scrollLock = false;
 export let abortStatusCheck = new AbortController();
@@ -523,6 +527,10 @@ export const saveCharacterDebounced = debounce(() => $('#create_button').trigger
  * The printing will also always reprint all filter options of the global list, to keep them up to date.
  */
 export const printCharactersDebounced = debounce(() => { printCharacters(false); }, DEFAULT_PRINT_TIMEOUT);
+
+function shouldSuppressCharacterDeleteListReprint(startedAtGeneration) {
+    return isCharacterDeleteReconcileInProgress || startedAtGeneration < characterDeleteReconcileGeneration;
+}
 
 /**
  * @enum {number} Extension prompt types
@@ -1210,6 +1218,12 @@ export function updateCharacterRow(chid, patch) {
  * @param {boolean} fullRefresh - If true, the list is fully refreshed and the navigation is being reset
  */
 export async function printCharacters(fullRefresh = false) {
+    const deleteReconcileGenerationAtStart = characterDeleteReconcileGeneration;
+    const suppressStaleReprint = !fullRefresh;
+    if (suppressStaleReprint && shouldSuppressCharacterDeleteListReprint(deleteReconcileGenerationAtStart)) {
+        return;
+    }
+
     const storageKey = 'Characters_PerPage';
     const listId = '#rm_print_characters_block';
 
@@ -1265,43 +1279,10 @@ export async function printCharacters(fullRefresh = false) {
         },
         showNavigator: true,
         callback: async function (/** @type {Entity[]} */ data) {
-            const renderPlan = createCharacterListPageRenderPlan({
-                pageEntities: data,
-                includeBackBlock: power_user.bogus_folders && isBogusFolderOpen(),
-                totalCharacters: characters.length,
-                totalGroups: groups.length,
-                hasActiveFilter: entitiesFilter.hasAnyFilter(),
-            });
-
-            $(listId).empty();
-            if (renderPlan.includeBackBlock) {
-                $(listId).append(getBackBlock());
+            if (suppressStaleReprint && shouldSuppressCharacterDeleteListReprint(deleteReconcileGenerationAtStart)) {
+                return;
             }
-            if (renderPlan.showEmptyBlock) {
-                const emptyBlock = await getEmptyBlock();
-                $(listId).append(emptyBlock);
-            }
-            for (const i of renderPlan.pageEntities) {
-                switch (i.type) {
-                    case 'character':
-                        $(listId).append(getCharacterBlock(i.item, i.id));
-                        break;
-                    case 'group':
-                        $(listId).append(getGroupBlock(i.item));
-                        break;
-                    case 'tag':
-                        $(listId).append(getTagBlock(i.item, i.entities, i.hidden, i.isUseless));
-                        break;
-                }
-            }
-
-            if (renderPlan.showHiddenBlock) {
-                const hiddenBlock = await getHiddenBlock(renderPlan.hiddenCount);
-                $(listId).append(hiddenBlock);
-            }
-            localizePagination($('#rm_print_characters_pagination'));
-
-            eventSource.emit(event_types.CHARACTER_PAGE_LOADED);
+            await renderCharacterListPage(data);
         },
         beforeSizeSelectorChange: function (_e, size) {
             pageSize = Number(size) || per_page_default;
@@ -1321,6 +1302,250 @@ export async function printCharacters(fullRefresh = false) {
 
     favsToHotswap();
     updatePersonaConnectionsAvatarList();
+}
+
+async function renderCharacterListPage(data) {
+    const listId = '#rm_print_characters_block';
+    const renderPlan = createCharacterListPageRenderPlan({
+        pageEntities: data,
+        includeBackBlock: power_user.bogus_folders && isBogusFolderOpen(),
+        totalCharacters: characters.length,
+        totalGroups: groups.length,
+        hasActiveFilter: entitiesFilter.hasAnyFilter(),
+    });
+
+    $(listId).empty();
+    if (renderPlan.includeBackBlock) {
+        $(listId).append(getBackBlock());
+    }
+    if (renderPlan.showEmptyBlock) {
+        const emptyBlock = await getEmptyBlock();
+        $(listId).append(emptyBlock);
+    }
+    for (const i of renderPlan.pageEntities) {
+        switch (i.type) {
+            case 'character':
+                $(listId).append(getCharacterBlock(i.item, i.id));
+                break;
+            case 'group':
+                $(listId).append(getGroupBlock(i.item));
+                break;
+            case 'tag':
+                $(listId).append(getTagBlock(i.item, i.entities, i.hidden, i.isUseless));
+                break;
+        }
+    }
+
+    if (renderPlan.showHiddenBlock) {
+        const hiddenBlock = await getHiddenBlock(renderPlan.hiddenCount);
+        $(listId).append(hiddenBlock);
+    }
+    localizePagination($('#rm_print_characters_pagination'));
+
+    eventSource.emit(event_types.CHARACTER_PAGE_LOADED);
+}
+
+function getCharacterListCurrentPage() {
+    try {
+        const currentPage = $('#rm_print_characters_pagination').pagination('getCurrentPageNum');
+        return Number(currentPage) || saveCharactersPage || 1;
+    } catch {
+        return saveCharactersPage || 1;
+    }
+}
+
+function getCharacterListCurrentPageSize() {
+    try {
+        const paginationData = $('#rm_print_characters_pagination').data('pagination');
+        const modelPageSize = Number(paginationData?.model?.pageSize);
+        if (modelPageSize) {
+            return modelPageSize;
+        }
+    } catch {
+        // Fall through to persisted/default size.
+    }
+    return Number(accountStorage.getItem('Characters_PerPage')) || per_page_default;
+}
+
+function renderCharacterListEntityBlock(entity) {
+    switch (entity.type) {
+        case 'character':
+            return getCharacterBlock(entity.item, entity.id);
+        case 'group':
+            return getGroupBlock(entity.item);
+        case 'tag':
+            return getTagBlock(entity.item, entity.entities, entity.hidden, entity.isUseless);
+        default:
+            return null;
+    }
+}
+
+function getCharacterListPageEntities(snapshot, currentPage, pageSize) {
+    const safePageSize = Number(pageSize) || 1;
+    const safeCurrentPage = Math.max(Number(currentPage) || 1, 1);
+    const pageStart = (safeCurrentPage - 1) * safePageSize;
+    return snapshot.entities.slice(pageStart, pageStart + safePageSize);
+}
+
+function indexExistingCharacterListElements(listElement, beforePageEntities) {
+    const map = new Map();
+    const entityBlocks = Array.from(listElement.children).filter(element => {
+        return element.classList.contains('character_select') ||
+            element.classList.contains('group_select') ||
+            element.classList.contains('bogus_folder_select');
+    });
+
+    for (let index = 0; index < beforePageEntities.length; index++) {
+        const entity = beforePageEntities[index];
+        const element = entityBlocks[index];
+        if (entity?.renderKey && element) {
+            map.set(entity.renderKey, element);
+        }
+    }
+
+    return map;
+}
+
+function updateCharacterListPaginationState(plan, afterSnapshot, { skipInitialCallback = false } = {}) {
+    const $pagination = $('#rm_print_characters_pagination');
+    const getPaginationRangeLabel = (currentPage, totalNumber) => {
+        return getCharacterListPaginationRangeLabel({
+            currentPage,
+            totalNumber,
+            pageSize: plan.pageSize,
+            fallbackTotal: afterSnapshot.total,
+        });
+    };
+
+    $pagination.pagination({
+        dataSource: afterSnapshot.entities,
+        pageSize: plan.pageSize,
+        pageRange: 1,
+        pageNumber: plan.currentPage,
+        position: 'top',
+        showPageNumbers: false,
+        showSizeChanger: true,
+        prevText: '<',
+        nextText: '>',
+        formatNavigator: function (currentPage, _totalPage, totalNumber) {
+            return getPaginationRangeLabel(currentPage, totalNumber);
+        },
+        formatSizeChanger: function () {
+            return renderPaginationDropdown(plan.pageSize, CHARACTER_LIST_PAGE_SIZE_OPTIONS);
+        },
+        showNavigator: true,
+        triggerPagingOnInit: !skipInitialCallback,
+        callback: async function (/** @type {Entity[]} */ data) {
+            await renderCharacterListPage(data);
+        },
+        beforeSizeSelectorChange: function (_e, size) {
+            plan.pageSize = Number(size) || per_page_default;
+            saveCharactersPage = 1;
+        },
+        afterSizeSelectorChange: function (e, size) {
+            accountStorage.setItem('Characters_PerPage', String(plan.pageSize));
+            paginationDropdownChangeHandler(e, size);
+        },
+        afterPaging: function (e) {
+            saveCharactersPage = e;
+        },
+    });
+
+    const paginationData = $pagination.data('pagination');
+    if (paginationData?.model) {
+        paginationData.model.pageNumber = plan.currentPage;
+        paginationData.model.pageSize = plan.pageSize;
+        paginationData.model.totalNumber = afterSnapshot.total;
+    }
+    paginationData && (paginationData.currentPageData = plan.pageEntities);
+    saveCharactersPage = plan.currentPage;
+    $pagination.find('.J-paginationjs-nav, .paginationjs-nav').text(plan.paginationLabel);
+    $pagination.find('.J-paginationjs-size-select').val(String(plan.pageSize));
+    localizePagination($pagination);
+}
+
+async function reconcileCharacterListAfterDelete(options) {
+    const { beforeSnapshot, deletedAvatars } = options;
+
+    try {
+        const listElement = document.getElementById('rm_print_characters_block');
+        if (!listElement) {
+            return false;
+        }
+
+        const currentPage = getCharacterListCurrentPage();
+        const pageSize = getCharacterListCurrentPageSize();
+        const afterSnapshot = createCharacterListEntitySnapshot(getEntitiesList({ doFilter: true }));
+        const plan = createCharacterDeleteReconcilePlan({
+            beforeSnapshot,
+            afterSnapshot,
+            deletedAvatars,
+            currentPage,
+            pageSize,
+            hasActiveFilter: entitiesFilter.hasAnyFilter(),
+            isBulkEdit: $('#rm_print_characters_block').hasClass('bulk_select'),
+            isBogusFolderOpen: power_user.bogus_folders && isBogusFolderOpen(),
+            isPrintPending: false,
+        });
+
+        if (plan.mode !== 'incremental') {
+            return false;
+        }
+        if (Number(plan.currentPage) !== Number(currentPage)) {
+            return false;
+        }
+
+        const renderPlan = createCharacterListPageRenderPlan({
+            pageEntities: plan.pageEntities,
+            includeBackBlock: false,
+            totalCharacters: characters.length,
+            totalGroups: groups.length,
+            hasActiveFilter: entitiesFilter.hasAnyFilter(),
+        });
+        const beforePageEntities = getCharacterListPageEntities(beforeSnapshot, currentPage, pageSize);
+        const existingElements = indexExistingCharacterListElements(listElement, beforePageEntities);
+        const desiredElements = [];
+
+        if (renderPlan.showEmptyBlock) {
+            desiredElements.push((await getEmptyBlock())[0]);
+        }
+
+        for (const entity of renderPlan.pageEntities) {
+            const existingElement = entity.type === 'character' ? existingElements.get(entity.renderKey) : null;
+            if (existingElement) {
+                desiredElements.push(existingElement);
+            } else {
+                const $element = renderCharacterListEntityBlock(entity);
+                if (!$element?.length) {
+                    return false;
+                }
+                desiredElements.push($element[0]);
+            }
+        }
+
+        if (renderPlan.showHiddenBlock) {
+            desiredElements.push((await getHiddenBlock(renderPlan.hiddenCount))[0]);
+        }
+
+        for (const child of Array.from(listElement.children)) {
+            if (!desiredElements.includes(child)) {
+                child.remove();
+            }
+        }
+        for (const element of desiredElements) {
+            listElement.appendChild(element);
+        }
+
+        syncCharacterListRowIdentity(listElement, renderPlan.pageEntities);
+        updateCharacterListPaginationState(plan, afterSnapshot, { skipInitialCallback: true });
+        favsToHotswap();
+        updatePersonaConnectionsAvatarList();
+        await eventSource.emit(event_types.CHARACTER_PAGE_LOADED);
+        return true;
+    } catch (error) {
+        console.warn('Character delete incremental reconcile failed; falling back to full refresh.', error);
+        return false;
+    }
 }
 
 /** Checks the state of the current search, and adds/removes the search sorting option accordingly */
@@ -10955,22 +11180,38 @@ export async function deleteCharacter(characterKey, { deleteChats = true, delete
  */
 async function removeCharacterFromUI(deletedAvatars = []) {
     const refreshStartedAt = performance.now();
-    preserveNeutralChat();
-    await clearChat();
-    $('#character_cross').trigger('click');
-    resetChatStateWithOptions({ clearCharacters: false });
-    $(document.getElementById('rm_button_selected_ch')).children('h2').text('');
-    restoreNeutralChat();
-    removeCharactersFromState(characters, deletedAvatars);
-    const groupsRefreshStartedAt = performance.now();
-    await getGroups();
-    markPerfInteractionMetric('groupsRefreshMs', performance.now() - groupsRefreshStartedAt);
-    const printCharactersStartedAt = performance.now();
-    await printCharacters(true);
-    markPerfInteractionMetric('characterPrintMs', performance.now() - printCharactersStartedAt);
-    await printMessages();
-    saveSettingsDebounced();
-    await eventSource.emit(event_types.CHAT_CHANGED, getCurrentChatId());
+    const beforeDeleteSnapshot = createCharacterListEntitySnapshot(getEntitiesList({ doFilter: true }));
+    cancelDebounce(printCharactersDebounced);
+    isCharacterDeleteReconcileInProgress = true;
+    try {
+        preserveNeutralChat();
+        await clearChat();
+        $('#character_cross').trigger('click');
+        resetChatStateWithOptions({ clearCharacters: false });
+        $(document.getElementById('rm_button_selected_ch')).children('h2').text('');
+        restoreNeutralChat();
+        removeCharactersFromState(characters, deletedAvatars);
+        const groupsRefreshStartedAt = performance.now();
+        await getGroups();
+        markPerfInteractionMetric('groupsRefreshMs', performance.now() - groupsRefreshStartedAt);
+        const reconcileStartedAt = performance.now();
+        const reconciled = await reconcileCharacterListAfterDelete({
+            beforeSnapshot: beforeDeleteSnapshot,
+            deletedAvatars,
+        });
+        markPerfInteractionMetric('characterDeleteReconcileMs', performance.now() - reconcileStartedAt);
+        if (!reconciled) {
+            const printCharactersStartedAt = performance.now();
+            await printCharacters(true);
+            markPerfInteractionMetric('characterPrintMs', performance.now() - printCharactersStartedAt);
+        }
+        await printMessages();
+        saveSettingsDebounced();
+        await eventSource.emit(event_types.CHAT_CHANGED, getCurrentChatId());
+    } finally {
+        isCharacterDeleteReconcileInProgress = false;
+        characterDeleteReconcileGeneration++;
+    }
     markPerfInteractionMetric('removeCharacterFromUIMs', performance.now() - refreshStartedAt);
 }
 

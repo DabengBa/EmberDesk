@@ -313,9 +313,14 @@ Instead it now:
 
 1. removes deleted avatars from the in-memory `characters` array through `public/scripts/character-list-state.js`
 2. refreshes groups
-3. reprints the list with `printCharacters(true)`
+3. attempts a state-driven incremental reconcile for the ordinary unfiltered single-delete path
+4. falls back to `printCharacters(true)` when the current state is complex or the incremental patch cannot be completed safely
 
 This preserves the existing chat reset semantics while avoiding a second full character-list request in the delete success path.
+
+For the safe incremental path, `removeCharacterFromUI()` captures a pre-delete entity snapshot, cancels a pending delayed character print, refreshes canonical character/group state, then calls the local delete reconcile helper. The helper compares before/after entity snapshots, removes the deleted visible row, reuses existing DOM nodes where possible, fills the current page from the after-delete render plan, rewrites visible character row identity attributes, updates the pagination model/text, refreshes hotswap/persona avatar surfaces, and emits `CHARACTER_PAGE_LOADED` even though the list was not fully reprinted.
+
+The fallback boundary is intentionally conservative. Multi-delete, active search/tag filters, bulk edit mode, bogus-folder drilldown, pending list prints, missing-before entities, still-present deleted entities, and page-clamp changes use the existing full-refresh path instead of leaving a partial DOM patch behind. A generation guard also prevents non-full `printCharacters(false)` calls and pagination callbacks that started before the delete reconcile from clearing the just-reconciled list after the delete succeeds; new user-triggered list changes after the delete are not held behind a timer, and explicit full-refresh fallback remains allowed.
 
 The delete flow also cancels `saveCharacterDebounced` at the start of `deleteCharacter()`. This prevents a pending delayed edit save from submitting after the user has already committed a destructive delete.
 
@@ -394,6 +399,8 @@ Stability-sensitive binding points:
 - `getCharacterListEntityKey()` in `public/scripts/character-list-render-state.js`
 - `createCharacterListEntitySnapshot()` in `public/scripts/character-list-render-state.js`
 - `createCharacterListPageRenderPlan()` in `public/scripts/character-list-render-state.js`
+- `createCharacterDeleteReconcilePlan()` in `public/scripts/character-list-render-state.js`
+- `syncCharacterListRowIdentity()` in `public/scripts/character-list-render-state.js`
 - `cancelDebounce(saveCharacterDebounced)` at the start of `deleteCharacter()`
 
 Current client-side state rules are documented in [Character List State Processing Flow](../logic-description/character_list_state_processing_flow.md).
@@ -406,7 +413,7 @@ Current client-side state rules are documented in [Character List State Processi
 - The feature keeps two distinct caches with different responsibilities:
   - `DiskCache` for PNG card extraction
   - SQLite sidecar for precomputed `/api/characters/all` payloads plus safe `/api/characters/get` full-payload reuse
-- Delete success avoids one extra `/api/characters/all` network roundtrip and one extra full list rebuild on the client.
+- Delete success avoids one extra `/api/characters/all` network roundtrip. In ordinary unfiltered single-delete cases it also avoids a full client-side list rebuild, while complex states still pay the existing full-refresh cost for correctness.
 - Corrupt derived rows are pruned opportunistically so steady-state reads can self-heal instead of degrading the whole list path.
 - The benchmark results should be interpreted per scenario, not as one global “SQLite is faster” claim.
   - first build can be materially slower because it pays index creation cost

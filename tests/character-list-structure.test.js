@@ -19,7 +19,16 @@ function extractFunctionSource(source, functionName) {
     );
     expect(functionStart).toBeGreaterThanOrEqual(0);
 
-    const bodyStart = source.indexOf('{', functionStart);
+    let bodyStart = -1;
+    let parenDepth = 0;
+    for (let i = functionStart; i < source.length; i++) {
+        if (source[i] === '(') parenDepth++;
+        if (source[i] === ')') parenDepth--;
+        if (source[i] === '{' && parenDepth === 0) {
+            bodyStart = i;
+            break;
+        }
+    }
     expect(bodyStart).toBeGreaterThanOrEqual(0);
 
     let depth = 0;
@@ -135,13 +144,15 @@ describe('character list structure', () => {
     test('keeps empty, hidden, and tag-overflow list states wired to the character list', () => {
         const scriptSource = read('public/script.js');
         const printCharactersSource = extractFunctionSource(scriptSource, 'printCharacters');
+        const renderCharacterListPageSource = extractFunctionSource(scriptSource, 'renderCharacterListPage');
         const rowSource = extractFunctionSource(scriptSource, 'buildCharacterRowHtml');
         const renderStateSource = read('public/scripts/character-list-render-state.js');
         const emptyBlockTemplate = read('public/scripts/templates/emptyBlock.html');
 
-        expect(printCharactersSource).toContain('createCharacterListPageRenderPlan({');
-        expect(printCharactersSource).toMatch(/if \(renderPlan\.showEmptyBlock\) \{\s+const emptyBlock = await getEmptyBlock\(\);\s+\$\(listId\)\.append\(emptyBlock\);/);
-        expect(printCharactersSource).toMatch(/const hiddenBlock = await getHiddenBlock\(renderPlan\.hiddenCount\);\s+\$\(listId\)\.append\(hiddenBlock\);/);
+        expect(printCharactersSource).toContain('await renderCharacterListPage(data);');
+        expect(renderCharacterListPageSource).toContain('createCharacterListPageRenderPlan({');
+        expect(renderCharacterListPageSource).toMatch(/if \(renderPlan\.showEmptyBlock\) \{\s+const emptyBlock = await getEmptyBlock\(\);\s+\$\(listId\)\.append\(emptyBlock\);/);
+        expect(renderCharacterListPageSource).toMatch(/const hiddenBlock = await getHiddenBlock\(renderPlan\.hiddenCount\);\s+\$\(listId\)\.append\(hiddenBlock\);/);
         expect(renderStateSource).toMatch(/const displayCount = pageEntities\.filter\(entity => entity\.type === 'character' \|\| entity\.type === 'group'\)\.length;/);
         expect(renderStateSource).toMatch(/const hiddenCount = \(totalCharacters \+ totalGroups\) - displayCount;/);
         expect(scriptSource).toMatch(/const hasActiveCharacterListFilter = entitiesFilter\.hasAnyFilter\(\);/);
@@ -203,6 +214,40 @@ describe('character list structure', () => {
         expect(printCharactersSource).toMatch(/formatSizeChanger: function \(\) \{\s+return renderPaginationDropdown\(getCurrentPageSize\(\), sizeChangerOptions\);/);
         expect(printCharactersSource).toMatch(/beforeSizeSelectorChange: function \(_e, size\) \{\s+pageSize = Number\(size\) \|\| per_page_default;\s+saveCharactersPage = 1;/);
         expect(printCharactersSource).toMatch(/afterSizeSelectorChange: function \(e, size\) \{\s+accountStorage\.setItem\(storageKey, String\(pageSize\)\);/);
+    });
+
+    test('keeps ordinary character delete on the incremental reconcile path with full-refresh fallback', () => {
+        const scriptSource = read('public/script.js');
+        const removeCharacterFromUISource = extractFunctionSource(scriptSource, 'removeCharacterFromUI');
+        const reconcileSource = extractFunctionSource(scriptSource, 'reconcileCharacterListAfterDelete');
+
+        expect(scriptSource).toContain('createCharacterDeleteReconcilePlan');
+        expect(scriptSource).toContain('syncCharacterListRowIdentity');
+        expect(scriptSource).toContain('let isCharacterDeleteReconcileInProgress = false;');
+        expect(scriptSource).toContain('let characterDeleteReconcileGeneration = 0;');
+        expect(scriptSource).not.toContain('suppressCharacterDeleteListReprintUntil');
+        expect(scriptSource).not.toContain('CHARACTER_DELETE_REPRINT_SUPPRESSION_MS');
+        expect(scriptSource).toContain('const deleteReconcileGenerationAtStart = characterDeleteReconcileGeneration;');
+        expect(scriptSource).toMatch(/if \(suppressStaleReprint && shouldSuppressCharacterDeleteListReprint\(deleteReconcileGenerationAtStart\)\) \{\s+return;\s+\}/);
+        expect(scriptSource).toMatch(/callback: async function \(\/\*\* @type \{Entity\[\]\} \*\/ data\) \{\s+if \(suppressStaleReprint && shouldSuppressCharacterDeleteListReprint\(deleteReconcileGenerationAtStart\)\) \{\s+return;\s+\}/);
+        expect(removeCharacterFromUISource).toContain('const beforeDeleteSnapshot = createCharacterListEntitySnapshot(getEntitiesList({ doFilter: true }));');
+        expect(removeCharacterFromUISource).toContain('cancelDebounce(printCharactersDebounced);');
+        expect(removeCharacterFromUISource).toContain('isCharacterDeleteReconcileInProgress = true;');
+        expect(removeCharacterFromUISource).toContain('isCharacterDeleteReconcileInProgress = false;');
+        expect(removeCharacterFromUISource).toContain('characterDeleteReconcileGeneration++;');
+        expect(removeCharacterFromUISource).toContain('const reconciled = await reconcileCharacterListAfterDelete({');
+        expect(removeCharacterFromUISource).toMatch(/if \(!reconciled\) \{\s+const printCharactersStartedAt = performance\.now\(\);\s+await printCharacters\(true\);/);
+        expect(reconcileSource).toContain('createCharacterDeleteReconcilePlan({');
+        expect(reconcileSource).toContain('hasActiveFilter: entitiesFilter.hasAnyFilter()');
+        expect(reconcileSource).toContain("isBulkEdit: $('#rm_print_characters_block').hasClass('bulk_select')");
+        expect(reconcileSource).toContain('syncCharacterListRowIdentity(listElement, renderPlan.pageEntities);');
+        expect(reconcileSource).toContain('updateCharacterListPaginationState(plan, afterSnapshot, { skipInitialCallback: true });');
+        expect(reconcileSource).toContain('await eventSource.emit(event_types.CHARACTER_PAGE_LOADED);');
+
+        const updatePaginationSource = extractFunctionSource(scriptSource, 'updateCharacterListPaginationState');
+        expect(updatePaginationSource).toContain("dataSource: afterSnapshot.entities");
+        expect(updatePaginationSource).toContain('triggerPagingOnInit: !skipInitialCallback');
+        expect(updatePaginationSource).not.toContain('paginationData.attributes.dataSource = afterSnapshot.entities;');
     });
 
     test('keeps search feedback, grid labels, and bulk selection semantics wired', () => {

@@ -40,7 +40,7 @@ This feature lets a user remove unwanted characters and immediately see the work
 5. The user optionally checks which world info files to delete and whether to also delete chat files (checked by default).
 6. The user confirms deletion.
 7. EmberDesk removes the deleted character and deletes any selected world info files.
-8. EmberDesk removes the deleted row from the visible character library.
+8. EmberDesk removes the deleted row from the visible character library. For an ordinary unfiltered single-character delete, the current page is reconciled incrementally: the row disappears, the pagination range updates, and remaining visible character row identities are resynced without clearing the whole list.
 9. A success toast confirms the deletion.
 
 ### Batch (Multi-Select) Deletion
@@ -65,6 +65,7 @@ This feature lets a user remove unwanted characters and immediately see the work
 - Deletion is destructive and must remain an explicit user-confirmed action.
 - Both single and batch delete use a unified confirmation dialog — no separate cascading popups.
 - The success path should update the visible library immediately.
+- Ordinary single-character deletion in the unfiltered library uses an incremental visible-list reconcile when the current page can be safely computed. Search/tag filters, bogus-folder drilldown, bulk edit mode, multi-delete, in-flight printing, and ambiguous entity changes keep the existing full-refresh fallback.
 - Once deletion starts, pending delayed character saves are cancelled so a stale edit-submit cannot race the delete and restore a removed row.
 - If an earlier edit response finishes after the card was already removed locally, EmberDesk does not refresh that deleted card back into the visible library.
 - Removing rows from the library is part of this feature; re-browsing the remaining library belongs to [Character Library Panel](feature.character_library_panel).
@@ -83,6 +84,6 @@ This feature exists separately from library browsing because destructive confirm
 
 ## Outcomes
 
-- **Success**: the deleted card(s) disappear from the visible library, any user-selected world info files are removed, and a success toast confirms the action. Delayed edit/save responses for those deleted cards should not make them reappear.
+- **Success**: the deleted card(s) disappear from the visible library, any user-selected world info files are removed, and a success toast confirms the action. Ordinary single deletes should keep the visible library context stable while updating pagination and row identity; delayed edit/save responses for deleted cards should not make them reappear.
 - **Cancel**: the dialog closes without side effects; the workspace and current chat remain unchanged.
 - **Failure**: EmberDesk should not pretend the row is gone if the delete action does not complete successfully. Individual character failures show a toastr warning and remaining characters continue processing.
