@@ -863,7 +863,7 @@ class BulkEditOverlay {
      */
     static #buildUnifiedDeleteDialogHtml = ({ count, nameTagsHtml, isTempChat, cascadeHtml }) => {
         let html = `
-            <h3>${t`Delete`} ${count} ${t`characters?`}</h3>
+            <h3>${t`Delete ${count} characters?`}</h3>
             <div class="delete-dialog-names">${nameTagsHtml}</div>
             <label class="delete-dialog-option" for="del_char_checkbox">
                 <input type="checkbox" id="del_char_checkbox" checked />

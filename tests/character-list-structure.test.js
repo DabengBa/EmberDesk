@@ -74,18 +74,33 @@ describe('character list structure', () => {
         ].forEach(marker => expect(indexHtml).toContain(marker));
 
         [
-            ['rm_button_create', 'Create'],
-            ['character_import_button', 'Import'],
-            ['external_import_button', 'Import URL'],
-            ['rm_button_group_chats', 'Group'],
-            ['rm_button_search', 'Search'],
-            ['charListGridToggle', 'Grid'],
-            ['bulkEditButton', 'Bulk Edit'],
-            ['bulkSelectAllButton', 'Select All'],
-            ['bulkDeleteButton', 'Delete'],
-        ].forEach(([id, label]) => {
-            expect(indexHtml).toMatch(new RegExp(`id="${id}"[\\s\\S]*?<span class="character-list-action-label" data-i18n="${label}">${label}<\\/span>`));
+            ['rm_button_create', 'Character Toolbar New', 'New', 'Create New Character'],
+            ['character_import_button', 'Character Toolbar File', 'File', 'Import Character from File'],
+            ['external_import_button', 'Character Toolbar URL', 'URL', 'Import content from external URL'],
+            ['rm_button_group_chats', 'Character Toolbar Group', 'Group', 'Create New Chat Group'],
+            ['rm_button_search', 'Character Toolbar Find', 'Find', 'Toggle search bar'],
+            ['charListGridToggle', 'Character Toolbar Grid', 'Grid', 'Toggle character grid view'],
+            ['bulkEditButton', 'Character Toolbar Bulk', 'Bulk', 'Bulk edit characters'],
+            ['bulkSelectAllButton', 'Character Toolbar All', 'All', 'Bulk select all characters'],
+            ['bulkDeleteButton', 'Character Toolbar Delete', 'Del', 'Bulk delete characters'],
+        ].forEach(([id, key, label, ariaLabel]) => {
+            expect(indexHtml).toMatch(new RegExp(`id="${id}"[\\s\\S]*?<span class="character-list-action-label" data-i18n="${key}">${label}<\\/span>`));
+            expect(indexHtml).toMatch(new RegExp(`id="${id}"[^>]*\\baria-label="${ariaLabel}"`));
         });
+
+        [
+            ['rm_button_create', 'Create New Character'],
+            ['character_import_button', 'Import Character from File'],
+            ['external_import_button', 'Import content from external URL'],
+            ['rm_button_group_chats', 'Create New Chat Group'],
+            ['rm_button_search', 'Toggle search bar'],
+            ['charListGridToggle', 'Toggle character grid view'],
+            ['bulkSelectAllButton', 'Bulk select all characters'],
+            ['bulkDeleteButton', 'Bulk delete characters'],
+        ].forEach(([id, title]) => {
+            expect(indexHtml).toMatch(new RegExp(`id="${id}"[^>]*\\btitle="${title}"`));
+        });
+        expect(indexHtml).toMatch(/id="bulkEditButton"[^>]*\btitle="Bulk edit characters&#13;&#13;/);
 
         [
             'rm_characters_block',
@@ -148,7 +163,10 @@ describe('character list structure', () => {
         expect(styleSource).toMatch(/#rm_button_bar \.character-list-sort-group\s*\{[\s\S]*grid-area:\s*sort/);
         expect(styleSource).toMatch(/#rm_button_bar \.character-list-view-group\s*\{[\s\S]*grid-area:\s*view/);
         expect(styleSource).toMatch(/#rm_button_bar \.character-list-bulk-actions\s*\{[\s\S]*grid-area:\s*bulk/);
-        expect(styleSource).toMatch(/#rm_button_bar \.character-list-action-label\s*\{[\s\S]*text-overflow:\s*ellipsis/);
+        const actionLabelRule = styleSource.match(/#rm_button_bar \.character-list-action-label\s*\{(?<body>[^}]+)\}/)?.groups?.body;
+        expect(actionLabelRule).toContain('white-space: nowrap');
+        expect(actionLabelRule).not.toContain('text-overflow');
+        expect(actionLabelRule).not.toContain('max-width');
         expect(styleSource).toMatch(/#bulkSelectedCount/);
         expect(styleSource).toMatch(/#rm_print_characters_block \.entity_type_badge/);
         expect(styleSource).toMatch(/@media screen and \(max-width: 600px\)[\s\S]*#rm_button_bar\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
@@ -193,36 +211,39 @@ describe('character list structure', () => {
         expect(indexHtml).toContain('id="character_search_status"');
         expect(indexHtml).toContain('data-i18n="Filtering characters…"');
         expect(indexHtml).toContain('aria-live="polite"');
-        expect(indexHtml).toContain('data-i18n="Import URL">Import URL</span>');
-        expect(indexHtml).toContain('data-i18n="Group">Group</span>');
-        expect(indexHtml).toContain('data-i18n="Bulk Edit">Bulk Edit</span>');
-        expect(indexHtml).toContain('data-i18n="Sort">Sort</label>');
+        expect(indexHtml).toContain('data-i18n="Character Toolbar URL">URL</span>');
+        expect(indexHtml).toContain('data-i18n="Character Toolbar Group">Group</span>');
+        expect(indexHtml).toContain('data-i18n="Character Toolbar Bulk">Bulk</span>');
+        expect(indexHtml).toContain('data-i18n="Character Toolbar Sort">Sort</label>');
         expect(indexHtml).toMatch(/id="bulkSelectedCount"[^>]*style="display: none;"[^>]*role="status"/);
         expect(indexHtml).toContain('role="status"');
         expect(indexHtml).toMatch(/id="bulkEditButton"[^>]*tabindex="0"/);
         expect(scriptSource).toContain("setCharacterSearchBusy(true)");
         expect(scriptSource).toContain("setCharacterSearchBusy(false)");
         expect(scriptSource).toContain("updateCharListGridToggleLabel()");
-        expect(scriptSource).toContain("data-i18n', power_user.charListGrid ? 'List' : 'Grid'");
+        expect(scriptSource).toContain("power_user.charListGrid ? 'Character Toolbar List' : 'Character Toolbar Grid'");
         expect(bulkEditSource).toMatch(/const checkbox = \$\('<input type=\\'checkbox\\' class=\\'bulk_select_checkbox\\' aria-label=\\'Select character for bulk edit\\'>'\);/);
         expect(overlaySource).toContain("character.setAttribute('aria-selected', 'true')");
         expect(overlaySource).toContain("character.setAttribute('aria-selected', 'false')");
         expect(overlaySource).toContain('syncBulkSelectionDomState({');
         expect(overlaySource).toContain('this.state !== BulkEditOverlayState.select');
         expect(overlaySource).toContain('updateBulkSelectionCountState({ selectedCount, deleteButton, fallbackFocusElement }, count)');
+        expect(overlaySource).toContain('t`Delete ${count} characters?`');
+        expect(overlaySource).not.toContain('${t`Delete`} ${count} ${t`characters?`}');
         expect(stateSource).toContain('if (!selectedCount)');
-        expect(stateSource).toContain('selectedCount.textContent = `${count} selected`;');
+        expect(stateSource).toContain('selectedCount.textContent = getBulkSelectionShortCountText(count);');
         expect(stateSource).toContain("selectedCount.setAttribute('aria-label',");
         expect(stateSource).toContain('updateBulkDeleteButtonState(deleteButton, count > 0, fallbackFocusElement)');
         expect(stateSource).toContain('export function syncBulkSelectionDomState');
         expect(styleSource).toMatch(/#character_search_status/);
         expect(styleSource).toMatch(/#rm_print_characters_block \.character_select\.character_selected/);
         expect(styleSource).toMatch(/#rm_print_characters_block \.character_select\.character_selected::after/);
-        expect(zhCnLocale).toContain('"Import URL": "网址导入"');
-        expect(zhCnLocale).toContain('"Group": "群组"');
-        expect(zhCnLocale).toContain('"Bulk Edit": "批量编辑"');
-        expect(zhCnLocale).toContain('"List": "列表"');
-        expect(zhCnLocale).toContain('"Sort": "排序"');
+        expect(zhCnLocale).toContain('"Character Toolbar URL": "URL"');
+        expect(zhCnLocale).toContain('"Character Toolbar Group": "群"');
+        expect(zhCnLocale).toContain('"Character Toolbar Bulk": "批"');
+        expect(zhCnLocale).toContain('"Character Toolbar List": "列"');
+        expect(zhCnLocale).toContain('"Character Toolbar Sort": "排"');
+        expect(zhCnLocale).toContain('"Delete ${0} characters?": "删除 ${0} 个角色？"');
         expect(zhCnLocale).toContain('"Filtering characters…": "正在筛选角色…"');
     });
 

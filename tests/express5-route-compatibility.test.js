@@ -442,4 +442,20 @@ describe('Express 5 route compatibility', () => {
             }
         });
     });
+
+    test('missing user CSS still returns an empty stylesheet response', async () => {
+        fs.mkdirSync(path.join(globalThis.DATA_ROOT, '_css'), { recursive: true });
+        fs.rmSync(path.join(globalThis.DATA_ROOT, '_css', 'user.css'), { force: true });
+
+        const app = express();
+        app.use(userCssMiddleware);
+        app.use(express.static(path.join(repoRoot, 'public'), {}));
+
+        await usingApp(app, async (url) => {
+            const response = await fetch(`${url}/css/user.css`);
+            expect(response.status).toBe(200);
+            expect(response.headers.get('content-type')).toContain('text/css');
+            expect(await response.text()).toBe('');
+        });
+    });
 });

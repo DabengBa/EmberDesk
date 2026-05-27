@@ -6,12 +6,21 @@ import fs from 'node:fs';
  * @type {import('express').Handler}
  */
 export function userCssMiddleware(req, res, next) {
-    if (req.method === 'GET' && req.path === '/css/user.css') {
+    if ((req.method === 'GET' || req.method === 'HEAD') && req.path === '/css/user.css') {
         const userCssPath = path.resolve(path.join(globalThis.DATA_ROOT, '_css', 'user.css'));
-        if (fs.existsSync(userCssPath)) {
-            res.sendFile(userCssPath);
-            return;
+        let css = '';
+
+        try {
+            const stat = fs.statSync(userCssPath);
+            if (stat.isFile()) {
+                css = fs.readFileSync(userCssPath, 'utf8');
+            }
+        } catch {
+            // Missing user CSS is an expected default state.
         }
+
+        res.type('text/css').send(css);
+        return;
     }
     next();
 }

@@ -1,6 +1,7 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
 import {
+    getBulkSelectionShortCountText,
     syncBulkSelectionDomState,
     updateBulkDeleteButtonState,
     updateBulkSelectionCountState,
@@ -57,6 +58,22 @@ function createFakeCharacterRow(characterId) {
     };
 }
 
+function withDocumentLanguage(language, callback) {
+    const originalDocument = globalThis.document;
+
+    globalThis.document = { documentElement: { lang: language } };
+
+    try {
+        return callback();
+    } finally {
+        if (originalDocument === undefined) {
+            delete globalThis.document;
+        } else {
+            globalThis.document = originalDocument;
+        }
+    }
+}
+
 function createFakeCharacterContainer(rows) {
     return {
         getElementsByClassName: className => className === 'character_select' ? rows : [],
@@ -109,9 +126,11 @@ describe('updateBulkSelectionCountState', () => {
         const selectedCount = createFakeButton();
         const deleteButton = createFakeButton();
 
-        updateBulkSelectionCountState({ selectedCount, deleteButton }, 0);
+        withDocumentLanguage('en', () => {
+            updateBulkSelectionCountState({ selectedCount, deleteButton }, 0);
+        });
 
-        expect(selectedCount.textContent).toBe('0 selected');
+        expect(selectedCount.textContent).toBe('0 sel');
         expect(readAttribute(selectedCount, 'title')).toBe('0 characters selected');
         expect(readAttribute(selectedCount, 'aria-label')).toBe('0 characters selected');
         expect(deleteButton.classList.contains('disabled')).toBe(true);
@@ -123,14 +142,22 @@ describe('updateBulkSelectionCountState', () => {
         const selectedCount = createFakeButton();
         const deleteButton = createFakeButton();
 
-        updateBulkSelectionCountState({ selectedCount, deleteButton }, 2);
+        withDocumentLanguage('en', () => {
+            updateBulkSelectionCountState({ selectedCount, deleteButton }, 2);
+        });
 
-        expect(selectedCount.textContent).toBe('2 selected');
+        expect(selectedCount.textContent).toBe('2 sel');
         expect(readAttribute(selectedCount, 'title')).toBe('2 characters selected');
         expect(readAttribute(selectedCount, 'aria-label')).toBe('2 characters selected');
         expect(deleteButton.classList.contains('disabled')).toBe(false);
         expect(readAttribute(deleteButton, 'aria-disabled')).toBe('false');
         expect(readAttribute(deleteButton, 'tabindex')).toBe('0');
+    });
+
+    test('uses a compact Chinese count when the document locale is Chinese', () => {
+        withDocumentLanguage('zh-cn', () => {
+            expect(getBulkSelectionShortCountText(3)).toBe('3个');
+        });
     });
 });
 

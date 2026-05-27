@@ -3142,9 +3142,6 @@ input[type="file"] {
     font-weight: 600;
     line-height: 1;
     letter-spacing: 0;
-    max-width: calc(var(--mainFontSize) * 5.8);
-    overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
 }
 

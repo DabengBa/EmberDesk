@@ -186,7 +186,7 @@ import {
     formatInstructModeStoryString,
     getInstructStoppingSequences,
 } from './scripts/instruct-mode.js';
-import { initLocales, t } from './scripts/i18n.js';
+import { initLocales, t, translate } from './scripts/i18n.js';
 import { getFriendlyTokenizerName, getTokenCount, getTokenCountAsync, initTokenizers, saveTokenCache } from './scripts/tokenizers.js';
 import {
     user_avatar,
@@ -10783,8 +10783,9 @@ function doCharListDisplaySwitch() {
 function updateCharListGridToggleLabel() {
     const toggle = $('#charListGridToggle');
     const label = toggle.find('.character-list-action-label');
-    const nextLabel = power_user.charListGrid ? t`List` : t`Grid`;
-    label.attr('data-i18n', power_user.charListGrid ? 'List' : 'Grid').text(nextLabel);
+    const key = power_user.charListGrid ? 'Character Toolbar List' : 'Character Toolbar Grid';
+    const nextLabel = power_user.charListGrid ? translate('List', key) : translate('Grid', key);
+    label.attr('data-i18n', key).text(nextLabel);
 }
 
 /**

@@ -114,9 +114,21 @@ export function updateBulkSelectionCountState({ selectedCount, deleteButton, fal
         return;
     }
 
-    selectedCount.textContent = `${count} selected`;
+    selectedCount.textContent = getBulkSelectionShortCountText(count);
     selectedCount.setAttribute('title', `${count} characters selected`);
     selectedCount.setAttribute('aria-label', `${count} characters selected`);
+}
+
+/**
+ * Returns the compact visible count used by the character-list toolbar.
+ * Full semantics stay on title/aria-label because this label is intentionally short.
+ *
+ * @param {number} count
+ * @returns {string}
+ */
+export function getBulkSelectionShortCountText(count) {
+    const locale = globalThis.document?.documentElement?.lang || globalThis.navigator?.language || 'en';
+    return String(locale).toLowerCase().startsWith('zh') ? `${count}个` : `${count} sel`;
 }
 
 /**
