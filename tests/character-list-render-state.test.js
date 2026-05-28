@@ -9,6 +9,7 @@ import {
     createCharacterDeleteReconcilePlan,
     getCharacterListEntityKey,
     getCharacterListPaginationRangeLabel,
+    shouldSuppressCharacterDeleteListReprintState,
     syncCharacterListRowIdentity,
 } from '../public/scripts/character-list-render-state.js';
 
@@ -363,6 +364,40 @@ describe('character list render state helpers', () => {
             currentPage: 1,
             pageSize: 5,
         })).toMatchObject({ mode: 'fallback', reason: 'duplicate-entity-key' });
+    });
+
+    test('suppresses stale list reprints during character delete unless cleanup explicitly owns the refresh', () => {
+        expect(shouldSuppressCharacterDeleteListReprintState({
+            startedAtGeneration: 4,
+            currentGeneration: 4,
+            isDeleteInProgress: true,
+        })).toBe(true);
+
+        expect(shouldSuppressCharacterDeleteListReprintState({
+            startedAtGeneration: 3,
+            currentGeneration: 4,
+            isDeleteInProgress: false,
+        })).toBe(true);
+
+        expect(shouldSuppressCharacterDeleteListReprintState({
+            startedAtGeneration: 4,
+            currentGeneration: 4,
+            isDeleteInProgress: true,
+            allowDuringDelete: true,
+        })).toBe(false);
+
+        expect(shouldSuppressCharacterDeleteListReprintState({
+            startedAtGeneration: 3,
+            currentGeneration: 4,
+            isDeleteInProgress: true,
+            allowDuringDelete: true,
+        })).toBe(true);
+
+        expect(shouldSuppressCharacterDeleteListReprintState({
+            startedAtGeneration: 4,
+            currentGeneration: 4,
+            isDeleteInProgress: false,
+        })).toBe(false);
     });
 
     test('syncs visible character row identity after deleting a middle row', () => {

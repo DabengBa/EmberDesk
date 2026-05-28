@@ -65,6 +65,7 @@ export async function showDeleteConfirmWithCascade(title, content) {
         okButton: t`Delete`,
         wider: true,
         leftAlign: true,
+        defaultResult: POPUP_RESULT.NEGATIVE,
         customButtons: [{
             text: t`Delete All`,
             result: POPUP_RESULT.CUSTOM1,

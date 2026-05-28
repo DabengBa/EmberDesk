@@ -2332,6 +2332,7 @@
     "Enter the name of your sprite": "輸入立繪名稱",
     "Start new chat?": "開始新聊天？",
     "Delete the character?": "您確定要刪除角色嗎？",
+    "Delete character \"${0}\"?": "刪除角色「${0}」？",
     "It will overwrite the World/Lorebook with the same name.": "它將覆蓋同名的世界資訊或知識書。",
     "All information associated with its linked persona will be lost.": "與這位使用者相關的所有資訊都將遺失。",
     "Are you sure you want to duplicate this persona?": "您確定要複製使用者角色嗎？",

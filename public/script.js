@@ -255,6 +255,7 @@ import {
     createCharacterListPageReconcilePlan,
     createCharacterListPageRenderPlan,
     getCharacterListPaginationRangeLabel,
+    shouldSuppressCharacterDeleteListReprintState,
     syncCharacterListRowIdentity,
 } from './scripts/character-list-render-state.js';
 import { runDeleteCharacterClosePreflight } from './scripts/delete-character-preflight.js';
@@ -531,8 +532,13 @@ export const saveCharacterDebounced = debounce(() => $('#create_button').trigger
  */
 export const printCharactersDebounced = debounce(() => { printCharacters(false); }, DEFAULT_PRINT_TIMEOUT);
 
-function shouldSuppressCharacterDeleteListReprint(startedAtGeneration) {
-    return isCharacterDeleteReconcileInProgress || startedAtGeneration < characterDeleteReconcileGeneration;
+function shouldSuppressCharacterDeleteListReprint(startedAtGeneration, { allowDuringDelete = false } = {}) {
+    return shouldSuppressCharacterDeleteListReprintState({
+        startedAtGeneration,
+        currentGeneration: characterDeleteReconcileGeneration,
+        isDeleteInProgress: isCharacterDeleteReconcileInProgress,
+        allowDuringDelete,
+    });
 }
 
 /**
@@ -1220,10 +1226,9 @@ export function updateCharacterRow(chid, patch) {
  *
  * @param {boolean} fullRefresh - If true, the list is fully refreshed and the navigation is being reset
  */
-export async function printCharacters(fullRefresh = false) {
+export async function printCharacters(fullRefresh = false, { allowDuringCharacterDelete = false } = {}) {
     const deleteReconcileGenerationAtStart = characterDeleteReconcileGeneration;
-    const suppressStaleReprint = !fullRefresh;
-    if (suppressStaleReprint && shouldSuppressCharacterDeleteListReprint(deleteReconcileGenerationAtStart)) {
+    if (shouldSuppressCharacterDeleteListReprint(deleteReconcileGenerationAtStart, { allowDuringDelete: allowDuringCharacterDelete })) {
         return;
     }
 
@@ -1283,7 +1288,7 @@ export async function printCharacters(fullRefresh = false) {
         },
         showNavigator: true,
         callback: async function (/** @type {Entity[]} */ data) {
-            if (suppressStaleReprint && shouldSuppressCharacterDeleteListReprint(deleteReconcileGenerationAtStart)) {
+            if (shouldSuppressCharacterDeleteListReprint(deleteReconcileGenerationAtStart, { allowDuringDelete: allowDuringCharacterDelete })) {
                 return;
             }
             const useFullRefresh = pendingInitialFullRefresh;
@@ -11272,6 +11277,11 @@ function buildTemporaryChatDeleteWarningHtml() {
         </div>`;
 }
 
+function getCharacterDeleteDialogTitle(characterName) {
+    const safeCharacterName = escapeHtml(characterName || t`this character`);
+    return t`Delete character "${safeCharacterName}"?`;
+}
+
 /**
  * Function to delete a character from UI after character deletion API success.
  * It manages necessary UI changes such as closing advanced editing popup, unsetting
@@ -11302,7 +11312,7 @@ async function removeCharacterFromUI(deletedAvatars = [], { deleteContext = null
     markPerfInteractionMetric('characterDeleteReconcileMs', performance.now() - reconcileStartedAt);
     if (!reconciled) {
         const printCharactersStartedAt = performance.now();
-        await printCharacters(true);
+        await printCharacters(true, { allowDuringCharacterDelete: true });
         markPerfInteractionMetric('characterPrintMs', performance.now() - printCharactersStartedAt);
     }
     await printMessages();
@@ -11832,7 +11842,9 @@ jQuery(async function () {
             toastr.warning('No character selected.');
             return;
         }
-        const avatarToDelete = characters[this_chid].avatar;
+        const characterToDelete = characters[this_chid];
+        const avatarToDelete = characterToDelete.avatar;
+        const deleteDialogTitle = getCharacterDeleteDialogTitle(characterToDelete.name);
 
         // Auto-stop generation if active
         if (is_send_press !== false) {
@@ -11875,7 +11887,7 @@ jQuery(async function () {
         // When world infos exist, use the integrated dialog with "Delete All" button;
         // otherwise fall back to the standard confirm dialog.
         if (cascadeHtml) {
-            const dialogResult = await showDeleteConfirmWithCascade(t`Delete the character?`, content);
+            const dialogResult = await showDeleteConfirmWithCascade(deleteDialogTitle, content);
             if (!dialogResult.confirmed) {
                 return;
             }
@@ -11887,8 +11899,9 @@ jQuery(async function () {
             });
         } else {
             let deleteChats = false;
-            const confirm = await Popup.show.confirm(t`Delete the character?`, content, {
+            const confirm = await Popup.show.confirm(deleteDialogTitle, content, {
                 leftAlign: true,
+                defaultResult: POPUP_RESULT.NEGATIVE,
                 onClose: () => { deleteChats = !!$('#del_char_checkbox').prop('checked'); },
             });
             if (!confirm) {

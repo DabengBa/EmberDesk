@@ -225,6 +225,7 @@ describe('character list structure', () => {
 
     test('keeps ordinary character delete on the incremental reconcile path with full-refresh fallback', () => {
         const scriptSource = read('public/script.js');
+        const printCharactersSource = extractFunctionSource(scriptSource, 'printCharacters');
         const removeCharacterFromUISource = extractFunctionSource(scriptSource, 'removeCharacterFromUI');
         const reconcileSource = extractFunctionSource(scriptSource, 'reconcileCharacterListAfterDelete');
 
@@ -236,8 +237,10 @@ describe('character list structure', () => {
         expect(scriptSource).not.toContain('suppressCharacterDeleteListReprintUntil');
         expect(scriptSource).not.toContain('CHARACTER_DELETE_REPRINT_SUPPRESSION_MS');
         expect(scriptSource).toContain('const deleteReconcileGenerationAtStart = characterDeleteReconcileGeneration;');
-        expect(scriptSource).toMatch(/if \(suppressStaleReprint && shouldSuppressCharacterDeleteListReprint\(deleteReconcileGenerationAtStart\)\) \{\s+return;\s+\}/);
-        expect(scriptSource).toMatch(/callback: async function \(\/\*\* @type \{Entity\[\]\} \*\/ data\) \{\s+if \(suppressStaleReprint && shouldSuppressCharacterDeleteListReprint\(deleteReconcileGenerationAtStart\)\) \{\s+return;\s+\}/);
+        expect(scriptSource).toContain('shouldSuppressCharacterDeleteListReprintState');
+        expect(printCharactersSource).toContain('allowDuringCharacterDelete = false');
+        expect(printCharactersSource).toMatch(/if \(shouldSuppressCharacterDeleteListReprint\(deleteReconcileGenerationAtStart, \{ allowDuringDelete: allowDuringCharacterDelete \}\)\) \{\s+return;\s+\}/);
+        expect(printCharactersSource).toMatch(/callback: async function \(\/\*\* @type \{Entity\[\]\} \*\/ data\) \{\s+if \(shouldSuppressCharacterDeleteListReprint\(deleteReconcileGenerationAtStart, \{ allowDuringDelete: allowDuringCharacterDelete \}\)\) \{\s+return;\s+\}/);
         const deleteCharacterSource = extractFunctionSource(scriptSource, 'deleteCharacter');
         expect(deleteCharacterSource).toContain('deleteContext = null');
         expect(deleteCharacterSource.indexOf('isCharacterDeleteReconcileInProgress = true;')).toBeLessThan(deleteCharacterSource.indexOf('const closeChatResult = await closeCurrentChatForDelete();'));
@@ -246,7 +249,7 @@ describe('character list structure', () => {
         expect(removeCharacterFromUISource).toContain('cancelDebounce(printCharactersDebounced);');
         expect(removeCharacterFromUISource).toContain('const reconciled = await reconcileCharacterListAfterDelete({');
         expect(removeCharacterFromUISource).toContain('deleteContext,');
-        expect(removeCharacterFromUISource).toMatch(/if \(!reconciled\) \{\s+const printCharactersStartedAt = performance\.now\(\);\s+await printCharacters\(true\);/);
+        expect(removeCharacterFromUISource).toMatch(/if \(!reconciled\) \{\s+const printCharactersStartedAt = performance\.now\(\);\s+await printCharacters\(true, \{ allowDuringCharacterDelete: true \}\);/);
         expect(reconcileSource).toContain('createCharacterDeleteReconcilePlan({');
         expect(reconcileSource).toContain('createCharacterBulkDeletePagePlan({');
         expect(reconcileSource).toContain("const isBulkDeleteContext = deleteContext?.source === 'bulk';");
@@ -270,7 +273,10 @@ describe('character list structure', () => {
         const styleSource = read('public/style.css');
         const overlaySource = read('public/scripts/BulkEditOverlay.js');
         const cascadeDialogSource = read('public/scripts/world-cascade-dialog.js');
+        const zhCnLocale = read('public/locales/zh-cn.json');
+        const zhTwLocale = read('public/locales/zh-tw.json');
         const deleteCharacterSource = extractFunctionSource(scriptSource, 'deleteCharacter');
+        const deleteDialogTitleSource = extractFunctionSource(scriptSource, 'getCharacterDeleteDialogTitle');
         const newAssistantChatSource = extractFunctionSource(scriptSource, 'newAssistantChat');
 
         expect(indexHtml).toContain('id="temporary_chat_status"');
@@ -284,15 +290,24 @@ describe('character list structure', () => {
         expect(deleteCharacterSource).toContain('if (inTempChat && !temporaryChatAcknowledged)');
         expect(scriptSource).toContain('buildTemporaryChatDeleteWarningHtml');
         expect(scriptSource).toContain('content += buildTemporaryChatDeleteWarningHtml();');
+        expect(deleteDialogTitleSource).toContain('escapeHtml(characterName');
+        expect(deleteDialogTitleSource).toContain('t`Delete character "${safeCharacterName}"?`');
+        expect(scriptSource).toContain('const characterToDelete = characters[this_chid];');
+        expect(scriptSource).toContain('const deleteDialogTitle = getCharacterDeleteDialogTitle(characterToDelete.name);');
+        expect(scriptSource).toContain('showDeleteConfirmWithCascade(deleteDialogTitle, content)');
+        expect(scriptSource).toMatch(/Popup\.show\.confirm\(deleteDialogTitle,\s*content,\s*\{[\s\S]*defaultResult: POPUP_RESULT\.NEGATIVE/);
         expect(scriptSource).toMatch(/deleteCharacter\(avatarToDelete,\s*\{[\s\S]*temporaryChatAcknowledged: inTempChat[\s\S]*deleteWorlds: dialogResult\.deleteWorlds/);
         expect(scriptSource).toMatch(/deleteCharacter\(avatarToDelete,\s*\{[\s\S]*deleteChats,[\s\S]*temporaryChatAcknowledged: inTempChat[\s\S]*\}\)/);
         expect(scriptSource).toMatch(/deleteCharacter\(avatarToDelete,\s*\{[\s\S]*deleteWorlds: \[\],[\s\S]*clearWorldReferences: false[\s\S]*\}\)/);
+        expect(zhCnLocale).toContain('"Delete character \\"${0}\\"?": "删除角色「${0}」？"');
+        expect(zhTwLocale).toContain('"Delete character \\"${0}\\"?": "刪除角色「${0}」？"');
 
         expect(overlaySource).toContain('temporaryChatAcknowledged: inTempChat');
         expect(overlaySource).toContain("deleteContext: { source: 'bulk', selectedCount: count }");
         expect(overlaySource).toContain('temporary chat — unsaved messages will be lost');
 
         const showDeleteConfirmWithCascadeSource = extractFunctionSource(cascadeDialogSource, 'showDeleteConfirmWithCascade');
+        expect(showDeleteConfirmWithCascadeSource).toContain('defaultResult: POPUP_RESULT.NEGATIVE');
         expect(showDeleteConfirmWithCascadeSource).toContain("const chatCb = document.getElementById('del_char_checkbox');");
         expect(showDeleteConfirmWithCascadeSource).toContain('if (chatCb) chatCb.checked = true;');
         expect(showDeleteConfirmWithCascadeSource).toContain("document.querySelectorAll('.world-cascade-checkbox').forEach((cb) => { cb.checked = true; });");

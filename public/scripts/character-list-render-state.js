@@ -105,6 +105,31 @@ function createCharacterDeleteFallback(reason) {
     };
 }
 
+/**
+ * Determines whether a character-list print was started from stale delete state.
+ *
+ * @param {object} options
+ * @param {number} options.startedAtGeneration Generation captured when the print was requested
+ * @param {number} options.currentGeneration Current delete-reconcile generation
+ * @param {boolean} options.isDeleteInProgress Whether delete cleanup owns the visible list right now
+ * @param {boolean} [options.allowDuringDelete] Whether this print is the authoritative delete cleanup refresh
+ * @returns {boolean}
+ */
+export function shouldSuppressCharacterDeleteListReprintState({
+    startedAtGeneration,
+    currentGeneration,
+    isDeleteInProgress,
+    allowDuringDelete = false,
+}) {
+    const isStaleGeneration = Number(startedAtGeneration) < Number(currentGeneration);
+
+    if (isStaleGeneration) {
+        return true;
+    }
+
+    return Boolean(isDeleteInProgress) && !allowDuringDelete;
+}
+
 function hasDuplicateValues(values) {
     return new Set(values).size !== values.length;
 }

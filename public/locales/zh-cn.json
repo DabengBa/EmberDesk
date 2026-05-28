@@ -1605,6 +1605,7 @@
     "Failed to delete character": "删除角色失败",
     "Delete the Chat File?": "删除聊天文件？",
     "Delete the character?": "删除角色？",
+    "Delete character \"${0}\"?": "删除角色「${0}」？",
     "Linked World Info": "关联世界书",
     "The following world info files are referenced by the characters being deleting.": "以下世界书被正在删除的角色所引用。",
     "The following world info files are referenced by the characters being deleted.": "以下世界书被正在删除的角色所引用。",
