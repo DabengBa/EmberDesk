@@ -79,6 +79,8 @@ export async function showDeleteConfirmWithCascade(title, content) {
             const btn = p.dlg.querySelector('[data-result="' + POPUP_RESULT.CUSTOM1 + '"]');
             if (btn) {
                 btn.addEventListener('click', () => {
+                    const chatCb = document.getElementById('del_char_checkbox');
+                    if (chatCb) chatCb.checked = true;
                     document.querySelectorAll('.world-cascade-checkbox').forEach((cb) => { cb.checked = true; });
                     p.complete(POPUP_RESULT.AFFIRMATIVE);
                 });

@@ -11115,9 +11115,10 @@ export async function handleDeleteCharacter(this_chid, delete_chats) {
  * @param {boolean} [options.deleteChats=true] - Whether to delete associated chats or not
  * @param {string[]} [options.deleteWorlds] - World info names to delete (from caller's preflight)
  * @param {boolean} [options.clearWorldReferences] - Whether to clear world references in remaining characters
+ * @param {boolean} [options.temporaryChatAcknowledged=false] - Whether the caller already confirmed the temporary-chat data loss warning
  * @return {Promise<boolean>} - A promise that resolves when the character is successfully deleted
  */
-export async function deleteCharacter(characterKey, { deleteChats = true, deleteWorlds, clearWorldReferences, deleteContext = null } = {}) {
+export async function deleteCharacter(characterKey, { deleteChats = true, deleteWorlds, clearWorldReferences, temporaryChatAcknowledged = false, deleteContext = null } = {}) {
     const deleteFlowStartedAt = performance.now();
     cancelDebounce(saveCharacterDebounced);
     if (!Array.isArray(characterKey)) {
@@ -11126,7 +11127,7 @@ export async function deleteCharacter(characterKey, { deleteChats = true, delete
     const deleteCandidates = getCharacterDeleteCandidates(characters, characterKey);
 
     const inTempChat = this_chid === undefined && name2 === neutralCharacterName;
-    if (inTempChat) {
+    if (inTempChat && !temporaryChatAcknowledged) {
         const confirmClose = await Popup.show.confirm(
             t`You are currently in a temporary chat.`,
             t`Deleting this character will close the chat and you will lose any unsaved messages. Do you want to proceed?`,
@@ -11239,6 +11240,13 @@ export async function deleteCharacter(characterKey, { deleteChats = true, delete
         isCharacterDeleteReconcileInProgress = false;
         characterDeleteReconcileGeneration++;
     }
+}
+
+function buildTemporaryChatDeleteWarningHtml() {
+    return `
+        <div class="delete-dialog-info">
+            <span>${t`temporary chat — unsaved messages will be lost`}</span>
+        </div>`;
 }
 
 /**
@@ -11827,6 +11835,10 @@ jQuery(async function () {
 
         // Build dialog content: original deleteConfirm template + world info section
         let content = await renderTemplateAsync('deleteConfirm');
+        const inTempChat = this_chid === undefined && name2 === neutralCharacterName;
+        if (inTempChat) {
+            content += buildTemporaryChatDeleteWarningHtml();
+        }
         const cascadeHtml = buildCascadeSectionHtml(worldInfos);
         if (cascadeHtml) {
             content += cascadeHtml;
@@ -11841,6 +11853,7 @@ jQuery(async function () {
             }
             await deleteCharacter(avatarToDelete, {
                 deleteChats: dialogResult.deleteChats,
+                temporaryChatAcknowledged: inTempChat,
                 deleteWorlds: dialogResult.deleteWorlds,
                 clearWorldReferences: dialogResult.clearWorldReferences,
             });
@@ -11853,7 +11866,12 @@ jQuery(async function () {
             if (!confirm) {
                 return;
             }
-            await deleteCharacter(avatarToDelete, { deleteChats });
+            await deleteCharacter(avatarToDelete, {
+                deleteChats,
+                temporaryChatAcknowledged: inTempChat,
+                deleteWorlds: [],
+                clearWorldReferences: false,
+            });
         }
     });
 

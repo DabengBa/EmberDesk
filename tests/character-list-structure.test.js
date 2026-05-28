@@ -261,6 +261,29 @@ describe('character list structure', () => {
         expect(updatePaginationSource).not.toContain('paginationData.attributes.dataSource = afterSnapshot.entities;');
     });
 
+    test('keeps temporary-chat warning integrated into character delete confirmation', () => {
+        const scriptSource = read('public/script.js');
+        const overlaySource = read('public/scripts/BulkEditOverlay.js');
+        const cascadeDialogSource = read('public/scripts/world-cascade-dialog.js');
+        const deleteCharacterSource = extractFunctionSource(scriptSource, 'deleteCharacter');
+
+        expect(deleteCharacterSource).toContain('temporaryChatAcknowledged = false');
+        expect(deleteCharacterSource).toContain('if (inTempChat && !temporaryChatAcknowledged)');
+        expect(scriptSource).toContain('buildTemporaryChatDeleteWarningHtml');
+        expect(scriptSource).toContain('content += buildTemporaryChatDeleteWarningHtml();');
+        expect(scriptSource).toMatch(/deleteCharacter\(avatarToDelete,\s*\{[\s\S]*temporaryChatAcknowledged: inTempChat[\s\S]*deleteWorlds: dialogResult\.deleteWorlds/);
+        expect(scriptSource).toMatch(/deleteCharacter\(avatarToDelete,\s*\{[\s\S]*deleteChats,[\s\S]*temporaryChatAcknowledged: inTempChat[\s\S]*\}\)/);
+        expect(scriptSource).toMatch(/deleteCharacter\(avatarToDelete,\s*\{[\s\S]*deleteWorlds: \[\],[\s\S]*clearWorldReferences: false[\s\S]*\}\)/);
+
+        expect(overlaySource).toContain('temporaryChatAcknowledged: inTempChat');
+        expect(overlaySource).toContain("deleteContext: { source: 'bulk', selectedCount: count }");
+        expect(overlaySource).toContain('temporary chat — unsaved messages will be lost');
+
+        const showDeleteConfirmWithCascadeSource = extractFunctionSource(cascadeDialogSource, 'showDeleteConfirmWithCascade');
+        expect(showDeleteConfirmWithCascadeSource).toContain("const chatCb = document.getElementById('del_char_checkbox');");
+        expect(showDeleteConfirmWithCascadeSource).toContain('if (chatCb) chatCb.checked = true;');
+        expect(showDeleteConfirmWithCascadeSource).toContain("document.querySelectorAll('.world-cascade-checkbox').forEach((cb) => { cb.checked = true; });");
+    });
     test('keeps the selected-character delete action directly discoverable and keyboard reachable', () => {
         const indexHtml = read('public/index.html');
 

@@ -36,8 +36,8 @@ This feature lets a user remove unwanted characters and immediately see the work
 1. The user chooses the directly exposed delete button for a specific [character card](term.character_card), or uses the retained delete option in the character actions menu.
 2. If message generation is in progress, EmberDesk blocks deletion and asks the user to stop generation first.
 3. EmberDesk checks whether the character references any world info files (`extensions.world`).
-4. EmberDesk presents a confirmation dialog. If linked world info files exist, the dialog includes a **World Info Cascade** section listing each world with its entry count and the number of other characters still bound to it. Worlds shared with other characters display a warning.
-5. The user optionally checks which world info files to delete and whether to also delete chat files (checked by default).
+4. EmberDesk presents a confirmation dialog. If the workspace is in a temporary chat, the dialog includes an inline warning that unsaved messages will be lost. If linked world info files exist, the same dialog includes a **World Info Cascade** section listing each world with its entry count and the number of other characters still bound to it. Worlds shared with other characters display a warning.
+5. The user optionally checks which world info files to delete and whether to also delete chat files (checked by default), or uses "Delete All" to select chat deletion and every world info deletion option in one action.
 6. The user confirms deletion.
 7. EmberDesk removes the deleted character and deletes any selected world info files.
 8. EmberDesk removes the deleted row from the visible character library. For an ordinary unfiltered single-character delete, the current page is reconciled incrementally: the row disappears, the pagination range updates, and remaining visible character row identities are resynced without clearing the whole list.
@@ -54,7 +54,7 @@ This feature lets a user remove unwanted characters and immediately see the work
    - An info banner if the user is in a temporary chat (unsaved messages will be lost)
    - A "Also delete the chat files" checkbox (checked by default)
    - A World Info Cascade section (if any selected characters have linked world info), with per-world checkboxes
-   - A "Delete All" button that selects all world info checkboxes in one action
+   - A "Delete All" button that selects chat file deletion and all world info checkboxes in one action
 6. The user confirms deletion (or cancels).
 7. EmberDesk closes the current chat, deletes all selected characters with their chosen options, and removes selected world info files. If generation is active, deletion is blocked until the user stops generation.
 8. The character library keeps the user's pagination context when the post-delete page can be safely computed: the same page stays visible when it still exists, or the library moves to the last valid page after the delete.
@@ -65,7 +65,7 @@ This feature lets a user remove unwanted characters and immediately see the work
 
 - Deletion is destructive and must remain an explicit user-confirmed action.
 - The selected-character delete affordance must remain directly discoverable and keyboard/screen-reader reachable; the menu option is a compatibility entry, not the only visible path.
-- Both single and batch delete use a unified confirmation dialog — no separate cascading popups.
+- Both single and batch delete use a unified confirmation dialog — ordinary UI delete flows do not show a separate temporary-chat or world-info confirmation after the user confirms that dialog.
 - The success path should update the visible library immediately.
 - Ordinary single-character deletion in the unfiltered library uses an incremental visible-list reconcile when the current page can be safely computed. Search/tag filters, bogus-folder drilldown, in-flight printing, and ambiguous entity changes keep the existing full-refresh fallback.
 - Bulk delete in the unfiltered library keeps pagination context after one or more successful deletions when the target page can be computed from the after-delete snapshot. The target is the original page when it still exists, otherwise the last valid page.
@@ -76,7 +76,7 @@ This feature lets a user remove unwanted characters and immediately see the work
 - Removing rows from the library is part of this feature; re-browsing the remaining library belongs to [Character Library Panel](feature.character_library_panel).
 - The "Also delete the chat files" checkbox is checked by default.
 - World info files are unchecked by default in the cascade section — the user must actively opt in to delete them (or use "Delete All").
-- "Delete All" selects all world info checkboxes — it means complete world info cleanup, not selective deletion.
+- "Delete All" selects the chat-file checkbox and all world info checkboxes — it means complete optional cleanup, not selective deletion.
 - Deleting a character does not affect other characters' world info references. See [ADR-0005](../adr/0005-delete-no-cross-character-world-ref-cleanup.md). For the inverse flow (deleting a world book and optionally clearing bound character references), see [Delete World Book](feature.world_book_delete).
 - A failed cascade (world file deletion) does not block the character deletion itself.
 - If the World Info editor panel is open showing a world that gets cascade-deleted, EmberDesk closes the editor and clears all related client-side references (cache, global selection, character world field, persona lorebook).
