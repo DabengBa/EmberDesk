@@ -327,6 +327,10 @@ The delete flow also cancels `saveCharacterDebounced` at the start of `deleteCha
 
 Character edit completion now guards the post-save refresh with `shouldRefreshCharacterAfterEdit(characters, editedAvatar)`. The refresh only runs when the submitted avatar key is still a non-empty string and still exists in the local `characters` array. If a delete already removed that avatar locally, the edit response returns without calling `getOneCharacter()`, so stale edit completion cannot reinsert the deleted card into the visible list.
 
+The selected-character title area now has a matching stale-index guard. `select_selected_character(chid, { switchMenu })` first resolves `characters[chid]`; if the character is missing, it returns `false` and only switches back to the character library when `switchMenu` is true. The header click path also checks `this_chid !== undefined && characters[this_chid]` before opening the editor. This keeps active-character deletion from turning a stale array index into a `characters[chid].name` read.
+
+Temporary Assistant chats now have a small workspace status binding rather than relying only on the delete confirmation warning. `setCharacterName()` calls `syncTemporaryChatStatus()`, temporary Assistant chat creation explicitly shows `#temporary_chat_status`, and selecting a real character clears it. This binding is UI state only; it does not change chat persistence or delete API behavior.
+
 The delete flow now also uses a dedicated preflight helper before the delete request:
 
 - `closeCurrentChatForDelete()` reuses the existing save/generation guards and low-level chat cleanup
@@ -336,6 +340,8 @@ The delete flow now also uses a dedicated preflight helper before the delete req
 - the helper still reselects the characters view so the visible landing state matches the old flow
 
 The detailed client-side state rules for stable delete keys, edit-refresh suppression, bulk-selection DOM sync, and delete-reconcile fallback are captured in [character-list-state-flow](../logic-description/character_list_state_processing_flow.md). User-facing delete and library behavior stay owned by [character-delete](../db/features/character-delete.md) and [character-library-panel](../db/features/character-library-panel.md).
+
+Bulk-select mode now keeps the legacy checkbox affordance and row-level accessibility state synchronized through the same model. `enableBulkSelect()` marks character rows with `role="checkbox"`, `aria-selected="false"`, `aria-checked="false"`, and `aria-describedby="bulkSelectionHint"` while adding `.bulk_select_checkbox` inputs with matching `aria-checked` and description wiring. `syncBulkSelectionDomState()` updates both row and checkbox checked state after pagination, sorting, filtering, or redraws, and `BulkEditOverlay` mirrors the same state on direct selection toggles.
 
 ### Character-row string render fast path
 
@@ -409,6 +415,11 @@ Stability-sensitive binding points:
 - `SCHEMA_VERSION` in `src/endpoints/character-index.js`
 - `removeCharactersFromState()` in `public/scripts/character-list-state.js`
 - `shouldRefreshCharacterAfterEdit()` in `public/scripts/character-list-state.js`
+- `syncBulkSelectionDomState()` in `public/scripts/character-list-state.js`
+- `setTemporaryChatStatus()` and `syncTemporaryChatStatus()` in `public/script.js`
+- `select_selected_character()` in `public/script.js`
+- selected-character title click handler in `public/script.js`
+- `enableBulkSelect()` / `disableBulkSelect()` in `public/scripts/bulk-edit.js`
 - `getCharacterListEntityKey()` in `public/scripts/character-list-render-state.js`
 - `createCharacterListEntitySnapshot()` in `public/scripts/character-list-render-state.js`
 - `createCharacterListPageRenderPlan()` in `public/scripts/character-list-render-state.js`

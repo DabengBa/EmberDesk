@@ -68,7 +68,7 @@ EmberDesk currently provides:
 - a documented shared browser library for common frontend utilities and extension compatibility
 - Docker-friendly deployment and browser access across devices
 - focused startup and interaction performance work for daily-use paths
-- client-side character-list incremental reconcile and consistency guards so ordinary browsing and delete flows keep visible rows, pagination, and bulk-selection hooks aligned without always redrawing the whole list, while delayed edit/save responses still cannot undo confirmed deletion actions
+- client-side character-list incremental reconcile and consistency guards so ordinary browsing and delete flows keep visible rows, pagination, selected-character navigation, temporary-chat status, and bulk-selection hooks aligned without always redrawing the whole list, while delayed edit/save responses still cannot undo confirmed deletion actions
 
 Current derived-cache scope is intentionally narrow:
 
@@ -97,6 +97,7 @@ EmberDesk does not currently aim to:
 - Do not let internal caches or indexes become the canonical user-data source by accident.
 - Keep derived caches scoped to proven hot paths; do not broaden them into general persistence without clear user-visible ROI.
 - Treat client-side derived lists as disposable views over canonical files; after destructive actions, stale delayed responses must not restore removed rows.
+- Keep compatibility-facing character row selectors and accessibility state synchronized when list rows are reused instead of re-rendered.
 
 ## One-Line Summary
 

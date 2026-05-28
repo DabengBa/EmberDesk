@@ -1,5 +1,6 @@
 import { registerDebugFunction } from './power-user.js';
 import { updateSecretDisplay } from './secrets.js';
+import { applyI18nTranslations, parseI18nAttributeSpecs } from './i18n-data.js';
 
 const storageKey = 'language';
 const overrideLanguage = localStorage.getItem(storageKey);
@@ -151,21 +152,7 @@ function findLang(language) {
  * @param {Element} element The element to translate
  */
 function translateElement(element) {
-    const keys = element.getAttribute('data-i18n').split(';'); // Multi-key entries are ; delimited
-    for (const key of keys) {
-        const attributeMatch = key.match(/\[(\S+)\](.+)/); // [attribute]key
-        if (attributeMatch) { // attribute-tagged key
-            const localizedValue = localeData?.[attributeMatch[2]];
-            if (localizedValue || localizedValue === '') {
-                element.setAttribute(attributeMatch[1], localizedValue);
-            }
-        } else { // No attribute tag, treat as 'text'
-            const localizedValue = localeData?.[key];
-            if (localizedValue || localizedValue === '') {
-                element.textContent = localizedValue;
-            }
-        }
-    }
+    applyI18nTranslations(element, element.getAttribute('data-i18n'), localeData);
 }
 
 /**
@@ -192,20 +179,19 @@ async function getMissingTranslations() {
     for (const language of langsToProcess) {
         const localeData = await getLocaleData(language.lang);
         $(document).find('[data-i18n]').each(function () {
-            const keys = $(this).data('i18n').split(';'); // Multi-key entries are ; delimited
-            for (const key of keys) {
-                const attributeMatch = key.match(/\[(\S+)\](.+)/); // [attribute]key
-                if (attributeMatch) { // attribute-tagged key
-                    const localizedValue = localeData?.[attributeMatch[2]];
-                    if (!localizedValue) {
-                        missingData.push({ key, language: language.lang, value: String($(this).attr(attributeMatch[1])) });
-                    }
-                } else { // No attribute tag, treat as 'text'
-                    const localizedValue = localeData?.[key];
-                    if (!localizedValue) {
-                        missingData.push({ key, language: language.lang, value: $(this).text().trim() });
-                    }
+            for (const entry of parseI18nAttributeSpecs($(this).data('i18n'))) {
+                const localizedValue = localeData?.[entry.key];
+                if (localizedValue || localizedValue === '') {
+                    continue;
                 }
+
+                if (entry.attributes.length > 0) {
+                    const fallbackAttribute = entry.attributes.find(attribute => $(this).attr(attribute) !== undefined) ?? entry.attributes[0];
+                    missingData.push({ key: entry.raw, language: language.lang, value: String($(this).attr(fallbackAttribute) ?? '') });
+                    continue;
+                }
+
+                missingData.push({ key: entry.raw, language: language.lang, value: $(this).text().trim() });
             }
         });
     }

@@ -149,7 +149,10 @@ describe('character list structure', () => {
         const renderStateSource = read('public/scripts/character-list-render-state.js');
         const emptyBlockTemplate = read('public/scripts/templates/emptyBlock.html');
 
-        expect(printCharactersSource).toContain('await renderCharacterListPage(data, { fullRefresh });');
+        expect(printCharactersSource).toContain('let pendingInitialFullRefresh = fullRefresh;');
+        expect(printCharactersSource).toContain('const useFullRefresh = pendingInitialFullRefresh;');
+        expect(printCharactersSource).toContain('pendingInitialFullRefresh = false;');
+        expect(printCharactersSource).toContain('await renderCharacterListPage(data, { fullRefresh: useFullRefresh });');
         expect(renderCharacterListPageSource).toContain('createCharacterListPageRenderPlan({');
         expect(scriptSource).toContain('createCharacterListPageReconcilePlan');
         expect(scriptSource).toContain('applyCharacterListPageRenderPlan({');

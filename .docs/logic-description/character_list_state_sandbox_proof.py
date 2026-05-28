@@ -283,6 +283,22 @@ def run_delete_character_close_preflight(is_generation_in_progress, calls):
     return True
 
 
+def resolve_selected_character_navigation(chid, characters, switch_menu=True):
+    if chid is None or chid < 0 or chid >= len(characters) or characters[chid] is None:
+        return {
+            "mode": "characters" if switch_menu else "no-op",
+            "selectedCharacterFound": False,
+            "openedEditor": False,
+        }
+
+    return {
+        "mode": "character_edit" if switch_menu else "peek",
+        "selectedCharacterFound": True,
+        "openedEditor": switch_menu,
+        "name": characters[chid].get("name"),
+    }
+
+
 class FakeClassList:
     def __init__(self):
         self.values = set()
@@ -327,6 +343,13 @@ class FakeElement:
 class FakeCheckbox:
     def __init__(self):
         self.checked = False
+        self.attributes = {}
+
+    def set_attribute(self, name, value):
+        self.attributes[name] = str(value)
+
+    def get_attribute(self, name):
+        return self.attributes.get(name)
 
 
 class FakeContainer:
@@ -399,8 +422,10 @@ def sync_bulk_selection_dom_state(
 
         character.class_list.toggle(selected_class, is_selected)
         character.set_attribute("aria-selected", str(is_selected).lower())
+        character.set_attribute("aria-checked", str(is_selected).lower())
         if checkbox is not None:
             checkbox.checked = is_selected
+            checkbox.set_attribute("aria-checked", str(is_selected).lower())
         if is_selected:
             visible_selected_count += 1
 
@@ -458,6 +483,22 @@ def main():
         "suppress-welcome-screen",
         "emit-chat-changed",
     ]
+    assert resolve_selected_character_navigation(0, [{"name": "Alpha"}]) == {
+        "mode": "character_edit",
+        "selectedCharacterFound": True,
+        "openedEditor": True,
+        "name": "Alpha",
+    }
+    assert resolve_selected_character_navigation(1, [{"name": "Alpha"}]) == {
+        "mode": "characters",
+        "selectedCharacterFound": False,
+        "openedEditor": False,
+    }
+    assert resolve_selected_character_navigation(1, [{"name": "Alpha"}], switch_menu=False) == {
+        "mode": "no-op",
+        "selectedCharacterFound": False,
+        "openedEditor": False,
+    }
 
     before_snapshot = create_character_list_entity_snapshot(
         [
@@ -695,13 +736,19 @@ def main():
     assert visible_selected_count == 2
     assert alpha.class_list.contains("character_selected") is True
     assert alpha.get_attribute("aria-selected") == "true"
+    assert alpha.get_attribute("aria-checked") == "true"
     assert alpha.checkbox.checked is True
+    assert alpha.checkbox.get_attribute("aria-checked") == "true"
     assert beta.class_list.contains("character_selected") is False
     assert beta.get_attribute("aria-selected") == "false"
+    assert beta.get_attribute("aria-checked") == "false"
     assert beta.checkbox.checked is False
+    assert beta.checkbox.get_attribute("aria-checked") == "false"
     assert gamma.class_list.contains("character_selected") is True
     assert gamma.get_attribute("aria-selected") == "true"
+    assert gamma.get_attribute("aria-checked") == "true"
     assert gamma.checkbox.checked is True
+    assert gamma.checkbox.get_attribute("aria-checked") == "true"
 
     assert sync_bulk_selection_dom_state(None, [0]) == 0
 

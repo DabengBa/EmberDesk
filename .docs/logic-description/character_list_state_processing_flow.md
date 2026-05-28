@@ -16,7 +16,7 @@
 
 Goals:
 
-- Document the current client-side rules for resolving character delete targets, ordinary current-page reconcile planning, delete-reconcile repaint suppression, incremental delete planning, bulk-delete page planning, edit-refresh eligibility, and bulk-selection UI state.
+- Document the current client-side rules for resolving character delete targets, ordinary current-page reconcile planning, delete-reconcile repaint suppression, incremental delete planning, bulk-delete page planning, selected-character navigation fallback, edit-refresh eligibility, and bulk-selection UI state.
 - Make the "deleted card must not be refreshed by a stale edit response" rule reproducible without production code.
 - Record the mutation boundary for the in-memory `characters` array and the DOM synchronization boundary for visible bulk-selection plus ordinary-page and post-delete row updates.
 
@@ -54,6 +54,7 @@ Inputs:
 - `fallbackFocusElement`: an optional focus target used when a disabled delete button currently owns focus.
 - `container`: the character-list DOM container that exposes currently visible character rows.
 - `selectedCharacterIds`: numeric character ids held in the bulk-selection model.
+- `chid`: the numeric active character index used by the selected-character title area.
 
 Valid avatar keys are non-empty strings. Missing values, empty strings, and non-string values are ignored by key-resolution and refresh-eligibility rules.
 
@@ -68,10 +69,11 @@ The processing outputs are:
 - `pageReconcilePlan`: either an incremental ordinary-page patch plan or a named full-render fallback reason.
 - `deleteReconcilePlan`: either an incremental current-page patch plan or a named full-refresh fallback reason.
 - `bulkDeletePagePlan`: either a page-preserving post-delete plan for one or more bulk-delete successes or a named fallback reason.
+- `selectedCharacterNavigation`: whether the selected-character title area can open the active character editor or must fall back to the character library.
 - `shouldRefreshAfterEdit`: boolean decision controlling whether edit completion may call `getOneCharacter(avatar)`.
 - `bulkDeleteButtonState`: class, ARIA, tab order, and focus state for the bulk-delete action.
 - `bulkSelectionCountState`: compact visible count text plus full title and ARIA label for the selected-count status.
-- `visibleBulkSelectionDomState`: per-visible-row selected class, `aria-selected`, checkbox checked state, and visible selected count.
+- `visibleBulkSelectionDomState`: per-visible-row selected class, `aria-selected`, `aria-checked`, checkbox checked state, checkbox `aria-checked`, and visible selected count.
 
 ## Staged Processing Flow
 
@@ -168,6 +170,15 @@ Full refreshes remain allowed because they are the explicit correctness fallback
    - `pageSize`
 8. `public/script.js` uses this plan only when the delete context identifies a bulk-delete entry. Unlike ordinary single-delete reconcile, this path may accept a clamped page so deleting the last page moves the user to the last valid page instead of resetting to page 1.
 
+### Resolve selected-character navigation
+
+1. Read `characters[chid]` before opening the selected-character editor.
+2. If the character exists, open the editor path and clear the temporary-chat status.
+3. If the character is missing and `switchMenu` is true, return to the character library instead of reading stale character fields.
+4. If the character is missing and `switchMenu` is false, return `false` without switching the menu.
+
+This keeps the selected-character title area safe after deleting the active character.
+
 ### Decide whether edit completion may refresh
 
 1. Reject the submitted avatar when it is not a non-empty string.
@@ -202,8 +213,9 @@ This prevents a stale edit response from calling `getOneCharacter()` after a del
 3. Iterate the currently visible rows returned by `container.getElementsByClassName(characterClass)`.
 4. Read each row's numeric `data-chid` value.
 5. Toggle the selected class and set `aria-selected` according to membership in the selected-id set.
-6. If the row has a bulk-select checkbox, set `checked` to the same selected state.
-7. Return the number of visible rows restored as selected.
+6. Set the row's `aria-checked` to the same selected state.
+7. If the row has a bulk-select checkbox, set both `checked` and checkbox `aria-checked` to the same selected state.
+8. Return the number of visible rows restored as selected.
 
 Hidden rows that are not currently returned by the container remain selected in the model only; they do not contribute to the visible selected count until they are rendered again.
 
@@ -217,13 +229,14 @@ Hidden rows that are not currently returned by the container remain selected in 
 - Ordinary current-page reconcile is available for safe sort/search/filter/pagination/page-size updates, but back-block renders, missing entity arrays, duplicate visible keys, or explicit `fullRefresh` requests keep the existing full-render path.
 - Ordinary incremental delete reconcile is limited to a single deleted avatar in an unfiltered, non-bulk, non-bogus-folder state with a stable current page.
 - Bulk-delete page planning supports one or more successful deleted avatars in an unfiltered, non-bogus-folder state and preserves the current page when possible, clamping only to the last valid page after deletion.
+- Selected-character navigation must guard the active character index before reading fields from `characters[chid]`; missing active rows fall back to the library when menu switching is allowed.
 - Incremental reconcile rewrites visible row identity after indexes shift, preserving the DOM contract for `data-chid`, legacy `chid`, and `CharID${chid}`.
 - Edit completion must not refresh a character that has already been removed locally.
 - `deleteCharacter()` cancels the pending debounced save before resolving delete candidates, so a queued edit submit cannot race the delete path.
 - Bulk delete must be disabled and removed from tab order until at least one visible or model-selected character is selected.
 - Visible bulk-selection count stays intentionally compact in the toolbar while title and ARIA label preserve the full `"N characters selected"` wording.
 - Disabling a focused bulk-delete button must move focus to the provided fallback so keyboard focus is not left on an unavailable action.
-- Visible character rows are synchronized from the selection model after sorting, filtering, pagination, or redraws; hidden selected rows remain in the model but are not marked in absent DOM.
+- Visible character rows are synchronized from the selection model after sorting, filtering, pagination, or redraws; the row's selected/checked semantics and the legacy checkbox's checked semantics stay aligned. Hidden selected rows remain in the model but are not marked in absent DOM.
 
 ## Output Schema
 
@@ -272,6 +285,11 @@ Hidden rows that are not currently returned by the container remain selected in 
     "pageSize": 2
   },
   "shouldRefreshAfterEdit": false,
+  "selectedCharacterNavigation": {
+    "mode": "characters",
+    "selectedCharacterFound": false,
+    "openedEditor": false
+  },
   "bulkDeleteButtonState": {
     "classDisabled": true,
     "ariaDisabled": "true",
@@ -287,8 +305,8 @@ Hidden rows that are not currently returned by the container remain selected in 
   "visibleBulkSelectionDomState": {
     "visibleSelectedCount": 2,
     "rows": [
-      { "dataChid": 0, "selected": true, "ariaSelected": "true", "checkboxChecked": true },
-      { "dataChid": 1, "selected": false, "ariaSelected": "false", "checkboxChecked": false }
+      { "dataChid": 0, "selected": true, "ariaSelected": "true", "ariaChecked": "true", "checkboxChecked": true, "checkboxAriaChecked": "true" },
+      { "dataChid": 1, "selected": false, "ariaSelected": "false", "ariaChecked": "false", "checkboxChecked": false, "checkboxAriaChecked": "false" }
     ]
   }
 }
@@ -302,7 +320,7 @@ Run:
 uv run python .docs/logic-description/character_list_state_sandbox_proof.py
 ```
 
-The proof script embeds fake character arrays, fake entity snapshots, and fake DOM elements. It verifies stable-id resolution, delete-candidate preservation, in-place removal, ordinary page-reconcile planning and fallback reasons, delete-reconcile suppression gates, incremental delete planning and fallback reasons, bulk-delete page planning and fallback reasons, edit-refresh suppression after local deletion, compact selected-count text plus full ARIA labels, and visible-row synchronization from the bulk-selection model.
+The proof script embeds fake character arrays, fake entity snapshots, and fake DOM elements. It verifies stable-id resolution, delete-candidate preservation, in-place removal, ordinary page-reconcile planning and fallback reasons, delete-reconcile suppression gates, incremental delete planning and fallback reasons, bulk-delete page planning and fallback reasons, selected-character navigation fallback after active deletion, edit-refresh suppression after local deletion, compact selected-count text plus full ARIA labels, and visible-row/checkbox selected and checked synchronization from the bulk-selection model.
 
 ## Boundaries And Failure Modes
 
@@ -314,8 +332,9 @@ The proof script embeds fake character arrays, fake entity snapshots, and fake D
 - If an ordinary incremental delete plan sees multiple deleted avatars, active filters, bulk edit mode, bogus-folder drilldown, pending prints, a missing before-delete key, or a still-present after-delete key, it returns a fallback reason.
 - If a bulk-delete page plan sees no successful deleted avatars, active filters, bogus-folder drilldown, pending prints, or missing after-delete entity data, it returns a fallback reason.
 - If an ordinary single-delete plan would clamp the page away from the mounted page, the UI falls back to full refresh; bulk-delete page planning may clamp to the last valid page by design.
+- If selected-character navigation points at a removed active row, the title click falls back to the character library instead of opening the editor; when menu switching is disabled, the guard returns without side effects.
 - If an edit response has no valid avatar key, refresh is skipped.
 - If local state is stale in the opposite direction and still contains the avatar, `shouldRefreshAfterEdit()` returns `true`; server/file authority is still handled by `getOneCharacter()` and the character APIs.
 - If the bulk delete button or selected-count element is absent, the state helpers return without throwing so partially mounted controls can degrade safely.
 - If the character-list container is absent, visible bulk-selection synchronization returns `0` and leaves the selection model untouched.
-- If a visible row has no checkbox, the row class and `aria-selected` state are still synchronized; checkbox state is skipped for that row.
+- If a visible row has no checkbox, the row class plus row `aria-selected` and `aria-checked` states are still synchronized; checkbox state is skipped for that row.

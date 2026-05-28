@@ -1264,6 +1264,7 @@ export async function printCharacters(fullRefresh = false) {
             fallbackTotal: entitySnapshot.total,
         });
     };
+    let pendingInitialFullRefresh = fullRefresh;
     $('#rm_print_characters_pagination').pagination({
         dataSource: entities,
         pageSize,
@@ -1285,7 +1286,9 @@ export async function printCharacters(fullRefresh = false) {
             if (suppressStaleReprint && shouldSuppressCharacterDeleteListReprint(deleteReconcileGenerationAtStart)) {
                 return;
             }
-            await renderCharacterListPage(data, { fullRefresh });
+            const useFullRefresh = pendingInitialFullRefresh;
+            pendingInitialFullRefresh = false;
+            await renderCharacterListPage(data, { fullRefresh: useFullRefresh });
         },
         beforeSizeSelectorChange: function (_e, size) {
             pageSize = Number(size) || per_page_default;
