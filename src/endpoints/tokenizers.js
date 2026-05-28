@@ -30,6 +30,8 @@ const tokenizersCache = {};
 const BYTES_PER_TOKEN = 3.35;
 const IS_DOWNLOAD_ALLOWED = getConfigValue('enableDownloadableTokenizers', true, 'boolean');
 const gunzip = promisify(zlib.gunzip);
+const REMOTE_TOKENIZER_BASE_URL = 'https://cdn.jsdelivr.net/gh/SillyTavern/SillyTavern@release/src/tokenizers';
+const REMOTE_EXTRA_TOKENIZER_BASE_URL = 'https://cdn.jsdelivr.net/gh/SillyTavern/SillyTavern-Tokenizers@main';
 
 /**
  * Guesstimates the token count for a string.
@@ -220,19 +222,19 @@ class WebTokenizer {
 }
 
 const spp_llama = new SentencePieceTokenizer('src/tokenizers/llama.model');
-const spp_nerd = new SentencePieceTokenizer('src/tokenizers/nerdstash.model');
-const spp_nerd_v2 = new SentencePieceTokenizer('src/tokenizers/nerdstash_v2.model');
-const spp_mistral = new SentencePieceTokenizer('src/tokenizers/mistral.model');
-const spp_yi = new SentencePieceTokenizer('src/tokenizers/yi.model');
-const spp_gemma = new SentencePieceTokenizer('src/tokenizers/gemma.model');
-const spp_jamba = new SentencePieceTokenizer('src/tokenizers/jamba.model');
+const spp_nerd = new SentencePieceTokenizer(`${REMOTE_TOKENIZER_BASE_URL}/nerdstash.model`);
+const spp_nerd_v2 = new SentencePieceTokenizer(`${REMOTE_TOKENIZER_BASE_URL}/nerdstash_v2.model`);
+const spp_mistral = new SentencePieceTokenizer(`${REMOTE_TOKENIZER_BASE_URL}/mistral.model`);
+const spp_yi = new SentencePieceTokenizer(`${REMOTE_TOKENIZER_BASE_URL}/yi.model`);
+const spp_gemma = new SentencePieceTokenizer(`${REMOTE_TOKENIZER_BASE_URL}/gemma.model`);
+const spp_jamba = new SentencePieceTokenizer(`${REMOTE_TOKENIZER_BASE_URL}/jamba.model`);
 const claude_tokenizer = new WebTokenizer('src/tokenizers/claude.json');
-const llama3_tokenizer = new WebTokenizer('src/tokenizers/llama3.json');
-const commandRTokenizer = new WebTokenizer('https://github.com/SillyTavern/SillyTavern-Tokenizers/raw/main/command-r.json.gz', 'src/tokenizers/llama3.json');
-const commandATokenizer = new WebTokenizer('https://github.com/SillyTavern/SillyTavern-Tokenizers/raw/main/command-a.json.gz', 'src/tokenizers/llama3.json');
-const qwen2Tokenizer = new WebTokenizer('https://github.com/SillyTavern/SillyTavern-Tokenizers/raw/main/qwen2.json.gz', 'src/tokenizers/llama3.json');
-const nemoTokenizer = new WebTokenizer('https://github.com/SillyTavern/SillyTavern-Tokenizers/raw/main/nemo.json.gz', 'src/tokenizers/llama3.json');
-const deepseekTokenizer = new WebTokenizer('https://github.com/SillyTavern/SillyTavern-Tokenizers/raw/main/deepseek.json.gz', 'src/tokenizers/llama3.json');
+const llama3_tokenizer = new WebTokenizer(`${REMOTE_TOKENIZER_BASE_URL}/llama3.json`);
+const commandRTokenizer = new WebTokenizer(`${REMOTE_EXTRA_TOKENIZER_BASE_URL}/command-r.json.gz`, `${REMOTE_TOKENIZER_BASE_URL}/llama3.json`);
+const commandATokenizer = new WebTokenizer(`${REMOTE_EXTRA_TOKENIZER_BASE_URL}/command-a.json.gz`, `${REMOTE_TOKENIZER_BASE_URL}/llama3.json`);
+const qwen2Tokenizer = new WebTokenizer(`${REMOTE_EXTRA_TOKENIZER_BASE_URL}/qwen2.json.gz`, `${REMOTE_TOKENIZER_BASE_URL}/llama3.json`);
+const nemoTokenizer = new WebTokenizer(`${REMOTE_EXTRA_TOKENIZER_BASE_URL}/nemo.json.gz`, `${REMOTE_TOKENIZER_BASE_URL}/llama3.json`);
+const deepseekTokenizer = new WebTokenizer(`${REMOTE_EXTRA_TOKENIZER_BASE_URL}/deepseek.json.gz`, `${REMOTE_TOKENIZER_BASE_URL}/llama3.json`);
 
 export const sentencepieceTokenizers = [
     'llama',

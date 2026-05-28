@@ -1154,7 +1154,7 @@
     "Each article will be saved as a separate file.": "لا ينصح. سيتم حفظ كل مقالة كملف منفصل.",
     "Data Bank": "بنك المعلومات",
     "These files will be available for extensions that support attachments (e.g. Vector Storage).": "ستكون هذه الملفات متاحة للملحقات التي تدعم المرفقات (مثل تخزين المتجهات).",
-    "Supported file types: Plain Text, PDF, Markdown, HTML, EPUB.": "أنواع الملفات المدعومة: نص عادي، PDF، Markdown، HTML، EPUB.",
+    "Supported file types: Plain Text, Markdown, HTML.": "أنواع الملفات المدعومة: نص عادي، Markdown، HTML.",
     "Drag and drop files here to upload.": "قم بسحب وإسقاط الملفات هنا للتحميل.",
     "Date (Newest First)": "التاريخ (الأحدث أولاً)",
     "Date (Oldest First)": "التاريخ (الأقدم أولاً)",

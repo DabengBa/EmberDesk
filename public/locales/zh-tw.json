@@ -1152,7 +1152,7 @@
     "Each article will be saved as a separate file.": "每篇文章將另存為一個檔案。",
     "Data Bank": "資料庫",
     "These files will be available for extensions that support attachments (e.g. Vector Storage).": "這些檔案將可用於支援附件的擴充功能（例如向量儲存）。",
-    "Supported file types: Plain Text, PDF, Markdown, HTML, EPUB.": "支援的檔案類型：純文字，PDF，Markdown，HTML，EPUB。",
+    "Supported file types: Plain Text, Markdown, HTML.": "支援的檔案類型：純文字、Markdown、HTML。",
     "Drag and drop files here to upload.": "拖放檔案至此即可上傳。",
     "Date (Newest First)": "日期（最新優先）",
     "Date (Oldest First)": "日期（最舊優先）",

@@ -1154,7 +1154,7 @@
     "Each article will be saved as a separate file.": "推奨されません。各記事は個別のファイルとして保存されます。",
     "Data Bank": "データバンク",
     "These files will be available for extensions that support attachments (e.g. Vector Storage).": "これらのファイルは、添付ファイルをサポートする拡張機能 (Vector Storage など) で使用できます。",
-    "Supported file types: Plain Text, PDF, Markdown, HTML, EPUB.": "サポートされているファイルの種類: プレーンテキスト、PDF、Markdown、HTML、EPUB。",
+    "Supported file types: Plain Text, Markdown, HTML.": "サポートされているファイルの種類: プレーンテキスト、Markdown、HTML。",
     "Drag and drop files here to upload.": "アップロードするには、ファイルをここにドラッグ アンド ドロップします。",
     "Date (Newest First)": "日付（新しい順）",
     "Date (Oldest First)": "日付（古い順）",

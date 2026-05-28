@@ -241,7 +241,6 @@ export const extension_settings = {
     character_allowed_regex: [],
     /** @type {Record<string, string[]>} */
     preset_allowed_regex: {},
-    tts: {},
     sd: {
         prompts: {},
         character_prompts: {},

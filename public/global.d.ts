@@ -167,8 +167,6 @@ declare global {
         ai: any;
     }
 
-    var pdfjsLib;
-    var ePub;
     var quickReplyApi: QuickReplyApi;
 
     var SillyTavern: {

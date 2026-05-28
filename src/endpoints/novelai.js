@@ -1,11 +1,10 @@
 import util from 'node:util';
-import { Buffer } from 'node:buffer';
 
 import fetch from 'node-fetch';
 import express from 'express';
 
 import { readSecret, SECRET_KEYS } from './secrets.js';
-import { readAllChunks, extractFileFromZipBuffer, forwardFetchResponse } from '../util.js';
+import { extractFileFromZipBuffer, forwardFetchResponse } from '../util.js';
 
 const API_NOVELAI = 'https://api.novelai.net';
 const TEXT_NOVELAI = 'https://text.novelai.net';
@@ -433,47 +432,6 @@ router.post('/generate-image', async (request, response) => {
             console.warn('NovelAI generated an image, but upscaling failed. Returning original image.', error);
             return response.send(originalBase64);
         }
-    } catch (error) {
-        console.error(error);
-        return response.sendStatus(500);
-    }
-});
-
-router.post('/generate-voice', async (request, response) => {
-    const token = readSecret(request.user.directories, SECRET_KEYS.NOVEL);
-
-    if (!token) {
-        console.error('NovelAI Access Token is missing.');
-        return response.sendStatus(400);
-    }
-
-    const text = request.body.text;
-    const voice = request.body.voice;
-
-    if (!text || !voice) {
-        return response.sendStatus(400);
-    }
-
-    try {
-        const url = `${API_NOVELAI}/ai/generate-voice?text=${encodeURIComponent(text)}&voice=-1&seed=${encodeURIComponent(voice)}&opus=false&version=v2`;
-        const result = await fetch(url, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Accept': 'audio/mpeg',
-            },
-        });
-
-        if (!result.ok) {
-            const errorText = await result.text();
-            console.error('NovelAI returned an error.', result.statusText, errorText);
-            return response.sendStatus(500);
-        }
-
-        const chunks = await readAllChunks(result.body);
-        const buffer = Buffer.concat(chunks.map(chunk => new Uint8Array(chunk)));
-        response.setHeader('Content-Type', 'audio/mpeg');
-        return response.send(buffer);
     } catch (error) {
         console.error(error);
         return response.sendStatus(500);

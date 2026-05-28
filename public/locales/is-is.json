@@ -1152,7 +1152,7 @@
     "Each article will be saved as a separate file.": "Ekki mælt með. Hver grein verður vistuð sem sér skrá.",
     "Data Bank": "Gagnabanki",
     "These files will be available for extensions that support attachments (e.g. Vector Storage).": "Þessar skrár verða tiltækar fyrir viðbætur sem styðja viðhengi (t.d. Vector Storage).",
-    "Supported file types: Plain Text, PDF, Markdown, HTML, EPUB.": "Stuðlar skráargerðir: Venjulegur texti, PDF, Markdown, HTML, EPUB.",
+    "Supported file types: Plain Text, Markdown, HTML.": "Stuðlar skráargerðir: Venjulegur texti, Markdown, HTML.",
     "Drag and drop files here to upload.": "Dragðu og slepptu skrám hingað til að hlaða upp.",
     "Date (Newest First)": "Dagsetning (nýjast fyrst)",
     "Date (Oldest First)": "Dagsetning (elst fyrst)",

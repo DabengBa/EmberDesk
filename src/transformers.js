@@ -41,12 +41,6 @@ const tasks = {
         configField: 'extensions.models.speechToText',
         quantized: true,
     },
-    'text-to-speech': {
-        defaultModel: 'Xenova/speecht5_tts',
-        pipeline: null,
-        configField: 'extensions.models.textToSpeech',
-        quantized: false,
-    },
 };
 
 /**

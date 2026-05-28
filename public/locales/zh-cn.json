@@ -1833,7 +1833,7 @@
     "View global, character, or data files.": "查看全局、角色或数据文件。",
     "Open Data Bank": "打开数据库",
     "These files will be available for extensions that support attachments (e.g. Vector Storage).": "这些文件将可用于支持附件的扩展（如向量存储）。",
-    "Supported file types: Plain Text, PDF, Markdown, HTML, EPUB.": "支持的文件类型：纯文本、PDF、Markdown、HTML、EPUB。",
+    "Supported file types: Plain Text, Markdown, HTML.": "支持的文件类型：纯文本、Markdown、HTML。",
     "Drag and drop files here to upload.": "将文件拖放到此处进行上传。",
     "Date (Newest First)": "日期（最新在先）",
     "Date (Oldest First)": "日期（最老在先）",

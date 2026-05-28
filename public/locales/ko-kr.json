@@ -1170,7 +1170,7 @@
     "Each article will be saved as a separate file.": "권장되지 않습니다. 각 기사는 별도의 파일로 저장됩니다.",
     "Data Bank": "데이터 저장소",
     "These files will be available for extensions that support attachments (e.g. Vector Storage).": "이러한 파일은 첨부 파일을 지원하는 확장 프로그램(예: 벡터 저장소)에 사용할 수 있습니다.",
-    "Supported file types: Plain Text, PDF, Markdown, HTML, EPUB.": "지원되는 파일 유형: 일반 텍스트, PDF, Markdown, HTML, EPUB.",
+    "Supported file types: Plain Text, Markdown, HTML.": "지원되는 파일 유형: 일반 텍스트, Markdown, HTML.",
     "Drag and drop files here to upload.": "여기에 파일을 끌어다 놓아 업로드하세요.",
     "Date (Newest First)": "날짜(최신순)",
     "Date (Oldest First)": "날짜(오래된 것부터)",

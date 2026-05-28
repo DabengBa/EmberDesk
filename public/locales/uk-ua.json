@@ -1152,7 +1152,7 @@
     "Each article will be saved as a separate file.": "Не рекомендовано. Кожна стаття буде збережена як окремий файл.",
     "Data Bank": "Банк даних",
     "These files will be available for extensions that support attachments (e.g. Vector Storage).": "Ці файли будуть доступні для розширень, які підтримують вкладення (наприклад, Vector Storage).",
-    "Supported file types: Plain Text, PDF, Markdown, HTML, EPUB.": "Підтримувані типи файлів: звичайний текст, PDF, Markdown, HTML, EPUB.",
+    "Supported file types: Plain Text, Markdown, HTML.": "Підтримувані типи файлів: звичайний текст, Markdown, HTML.",
     "Drag and drop files here to upload.": "Перетягніть файли сюди, щоб завантажити.",
     "Date (Newest First)": "Дата (Спочатку найновіші)",
     "Date (Oldest First)": "Дата (спочатку найдавніші)",

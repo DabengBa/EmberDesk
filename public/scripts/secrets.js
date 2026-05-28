@@ -1,4 +1,4 @@
-import { DOMPurify, moment, sha256 } from '../lib.js';
+import { moment, sha256 } from '../lib.js';
 import { event_types, eventSource, getRequestHeaders, saveSettings } from '../script.js';
 import { t } from './i18n.js';
 import { chat_completion_sources } from './openai.js';
@@ -47,12 +47,10 @@ export const SECRET_KEYS = {
     COHERE: 'api_key_cohere',
     PERPLEXITY: 'api_key_perplexity',
     GROQ: 'api_key_groq',
-    AZURE_TTS: 'api_key_azure_tts',
     AZURE_OPENAI: 'api_key_azure_openai',
     FEATHERLESS: 'api_key_featherless',
     HUGGINGFACE: 'api_key_huggingface',
     STABILITY: 'api_key_stability',
-    CUSTOM_OPENAI_TTS: 'api_key_custom_openai_tts',
     CHUTES: 'api_key_chutes',
     ELECTRONHUB: 'api_key_electronhub',
     NANOGPT: 'api_key_nanogpt',
@@ -73,10 +71,7 @@ export const SECRET_KEYS = {
     COMETAPI: 'api_key_cometapi',
     ZAI: 'api_key_zai',
     SILICONFLOW: 'api_key_siliconflow',
-    ELEVENLABS: 'api_key_elevenlabs',
     POLLINATIONS: 'api_key_pollinations',
-    VOLCENGINE_APP_ID: 'volcengine_app_id',
-    VOLCENGINE_ACCESS_KEY: 'volcengine_access_key',
     WORKERS_AI: 'api_key_workers_ai',
 };
 
@@ -114,14 +109,12 @@ const FRIENDLY_NAMES = {
     [SECRET_KEYS.XAI]: 'xAI (Grok)',
     [SECRET_KEYS.VERTEXAI_SERVICE_ACCOUNT]: 'Google Vertex AI (Service Account)',
     [SECRET_KEYS.STABILITY]: 'Stability AI',
-    [SECRET_KEYS.CUSTOM_OPENAI_TTS]: 'Custom OpenAI TTS',
     [SECRET_KEYS.TAVILY]: 'Tavily',
     [SECRET_KEYS.BFL]: 'Black Forest Labs',
     [SECRET_KEYS.COMFY_RUNPOD]: 'ComfyUI RunPod',
     [SECRET_KEYS.SERPAPI]: 'SerpApi',
     [SECRET_KEYS.SERPER]: 'Serper',
     [SECRET_KEYS.FALAI]: 'FAL.AI',
-    [SECRET_KEYS.AZURE_TTS]: 'Azure TTS',
     [SECRET_KEYS.AIMLAPI]: 'AI/ML API',
     [SECRET_KEYS.FIREWORKS]: 'Fireworks AI',
     [SECRET_KEYS.DEEPL]: 'DeepL',
@@ -137,10 +130,7 @@ const FRIENDLY_NAMES = {
     [SECRET_KEYS.AZURE_OPENAI]: 'Azure OpenAI',
     [SECRET_KEYS.ZAI]: 'Z.AI',
     [SECRET_KEYS.SILICONFLOW]: 'SiliconFlow',
-    [SECRET_KEYS.ELEVENLABS]: 'ElevenLabs TTS',
     [SECRET_KEYS.POLLINATIONS]: 'Pollinations',
-    [SECRET_KEYS.VOLCENGINE_APP_ID]: 'Volcengine App ID',
-    [SECRET_KEYS.VOLCENGINE_ACCESS_KEY]: 'Volcengine Access Key',
     [SECRET_KEYS.WORKERS_AI]: 'Cloudflare Workers AI',
 };
 

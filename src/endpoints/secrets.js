@@ -39,11 +39,9 @@ export const SECRET_KEYS = {
     COHERE: 'api_key_cohere',
     PERPLEXITY: 'api_key_perplexity',
     GROQ: 'api_key_groq',
-    AZURE_TTS: 'api_key_azure_tts',
     FEATHERLESS: 'api_key_featherless',
     HUGGINGFACE: 'api_key_huggingface',
     STABILITY: 'api_key_stability',
-    CUSTOM_OPENAI_TTS: 'api_key_custom_openai_tts',
     TAVILY: 'api_key_tavily',
     CHUTES: 'api_key_chutes',
     ELECTRONHUB: 'api_key_electronhub',
@@ -65,10 +63,7 @@ export const SECRET_KEYS = {
     AZURE_OPENAI: 'api_key_azure_openai',
     ZAI: 'api_key_zai',
     SILICONFLOW: 'api_key_siliconflow',
-    ELEVENLABS: 'api_key_elevenlabs',
     POLLINATIONS: 'api_key_pollinations',
-    VOLCENGINE_APP_ID: 'volcengine_app_id',
-    VOLCENGINE_ACCESS_KEY: 'volcengine_access_key',
     WORKERS_AI: 'api_key_workers_ai',
 };
 

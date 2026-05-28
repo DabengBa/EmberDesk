@@ -1150,7 +1150,7 @@
     "Each article will be saved as a separate file.": "Niet aangeraden. Elk artikel wordt als apart bestand opgeslagen.",
     "Data Bank": "Data bank",
     "These files will be available for extensions that support attachments (e.g. Vector Storage).": "Deze bestanden zijn beschikbaar voor extensies die bijlagen ondersteunen (bijvoorbeeld Vector Storage).",
-    "Supported file types: Plain Text, PDF, Markdown, HTML, EPUB.": "Ondersteunde bestandstypen: platte tekst, PDF, Markdown, HTML, EPUB.",
+    "Supported file types: Plain Text, Markdown, HTML.": "Ondersteunde bestandstypen: platte tekst, Markdown, HTML.",
     "Drag and drop files here to upload.": "Sleep bestanden hierheen om ze te uploaden.",
     "Date (Newest First)": "Datum (Nieuwste eerst)",
     "Date (Oldest First)": "Datum (oudste eerst)",

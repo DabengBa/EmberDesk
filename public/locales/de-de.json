@@ -1154,7 +1154,7 @@
     "Each article will be saved as a separate file.": "Nicht empfohlen. Jeder Artikel wird als separate Datei gespeichert.",
     "Data Bank": "Datenbank",
     "These files will be available for extensions that support attachments (e.g. Vector Storage).": "Diese Dateien sind für Erweiterungen verfügbar, die Anhänge unterstützen (z. B. Vector Storage).",
-    "Supported file types: Plain Text, PDF, Markdown, HTML, EPUB.": "Unterstützte Dateitypen: Nur Text, PDF, Markdown, HTML, EPUB.",
+    "Supported file types: Plain Text, Markdown, HTML.": "Unterstützte Dateitypen: Nur Text, Markdown, HTML.",
     "Drag and drop files here to upload.": "Ziehen Sie Dateien hierher, um sie hochzuladen.",
     "Date (Newest First)": "Datum (Neueste zuerst)",
     "Date (Oldest First)": "Datum (Älteste zuerst)",

@@ -1152,7 +1152,7 @@
     "Each article will be saved as a separate file.": "Không được khuyến khích. Mỗi bài viết sẽ được lưu thành một file riêng biệt.",
     "Data Bank": "Dữ liệu ngân hàng",
     "These files will be available for extensions that support attachments (e.g. Vector Storage).": "Các tệp này sẽ có sẵn cho các tiện ích mở rộng hỗ trợ tệp đính kèm (ví dụ: Bộ lưu trữ Vector).",
-    "Supported file types: Plain Text, PDF, Markdown, HTML, EPUB.": "Các loại tệp được hỗ trợ: Văn bản thuần túy, PDF, Markdown, HTML, EPUB.",
+    "Supported file types: Plain Text, Markdown, HTML.": "Các loại tệp được hỗ trợ: Văn bản thuần túy, Markdown, HTML.",
     "Drag and drop files here to upload.": "Kéo và thả tập tin vào đây để tải lên.",
     "Date (Newest First)": "Ngày (Mới nhất đầu tiên)",
     "Date (Oldest First)": "Ngày (Cũ nhất đầu tiên)",
