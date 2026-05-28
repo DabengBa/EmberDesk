@@ -118,4 +118,4 @@ bun run --cwd tests test:unit -- third-party-extension-compatibility.test.js --r
 - MDN ARIA overview — https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA
 - jQuery Learning Center, Event Delegation — https://learn.jquery.com/events/event-delegation/
 - Playwright Locators — https://playwright.dev/docs/locators
-- Inference：角色列表后续 slice 应优先选择控件层，因为最近提交已稳定分页、搜索、网格和批量选择基础语义。
+- Inference：角色列表后续 slice 应优先选择控件层，因为 2026-05-25 至 2026-05-26 的提交已稳定分页、搜索、网格和批量选择基础语义。

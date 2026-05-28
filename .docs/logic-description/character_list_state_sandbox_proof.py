@@ -217,6 +217,53 @@ def create_character_delete_reconcile_plan(
     }
 
 
+def create_character_bulk_delete_page_plan(
+    after_snapshot,
+    deleted_avatars,
+    current_page,
+    page_size,
+    has_active_filter=False,
+    is_bogus_folder_open=False,
+    is_print_pending=False,
+):
+    def fallback(reason):
+        return {"mode": "fallback", "reason": reason}
+
+    if not isinstance(deleted_avatars, list) or len(deleted_avatars) == 0:
+        return fallback("no-deleted-avatars")
+    if has_active_filter:
+        return fallback("active-filter")
+    if is_bogus_folder_open:
+        return fallback("bogus-folder")
+    if is_print_pending:
+        return fallback("print-pending")
+    if after_snapshot is None or not isinstance(after_snapshot.get("entities"), list):
+        return fallback("missing-after-entity")
+    after_keys = after_snapshot.get("keys", [])
+    if len(set(after_keys)) != len(after_keys):
+        return fallback("duplicate-entity-key")
+
+    safe_page_size = page_size or 1
+    total_pages = max((after_snapshot.get("total", 0) + safe_page_size - 1) // safe_page_size, 1)
+    safe_current_page = min(max(current_page or 1, 1), total_pages)
+    page_start = (safe_current_page - 1) * safe_page_size
+    page_entities = after_snapshot["entities"][page_start : page_start + safe_page_size]
+
+    return {
+        "mode": "incremental",
+        "deletedKeys": [f"character:{avatar}" for avatar in deleted_avatars],
+        "pageEntities": page_entities,
+        "requiresIdentitySync": True,
+        "paginationLabel": get_character_list_pagination_range_label(
+            safe_current_page,
+            after_snapshot["total"],
+            safe_page_size,
+        ),
+        "currentPage": safe_current_page,
+        "pageSize": safe_page_size,
+    }
+
+
 def run_delete_character_close_preflight(is_generation_in_progress, calls):
     if is_generation_in_progress:
         calls.append("blocked")
@@ -543,6 +590,75 @@ def main():
         current_page=1,
         page_size=2,
     ) == {"mode": "fallback", "reason": "still-present-after-delete"}
+
+    bulk_after_snapshot = create_character_list_entity_snapshot(
+        [
+            {"type": "character", "id": 0, "item": {"avatar": "alpha.png"}},
+            {"type": "character", "id": 1, "item": {"avatar": "bravo.png"}},
+            {"type": "character", "id": 2, "item": {"avatar": "charlie.png"}},
+            {"type": "character", "id": 3, "item": {"avatar": "delta.png"}},
+            {"type": "character", "id": 4, "item": {"avatar": "echo.png"}},
+            {"type": "character", "id": 5, "item": {"avatar": "hotel.png"}},
+            {"type": "character", "id": 6, "item": {"avatar": "india.png"}},
+            {"type": "character", "id": 7, "item": {"avatar": "juliet.png"}},
+            {"type": "character", "id": 8, "item": {"avatar": "kilo.png"}},
+            {"type": "character", "id": 9, "item": {"avatar": "lima.png"}},
+        ]
+    )
+    bulk_plan = create_character_bulk_delete_page_plan(
+        bulk_after_snapshot,
+        ["foxtrot.png", "golf.png"],
+        current_page=2,
+        page_size=5,
+    )
+    assert bulk_plan["mode"] == "incremental"
+    assert bulk_plan["currentPage"] == 2
+    assert [entity["renderKey"] for entity in bulk_plan["pageEntities"]] == [
+        "character:hotel.png",
+        "character:india.png",
+        "character:juliet.png",
+        "character:kilo.png",
+        "character:lima.png",
+    ]
+    assert bulk_plan["paginationLabel"] == "6-10 / 10"
+
+    clamped_bulk_after_snapshot = create_character_list_entity_snapshot(
+        [
+            {"type": "character", "id": 0, "item": {"avatar": "alpha.png"}},
+            {"type": "character", "id": 1, "item": {"avatar": "bravo.png"}},
+            {"type": "character", "id": 2, "item": {"avatar": "charlie.png"}},
+            {"type": "character", "id": 3, "item": {"avatar": "delta.png"}},
+            {"type": "character", "id": 4, "item": {"avatar": "echo.png"}},
+            {"type": "character", "id": 5, "item": {"avatar": "foxtrot.png"}},
+            {"type": "character", "id": 6, "item": {"avatar": "golf.png"}},
+            {"type": "character", "id": 7, "item": {"avatar": "hotel.png"}},
+        ]
+    )
+    clamped_bulk_plan = create_character_bulk_delete_page_plan(
+        clamped_bulk_after_snapshot,
+        ["india.png", "juliet.png", "kilo.png"],
+        current_page=3,
+        page_size=5,
+    )
+    assert clamped_bulk_plan["currentPage"] == 2
+    assert [entity["renderKey"] for entity in clamped_bulk_plan["pageEntities"]] == [
+        "character:foxtrot.png",
+        "character:golf.png",
+        "character:hotel.png",
+    ]
+    assert clamped_bulk_plan["paginationLabel"] == "6-8 / 8"
+    assert create_character_bulk_delete_page_plan(
+        clamped_bulk_after_snapshot,
+        [],
+        current_page=1,
+        page_size=5,
+    ) == {"mode": "fallback", "reason": "no-deleted-avatars"}
+    assert create_character_bulk_delete_page_plan(
+        duplicate_snapshot,
+        ["bravo.png"],
+        current_page=1,
+        page_size=5,
+    ) == {"mode": "fallback", "reason": "duplicate-entity-key"}
 
     delete_button = FakeElement()
     fallback = FakeElement()

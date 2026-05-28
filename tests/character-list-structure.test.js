@@ -226,6 +226,7 @@ describe('character list structure', () => {
         const reconcileSource = extractFunctionSource(scriptSource, 'reconcileCharacterListAfterDelete');
 
         expect(scriptSource).toContain('createCharacterDeleteReconcilePlan');
+        expect(scriptSource).toContain('createCharacterBulkDeletePagePlan');
         expect(scriptSource).toContain('syncCharacterListRowIdentity');
         expect(scriptSource).toContain('let isCharacterDeleteReconcileInProgress = false;');
         expect(scriptSource).toContain('let characterDeleteReconcileGeneration = 0;');
@@ -235,15 +236,20 @@ describe('character list structure', () => {
         expect(scriptSource).toMatch(/if \(suppressStaleReprint && shouldSuppressCharacterDeleteListReprint\(deleteReconcileGenerationAtStart\)\) \{\s+return;\s+\}/);
         expect(scriptSource).toMatch(/callback: async function \(\/\*\* @type \{Entity\[\]\} \*\/ data\) \{\s+if \(suppressStaleReprint && shouldSuppressCharacterDeleteListReprint\(deleteReconcileGenerationAtStart\)\) \{\s+return;\s+\}/);
         const deleteCharacterSource = extractFunctionSource(scriptSource, 'deleteCharacter');
+        expect(deleteCharacterSource).toContain('deleteContext = null');
         expect(deleteCharacterSource.indexOf('isCharacterDeleteReconcileInProgress = true;')).toBeLessThan(deleteCharacterSource.indexOf('const closeChatResult = await closeCurrentChatForDelete();'));
-        expect(deleteCharacterSource.indexOf('isCharacterDeleteReconcileInProgress = false;')).toBeGreaterThan(deleteCharacterSource.indexOf('await removeCharacterFromUI(deletedAvatars);'));
+        expect(deleteCharacterSource.indexOf('isCharacterDeleteReconcileInProgress = false;')).toBeGreaterThan(deleteCharacterSource.indexOf('await removeCharacterFromUI(deletedAvatars, { deleteContext });'));
         expect(removeCharacterFromUISource).toContain('const beforeDeleteSnapshot = createCharacterListEntitySnapshot(getEntitiesList({ doFilter: true }));');
         expect(removeCharacterFromUISource).toContain('cancelDebounce(printCharactersDebounced);');
         expect(removeCharacterFromUISource).toContain('const reconciled = await reconcileCharacterListAfterDelete({');
+        expect(removeCharacterFromUISource).toContain('deleteContext,');
         expect(removeCharacterFromUISource).toMatch(/if \(!reconciled\) \{\s+const printCharactersStartedAt = performance\.now\(\);\s+await printCharacters\(true\);/);
         expect(reconcileSource).toContain('createCharacterDeleteReconcilePlan({');
-        expect(reconcileSource).toContain('hasActiveFilter: entitiesFilter.hasAnyFilter()');
-        expect(reconcileSource).toContain("isBulkEdit: $('#rm_print_characters_block').hasClass('bulk_select')");
+        expect(reconcileSource).toContain('createCharacterBulkDeletePagePlan({');
+        expect(reconcileSource).toContain("const isBulkDeleteContext = deleteContext?.source === 'bulk';");
+        expect(reconcileSource).toContain('const hasActiveFilter = entitiesFilter.hasAnyFilter();');
+        expect(reconcileSource).toContain("const isBulkEdit = $('#rm_print_characters_block').hasClass('bulk_select');");
+        expect(reconcileSource).toContain('isBulkEdit: isBulkEdit && !isBulkDeleteContext');
         expect(reconcileSource).toContain('applyCharacterListPageRenderPlan({');
         expect(reconcileSource).toContain('currentCharacterListPageEntities = plan.pageEntities;');
         expect(reconcileSource).toContain('updateCharacterListPaginationState(plan, afterSnapshot, { skipInitialCallback: true });');
@@ -292,6 +298,7 @@ describe('character list structure', () => {
         expect(overlaySource).toContain('this.state !== BulkEditOverlayState.select');
         expect(overlaySource).toContain('updateBulkSelectionCountState({ selectedCount, deleteButton, fallbackFocusElement }, count)');
         expect(overlaySource).toContain('t`Delete ${count} characters?`');
+        expect(overlaySource).toContain("deleteContext: { source: 'bulk', selectedCount: count }");
         expect(overlaySource).not.toContain('${t`Delete`} ${count} ${t`characters?`}');
         expect(stateSource).toContain('if (!selectedCount)');
         expect(stateSource).toContain('selectedCount.textContent = getBulkSelectionShortCountText(count);');

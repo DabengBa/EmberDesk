@@ -5,6 +5,7 @@ import {
     createCharacterListEntitySnapshot,
     createCharacterListPageReconcilePlan,
     createCharacterListPageRenderPlan,
+    createCharacterBulkDeletePagePlan,
     createCharacterDeleteReconcilePlan,
     getCharacterListEntityKey,
     getCharacterListPaginationRangeLabel,
@@ -267,6 +268,101 @@ describe('character list render state helpers', () => {
             pageSize: 2,
             isBogusFolderOpen: true,
         })).toMatchObject({ mode: 'fallback', reason: 'bogus-folder' });
+    });
+
+    test('plans bulk delete target pages from the after snapshot', () => {
+        const afterSecondPageDelete = createCharacterListEntitySnapshot([
+            characterEntity(0, 'alpha.png'),
+            characterEntity(1, 'bravo.png'),
+            characterEntity(2, 'charlie.png'),
+            characterEntity(3, 'delta.png'),
+            characterEntity(4, 'echo.png'),
+            characterEntity(5, 'hotel.png'),
+            characterEntity(6, 'india.png'),
+            characterEntity(7, 'juliet.png'),
+            characterEntity(8, 'kilo.png'),
+            characterEntity(9, 'lima.png'),
+        ]);
+
+        const secondPagePlan = createCharacterBulkDeletePagePlan({
+            afterSnapshot: afterSecondPageDelete,
+            deletedAvatars: ['foxtrot.png', 'golf.png'],
+            currentPage: 2,
+            pageSize: 5,
+        });
+
+        expect(secondPagePlan.mode).toBe('incremental');
+        expect(secondPagePlan.currentPage).toBe(2);
+        expect(secondPagePlan.pageEntities.map(entity => entity.item.avatar)).toEqual([
+            'hotel.png',
+            'india.png',
+            'juliet.png',
+            'kilo.png',
+            'lima.png',
+        ]);
+        expect(secondPagePlan.paginationLabel).toBe('6-10 / 10');
+
+        const afterLastPageDelete = createCharacterListEntitySnapshot([
+            characterEntity(0, 'alpha.png'),
+            characterEntity(1, 'bravo.png'),
+            characterEntity(2, 'charlie.png'),
+            characterEntity(3, 'delta.png'),
+            characterEntity(4, 'echo.png'),
+            characterEntity(5, 'foxtrot.png'),
+            characterEntity(6, 'golf.png'),
+            characterEntity(7, 'hotel.png'),
+        ]);
+
+        const clampedPlan = createCharacterBulkDeletePagePlan({
+            afterSnapshot: afterLastPageDelete,
+            deletedAvatars: ['india.png', 'juliet.png', 'kilo.png'],
+            currentPage: 3,
+            pageSize: 5,
+        });
+
+        expect(clampedPlan.mode).toBe('incremental');
+        expect(clampedPlan.currentPage).toBe(2);
+        expect(clampedPlan.pageEntities.map(entity => entity.item.avatar)).toEqual(['foxtrot.png', 'golf.png', 'hotel.png']);
+        expect(clampedPlan.paginationLabel).toBe('6-8 / 8');
+    });
+
+    test('falls back from bulk delete page planning for unsafe states', () => {
+        const afterSnapshot = createCharacterListEntitySnapshot([
+            characterEntity(0, 'alpha.png'),
+        ]);
+
+        expect(createCharacterBulkDeletePagePlan({
+            afterSnapshot,
+            deletedAvatars: [],
+            currentPage: 1,
+            pageSize: 5,
+        })).toMatchObject({ mode: 'fallback', reason: 'no-deleted-avatars' });
+
+        expect(createCharacterBulkDeletePagePlan({
+            afterSnapshot,
+            deletedAvatars: ['bravo.png'],
+            currentPage: 1,
+            pageSize: 5,
+            hasActiveFilter: true,
+        })).toMatchObject({ mode: 'fallback', reason: 'active-filter' });
+
+        expect(createCharacterBulkDeletePagePlan({
+            afterSnapshot,
+            deletedAvatars: ['bravo.png'],
+            currentPage: 1,
+            pageSize: 5,
+            isBogusFolderOpen: true,
+        })).toMatchObject({ mode: 'fallback', reason: 'bogus-folder' });
+
+        expect(createCharacterBulkDeletePagePlan({
+            afterSnapshot: createCharacterListEntitySnapshot([
+                characterEntity(0, 'alpha.png'),
+                characterEntity(1, 'alpha.png'),
+            ]),
+            deletedAvatars: ['bravo.png'],
+            currentPage: 1,
+            pageSize: 5,
+        })).toMatchObject({ mode: 'fallback', reason: 'duplicate-entity-key' });
     });
 
     test('syncs visible character row identity after deleting a middle row', () => {

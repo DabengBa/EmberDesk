@@ -999,6 +999,7 @@ class BulkEditOverlay {
                 deleteChats,
                 deleteWorlds: capturedCascade.deleteWorlds,
                 clearWorldReferences: capturedCascade.clearWorldReferences,
+                deleteContext: { source: 'bulk', selectedCount: count },
             });
             toastr.success(t`Deleted ${count} character(s)`);
         } finally {

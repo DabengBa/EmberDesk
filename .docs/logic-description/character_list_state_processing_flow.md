@@ -16,7 +16,7 @@
 
 Goals:
 
-- Document the current client-side rules for resolving character delete targets, ordinary current-page reconcile planning, delete-reconcile repaint suppression, incremental delete planning, edit-refresh eligibility, and bulk-selection UI state.
+- Document the current client-side rules for resolving character delete targets, ordinary current-page reconcile planning, delete-reconcile repaint suppression, incremental delete planning, bulk-delete page planning, edit-refresh eligibility, and bulk-selection UI state.
 - Make the "deleted card must not be refreshed by a stale edit response" rule reproducible without production code.
 - Record the mutation boundary for the in-memory `characters` array and the DOM synchronization boundary for visible bulk-selection plus ordinary-page and post-delete row updates.
 
@@ -67,6 +67,7 @@ The processing outputs are:
 - `deleteReprintSuppressionState`: whether a non-full character-list print is suppressed because a delete reconcile is active or because the print started before the latest reconcile generation.
 - `pageReconcilePlan`: either an incremental ordinary-page patch plan or a named full-render fallback reason.
 - `deleteReconcilePlan`: either an incremental current-page patch plan or a named full-refresh fallback reason.
+- `bulkDeletePagePlan`: either a page-preserving post-delete plan for one or more bulk-delete successes or a named fallback reason.
 - `shouldRefreshAfterEdit`: boolean decision controlling whether edit completion may call `getOneCharacter(avatar)`.
 - `bulkDeleteButtonState`: class, ARIA, tab order, and focus state for the bulk-delete action.
 - `bulkSelectionCountState`: compact visible count text plus full title and ARIA label for the selected-count status.
@@ -150,6 +151,23 @@ Full refreshes remain allowed because they are the explicit correctness fallback
 8. `public/script.js` accepts the incremental plan only when the plan page still equals the currently mounted page. If the page would clamp to another page, the UI uses the full-refresh fallback instead.
 9. Accepted incremental reconcile now feeds the shared page-update helper: it builds the current page render plan, reuses existing visible DOM nodes where possible, creates missing visible rows, removes stale children, appends desired children in order, then rewrites visible character row identity attributes.
 
+### Plan bulk-delete target page
+
+1. Accept one or more `deletedAvatars` entries; if none were deleted successfully, return fallback reason `no-deleted-avatars`.
+2. Return fallback for active search/tag filters, bogus-folder drilldown, or a pending list print.
+3. Require an after-delete entity snapshot; otherwise return fallback reason `missing-after-entity`.
+4. Compute `totalPages` from `afterSnapshot.total` and the active page size, with a minimum of `1`.
+5. Clamp the requested current page into the after-delete page range.
+6. Slice `afterSnapshot.entities` for the clamped target page.
+7. Return a plan containing:
+   - `deletedKeys`
+   - `pageEntities`
+   - `requiresIdentitySync: true`
+   - `paginationLabel`
+   - `currentPage`
+   - `pageSize`
+8. `public/script.js` uses this plan only when the delete context identifies a bulk-delete entry. Unlike ordinary single-delete reconcile, this path may accept a clamped page so deleting the last page moves the user to the last valid page instead of resetting to page 1.
+
 ### Decide whether edit completion may refresh
 
 1. Reject the submitted avatar when it is not a non-empty string.
@@ -198,6 +216,7 @@ Hidden rows that are not currently returned by the container remain selected in 
 - Non-full character-list prints and pagination callbacks that started before the latest completed delete reconcile are suppressed; explicit full-refresh fallback is not suppressed.
 - Ordinary current-page reconcile is available for safe sort/search/filter/pagination/page-size updates, but back-block renders, missing entity arrays, duplicate visible keys, or explicit `fullRefresh` requests keep the existing full-render path.
 - Ordinary incremental delete reconcile is limited to a single deleted avatar in an unfiltered, non-bulk, non-bogus-folder state with a stable current page.
+- Bulk-delete page planning supports one or more successful deleted avatars in an unfiltered, non-bogus-folder state and preserves the current page when possible, clamping only to the last valid page after deletion.
 - Incremental reconcile rewrites visible row identity after indexes shift, preserving the DOM contract for `data-chid`, legacy `chid`, and `CharID${chid}`.
 - Edit completion must not refresh a character that has already been removed locally.
 - `deleteCharacter()` cancels the pending debounced save before resolving delete candidates, so a queued edit submit cannot race the delete path.
@@ -283,7 +302,7 @@ Run:
 uv run python .docs/logic-description/character_list_state_sandbox_proof.py
 ```
 
-The proof script embeds fake character arrays, fake entity snapshots, and fake DOM elements. It verifies stable-id resolution, delete-candidate preservation, in-place removal, ordinary page-reconcile planning and fallback reasons, delete-reconcile suppression gates, incremental delete planning and fallback reasons, edit-refresh suppression after local deletion, compact selected-count text plus full ARIA labels, and visible-row synchronization from the bulk-selection model.
+The proof script embeds fake character arrays, fake entity snapshots, and fake DOM elements. It verifies stable-id resolution, delete-candidate preservation, in-place removal, ordinary page-reconcile planning and fallback reasons, delete-reconcile suppression gates, incremental delete planning and fallback reasons, bulk-delete page planning and fallback reasons, edit-refresh suppression after local deletion, compact selected-count text plus full ARIA labels, and visible-row synchronization from the bulk-selection model.
 
 ## Boundaries And Failure Modes
 
@@ -292,8 +311,9 @@ The proof script embeds fake character arrays, fake entity snapshots, and fake D
 - If generation is in progress, delete preflight returns without running destructive cleanup.
 - If a non-full character-list print starts during delete reconcile or before the latest reconcile generation completes, it returns without rendering; callers that require correctness must request full refresh.
 - If an ordinary current-page reconcile sees a back block, missing entity data, or duplicate visible keys, it returns a fallback reason and the UI uses the existing full render path instead.
-- If an incremental delete plan sees multiple deleted avatars, active filters, bulk edit mode, bogus-folder drilldown, pending prints, a missing before-delete key, or a still-present after-delete key, it returns a fallback reason.
-- If an accepted plan would clamp the page away from the mounted page, the UI falls back to full refresh.
+- If an ordinary incremental delete plan sees multiple deleted avatars, active filters, bulk edit mode, bogus-folder drilldown, pending prints, a missing before-delete key, or a still-present after-delete key, it returns a fallback reason.
+- If a bulk-delete page plan sees no successful deleted avatars, active filters, bogus-folder drilldown, pending prints, or missing after-delete entity data, it returns a fallback reason.
+- If an ordinary single-delete plan would clamp the page away from the mounted page, the UI falls back to full refresh; bulk-delete page planning may clamp to the last valid page by design.
 - If an edit response has no valid avatar key, refresh is skipped.
 - If local state is stale in the opposite direction and still contains the avatar, `shouldRefreshAfterEdit()` returns `true`; server/file authority is still handled by `getOneCharacter()` and the character APIs.
 - If the bulk delete button or selected-count element is absent, the state helpers return without throwing so partially mounted controls can degrade safely.

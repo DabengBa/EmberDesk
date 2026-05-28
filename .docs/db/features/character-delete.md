@@ -57,8 +57,9 @@ This feature lets a user remove unwanted characters and immediately see the work
    - A "Delete All" button that selects all world info checkboxes in one action
 6. The user confirms deletion (or cancels).
 7. EmberDesk closes the current chat, deletes all selected characters with their chosen options, and removes selected world info files. If generation is active, deletion is blocked until the user stops generation.
-8. A success toast ("Deleted N character(s)") confirms the result.
-9. The workspace refreshes related context such as groups and the character library.
+8. The character library keeps the user's pagination context when the post-delete page can be safely computed: the same page stays visible when it still exists, or the library moves to the last valid page after the delete.
+9. A success toast ("Deleted N character(s)") confirms the result.
+10. The workspace refreshes related context such as groups and the character library.
 
 ## Business Rules And Boundaries
 
@@ -66,7 +67,8 @@ This feature lets a user remove unwanted characters and immediately see the work
 - The selected-character delete affordance must remain directly discoverable and keyboard/screen-reader reachable; the menu option is a compatibility entry, not the only visible path.
 - Both single and batch delete use a unified confirmation dialog — no separate cascading popups.
 - The success path should update the visible library immediately.
-- Ordinary single-character deletion in the unfiltered library uses an incremental visible-list reconcile when the current page can be safely computed. Search/tag filters, bogus-folder drilldown, bulk edit mode, multi-delete, in-flight printing, and ambiguous entity changes keep the existing full-refresh fallback.
+- Ordinary single-character deletion in the unfiltered library uses an incremental visible-list reconcile when the current page can be safely computed. Search/tag filters, bogus-folder drilldown, in-flight printing, and ambiguous entity changes keep the existing full-refresh fallback.
+- Bulk delete in the unfiltered library keeps pagination context after one or more successful deletions when the target page can be computed from the after-delete snapshot. The target is the original page when it still exists, otherwise the last valid page.
 - When that safe single-delete path succeeds, it uses the same current-page update rules as ordinary library browsing so pagination text, row identity hooks, and bulk-edit selectors stay aligned instead of splitting into a delete-only special case.
 - During ordinary single-character deletion, early chat-closing and menu-switch side effects are suppressed from repainting the character library before the incremental reconcile can remove the affected row.
 - Once deletion starts, pending delayed character saves are cancelled so a stale edit-submit cannot race the delete and restore a removed row.

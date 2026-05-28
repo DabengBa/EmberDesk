@@ -249,6 +249,7 @@ import { canJumpToSwipeForMessage, canOpenSwipePickerForMessage, initSwipePicker
 import { getCharacterDeleteCandidates, removeCharactersFromState, shouldRefreshCharacterAfterEdit } from './scripts/character-list-state.js';
 import {
     CHARACTER_LIST_PAGE_SIZE_OPTIONS,
+    createCharacterBulkDeletePagePlan,
     createCharacterDeleteReconcilePlan,
     createCharacterListEntitySnapshot,
     createCharacterListPageReconcilePlan,
@@ -1538,7 +1539,7 @@ function updateCharacterListPaginationState(plan, afterSnapshot, { skipInitialCa
 }
 
 async function reconcileCharacterListAfterDelete(options) {
-    const { beforeSnapshot, deletedAvatars } = options;
+    const { beforeSnapshot, deletedAvatars, deleteContext = null } = options;
 
     try {
         const listElement = document.getElementById('rm_print_characters_block');
@@ -1549,22 +1550,36 @@ async function reconcileCharacterListAfterDelete(options) {
         const currentPage = getCharacterListCurrentPage();
         const pageSize = getCharacterListCurrentPageSize();
         const afterSnapshot = createCharacterListEntitySnapshot(getEntitiesList({ doFilter: true }));
-        const plan = createCharacterDeleteReconcilePlan({
-            beforeSnapshot,
-            afterSnapshot,
-            deletedAvatars,
-            currentPage,
-            pageSize,
-            hasActiveFilter: entitiesFilter.hasAnyFilter(),
-            isBulkEdit: $('#rm_print_characters_block').hasClass('bulk_select'),
-            isBogusFolderOpen: power_user.bogus_folders && isBogusFolderOpen(),
-            isPrintPending: false,
-        });
+        const hasActiveFilter = entitiesFilter.hasAnyFilter();
+        const isBulkEdit = $('#rm_print_characters_block').hasClass('bulk_select');
+        const isBulkDeleteContext = deleteContext?.source === 'bulk';
+        const isBogusFolderOpenNow = power_user.bogus_folders && isBogusFolderOpen();
+        const plan = isBulkDeleteContext
+            ? createCharacterBulkDeletePagePlan({
+                afterSnapshot,
+                deletedAvatars,
+                currentPage,
+                pageSize,
+                hasActiveFilter,
+                isBogusFolderOpen: isBogusFolderOpenNow,
+                isPrintPending: false,
+            })
+            : createCharacterDeleteReconcilePlan({
+                beforeSnapshot,
+                afterSnapshot,
+                deletedAvatars,
+                currentPage,
+                pageSize,
+                hasActiveFilter,
+                isBulkEdit: isBulkEdit && !isBulkDeleteContext,
+                isBogusFolderOpen: isBogusFolderOpenNow,
+                isPrintPending: false,
+            });
 
         if (plan.mode !== 'incremental') {
             return false;
         }
-        if (Number(plan.currentPage) !== Number(currentPage)) {
+        if (!isBulkDeleteContext && Number(plan.currentPage) !== Number(currentPage)) {
             return false;
         }
 
@@ -1573,7 +1588,7 @@ async function reconcileCharacterListAfterDelete(options) {
             includeBackBlock: false,
             totalCharacters: characters.length,
             totalGroups: groups.length,
-            hasActiveFilter: entitiesFilter.hasAnyFilter(),
+            hasActiveFilter,
         });
         const beforePageEntities = getCharacterListPageEntities(beforeSnapshot, currentPage, pageSize);
         const reconciled = await applyCharacterListPageRenderPlan({
@@ -11102,7 +11117,7 @@ export async function handleDeleteCharacter(this_chid, delete_chats) {
  * @param {boolean} [options.clearWorldReferences] - Whether to clear world references in remaining characters
  * @return {Promise<boolean>} - A promise that resolves when the character is successfully deleted
  */
-export async function deleteCharacter(characterKey, { deleteChats = true, deleteWorlds, clearWorldReferences } = {}) {
+export async function deleteCharacter(characterKey, { deleteChats = true, deleteWorlds, clearWorldReferences, deleteContext = null } = {}) {
     const deleteFlowStartedAt = performance.now();
     cancelDebounce(saveCharacterDebounced);
     if (!Array.isArray(characterKey)) {
@@ -11217,7 +11232,7 @@ export async function deleteCharacter(characterKey, { deleteChats = true, delete
             }
         }
 
-        await removeCharacterFromUI(deletedAvatars);
+        await removeCharacterFromUI(deletedAvatars, { deleteContext });
         markPerfInteractionMetric('deleteFlowMs', performance.now() - deleteFlowStartedAt);
         return deleted;
     } finally {
@@ -11233,7 +11248,7 @@ export async function deleteCharacter(characterKey, { deleteChats = true, delete
  * panel, removing deleted characters from the in-memory list, refreshing groups, and reprinting the list.
  * It also ensures to save the settings after all the operations.
  */
-async function removeCharacterFromUI(deletedAvatars = []) {
+async function removeCharacterFromUI(deletedAvatars = [], { deleteContext = null } = {}) {
     const refreshStartedAt = performance.now();
     const beforeDeleteSnapshot = createCharacterListEntitySnapshot(getEntitiesList({ doFilter: true }));
     cancelDebounce(printCharactersDebounced);
@@ -11251,6 +11266,7 @@ async function removeCharacterFromUI(deletedAvatars = []) {
     const reconciled = await reconcileCharacterListAfterDelete({
         beforeSnapshot: beforeDeleteSnapshot,
         deletedAvatars,
+        deleteContext,
     });
     markPerfInteractionMetric('characterDeleteReconcileMs', performance.now() - reconcileStartedAt);
     if (!reconciled) {

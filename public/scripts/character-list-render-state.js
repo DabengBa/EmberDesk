@@ -255,6 +255,67 @@ export function createCharacterDeleteReconcilePlan({
 }
 
 /**
+ * Builds a page-preserving plan after one or more bulk-delete successes.
+ * @param {object} options
+ * @param {{entities: Array<object>, total: number, keys: string[]}} options.afterSnapshot
+ * @param {string[]} options.deletedAvatars
+ * @param {number} options.currentPage
+ * @param {number} options.pageSize
+ * @param {boolean} [options.hasActiveFilter]
+ * @param {boolean} [options.isBogusFolderOpen]
+ * @param {boolean} [options.isPrintPending]
+ * @returns {{mode: 'incremental', deletedKeys: string[], pageEntities: Array<object>, requiresIdentitySync: boolean, paginationLabel: string, currentPage: number, pageSize: number}|{mode: 'fallback', reason: string}}
+ */
+export function createCharacterBulkDeletePagePlan({
+    afterSnapshot,
+    deletedAvatars,
+    currentPage,
+    pageSize,
+    hasActiveFilter = false,
+    isBogusFolderOpen = false,
+    isPrintPending = false,
+}) {
+    if (!Array.isArray(deletedAvatars) || deletedAvatars.length === 0) {
+        return createCharacterDeleteFallback('no-deleted-avatars');
+    }
+    if (hasActiveFilter) {
+        return createCharacterDeleteFallback('active-filter');
+    }
+    if (isBogusFolderOpen) {
+        return createCharacterDeleteFallback('bogus-folder');
+    }
+    if (isPrintPending) {
+        return createCharacterDeleteFallback('print-pending');
+    }
+    if (!afterSnapshot || !Array.isArray(afterSnapshot.entities)) {
+        return createCharacterDeleteFallback('missing-after-entity');
+    }
+    if (hasDuplicateValues(Array.isArray(afterSnapshot.keys) ? afterSnapshot.keys : [])) {
+        return createCharacterDeleteFallback('duplicate-entity-key');
+    }
+
+    const safePageSize = Number(pageSize) || 1;
+    const totalPages = Math.max(Math.ceil((afterSnapshot.total ?? 0) / safePageSize), 1);
+    const safeCurrentPage = Math.min(Math.max(Number(currentPage) || 1, 1), totalPages);
+    const pageStart = (safeCurrentPage - 1) * safePageSize;
+    const pageEntities = afterSnapshot.entities.slice(pageStart, pageStart + safePageSize);
+
+    return {
+        mode: 'incremental',
+        deletedKeys: deletedAvatars.map(avatar => `character:${avatar}`),
+        pageEntities,
+        requiresIdentitySync: true,
+        paginationLabel: getCharacterListPaginationRangeLabel({
+            currentPage: safeCurrentPage,
+            totalNumber: afterSnapshot.total,
+            pageSize: safePageSize,
+        }),
+        currentPage: safeCurrentPage,
+        pageSize: safePageSize,
+    };
+}
+
+/**
  * Rewrites visible character row identity attributes after array indexes shift.
  * @param {ParentNode|null} container
  * @param {Array<object>} pageEntities
