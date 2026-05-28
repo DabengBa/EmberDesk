@@ -38,7 +38,13 @@ function readAttribute(element, name) {
 function createFakeCharacterRow(characterId) {
     const classes = new Set();
     const attributes = new Map([['data-chid', String(characterId)]]);
-    const checkbox = { checked: false };
+    const checkboxAttributes = new Map();
+    const checkbox = {
+        checked: false,
+        getAttribute: name => checkboxAttributes.get(name) ?? null,
+        setAttribute: (name, value) => checkboxAttributes.set(name, String(value)),
+        removeAttribute: name => checkboxAttributes.delete(name),
+    };
 
     return {
         checkbox,
@@ -176,13 +182,19 @@ describe('syncBulkSelectionDomState', () => {
         expect(visibleSelectedCount).toBe(2);
         expect(alpha.classList.contains('character_selected')).toBe(true);
         expect(readAttribute(alpha, 'aria-selected')).toBe('true');
+        expect(readAttribute(alpha, 'aria-checked')).toBe('true');
         expect(alpha.checkbox.checked).toBe(true);
+        expect(readAttribute(alpha.checkbox, 'aria-checked')).toBe('true');
         expect(beta.classList.contains('character_selected')).toBe(false);
         expect(readAttribute(beta, 'aria-selected')).toBe('false');
+        expect(readAttribute(beta, 'aria-checked')).toBe('false');
         expect(beta.checkbox.checked).toBe(false);
+        expect(readAttribute(beta.checkbox, 'aria-checked')).toBe('false');
         expect(gamma.classList.contains('character_selected')).toBe(true);
         expect(readAttribute(gamma, 'aria-selected')).toBe('true');
+        expect(readAttribute(gamma, 'aria-checked')).toBe('true');
         expect(gamma.checkbox.checked).toBe(true);
+        expect(readAttribute(gamma.checkbox, 'aria-checked')).toBe('true');
     });
 
     test('keeps hidden selected characters in the model while clearing unselected visible rows', () => {
@@ -198,8 +210,10 @@ describe('syncBulkSelectionDomState', () => {
         expect(visibleSelectedCount).toBe(0);
         expect(alpha.classList.contains('character_selected')).toBe(false);
         expect(readAttribute(alpha, 'aria-selected')).toBe('false');
+        expect(readAttribute(alpha, 'aria-checked')).toBe('false');
         expect(beta.classList.contains('character_selected')).toBe(false);
         expect(readAttribute(beta, 'aria-selected')).toBe('false');
+        expect(readAttribute(beta, 'aria-checked')).toBe('false');
     });
 
     test('restores visible selection by data-chid after rows move on the page', () => {
@@ -216,12 +230,18 @@ describe('syncBulkSelectionDomState', () => {
         expect(visibleSelectedCount).toBe(2);
         expect(gamma.classList.contains('character_selected')).toBe(true);
         expect(readAttribute(gamma, 'aria-selected')).toBe('true');
+        expect(readAttribute(gamma, 'aria-checked')).toBe('true');
         expect(gamma.checkbox.checked).toBe(true);
+        expect(readAttribute(gamma.checkbox, 'aria-checked')).toBe('true');
         expect(alpha.classList.contains('character_selected')).toBe(false);
         expect(readAttribute(alpha, 'aria-selected')).toBe('false');
+        expect(readAttribute(alpha, 'aria-checked')).toBe('false');
         expect(alpha.checkbox.checked).toBe(false);
+        expect(readAttribute(alpha.checkbox, 'aria-checked')).toBe('false');
         expect(beta.classList.contains('character_selected')).toBe(true);
         expect(readAttribute(beta, 'aria-selected')).toBe('true');
+        expect(readAttribute(beta, 'aria-checked')).toBe('true');
         expect(beta.checkbox.checked).toBe(true);
+        expect(readAttribute(beta.checkbox, 'aria-checked')).toBe('true');
     });
 });

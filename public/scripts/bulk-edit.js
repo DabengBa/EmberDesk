@@ -88,10 +88,14 @@ function enableBulkSelect() {
             return;
         }
         const checkbox = $('<input type=\'checkbox\' class=\'bulk_select_checkbox\' aria-label=\'Select character for bulk edit\'>');
+        checkbox.attr({ 'aria-checked': 'false', 'aria-describedby': 'bulkSelectionHint' });
         checkbox.on('change', () => {
             // Do something when the checkbox is changed
         });
+        $(el).attr('role', 'checkbox');
         $(el).attr('aria-selected', 'false');
+        $(el).attr('aria-checked', 'false');
+        $(el).attr('aria-describedby', 'bulkSelectionHint');
         $(el).prepend(checkbox);
     });
     $('#rm_print_characters_block.group_overlay_mode_select .bogus_folder_select, #rm_print_characters_block.group_overlay_mode_select .group_select')
@@ -109,7 +113,9 @@ function enableBulkSelect() {
  */
 function disableBulkSelect() {
     $('.bulk_select_checkbox').remove();
+    $('#rm_print_characters_block .character_select').removeAttr('role');
     $('#rm_print_characters_block .character_select').removeAttr('aria-selected');
+    $('#rm_print_characters_block .character_select').removeAttr('aria-checked aria-describedby');
     $('#rm_print_characters_block.group_overlay_mode_select .bogus_folder_select, #rm_print_characters_block.group_overlay_mode_select .group_select')
         .removeClass('disabled');
     $('#rm_print_characters_block').removeClass('bulk_select');

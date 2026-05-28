@@ -2981,6 +2981,23 @@ input[type="file"] {
     display: none;
 }
 
+#temporary_chat_status {
+    display: inline-flex;
+    width: fit-content;
+    margin-top: 2px;
+    padding: 1px 6px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 5px;
+    color: var(--SmartThemeEmColor);
+    font-size: calc(var(--mainFontSize) * 0.78);
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+#temporary_chat_status[hidden] {
+    display: none;
+}
+
 .selected-right-tab {
     filter: brightness(150%);
 }
@@ -3159,6 +3176,16 @@ input[type="file"] {
     font-size: calc(var(--mainFontSize) * 0.78);
     font-weight: 600;
     line-height: 1;
+    white-space: nowrap;
+}
+
+#bulkSelectionHint {
+    align-items: center;
+    min-height: calc(var(--mainFontSize) * 1.7);
+    padding: 3px 2px;
+    color: var(--SmartThemeBodyColor);
+    font-size: calc(var(--mainFontSize) * 0.72);
+    line-height: 1.1;
     white-space: nowrap;
 }
 

@@ -51,6 +51,8 @@ This feature lets users work with large character libraries without leaving the 
 - After a bulk delete in an unfiltered library, the panel preserves pagination context when the after-delete page can be computed: the original page remains visible if it still exists, otherwise the panel moves to the last valid page.
 - If the delete occurs in a complex browsing state such as active search/filtering, bogus-folder drilldown, ambiguous row identity, or an in-flight list print, the panel may fall back to the full list refresh path to preserve correctness.
 - The character-list toolbar is grouped for scanning as a compact control surface: creation/import/group and sort controls read first, while search, grid/list, bulk edit, selected count, select-all, and delete controls stay together as the follow-up action row.
+- When bulk-select mode is active, the toolbar exposes a short visible hint that character cards can be clicked to select them, so selection is not discoverable only through the checkbox or tooltip.
+- Character cards in bulk-select mode keep visual selected styling, the legacy `.bulk_select_checkbox` affordance, and accessible selected/checked state synchronized after clicks, sorting, filtering, and pagination redraws.
 - Bulk delete remains unavailable until at least one character is selected, even when the compact toolbar keeps the bulk status controls visible in the same operation context.
 - Ordinary character rows keep their Character type badge in the DOM for localization and compatibility, but it is visually quiet by default so users can scan names, avatars, and tags first.
 - Group rows continue to show their Group badge so mixed character/group lists remain distinguishable.

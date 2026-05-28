@@ -165,8 +165,10 @@ export function syncBulkSelectionDomState({
 
         character.classList.toggle(selectedClass, isSelected);
         character.setAttribute('aria-selected', String(isSelected));
+        character.setAttribute('aria-checked', String(isSelected));
         if (checkbox) {
             checkbox.checked = isSelected;
+            checkbox.setAttribute('aria-checked', String(isSelected));
         }
         if (isSelected) {
             visibleSelectedCount++;

@@ -42,6 +42,7 @@ This feature lets a user remove unwanted characters and immediately see the work
 7. EmberDesk removes the deleted character and deletes any selected world info files.
 8. EmberDesk removes the deleted row from the visible character library. For an ordinary unfiltered single-character delete, the current page is reconciled incrementally: the row disappears, the pagination range updates, and remaining visible character row identities are resynced without clearing the whole list.
 9. A success toast confirms the deletion.
+10. If the deleted character was the current selected character, the selected-character title area no longer reopens a stale editor for the removed card; the workspace stays in a safe empty or library state.
 
 ### Batch (Multi-Select) Deletion
 
@@ -66,6 +67,8 @@ This feature lets a user remove unwanted characters and immediately see the work
 - Deletion is destructive and must remain an explicit user-confirmed action.
 - The selected-character delete affordance must remain directly discoverable and keyboard/screen-reader reachable; the menu option is a compatibility entry, not the only visible path.
 - Both single and batch delete use a unified confirmation dialog — ordinary UI delete flows do not show a separate temporary-chat or world-info confirmation after the user confirms that dialog.
+- When deletion starts from a temporary chat, the temporary-chat loss warning appears inside that same unified confirmation dialog, and the workspace also exposes the temporary-chat state outside the dialog so users are not relying on the confirmation alone.
+- After deleting the active character, clicking the selected-character title area must not read or display stale deleted-card data.
 - The success path should update the visible library immediately.
 - Ordinary single-character deletion in the unfiltered library uses an incremental visible-list reconcile when the current page can be safely computed. Search/tag filters, bogus-folder drilldown, in-flight printing, and ambiguous entity changes keep the existing full-refresh fallback.
 - Bulk delete in the unfiltered library keeps pagination context after one or more successful deletions when the target page can be computed from the after-delete snapshot. The target is the original page when it still exists, otherwise the last valid page.
@@ -89,6 +92,6 @@ This feature exists separately from library browsing because destructive confirm
 
 ## Outcomes
 
-- **Success**: the deleted card(s) disappear from the visible library, any user-selected world info files are removed, and a success toast confirms the action. Ordinary single deletes should keep the visible library context stable while updating pagination and row identity; delayed edit/save responses for deleted cards should not make them reappear.
+- **Success**: the deleted card(s) disappear from the visible library, any user-selected world info files are removed, and a success toast confirms the action. Ordinary single deletes should keep the visible library context stable while updating pagination and row identity; delayed edit/save responses for deleted cards should not make them reappear, and active-character navigation should fall back safely when the active card was deleted.
 - **Cancel**: the dialog closes without side effects; the workspace and current chat remain unchanged.
 - **Failure**: EmberDesk should not pretend the row is gone if the delete action does not complete successfully. Individual character failures show a toastr warning and remaining characters continue processing.

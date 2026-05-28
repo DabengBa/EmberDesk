@@ -726,12 +726,20 @@ class BulkEditOverlay {
         if (select) {
             character.classList.add(BulkEditOverlay.selectedClass);
             character.setAttribute('aria-selected', 'true');
-            if (legacyBulkEditCheckbox) legacyBulkEditCheckbox.checked = true;
+            character.setAttribute('aria-checked', 'true');
+            if (legacyBulkEditCheckbox) {
+                legacyBulkEditCheckbox.checked = true;
+                legacyBulkEditCheckbox.setAttribute('aria-checked', 'true');
+            }
             this.#selectedCharacters.push(characterId);
         } else {
             character.classList.remove(BulkEditOverlay.selectedClass);
             character.setAttribute('aria-selected', 'false');
-            if (legacyBulkEditCheckbox) legacyBulkEditCheckbox.checked = false;
+            character.setAttribute('aria-checked', 'false');
+            if (legacyBulkEditCheckbox) {
+                legacyBulkEditCheckbox.checked = false;
+                legacyBulkEditCheckbox.setAttribute('aria-checked', 'false');
+            }
             this.#selectedCharacters = this.#selectedCharacters.filter(item => characterId !== item);
         }
 

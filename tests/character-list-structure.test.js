@@ -263,10 +263,20 @@ describe('character list structure', () => {
 
     test('keeps temporary-chat warning integrated into character delete confirmation', () => {
         const scriptSource = read('public/script.js');
+        const indexHtml = read('public/index.html');
+        const styleSource = read('public/style.css');
         const overlaySource = read('public/scripts/BulkEditOverlay.js');
         const cascadeDialogSource = read('public/scripts/world-cascade-dialog.js');
         const deleteCharacterSource = extractFunctionSource(scriptSource, 'deleteCharacter');
+        const newAssistantChatSource = extractFunctionSource(scriptSource, 'newAssistantChat');
 
+        expect(indexHtml).toContain('id="temporary_chat_status"');
+        expect(indexHtml).toContain('data-i18n="Temporary chat"');
+        expect(styleSource).toMatch(/#temporary_chat_status/);
+        expect(scriptSource).toContain('function setTemporaryChatStatus');
+        expect(scriptSource).toContain("$('#temporary_chat_status')");
+        expect(newAssistantChatSource).toContain('setTemporaryChatStatus(true)');
+        expect(newAssistantChatSource).toContain('setTemporaryChatStatus(false)');
         expect(deleteCharacterSource).toContain('temporaryChatAcknowledged = false');
         expect(deleteCharacterSource).toContain('if (inTempChat && !temporaryChatAcknowledged)');
         expect(scriptSource).toContain('buildTemporaryChatDeleteWarningHtml');
@@ -284,6 +294,18 @@ describe('character list structure', () => {
         expect(showDeleteConfirmWithCascadeSource).toContain('if (chatCb) chatCb.checked = true;');
         expect(showDeleteConfirmWithCascadeSource).toContain("document.querySelectorAll('.world-cascade-checkbox').forEach((cb) => { cb.checked = true; });");
     });
+
+    test('keeps selected-character navigation safe when the current character was deleted', () => {
+        const scriptSource = read('public/script.js');
+        const selectSelectedCharacterSource = extractFunctionSource(scriptSource, 'select_selected_character');
+
+        expect(selectSelectedCharacterSource).toContain('const character = characters[chid];');
+        expect(selectSelectedCharacterSource).toMatch(/if \(!character\) \{\s+if \(switchMenu\) \{\s+select_rm_characters\(\);\s+\}\s+return false;\s+\}/);
+        expect(selectSelectedCharacterSource).toContain("$('#rm_button_selected_ch').children('h2').text(character.name);");
+        expect(selectSelectedCharacterSource).not.toContain("$('#rm_button_selected_ch').children('h2').text(characters[chid].name);");
+        expect(scriptSource).toMatch(/if \(this_chid !== undefined && characters\[this_chid\]\) \{\s+selected_button = 'character_edit';\s+select_selected_character\(this_chid\);\s+\} else \{\s+selected_button = 'characters';\s+select_rm_characters\(\);\s+\}/);
+    });
+
     test('keeps the selected-character delete action directly discoverable and keyboard reachable', () => {
         const indexHtml = read('public/index.html');
 
@@ -303,6 +325,8 @@ describe('character list structure', () => {
         expect(indexHtml).toContain('id="character_search_status"');
         expect(indexHtml).toContain('data-i18n="Filtering characters…"');
         expect(indexHtml).toContain('aria-live="polite"');
+        expect(indexHtml).toContain('id="bulkSelectionHint"');
+        expect(indexHtml).toContain('data-i18n="Click character cards to select"');
         expect(indexHtml).toContain('data-i18n="Character Toolbar URL">URL</span>');
         expect(indexHtml).toContain('data-i18n="Character Toolbar Group">Group</span>');
         expect(indexHtml).toContain('data-i18n="Character Toolbar Bulk">Bulk</span>');
@@ -315,8 +339,13 @@ describe('character list structure', () => {
         expect(scriptSource).toContain("updateCharListGridToggleLabel()");
         expect(scriptSource).toContain("power_user.charListGrid ? 'Character Toolbar List' : 'Character Toolbar Grid'");
         expect(bulkEditSource).toMatch(/const checkbox = \$\('<input type=\\'checkbox\\' class=\\'bulk_select_checkbox\\' aria-label=\\'Select character for bulk edit\\'>'\);/);
+        expect(bulkEditSource).toContain("aria-describedby': 'bulkSelectionHint'");
+        expect(bulkEditSource).toContain("$(el).attr('role', 'checkbox')");
+        expect(bulkEditSource).toContain("$(el).attr('aria-checked', 'false')");
         expect(overlaySource).toContain("character.setAttribute('aria-selected', 'true')");
         expect(overlaySource).toContain("character.setAttribute('aria-selected', 'false')");
+        expect(overlaySource).toContain("character.setAttribute('aria-checked', 'true')");
+        expect(overlaySource).toContain("character.setAttribute('aria-checked', 'false')");
         expect(overlaySource).toContain('syncBulkSelectionDomState({');
         expect(overlaySource).toContain('this.state !== BulkEditOverlayState.select');
         expect(overlaySource).toContain('updateBulkSelectionCountState({ selectedCount, deleteButton, fallbackFocusElement }, count)');
@@ -328,7 +357,10 @@ describe('character list structure', () => {
         expect(stateSource).toContain("selectedCount.setAttribute('aria-label',");
         expect(stateSource).toContain('updateBulkDeleteButtonState(deleteButton, count > 0, fallbackFocusElement)');
         expect(stateSource).toContain('export function syncBulkSelectionDomState');
+        expect(stateSource).toContain("character.setAttribute('aria-checked', String(isSelected))");
+        expect(stateSource).toContain("checkbox.setAttribute('aria-checked', String(isSelected))");
         expect(styleSource).toMatch(/#character_search_status/);
+        expect(styleSource).toMatch(/#bulkSelectionHint/);
         expect(styleSource).toMatch(/#rm_print_characters_block \.character_select\.character_selected/);
         expect(styleSource).toMatch(/#rm_print_characters_block \.character_select\.character_selected::after/);
         expect(zhCnLocale).toContain('"Character Toolbar URL": "URL"');
@@ -338,6 +370,7 @@ describe('character list structure', () => {
         expect(zhCnLocale).toContain('"Character Toolbar Sort": "排"');
         expect(zhCnLocale).toContain('"Delete ${0} characters?": "删除 ${0} 个角色？"');
         expect(zhCnLocale).toContain('"Filtering characters…": "正在筛选角色…"');
+        expect(zhCnLocale).toContain('"Click character cards to select": "点击角色卡选择"');
     });
 
     test('keeps bulk selection mounted on generated character rows', () => {
@@ -347,14 +380,19 @@ describe('character list structure', () => {
 
         expect(enableBulkSelectSource).toMatch(/\$\(\'#rm_print_characters_block \.character_select\'\)\.each/);
         expect(enableBulkSelectSource).toMatch(/const checkbox = \$\('<input type=\\'checkbox\\' class=\\'bulk_select_checkbox\\' aria-label=\\'Select character for bulk edit\\'>'\);/);
+        expect(enableBulkSelectSource).toContain("$(el).attr('role', 'checkbox')");
         expect(enableBulkSelectSource).toContain("$(el).attr('aria-selected', 'false')");
+        expect(enableBulkSelectSource).toContain("$(el).attr('aria-checked', 'false')");
+        expect(enableBulkSelectSource).toContain("$(el).attr('aria-describedby', 'bulkSelectionHint')");
         expect(enableBulkSelectSource).toContain("$('#rm_print_characters_block').addClass('bulk_select')");
         expect(enableBulkSelectSource).toContain("$(document).off('click.bulkSelectCheckbox').on('click.bulkSelectCheckbox'");
         expect(bulkEditSource).toContain('if (is_bulk_edit) {');
         expect(bulkEditSource).toContain('characterGroupOverlay.onPageLoad();');
         expect(bulkEditSource).toContain("$('#bulkSelectedCount').css('display', 'inline-flex')");
         expect(disableBulkSelectSource).toContain("$('.bulk_select_checkbox').remove()");
+        expect(disableBulkSelectSource).toContain("$('#rm_print_characters_block .character_select').removeAttr('role')");
         expect(disableBulkSelectSource).toContain("$('#rm_print_characters_block .character_select').removeAttr('aria-selected')");
+        expect(disableBulkSelectSource).toContain("$('#rm_print_characters_block .character_select').removeAttr('aria-checked aria-describedby')");
         expect(disableBulkSelectSource).toContain("$('#rm_print_characters_block').removeClass('bulk_select')");
         expect(disableBulkSelectSource).toContain("$(document).off('click.bulkSelectCheckbox')");
     });

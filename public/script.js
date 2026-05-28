@@ -7364,6 +7364,17 @@ export function setCharacterId(value) {
 
 export function setCharacterName(value) {
     name2 = value;
+    syncTemporaryChatStatus();
+}
+
+function setTemporaryChatStatus(isTemporary) {
+    const status = $('#temporary_chat_status');
+    status.prop('hidden', !isTemporary);
+    status.attr('aria-hidden', String(!isTemporary));
+}
+
+function syncTemporaryChatStatus() {
+    setTemporaryChatStatus(this_chid === undefined && name2 === neutralCharacterName);
 }
 
 /**
@@ -8955,6 +8966,15 @@ export function select_rm_info(type, charId, previousCharId = null) {
 export function select_selected_character(chid, { switchMenu = true } = {}) {
     //character select
     //console.log('select_selected_character() -- starting with input of -- ' + chid + ' (name:' + characters[chid].name + ')');
+    const character = characters[chid];
+    if (!character) {
+        if (switchMenu) {
+            select_rm_characters();
+        }
+        return false;
+    }
+
+    setTemporaryChatStatus(false);
     $('#rm_print_characters_block .character_select').removeClass('is_active');
     $(`#CharID${chid}`).addClass('is_active');
 
@@ -8978,41 +8998,41 @@ export function select_selected_character(chid, { switchMenu = true } = {}) {
 
     // Don't update the navbar name if we're peeking the group member defs
     if (!selected_group) {
-        $('#rm_button_selected_ch').children('h2').text(characters[chid].name);
+        $('#rm_button_selected_ch').children('h2').text(character.name);
     }
 
     $('#add_avatar_button').val('');
 
-    $('#character_popup-button-h3').text(characters[chid].name);
-    $('#character_name_pole').val(characters[chid].name);
-    $('#description_textarea').val(characters[chid].description);
-    $('#character_world').val(characters[chid].data?.extensions?.world || '');
-    $('#creator_notes_textarea').val(characters[chid].data?.creator_notes || characters[chid].creatorcomment);
-    $('#creator_notes_spoiler').html(formatCreatorNotes(characters[chid].data?.creator_notes || characters[chid].creatorcomment, characters[chid].avatar));
-    $('#character_version_textarea').val(characters[chid].data?.character_version || '');
-    $('#system_prompt_textarea').val(characters[chid].data?.system_prompt || '');
-    $('#post_history_instructions_textarea').val(characters[chid].data?.post_history_instructions || '');
-    $('#tags_textarea').val(Array.isArray(characters[chid].data?.tags) ? characters[chid].data.tags.join(', ') : '');
-    $('#creator_textarea').val(characters[chid].data?.creator);
-    $('#character_version_textarea').val(characters[chid].data?.character_version || '');
-    $('#personality_textarea').val(characters[chid].personality);
-    $('#firstmessage_textarea').val(characters[chid].first_mes);
-    $('#scenario_pole').val(characters[chid].scenario);
-    $('#depth_prompt_prompt').val(characters[chid].data?.extensions?.depth_prompt?.prompt ?? '');
-    $('#depth_prompt_depth').val(characters[chid].data?.extensions?.depth_prompt?.depth ?? depth_prompt_depth_default);
-    $('#depth_prompt_role').val(characters[chid].data?.extensions?.depth_prompt?.role ?? depth_prompt_role_default);
-    $('#talkativeness_slider').val(characters[chid].talkativeness || talkativeness_default);
-    $('#mes_example_textarea').val(characters[chid].mes_example);
-    $('#selected_chat_pole').val(characters[chid].chat);
-    $('#create_date_pole').val(timestampToMoment(characters[chid].create_date).toISOString());
-    $('#avatar_url_pole').val(characters[chid].avatar);
-    $('#chat_import_avatar_url').val(characters[chid].avatar);
-    $('#chat_import_character_name').val(characters[chid].name);
-    $('#character_json_data').val(characters[chid].json_data);
+    $('#character_popup-button-h3').text(character.name);
+    $('#character_name_pole').val(character.name);
+    $('#description_textarea').val(character.description);
+    $('#character_world').val(character.data?.extensions?.world || '');
+    $('#creator_notes_textarea').val(character.data?.creator_notes || character.creatorcomment);
+    $('#creator_notes_spoiler').html(formatCreatorNotes(character.data?.creator_notes || character.creatorcomment, character.avatar));
+    $('#character_version_textarea').val(character.data?.character_version || '');
+    $('#system_prompt_textarea').val(character.data?.system_prompt || '');
+    $('#post_history_instructions_textarea').val(character.data?.post_history_instructions || '');
+    $('#tags_textarea').val(Array.isArray(character.data?.tags) ? character.data.tags.join(', ') : '');
+    $('#creator_textarea').val(character.data?.creator);
+    $('#character_version_textarea').val(character.data?.character_version || '');
+    $('#personality_textarea').val(character.personality);
+    $('#firstmessage_textarea').val(character.first_mes);
+    $('#scenario_pole').val(character.scenario);
+    $('#depth_prompt_prompt').val(character.data?.extensions?.depth_prompt?.prompt ?? '');
+    $('#depth_prompt_depth').val(character.data?.extensions?.depth_prompt?.depth ?? depth_prompt_depth_default);
+    $('#depth_prompt_role').val(character.data?.extensions?.depth_prompt?.role ?? depth_prompt_role_default);
+    $('#talkativeness_slider').val(character.talkativeness || talkativeness_default);
+    $('#mes_example_textarea').val(character.mes_example);
+    $('#selected_chat_pole').val(character.chat);
+    $('#create_date_pole').val(timestampToMoment(character.create_date).toISOString());
+    $('#avatar_url_pole').val(character.avatar);
+    $('#chat_import_avatar_url').val(character.avatar);
+    $('#chat_import_character_name').val(character.name);
+    $('#character_json_data').val(character.json_data);
 
-    updateFavButtonState(characters[chid].fav || characters[chid].fav == 'true');
+    updateFavButtonState(character.fav || character.fav == 'true');
 
-    const avatarUrl = characters[chid].avatar != 'none' ? getThumbnailUrl('avatar', characters[chid].avatar) : default_avatar;
+    const avatarUrl = character.avatar != 'none' ? getThumbnailUrl('avatar', character.avatar) : default_avatar;
     $('#avatar_load_preview').attr('src', avatarUrl);
     $('.open_alternate_greetings').data('chid', chid);
     $('#set_character_world').data('chid', chid);
@@ -11297,11 +11317,13 @@ async function removeCharacterFromUI(deletedAvatars = [], { deleteContext = null
 export async function newAssistantChat({ temporary = false } = {}) {
     await clearChat();
     if (!temporary) {
+        setTemporaryChatStatus(false);
         return openPermanentAssistantChat();
     }
     chat.splice(0, chat.length);
     chat_metadata = {};
     setCharacterName(neutralCharacterName);
+    setTemporaryChatStatus(true);
     sendSystemMessage(system_message_types.ASSISTANT_NOTE);
 }
 
@@ -11572,9 +11594,12 @@ jQuery(async function () {
     $('#rm_button_selected_ch').on('click', function () {
         if (selected_group) {
             select_group_chats(selected_group, false);
-        } else {
+        } else if (this_chid !== undefined && characters[this_chid]) {
             selected_button = 'character_edit';
             select_selected_character(this_chid);
+        } else {
+            selected_button = 'characters';
+            select_rm_characters();
         }
         $('#character_search_bar').val('').trigger('input');
     });
