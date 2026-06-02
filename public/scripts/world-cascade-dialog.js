@@ -108,37 +108,37 @@ export function buildCascadeSectionHtml(worldInfos) {
         return null;
     }
 
-    let html = `<div class="world-cascade-section">`;
-    html += `<div class="world-cascade-section-header">`;
-    html += `<i class="fa-solid fa-book fa-fw"></i>`;
+    let html = '<div class="world-cascade-section">';
+    html += '<div class="world-cascade-section-header">';
+    html += '<i class="fa-solid fa-book fa-fw"></i>';
     html += `<span>${t`Linked World Info`}</span>`;
-    html += `</div>`;
-    html += `<div class="world-cascade-list">`;
+    html += '</div>';
+    html += '<div class="world-cascade-list">';
 
     for (const world of worldInfos) {
         const otherCount = world.boundCharacters.length - world.deleteCandidateAvatars.length;
         const hasWarning = otherCount > 0;
 
         html += `<div class="world-cascade-item${hasWarning ? ' world-cascade-warn' : ''}">`;
-        html += `<label class="world-cascade-label">`;
+        html += '<label class="world-cascade-label">';
         html += `<input type="checkbox" class="world-cascade-checkbox" data-world="${escapeAttr(world.name)}">`;
         html += `<strong>${escapeHtml(world.name)}</strong>`;
         html += `<span class="world-cascade-meta">${world.entryCount} ${t`entries`}</span>`;
-        html += `</label>`;
+        html += '</label>';
 
         if (hasWarning) {
-            html += `<div class="world-cascade-warning">`;
-            html += `<i class="fa-solid fa-triangle-exclamation fa-fw"></i>`;
+            html += '<div class="world-cascade-warning">';
+            html += '<i class="fa-solid fa-triangle-exclamation fa-fw"></i>';
             html += `<span>${otherCount} ${t`other character(s) are still using this world info.`}</span>`;
-            html += `</div>`;
+            html += '</div>';
         }
 
-        html += `</div>`;
+        html += '</div>';
     }
 
-    html += `</div>`;
+    html += '</div>';
 
-    html += `</div>`;
+    html += '</div>';
     return html;
 }
 

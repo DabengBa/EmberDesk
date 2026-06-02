@@ -1,7 +1,7 @@
 import { Fuse } from '../lib.js';
 
 import { saveSettings, substituteParams, getRequestHeaders, chat_metadata, this_chid, characters, saveCharacterDebounced, menu_type, eventSource, event_types, getExtensionPromptByName, saveMetadata, getCurrentChatId, extension_prompt_roles, create_save, createOrEditCharacter, name1, getOneCharacter, select_selected_character } from '../script.js';
-import { download, debounce, initScrollHeight, resetScrollHeight, parseJsonFile, extractDataFromPng, getFileBuffer, getCharaFilename, getSortableDelay, escapeRegex, PAGINATION_TEMPLATE, navigation_option, waitUntilCondition, isTrueBoolean, setValueByPath, flashHighlight, select2ModifyOptions, getSelect2OptionId, dynamicSelect2DataViaAjax, highlightRegex, select2ChoiceClickSubscribe, isFalseBoolean, getSanitizedFilename, checkOverwriteExistingData, getStringHash, parseStringArray, cancelDebounce, findChar, onlyUnique, equalsIgnoreCaseAndAccents, uuidv4, normalizeArray, getUniqueName, logSlashCommandWarn, addLongPressEvent, escapeHtml } from './utils.js';
+import { download, debounce, initScrollHeight, resetScrollHeight, parseJsonFile, extractDataFromPng, getFileBuffer, getCharaFilename, escapeRegex, PAGINATION_TEMPLATE, navigation_option, waitUntilCondition, isTrueBoolean, setValueByPath, flashHighlight, select2ModifyOptions, getSelect2OptionId, dynamicSelect2DataViaAjax, highlightRegex, select2ChoiceClickSubscribe, isFalseBoolean, getSanitizedFilename, checkOverwriteExistingData, getStringHash, parseStringArray, cancelDebounce, findChar, onlyUnique, equalsIgnoreCaseAndAccents, uuidv4, normalizeArray, getUniqueName, logSlashCommandWarn, addLongPressEvent, escapeHtml } from './utils.js';
 import { extension_settings, getContext } from './extensions.js';
 import { NOTE_MODULE_NAME, metadata_keys, shouldWIAddPrompt } from './authors-note.js';
 import { isMobile } from './RossAscends-mods.js';
@@ -3179,26 +3179,6 @@ function handleMatchCheckboxHelper({ template, entry, fieldName, data, name }) {
 }
 
 /**
- * Helper to update position/order display.
- * @param {object} params - Parameters for updating position/order display.
- * @param {JQuery<HTMLElement>} params.template - The template element containing the display.
- * @param {object} params.data - The data object containing entries.
- * @param {string} params.uid - The unique identifier of the entry to update.
- */
-function updatePosOrdDisplayHelper({ template, data, uid }) {
-    let entry = data.entries[uid];
-    let posText = entry.position;
-    switch (entry.position) {
-        case 0: posText = '↑CD'; break;
-        case 1: posText = 'CD↓'; break;
-        case 2: posText = '↑AN'; break;
-        case 3: posText = 'AN↓'; break;
-        case 4: posText = `@D${entry.depth}`; break;
-    }
-    template.find('.world_entry_form_position_value').text(`(${posText} ${entry.order})`);
-}
-
-/**
  * Helper to initialize character filter select2.
  * @param {JQuery<HTMLElement>} characterFilter - The select element for character filter.
  */
@@ -3386,75 +3366,6 @@ function handleNumberInputHelper({ inputElem, entry, entryKey, data, name, min, 
         !noSave && await saveWorldInfo(name, data);
     });
     inputElem.val(entry[entryKey] ?? (clamp ? min : '')).trigger('input', { noSave: true });
-}
-
-/**
- * Helper to handle tri-state selector for constant/normal/vectorized.
- * @param {object} params - Parameters for handling the entry state selector.
- * @param {JQuery<HTMLElement>} params.entryStateSelector - The select element for entry state.
- * @param {object} params.entry - The entry object containing the state.
- * @param {object} params.data - The data object containing entries.
- * @param {string} params.name - The name of the world info to save changes to.
- */
-function handleEntryStateSelectorHelper({ entryStateSelector, entry, data, name }) {
-    entryStateSelector.data('uid', entry.uid);
-    entryStateSelector.on('click', function (event) {
-        event.stopPropagation();
-    });
-    entryStateSelector.on('input', async function (_, { noSave = false } = {}) {
-        const uid = entry.uid;
-        const value = $(this).val();
-        switch (value) {
-            case 'constant':
-                data.entries[uid].constant = true;
-                data.entries[uid].vectorized = false;
-                setWIOriginalDataValue(data, uid, 'constant', true);
-                setWIOriginalDataValue(data, uid, 'extensions.vectorized', false);
-                break;
-            case 'normal':
-                data.entries[uid].constant = false;
-                data.entries[uid].vectorized = false;
-                setWIOriginalDataValue(data, uid, 'constant', false);
-                setWIOriginalDataValue(data, uid, 'extensions.vectorized', false);
-                break;
-            case 'vectorized':
-                data.entries[uid].constant = false;
-                data.entries[uid].vectorized = true;
-                setWIOriginalDataValue(data, uid, 'constant', false);
-                setWIOriginalDataValue(data, uid, 'extensions.vectorized', true);
-                break;
-        }
-        !noSave && await saveWorldInfo(name, data);
-    });
-    const entryState = () => entry.constant === true ? 'constant' : entry.vectorized === true ? 'vectorized' : 'normal';
-    entryStateSelector.find(`option[value=${entryState()}]`).prop('selected', true).trigger('input', { noSave: true });
-}
-
-/**
- * Helper to handle kill switch toggle.
- * @param {object} params - Parameters for handling the kill switch toggle.
- * @param {JQuery<HTMLElement>} params.entryKillSwitch - The toggle element for the kill switch.
- * @param {object} params.entry - The entry object containing the state.
- * @param {object} params.data - The data object containing entries.
- * @param {string} params.name - The name of the world info to save changes to.
- * @param {JQuery<HTMLElement>} params.template - The template element for the entry.
- */
-function handleEntryKillSwitchHelper({ entryKillSwitch, entry, data, name, template }) {
-    entryKillSwitch.data('uid', entry.uid);
-    entryKillSwitch.on('click', async function () {
-        const uid = entry.uid;
-        data.entries[uid].disable = !data.entries[uid].disable;
-        const isActive = !data.entries[uid].disable;
-        setWIOriginalDataValue(data, uid, 'enabled', isActive);
-        template.toggleClass('disabledWIEntry', !isActive);
-        entryKillSwitch.toggleClass('fa-toggle-off', !isActive);
-        entryKillSwitch.toggleClass('fa-toggle-on', isActive);
-        await saveWorldInfo(name, data);
-    });
-    const isActive = !entry.disable;
-    template.toggleClass('disabledWIEntry', !isActive);
-    entryKillSwitch.toggleClass('fa-toggle-off', !isActive);
-    entryKillSwitch.toggleClass('fa-toggle-on', isActive);
 }
 
 /**
@@ -3655,15 +3566,6 @@ export async function getWorldEntry(name, data, entry) {
     headerTemplate.attr('uid', entry.uid);
 
     if (typeof power_user.wi_key_input_plaintext === 'undefined') power_user.wi_key_input_plaintext = true;
-
-    const editOutlet = headerTemplate.find('.inline-drawer-outlet');
-
-    function addEditorDrawerContent() {
-        const editTemplate = WI_ENTRY_EDIT_TEMPLATE.clone();
-        setupEditFormBindings(editTemplate, editOutlet, name, data, entry);
-        initAccordionState(editOutlet);
-    }
-
 
     headerTemplate.find('.inline-drawer-content').css('display', 'none');
 

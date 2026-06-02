@@ -3,7 +3,7 @@ import path from 'node:path';
 import url from 'node:url';
 
 import express from 'express';
-import { getConfigValue, color } from './util.js';
+import { getConfigValue } from './util.js';
 import { updatePlugins } from './plugin-updater.js';
 
 let _enableServerPlugins;

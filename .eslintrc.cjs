@@ -77,6 +77,7 @@ module.exports = {
         'docker/**',
         'plugins/**',
         '**/*.min.js',
+        'public/scripts/extensions/third-party/**',
         'public/scripts/extensions/quick-reply/lib/**',
         'public/scripts/extensions/tts/lib/**',
     ],

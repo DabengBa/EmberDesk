@@ -176,7 +176,7 @@ export async function showUnifiedImportConfirm(results) {
         </label>`;
     }
 
-    html += `</div></div>`;
+    html += '</div></div>';
 
     let importAllChoices = null;
 

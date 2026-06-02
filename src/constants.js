@@ -216,7 +216,6 @@ export const FEATHERLESS_HEADERS = {
 };
 
 
-
 export const OPENAI_VERBOSITY_MODELS = /^gpt-5/;
 
 export const OPENAI_REASONING_EFFORT_MODELS = [

@@ -4,7 +4,6 @@ import mime from 'mime-types';
 import sanitize from 'sanitize-filename';
 import { USER_DIRECTORY_TEMPLATE, PUBLIC_DIRECTORIES, SETTINGS_FILE, UPLOADS_DIRECTORY } from './constants.js';
 import { getAllUserHandles, toAvatarKey } from './user-storage.js';
-import { invalidateFirefoxCache } from './util.js';
 import storage from 'node-persist';
 
 const PUBLIC_USER_AVATAR = '/img/default-user.png';

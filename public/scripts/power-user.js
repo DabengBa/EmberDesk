@@ -85,7 +85,6 @@ const MAX_CONTEXT_UNLOCKED = 512 * 1024;
 const MAX_RESPONSE_UNLOCKED = 64 * 1024;
 const unlockedMaxContextStep = 512;
 const maxContextMin = 512;
-const maxContextStep = 64;
 
 const defaultStoryString = '{{#if system}}{{system}}\n{{/if}}{{#if description}}{{description}}\n{{/if}}{{#if personality}}{{char}}\'s personality: {{personality}}\n{{/if}}{{#if scenario}}Scenario: {{scenario}}\n{{/if}}{{#if persona}}{{persona}}\n{{/if}}';
 const defaultExampleSeparator = '***';
@@ -195,7 +194,7 @@ export const power_user = {
     timestamp_model_icon: false,
     mesIDDisplay_enabled: false,
     hideChatAvatars_enabled: false,
-message_token_count_enabled: false,
+    message_token_count_enabled: false,
     expand_message_actions: false,
     enableZenSliders: false,
     enableLabMode: false,

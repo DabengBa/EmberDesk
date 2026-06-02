@@ -992,29 +992,6 @@ function parseLlmResponse(emotionResponse, labels) {
 }
 
 /**
- * Gets the JSON schema for the LLM API.
- * @param {string[]} emotions A list of emotions to search for.
- * @returns {object} The JSON schema for the LLM API.
- */
-function getJsonSchema(emotions) {
-    return {
-        $schema: 'http://json-schema.org/draft-04/schema#',
-        type: 'object',
-        properties: {
-            emotion: {
-                type: 'string',
-                enum: emotions,
-            },
-        },
-        required: [
-            'emotion',
-        ],
-        additionalProperties: false,
-    };
-}
-
-
-/**
  * Retrieves the label of an expression via classification based on the provided text.
  * Optionally allows to override the expressions API being used.
  * @param {string} text - The text to classify and retrieve the expression label for.

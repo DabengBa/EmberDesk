@@ -30,7 +30,6 @@ import {
     rehydrateWorldInfoPanel,
     charUpdatePrimaryWorld,
     charSetAuxWorlds,
-    updateWorldInfoList,
     flushDeletedWorldsFromUI,
 } from './scripts/world-info.js';
 import { scanImportedCharacter, showUnifiedImportConfirm, applyImportChoices, buildSkipAllChoices } from './scripts/import-confirm-dialog.js';
@@ -67,8 +66,6 @@ import {
     persona_description_positions,
     loadMovingUIState,
     getCustomStoppingStrings,
-    MAX_CONTEXT_DEFAULT,
-    MAX_RESPONSE_DEFAULT,
     renderStoryString,
     sortEntitiesList,
     registerDebugFunction,
@@ -1384,7 +1381,6 @@ async function applyCharacterListPageRenderPlan({ listElement, renderPlan, befor
 }
 
 async function renderCharacterListPage(data, { fullRefresh = false } = {}) {
-    const listId = '#rm_print_characters_block';
     const listElement = document.getElementById('rm_print_characters_block');
     const renderPlan = createCharacterListPageRenderPlan({
         pageEntities: data,
@@ -5649,7 +5645,6 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
     await eventSource.emit(event_types.GENERATE_AFTER_COMBINE_PROMPTS, eventData);
     finalPrompt = eventData.prompt;
 
-    let maxLength = Number(amount_gen); // how many tokens the AI will be requested to generate
     let thisPromptBits = [];
 
     let generate_data;

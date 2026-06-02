@@ -47,7 +47,6 @@ import { SECRET_KEYS, secret_state, writeSecret, resolveSecretKey } from './secr
 
 import { getEventSourceStream } from './sse-stream.js';
 import {
-    clamp,
     createThumbnail,
     delay,
     download,
@@ -59,12 +58,10 @@ import {
     getStringHash,
     getVideoDurationFromDataURL,
     isDataURL,
-    isUuid,
     isValidUrl,
     parseJsonFile,
     resetScrollHeight,
     stringFormat,
-    textValueMatcher,
     uuidv4,
 } from './utils.js';
 import { countTokensOpenAIAsync, getTokenizerModel } from './tokenizers.js';
@@ -74,7 +71,6 @@ import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
 import { SlashCommand } from './slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandArgument } from './slash-commands/SlashCommandArgument.js';
 import { renderTemplateAsync } from './templates.js';
-import { SlashCommandEnumValue } from './slash-commands/SlashCommandEnumValue.js';
 import { callGenericPopup, Popup, POPUP_RESULT, POPUP_TYPE } from './popup.js';
 import { t } from './i18n.js';
 import { ToolManager } from './tool-calling.js';
@@ -135,18 +131,13 @@ const default_bias_presets = {
     ],
 };
 
-const max_2k = 2047;
-const max_4k = 4095;
 const max_8k = 8191;
-const max_16k = 16383;
 const max_32k = 32767;
 const max_64k = 65535;
 const max_128k = 128 * 1000;
 const max_200k = 200 * 1000;
 const max_256k = 256 * 1000;
-const max_400k = 400 * 1000;
 const max_1mil = 1000 * 1000;
-const oai_max_temp = 2.0;
 const claude_max_temp = 1.0;
 const openai_max_stop_strings = 4;
 
@@ -1611,26 +1602,22 @@ function saveModelList(data) {
         const list = document.getElementById('model_claude_list');
         if (list) { list.innerHTML = ''; model_list.forEach(m => { const o = document.createElement('option'); o.value = m.id; list.appendChild(o); }); }
         const sel = model_list.find(m => m.id === oai_settings.claude_model);
-        if (sel) { $('#model_claude_select').val(oai_settings.claude_model).trigger('change'); }
-        else if (model_list.length > 0) { oai_settings.claude_model = model_list[0].id; $('#model_claude_select').val(model_list[0].id).trigger('change'); }
+        if (sel) { $('#model_claude_select').val(oai_settings.claude_model).trigger('change'); } else if (model_list.length > 0) { oai_settings.claude_model = model_list[0].id; $('#model_claude_select').val(model_list[0].id).trigger('change'); }
     }
 
     if (oai_settings.chat_completion_source == chat_completion_sources.OPENAI) {
         const list = document.getElementById('model_openai_list');
         if (list) { list.innerHTML = ''; model_list.forEach(m => { const o = document.createElement('option'); o.value = m.id; list.appendChild(o); }); }
         const sel = model_list.find(m => m.id === oai_settings.openai_model);
-        if (sel) { $('#model_openai_select').val(oai_settings.openai_model).trigger('change'); }
-        else if (model_list.length > 0) { oai_settings.openai_model = model_list[0].id; $('#model_openai_select').val(model_list[0].id).trigger('change'); }
+        if (sel) { $('#model_openai_select').val(oai_settings.openai_model).trigger('change'); } else if (model_list.length > 0) { oai_settings.openai_model = model_list[0].id; $('#model_openai_select').val(model_list[0].id).trigger('change'); }
     }
 
     if (oai_settings.chat_completion_source == chat_completion_sources.MAKERSUITE || oai_settings.chat_completion_source == chat_completion_sources.VERTEXAI) {
         const list = document.getElementById('model_google_list');
         if (list) { list.innerHTML = ''; model_list.forEach(m => { const o = document.createElement('option'); o.value = m.id; list.appendChild(o); }); }
         const sel = model_list.find(m => m.id === oai_settings.google_model);
-        if (sel) { $('#model_google_select').val(oai_settings.google_model).trigger('change'); }
-        else if (model_list.length > 0) { oai_settings.google_model = model_list[0].id; $('#model_google_select').val(model_list[0].id).trigger('change'); }
+        if (sel) { $('#model_google_select').val(oai_settings.google_model).trigger('change'); } else if (model_list.length > 0) { oai_settings.google_model = model_list[0].id; $('#model_google_select').val(model_list[0].id).trigger('change'); }
     }
-
 }
 
 function getVerbosity(settings = null) {
@@ -1812,7 +1799,6 @@ export async function createGenerationParameters(settings, model, type, messages
     }
 
 
-
     if (settings.chat_completion_source === chat_completion_sources.MAKERSUITE) {
         const stopStringsLimit = 5;
         generate_data.top_k = Number(settings.top_k_openai);
@@ -1838,7 +1824,6 @@ export async function createGenerationParameters(settings, model, type, messages
     }
 
 
-
     // https://console.groq.com/docs/openai
 
     // https://api-docs.deepseek.com/api/create-chat-completion
@@ -1848,8 +1833,6 @@ export async function createGenerationParameters(settings, model, type, messages
 
 
     // https://docs.z.ai/api-reference/llm/chat-completion
-
-
 
 
     // https://docs.nano-gpt.com/api-reference/endpoint/chat-completion#temperature-&-nucleus
@@ -2027,44 +2010,6 @@ export function getStreamingReply(data, state, { chatCompletionSource = null, ov
             }
         });
         return data?.candidates?.[0]?.content?.parts?.filter(x => !x.thought)?.map(x => x.text)?.[0] || '';
-        return data?.delta?.message?.content?.text || data?.delta?.message?.tool_plan || '';
-        if (show_thoughts) {
-            state.reasoning += (data.choices?.filter(x => x?.delta?.reasoning_content)?.[0]?.delta?.reasoning_content || '');
-        }
-        return data.choices?.[0]?.delta?.content || '';
-        if (show_thoughts) {
-            state.reasoning += (data.choices?.filter(x => x?.delta?.reasoning_content)?.[0]?.delta?.reasoning_content || '');
-        }
-        return data.choices?.[0]?.delta?.content || '';
-        const imageUrls = data?.choices?.[0]?.delta?.images?.filter(x => x.type === 'image_url')?.map(x => x?.image_url?.url) || [];
-        if (Array.isArray(imageUrls) && imageUrls.length > 0) {
-            state.images.push(...imageUrls.filter(isDataURL));
-        }
-        if (show_thoughts) {
-            state.reasoning +=
-                data.choices?.filter(x => x?.delta?.reasoning)?.[0]?.delta?.reasoning ??
-                data.choices?.filter(x => x?.delta?.reasoning_content)?.[0]?.delta?.reasoning_content ??
-                data.choices?.filter(x => x?.message?.reasoning)?.[0]?.message?.reasoning ??
-                data.choices?.filter(x => x?.message?.reasoning_content)?.[0]?.message?.reasoning_content ??
-                '';
-        }
-        // Extract thought signatures from OpenRouter streaming.
-        const reasoningDetails = [
-            ...(data?.choices?.[0]?.delta?.reasoning_details || []),
-            ...(data?.choices?.[0]?.message?.reasoning_details || []),
-        ];
-        reasoningDetails.forEach((detail) => {
-            if (detail.type === 'reasoning.encrypted' && detail.data) {
-                const isToolLikeId = typeof detail.id === 'string' && /^(tool_|call_)/.test(detail.id);
-                if (typeof detail.id === 'string' && detail.id.length > 0) {
-                    state.toolSignatures[detail.id] = detail.data;
-                }
-                if (!isToolLikeId) {
-                    state.signature = detail.data;
-                }
-            }
-        });
-        return data.choices?.[0]?.delta?.content ?? data.choices?.[0]?.message?.content ?? data.choices?.[0]?.text ?? '';
     } else {
         return data.choices?.[0]?.delta?.content ?? data.choices?.[0]?.message?.content ?? data.choices?.[0]?.text ?? '';
     }
@@ -2481,7 +2426,7 @@ class Message {
      */
     async compressImage(image) {
         const compressImageSources = [
-                        chat_completion_sources.MAKERSUITE,
+            chat_completion_sources.MAKERSUITE,
         ];
         const sizeThreshold = 2 * 1024 * 1024;
         const dataSize = image.length * 0.75;
@@ -3771,41 +3716,6 @@ function onSettingsPresetChange() {
 }
 
 /**
- * Get the maximum context size for the OpenAI model
- * @param {string} value Model identifier
- * @returns {number} Maximum context size in tokens
- */
-function getMaxContextOpenAI(value) {
-    /** @type {[RegExp, number][]} */
-    const contextMap = [
-        [/^gpt-5\.[45]/, max_1mil],
-        [/^gpt-5/, max_400k],
-        [/gpt-4\.1/, max_1mil],
-        [/gpt-audio/, max_128k],
-        [/^o1/, max_128k],
-        [/^o[34]/, max_200k],
-        [/chatgpt-4o-latest|gpt-4-turbo|gpt-4o|gpt-4-1106|gpt-4-0125|gpt-4-vision/, max_128k],
-        [/gpt-3\.5-turbo-1106/, max_16k],
-        [/^(gpt-4|gpt-4-0314|gpt-4-0613)$/, max_8k],
-        [/^(gpt-4-32k|gpt-4-32k-0314|gpt-4-32k-0613)$/, max_32k],
-        [/gpt-realtime/, max_32k],
-        [/^(gpt-3\.5-turbo-16k|gpt-3\.5-turbo-16k-0613)$/, max_16k],
-        [/^code-davinci-002$/, max_8k],
-        [/^(text-curie-001|text-babbage-001|text-ada-001)$/, max_2k],
-        [/gpt-3/, max_4k],
-    ];
-
-    for (const [regex, max] of contextMap) {
-        if (regex.test(value)) {
-            return max;
-        }
-    }
-
-    // Safe default for most modern models
-    return max_128k;
-}
-
-/**
  * Get the maximum context size for Gemini models based on model identifier and optional model list.
  * @param {string} model Model identifier
  * @returns {number} Maximum context size in tokens
@@ -3868,9 +3778,6 @@ function getGeminiMaxTemp(model) {
 async function onModelChange() {
     biasCache = undefined;
     let value = String($(this).val() || '');
-
-    // Skip setting the context size for sources that get it from external APIs
-    const hasModelsLoaded = Array.isArray(model_list) && model_list.length > 0;
 
     if ($(this).is('#model_claude_select')) {
         if (value.includes('-v')) {
@@ -3935,20 +3842,6 @@ async function onModelChange() {
     if (oai_settings.chat_completion_source == chat_completion_sources.MAKERSUITE) {
         $('#openai_reverse_proxy').attr('placeholder', 'https://generativelanguage.googleapis.com');
     }
-
-
-
-
-
-
-    
-
-
-
-
-
-
-
 
 
     saveSettingsDebounced();

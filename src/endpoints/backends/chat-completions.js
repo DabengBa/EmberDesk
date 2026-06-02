@@ -31,8 +31,6 @@ import {
     getPromptNames,
     calculateClaudeBudgetTokens,
     calculateGoogleBudgetTokens,
-    addAssistantPrefix,
-    addReasoningContentToToolCalls,
     embedOpenRouterMedia,
     postProcessPrompt,
     PROMPT_PROCESSING_TYPE,
@@ -63,23 +61,6 @@ const cachingAtDepth = (() => {
     return Number.isInteger(value) && value >= 0 ? value : -1;
 })();
 const enableAdaptiveThinking = getConfigValue('claude.enableAdaptiveThinking', true, 'boolean');
-
-/**
- * Hacky way to use JSON schema only if json_object format is supported.
- * @param {object} bodyParams Additional body parameters
- * @param {object[]} messages Array of messages
- * @param {object} jsonSchema JSON schema object
- */
-function setJsonObjectFormat(bodyParams, messages, jsonSchema) {
-    bodyParams['response_format'] = {
-        type: 'json_object',
-    };
-    const message = {
-        role: 'user',
-        content: `JSON schema for the response:\n${JSON.stringify(jsonSchema.value, null, 4)}`,
-    };
-    messages.push(message);
-}
 
 /**
  * Sends a request to Claude API.
@@ -534,7 +515,7 @@ async function sendMakerSuiteRequest(request, response) {
 
             const candidates = generateResponseJson?.candidates;
             if (!candidates || candidates.length === 0) {
-                let message = `Google AI Studio API returned no candidate`;
+                let message = 'Google AI Studio API returned no candidate';
                 console.warn(message, generateResponseJson);
                 if (generateResponseJson?.promptFeedback?.blockReason) {
                     message += `\nPrompt was blocked due to : ${generateResponseJson.promptFeedback.blockReason}`;
@@ -545,11 +526,11 @@ async function sendMakerSuiteRequest(request, response) {
             const responseContent = candidates[0].content ?? candidates[0].output;
             const functionCall = (candidates?.[0]?.content?.parts ?? []).some(part => part.functionCall);
             const inlineData = (candidates?.[0]?.content?.parts ?? []).some(part => part.inlineData);
-            console.debug(`Google AI Studio response:`, util.inspect(generateResponseJson, { depth: 5, colors: true }));
+            console.debug('Google AI Studio response:', util.inspect(generateResponseJson, { depth: 5, colors: true }));
 
             const responseText = typeof responseContent === 'string' ? responseContent : responseContent?.parts?.filter(part => !part.thought)?.map(part => part.text)?.join('\n\n');
             if (!responseText && !functionCall && !inlineData) {
-                let message = `Google AI Studio Candidate text empty`;
+                let message = 'Google AI Studio Candidate text empty';
                 console.warn(message, generateResponseJson);
                 return response.send({ error: { message } });
             }
@@ -559,7 +540,7 @@ async function sendMakerSuiteRequest(request, response) {
             return response.send(reply);
         }
     } catch (error) {
-        console.error(`Error communicating with Google AI Studio API:`, error);
+        console.error('Error communicating with Google AI Studio API:', error);
         if (!response.headersSent) {
             return response.status(500).send({ error: true });
         }

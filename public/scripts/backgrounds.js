@@ -716,31 +716,31 @@ async function loadBackgroundCatalog() {
     setBackgroundCatalogLoading(true);
 
     try {
-    const response = await fetch('/api/backgrounds/all', {
-        method: 'POST',
-        headers: getRequestHeaders(),
-        body: JSON.stringify({}),
-    });
-    if (response.ok) {
-        const { images, config } = await response.json();
-        Object.assign(THUMBNAIL_CONFIG, config);
-        cachedSystemBackgrounds = images;
-        const existingFiles = new Set(images.map(x => x.filename));
-        for (const selectedFile of selectedSystemBackgroundFiles) {
-            if (!existingFiles.has(selectedFile)) {
-                selectedSystemBackgroundFiles.delete(selectedFile);
+        const response = await fetch('/api/backgrounds/all', {
+            method: 'POST',
+            headers: getRequestHeaders(),
+            body: JSON.stringify({}),
+        });
+        if (response.ok) {
+            const { images, config } = await response.json();
+            Object.assign(THUMBNAIL_CONFIG, config);
+            cachedSystemBackgrounds = images;
+            const existingFiles = new Set(images.map(x => x.filename));
+            for (const selectedFile of selectedSystemBackgroundFiles) {
+                if (!existingFiles.has(selectedFile)) {
+                    selectedSystemBackgroundFiles.delete(selectedFile);
+                }
             }
+
+            // Load folders first so getFilteredImages() works correctly in folder view
+            await loadFolders();
+
+            await preloadImageMetadata();
+
+            // Render only filtered images if inside a folder, otherwise all
+            renderSystemBackgrounds(getFilteredImages());
+            highlightSelectedBackground();
         }
-
-        // Load folders first so getFilteredImages() works correctly in folder view
-        await loadFolders();
-
-        await preloadImageMetadata();
-
-        // Render only filtered images if inside a folder, otherwise all
-        renderSystemBackgrounds(getFilteredImages());
-        highlightSelectedBackground();
-    }
     } finally {
         setBackgroundCatalogLoading(false);
     }

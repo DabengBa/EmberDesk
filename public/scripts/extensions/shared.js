@@ -389,7 +389,7 @@ export class ConnectionManagerRequestService {
      * @returns {Promise<import('../custom-request.js').ExtractedData | (() => AsyncGenerator<import('../custom-request.js').StreamResponse>)>} If not streaming, returns extracted data; if streaming, returns a function that creates an AsyncGenerator
      */
     static async sendRequest(profileId, prompt, maxTokens, custom = this.defaultSendRequestParams, overridePayload = {}) {
-        const { stream, signal, extractData, includePreset, includeInstruct, instructSettings } = { ...this.defaultSendRequestParams, ...custom };
+        const { stream, signal, extractData, includePreset } = { ...this.defaultSendRequestParams, ...custom };
 
         const context = SillyTavern.getContext();
         if (context.extensionSettings.disabledExtensions.includes('connection-manager')) {
@@ -444,10 +444,8 @@ export class ConnectionManagerRequestService {
     * @param {InstructSettings} instructSettings optional instruct settings
     */
     static constructPrompt(prompt, profileId, instructSettings = null) {
-        const context = SillyTavern.getContext();
         const profile = this.getProfile(profileId);
         const selectedApiMap = this.validateProfile(profile);
-        const instructName = profile.instruct;
 
         switch (selectedApiMap.selected) {
             case 'openai': {
