@@ -26,7 +26,7 @@ It is not optimized for users who want a managed cloud product or a minimal one-
 
 ## Architecture And Boundaries
 
-- Runtime: Node.js 24 LTS (`>=24 <25`)
+- Runtime: Node.js 24 Active LTS (`>=24 <25`)
 - Package manager and task runner: Bun 1.3.14
 - Server: Express-based API and startup pipeline
 - Frontend: HTML/CSS/jQuery main shell with progressive performance refactors

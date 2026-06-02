@@ -33,7 +33,7 @@ function makeUserDirectories(prefix) {
     return directories;
 }
 
-async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled = true } = {}) {
+async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled = true, parseImpl } = {}) {
     jest.resetModules();
 
     const mockGenerateThumbnail = jest.fn(generateThumbnailImpl ?? (() => Promise.resolve({ path: 'thumb.png', aspectRatio: 1, resolution: 1 })));
@@ -49,7 +49,7 @@ async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled 
     const mockListIndexedCharacterPayloads = jest.fn(async () => []);
     const mockFindCharactersBoundToWorld = jest.fn(() => []);
     const mockWrite = jest.fn(() => Buffer.from('character-png'));
-    const mockParse = jest.fn(async () => '{"spec":"chara_card_v2","data":{"name":"Character"}}');
+    const mockParse = jest.fn(parseImpl ?? (async () => '{"spec":"chara_card_v2","data":{"name":"Character"}}'));
 
     jest.unstable_mockModule('../src/util.js', () => ({
         deepMerge: (target, source) => ({ ...target, ...source }),
@@ -527,6 +527,82 @@ describe('thumbnail write-time pregeneration hooks', () => {
         expect(response.statusCode).toBe(200);
         expect(mocks.invalidateThumbnail).not.toHaveBeenCalled();
         expect(mocks.generateThumbnail).not.toHaveBeenCalled();
+    });
+
+    test('character metadata edit rejects a missing avatar source without creating a fallback card', async () => {
+        const directories = makeUserDirectories('emberdesk-pregen-edit-missing-avatar-');
+        const { router, mocks } = await importCharacterRoutes();
+        const missingAvatarPath = path.join(directories.characters, 'Missing.png');
+        const request = {
+            body: {
+                avatar_url: 'Missing.png',
+                ch_name: 'Missing',
+                description: 'updated',
+                personality: '',
+                scenario: '',
+                first_mes: '',
+                mes_example: '',
+                creator_notes: '',
+                system_prompt: '',
+                post_history_instructions: '',
+                tags: '',
+                creator: '',
+                talkativeness: 0.5,
+                fav: false,
+                world: '',
+                depth_prompt_prompt: '',
+                depth_prompt_depth: 4,
+                depth_prompt_role: 'system',
+                alternate_greetings: [],
+                group_only_greetings: [],
+                extensions: '{}',
+                chat: 'existing-chat',
+                create_date: '2026-05-13T00:00:00.000Z',
+            },
+            user: {
+                directories,
+                profile: { handle: 'default-user' },
+            },
+        };
+
+        const response = await invokeRoute(router, 'post', '/edit', request);
+
+        expect(response.statusCode).toBe(400);
+        expect(response.body).toBe('Error: character file does not exist');
+        expect(fs.existsSync(missingAvatarPath)).toBe(false);
+        expect(mocks.write).not.toHaveBeenCalled();
+        expect(mocks.invalidateThumbnail).not.toHaveBeenCalled();
+        expect(mocks.generateThumbnail).not.toHaveBeenCalled();
+    });
+
+    test('invalid character imports return a client error and remove the uploaded file', async () => {
+        const directories = makeUserDirectories('emberdesk-pregen-invalid-import-');
+        const { router } = await importCharacterRoutes({
+            parseImpl: async () => {
+                throw new Error('invalid character card');
+            },
+        });
+        const uploadPath = path.join(directories.root, 'upload.tmp');
+        fs.writeFileSync(uploadPath, Buffer.from('not-a-card'));
+        const request = {
+            body: {
+                file_type: 'png',
+            },
+            file: {
+                destination: directories.root,
+                filename: 'upload.tmp',
+            },
+            user: {
+                directories,
+                profile: { handle: 'default-user' },
+            },
+        };
+
+        const response = await invokeRoute(router, 'post', '/import', request);
+
+        expect(response.statusCode).toBe(400);
+        expect(response.body).toEqual({ error: true });
+        expect(fs.existsSync(uploadPath)).toBe(false);
     });
 
     test('metadata-only character edits do not invalidate or pregenerate thumbnails', async () => {

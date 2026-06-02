@@ -1212,6 +1212,14 @@ body .panelControlBar {
     align-items: baseline;
 }
 
+.list-group button.list-group-item {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    text-align: left;
+}
+
 #extensionsMenu>.extension_container>div,
 #extensionsMenu>div:not(.extension_container),
 .options-content a,

@@ -6,6 +6,7 @@ const publicRoot = path.resolve('..', 'public');
 const indexHtmlPath = path.join(publicRoot, 'index.html');
 const tavernHelperRoot = path.join(publicRoot, 'scripts', 'extensions', 'third-party', 'JS-Slash-Runner');
 const tavernHelperSourceRoot = path.join(tavernHelperRoot, 'src');
+const tavernHelperDistPath = path.join(tavernHelperRoot, 'dist', 'index.js');
 
 const requiredScriptExports = [
     'characters',
@@ -174,6 +175,30 @@ describe('third-party extension compatibility boundary', () => {
 
         expect(fs.readFileSync(path.join(tavernHelperRoot, 'src', 'function', 'index.ts'), 'utf8'))
             .toContain('globalThis.TavernHelper = getTavernHelper()');
+    });
+
+    test('keeps Tavern Helper character edits bound to canonical avatar filenames', () => {
+        const characterSource = fs.readFileSync(path.join(tavernHelperSourceRoot, 'function', 'character.ts'), 'utf8');
+        const tavernSource = fs.readFileSync(path.join(tavernHelperSourceRoot, 'util', 'tavern.ts'), 'utf8');
+        const bundledEntry = fs.readFileSync(tavernHelperDistPath, 'utf8');
+
+        expect(characterSource).toContain("const avatarFileName = old_data?.avatar ?? `${character_name}.png`;");
+        expect(characterSource).toContain('avatar_url: avatarFileName');
+        expect(characterSource).toContain('new File([new_data.avatar], avatarFileName)');
+        expect(characterSource).toContain('await getOneCharacter(target.avatar);');
+        expect(characterSource).not.toContain("avatar_url: character_name + '.png'");
+        expect(characterSource).not.toContain("new File([new_data.avatar], character_name + '.png')");
+        expect(characterSource).not.toContain("await getOneCharacter(character_name + '.png')");
+
+        expect(tavernSource).toContain("avatar_url: character.avatar || `${character.name}.png`");
+        expect(tavernSource).not.toContain("avatar_url: character.name + '.png'");
+
+        expect(bundledEntry).not.toContain("avatar_url:e+'.png'");
+        expect(bundledEntry).not.toContain("new File([t.avatar],e+'.png')");
+        expect(bundledEntry).toMatch(/avatar_url:[a-zA-Z_$][\w$]*,avatar:/);
+        expect(bundledEntry).toMatch(/new File\(\[[a-zA-Z_$][\w$]*\.avatar\],[a-zA-Z_$][\w$]*\)/);
+        expect(bundledEntry).toContain("||`${");
+        expect(bundledEntry).toContain("}.png`");
     });
 
     test('keeps Tavern Helper source imports resolvable through the public SillyTavern alias', () => {

@@ -44,4 +44,14 @@ describe('character detail sidebar structure', () => {
         expect(source).toContain("case 'character_action_duplicate':");
         expect(source).toContain("case 'character_action_advanced':");
     });
+
+    test('export format options are real buttons for keyboard and assistive tech', () => {
+        const indexHtml = read('public/index.html');
+        const accessibilitySource = read('public/scripts/a11y.js');
+
+        expect(indexHtml).toMatch(/<button[^>]*class="export_format list-group-item"[^>]*data-format="png"[^>]*type="button"[^>]*>PNG<\/button>/);
+        expect(indexHtml).toMatch(/<button[^>]*class="export_format list-group-item"[^>]*data-format="json"[^>]*type="button"[^>]*>JSON<\/button>/);
+        expect(accessibilitySource).toContain('function isNativeInteractiveElement(element)');
+        expect(accessibilitySource).toMatch(/if \(isNativeInteractiveElement\(element\)\) \{\s+return;\s+\}\s+element\.setAttribute\('role', 'listitem'\);/);
+    });
 });

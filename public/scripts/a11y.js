@@ -59,6 +59,23 @@ const tabItemSelectors = [
     '#bg_tabs .bg_tabs_list .bg_tab_button',
 ].join(', ');
 
+const nativeInteractiveSelectors = [
+    'button',
+    'a[href]',
+    'input',
+    'select',
+    'textarea',
+    'summary',
+].join(', ');
+
+/**
+ * @param {Element} element Element to check.
+ * @returns {boolean} True when the element already has native interactive semantics.
+ */
+function isNativeInteractiveElement(element) {
+    return element.matches(nativeInteractiveSelectors);
+}
+
 /** @type {Record<string, (element: Element) => void>} */
 const a11yRules = {
     [buttonSelectors]: (element) => {
@@ -68,6 +85,10 @@ const a11yRules = {
         element.setAttribute('role', 'list');
     },
     [listItemSelectors]: (element) => {
+        if (isNativeInteractiveElement(element)) {
+            return;
+        }
+
         element.setAttribute('role', 'listitem');
     },
     [toolbarSelectors]: (element) => {

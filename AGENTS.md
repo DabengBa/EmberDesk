@@ -10,7 +10,7 @@ EmberDesk is a self-hosted browser LLM workspace forked from SillyTavern. The pr
 
 | Area | Contract |
 |---|---|
-| Runtime | Node.js 24 LTS (`>=24 <25`) |
+| Runtime | Node.js 24 Active LTS (`>=24 <25`) |
 | Package manager / scripts | Bun 1.3.14 (`packageManager`) |
 | Language | JavaScript ES modules |
 | Server | Express 5 |
@@ -55,7 +55,7 @@ bun run docs:build
 bun run lint
 ```
 
-Use Node for the server by default. Bun is the package manager and script runner, not the default application runtime. `src/electron` remains npm-owned.
+Use Node 24 for server release proof by default. Bun is the package manager and script runner, not the default application runtime. Local runs on non-contract Node majors are diagnostic only and do not replace Node 24 validation. `src/electron` remains npm-owned.
 
 ## Architecture Rules
 

@@ -27,6 +27,7 @@ import {
     flattenChubChat,
     getJsonChatImportConverter,
 } from './chat-import-converters.js';
+import { createChatBackupPlan } from './chat-backup-helpers.js';
 
 const isBackupEnabled = !!getConfigValue('backups.chat.enabled', true, 'boolean');
 const maxTotalChatBackups = Number(getConfigValue('backups.chat.maxTotalBackups', -1, 'number'));
@@ -82,24 +83,29 @@ function applyInteractionPerfChatTimestamp(filePath) {
  * @returns
  */
 function backupChat(directory, name, data, backupPrefix = CHAT_BACKUPS_PREFIX) {
+    let backupName = name;
     try {
         if (!isBackupEnabled) { return; }
         if (!fs.existsSync(directory)) {
             console.error(`The chat couldn't be backed up because no directory exists at ${directory}!`);
         }
-        // replace non-alphanumeric characters with underscores
-        name = sanitize(name).replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        const backupPlan = createChatBackupPlan({
+            directory,
+            name,
+            backupPrefix,
+            timestamp: generateTimestamp(),
+            maxTotalChatBackups,
+        });
+        backupName = backupPlan.normalizedName;
 
-        const backupFile = path.join(directory, `${backupPrefix}${name}_${generateTimestamp()}.jsonl`);
-
-        tryWriteFileSync(backupFile, data);
-        removeOldBackups(directory, `${backupPrefix}${name}_`);
-        if (isNaN(maxTotalChatBackups) || maxTotalChatBackups < 0) {
+        tryWriteFileSync(backupPlan.backupFile, data);
+        removeOldBackups(directory, backupPlan.perChatCleanupPrefix);
+        if (!backupPlan.shouldApplyTotalRetention) {
             return;
         }
-        removeOldBackups(directory, backupPrefix, maxTotalChatBackups);
+        removeOldBackups(directory, backupPlan.totalCleanupPrefix, backupPlan.totalCleanupLimit);
     } catch (err) {
-        console.error(`Could not backup chat for ${name}`, err);
+        console.error(`Could not backup chat for ${backupName}`, err);
     }
 }
 

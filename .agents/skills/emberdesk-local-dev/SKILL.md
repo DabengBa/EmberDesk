@@ -19,7 +19,8 @@ Use this when setting up the repo, starting the server, changing runtime configu
 
 ## Runtime Contract
 
-- Application runtime is Node.js 24 LTS (`>=24 <25`).
+- Application runtime is Node.js 24 Active LTS (`>=24 <25`).
+- Local proof under non-contract Node majors, including Node 25, is diagnostic only and does not replace Node 24 release validation.
 - Root package manager and script runner are Bun (`packageManager: bun@1.3.14`).
 - Bun is for install and orchestration; default server commands still run Node.
 - `src/electron` is not Bun-owned yet. Keep Electron npm-owned unless the project explicitly migrates it.

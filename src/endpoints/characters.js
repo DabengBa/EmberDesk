@@ -1344,27 +1344,45 @@ router.post('/edit', validateAvatarUrlMiddleware, async function (request, respo
         return;
     }
 
+    if (!request.body.avatar_url) {
+        console.warn('Error: no avatar_url in request body');
+        response.status(400).send('Error: no avatar_url in request body');
+        return;
+    }
+
+    const avatarUrl = request.body.avatar_url.toString();
     let char = charaFormatData(request.body, request.user.directories);
     char.chat = request.body.chat;
     char.create_date = request.body.create_date;
     char = JSON.stringify(char);
-    let targetFile = (request.body.avatar_url).replace('.png', '');
+    let targetFile = avatarUrl.replace('.png', '');
 
     try {
         if (!request.file) {
-            const avatarPath = path.join(request.user.directories.characters, request.body.avatar_url);
-            await writeCharacterData(avatarPath, char, targetFile, request, undefined, { shouldRegenerateThumbnail: false });
+            const avatarPath = path.join(request.user.directories.characters, avatarUrl);
+            if (!fs.existsSync(avatarPath)) {
+                console.warn('Error: character file does not exist', avatarPath);
+                return response.status(400).send('Error: character file does not exist');
+            }
+
+            const result = await writeCharacterData(avatarPath, char, targetFile, request, undefined, { shouldRegenerateThumbnail: false });
+            if (!result) {
+                return response.status(500).send('Error: failed to write character data');
+            }
         } else {
             const crop = tryParse(request.query.crop);
             const newAvatarPath = path.join(request.file.destination, request.file.filename);
-            await writeCharacterData(newAvatarPath, char, targetFile, request, crop);
+            const result = await writeCharacterData(newAvatarPath, char, targetFile, request, crop);
             fs.unlinkSync(newAvatarPath);
+            if (!result) {
+                return response.status(500).send('Error: failed to write character data');
+            }
 
             // Bust cache to reload the new avatar
             cacheBuster.bust(request, response);
         }
 
-        await refreshCharacterIndexEntrySafe(request.user.directories, request.body.avatar_url, 'edit');
+        await refreshCharacterIndexEntrySafe(request.user.directories, avatarUrl, 'edit');
         return response.sendStatus(200);
     } catch (err) {
         console.error('An error occurred, character edit invalidated.', err);
@@ -1920,6 +1938,11 @@ router.post('/import', async function (request, response) {
     const uploadPath = path.join(request.file.destination, request.file.filename);
     const format = request.body.file_type;
     const preservedFileName = getPreservedName(request);
+    const removeUploadedFile = () => {
+        if (fs.existsSync(uploadPath)) {
+            fs.unlinkSync(uploadPath);
+        }
+    };
 
     const formatImportFunctions = {
         'yaml': importFromYaml,
@@ -1941,6 +1964,7 @@ router.post('/import', async function (request, response) {
 
         if (!fileName) {
             console.warn('Failed to import character');
+            removeUploadedFile();
             return response.sendStatus(400);
         }
 
@@ -1949,7 +1973,12 @@ router.post('/import', async function (request, response) {
         response.send({ file_name: fileName });
     } catch (err) {
         console.error(err);
-        response.send({ error: true });
+        try {
+            removeUploadedFile();
+        } catch (cleanupError) {
+            console.warn('Failed to remove uploaded character import file:', cleanupError);
+        }
+        response.status(400).send({ error: true });
     }
 });
 

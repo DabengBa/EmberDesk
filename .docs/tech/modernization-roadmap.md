@@ -16,7 +16,7 @@ It does not redefine user-facing product semantics. User-visible pages, features
 
 ## Assumptions
 
-- Node.js 24 remains the supported application runtime.
+- Node.js 24 Active LTS (`>=24 <25`) remains the supported application runtime.
 - Bun remains the package manager and script runner, not the default application runtime.
 - Express 5 remains the server framework.
 - The browser application remains HTML/CSS/jQuery during this roadmap.
@@ -69,7 +69,7 @@ Phase 0 result:
 
 - Whole-repo lint is green after excluding vendored third-party extension build artifacts and fixing first-party lint debt.
 - The core modernization gates are green locally: semantic docs, compatibility, Express route/order, shared browser library, startup/config, user/auth/setup/login, character-list focused tests, performance tooling tests, and full unit suite.
-- Local proof ran under Node 25.4.0, while the project runtime contract is Node 24 LTS. Treat local results as useful baseline evidence, not release proof.
+- Local proof ran under Node 25.4.0, while the project runtime contract is Node 24 Active LTS. Treat local results as useful diagnostic evidence, not release proof.
 - Full Playwright E2E and performance runners were skipped because Phase 0 did not change user-visible behavior or implement a performance slice.
 
 ### Phase 1: Complexity Mapping
@@ -99,7 +99,7 @@ Execution record: [modernization-phase1-complexity-map.md](modernization-phase1-
 Phase 1 result:
 
 - The critical frontend risk cluster is `public/script.js`, `public/scripts/world-info.js`, and `public/scripts/slash-commands.js`; do not start by splitting these files broadly.
-- The high-value backend starting points are `src/endpoints/characters.js` pure card helpers and `src/endpoints/chats.js` chat import/backup helpers. Character card helpers and chat import converters are now delivered; chat backup helpers are the next backend slice.
+- The high-value backend starting points are `src/endpoints/characters.js` pure card helpers and `src/endpoints/chats.js` chat import/backup helpers. Character card helpers, chat import converters, and chat backup planning helpers are now delivered.
 - The safest frontend starting points are world-info external conversion helpers, OpenAI/provider capability helpers, and additional character-list state/render helpers.
 - Main chat workspace extraction, message rendering/streaming, slash-command parser semantics, regex placement values, extension mount points, and route-level endpoint file splits remain deferred until smaller helper boundaries are covered.
 
@@ -243,13 +243,13 @@ Phase 1 result:
 | Semantic docs | `bun run docs:check` or `bun run docs:build` |
 | Character route helper/service | Focused helper/route tests plus interaction-performance index tests if list/get/index behavior changes |
 | Character mutation side effects | Thumbnail write-time pregeneration tests and character-index refresh/delete proof |
-| Chat route helper/service | Focused chat endpoint/import tests plus interaction-performance index tests when chat aggregate dirty marking changes |
+| Chat route helper/service | Focused chat endpoint/import/backup-helper tests plus interaction-performance index tests when chat aggregate dirty marking changes |
 | World-info conversion or editor UI | Pure helper tests for conversions; `world-info-card-rendering.test.js` and Playwright for visible editor behavior |
 | OpenAI/provider capability or request semantics | `openai-segmented-controls.test.js`, provider/backend tests such as `chat-completions-google.test.js`, and source-backed provider docs for API syntax changes |
 
 ## Known Execution Gaps
 
-- Node 24 proof remains required before release because the Phase 0 local baseline ran under Node 25.4.0.
+- Node 24 proof remains required before release because the Phase 0 local baseline ran under Node 25.4.0, which is outside the supported engine range and is not a release-proof runtime.
 - Full Playwright E2E remains a release or UI-slice gate, not yet part of the Phase 0/1 local proof.
 - Startup and interaction performance runners remain required before claiming latency wins.
 - Vendored third-party extension artifacts are intentionally excluded from whole-repo lint; do not auto-format or refactor them as first-party source.
@@ -258,58 +258,62 @@ Phase 1 result:
 
 - 2026-06-02: Character card helper boundary delivered. `UNSET_SENTINEL`, `calculateDataSize`, `toShallow`, `unsetPrivateFields`, and `processUnsetSentinels` now live in `src/endpoints/character-card-helpers.js` with focused proof in `tests/character-card-helpers.test.js`. `readFromV2` intentionally remains in `src/endpoints/characters.js` because its current default and warning behavior is not a clean pure-helper boundary.
 - 2026-06-02: Chat import converter helper boundary delivered. Ooba, Agnai, CAI Tools, Kobold Lite, Chub JSONL flattening, RisuAI conversion, and JSON converter selection now live in `src/endpoints/chat-import-converters.js` with fixture-style proof in `tests/chat-import-converters.test.js`. `/api/chats/import` continues to own upload cleanup, path checks, file naming, file writes/copy, JSON/JSONL branching, Chub fallback handling, response shape, and chat-stat dirty marking.
+- 2026-06-02: Chat backup helper boundary delivered. Backup name normalization, backup file path construction, per-chat cleanup prefix selection, and total-retention policy decisions now live in `src/endpoints/chat-backup-helpers.js` with focused proof in `tests/chat-backup-helpers.test.js`. `backupChat()` continues to own enablement, directory checks, file writes, cleanup calls, throttling lifecycle, and failure logging.
 
-## Confirmed Next Work
+## Recommended Next Work
 
-The next implementation slice is chat backup helper extraction in `src/endpoints/chats.js`.
+The next recommended implementation slice is world-info external conversion helper extraction in `public/scripts/world-info.js`.
 
 Scope:
 
-- Extract backup filename and policy helpers first, including sanitized backup name generation, backup file path construction, per-chat cleanup prefix selection, and total-backup retention policy inputs.
-- Add focused tests for backup helper behavior before moving production logic.
-- Keep route/save behavior unchanged: `trySaveChat()`, integrity checks, JSONL serialization, `getBackupFunction()` throttling semantics, trailing flush on `process.on('exit')`, backup retention settings, and chat-stat dirty marking must stay stable unless a later design explicitly approves a behavior change.
+- Extract pure external lorebook / character-book conversion helpers before touching prompt activation or editor DOM behavior.
+- Add focused conversion tests for representative external formats before moving production logic.
+- Keep world-info prompt activation, recursion, timed effects, regex placement values, slash-command registration, editor card DOM identity, pagination, and request/cache side effects stable unless a later design explicitly approves a behavior change.
+
+First shippable target:
+
+1. Identify conversion functions in `public/scripts/world-info.js` that can accept explicit input and return converted world-info data without reading globals or mutating DOM.
+2. Add focused unit tests for the extracted conversion helpers and fixture-shaped inputs.
+3. Move only deterministic conversion logic out of `public/scripts/world-info.js`; leave prompt scanning, regex application, save/load cache behavior, editor rendering, and event emission in the existing module for the first slice.
 
 Not in this slice:
 
-- Do not change JSONL serialization format, integrity checks, chat save/load behavior, group chat import, import converters, search/recent routes, or character-index dirty marking.
-- Do not change backup timing, retention count semantics, config keys, throttling options, or flush behavior.
-- Do not split the whole chat router or alter request/response shapes for adjacent chat routes.
+- Do not change regex matching semantics, placement values, or slash-command surfaces.
+- Do not change prompt activation recursion, timed effects, or inclusion-group behavior.
+- Do not change editor card templates, DOM identity, pagination, or visible workflow without frontend review and browser proof.
+- Do not split the whole world-info module or introduce a framework/controller rewrite in this slice.
 
 Minimum validation:
 
-- New focused helper tests for backup file naming, prefix cleanup selection, and retention-policy boundaries.
-- Existing or new save/backup proof if `trySaveChat()`, `getBackupFunction()`, throttling, or integrity-check wiring changes.
-- `interaction-performance-index.test.js` only if character aggregate dirty marking or chat-stat refresh behavior changes.
+- New focused helper tests for external conversion behavior.
+- `world-info-card-rendering.test.js` and browser proof only if visible editor rendering changes.
+- `bun run test:compat` if regex, slash-command, extension, import alias, or world-info regex surfaces are touched.
 - `bun run lint` as the closeout gate.
 
 ## Recommended Near-Term Sequence
 
-1. Extract chat backup helpers from `src/endpoints/chats.js`.
-   - Start with backup filename/policy helpers only after import converters are covered.
-   - Preserve throttling behavior, retention settings, integrity checks, and save-route side effects.
-
-2. Extract world-info external conversion helpers.
+1. Extract world-info external conversion helpers.
    - Start with external lorebook and character-book conversion helpers.
    - Do not touch prompt activation recursion, regex semantics, or editor DOM identity in the same slice.
 
-3. Extract OpenAI/provider capability helpers.
+2. Extract OpenAI/provider capability helpers.
    - Start with reasoning effort, verbosity, media inlining, and model-selection helpers.
    - Use source-backed provider docs before changing API syntax, model-specific behavior, or request payload semantics.
 
-4. Continue character-list helper extraction inside `public/script.js`.
+3. Continue character-list helper extraction inside `public/script.js`.
    - Extend existing `character-list-state.js` and `character-list-render-state.js` boundaries.
    - Preserve row identity selectors and run compatibility proof when identity/export surfaces are touched.
 
-5. Continue character route service extraction only after the delivered helper boundary stays green.
+4. Continue character route service extraction only after the delivered helper boundary stays green.
    - Prefer read/list service wrappers or import-format helpers with route proof.
    - Keep `/api/characters/all`, `/api/characters/get`, cache/index refresh, and thumbnail side effects stable.
 
-6. Pick a low-risk frontend panel or toolbar controller only after the helper slices above are green.
+5. Pick a low-risk frontend panel or toolbar controller only after the helper slices above are green.
    - Keep the login/setup controller pattern: pure helpers, explicit root, dependency injection, cleanup, and focused proof.
 
-7. Run startup and interaction performance reports after any slice that claims a latency improvement.
+6. Run startup and interaction performance reports after any slice that claims a latency improvement.
 
-8. Update owning docs after each shipped slice, then record only shipped architecture evolution in `.docs/PROJECT_HISTORY.md`.
+7. Update owning docs after each shipped slice, then record only shipped architecture evolution in `.docs/PROJECT_HISTORY.md`.
 
 ## Non-Goals
 

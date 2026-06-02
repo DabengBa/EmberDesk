@@ -15,7 +15,7 @@ This is a planning and execution record for [modernization-roadmap.md](moderniza
 
 Phase 1 assumes the current modernization contracts remain in force:
 
-- Node.js 24 LTS is the application runtime contract.
+- Node.js 24 Active LTS (`>=24 <25`) is the application runtime contract.
 - Bun is the package manager and script runner.
 - Express 5 remains the server framework.
 - The browser app remains HTML/CSS/jQuery.
@@ -309,15 +309,19 @@ Minimum proof for future slices:
    - Candidate helpers: Ooba, Agnai, CAI, Kobold Lite, Chub flattening, and Risu conversion.
    - Reason: current behavior is pure enough to preserve with fixture tests before route splitting.
 
-3. Extract world-info external format conversion helpers.
+3. Extract chat backup planning helpers from `src/endpoints/chats.js` (delivered 2026-06-02).
+   - Candidate helpers: backup name normalization, backup file path construction, cleanup prefix selection, and total-retention decision.
+   - Reason: keeps backup planning testable while preserving route-owned filesystem writes, cleanup order, throttling lifecycle, and save behavior.
+
+4. Extract world-info external format conversion helpers.
    - Candidate helpers: NovelAI/Agnai/Risu/character-book conversions and world-entry normalization.
    - Reason: reduces `world-info.js` size without touching prompt activation or editor DOM first.
 
-4. Extract OpenAI/provider capability helpers.
+5. Extract OpenAI/provider capability helpers.
    - Candidate helpers: reasoning effort normalization, verbosity resolution, media inlining support, model selection by source.
    - Reason: existing focused segmented-control and backend provider tests can be expanded without changing UI binding first.
 
-5. Continue character-list helper extraction inside `public/script.js`.
+6. Continue character-list helper extraction inside `public/script.js`.
    - Candidate helpers: state transition and render planning that extend existing `character-list-state.js` and `character-list-render-state.js`.
    - Reason: existing focused tests already guard row identity and incremental reconcile.
 
@@ -401,13 +405,13 @@ Delivered follow-up:
 
 - 2026-06-02: The first recommended slice extracted the pure character-card helper boundary from `src/endpoints/characters.js` into `src/endpoints/character-card-helpers.js` with direct helper tests. `readFromV2` remains in `characters.js` because its current default and warning behavior is not yet a clean pure-helper boundary.
 - 2026-06-02: The second recommended slice extracted chat import converters from `src/endpoints/chats.js` into `src/endpoints/chat-import-converters.js` with fixture-style tests for Ooba, Agnai, CAI Tools, Kobold Lite, Chub JSONL flattening, RisuAI, and JSON converter selection. `/api/chats/import` keeps route-owned upload cleanup, path checks, file writes/copy, response shape, fallback behavior, and chat-stat dirty marking.
+- 2026-06-02: The third recommended slice extracted chat backup planning from `src/endpoints/chats.js` into `src/endpoints/chat-backup-helpers.js` with focused tests for backup name normalization, backup path construction, cleanup prefixes, and total-retention boundaries. `backupChat()` keeps route-owned enablement, directory checks, file writes, cleanup calls, throttle map, process-exit flush, and failure logging.
 
 The remaining safest near-term implementation sequence is:
 
-1. Chat backup helpers.
-2. World-info conversion helpers.
-3. OpenAI/provider capability helpers.
-4. Additional character-list state helpers.
-5. Character route service wrappers after the delivered helper boundary stays green.
+1. World-info conversion helpers.
+2. OpenAI/provider capability helpers.
+3. Additional character-list state helpers.
+4. Character route service wrappers after the delivered helper boundary stays green.
 
 Each later slice should state the compatibility surface it touches, add or identify focused regression proof before behavior moves, and keep file-backed data and browser extension contracts stable.
