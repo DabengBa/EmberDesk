@@ -258,34 +258,61 @@ Phase 1 result:
 
 - 2026-06-02: Character card helper boundary delivered. `UNSET_SENTINEL`, `calculateDataSize`, `toShallow`, `unsetPrivateFields`, and `processUnsetSentinels` now live in `src/endpoints/character-card-helpers.js` with focused proof in `tests/character-card-helpers.test.js`. `readFromV2` intentionally remains in `src/endpoints/characters.js` because its current default and warning behavior is not a clean pure-helper boundary.
 
+## Confirmed Next Work
+
+The next implementation slice is chat import converter helper extraction in `src/endpoints/chats.js`.
+
+Scope:
+
+- Extract pure import converters into a focused helper module, expected around Ooba, Agnai, CAI Tools, Kobold Lite, Chub JSONL flattening, and RisuAI conversion.
+- Add direct fixture-style tests before moving converter logic.
+- Keep `/api/chats/import` route behavior unchanged: upload cleanup, file naming, JSON/JSONL branching, Chub flatten fallback, and `markCharacterChatStatsDirtySafe()` stay route-owned unless the implementation design proves a smaller service boundary is safer.
+
+Not in this slice:
+
+- Do not change JSONL serialization format, integrity checks, chat save/load behavior, group chat import, search/recent routes, or character-index dirty marking.
+- Do not move chat backup throttling in the same slice. Backup helpers are the next backend sub-slice after import converters are covered.
+- Do not alter request/response shapes for `/api/chats/import` or adjacent chat routes.
+
+Minimum validation:
+
+- New focused helper tests for supported import formats and malformed/unknown-format boundaries.
+- Existing or new route-level import proof if the `/api/chats/import` branch wiring changes.
+- `interaction-performance-index.test.js` only if character aggregate dirty marking or chat-stat refresh behavior changes.
+- `bun run lint` as the closeout gate.
+
 ## Recommended Near-Term Sequence
 
-1. Extract chat import and backup helpers from `src/endpoints/chats.js`.
-   - Start with pure import converters and backup policy helpers.
-   - Preserve JSONL serialization, integrity checks, and character-index dirty marking.
+1. Extract chat import converters from `src/endpoints/chats.js`.
+   - Start with pure format converters and Chub JSONL flattening.
+   - Preserve upload handling, JSONL serialization, route response shape, and character-index dirty marking.
 
-2. Extract world-info external conversion helpers.
+2. Extract chat backup helpers from `src/endpoints/chats.js`.
+   - Start with backup filename/policy helpers only after import converters are covered.
+   - Preserve throttling behavior, retention settings, integrity checks, and save-route side effects.
+
+3. Extract world-info external conversion helpers.
    - Start with external lorebook and character-book conversion helpers.
    - Do not touch prompt activation recursion, regex semantics, or editor DOM identity in the same slice.
 
-3. Extract OpenAI/provider capability helpers.
+4. Extract OpenAI/provider capability helpers.
    - Start with reasoning effort, verbosity, media inlining, and model-selection helpers.
    - Use source-backed provider docs before changing API syntax, model-specific behavior, or request payload semantics.
 
-4. Continue character-list helper extraction inside `public/script.js`.
+5. Continue character-list helper extraction inside `public/script.js`.
    - Extend existing `character-list-state.js` and `character-list-render-state.js` boundaries.
    - Preserve row identity selectors and run compatibility proof when identity/export surfaces are touched.
 
-5. Continue character route service extraction only after the delivered helper boundary stays green.
+6. Continue character route service extraction only after the delivered helper boundary stays green.
    - Prefer read/list service wrappers or import-format helpers with route proof.
    - Keep `/api/characters/all`, `/api/characters/get`, cache/index refresh, and thumbnail side effects stable.
 
-6. Pick a low-risk frontend panel or toolbar controller only after the helper slices above are green.
+7. Pick a low-risk frontend panel or toolbar controller only after the helper slices above are green.
    - Keep the login/setup controller pattern: pure helpers, explicit root, dependency injection, cleanup, and focused proof.
 
-7. Run startup and interaction performance reports after any slice that claims a latency improvement.
+8. Run startup and interaction performance reports after any slice that claims a latency improvement.
 
-8. Update owning docs after each shipped slice, then record only shipped architecture evolution in `.docs/PROJECT_HISTORY.md`.
+9. Update owning docs after each shipped slice, then record only shipped architecture evolution in `.docs/PROJECT_HISTORY.md`.
 
 ## Non-Goals
 
