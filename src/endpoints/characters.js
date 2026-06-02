@@ -19,6 +19,7 @@ import { deepMerge, humanizedDateTime, tryParse, MemoryLimitedMap, getConfigValu
 import { TavernCardValidator } from '../validator/TavernCardValidator.js';
 import { parse, read, write } from '../character-card-parser.js';
 import { readWorldInfoFile } from './worldinfo.js';
+import { calculateDataSize, processUnsetSentinels, toShallow, unsetPrivateFields } from './character-card-helpers.js';
 
 import { areThumbnailsEnabled, generateThumbnail, invalidateThumbnail } from './thumbnails.js';
 import { importRisuSprites } from './sprites.js';
@@ -410,57 +411,6 @@ const calculateChatSize = (charDir) => {
     return { chatSize, dateLastChat };
 };
 
-// Calculate the total string length of the data object
-const calculateDataSize = (data) => {
-    return typeof data === 'object' ? Object.values(data).reduce((acc, val) => acc + String(val).length, 0) : 0;
-};
-
-/**
- * Only get fields that are used to display the character list.
- * @param {object} character Character object
- * @returns {{shallow: true, [key: string]: any}} Shallow character
- */
-const toShallow = (character) => {
-    return {
-        shallow: true,
-        name: character.name,
-        avatar: character.avatar,
-        chat: character.chat,
-        fav: character.fav,
-        date_added: character.date_added,
-        create_date: character.create_date,
-        date_last_chat: character.date_last_chat,
-        chat_size: character.chat_size,
-        data_size: character.data_size,
-        tags: character.tags,
-        description: _.get(character, 'description', _.get(character, 'data.description', '')),
-        personality: _.get(character, 'personality', _.get(character, 'data.personality', '')),
-        scenario: _.get(character, 'scenario', _.get(character, 'data.scenario', '')),
-        first_mes: _.get(character, 'first_mes', _.get(character, 'data.first_mes', '')),
-        mes_example: _.get(character, 'mes_example', _.get(character, 'data.mes_example', '')),
-        creatorcomment: _.get(character, 'creatorcomment', _.get(character, 'data.creator_notes', '')),
-        talkativeness: _.get(character, 'talkativeness', _.get(character, 'data.extensions.talkativeness', 0)),
-        data: {
-            name: _.get(character, 'data.name', ''),
-            character_version: _.get(character, 'data.character_version', ''),
-            creator: _.get(character, 'data.creator', ''),
-            creator_notes: _.get(character, 'data.creator_notes', ''),
-            description: _.get(character, 'data.description', ''),
-            mes_example: _.get(character, 'data.mes_example', ''),
-            scenario: _.get(character, 'data.scenario', ''),
-            personality: _.get(character, 'data.personality', ''),
-            first_mes: _.get(character, 'data.first_mes', ''),
-            alternate_greetings: _.get(character, 'data.alternate_greetings', []),
-            tags: _.get(character, 'data.tags', []),
-            extensions: {
-                fav: _.get(character, 'data.extensions.fav', false),
-                world: _.get(character, 'data.extensions.world', ''),
-                talkativeness: _.get(character, 'data.extensions.talkativeness', _.get(character, 'talkativeness', 0)),
-            },
-        },
-    };
-};
-
 /**
  * processCharacter - Process a given character, read its data and calculate its statistics.
  *
@@ -779,15 +729,6 @@ function convertToV2(char, directories) {
     result.create_date = char.create_date;
 
     return result;
-}
-
-/**
- * Removes fields that are not meant to be shared.
- */
-function unsetPrivateFields(char) {
-    _.set(char, 'fav', false);
-    _.set(char, 'data.extensions.fav', false);
-    _.unset(char, 'chat');
 }
 
 function readFromV2(char) {
@@ -1524,37 +1465,8 @@ router.post('/edit-attribute', validateAvatarUrlMiddleware, async function (requ
     }
 });
 
-/**
- * Sentinel value that signals a field should be completely removed (unset)
- * from the character card rather than being set to any value. Use this in
- * the merge payload wherever a key should be deleted.
- *
- * Both the server and the frontend share this constant so that callers can
- * explicitly opt into deletion without overloading `null`.
- * @type {string}
- */
-const UNSET_SENTINEL = '__@@UNSET@@__';
-
 /** Maximum number of characters processed in parallel during bulk merge */
 const BULK_MERGE_CONCURRENCY = 10;
-
-/**
- * Recursively walks `source` and removes any key from `target` whose
- * corresponding value in `source` equals the {@link UNSET_SENTINEL}.
- * Called after {@link deepMerge} so that the sentinel gets replaced by
- * an actual key deletion.
- * @param {object} target The merged character object to clean up
- * @param {object} source The original update payload (pre-merge clone)
- */
-function processUnsetSentinels(target, source) {
-    for (const key of Object.keys(source)) {
-        if (source[key] === UNSET_SENTINEL) {
-            _.unset(target, key);
-        } else if (_.isPlainObject(source[key]) && _.isPlainObject(target[key])) {
-            processUnsetSentinels(target[key], source[key]);
-        }
-    }
-}
 
 /**
  * Reads a character card, applies a merge update (with sentinel-based

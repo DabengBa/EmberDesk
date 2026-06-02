@@ -65,7 +65,16 @@ Execution record: [modernization-phase0-baseline.md](modernization-phase0-baseli
    - Use existing startup and interaction runners before claiming a win.
    - Record scenario, profile shape, warm/cold state, and machine-sensitive caveats.
 
+Phase 0 result:
+
+- Whole-repo lint is green after excluding vendored third-party extension build artifacts and fixing first-party lint debt.
+- The core modernization gates are green locally: semantic docs, compatibility, Express route/order, shared browser library, startup/config, user/auth/setup/login, character-list focused tests, performance tooling tests, and full unit suite.
+- Local proof ran under Node 25.4.0, while the project runtime contract is Node 24 LTS. Treat local results as useful baseline evidence, not release proof.
+- Full Playwright E2E and performance runners were skipped because Phase 0 did not change user-visible behavior or implement a performance slice.
+
 ### Phase 1: Complexity Mapping
+
+Execution record: [modernization-phase1-complexity-map.md](modernization-phase1-complexity-map.md).
 
 1. Classify high-complexity modules by ownership.
    - Frontend shell: `public/script.js`.
@@ -86,6 +95,13 @@ Execution record: [modernization-phase0-baseline.md](modernization-phase0-baseli
    - Prefer unit tests for pure helpers and route services.
    - Use Playwright for user-visible browser flows.
    - Use compatibility tests before touching shared extension surfaces.
+
+Phase 1 result:
+
+- The critical frontend risk cluster is `public/script.js`, `public/scripts/world-info.js`, and `public/scripts/slash-commands.js`; do not start by splitting these files broadly.
+- The high-value backend starting points are `src/endpoints/characters.js` pure card helpers and `src/endpoints/chats.js` chat import/backup helpers.
+- The safest frontend starting points are world-info external conversion helpers, OpenAI/provider capability helpers, and additional character-list state/render helpers.
+- Main chat workspace extraction, message rendering/streaming, slash-command parser semantics, regex placement values, extension mount points, and route-level endpoint file splits remain deferred until smaller helper boundaries are covered.
 
 ### Phase 2: Frontend Slice Modernization
 
@@ -225,15 +241,51 @@ Execution record: [modernization-phase0-baseline.md](modernization-phase0-baseli
 | Character-list state/rendering | Character-list state, render-state, and structure tests |
 | Performance change | Startup or interaction performance runner with scenario evidence |
 | Semantic docs | `bun run docs:check` or `bun run docs:build` |
+| Character route helper/service | Focused helper/route tests plus interaction-performance index tests if list/get/index behavior changes |
+| Character mutation side effects | Thumbnail write-time pregeneration tests and character-index refresh/delete proof |
+| Chat route helper/service | Focused chat endpoint/import tests plus interaction-performance index tests when chat aggregate dirty marking changes |
+| World-info conversion or editor UI | Pure helper tests for conversions; `world-info-card-rendering.test.js` and Playwright for visible editor behavior |
+| OpenAI/provider capability or request semantics | `openai-segmented-controls.test.js`, provider/backend tests such as `chat-completions-google.test.js`, and source-backed provider docs for API syntax changes |
+
+## Known Execution Gaps
+
+- Node 24 proof remains required before release because the Phase 0 local baseline ran under Node 25.4.0.
+- Full Playwright E2E remains a release or UI-slice gate, not yet part of the Phase 0/1 local proof.
+- Startup and interaction performance runners remain required before claiming latency wins.
+- Vendored third-party extension artifacts are intentionally excluded from whole-repo lint; do not auto-format or refactor them as first-party source.
+
+## Delivered Modernization Slices
+
+- 2026-06-02: Character card helper boundary delivered. `UNSET_SENTINEL`, `calculateDataSize`, `toShallow`, `unsetPrivateFields`, and `processUnsetSentinels` now live in `src/endpoints/character-card-helpers.js` with focused proof in `tests/character-card-helpers.test.js`. `readFromV2` intentionally remains in `src/endpoints/characters.js` because its current default and warning behavior is not a clean pure-helper boundary.
 
 ## Recommended Near-Term Sequence
 
-1. Create per-area complexity maps for `public/script.js`, `world-info.js`, `slash-commands.js`, `openai.js`, and `src/endpoints/characters.js`.
-2. Pick one low-risk frontend panel and apply the login/setup controller pattern.
-3. Extract one pure helper group from `src/endpoints/characters.js` with focused tests.
-4. Add compatibility proof before touching any extension, regex, slash-command, or message-rendering path.
-5. Run startup and interaction performance reports after any slice that claims a latency improvement.
-6. Update owning docs after each shipped slice, then record only shipped architecture evolution in `.docs/PROJECT_HISTORY.md`.
+1. Extract chat import and backup helpers from `src/endpoints/chats.js`.
+   - Start with pure import converters and backup policy helpers.
+   - Preserve JSONL serialization, integrity checks, and character-index dirty marking.
+
+2. Extract world-info external conversion helpers.
+   - Start with external lorebook and character-book conversion helpers.
+   - Do not touch prompt activation recursion, regex semantics, or editor DOM identity in the same slice.
+
+3. Extract OpenAI/provider capability helpers.
+   - Start with reasoning effort, verbosity, media inlining, and model-selection helpers.
+   - Use source-backed provider docs before changing API syntax, model-specific behavior, or request payload semantics.
+
+4. Continue character-list helper extraction inside `public/script.js`.
+   - Extend existing `character-list-state.js` and `character-list-render-state.js` boundaries.
+   - Preserve row identity selectors and run compatibility proof when identity/export surfaces are touched.
+
+5. Continue character route service extraction only after the delivered helper boundary stays green.
+   - Prefer read/list service wrappers or import-format helpers with route proof.
+   - Keep `/api/characters/all`, `/api/characters/get`, cache/index refresh, and thumbnail side effects stable.
+
+6. Pick a low-risk frontend panel or toolbar controller only after the helper slices above are green.
+   - Keep the login/setup controller pattern: pure helpers, explicit root, dependency injection, cleanup, and focused proof.
+
+7. Run startup and interaction performance reports after any slice that claims a latency improvement.
+
+8. Update owning docs after each shipped slice, then record only shipped architecture evolution in `.docs/PROJECT_HISTORY.md`.
 
 ## Non-Goals
 
@@ -253,6 +305,7 @@ Related semantic docs:
 - `feature.character_library_panel`
 - `feature.character_delete`
 - `feature.extension_panel_open`
+- `feature.world_info_panel`
 - `term.shared_browser_library`
 - `term.character_card`
 
@@ -271,7 +324,20 @@ Stability-sensitive binding points:
 - `@sillytavern/*`
 - `POST /api/characters/all`
 - `POST /api/characters/get`
+- `POST /api/chats/save`
+- `POST /api/chats/rename`
+- `POST /api/chats/delete`
+- `POST /api/chats/import`
 - `<user root>/_cache/character-index.sqlite`
+
+Related implementation docs:
+
+- [modernization-phase0-baseline.md](modernization-phase0-baseline.md)
+- [modernization-phase1-complexity-map.md](modernization-phase1-complexity-map.md)
+- [frontend-jquery-slice-migration.md](frontend-jquery-slice-migration.md)
+- [frontend-shared-library-boundary.md](frontend-shared-library-boundary.md)
+- [interaction-performance-indexing.md](interaction-performance-indexing.md)
+- [third-party-extension-compatibility.md](../../docs/third-party-extension-compatibility.md)
 
 ## Performance And Caching
 
