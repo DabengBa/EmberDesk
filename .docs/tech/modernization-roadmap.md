@@ -99,7 +99,7 @@ Execution record: [modernization-phase1-complexity-map.md](modernization-phase1-
 Phase 1 result:
 
 - The critical frontend risk cluster is `public/script.js`, `public/scripts/world-info.js`, and `public/scripts/slash-commands.js`; do not start by splitting these files broadly.
-- The high-value backend starting points are `src/endpoints/characters.js` pure card helpers and `src/endpoints/chats.js` chat import/backup helpers.
+- The high-value backend starting points are `src/endpoints/characters.js` pure card helpers and `src/endpoints/chats.js` chat import/backup helpers. Character card helpers and chat import converters are now delivered; chat backup helpers are the next backend slice.
 - The safest frontend starting points are world-info external conversion helpers, OpenAI/provider capability helpers, and additional character-list state/render helpers.
 - Main chat workspace extraction, message rendering/streaming, slash-command parser semantics, regex placement values, extension mount points, and route-level endpoint file splits remain deferred until smaller helper boundaries are covered.
 
@@ -257,62 +257,59 @@ Phase 1 result:
 ## Delivered Modernization Slices
 
 - 2026-06-02: Character card helper boundary delivered. `UNSET_SENTINEL`, `calculateDataSize`, `toShallow`, `unsetPrivateFields`, and `processUnsetSentinels` now live in `src/endpoints/character-card-helpers.js` with focused proof in `tests/character-card-helpers.test.js`. `readFromV2` intentionally remains in `src/endpoints/characters.js` because its current default and warning behavior is not a clean pure-helper boundary.
+- 2026-06-02: Chat import converter helper boundary delivered. Ooba, Agnai, CAI Tools, Kobold Lite, Chub JSONL flattening, RisuAI conversion, and JSON converter selection now live in `src/endpoints/chat-import-converters.js` with fixture-style proof in `tests/chat-import-converters.test.js`. `/api/chats/import` continues to own upload cleanup, path checks, file naming, file writes/copy, JSON/JSONL branching, Chub fallback handling, response shape, and chat-stat dirty marking.
 
 ## Confirmed Next Work
 
-The next implementation slice is chat import converter helper extraction in `src/endpoints/chats.js`.
+The next implementation slice is chat backup helper extraction in `src/endpoints/chats.js`.
 
 Scope:
 
-- Extract pure import converters into a focused helper module, expected around Ooba, Agnai, CAI Tools, Kobold Lite, Chub JSONL flattening, and RisuAI conversion.
-- Add direct fixture-style tests before moving converter logic.
-- Keep `/api/chats/import` route behavior unchanged: upload cleanup, file naming, JSON/JSONL branching, Chub flatten fallback, and `markCharacterChatStatsDirtySafe()` stay route-owned unless the implementation design proves a smaller service boundary is safer.
+- Extract backup filename and policy helpers first, including sanitized backup name generation, backup file path construction, per-chat cleanup prefix selection, and total-backup retention policy inputs.
+- Add focused tests for backup helper behavior before moving production logic.
+- Keep route/save behavior unchanged: `trySaveChat()`, integrity checks, JSONL serialization, `getBackupFunction()` throttling semantics, trailing flush on `process.on('exit')`, backup retention settings, and chat-stat dirty marking must stay stable unless a later design explicitly approves a behavior change.
 
 Not in this slice:
 
-- Do not change JSONL serialization format, integrity checks, chat save/load behavior, group chat import, search/recent routes, or character-index dirty marking.
-- Do not move chat backup throttling in the same slice. Backup helpers are the next backend sub-slice after import converters are covered.
-- Do not alter request/response shapes for `/api/chats/import` or adjacent chat routes.
+- Do not change JSONL serialization format, integrity checks, chat save/load behavior, group chat import, import converters, search/recent routes, or character-index dirty marking.
+- Do not change backup timing, retention count semantics, config keys, throttling options, or flush behavior.
+- Do not split the whole chat router or alter request/response shapes for adjacent chat routes.
 
 Minimum validation:
 
-- New focused helper tests for supported import formats and malformed/unknown-format boundaries.
-- Existing or new route-level import proof if the `/api/chats/import` branch wiring changes.
+- New focused helper tests for backup file naming, prefix cleanup selection, and retention-policy boundaries.
+- Existing or new save/backup proof if `trySaveChat()`, `getBackupFunction()`, throttling, or integrity-check wiring changes.
 - `interaction-performance-index.test.js` only if character aggregate dirty marking or chat-stat refresh behavior changes.
 - `bun run lint` as the closeout gate.
 
 ## Recommended Near-Term Sequence
 
-1. Extract chat import converters from `src/endpoints/chats.js`.
-   - Start with pure format converters and Chub JSONL flattening.
-   - Preserve upload handling, JSONL serialization, route response shape, and character-index dirty marking.
-
-2. Extract chat backup helpers from `src/endpoints/chats.js`.
+1. Extract chat backup helpers from `src/endpoints/chats.js`.
    - Start with backup filename/policy helpers only after import converters are covered.
    - Preserve throttling behavior, retention settings, integrity checks, and save-route side effects.
 
-3. Extract world-info external conversion helpers.
+2. Extract world-info external conversion helpers.
    - Start with external lorebook and character-book conversion helpers.
    - Do not touch prompt activation recursion, regex semantics, or editor DOM identity in the same slice.
 
-4. Extract OpenAI/provider capability helpers.
+3. Extract OpenAI/provider capability helpers.
    - Start with reasoning effort, verbosity, media inlining, and model-selection helpers.
    - Use source-backed provider docs before changing API syntax, model-specific behavior, or request payload semantics.
 
-5. Continue character-list helper extraction inside `public/script.js`.
+4. Continue character-list helper extraction inside `public/script.js`.
    - Extend existing `character-list-state.js` and `character-list-render-state.js` boundaries.
    - Preserve row identity selectors and run compatibility proof when identity/export surfaces are touched.
 
-6. Continue character route service extraction only after the delivered helper boundary stays green.
+5. Continue character route service extraction only after the delivered helper boundary stays green.
    - Prefer read/list service wrappers or import-format helpers with route proof.
    - Keep `/api/characters/all`, `/api/characters/get`, cache/index refresh, and thumbnail side effects stable.
 
-7. Pick a low-risk frontend panel or toolbar controller only after the helper slices above are green.
+6. Pick a low-risk frontend panel or toolbar controller only after the helper slices above are green.
    - Keep the login/setup controller pattern: pure helpers, explicit root, dependency injection, cleanup, and focused proof.
 
-8. Run startup and interaction performance reports after any slice that claims a latency improvement.
+7. Run startup and interaction performance reports after any slice that claims a latency improvement.
 
-9. Update owning docs after each shipped slice, then record only shipped architecture evolution in `.docs/PROJECT_HISTORY.md`.
+8. Update owning docs after each shipped slice, then record only shipped architecture evolution in `.docs/PROJECT_HISTORY.md`.
 
 ## Non-Goals
 

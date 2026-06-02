@@ -278,7 +278,7 @@ Main couplings:
 
 Safe extraction candidates:
 
-- Import converter functions into a dedicated chat-import service.
+- Import converter functions into a dedicated chat-import helper module (delivered 2026-06-02).
 - Backup policy and throttled function cache into a focused backup helper.
 - Pure preview and metadata extraction helpers.
 - Shared file-path resolution helpers that keep `isPathUnderParent()` validation explicit.
@@ -305,7 +305,7 @@ Minimum proof for future slices:
    - Candidate helpers: shallow payload shaping, data-size calculation, V1/V2 field mapping, unset sentinel cleanup.
    - Reason: high payoff, no browser compatibility surface, and route services can reuse the helpers later.
 
-2. Extract chat import converter tests from `src/endpoints/chats.js`.
+2. Extract chat import converter tests from `src/endpoints/chats.js` (delivered 2026-06-02).
    - Candidate helpers: Ooba, Agnai, CAI, Kobold Lite, Chub flattening, and Risu conversion.
    - Reason: current behavior is pure enough to preserve with fixture tests before route splitting.
 
@@ -400,10 +400,11 @@ Phase 1 confirms that the next modernization work should proceed from pure helpe
 Delivered follow-up:
 
 - 2026-06-02: The first recommended slice extracted the pure character-card helper boundary from `src/endpoints/characters.js` into `src/endpoints/character-card-helpers.js` with direct helper tests. `readFromV2` remains in `characters.js` because its current default and warning behavior is not yet a clean pure-helper boundary.
+- 2026-06-02: The second recommended slice extracted chat import converters from `src/endpoints/chats.js` into `src/endpoints/chat-import-converters.js` with fixture-style tests for Ooba, Agnai, CAI Tools, Kobold Lite, Chub JSONL flattening, RisuAI, and JSON converter selection. `/api/chats/import` keeps route-owned upload cleanup, path checks, file writes/copy, response shape, fallback behavior, and chat-stat dirty marking.
 
 The remaining safest near-term implementation sequence is:
 
-1. Chat import/backup helpers.
+1. Chat backup helpers.
 2. World-info conversion helpers.
 3. OpenAI/provider capability helpers.
 4. Additional character-list state helpers.
