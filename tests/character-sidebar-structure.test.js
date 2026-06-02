@@ -54,4 +54,15 @@ describe('character detail sidebar structure', () => {
         expect(accessibilitySource).toContain('function isNativeInteractiveElement(element)');
         expect(accessibilitySource).toMatch(/if \(isNativeInteractiveElement\(element\)\) \{\s+return;\s+\}\s+element\.setAttribute\('role', 'listitem'\);/);
     });
+
+    test('export format popup keeps keyboard focus and reports export results', () => {
+        const source = read('public/script.js');
+
+        expect(source).toContain('function closeCharacterExportPopup({ restoreFocus = true } = {})');
+        expect(source).toContain("exportPopup.querySelector('.export_format')?.focus();");
+        expect(source).toMatch(/event\.key === 'Escape'[\s\S]+closeCharacterExportPopup\(\)/);
+        expect(source).toMatch(/exportPopupTrigger\.focus\(\)/);
+        expect(source).toMatch(/toastr\.success\([\s\S]+Character export download started\./);
+        expect(source).toMatch(/toastr\.error\([\s\S]+Could not download file/);
+    });
 });

@@ -3,7 +3,7 @@ id: page.chat_workspace
 type: page
 name: Chat Workspace
 route: /
-related: [feature.startup_bootstrap, feature.character_library_panel, feature.character_delete, feature.world_info_panel, feature.background_library_panel, feature.extension_panel_open, term.character_card, term.shared_browser_library, page.login]
+related: [feature.startup_bootstrap, feature.character_library_panel, feature.character_export, feature.character_delete, feature.world_info_panel, feature.background_library_panel, feature.extension_panel_open, term.character_card, term.shared_browser_library, page.login]
 ---
 
 # Page: Chat Workspace
@@ -28,6 +28,7 @@ This page exists so a user can run their daily LLM workflow from one browser sur
 
 - `feature.startup_bootstrap`: the visible shell-loading experience between opening the URL and reaching a usable workspace.
 - `feature.character_library_panel`: browsing and selecting character cards from the workspace.
+- `feature.character_export`: exporting the active character card as PNG or JSON with keyboard-reachable format selection and visible feedback.
 - `feature.character_delete`: removing a character from the active library.
 - `feature.world_info_panel`: activating global World Info and editing world-book entries from the workspace drawer.
 - `feature.background_library_panel`: opening and refreshing the background library inside the workspace.
@@ -39,6 +40,7 @@ This page exists so a user can run their daily LLM workflow from one browser sur
 
 !include feature.startup_bootstrap
 !include feature.character_library_panel
+!include feature.character_export
 !include feature.character_delete
 !include feature.world_info_panel
 !include feature.background_library_panel

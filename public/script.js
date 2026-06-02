@@ -475,6 +475,26 @@ let exportPopper = Popper.createPopper(document.getElementById('export_button'),
     placement: 'left',
 });
 let isExportPopupOpen = false;
+let exportPopupTrigger = null;
+
+function updateCharacterExportPopupPosition() {
+    exportPopper?.update();
+}
+
+function closeCharacterExportPopup({ restoreFocus = true } = {}) {
+    const exportPopup = document.getElementById('export_format_popup');
+    if (!(exportPopup instanceof HTMLElement)) {
+        return;
+    }
+
+    $(exportPopup).hide();
+    isExportPopupOpen = false;
+    updateCharacterExportPopupPosition();
+
+    if (restoreFocus && exportPopupTrigger instanceof HTMLElement && document.contains(exportPopupTrigger)) {
+        exportPopupTrigger.focus();
+    }
+}
 
 function toggleCharacterExportPopup(referenceElement = document.getElementById('export_button')) {
     const exportPopup = document.getElementById('export_format_popup');
@@ -488,8 +508,16 @@ function toggleCharacterExportPopup(referenceElement = document.getElementById('
     });
 
     isExportPopupOpen = !isExportPopupOpen;
-    $(exportPopup).toggle(isExportPopupOpen);
-    exportPopper.update();
+    exportPopupTrigger = referenceElement;
+
+    if (!isExportPopupOpen) {
+        closeCharacterExportPopup();
+        return;
+    }
+
+    $(exportPopup).show();
+    updateCharacterExportPopupPosition();
+    exportPopup.querySelector('.export_format')?.focus();
 }
 
 // Saved here for performance reasons
@@ -12510,6 +12538,14 @@ jQuery(async function () {
         toggleCharacterExportPopup(this);
     });
 
+    $(document).on('keydown', function (event) {
+        if (isExportPopupOpen && event.key === 'Escape') {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            closeCharacterExportPopup();
+        }
+    });
+
     $(document).on('click', '.export_format', async function () {
         const format = $(this).data('format');
 
@@ -12517,30 +12553,37 @@ jQuery(async function () {
             return;
         }
 
-        $('#export_format_popup').hide();
-        isExportPopupOpen = false;
-        exportPopper.update();
+        closeCharacterExportPopup();
 
-        // Save before exporting
-        await createOrEditCharacter();
-        const body = { format, avatar_url: characters[this_chid].avatar };
+        try {
+            // Save before exporting
+            await createOrEditCharacter();
+            const body = { format, avatar_url: characters[this_chid].avatar };
 
-        const response = await fetch('/api/characters/export', {
-            method: 'POST',
-            headers: getRequestHeaders(),
-            body: JSON.stringify(body),
-        });
+            const response = await fetch('/api/characters/export', {
+                method: 'POST',
+                headers: getRequestHeaders(),
+                body: JSON.stringify(body),
+            });
 
-        if (response.ok) {
+            if (!response.ok) {
+                toastr.error(t`Could not download file`, t`Export and Download`);
+                return;
+            }
+
             const filename = characters[this_chid].avatar.replace('.png', `.${format}`);
             const blob = await response.blob();
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
             a.setAttribute('download', filename);
             document.body.appendChild(a);
+            toastr.success(t`Character export download started.`, t`Export and Download`);
             a.click();
             URL.revokeObjectURL(a.href);
             document.body.removeChild(a);
+        } catch (error) {
+            console.error('Character export failed', error);
+            toastr.error(t`Could not download file`, t`Export and Download`);
         }
     });
     //**************************CHAT IMPORT EXPORT*************************//
@@ -12630,9 +12673,7 @@ jQuery(async function () {
         if (isExportPopupOpen
             && clickTarget.closest('#export_button').length == 0
             && clickTarget.closest('#export_format_popup').length == 0) {
-            $('#export_format_popup').hide();
-            isExportPopupOpen = false;
-            exportPopper.update();
+            closeCharacterExportPopup({ restoreFocus: false });
         }
 
         const forbiddenTargets = [

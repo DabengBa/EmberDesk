@@ -2,7 +2,7 @@
 id: feature.character_library_panel
 type: feature
 name: Character Library Panel
-related: [page.chat_workspace, feature.character_delete, term.character_card]
+related: [page.chat_workspace, feature.character_delete, feature.character_export, term.character_card]
 ---
 
 # Feature: Character Library Panel
@@ -56,7 +56,7 @@ This feature lets users work with large character libraries without leaving the 
 - Bulk delete remains unavailable until at least one character is selected, even when the compact toolbar keeps the bulk status controls visible in the same operation context.
 - Ordinary character rows keep their Character type badge in the DOM for localization and compatibility, but it is visually quiet by default so users can scan names, avatars, and tags first.
 - Group rows continue to show their Group badge so mixed character/group lists remain distinguishable.
-- Browsing and selecting cards belong to this feature; destructive removal belongs to [Delete Character](feature.character_delete).
+- Browsing and selecting cards belong to this feature; destructive removal belongs to [Delete Character](feature.character_delete), and exporting a selected card belongs to [Character Export](feature.character_export).
 
 ## ID Boundary Notes
 
