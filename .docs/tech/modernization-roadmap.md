@@ -259,61 +259,71 @@ Phase 1 result:
 - 2026-06-02: Character card helper boundary delivered. `UNSET_SENTINEL`, `calculateDataSize`, `toShallow`, `unsetPrivateFields`, and `processUnsetSentinels` now live in `src/endpoints/character-card-helpers.js` with focused proof in `tests/character-card-helpers.test.js`. `readFromV2` intentionally remains in `src/endpoints/characters.js` because its current default and warning behavior is not a clean pure-helper boundary.
 - 2026-06-02: Chat import converter helper boundary delivered. Ooba, Agnai, CAI Tools, Kobold Lite, Chub JSONL flattening, RisuAI conversion, and JSON converter selection now live in `src/endpoints/chat-import-converters.js` with fixture-style proof in `tests/chat-import-converters.test.js`. `/api/chats/import` continues to own upload cleanup, path checks, file naming, file writes/copy, JSON/JSONL branching, Chub fallback handling, response shape, and chat-stat dirty marking.
 - 2026-06-02: Chat backup helper boundary delivered. Backup name normalization, backup file path construction, per-chat cleanup prefix selection, and total-retention policy decisions now live in `src/endpoints/chat-backup-helpers.js` with focused proof in `tests/chat-backup-helpers.test.js`. `backupChat()` continues to own enablement, directory checks, file writes, cleanup calls, throttling lifecycle, and failure logging.
+- 2026-06-03: World-info external converter helper boundary delivered. Novel Lorebook, Agnai Memory Book, Risu Lorebook, and embedded Character Book converters now live in `public/scripts/world-info-converters.js` with focused proof in `tests/world-info-converters.test.js`. `public/scripts/world-info.js` continues to own file parsing, overwrite checks, `/api/worldinfo/import`, `saveWorldInfo()`, editor refresh side effects, and the public `convertCharacterBook` re-export used by `@sillytavern/scripts/world-info`.
 
 ## Recommended Next Work
 
-The next recommended implementation slice is world-info external conversion helper extraction in `public/scripts/world-info.js`.
+The next recommended implementation slice is World Info import UX feedback, starting with loading state and empty embedded-lorebook feedback.
 
 Scope:
 
-- Extract pure external lorebook / character-book conversion helpers before touching prompt activation or editor DOM behavior.
-- Add focused conversion tests for representative external formats before moving production logic.
-- Keep world-info prompt activation, recursion, timed effects, regex placement values, slash-command registration, editor card DOM identity, pagination, and request/cache side effects stable unless a later design explicitly approves a behavior change.
+- Add visible feedback while World Info import work is running so slow parse/network paths do not appear idle.
+- Add an explicit info toast when the selected character has no embedded `character_book` data instead of returning silently.
+- Keep converter logic, prompt activation, regex placement values, slash-command registration, editor card DOM identity, pagination, and import API shapes stable unless a later design explicitly approves a behavior change.
 
 First shippable target:
 
-1. Identify conversion functions in `public/scripts/world-info.js` that can accept explicit input and return converted world-info data without reading globals or mutating DOM.
-2. Add focused unit tests for the extracted conversion helpers and fixture-shaped inputs.
-3. Move only deterministic conversion logic out of `public/scripts/world-info.js`; leave prompt scanning, regex application, save/load cache behavior, editor rendering, and event emission in the existing module for the first slice.
+1. Disable the import file control or owning import button and show a small spinner while `importWorldInfo(file)` is actively parsing, confirming, posting, or saving.
+2. Restore the control on success, cancel, parse failure, overwrite denial, or network failure.
+3. Add a `toastr.info` path for `importEmbeddedWorldInfo()` when the active character has no embedded lorebook data.
+4. Prove the changes with focused import-flow tests or browser evidence depending on the executable surface available.
 
 Not in this slice:
 
-- Do not change regex matching semantics, placement values, or slash-command surfaces.
-- Do not change prompt activation recursion, timed effects, or inclusion-group behavior.
-- Do not change editor card templates, DOM identity, pagination, or visible workflow without frontend review and browser proof.
-- Do not split the whole world-info module or introduce a framework/controller rewrite in this slice.
+- Do not change external-format converter output, regex matching semantics, placement values, or slash-command surfaces.
+- Do not change prompt activation recursion, timed effects, inclusion-group behavior, editor card templates, DOM identity, pagination, or world-info file schema.
+- Do not add format preview, richer overwrite entry counts, retry buttons, or batch import in the first loading/empty-feedback slice; treat those as later UX slices.
+- Do not split the whole world-info module or introduce a framework/controller rewrite.
 
 Minimum validation:
 
-- New focused helper tests for external conversion behavior.
+- New focused proof for import UI state and no-embedded-book feedback, or browser proof if no stable unit surface exists.
 - `world-info-card-rendering.test.js` and browser proof only if visible editor rendering changes.
 - `bun run test:compat` if regex, slash-command, extension, import alias, or world-info regex surfaces are touched.
 - `bun run lint` as the closeout gate.
 
 ## Recommended Near-Term Sequence
 
-1. Extract world-info external conversion helpers.
-   - Start with external lorebook and character-book conversion helpers.
-   - Do not touch prompt activation recursion, regex semantics, or editor DOM identity in the same slice.
+1. Improve World Info import feedback.
+   - Start with loading state during import and an explicit no-embedded-lorebook info message.
+   - Do not change converter output, prompt activation recursion, regex semantics, or editor DOM identity in the same slice.
 
-2. Extract OpenAI/provider capability helpers.
+2. Improve World Info import decision quality.
+   - Add detected-format and entry-count context to confirmation/overwrite flows.
+   - Improve parsing, format mismatch, network failure, and retry messaging without changing converter output.
+
+3. Add World Info batch import as a separate UX/API slice.
+   - Move from first-file-only handling to an explicit per-file queue after import feedback and conversion boundaries stay green.
+   - Keep per-file error reporting and overwrite decisions explicit.
+
+4. Extract OpenAI/provider capability helpers.
    - Start with reasoning effort, verbosity, media inlining, and model-selection helpers.
    - Use source-backed provider docs before changing API syntax, model-specific behavior, or request payload semantics.
 
-3. Continue character-list helper extraction inside `public/script.js`.
+5. Continue character-list helper extraction inside `public/script.js`.
    - Extend existing `character-list-state.js` and `character-list-render-state.js` boundaries.
    - Preserve row identity selectors and run compatibility proof when identity/export surfaces are touched.
 
-4. Continue character route service extraction only after the delivered helper boundary stays green.
+6. Continue character route service extraction only after the delivered helper boundary stays green.
    - Prefer read/list service wrappers or import-format helpers with route proof.
    - Keep `/api/characters/all`, `/api/characters/get`, cache/index refresh, and thumbnail side effects stable.
 
-5. Pick a low-risk frontend panel or toolbar controller only after the helper slices above are green.
+7. Pick a low-risk frontend panel or toolbar controller only after the helper slices above are green.
    - Keep the login/setup controller pattern: pure helpers, explicit root, dependency injection, cleanup, and focused proof.
 
-6. Run startup and interaction performance reports after any slice that claims a latency improvement.
+8. Run startup and interaction performance reports after any slice that claims a latency improvement.
 
-7. Update owning docs after each shipped slice, then record only shipped architecture evolution in `.docs/PROJECT_HISTORY.md`.
+9. Update owning docs after each shipped slice, then record only shipped architecture evolution in `.docs/PROJECT_HISTORY.md`.
 
 ## Non-Goals
 
