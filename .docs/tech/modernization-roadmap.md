@@ -260,57 +260,54 @@ Phase 1 result:
 - 2026-06-02: Chat import converter helper boundary delivered. Ooba, Agnai, CAI Tools, Kobold Lite, Chub JSONL flattening, RisuAI conversion, and JSON converter selection now live in `src/endpoints/chat-import-converters.js` with fixture-style proof in `tests/chat-import-converters.test.js`. `/api/chats/import` continues to own upload cleanup, path checks, file naming, file writes/copy, JSON/JSONL branching, Chub fallback handling, response shape, and chat-stat dirty marking.
 - 2026-06-02: Chat backup helper boundary delivered. Backup name normalization, backup file path construction, per-chat cleanup prefix selection, and total-retention policy decisions now live in `src/endpoints/chat-backup-helpers.js` with focused proof in `tests/chat-backup-helpers.test.js`. `backupChat()` continues to own enablement, directory checks, file writes, cleanup calls, throttling lifecycle, and failure logging.
 - 2026-06-03: World-info external converter helper boundary delivered. Novel Lorebook, Agnai Memory Book, Risu Lorebook, and embedded Character Book converters now live in `public/scripts/world-info-converters.js` with focused proof in `tests/world-info-converters.test.js`. `public/scripts/world-info.js` continues to own file parsing, overwrite checks, `/api/worldinfo/import`, `saveWorldInfo()`, editor refresh side effects, and the public `convertCharacterBook` re-export used by `@sillytavern/scripts/world-info`.
+- 2026-06-03: World-info import feedback delivered. The file import entry now exposes busy/disabled feedback, spinner state, and a persistent loading toast while `importWorldInfo(file)` is active, then restores on success, cancel, parse failure, overwrite denial, or network failure. `importEmbeddedWorldInfo()` now reports when the selected character has no embedded `character_book` data. Converter logic, import API shapes, overwrite decisions, editor rendering, and compatibility exports remain unchanged.
 
 ## Recommended Next Work
 
-The next recommended implementation slice is World Info import UX feedback, starting with loading state and empty embedded-lorebook feedback.
+The next recommended implementation slice is World Info import decision quality, starting with detected-format context, entry-count context, and more actionable failure messages.
 
 Scope:
 
-- Add visible feedback while World Info import work is running so slow parse/network paths do not appear idle.
-- Add an explicit info toast when the selected character has no embedded `character_book` data instead of returning silently.
+- Show detected external format and imported entry count before destructive overwrite decisions when that information is available.
+- Improve parse, format mismatch, network failure, and retry guidance without exposing raw technical errors as the primary user message.
 - Keep converter logic, prompt activation, regex placement values, slash-command registration, editor card DOM identity, pagination, and import API shapes stable unless a later design explicitly approves a behavior change.
 
 First shippable target:
 
-1. Disable the import file control or owning import button and show a small spinner while `importWorldInfo(file)` is actively parsing, confirming, posting, or saving.
-2. Restore the control on success, cancel, parse failure, overwrite denial, or network failure.
-3. Add a `toastr.info` path for `importEmbeddedWorldInfo()` when the active character has no embedded lorebook data.
+1. Surface detected format and entry count near the existing overwrite confirmation path, without adding a separate import preview flow yet.
+2. Replace raw parse/import errors with actionable user messages while preserving console detail for debugging.
+3. Keep retry UI out unless the same slice defines where retry state lives and how duplicate submissions are prevented.
 4. Prove the changes with focused import-flow tests or browser evidence depending on the executable surface available.
 
 Not in this slice:
 
 - Do not change external-format converter output, regex matching semantics, placement values, or slash-command surfaces.
 - Do not change prompt activation recursion, timed effects, inclusion-group behavior, editor card templates, DOM identity, pagination, or world-info file schema.
-- Do not add format preview, richer overwrite entry counts, retry buttons, or batch import in the first loading/empty-feedback slice; treat those as later UX slices.
+- Do not add batch import in the decision-quality slice; treat multi-file queueing and per-file reporting as a separate UX/API slice.
 - Do not split the whole world-info module or introduce a framework/controller rewrite.
 
 Minimum validation:
 
-- New focused proof for import UI state and no-embedded-book feedback, or browser proof if no stable unit surface exists.
+- New focused proof for detected-format/entry-count display and actionable error branches, or browser proof if no stable unit surface exists.
 - `world-info-card-rendering.test.js` and browser proof only if visible editor rendering changes.
 - `bun run test:compat` if regex, slash-command, extension, import alias, or world-info regex surfaces are touched.
 - `bun run lint` as the closeout gate.
 
 ## Recommended Near-Term Sequence
 
-1. Improve World Info import feedback.
-   - Start with loading state during import and an explicit no-embedded-lorebook info message.
-   - Do not change converter output, prompt activation recursion, regex semantics, or editor DOM identity in the same slice.
-
-2. Improve World Info import decision quality.
+1. Improve World Info import decision quality.
    - Add detected-format and entry-count context to confirmation/overwrite flows.
    - Improve parsing, format mismatch, network failure, and retry messaging without changing converter output.
 
-3. Add World Info batch import as a separate UX/API slice.
+2. Add World Info batch import as a separate UX/API slice.
    - Move from first-file-only handling to an explicit per-file queue after import feedback and conversion boundaries stay green.
    - Keep per-file error reporting and overwrite decisions explicit.
 
-4. Extract OpenAI/provider capability helpers.
+3. Extract OpenAI/provider capability helpers.
    - Start with reasoning effort, verbosity, media inlining, and model-selection helpers.
    - Use source-backed provider docs before changing API syntax, model-specific behavior, or request payload semantics.
 
-5. Continue character-list helper extraction inside `public/script.js`.
+4. Continue character-list helper extraction inside `public/script.js`.
    - Extend existing `character-list-state.js` and `character-list-render-state.js` boundaries.
    - Preserve row identity selectors and run compatibility proof when identity/export surfaces are touched.
 

@@ -349,6 +349,12 @@
     background-color: rgba(255, 255, 255, 0.08);
 }
 
+#world_more_menu_dropdown .options-menu[aria-disabled="true"] {
+    cursor: wait;
+    opacity: 0.65;
+    pointer-events: none;
+}
+
 #world_more_menu_dropdown .options-content-hr {
     border: none;
     border-top: 1px solid var(--SmartThemeBorderColor);

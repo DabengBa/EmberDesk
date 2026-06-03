@@ -74,6 +74,8 @@ export let world_names;
 let worldInfoRuntimeInitialized = false;
 let worldInfoCoreInitialized = false;
 let worldInfoPanelInitialized = false;
+let worldInfoImportBusy = false;
+let worldInfoImportToast = null;
 export let world_info_depth = 2;
 export let world_info_min_activations = 0; // if > 0, will continue seeking chat until minimum world infos are activated
 export let world_info_min_activations_depth_max = 0; // used when (world_info_min_activations > 0)
@@ -93,6 +95,32 @@ function closeMoreMenu() {
     $('#world_more_menu_dropdown').hide();
     $('#WorldInfo').removeClass('wi-more-menu-open');
 }
+
+function setWorldImportBusy(isBusy) {
+    worldInfoImportBusy = Boolean(isBusy);
+    const importIcon = $('#world_import_menu_item').find('i').first();
+
+    $('#world_import_file').prop('disabled', worldInfoImportBusy);
+    $('#world_import_menu_item')
+        .toggleClass('disabled', worldInfoImportBusy)
+        .attr('aria-disabled', String(worldInfoImportBusy));
+
+    if (worldInfoImportBusy) {
+        importIcon.removeClass('fa-file-import').addClass('fa-spinner fa-spin');
+
+        if (!worldInfoImportToast) {
+            worldInfoImportToast = toastr.info(t`Importing World Info...`, t`Please wait`, { timeOut: 0, extendedTimeOut: 0 });
+        }
+    } else {
+        importIcon.removeClass('fa-spinner fa-spin').addClass('fa-file-import');
+
+        if (worldInfoImportToast) {
+            toastr.clear(worldInfoImportToast, { force: true });
+            worldInfoImportToast = null;
+        }
+    }
+}
+
 const saveSettingsDebounced = debounce(() => {
     Object.assign(world_info, { globalSelect: selected_world_info });
     saveSettings();
@@ -5713,6 +5741,7 @@ export async function importEmbeddedWorldInfo(skipPopup = false) {
     const hasEmbed = checkEmbeddedWorld(chid);
 
     if (!hasEmbed) {
+        toastr.info(t`This character card does not contain embedded World/Lorebook data.`);
         return;
     }
 
@@ -6313,6 +6342,10 @@ export function initWorldInfo() {
     if (!worldInfoPanelInitialized && document.querySelector('#world_editor_select')) {
         // More menu: import
         $('#world_import_menu_item').on('click', function () {
+            if (worldInfoImportBusy) {
+                return;
+            }
+
             $('#world_import_file').trigger('click');
             closeMoreMenu();
         });
@@ -6323,9 +6356,18 @@ export function initWorldInfo() {
             }
 
             const file = e.target.files[0];
+            if (!file) {
+                e.target.value = '';
+                return;
+            }
 
-            await importWorldInfo(file);
-            e.target.value = '';
+            setWorldImportBusy(true);
+            try {
+                await importWorldInfo(file);
+            } finally {
+                setWorldImportBusy(false);
+                e.target.value = '';
+            }
         });
 
         // More menu toggle

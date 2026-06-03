@@ -37,7 +37,7 @@ This feature lets users keep lorebook context close to the chat workspace: they 
 2. EmberDesk shows a Global World Info panel and a World Info Editor panel.
 3. In the global panel, the user can select zero or more worlds that remain active across chats. When no global world is active, the selector shows an empty prompt.
 4. In the editor panel, the user selects a world book to inspect or modify.
-5. EmberDesk shows editor controls for searching, sorting, creating, importing, exporting, renaming, duplicating, deleting, refreshing, backfilling metadata, and applying sorting.
+5. EmberDesk shows editor controls for searching, sorting, creating, importing, exporting, renaming, duplicating, deleting, refreshing, backfilling metadata, and applying sorting. When a file import is running, the import action is disabled and shows visible in-progress feedback until that import attempt finishes.
 6. World entries appear as cards so the user can scan the list before expanding or editing a specific entry.
 7. When entry content needs more room, the content editor opens as a modal dialog with its own title, metadata, close control, and text area.
 
@@ -46,6 +46,8 @@ This feature lets users keep lorebook context close to the chat workspace: they 
 - The drawer belongs to the chat workspace; users should not need a separate route to activate or edit World Info.
 - Global world activation and editor selection are separate controls because selecting a world for editing does not automatically mean it is globally active.
 - The World Info drawer can stay open alongside other workspace context, but its own panels and dialogs own their visible loading, empty, and editing states.
+- The toolbar import action prevents duplicate file-picker opens while an import attempt is active; file parsing, conversion, overwrite checks, upload, success, and failure paths all restore the action to its normal state.
+- Embedded World/Lorebook import is a toolbar-adjacent character action: if a selected character has no embedded book data, EmberDesk reports that empty state instead of silently doing nothing.
 - Destructive world-book deletion is a separate semantic feature: [Delete World Book](feature.world_book_delete).
 - Character deletion may also delete selected world info files through its cascade section, but that destructive flow belongs to [Delete Character](feature.character_delete).
 - Entry scanning, prompt injection, token budget calculations, server endpoints, and persistence details are outside this semantic ID.
@@ -56,4 +58,6 @@ This feature lets users keep lorebook context close to the chat workspace: they 
 - **Editor selected**: the editor panel shows the selected world book's entries and toolbar actions.
 - **Entry opened**: the selected entry expands or opens the content editor dialog for focused editing.
 - **Empty state**: if no global worlds or editor world are selected, the panel communicates that state without leaving stale entry content visible.
+- **Import in progress**: the import action is visibly busy, duplicate import starts are blocked, and the action is restored after success, cancellation, parse failure, or network failure.
+- **No embedded book**: trying to import embedded World/Lorebook data from a selected character without embedded data produces an informational message.
 - **Deletion requested**: the user is routed into the separate [Delete World Book](feature.world_book_delete) confirmation flow.
