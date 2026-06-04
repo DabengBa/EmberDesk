@@ -32,13 +32,13 @@ describe('world info import feedback', () => {
         );
         const busyHelper = extractBlock(
             source,
-            'function setWorldImportBusy(isBusy)',
+            'function setWorldImportBusy(isBusy',
             'const saveSettingsDebounced',
         );
 
         expect(source).toContain('let worldInfoImportBusy = false;');
         expect(source).toContain('let worldInfoImportToast = null;');
-        expect(source).toContain('function setWorldImportBusy(isBusy)');
+        expect(source).toContain('function setWorldImportBusy(isBusy, { showToast = true } = {})');
         expect(source).toContain('export async function importWorldInfoFiles(files)');
         expect(changeHandler).toContain('const files = Array.from(e.target.files ?? []);');
         expect(changeHandler).toContain('try {');
@@ -99,10 +99,13 @@ describe('world info import feedback', () => {
             'export async function importWorldInfo(file',
         );
 
-        expect(source).toContain('function createWorldInfoImportResult(status, file, worldName = null)');
-        expect(source).toContain('function summarizeWorldInfoBatchImport(results)');
+        expect(source).toContain("import { createWorldInfoImportResult, summarizeWorldInfoBatchImport } from './world-info-import-results.js';");
         expect(source).toContain('function showWorldInfoBatchImportSummary(summary)');
-        expect(batchSource).toContain('const queue = Array.from(files ?? []).filter(Boolean);');
+        expect(source).toContain('summary.unprocessedCount === 0');
+        expect(source).toContain('const WORLD_INFO_IMPORT_BATCH_FILE_LIMIT = 50;');
+        expect(source).toContain("const WORLD_INFO_IMPORT_ACCEPTED_EXTENSIONS = ['.json', '.lorebook', '.png'];");
+        expect(source).toContain('function prepareWorldInfoImportQueue(files)');
+        expect(batchSource).toContain('const { selectedFiles, queue, unsupportedFiles, overflowFiles, skippedResults } = prepareWorldInfoImportQueue(files);');
         expect(batchSource).toContain('if (worldInfoImportBusy) {');
         expect(batchSource).toContain('setWorldImportBusy(true, { showToast: false });');
         expect(batchSource).toContain('for (let index = 0; index < queue.length; index++) {');
@@ -138,9 +141,13 @@ describe('world info import feedback', () => {
         expect(source).toContain('function updateWorldInfoBatchProgress(batchState, index, total, file)');
         expect(source).toContain('world-info-batch-cancel');
         expect(source).toContain('batchState.cancelRequested = true;');
+        expect(source).toContain("role', 'status'");
+        expect(source).toContain("aria-live', 'polite'");
+        expect(source).toContain('Cancel remaining imports?');
+        expect(source).toContain('Ask for each conflict');
         expect(batchSource).toContain('if (batchState.cancelRequested) {');
         expect(batchSource).toContain("createWorldInfoImportResult('skipped', file)");
-        expect(batchSource).toContain('result.unprocessed = true;');
+        expect(batchSource).toContain("unprocessed: true, reason: 'cancelled-remaining'");
     });
 
     test('world import derives reusable format and entry-count metadata', () => {
@@ -159,7 +166,9 @@ describe('world info import feedback', () => {
         expect(source).toContain("formatLabel: 'Agnai Memory Book'");
         expect(source).toContain("formatLabel: 'Risu Lorebook'");
         expect(source).toContain('formatLabel: sourceFormatLabel');
-        expect(importSource).toContain("detectWorldInfoImportMetadata(jsonData, { sourceFormatLabel: file.name.endsWith('.png') ? 'PNG NAI data' : 'World Info JSON' })");
+        expect(importSource).toContain("const isPngImport = file.name.toLowerCase().endsWith('.png');");
+        expect(importSource).toContain('if (isPngImport) {');
+        expect(importSource).toContain("detectWorldInfoImportMetadata(jsonData, { sourceFormatLabel: isPngImport ? 'PNG NAI data' : 'World Info JSON' })");
         expect(importSource).toContain("formData.append('convertedData', JSON.stringify(metadata.convertedData));");
         expect(source).toContain('formatWorldInfoImportSummary(metadata)');
         expect(source).toContain('countWorldInfoEntries(metadata.convertedData');

@@ -46,7 +46,7 @@ This feature lets users keep lorebook context close to the chat workspace: they 
 - The drawer belongs to the chat workspace; users should not need a separate route to activate or edit World Info.
 - Global world activation and editor selection are separate controls because selecting a world for editing does not automatically mean it is globally active.
 - The World Info drawer can stay open alongside other workspace context, but its own panels and dialogs own their visible loading, empty, and editing states.
-- The toolbar import action accepts one or more `.json`, `.lorebook`, or `.png` files from the file picker, and the World Info editor panel accepts dropped files through the same import queue.
+- The toolbar import action accepts one or more `.json`, `.lorebook`, or `.png` files from the file picker, and the World Info editor panel accepts dropped files through the same import queue. A batch imports up to 50 supported files; unsupported extensions and extra files are skipped with visible feedback.
 - The toolbar import action prevents duplicate file-picker opens while an import batch is active; file parsing, conversion, overwrite checks, upload, success, skip, cancellation, and failure paths all restore the action to its normal state.
 - Single-file import shows the detected source format and entry count when available so overwrite decisions and successful outcomes have visible context.
 - Batch import processes files sequentially because each successful file can refresh the World Info selector and switch the editor to the imported world.

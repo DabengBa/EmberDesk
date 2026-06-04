@@ -27,6 +27,7 @@ import { buildWorldInfoReplayState } from './deferred-panel-replays.js';
 import { buildCascadeSectionHtml, captureCascadeChoices } from './world-cascade-dialog.js';
 import { convertAgnaiMemoryBook, convertCharacterBook, convertNovelLorebook, convertRisuLorebook } from './world-info-converters.js';
 import { DragAndDropHandler } from './dragdrop.js';
+import { createWorldInfoImportResult, summarizeWorldInfoBatchImport } from './world-info-import-results.js';
 
 export { convertCharacterBook };
 
@@ -98,8 +99,7 @@ function closeMoreMenu() {
     $('#WorldInfo').removeClass('wi-more-menu-open');
 }
 
-function setWorldImportBusy(isBusy) {
-    const showToast = arguments[1]?.showToast ?? true;
+function setWorldImportBusy(isBusy, { showToast = true } = {}) {
     worldInfoImportBusy = Boolean(isBusy);
     const importIcon = $('#world_import_menu_item').find('i').first();
 
@@ -237,13 +237,8 @@ const WORLD_INFO_IMPORT_CONFLICT_CHOICE = Object.freeze({
     SKIP: 'skip',
 });
 
-function createWorldInfoImportResult(status, file, worldName = null) {
-    return {
-        status,
-        fileName: file?.name ?? null,
-        worldName,
-    };
-}
+const WORLD_INFO_IMPORT_BATCH_FILE_LIMIT = 50;
+const WORLD_INFO_IMPORT_ACCEPTED_EXTENSIONS = ['.json', '.lorebook', '.png'];
 
 function getWorldInfoImportBaseName(file) {
     const fileName = file?.name ?? '';
@@ -259,6 +254,25 @@ async function getWorldInfoImportTargetName(file) {
     return getSanitizedFilename(getWorldInfoImportBaseName(file));
 }
 
+function isWorldInfoImportFileSupported(file) {
+    const fileName = file?.name?.toLowerCase?.() ?? '';
+    return WORLD_INFO_IMPORT_ACCEPTED_EXTENSIONS.some(extension => fileName.endsWith(extension));
+}
+
+function prepareWorldInfoImportQueue(files) {
+    const selectedFiles = Array.from(files ?? []).filter(Boolean);
+    const supportedFiles = selectedFiles.filter(file => isWorldInfoImportFileSupported(file));
+    const unsupportedFiles = selectedFiles.filter(file => !isWorldInfoImportFileSupported(file));
+    const queue = supportedFiles.slice(0, WORLD_INFO_IMPORT_BATCH_FILE_LIMIT);
+    const overflowFiles = supportedFiles.slice(WORLD_INFO_IMPORT_BATCH_FILE_LIMIT);
+    const skippedResults = [
+        ...unsupportedFiles.map(file => createWorldInfoImportResult('skipped', file, null, { reason: 'unsupported-extension' })),
+        ...overflowFiles.map(file => createWorldInfoImportResult('skipped', file, null, { reason: 'batch-limit' })),
+    ];
+
+    return { selectedFiles, queue, unsupportedFiles, overflowFiles, skippedResults };
+}
+
 async function getWorldInfoBatchImportConflicts(files) {
     const conflicts = [];
 
@@ -271,30 +285,6 @@ async function getWorldInfoBatchImportConflicts(files) {
     }
 
     return conflicts;
-}
-
-function summarizeWorldInfoBatchImport(results) {
-    const summary = {
-        successCount: 0,
-        failedCount: 0,
-        skippedCount: 0,
-        unprocessedCount: 0,
-        totalCount: results.length,
-    };
-
-    for (const result of results) {
-        if (result?.unprocessed) {
-            summary.unprocessedCount++;
-        } else if (result?.status === 'success') {
-            summary.successCount++;
-        } else if (result?.status === 'failed') {
-            summary.failedCount++;
-        } else if (result?.status === 'cancelled' || result?.status === 'skipped') {
-            summary.skippedCount++;
-        }
-    }
-
-    return summary;
 }
 
 function formatWorldInfoImportBatchSummary(summary) {
@@ -321,18 +311,19 @@ function formatWorldInfoImportBatchSummary(summary) {
 
 function showWorldInfoBatchImportSummary(summary) {
     const detail = formatWorldInfoImportBatchSummary(summary);
+    const total = t`${summary.totalCount} total`;
 
-    if (summary.successCount > 0 && summary.failedCount === 0 && summary.skippedCount === 0) {
-        toastr.success(t`World Info batch import complete: ${detail}.`);
+    if (summary.successCount > 0 && summary.failedCount === 0 && summary.skippedCount === 0 && summary.unprocessedCount === 0) {
+        toastr.success(t`World Info batch import complete: ${detail} (${total}).`);
         return;
     }
 
     if (summary.successCount > 0) {
-        toastr.warning(t`World Info batch import partially complete: ${detail}.`);
+        toastr.warning(t`World Info batch import partially complete: ${detail} (${total}).`);
         return;
     }
 
-    toastr.warning(t`World Info batch import finished with no new World Info imported: ${detail}.`);
+    toastr.warning(t`World Info batch import finished with no new World Info imported: ${detail} (${total}).`);
 }
 
 function buildWorldInfoBatchProgressHtml(index, total, file) {
@@ -341,8 +332,14 @@ function buildWorldInfoBatchProgressHtml(index, total, file) {
         <div>${t`Importing file ${index} of ${total}`}</div>
         <div><strong>${escapeHtml(file?.name ?? t`Unknown file`)}</strong></div>
         <div>${t`Progress`}: ${percent}%</div>
-        <button type="button" class="menu_button world-info-batch-cancel">${t`Cancel remaining`}</button>
+        <button type="button" class="menu_button world-info-batch-cancel" aria-label="${escapeHtml(t`Cancel remaining World Info imports`)}">${t`Cancel remaining`}</button>
     `;
+}
+
+async function waitForWorldInfoBatchCancelPrompt(batchState) {
+    while (batchState.cancelPromptOpen) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+    }
 }
 
 function updateWorldInfoBatchProgress(batchState, index, total, file) {
@@ -362,11 +359,38 @@ function updateWorldInfoBatchProgress(batchState, index, total, file) {
         worldInfoImportToast.find('.toast-message').html(progressHtml);
     }
 
+    worldInfoImportToast.find('.toast-message')
+        .attr('role', 'status')
+        .attr('aria-live', 'polite')
+        .attr('aria-atomic', 'true');
+
     const percent = total > 0 ? Math.round((progressIndex / total) * 100) : 0;
     worldInfoImportToast.find('.toast-progress').css('width', `${percent}%`);
-    worldInfoImportToast.find('.world-info-batch-cancel').off('click').on('click', (event) => {
-        batchState.cancelRequested = true;
-        $(event.currentTarget).prop('disabled', true).text(t`Cancelling...`);
+    worldInfoImportToast.find('.world-info-batch-cancel').off('click').on('click', async (event) => {
+        const button = $(event.currentTarget);
+        button.prop('disabled', true);
+        batchState.cancelPromptOpen = true;
+
+        try {
+            const confirmed = await Popup.show.confirm(
+                t`Cancel remaining imports?`,
+                t`The current file will finish. Files still waiting in the batch will be skipped.`,
+                {
+                    okButton: t`Cancel remaining`,
+                    cancelButton: t`Keep importing`,
+                    defaultResult: POPUP_RESULT.NEGATIVE,
+                },
+            );
+
+            if (confirmed === POPUP_RESULT.AFFIRMATIVE) {
+                batchState.cancelRequested = true;
+                button.text(t`Cancelling...`);
+            } else {
+                button.prop('disabled', false);
+            }
+        } finally {
+            batchState.cancelPromptOpen = false;
+        }
     });
 }
 
@@ -385,7 +409,7 @@ async function showWorldInfoBatchConflictPopup(conflicts) {
 
     const result = await Popup.show.confirm(t`World Info import conflicts`, buildWorldInfoBatchConflictHtml(conflicts), {
         okButton: t`Overwrite all`,
-        cancelButton: t`Confirm individually`,
+        cancelButton: t`Ask for each conflict`,
         defaultResult: POPUP_RESULT.NEGATIVE,
         customButtons: [{ text: t`Skip all`, result: POPUP_RESULT.CUSTOM1 }],
     });
@@ -6166,18 +6190,32 @@ export function onWorldInfoChange(args, text) {
  * @returns {Promise<object[]>} Batch import results
  */
 export async function importWorldInfoFiles(files) {
-    const queue = Array.from(files ?? []).filter(Boolean);
+    const { selectedFiles, queue, unsupportedFiles, overflowFiles, skippedResults } = prepareWorldInfoImportQueue(files);
 
-    if (queue.length === 0) {
+    if (selectedFiles.length === 0) {
         return [createWorldInfoImportResult('skipped', null)];
     }
 
     if (worldInfoImportBusy) {
-        return queue.map(file => createWorldInfoImportResult('skipped', file));
+        return selectedFiles.map(file => createWorldInfoImportResult('skipped', file, null, { reason: 'busy' }));
     }
 
-    const results = [];
-    const batchState = { cancelRequested: false };
+    if (unsupportedFiles.length > 0) {
+        toastr.warning(t`${unsupportedFiles.length} unsupported file(s) skipped. Supported formats: .json, .lorebook, .png.`, t`World Info Import`);
+    }
+
+    if (overflowFiles.length > 0) {
+        toastr.warning(t`Only the first ${WORLD_INFO_IMPORT_BATCH_FILE_LIMIT} World Info files will be imported. ${overflowFiles.length} extra file(s) were skipped.`, t`World Info Import`);
+    }
+
+    if (queue.length === 0) {
+        const summary = summarizeWorldInfoBatchImport(skippedResults);
+        showWorldInfoBatchImportSummary(summary);
+        return skippedResults;
+    }
+
+    const results = [...skippedResults];
+    const batchState = { cancelRequested: false, cancelPromptOpen: false };
     let conflictFiles = new Set();
     let skippedConflictFiles = new Set();
     let completed = false;
@@ -6190,6 +6228,7 @@ export async function importWorldInfoFiles(files) {
             conflicts = await getWorldInfoBatchImportConflicts(queue);
         } catch (error) {
             console.error('World Info batch conflict pre-scan failed:', error);
+            toastr.warning(t`Conflict pre-scan failed. EmberDesk will ask about overwrites one file at a time.`, t`World Info Import`);
         }
         const conflictChoice = await showWorldInfoBatchConflictPopup(conflicts);
         conflictFiles = new Set(conflicts.map(conflict => conflict.file));
@@ -6198,9 +6237,10 @@ export async function importWorldInfoFiles(files) {
         for (let index = 0; index < queue.length; index++) {
             const file = queue[index];
 
+            await waitForWorldInfoBatchCancelPrompt(batchState);
+
             if (batchState.cancelRequested) {
-                const result = createWorldInfoImportResult('skipped', file);
-                result.unprocessed = true;
+                const result = createWorldInfoImportResult('skipped', file, null, { unprocessed: true, reason: 'cancelled-remaining' });
                 results.push(result);
                 continue;
             }
@@ -6244,6 +6284,8 @@ export async function importWorldInfo(file, { overwriteMode = WORLD_INFO_IMPORT_
         return createWorldInfoImportResult('skipped', file);
     }
 
+    const isPngImport = file.name.toLowerCase().endsWith('.png');
+
     if (file.size > WORLD_INFO_IMPORT_LARGE_FILE_THRESHOLD_BYTES) {
         toastr.info(t`This file is large. Importing may take longer than usual.`);
     }
@@ -6255,7 +6297,7 @@ export async function importWorldInfo(file, { overwriteMode = WORLD_INFO_IMPORT_
     try {
         let jsonData;
 
-        if (file.name.endsWith('.png')) {
+        if (isPngImport) {
             const buffer = new Uint8Array(await getFileBuffer(file));
             jsonData = extractDataFromPng(buffer, 'naidata');
 
@@ -6278,7 +6320,7 @@ export async function importWorldInfo(file, { overwriteMode = WORLD_INFO_IMPORT_
             return createWorldInfoImportResult('failed', file);
         }
 
-        metadata = detectWorldInfoImportMetadata(jsonData, { sourceFormatLabel: file.name.endsWith('.png') ? 'PNG NAI data' : 'World Info JSON' });
+        metadata = detectWorldInfoImportMetadata(jsonData, { sourceFormatLabel: isPngImport ? 'PNG NAI data' : 'World Info JSON' });
         if (metadata.unsupported) {
             toastr.error(t`Unsupported World Info file format. Supported formats: World Info JSON (SillyTavern compatible), PNG NAI data, Novel Lorebook, Agnai Memory Book, Risu Lorebook.`);
             return createWorldInfoImportResult('failed', file);
@@ -6293,7 +6335,7 @@ export async function importWorldInfo(file, { overwriteMode = WORLD_INFO_IMPORT_
         return createWorldInfoImportResult('failed', file);
     }
 
-    const worldName = file.name.substr(0, file.name.lastIndexOf('.'));
+    const worldName = getWorldInfoImportBaseName(file);
     const sanitizedWorldName = await getSanitizedFilename(worldName);
     const allowed = await prepareWorldInfoImportOverwrite(sanitizedWorldName, metadata, overwriteMode);
     if (!allowed) {
