@@ -261,21 +261,23 @@ Phase 1 result:
 - 2026-06-02: Chat backup helper boundary delivered. Backup name normalization, backup file path construction, per-chat cleanup prefix selection, and total-retention policy decisions now live in `src/endpoints/chat-backup-helpers.js` with focused proof in `tests/chat-backup-helpers.test.js`. `backupChat()` continues to own enablement, directory checks, file writes, cleanup calls, throttling lifecycle, and failure logging.
 - 2026-06-03: World-info external converter helper boundary delivered. Novel Lorebook, Agnai Memory Book, Risu Lorebook, and embedded Character Book converters now live in `public/scripts/world-info-converters.js` with focused proof in `tests/world-info-converters.test.js`. `public/scripts/world-info.js` continues to own file parsing, overwrite checks, `/api/worldinfo/import`, `saveWorldInfo()`, editor refresh side effects, and the public `convertCharacterBook` re-export used by `@sillytavern/scripts/world-info`.
 - 2026-06-03: World-info import feedback delivered. The file import entry now exposes busy/disabled feedback, spinner state, and a persistent loading toast while `importWorldInfo(file)` is active, then restores on success, cancel, parse failure, overwrite denial, or network failure. `importEmbeddedWorldInfo()` now reports when the selected character has no embedded `character_book` data. Converter logic, import API shapes, overwrite decisions, editor rendering, and compatibility exports remain unchanged.
+- 2026-06-04: World-info import decision quality delivered. Single-file import now derives detected format and entry count for overwrite confirmation and success feedback, uses action-labeled overwrite confirmation with cancel as the safe default, distinguishes PNG character-card/no-data cases, unsupported formats, oversized uploads, parse failures, and network/import failures, and preserves converter output plus `/api/worldinfo/import` payload shape.
 
 ## Recommended Next Work
 
-The next recommended implementation slice is World Info import decision quality, starting with detected-format context, entry-count context, and more actionable failure messages.
+The next recommended implementation slice is World Info batch import, building on the delivered converter boundary, busy feedback, and import decision-quality context.
 
 Scope:
 
-- Show detected external format and imported entry count before destructive overwrite decisions when that information is available.
-- Improve parse, format mismatch, network failure, and retry guidance without exposing raw technical errors as the primary user message.
+- Move the file input from first-file-only handling to an explicit multi-file queue.
+- Keep detected format, entry count, overwrite confirmation, and actionable per-file errors visible for each import attempt.
+- Prevent duplicate submissions while a batch is active and make partial success/failure outcomes clear.
 - Keep converter logic, prompt activation, regex placement values, slash-command registration, editor card DOM identity, pagination, and import API shapes stable unless a later design explicitly approves a behavior change.
 
 First shippable target:
 
-1. Surface detected format and entry count near the existing overwrite confirmation path, without adding a separate import preview flow yet.
-2. Replace raw parse/import errors with actionable user messages while preserving console detail for debugging.
+1. Add `multiple` input support only after defining explicit per-file sequencing and user feedback.
+2. Reuse the current single-file metadata and error-classification helpers for each file.
 3. Keep retry UI out unless the same slice defines where retry state lives and how duplicate submissions are prevented.
 4. Prove the changes with focused import-flow tests or browser evidence depending on the executable surface available.
 
@@ -283,8 +285,8 @@ Not in this slice:
 
 - Do not change external-format converter output, regex matching semantics, placement values, or slash-command surfaces.
 - Do not change prompt activation recursion, timed effects, inclusion-group behavior, editor card templates, DOM identity, pagination, or world-info file schema.
-- Do not add batch import in the decision-quality slice; treat multi-file queueing and per-file reporting as a separate UX/API slice.
 - Do not split the whole world-info module or introduce a framework/controller rewrite.
+- Do not change converter output, import API shape, world-info schema, or editor card DOM identity as part of batch import.
 
 Minimum validation:
 
@@ -295,32 +297,28 @@ Minimum validation:
 
 ## Recommended Near-Term Sequence
 
-1. Improve World Info import decision quality.
-   - Add detected-format and entry-count context to confirmation/overwrite flows.
-   - Improve parsing, format mismatch, network failure, and retry messaging without changing converter output.
-
-2. Add World Info batch import as a separate UX/API slice.
+1. Add World Info batch import as a separate UX/API slice.
    - Move from first-file-only handling to an explicit per-file queue after import feedback and conversion boundaries stay green.
    - Keep per-file error reporting and overwrite decisions explicit.
 
-3. Extract OpenAI/provider capability helpers.
+2. Extract OpenAI/provider capability helpers.
    - Start with reasoning effort, verbosity, media inlining, and model-selection helpers.
    - Use source-backed provider docs before changing API syntax, model-specific behavior, or request payload semantics.
 
-4. Continue character-list helper extraction inside `public/script.js`.
+3. Continue character-list helper extraction inside `public/script.js`.
    - Extend existing `character-list-state.js` and `character-list-render-state.js` boundaries.
    - Preserve row identity selectors and run compatibility proof when identity/export surfaces are touched.
 
-6. Continue character route service extraction only after the delivered helper boundary stays green.
+4. Continue character route service extraction only after the delivered helper boundary stays green.
    - Prefer read/list service wrappers or import-format helpers with route proof.
    - Keep `/api/characters/all`, `/api/characters/get`, cache/index refresh, and thumbnail side effects stable.
 
-7. Pick a low-risk frontend panel or toolbar controller only after the helper slices above are green.
+5. Pick a low-risk frontend panel or toolbar controller only after the helper slices above are green.
    - Keep the login/setup controller pattern: pure helpers, explicit root, dependency injection, cleanup, and focused proof.
 
-8. Run startup and interaction performance reports after any slice that claims a latency improvement.
+6. Run startup and interaction performance reports after any slice that claims a latency improvement.
 
-9. Update owning docs after each shipped slice, then record only shipped architecture evolution in `.docs/PROJECT_HISTORY.md`.
+7. Update owning docs after each shipped slice, then record only shipped architecture evolution in `.docs/PROJECT_HISTORY.md`.
 
 ## Non-Goals
 

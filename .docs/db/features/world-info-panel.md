@@ -47,6 +47,8 @@ This feature lets users keep lorebook context close to the chat workspace: they 
 - Global world activation and editor selection are separate controls because selecting a world for editing does not automatically mean it is globally active.
 - The World Info drawer can stay open alongside other workspace context, but its own panels and dialogs own their visible loading, empty, and editing states.
 - The toolbar import action prevents duplicate file-picker opens while an import attempt is active; file parsing, conversion, overwrite checks, upload, success, and failure paths all restore the action to its normal state.
+- Single-file import shows the detected source format and entry count when available so overwrite decisions and successful outcomes have visible context.
+- Import errors distinguish unsupported formats, damaged or incomplete files, PNG files without importable World Info data, oversized uploads, and connection/import failures when EmberDesk can identify the cause.
 - Embedded World/Lorebook import is a toolbar-adjacent character action: if a selected character has no embedded book data, EmberDesk reports that empty state instead of silently doing nothing.
 - Destructive world-book deletion is a separate semantic feature: [Delete World Book](feature.world_book_delete).
 - Character deletion may also delete selected world info files through its cascade section, but that destructive flow belongs to [Delete Character](feature.character_delete).
@@ -59,5 +61,8 @@ This feature lets users keep lorebook context close to the chat workspace: they 
 - **Entry opened**: the selected entry expands or opens the content editor dialog for focused editing.
 - **Empty state**: if no global worlds or editor world are selected, the panel communicates that state without leaving stale entry content visible.
 - **Import in progress**: the import action is visibly busy, duplicate import starts are blocked, and the action is restored after success, cancellation, parse failure, or network failure.
+- **Import decision shown**: when an import would overwrite an existing world, the confirmation includes the detected format, available entry count, and action-specific overwrite/cancel choices.
+- **Import completed**: successful imports report the imported format and available entry count, then make the automatic switch to the imported World Info visible to the user.
+- **Import failed**: failed imports show a recoverable reason instead of exposing raw technical error text as the primary message.
 - **No embedded book**: trying to import embedded World/Lorebook data from a selected character without embedded data produces an informational message.
 - **Deletion requested**: the user is routed into the separate [Delete World Book](feature.world_book_delete) confirmation flow.

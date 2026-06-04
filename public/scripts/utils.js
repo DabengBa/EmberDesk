@@ -2429,15 +2429,17 @@ export function highlightRegex(regexStr) {
  * @param {boolean} [options.interactive=false] - Whether to show a confirmation dialog when needing to overwrite an existing data object
  * @param {string} [options.actionName='overwrite'] - The action name to display in the confirmation dialog
  * @param {(existingName:string)=>void} [options.deleteAction=null] - Optional action to execute wen deleting an existing data object on overwrite
+ * @param {string?} [options.contextHtml=null] - Optional extra HTML to append to the confirmation body
+ * @param {object} [options.confirmOptions={}] - Optional Popup.show.confirm options
  * @returns {Promise<boolean>} True if the user confirmed the overwrite or there is no overwrite needed, false otherwise
  */
-export async function checkOverwriteExistingData(type, existingNames, name, { interactive = false, actionName = 'Overwrite', deleteAction = null } = {}) {
+export async function checkOverwriteExistingData(type, existingNames, name, { interactive = false, actionName = 'Overwrite', deleteAction = null, contextHtml = null, confirmOptions = {} } = {}) {
     const existing = existingNames.find(x => equalsIgnoreCaseAndAccents(x, name));
     if (!existing) {
         return true;
     }
 
-    const overwrite = interactive && await Popup.show.confirm(`${type} ${actionName}`, `<p>A ${type.toLowerCase()} with the same name already exists:<br />${escapeHtml(existing)}</p>Do you want to overwrite it?`);
+    const overwrite = interactive && await Popup.show.confirm(`${type} ${actionName}`, `<p>A ${type.toLowerCase()} with the same name already exists:<br />${escapeHtml(existing)}</p>${contextHtml ?? ''}<p>Do you want to overwrite it?</p>`, confirmOptions);
     if (!overwrite) {
         toastr.warning(`${type} ${actionName.toLowerCase()} cancelled. A ${type.toLowerCase()} with the same name already exists:<br />${escapeHtml(existing)}`, `${type} ${actionName}`, { escapeHtml: false });
         return false;

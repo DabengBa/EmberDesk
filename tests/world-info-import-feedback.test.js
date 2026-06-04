@@ -89,4 +89,90 @@ describe('world info import feedback', () => {
         expect(worldInfoCss).toContain('#world_more_menu_dropdown .options-menu[aria-disabled="true"]');
         expect(worldInfoCss).toContain('pointer-events: none;');
     });
+
+    test('world import derives reusable format and entry-count metadata', () => {
+        const source = read('public/scripts/world-info.js');
+        const importSource = extractBlock(
+            source,
+            'export async function importWorldInfo(file)',
+            'export function openWorldInfoEditor(worldName)',
+        );
+
+        expect(source).toContain('const WORLD_INFO_IMPORT_LARGE_FILE_THRESHOLD_BYTES = 10 * 1024 * 1024;');
+        expect(source).toContain('function detectWorldInfoImportMetadata(jsonData, { sourceFormatLabel = \'World Info JSON\' } = {})');
+        expect(source).toContain('function countWorldInfoEntries(data)');
+        expect(source).toContain('function formatWorldInfoImportSummary(metadata)');
+        expect(source).toContain("formatLabel: 'Novel Lorebook'");
+        expect(source).toContain("formatLabel: 'Agnai Memory Book'");
+        expect(source).toContain("formatLabel: 'Risu Lorebook'");
+        expect(source).toContain('formatLabel: sourceFormatLabel');
+        expect(importSource).toContain("detectWorldInfoImportMetadata(jsonData, { sourceFormatLabel: file.name.endsWith('.png') ? 'PNG NAI data' : 'World Info JSON' })");
+        expect(importSource).toContain("formData.append('convertedData', JSON.stringify(metadata.convertedData));");
+        expect(source).toContain('formatWorldInfoImportSummary(metadata)');
+        expect(source).toContain('countWorldInfoEntries(metadata.convertedData');
+    });
+
+    test('world import overwrite confirmation includes context and safe action labels', () => {
+        const worldInfoSource = read('public/scripts/world-info.js');
+        const utilsSource = read('public/scripts/utils.js');
+        const importSource = extractBlock(
+            worldInfoSource,
+            'export async function importWorldInfo(file)',
+            'export function openWorldInfoEditor(worldName)',
+        );
+        const overwriteHelper = extractBlock(
+            utilsSource,
+            'export async function checkOverwriteExistingData',
+            'export function getFreeName',
+        );
+
+        expect(overwriteHelper).toContain('contextHtml = null');
+        expect(overwriteHelper).toContain('confirmOptions = {}');
+        expect(overwriteHelper).toContain('${contextHtml ?? \'\'}');
+        expect(overwriteHelper).toContain('Popup.show.confirm');
+        expect(overwriteHelper).toContain('confirmOptions');
+        expect(importSource).toContain('contextHtml: buildWorldInfoImportContextHtml(metadata)');
+        expect(importSource).toContain("okButton: buildWorldInfoOverwriteButtonLabel(metadata)");
+        expect(importSource).toContain("cancelButton: t`Cancel`");
+        expect(importSource).toContain('defaultResult: POPUP_RESULT.NEGATIVE');
+        expect(importSource).toContain('popup.cancelButton.focus()');
+        expect(importSource).toContain('buildWorldInfoOverwriteButtonLabel(metadata)');
+        expect(worldInfoSource).toContain('formatWorldInfoEntryCount(metadata?.entryCount)');
+    });
+
+    test('world import classifies parsing, PNG, large-file, and network outcomes', () => {
+        const source = read('public/scripts/world-info.js');
+        const importSource = extractBlock(
+            source,
+            'export async function importWorldInfo(file)',
+            'export function openWorldInfoEditor(worldName)',
+        );
+
+        expect(importSource).toContain('file.size > WORLD_INFO_IMPORT_LARGE_FILE_THRESHOLD_BYTES');
+        expect(importSource).toContain('toastr.info(t`This file is large. Importing may take longer than usual.`)');
+        expect(importSource).toContain("extractDataFromPng(buffer, 'naidata')");
+        expect(importSource).toContain("extractDataFromPng(buffer, 'chara')");
+        expect(importSource).toContain('This PNG contains character card data, but no World Info data. To import the character card, use character import.');
+        expect(importSource).toContain('This PNG file does not contain importable World Info data.');
+        expect(importSource).toContain('File contents are damaged or in an unsupported format. Please check that the file is complete.');
+        expect(importSource).toContain('Unsupported World Info file format. Supported formats: World Info JSON (SillyTavern compatible), PNG NAI data, Novel Lorebook, Agnai Memory Book, Risu Lorebook.');
+        expect(importSource).toContain('result.status === 413');
+        expect(importSource).toContain('File is too large. Please check the file contents or compress it before retrying.');
+        expect(importSource).toContain('Import failed. Please check your connection and try again.');
+        expect(importSource).toContain('console.error');
+    });
+
+    test('world import success toast reports imported context and automatic editor switch', () => {
+        const source = read('public/scripts/world-info.js');
+        const importSource = extractBlock(
+            source,
+            'export async function importWorldInfo(file)',
+            'export function openWorldInfoEditor(worldName)',
+        );
+
+        expect(importSource).toContain('buildWorldInfoImportSuccessMessage(data.name, metadata)');
+        expect(source).toContain('Switched to the imported World Info.');
+        expect(source).toContain('formatWorldInfoImportSummary(metadata)');
+        expect(importSource).not.toContain('World Info "${data.name}" imported successfully!');
+    });
 });

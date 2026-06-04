@@ -121,6 +121,113 @@ function setWorldImportBusy(isBusy) {
     }
 }
 
+const WORLD_INFO_IMPORT_LARGE_FILE_THRESHOLD_BYTES = 10 * 1024 * 1024;
+
+function countWorldInfoEntries(data) {
+    const entries = data?.entries;
+
+    if (Array.isArray(entries)) {
+        return entries.length;
+    }
+
+    if (entries && typeof entries === 'object') {
+        return Object.keys(entries).length;
+    }
+
+    return null;
+}
+
+function detectWorldInfoImportMetadata(jsonData, { sourceFormatLabel = 'World Info JSON' } = {}) {
+    if (jsonData?.lorebookVersion !== undefined) {
+        console.log('Converting Novel Lorebook');
+        const metadata = {
+            formatLabel: 'Novel Lorebook',
+            convertedData: convertNovelLorebook(jsonData),
+            entryCount: null,
+            unsupported: false,
+        };
+        metadata.entryCount = countWorldInfoEntries(metadata.convertedData);
+        return metadata;
+    }
+
+    if (jsonData?.kind === 'memory') {
+        console.log('Converting Agnai Memory Book');
+        const metadata = {
+            formatLabel: 'Agnai Memory Book',
+            convertedData: convertAgnaiMemoryBook(jsonData),
+            entryCount: null,
+            unsupported: false,
+        };
+        metadata.entryCount = countWorldInfoEntries(metadata.convertedData);
+        return metadata;
+    }
+
+    if (jsonData?.type === 'risu') {
+        console.log('Converting Risu Lorebook');
+        const metadata = {
+            formatLabel: 'Risu Lorebook',
+            convertedData: convertRisuLorebook(jsonData),
+            entryCount: null,
+            unsupported: false,
+        };
+        metadata.entryCount = countWorldInfoEntries(metadata.convertedData);
+        return metadata;
+    }
+
+    if (jsonData && typeof jsonData === 'object' && 'entries' in jsonData) {
+        return {
+            formatLabel: sourceFormatLabel,
+            convertedData: null,
+            entryCount: countWorldInfoEntries(jsonData),
+            unsupported: false,
+        };
+    }
+
+    return {
+        formatLabel: '',
+        convertedData: null,
+        entryCount: null,
+        unsupported: true,
+    };
+}
+
+function formatWorldInfoEntryCount(entryCount) {
+    if (!Number.isFinite(entryCount)) {
+        return '';
+    }
+
+    return entryCount === 1 ? t`1 entry` : t`${entryCount} entries`;
+}
+
+function formatWorldInfoImportSummary(metadata) {
+    if (!metadata?.formatLabel) {
+        return '';
+    }
+
+    const entryCount = formatWorldInfoEntryCount(metadata.entryCount);
+    return entryCount ? `${metadata.formatLabel}, ${entryCount}` : metadata.formatLabel;
+}
+
+function buildWorldInfoImportContextHtml(metadata) {
+    const summary = formatWorldInfoImportSummary(metadata);
+    if (!summary) {
+        return '';
+    }
+
+    return `<p>${t`Detected import`}: ${escapeHtml(summary)}</p>`;
+}
+
+function buildWorldInfoOverwriteButtonLabel(metadata) {
+    const entryCount = formatWorldInfoEntryCount(metadata?.entryCount);
+    return entryCount ? `${t`Overwrite and Import`} (${entryCount})` : t`Overwrite and Import`;
+}
+
+function buildWorldInfoImportSuccessMessage(name, metadata) {
+    const summary = formatWorldInfoImportSummary(metadata);
+    const summaryText = summary ? ` (${summary})` : '';
+    return `${t`World Info "${name}" imported successfully!`}${summaryText} ${t`Switched to the imported World Info.`}`;
+}
+
 const saveSettingsDebounced = debounce(() => {
     Object.assign(world_info, { globalSelect: selected_world_info });
     saveSettings();
@@ -5856,8 +5963,13 @@ export async function importWorldInfo(file) {
         return;
     }
 
+    if (file.size > WORLD_INFO_IMPORT_LARGE_FILE_THRESHOLD_BYTES) {
+        toastr.info(t`This file is large. Importing may take longer than usual.`);
+    }
+
     const formData = new FormData();
     formData.append('avatar', file);
+    let metadata;
 
     try {
         let jsonData;
@@ -5865,41 +5977,57 @@ export async function importWorldInfo(file) {
         if (file.name.endsWith('.png')) {
             const buffer = new Uint8Array(await getFileBuffer(file));
             jsonData = extractDataFromPng(buffer, 'naidata');
+
+            if (jsonData === undefined || jsonData === null) {
+                const characterData = extractDataFromPng(buffer, 'chara');
+                if (characterData !== undefined && characterData !== null) {
+                    toastr.error(t`This PNG contains character card data, but no World Info data. To import the character card, use character import.`);
+                } else {
+                    toastr.error(t`This PNG file does not contain importable World Info data.`);
+                }
+                return;
+            }
         } else {
             // File should be a JSON file
             jsonData = await parseJsonFile(file);
         }
 
         if (jsonData === undefined || jsonData === null) {
-            toastr.error(t`File is not valid: ${file.name}`);
+            toastr.error(t`File contents are damaged or in an unsupported format. Please check that the file is complete.`);
             return;
         }
 
-        // Convert Novel Lorebook
-        if (jsonData.lorebookVersion !== undefined) {
-            console.log('Converting Novel Lorebook');
-            formData.append('convertedData', JSON.stringify(convertNovelLorebook(jsonData)));
+        metadata = detectWorldInfoImportMetadata(jsonData, { sourceFormatLabel: file.name.endsWith('.png') ? 'PNG NAI data' : 'World Info JSON' });
+        if (metadata.unsupported) {
+            toastr.error(t`Unsupported World Info file format. Supported formats: World Info JSON (SillyTavern compatible), PNG NAI data, Novel Lorebook, Agnai Memory Book, Risu Lorebook.`);
+            return;
         }
 
-        // Convert Agnai Memory Book
-        if (jsonData.kind === 'memory') {
-            console.log('Converting Agnai Memory Book');
-            formData.append('convertedData', JSON.stringify(convertAgnaiMemoryBook(jsonData)));
-        }
-
-        // Convert Risu Lorebook
-        if (jsonData.type === 'risu') {
-            console.log('Converting Risu Lorebook');
-            formData.append('convertedData', JSON.stringify(convertRisuLorebook(jsonData)));
+        if (metadata.convertedData) {
+            formData.append('convertedData', JSON.stringify(metadata.convertedData));
         }
     } catch (error) {
-        toastr.error(`Error parsing file: ${error}`);
+        console.error('Error parsing world info import file:', error);
+        toastr.error(t`File contents are damaged or in an unsupported format. Please check that the file is complete.`);
         return;
     }
 
     const worldName = file.name.substr(0, file.name.lastIndexOf('.'));
     const sanitizedWorldName = await getSanitizedFilename(worldName);
-    const allowed = await checkOverwriteExistingData('World Info', world_names, sanitizedWorldName, { interactive: true, actionName: 'Import', deleteAction: (existingName) => deleteWorldInfo(existingName) });
+    const allowed = await checkOverwriteExistingData('World Info', world_names, sanitizedWorldName, {
+        interactive: true,
+        actionName: 'Import',
+        deleteAction: (existingName) => deleteWorldInfo(existingName),
+        contextHtml: buildWorldInfoImportContextHtml(metadata),
+        confirmOptions: {
+            okButton: buildWorldInfoOverwriteButtonLabel(metadata),
+            cancelButton: t`Cancel`,
+            defaultResult: POPUP_RESULT.NEGATIVE,
+            onOpen: (popup) => {
+                popup.cancelButton.focus();
+            },
+        },
+    });
     if (!allowed) {
         return false;
     }
@@ -5913,6 +6041,12 @@ export async function importWorldInfo(file) {
         });
 
         if (!result.ok) {
+            if (result.status === 413) {
+                console.error('Error importing world info: file too large', result.status, result.statusText);
+                toastr.error(t`File is too large. Please check the file contents or compress it before retrying.`);
+                return;
+            }
+
             throw new Error(`Failed to import world info: ${result.statusText}`);
         }
 
@@ -5926,11 +6060,11 @@ export async function importWorldInfo(file) {
                 $('#world_editor_select').val(newIndex).trigger('change');
             }
 
-            toastr.success(t`World Info "${data.name}" imported successfully!`);
+            toastr.success(buildWorldInfoImportSuccessMessage(data.name, metadata));
         }
     } catch (error) {
         console.error('Error importing world info:', error);
-        toastr.error(t`Failed to import World Info`);
+        toastr.error(t`Import failed. Please check your connection and try again.`);
     }
 }
 
