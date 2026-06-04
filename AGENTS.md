@@ -26,7 +26,7 @@ EmberDesk is a self-hosted browser LLM workspace forked from SillyTavern. The pr
 - Read the relevant `.docs/tech/*.md` and `.docs/adr/*.md` before changing accepted architecture.
 - Read `.docs/db/pages`, `.docs/db/features`, and `.docs/db/terms` before changing user-visible pages, features, or terms.
 - Read `.docs/tech/bun-workflow.md` for Node/Bun/CI boundaries.
-- Read `docs/third-party-extension-compatibility.md` before touching regex, extensions, slash commands, world info regex editing, message rendering, or character-list DOM.
+- Read `.docs/tech/third-party-extension-compatibility.md` before touching regex, extensions, slash commands, world info regex editing, message rendering, or character-list DOM.
 
 ## Key Directories
 

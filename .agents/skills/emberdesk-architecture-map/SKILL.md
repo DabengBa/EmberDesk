@@ -13,7 +13,7 @@ Use this first when the request is architectural, cross-cutting, or unclear. Bui
 - `.docs/project-overview.md` and `.docs/PROJECT_HISTORY.md` for durable architecture decisions.
 - `.docs/adr/*.md` before changing accepted boundaries.
 - `.docs/tech/server-startup-orchestration.md`, `.docs/tech/config-resolution.md`, `.docs/tech/user-module-split.md`, `.docs/tech/plugin-loader-lifecycle.md` for server structure.
-- `.docs/tech/frontend-jquery-slice-migration.md`, `.docs/tech/frontend-shared-library-boundary.md`, `docs/third-party-extension-compatibility.md` for frontend modernization boundaries.
+- `.docs/tech/frontend-jquery-slice-migration.md`, `.docs/tech/frontend-shared-library-boundary.md`, `.docs/tech/third-party-extension-compatibility.md` for frontend modernization boundaries.
 - `.docs/db/pages`, `.docs/db/features`, `.docs/db/terms` when a user-visible page, feature, or term changes.
 
 ## Mental Model

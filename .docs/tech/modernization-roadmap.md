@@ -371,7 +371,7 @@ Related implementation docs:
 - [frontend-jquery-slice-migration.md](frontend-jquery-slice-migration.md)
 - [frontend-shared-library-boundary.md](frontend-shared-library-boundary.md)
 - [interaction-performance-indexing.md](interaction-performance-indexing.md)
-- [third-party-extension-compatibility.md](../../docs/third-party-extension-compatibility.md)
+- [third-party-extension-compatibility.md](third-party-extension-compatibility.md)
 
 ## Performance And Caching
 

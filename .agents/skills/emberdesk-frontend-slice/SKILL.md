@@ -12,7 +12,7 @@ Use this before changing anything under `public/` or frontend tests.
 - `public/script.js` for main shell startup and exported compatibility surfaces.
 - `public/lib.js`, `webpack.config.js`, `.docs/tech/frontend-shared-library-boundary.md`, `.docs/adr/0006-preserve-dual-libjs-source-and-bundled-boundary.md` before touching `/lib.js`.
 - `.docs/tech/frontend-jquery-slice-migration.md` before creating or extending page-level controllers.
-- `docs/third-party-extension-compatibility.md` before touching regex, extensions, character list, slash commands, world info regex, message rendering, or `@sillytavern/*`.
+- `.docs/tech/third-party-extension-compatibility.md` before touching regex, extensions, character list, slash commands, world info regex, message rendering, or `@sillytavern/*`.
 - Existing specs under `docs/specs/` for active slice constraints.
 - Focused tests under `tests/` and `tests/frontend/`.
 

@@ -395,7 +395,7 @@ Related implementation docs:
 - [interaction-performance-indexing.md](interaction-performance-indexing.md)
 - [server-startup-orchestration.md](server-startup-orchestration.md)
 - [user-module-split.md](user-module-split.md)
-- [third-party-extension-compatibility.md](../../docs/third-party-extension-compatibility.md)
+- [third-party-extension-compatibility.md](third-party-extension-compatibility.md)
 
 ## Phase 1 Outcome
 
