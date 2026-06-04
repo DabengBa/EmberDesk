@@ -80,7 +80,7 @@ const baseLanguageOptions = {
 export default [
     {
         linterOptions: {
-            reportUnusedDisableDirectives: 'off',
+            reportUnusedDisableDirectives: 'warn',
         },
     },
     {

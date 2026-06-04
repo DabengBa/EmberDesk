@@ -22,6 +22,8 @@ The immediate need is to replace the previous broad research note with corrected
 
 ## Confirmed Facts
 
+These facts describe the pre-upgrade review baseline captured on 2026-06-04. The delivered state is recorded in the Intent Domains table and Change History below.
+
 | Area | Verified State |
 |---|---|
 | Runtime/package manager | Root `package.json` uses Node.js `>=26.3.0 <27`; Bun `1.3.14` is the package manager and script runner. |
@@ -42,7 +44,7 @@ The immediate need is to replace the previous broad research note with corrected
 | Research correction | Remove inaccurate or unsafe claims from the existing ESLint/oxlint migration brief | Corrected | 2026-06-04: review found incorrect rule counts, line count, tests lint baseline omission, npm command examples, and invalid oxlint category placement under `rules` | This brief now records corrected facts; detailed upgrade plan is moved to `.docs/specs/260604-10-eslint-oxlint-lint-modernization/design.md` |
 | Fast lint lane | Introduce oxlint only where it can be validated without weakening the existing ESLint gate | Delivered | 2026-06-04: root `lint:fast` was delivered as a non-authoritative preflight with `oxlint@1.67.0` because `oxlint@1.68.0` was still blocked by the repository 7-day package cooling policy | `package.json`, `bun.lock`, `.oxlintrc.json`; delivery spec `260604-10-eslint-oxlint-lint-modernization`; root `bun run lint` remains the authoritative ESLint gate |
 | ESLint major upgrade | Complete the lint-tooling upgrade rather than stopping at a fast-lint preflight | Delivered | 2026-06-04: user clarified that the upgrade action must be completed; current npm latest was ESLint 10.4.1, but the repository package cooling policy required the implementation to use `eslint@10.4.0` and `eslint-plugin-jsdoc@63.0.0` | `eslint.config.js`, `tests/eslint.config.js`, `package.json`, `tests/package.json`; `bun run lint` and `bun run --cwd tests lint` are both green |
-| Tests package lint | Avoid presenting tests lint as a green baseline | Planned guardrail | 2026-06-04: local `bun run --cwd tests lint` failed with existing issues | First lint modernization slice records this debt but does not fix all tests lint errors |
+| Tests package lint | Avoid presenting tests lint as a green baseline | Delivered | 2026-06-04: local `bun run --cwd tests lint` initially failed with existing issues; the ESLint 10 completion slice fixed the tests lint baseline | `tests/eslint.config.js`, `tests/package.json`, and focused test lint fixes; `bun run --cwd tests lint` is green |
 | Bun command contract | Use Bun commands in project-owned migration steps | Planned | 2026-06-04: previous brief used `npm install`, `npm run`, and `npx` examples despite project Bun ownership | Future implementation should use `bun add -d`, `bun run`, and `bunx` / `bun x` where needed |
 
 ## Assumptions
@@ -50,6 +52,7 @@ The immediate need is to replace the previous broad research note with corrected
 - The first shippable slice is a tooling migration slice, not a user-facing product change.
 - Existing `bun run lint` remains the authoritative closeout gate until a later approved design changes that contract.
 - oxlint is introduced as a fast local preflight first; a failure or mismatch in oxlint must not block release until the rule mapping has been reviewed.
+- `lint:fast` intentionally does not mirror every ESLint rule; the known coverage gap is acceptable only because `bun run lint` remains the authoritative gate.
 - The existing ESLint ignore surface is intentional, especially `public/lib/**`, vendored third-party extension artifacts, `plugins/**`, `src/tokenizers/**`, generated, cache, and data directories.
 - The tests lint baseline is out of scope for the first oxlint fast-lane slice unless a later design explicitly targets tests lint remediation.
 
@@ -68,8 +71,11 @@ The immediate need is to replace the previous broad research note with corrected
 
 - `package.json`
 - `tests/package.json`
-- `.eslintrc.cjs`
-- `tests/.eslintrc.cjs`
+- Historical `.eslintrc.cjs`
+- Historical `tests/.eslintrc.cjs`
+- Current `eslint.config.js`
+- Current `tests/eslint.config.js`
+- `.oxlintrc.json`
 - `AGENTS.md`
 - `.docs/tech/bun-workflow.md`
 - `.docs/tech/modernization-phase0-baseline.md`
@@ -87,5 +93,5 @@ The immediate need is to replace the previous broad research note with corrected
 
 - 2026-06-04: Initial research note existed as a broad migration report.
 - 2026-06-04: Review verified local and external facts; corrected the document into a durable user intent brief and moved implementation design into a dedicated spec.
-- 2026-06-04: Delivered the root oxlint fast lane as the first slice; ESLint 10 flat config and tests lint green-up remain assigned to `.docs/specs/260604-11-eslint10-flat-config-upgrade/design.md`.
+- 2026-06-04: Delivered the root oxlint fast lane as the first slice; ESLint 10 flat config and tests lint green-up were assigned to `.docs/specs/260604-11-eslint10-flat-config-upgrade/design.md`.
 - 2026-06-04: Delivered the ESLint 10 flat config completion slice; root and tests lint now use flat config, and tests lint is no longer a red baseline.

@@ -23,6 +23,7 @@
         "public/scripts/extensions/tts/lib/**"
     ],
     "rules": {
+        "eslint/no-self-compare": "warn",
         "eslint/no-control-regex": "off",
         "eslint/no-constant-condition": "warn",
         "eslint/require-yield": "off",
