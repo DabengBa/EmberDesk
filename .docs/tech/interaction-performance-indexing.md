@@ -7,6 +7,7 @@ This document covers the first delivered slice of EmberDesk's interaction-perfor
 Primary files:
 
 - `src/endpoints/character-index.js`
+- `src/derived-cache-sqlite.js`
 - `src/endpoints/characters.js`
 - `src/endpoints/chats.js`
 - `src/interaction-performance-report.js`
@@ -125,10 +126,10 @@ Separate from SQLite, thumbnail HTTP caching, lazy image fetch behavior, placeho
 
 The module:
 
-- feature-detects `node:sqlite`
-- opens one cached `DatabaseSync` handle per user root
-- closes cached handles during server shutdown
-- resets cached handles when structural index operations fail
+- delegates `node:sqlite` feature detection to `src/derived-cache-sqlite.js`
+- delegates cached `DatabaseSync` handle lifecycle to `src/derived-cache-sqlite.js`
+- closes cached handles during server shutdown through the helper
+- resets cached handles through the helper when structural index operations fail
 - recreates derived rows when:
   - the row is missing
   - the source PNG `mtime` changes
@@ -142,6 +143,8 @@ The module:
 ### What is actually cached
 
 The SQLite sidecar caches per-character derived payloads for `POST /api/characters/all`.
+
+Shared SQLite lifecycle details live in [Derived Cache SQLite Helper](derived-cache-sqlite.md). The helper owns feature detection, PRAGMA setup, cached handle lifecycle, schema-version reset plumbing, status reporting, and reset-count circuit breaking. `character-index.js` remains the owner of character schema, payloads, freshness checks, and fallback rules.
 
 It is not just a tiny row index with avatar and title fields.
 

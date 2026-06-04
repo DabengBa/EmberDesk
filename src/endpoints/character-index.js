@@ -1,37 +1,25 @@
 import fs from 'node:fs';
-import { createRequire } from 'node:module';
 import path from 'node:path';
 import sanitize from 'sanitize-filename';
 
-const require = createRequire(import.meta.url);
-let DatabaseSync;
-
-try {
-    ({ DatabaseSync } = require('node:sqlite'));
-} catch {
-    DatabaseSync = undefined;
-}
+import {
+    disposeDerivedSqliteSidecars,
+    getDerivedSqliteSidecarStatus,
+    getDerivedSqliteStartupStatus,
+    logDerivedSqliteStartupStatus,
+    openDerivedSqliteSidecar,
+    resetDerivedSqliteSidecar,
+} from '../derived-cache-sqlite.js';
 
 const SCHEMA_VERSION = 2;
-const DATABASES = new Map();
+const CHARACTER_INDEX_KEY = 'character-index';
+const CHARACTER_INDEX_FILENAME = 'character-index.sqlite';
+const CHARACTER_INDEX_MODE_ENV_VAR = 'EMBERDESK_CHARACTER_INDEX_MODE';
 const ROW_REFRESH_CONCURRENCY = 10;
 const CHARACTER_AVATAR_COLLATOR = new Intl.Collator(undefined, {
     sensitivity: 'base',
     numeric: false,
 });
-const CHARACTER_INDEX_MODE = Object.freeze({
-    AUTO: 'auto',
-    FORCE_ON: 'force_on',
-    FORCE_OFF: 'force_off',
-});
-
-function getCharacterIndexMode() {
-    const mode = String(process.env.EMBERDESK_CHARACTER_INDEX_MODE ?? CHARACTER_INDEX_MODE.AUTO).toLowerCase();
-    if (mode === CHARACTER_INDEX_MODE.FORCE_ON || mode === CHARACTER_INDEX_MODE.FORCE_OFF) {
-        return mode;
-    }
-    return CHARACTER_INDEX_MODE.AUTO;
-}
 
 /**
  * @param {{ chats?: string }} directories
@@ -270,14 +258,34 @@ export function getFreshIndexedCharacterFullPayload(userRoot, directories, avata
  * @returns {boolean}
  */
 export function isCharacterIndexSupported() {
-    const mode = getCharacterIndexMode();
-    if (mode === CHARACTER_INDEX_MODE.FORCE_OFF) {
-        return false;
-    }
-    if (mode === CHARACTER_INDEX_MODE.FORCE_ON) {
-        return typeof DatabaseSync === 'function';
-    }
-    return typeof DatabaseSync === 'function';
+    return getCharacterIndexStartupStatus().supported;
+}
+
+export function getCharacterIndexStartupStatus() {
+    return getDerivedSqliteStartupStatus({
+        key: CHARACTER_INDEX_KEY,
+        schemaVersion: SCHEMA_VERSION,
+        modeEnvVar: CHARACTER_INDEX_MODE_ENV_VAR,
+    });
+}
+
+export function logCharacterIndexStartupStatus() {
+    logDerivedSqliteStartupStatus({
+        key: CHARACTER_INDEX_KEY,
+        schemaVersion: SCHEMA_VERSION,
+        modeEnvVar: CHARACTER_INDEX_MODE_ENV_VAR,
+    });
+}
+
+/**
+ * @param {string} userRoot
+ */
+export function getCharacterIndexStatus(userRoot) {
+    return getDerivedSqliteSidecarStatus(userRoot, CHARACTER_INDEX_KEY, {
+        filename: CHARACTER_INDEX_FILENAME,
+        schemaVersion: SCHEMA_VERSION,
+        modeEnvVar: CHARACTER_INDEX_MODE_ENV_VAR,
+    });
 }
 
 /**
@@ -285,53 +293,39 @@ export function isCharacterIndexSupported() {
  * @returns {string}
  */
 export function getCharacterIndexPath(userRoot) {
-    return path.join(userRoot, '_cache', 'character-index.sqlite');
+    return path.join(userRoot, '_cache', CHARACTER_INDEX_FILENAME);
 }
 
 /**
  * @param {string} userRoot
- * @returns {DatabaseSync}
+ * @returns {import('node:sqlite').DatabaseSync|null}
  */
 function openCharacterIndexDatabase(userRoot) {
-    if (!isCharacterIndexSupported()) {
-        return null;
-    }
-
-    if (DATABASES.has(userRoot)) {
-        return DATABASES.get(userRoot);
-    }
-
-    const databasePath = getCharacterIndexPath(userRoot);
-    fs.mkdirSync(path.dirname(databasePath), { recursive: true });
-    const db = new DatabaseSync(databasePath);
-    db.exec('PRAGMA journal_mode = WAL;');
-    db.exec(`
-        CREATE TABLE IF NOT EXISTS meta (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS characters (
-            avatar TEXT PRIMARY KEY,
-            full_json TEXT NOT NULL,
-            shallow_json TEXT NOT NULL,
-            source_mtime_ms INTEGER NOT NULL,
-            source_size INTEGER NOT NULL,
-            source_world_name TEXT NOT NULL DEFAULT '',
-            source_world_mtime_ms INTEGER NOT NULL DEFAULT -1,
-            source_world_size INTEGER NOT NULL DEFAULT -1,
-            chat_stats_dirty INTEGER NOT NULL DEFAULT 0
-        );
-    `);
-
-    const currentVersion = db.prepare('SELECT value FROM meta WHERE key = \'schema_version\'').get()?.value;
-    if (Number(currentVersion) !== SCHEMA_VERSION) {
-        db.prepare('DELETE FROM characters').run();
-        db.prepare('INSERT OR REPLACE INTO meta (key, value) VALUES (\'schema_version\', ?)').run(String(SCHEMA_VERSION));
-    }
-
-    DATABASES.set(userRoot, db);
-    return db;
+    return openDerivedSqliteSidecar({
+        userRoot,
+        key: CHARACTER_INDEX_KEY,
+        filename: CHARACTER_INDEX_FILENAME,
+        schemaVersion: SCHEMA_VERSION,
+        modeEnvVar: CHARACTER_INDEX_MODE_ENV_VAR,
+        initialize(db) {
+            db.exec(`
+                CREATE TABLE IF NOT EXISTS characters (
+                    avatar TEXT PRIMARY KEY,
+                    full_json TEXT NOT NULL,
+                    shallow_json TEXT NOT NULL,
+                    source_mtime_ms INTEGER NOT NULL,
+                    source_size INTEGER NOT NULL,
+                    source_world_name TEXT NOT NULL DEFAULT '',
+                    source_world_mtime_ms INTEGER NOT NULL DEFAULT -1,
+                    source_world_size INTEGER NOT NULL DEFAULT -1,
+                    chat_stats_dirty INTEGER NOT NULL DEFAULT 0
+                );
+            `);
+        },
+        resetSchema(db) {
+            db.prepare('DELETE FROM characters').run();
+        },
+    });
 }
 
 /**
@@ -339,18 +333,7 @@ function openCharacterIndexDatabase(userRoot) {
  * @returns {void}
  */
 export function resetCharacterIndexDatabase(userRoot) {
-    const db = DATABASES.get(userRoot);
-    if (!db) {
-        return;
-    }
-
-    try {
-        db.close();
-    } catch {
-        // Ignore close failures while recovering a broken index.
-    }
-
-    DATABASES.delete(userRoot);
+    resetDerivedSqliteSidecar(userRoot, CHARACTER_INDEX_KEY, { reason: 'character-index-reset' });
 }
 
 /**
@@ -393,14 +376,7 @@ export function deleteCharacterIndexEntry(userRoot, avatar) {
  * @returns {void}
  */
 export function disposeCharacterIndexDatabases() {
-    for (const db of DATABASES.values()) {
-        try {
-            db.close();
-        } catch {
-            // Ignore shutdown close failures.
-        }
-    }
-    DATABASES.clear();
+    disposeDerivedSqliteSidecars(CHARACTER_INDEX_KEY);
 }
 
 /**
