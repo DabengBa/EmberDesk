@@ -76,6 +76,14 @@ import { t } from './i18n.js';
 import { ToolManager } from './tool-calling.js';
 import { accountStorage } from './util/AccountStorage.js';
 import { IGNORE_SYMBOL, MEDIA_DISPLAY, MEDIA_TYPE } from './constants.js';
+import {
+    getChatCompletionModelFromSettings,
+    isAudioInliningSupportedForSettings,
+    isImageInliningSupportedForSettings,
+    isVideoInliningSupportedForSettings,
+    resolveReasoningEffort,
+    resolveVerbosity,
+} from './openai-provider-capabilities.js';
 
 /** @type {{name: string, url: string, password: string}[]} */
 export let proxies = [];
@@ -1579,19 +1587,13 @@ function checkModerationError(data, { quiet = false } = {}) {
  */
 export function getChatCompletionModel(settings = null) {
     settings = settings ?? oai_settings;
-    const source = settings.chat_completion_source;
-    switch (source) {
-        case chat_completion_sources.CLAUDE:
-            return settings.claude_model;
-        case chat_completion_sources.OPENAI:
-            return settings.openai_model;
-        case chat_completion_sources.MAKERSUITE:
-        case chat_completion_sources.VERTEXAI:
-            return settings.google_model;
-        default:
-            console.error(`Unknown chat completion source: ${source}`);
-            return '';
+    const model = getChatCompletionModelFromSettings(settings);
+
+    if (!model && !Object.values(chat_completion_sources).includes(settings.chat_completion_source)) {
+        console.error(`Unknown chat completion source: ${settings.chat_completion_source}`);
     }
+
+    return model;
 }
 
 function saveModelList(data) {
@@ -1622,13 +1624,7 @@ function saveModelList(data) {
 
 function getVerbosity(settings = null) {
     settings = settings ?? oai_settings;
-
-    if (settings.verbosity === verbosity_levels.auto) {
-        return undefined;
-    }
-
-    // TODO: Adjust verbosity based on model capabilities
-    return settings.verbosity;
+    return resolveVerbosity(settings);
 }
 
 /**
@@ -1640,27 +1636,7 @@ function getVerbosity(settings = null) {
 function getReasoningEffort(settings = null, model = null) {
     settings = settings ?? oai_settings;
     model = model ?? getChatCompletionModel(settings);
-
-    if (settings.chat_completion_source !== chat_completion_sources.OPENAI) {
-        return settings.reasoning_effort;
-    }
-
-    switch (settings.reasoning_effort) {
-        case reasoning_effort_types.auto:
-            return undefined;
-        case reasoning_effort_types.min:
-            if (/^gpt-5\.(4|5)/.test(model)) {
-                return 'none';
-            }
-            if (/^gpt-5/.test(model)) {
-                return reasoning_effort_types.min;
-            }
-            return reasoning_effort_types.low;
-        case reasoning_effort_types.max:
-            return reasoning_effort_types.high;
-        default:
-            return settings.reasoning_effort;
-    }
+    return resolveReasoningEffort(settings, model);
 }
 
 /**
@@ -4017,60 +3993,7 @@ async function onCustomizeParametersClick() {
  * @returns {boolean} True if the model supports image inlining
  */
 export function isImageInliningSupported() {
-    if (main_api !== 'openai') {
-        return false;
-    }
-
-    if (!oai_settings.media_inlining) {
-        return false;
-    }
-
-    const visionSupportedModels = [
-        // OpenAI
-        'chatgpt-4o-latest',
-        'gpt-4-turbo',
-        'gpt-4-vision',
-        'gpt-4.1',
-        'gpt-4.5-preview',
-        'gpt-4o',
-        'gpt-5',
-        'o1',
-        'o3',
-        'o4-mini',
-        // Claude
-        'claude-3',
-        'claude-opus-4',
-        'claude-sonnet-4',
-        'claude-haiku-4',
-        // Google AI Studio
-        'gemini-2.0',
-        'gemini-2.5',
-        'gemini-3',
-        'gemini-exp-1206',
-        'learnlm',
-        'gemini-robotics',
-        'gemma-3-27b',
-        'gemma-3-12b',
-        'gemma-3-4b',
-        'gemma-4',
-    ];
-
-    switch (oai_settings.chat_completion_source) {
-        case chat_completion_sources.OPENAI:
-        {
-            const modelToCheck = oai_settings.openai_model;
-            return visionSupportedModels.some(model =>
-                modelToCheck.includes(model)
-                && ['gpt-4-turbo-preview', 'o1-mini', 'o3-mini'].some(x => !modelToCheck.includes(x)),
-            );
-        }
-        case chat_completion_sources.MAKERSUITE:
-            return visionSupportedModels.some(model => oai_settings.google_model.includes(model));
-        case chat_completion_sources.CLAUDE:
-            return visionSupportedModels.some(model => oai_settings.claude_model.includes(model));
-        default:
-            return false;
-    }
+    return isImageInliningSupportedForSettings(oai_settings, { mainApi: main_api });
 }
 
 /**
@@ -4078,29 +4001,7 @@ export function isImageInliningSupported() {
  * @returns {boolean} True if the model supports video inlining
  */
 export function isVideoInliningSupported() {
-    if (main_api !== 'openai') {
-        return false;
-    }
-
-    if (!oai_settings.media_inlining) {
-        return false;
-    }
-
-    const videoSupportedModels = [
-        // Gemini
-        'gemini-2.0',
-        'gemini-2.5',
-        'gemini-exp-1206',
-        'gemini-3',
-        'gemma-4',
-    ];
-
-    switch (oai_settings.chat_completion_source) {
-        case chat_completion_sources.MAKERSUITE:
-            return videoSupportedModels.some(model => oai_settings.google_model.includes(model));
-        default:
-            return false;
-    }
+    return isVideoInliningSupportedForSettings(oai_settings, { mainApi: main_api });
 }
 
 /**
@@ -4108,35 +4009,7 @@ export function isVideoInliningSupported() {
  * @returns {boolean} True if the model supports audio inlining
  */
 export function isAudioInliningSupported() {
-    if (main_api !== 'openai') {
-        return false;
-    }
-
-    if (!oai_settings.media_inlining) {
-        return false;
-    }
-
-    const audioSupportedModels = [
-        'gemini-2.0',
-        'gemini-2.5',
-        'gemini-3',
-        'gemini-exp-1206',
-        'gpt-4o-audio',
-        'gpt-4o-realtime',
-        'gpt-4o-mini-audio',
-        'gpt-4o-mini-realtime',
-        'gpt-audio',
-        'gpt-realtime',
-    ];
-
-    switch (oai_settings.chat_completion_source) {
-        case chat_completion_sources.OPENAI:
-            return audioSupportedModels.some(model => oai_settings.openai_model.includes(model));
-        case chat_completion_sources.MAKERSUITE:
-            return audioSupportedModels.some(model => oai_settings.google_model.includes(model));
-        default:
-            return false;
-    }
+    return isAudioInliningSupportedForSettings(oai_settings, { mainApi: main_api });
 }
 
 /**

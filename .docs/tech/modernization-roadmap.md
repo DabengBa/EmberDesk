@@ -262,10 +262,11 @@ Phase 1 result:
 - 2026-06-03: World-info external converter helper boundary delivered. Novel Lorebook, Agnai Memory Book, Risu Lorebook, and embedded Character Book converters now live in `public/scripts/world-info-converters.js` with focused proof in `tests/world-info-converters.test.js`. `public/scripts/world-info.js` continues to own file parsing, overwrite checks, `/api/worldinfo/import`, `saveWorldInfo()`, editor refresh side effects, and the public `convertCharacterBook` re-export used by `@sillytavern/scripts/world-info`.
 - 2026-06-03: World-info import feedback delivered. The file import entry now exposes busy/disabled feedback, spinner state, and a persistent loading toast while `importWorldInfo(file)` is active, then restores on success, cancel, parse failure, overwrite denial, or network failure. `importEmbeddedWorldInfo()` now reports when the selected character has no embedded `character_book` data. Converter logic, import API shapes, overwrite decisions, editor rendering, and compatibility exports remain unchanged.
 - 2026-06-04: World-info import decision quality delivered. Single-file import now derives detected format and entry count for overwrite confirmation and success feedback, uses action-labeled overwrite confirmation with cancel as the safe default, distinguishes PNG character-card/no-data cases, unsupported formats, oversized uploads, parse failures, and network/import failures, and preserves converter output plus `/api/worldinfo/import` payload shape.
+- 2026-06-04: OpenAI/provider capability helper extraction delivered. public/scripts/openai-provider-capabilities.js now owns pure model, reasoning, verbosity, and media-support helpers, while public/scripts/openai.js keeps compatibility wrappers and request assembly. Focused unit tests now exercise structured descriptors and the current helper branches without changing provider UI or payload semantics.
 
 ## Recommended Next Work
 
-The next recommended implementation slice is World Info batch import, building on the delivered converter boundary, busy feedback, and import decision-quality context.
+The next recommended implementation slice after the delivered OpenAI/provider capability helper extraction is character-list helper extraction inside `public/script.js`. That area still has repeated render/state logic that can be isolated without touching the main chat workspace shell or extension surfaces.
 
 Scope:
 
