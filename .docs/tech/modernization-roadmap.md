@@ -16,7 +16,7 @@ It does not redefine user-facing product semantics. User-visible pages, features
 
 ## Assumptions
 
-- Node.js 24 Active LTS (`>=24 <25`) remains the supported application runtime.
+- Node.js 26.3.0 Current (`>=26.3.0 <27`) remains the supported application runtime.
 - Bun remains the package manager and script runner, not the default application runtime.
 - Express 5 remains the server framework.
 - The browser application remains HTML/CSS/jQuery during this roadmap.
@@ -69,7 +69,7 @@ Phase 0 result:
 
 - Whole-repo lint is green after excluding vendored third-party extension build artifacts and fixing first-party lint debt.
 - The core modernization gates are green locally: semantic docs, compatibility, Express route/order, shared browser library, startup/config, user/auth/setup/login, character-list focused tests, performance tooling tests, and full unit suite.
-- Local proof ran under Node 25.4.0, while the project runtime contract is Node 24 Active LTS. Treat local results as useful diagnostic evidence, not release proof.
+- Local proof ran under Node 25.4.0, while the project runtime contract is now Node.js 26.3.0 Current. Treat local results as useful diagnostic evidence, not release proof.
 - Full Playwright E2E and performance runners were skipped because Phase 0 did not change user-visible behavior or implement a performance slice.
 
 ### Phase 1: Complexity Mapping
@@ -249,7 +249,7 @@ Phase 1 result:
 
 ## Known Execution Gaps
 
-- Node 24 proof remains required before release because the Phase 0 local baseline ran under Node 25.4.0, which is outside the supported engine range and is not a release-proof runtime.
+- Node.js 26.3.0 proof remains required before release because the Phase 0 local baseline ran under Node 25.4.0, which is outside the supported engine range and is not a release-proof runtime.
 - Full Playwright E2E remains a release or UI-slice gate, not yet part of the Phase 0/1 local proof.
 - Startup and interaction performance runners remain required before claiming latency wins.
 - Vendored third-party extension artifacts are intentionally excluded from whole-repo lint; do not auto-format or refactor them as first-party source.

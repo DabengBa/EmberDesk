@@ -10,7 +10,7 @@ EmberDesk is a self-hosted browser LLM workspace forked from SillyTavern. The pr
 
 | Area | Contract |
 |---|---|
-| Runtime | Node.js 24 Active LTS (`>=24 <25`) |
+| Runtime | Node.js 26.3.0 Current (`>=26.3.0 <27`) |
 | Package manager / scripts | Bun 1.3.14 (`packageManager`) |
 | Language | JavaScript ES modules |
 | Server | Express 5 |
@@ -25,7 +25,7 @@ EmberDesk is a self-hosted browser LLM workspace forked from SillyTavern. The pr
 - Read `.docs/project-overview.md` and `.docs/PROJECT_HISTORY.md` for durable project direction.
 - Read the relevant `.docs/tech/*.md` and `.docs/adr/*.md` before changing accepted architecture.
 - Read `.docs/db/pages`, `.docs/db/features`, and `.docs/db/terms` before changing user-visible pages, features, or terms.
-- Read `docs/bun-workflow.md` for Node/Bun/CI boundaries.
+- Read `.docs/tech/bun-workflow.md` for Node/Bun/CI boundaries.
 - Read `docs/third-party-extension-compatibility.md` before touching regex, extensions, slash commands, world info regex editing, message rendering, or character-list DOM.
 
 ## Key Directories
@@ -55,7 +55,7 @@ bun run docs:build
 bun run lint
 ```
 
-Use Node 24 for server release proof by default. Bun is the package manager and script runner, not the default application runtime. Local runs on non-contract Node majors are diagnostic only and do not replace Node 24 validation. `src/electron` remains npm-owned.
+Use Node.js 26.3.0 for server release proof by default. Bun is the package manager and script runner, not the default application runtime. Local runs on non-contract Node majors are diagnostic only and do not replace Node.js 26.3.0 validation. `src/electron` remains npm-owned.
 
 ## Architecture Rules
 

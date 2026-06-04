@@ -12,9 +12,9 @@ This is an execution record for `.docs/tech/modernization-roadmap.md`. It does n
 - Workspace: `D:\DEV\EmberDesk`
 - Local Node: `v25.4.0`
 - Local Bun: `1.3.14`
-- Project runtime contract: Node.js 24 Active LTS (`>=24 <25`)
+- Project runtime contract at the time of this baseline: Node.js 24 Active LTS (`>=24 <25`). This was superseded by Node.js 26.3.0 Current (`>=26.3.0 <27`) on 2026-06-04.
 
-The local test run was executed under Node 25.4.0. Treat the results as useful diagnostic evidence, not as a replacement for Node 24 CI or release validation. As of June 2, 2026, the Node.js Release Working Group schedule lists 25.x as end-of-life after June 1, 2026, so local Node 25 proof must not widen the runtime contract.
+The local test run was executed under Node 25.4.0. Treat the results as useful diagnostic evidence, not as a replacement for release validation on the active runtime contract. As of June 2, 2026, the Node.js Release Working Group schedule lists 25.x as end-of-life after June 1, 2026, so local Node 25 proof must not widen the runtime contract.
 
 ## Validation Results
 
@@ -82,7 +82,7 @@ Resolved lint follow-up:
 | Full Playwright E2E | Skipped | Higher-cost browser/server validation. No user-facing behavior changed in Phase 0. Run before release or before/after UI slices. |
 | Startup performance runner | Skipped | No startup optimization was implemented in Phase 0. Use only when making or validating performance claims. |
 | Interaction performance runner | Skipped | No interaction-performance implementation changed in Phase 0. Use for character-list, delete, get/list, and cache changes. |
-| Node 24 CI proof | Skipped locally | Local workstation is Node 25.4.0. Required before release because project contract is Node 24 Active LTS. |
+| Contract Node runtime proof | Skipped locally | Local workstation is Node 25.4.0. Required before release on the active contract runtime. |
 
 ## Baseline Gates For Later Slices
 

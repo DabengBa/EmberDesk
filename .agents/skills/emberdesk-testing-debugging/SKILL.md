@@ -11,7 +11,7 @@ Use this whenever behavior changes, a validation command fails, or the right pro
 
 - `package.json` and `tests/package.json`
 - `tests/jest.config.json`, `tests/playwright.config.js`
-- `docs/bun-workflow.md`
+- `.docs/tech/bun-workflow.md`
 - Relevant `.docs/tech/*.md` and `.docs/db/**` for the feature being changed
 - Existing focused tests near the touched code
 
@@ -59,7 +59,7 @@ Use `bun run test:compat` before and after frontend work touching regex, Tavern 
 
 ## Known Caveats
 
-- `docs/bun-workflow.md` records that full Jest and lint have had baseline debt in the worktree. Do not treat unrelated existing failures as part of a narrow task without evidence.
+- `.docs/tech/bun-workflow.md` records runtime and validation boundaries. Do not treat unrelated existing failures as part of a narrow task without evidence.
 - Playwright can reuse an existing server unless `PLAYWRIGHT_REUSE_SERVER=0`; its default data/config paths are `.tmp/playwright-e2e-*`.
 - Some frontend compatibility tests intentionally assert legacy selectors and exports. Do not delete them as “old style” without a migration plan.
 

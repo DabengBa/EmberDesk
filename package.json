@@ -98,7 +98,7 @@
         "yauzl": "^3.2.1"
     },
     "engines": {
-        "node": ">=24 <25"
+        "node": ">=26.3.0 <27"
     },
     "overrides": {
         "openai": "^4.17.0",
@@ -161,7 +161,7 @@
         "@types/lodash": "^4.17.24",
         "@types/mime-types": "^3.0.1",
         "@types/multer": "^2.1.0",
-        "@types/node": "^24.12.4",
+        "@types/node": "^25.9.1",
         "@types/node-persist": "^3.1.8",
         "@types/png-chunk-text": "^1.0.3",
         "@types/png-chunks-extract": "^1.0.2",

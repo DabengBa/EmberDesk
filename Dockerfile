@@ -1,6 +1,6 @@
 FROM oven/bun:1.3.14-alpine AS bun
 
-FROM node:lts-alpine3.23
+FROM node:26.3.0-alpine3.23
 
 # Arguments
 ARG APP_HOME=/home/node/app

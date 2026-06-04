@@ -35,7 +35,7 @@ EmberDesk/
 
 ## Requirements
 
-- Node.js 24 LTS (`>=24 <25`)
+- Node.js 26.3.0 Current (`>=26.3.0 <27`)
 
 ## Acknowledgments
 
