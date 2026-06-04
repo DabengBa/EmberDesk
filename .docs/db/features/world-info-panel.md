@@ -37,7 +37,7 @@ This feature lets users keep lorebook context close to the chat workspace: they 
 2. EmberDesk shows a Global World Info panel and a World Info Editor panel.
 3. In the global panel, the user can select zero or more worlds that remain active across chats. When no global world is active, the selector shows an empty prompt.
 4. In the editor panel, the user selects a world book to inspect or modify.
-5. EmberDesk shows editor controls for searching, sorting, creating, importing, exporting, renaming, duplicating, deleting, refreshing, backfilling metadata, and applying sorting. When a file import is running, the import action is disabled and shows visible in-progress feedback until that import attempt finishes.
+5. EmberDesk shows editor controls for searching, sorting, creating, importing, exporting, renaming, duplicating, deleting, refreshing, backfilling metadata, and applying sorting. When one or more files are being imported, the import action is disabled and shows visible in-progress feedback until the active import batch finishes.
 6. World entries appear as cards so the user can scan the list before expanding or editing a specific entry.
 7. When entry content needs more room, the content editor opens as a modal dialog with its own title, metadata, close control, and text area.
 
@@ -46,8 +46,11 @@ This feature lets users keep lorebook context close to the chat workspace: they 
 - The drawer belongs to the chat workspace; users should not need a separate route to activate or edit World Info.
 - Global world activation and editor selection are separate controls because selecting a world for editing does not automatically mean it is globally active.
 - The World Info drawer can stay open alongside other workspace context, but its own panels and dialogs own their visible loading, empty, and editing states.
-- The toolbar import action prevents duplicate file-picker opens while an import attempt is active; file parsing, conversion, overwrite checks, upload, success, and failure paths all restore the action to its normal state.
+- The toolbar import action accepts one or more `.json`, `.lorebook`, or `.png` files from the file picker, and the World Info editor panel accepts dropped files through the same import queue.
+- The toolbar import action prevents duplicate file-picker opens while an import batch is active; file parsing, conversion, overwrite checks, upload, success, skip, cancellation, and failure paths all restore the action to its normal state.
 - Single-file import shows the detected source format and entry count when available so overwrite decisions and successful outcomes have visible context.
+- Batch import processes files sequentially because each successful file can refresh the World Info selector and switch the editor to the imported world.
+- When a batch contains files that would overwrite existing World Info names, EmberDesk asks once whether to overwrite all conflicts, skip all conflicts, or confirm each conflict individually.
 - Import errors distinguish unsupported formats, damaged or incomplete files, PNG files without importable World Info data, oversized uploads, and connection/import failures when EmberDesk can identify the cause.
 - Embedded World/Lorebook import is a toolbar-adjacent character action: if a selected character has no embedded book data, EmberDesk reports that empty state instead of silently doing nothing.
 - Destructive world-book deletion is a separate semantic feature: [Delete World Book](feature.world_book_delete).
@@ -60,9 +63,12 @@ This feature lets users keep lorebook context close to the chat workspace: they 
 - **Editor selected**: the editor panel shows the selected world book's entries and toolbar actions.
 - **Entry opened**: the selected entry expands or opens the content editor dialog for focused editing.
 - **Empty state**: if no global worlds or editor world are selected, the panel communicates that state without leaving stale entry content visible.
-- **Import in progress**: the import action is visibly busy, duplicate import starts are blocked, and the action is restored after success, cancellation, parse failure, or network failure.
+- **Import in progress**: the import action is visibly busy, duplicate import starts are blocked, batch progress shows the current file position, and the action is restored after success, skip, cancellation, parse failure, or network failure.
 - **Import decision shown**: when an import would overwrite an existing world, the confirmation includes the detected format, available entry count, and action-specific overwrite/cancel choices.
+- **Batch import decision shown**: when multiple selected files would overwrite existing worlds, the batch conflict summary lets the user overwrite all conflicts, skip all conflicts, or fall back to individual overwrite confirmations.
 - **Import completed**: successful imports report the imported format and available entry count, then make the automatic switch to the imported World Info visible to the user.
+- **Batch import completed**: after the queue ends, EmberDesk reports aggregate imported, failed, skipped, and unprocessed counts without listing a long file inventory.
+- **Batch import cancelled**: cancelling remaining files from the progress toast lets the active file finish and leaves later files unprocessed in the final summary.
 - **Import failed**: failed imports show a recoverable reason instead of exposing raw technical error text as the primary message.
 - **No embedded book**: trying to import embedded World/Lorebook data from a selected character without embedded data produces an informational message.
 - **Deletion requested**: the user is routed into the separate [Delete World Book](feature.world_book_delete) confirmation flow.

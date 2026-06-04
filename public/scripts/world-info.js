@@ -26,6 +26,7 @@ import { getOrCreatePersonaDescriptor, setPersonaDescription, user_avatar } from
 import { buildWorldInfoReplayState } from './deferred-panel-replays.js';
 import { buildCascadeSectionHtml, captureCascadeChoices } from './world-cascade-dialog.js';
 import { convertAgnaiMemoryBook, convertCharacterBook, convertNovelLorebook, convertRisuLorebook } from './world-info-converters.js';
+import { DragAndDropHandler } from './dragdrop.js';
 
 export { convertCharacterBook };
 
@@ -76,6 +77,7 @@ let worldInfoCoreInitialized = false;
 let worldInfoPanelInitialized = false;
 let worldInfoImportBusy = false;
 let worldInfoImportToast = null;
+let worldInfoImportDragDropHandler = null;
 export let world_info_depth = 2;
 export let world_info_min_activations = 0; // if > 0, will continue seeking chat until minimum world infos are activated
 export let world_info_min_activations_depth_max = 0; // used when (world_info_min_activations > 0)
@@ -97,6 +99,7 @@ function closeMoreMenu() {
 }
 
 function setWorldImportBusy(isBusy) {
+    const showToast = arguments[1]?.showToast ?? true;
     worldInfoImportBusy = Boolean(isBusy);
     const importIcon = $('#world_import_menu_item').find('i').first();
 
@@ -108,7 +111,7 @@ function setWorldImportBusy(isBusy) {
     if (worldInfoImportBusy) {
         importIcon.removeClass('fa-file-import').addClass('fa-spinner fa-spin');
 
-        if (!worldInfoImportToast) {
+        if (showToast && !worldInfoImportToast) {
             worldInfoImportToast = toastr.info(t`Importing World Info...`, t`Please wait`, { timeOut: 0, extendedTimeOut: 0 });
         }
     } else {
@@ -226,6 +229,209 @@ function buildWorldInfoImportSuccessMessage(name, metadata) {
     const summary = formatWorldInfoImportSummary(metadata);
     const summaryText = summary ? ` (${summary})` : '';
     return `${t`World Info "${name}" imported successfully!`}${summaryText} ${t`Switched to the imported World Info.`}`;
+}
+
+const WORLD_INFO_IMPORT_CONFLICT_CHOICE = Object.freeze({
+    CONFIRM: 'confirm',
+    OVERWRITE: 'overwrite',
+    SKIP: 'skip',
+});
+
+function createWorldInfoImportResult(status, file, worldName = null) {
+    return {
+        status,
+        fileName: file?.name ?? null,
+        worldName,
+    };
+}
+
+function getWorldInfoImportBaseName(file) {
+    const fileName = file?.name ?? '';
+    const extensionIndex = fileName.lastIndexOf('.');
+    return extensionIndex > 0 ? fileName.slice(0, extensionIndex) : fileName;
+}
+
+function findExistingWorldInfoName(name) {
+    return world_names?.find(existingName => equalsIgnoreCaseAndAccents(existingName, name)) ?? null;
+}
+
+async function getWorldInfoImportTargetName(file) {
+    return getSanitizedFilename(getWorldInfoImportBaseName(file));
+}
+
+async function getWorldInfoBatchImportConflicts(files) {
+    const conflicts = [];
+
+    for (const file of files) {
+        const targetName = await getWorldInfoImportTargetName(file);
+        const existingName = findExistingWorldInfoName(targetName);
+        if (existingName) {
+            conflicts.push({ file, targetName, existingName });
+        }
+    }
+
+    return conflicts;
+}
+
+function summarizeWorldInfoBatchImport(results) {
+    const summary = {
+        successCount: 0,
+        failedCount: 0,
+        skippedCount: 0,
+        unprocessedCount: 0,
+        totalCount: results.length,
+    };
+
+    for (const result of results) {
+        if (result?.unprocessed) {
+            summary.unprocessedCount++;
+        } else if (result?.status === 'success') {
+            summary.successCount++;
+        } else if (result?.status === 'failed') {
+            summary.failedCount++;
+        } else if (result?.status === 'cancelled' || result?.status === 'skipped') {
+            summary.skippedCount++;
+        }
+    }
+
+    return summary;
+}
+
+function formatWorldInfoImportBatchSummary(summary) {
+    const parts = [];
+
+    if (summary.successCount > 0) {
+        parts.push(t`${summary.successCount} imported`);
+    }
+
+    if (summary.failedCount > 0) {
+        parts.push(t`${summary.failedCount} failed`);
+    }
+
+    if (summary.skippedCount > 0) {
+        parts.push(t`${summary.skippedCount} skipped`);
+    }
+
+    if (summary.unprocessedCount > 0) {
+        parts.push(t`${summary.unprocessedCount} unprocessed`);
+    }
+
+    return parts.join(', ');
+}
+
+function showWorldInfoBatchImportSummary(summary) {
+    const detail = formatWorldInfoImportBatchSummary(summary);
+
+    if (summary.successCount > 0 && summary.failedCount === 0 && summary.skippedCount === 0) {
+        toastr.success(t`World Info batch import complete: ${detail}.`);
+        return;
+    }
+
+    if (summary.successCount > 0) {
+        toastr.warning(t`World Info batch import partially complete: ${detail}.`);
+        return;
+    }
+
+    toastr.warning(t`World Info batch import finished with no new World Info imported: ${detail}.`);
+}
+
+function buildWorldInfoBatchProgressHtml(index, total, file) {
+    const percent = total > 0 ? Math.round((index / total) * 100) : 0;
+    return `
+        <div>${t`Importing file ${index} of ${total}`}</div>
+        <div><strong>${escapeHtml(file?.name ?? t`Unknown file`)}</strong></div>
+        <div>${t`Progress`}: ${percent}%</div>
+        <button type="button" class="menu_button world-info-batch-cancel">${t`Cancel remaining`}</button>
+    `;
+}
+
+function updateWorldInfoBatchProgress(batchState, index, total, file) {
+    const progressIndex = index + 1;
+    const progressHtml = buildWorldInfoBatchProgressHtml(progressIndex, total, file);
+
+    if (!worldInfoImportToast) {
+        worldInfoImportToast = toastr.info(progressHtml, t`Importing World Info`, {
+            timeOut: 0,
+            extendedTimeOut: 0,
+            tapToDismiss: false,
+            progressBar: true,
+            escapeHtml: false,
+            html: true,
+        });
+    } else {
+        worldInfoImportToast.find('.toast-message').html(progressHtml);
+    }
+
+    const percent = total > 0 ? Math.round((progressIndex / total) * 100) : 0;
+    worldInfoImportToast.find('.toast-progress').css('width', `${percent}%`);
+    worldInfoImportToast.find('.world-info-batch-cancel').off('click').on('click', (event) => {
+        batchState.cancelRequested = true;
+        $(event.currentTarget).prop('disabled', true).text(t`Cancelling...`);
+    });
+}
+
+function buildWorldInfoBatchConflictHtml(conflicts) {
+    const visibleConflicts = conflicts.slice(0, 10).map(conflict => `<li>${escapeHtml(conflict.file.name)} &rarr; ${escapeHtml(conflict.existingName)}</li>`).join('');
+    const overflowCount = conflicts.length - 10;
+    const overflow = overflowCount > 0 ? `<p>${t`${overflowCount} more conflicts are not shown.`}</p>` : '';
+
+    return `<p>${t`Some selected files will overwrite existing World Info.`}</p><ul>${visibleConflicts}</ul>${overflow}<p>${t`Choose how to handle these conflicts before the batch starts.`}</p>`;
+}
+
+async function showWorldInfoBatchConflictPopup(conflicts) {
+    if (conflicts.length === 0) {
+        return WORLD_INFO_IMPORT_CONFLICT_CHOICE.CONFIRM;
+    }
+
+    const result = await Popup.show.confirm(t`World Info import conflicts`, buildWorldInfoBatchConflictHtml(conflicts), {
+        okButton: t`Overwrite all`,
+        cancelButton: t`Confirm individually`,
+        defaultResult: POPUP_RESULT.NEGATIVE,
+        customButtons: [{ text: t`Skip all`, result: POPUP_RESULT.CUSTOM1 }],
+    });
+
+    if (result === POPUP_RESULT.AFFIRMATIVE) {
+        return WORLD_INFO_IMPORT_CONFLICT_CHOICE.OVERWRITE;
+    }
+
+    if (result === POPUP_RESULT.CUSTOM1) {
+        return WORLD_INFO_IMPORT_CONFLICT_CHOICE.SKIP;
+    }
+
+    return WORLD_INFO_IMPORT_CONFLICT_CHOICE.CONFIRM;
+}
+
+async function prepareWorldInfoImportOverwrite(sanitizedWorldName, metadata, overwriteMode) {
+    const existingName = findExistingWorldInfoName(sanitizedWorldName);
+
+    if (!existingName) {
+        return true;
+    }
+
+    if (overwriteMode === WORLD_INFO_IMPORT_CONFLICT_CHOICE.SKIP) {
+        return false;
+    }
+
+    if (overwriteMode === WORLD_INFO_IMPORT_CONFLICT_CHOICE.OVERWRITE) {
+        toastr.info(`Overwriting Existing World Info:<br />${escapeHtml(existingName)}`, t`World Info Import`, { escapeHtml: false });
+        await deleteWorldInfo(existingName);
+        return true;
+    }
+
+    return checkOverwriteExistingData('World Info', world_names, sanitizedWorldName, {
+        interactive: true,
+        actionName: 'Import',
+        deleteAction: (existingName) => deleteWorldInfo(existingName),
+        contextHtml: buildWorldInfoImportContextHtml(metadata),
+        confirmOptions: {
+            okButton: buildWorldInfoOverwriteButtonLabel(metadata),
+            cancelButton: t`Cancel`,
+            defaultResult: POPUP_RESULT.NEGATIVE,
+            onOpen: (popup) => {
+                popup.cancelButton.focus();
+            },
+        },
+    });
 }
 
 const saveSettingsDebounced = debounce(() => {
@@ -5955,12 +6161,87 @@ export function onWorldInfoChange(args, text) {
 }
 
 /**
+ * Imports multiple world info files in selection order.
+ * @param {ArrayLike<File>|File[]} files Files to import
+ * @returns {Promise<object[]>} Batch import results
+ */
+export async function importWorldInfoFiles(files) {
+    const queue = Array.from(files ?? []).filter(Boolean);
+
+    if (queue.length === 0) {
+        return [createWorldInfoImportResult('skipped', null)];
+    }
+
+    if (worldInfoImportBusy) {
+        return queue.map(file => createWorldInfoImportResult('skipped', file));
+    }
+
+    const results = [];
+    const batchState = { cancelRequested: false };
+    let conflictFiles = new Set();
+    let skippedConflictFiles = new Set();
+    let completed = false;
+
+    setWorldImportBusy(true, { showToast: false });
+
+    try {
+        let conflicts = [];
+        try {
+            conflicts = await getWorldInfoBatchImportConflicts(queue);
+        } catch (error) {
+            console.error('World Info batch conflict pre-scan failed:', error);
+        }
+        const conflictChoice = await showWorldInfoBatchConflictPopup(conflicts);
+        conflictFiles = new Set(conflicts.map(conflict => conflict.file));
+        skippedConflictFiles = conflictChoice === WORLD_INFO_IMPORT_CONFLICT_CHOICE.SKIP ? conflictFiles : new Set();
+
+        for (let index = 0; index < queue.length; index++) {
+            const file = queue[index];
+
+            if (batchState.cancelRequested) {
+                const result = createWorldInfoImportResult('skipped', file);
+                result.unprocessed = true;
+                results.push(result);
+                continue;
+            }
+
+            updateWorldInfoBatchProgress(batchState, index, queue.length, file);
+
+            if (skippedConflictFiles.has(file)) {
+                results.push(createWorldInfoImportResult('skipped', file));
+                continue;
+            }
+
+            const overwriteMode = conflictFiles.has(file) ? conflictChoice : WORLD_INFO_IMPORT_CONFLICT_CHOICE.CONFIRM;
+
+            try {
+                const result = await importWorldInfo(file, { overwriteMode });
+                results.push(result ?? createWorldInfoImportResult('skipped', file));
+            } catch (error) {
+                console.error('Error importing world info batch file:', error);
+                results.push(createWorldInfoImportResult('failed', file));
+            }
+        }
+
+        const summary = summarizeWorldInfoBatchImport(results);
+        completed = true;
+        setWorldImportBusy(false);
+        showWorldInfoBatchImportSummary(summary);
+        return results;
+    } finally {
+        if (!completed) {
+            setWorldImportBusy(false);
+        }
+    }
+}
+
+/**
  * Imports world info from a file.
  * @param {File} file File to import
  */
-export async function importWorldInfo(file) {
+export async function importWorldInfo(file, { overwriteMode = WORLD_INFO_IMPORT_CONFLICT_CHOICE.CONFIRM } = {}) {
     if (!file) {
-        return;
+        return createWorldInfoImportResult('skipped', file);
     }
 
     if (file.size > WORLD_INFO_IMPORT_LARGE_FILE_THRESHOLD_BYTES) {
@@ -5985,7 +6266,7 @@ export async function importWorldInfo(file) {
                 } else {
                     toastr.error(t`This PNG file does not contain importable World Info data.`);
                 }
-                return;
+                return createWorldInfoImportResult('failed', file);
             }
         } else {
             // File should be a JSON file
@@ -5994,13 +6275,13 @@ export async function importWorldInfo(file) {
 
         if (jsonData === undefined || jsonData === null) {
             toastr.error(t`File contents are damaged or in an unsupported format. Please check that the file is complete.`);
-            return;
+            return createWorldInfoImportResult('failed', file);
         }
 
         metadata = detectWorldInfoImportMetadata(jsonData, { sourceFormatLabel: file.name.endsWith('.png') ? 'PNG NAI data' : 'World Info JSON' });
         if (metadata.unsupported) {
             toastr.error(t`Unsupported World Info file format. Supported formats: World Info JSON (SillyTavern compatible), PNG NAI data, Novel Lorebook, Agnai Memory Book, Risu Lorebook.`);
-            return;
+            return createWorldInfoImportResult('failed', file);
         }
 
         if (metadata.convertedData) {
@@ -6009,27 +6290,14 @@ export async function importWorldInfo(file) {
     } catch (error) {
         console.error('Error parsing world info import file:', error);
         toastr.error(t`File contents are damaged or in an unsupported format. Please check that the file is complete.`);
-        return;
+        return createWorldInfoImportResult('failed', file);
     }
 
     const worldName = file.name.substr(0, file.name.lastIndexOf('.'));
     const sanitizedWorldName = await getSanitizedFilename(worldName);
-    const allowed = await checkOverwriteExistingData('World Info', world_names, sanitizedWorldName, {
-        interactive: true,
-        actionName: 'Import',
-        deleteAction: (existingName) => deleteWorldInfo(existingName),
-        contextHtml: buildWorldInfoImportContextHtml(metadata),
-        confirmOptions: {
-            okButton: buildWorldInfoOverwriteButtonLabel(metadata),
-            cancelButton: t`Cancel`,
-            defaultResult: POPUP_RESULT.NEGATIVE,
-            onOpen: (popup) => {
-                popup.cancelButton.focus();
-            },
-        },
-    });
+    const allowed = await prepareWorldInfoImportOverwrite(sanitizedWorldName, metadata, overwriteMode);
     if (!allowed) {
-        return false;
+        return createWorldInfoImportResult('cancelled', file, sanitizedWorldName);
     }
 
     try {
@@ -6044,7 +6312,7 @@ export async function importWorldInfo(file) {
             if (result.status === 413) {
                 console.error('Error importing world info: file too large', result.status, result.statusText);
                 toastr.error(t`File is too large. Please check the file contents or compress it before retrying.`);
-                return;
+                return createWorldInfoImportResult('failed', file);
             }
 
             throw new Error(`Failed to import world info: ${result.statusText}`);
@@ -6061,10 +6329,14 @@ export async function importWorldInfo(file) {
             }
 
             toastr.success(buildWorldInfoImportSuccessMessage(data.name, metadata));
+            return createWorldInfoImportResult('success', file, data.name);
         }
+
+        return createWorldInfoImportResult('failed', file);
     } catch (error) {
         console.error('Error importing world info:', error);
         toastr.error(t`Import failed. Please check your connection and try again.`);
+        return createWorldInfoImportResult('failed', file);
     }
 }
 
@@ -6489,20 +6761,24 @@ export function initWorldInfo() {
                 return;
             }
 
-            const file = e.target.files[0];
-            if (!file) {
+            const files = Array.from(e.target.files ?? []);
+            if (files.length === 0) {
                 e.target.value = '';
                 return;
             }
 
-            setWorldImportBusy(true);
             try {
-                await importWorldInfo(file);
+                await importWorldInfoFiles(files);
             } finally {
-                setWorldImportBusy(false);
                 e.target.value = '';
             }
         });
+
+        if (!worldInfoImportDragDropHandler) {
+            worldInfoImportDragDropHandler = new DragAndDropHandler('#world_popup', async (files) => {
+                await importWorldInfoFiles(files);
+            });
+        }
 
         // More menu toggle
         $('#world_more_menu').off('click.worldMoreMenuToggle').on('click.worldMoreMenuToggle', function (e) {
