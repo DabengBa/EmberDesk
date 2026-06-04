@@ -2,7 +2,7 @@
 
 ## Module Responsibility
 
-`src/derived-cache-sqlite.js` owns the shared lifecycle for SQLite files that are derived from canonical filesystem data.
+`src/derived-cache-sqlite.js` owns the shared lifecycle for SQLite files that are derived from canonical filesystem data. Project-level cache boundaries are summarized in [project-overview](../project-overview.md), and the current character-index integration is described in [interaction-performance-indexing](interaction-performance-indexing.md).
 
 The helper is infrastructure only. It owns:
 
@@ -12,9 +12,9 @@ The helper is infrastructure only. It owns:
 - cached `DatabaseSync` handle lifecycle by user root and logical sidecar key
 - common SQLite PRAGMA setup
 - `meta.schema_version` tracking
-- schema reset hooks supplied by the owning sidecar module
+- idempotent schema hooks supplied by the owning sidecar module
 - reset count tracking and current-process circuit breaking
-- structured operator logs and pure status queries
+- structured operator logs and read-only status queries
 
 The helper does not own business rules. Entity modules continue to own their schema, payloads, freshness keys, invalidation rules, and filesystem fallback behavior.
 
@@ -73,6 +73,12 @@ The helper emits structured `console.info` records with:
 - `disabled` when mode or circuit breaker disables a sidecar
 - `unsupported` when `node:sqlite` is unavailable
 
+`disabledReason` values currently include:
+
+- `force_off`
+- `unsupported`
+- `reset_threshold_exceeded`
+
 `src/server-main.js` logs the parsed character-index mode during startup without opening any user-root SQLite file.
 
 Code can query status through the sidecar wrapper exported by `src/endpoints/character-index.js`, which delegates to the helper and reports:
@@ -85,7 +91,7 @@ Code can query status through the sidecar wrapper exported by `src/endpoints/cha
 - `resetCount`
 - `disabledReason`
 
-There is no HTTP health/status endpoint for this slice. If an operator UI or `/health` response needs this data later, it should call the existing pure status function through a separately designed API boundary.
+There is no HTTP health/status endpoint for this slice. If an operator UI or `/health` response needs this data later, it should call the existing read-only status function through a separately designed API boundary.
 
 ## SQLite Baseline
 

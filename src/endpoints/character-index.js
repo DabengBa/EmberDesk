@@ -307,7 +307,7 @@ function openCharacterIndexDatabase(userRoot) {
         filename: CHARACTER_INDEX_FILENAME,
         schemaVersion: SCHEMA_VERSION,
         modeEnvVar: CHARACTER_INDEX_MODE_ENV_VAR,
-        initialize(db) {
+        ensureSchema(db) {
             db.exec(`
                 CREATE TABLE IF NOT EXISTS characters (
                     avatar TEXT PRIMARY KEY,
@@ -518,27 +518,29 @@ export async function listIndexedCharacterPayloads({
 
         for (let index = 0; index < avatarsToRefreshChatStats.length; index += ROW_REFRESH_CONCURRENCY) {
             const batch = avatarsToRefreshChatStats.slice(index, index + ROW_REFRESH_CONCURRENCY);
-            const results = await Promise.allSettled(batch.map(async (avatar) => {
-                refreshCharacterChatStatsRow(userRoot, directories, avatar);
-            }));
-
-            for (let i = 0; i < results.length; i++) {
-                if (results[i].status === 'rejected') {
-                    console.warn(`Character index chat-stat refresh skipped for ${batch[i]}:`, results[i].reason);
+            for (const avatar of batch) {
+                try {
+                    refreshCharacterChatStatsRow(userRoot, directories, avatar);
+                } catch (error) {
+                    console.warn(`Character index chat-stat refresh skipped for ${avatar}:`, error);
                 }
             }
         }
 
         for (let index = 0; index < avatarsToRefresh.length; index += ROW_REFRESH_CONCURRENCY) {
             const batch = avatarsToRefresh.slice(index, index + ROW_REFRESH_CONCURRENCY);
-            const results = await Promise.allSettled(batch.map(async (avatar) => {
-                const row = await buildRow(avatar, directories);
-                upsertCharacterIndexEntry(userRoot, avatar, row);
-            }));
+            const results = await Promise.allSettled(batch.map(avatar => buildRow(avatar, directories)));
 
             for (let i = 0; i < results.length; i++) {
                 if (results[i].status === 'rejected') {
                     console.warn(`Character index refresh skipped for ${batch[i]}:`, results[i].reason);
+                    continue;
+                }
+
+                try {
+                    upsertCharacterIndexEntry(userRoot, batch[i], results[i].value);
+                } catch (error) {
+                    console.warn(`Character index refresh skipped for ${batch[i]}:`, error);
                 }
             }
         }
@@ -549,7 +551,12 @@ export async function listIndexedCharacterPayloads({
             }
         }
 
-        const rows = db.prepare(`SELECT avatar, ${payloadColumn} AS payload FROM characters`).all();
+        const readDb = openCharacterIndexDatabase(userRoot);
+        if (!readDb) {
+            return [];
+        }
+
+        const rows = readDb.prepare(`SELECT avatar, ${payloadColumn} AS payload FROM characters`).all();
         rows.sort((left, right) => CHARACTER_AVATAR_COLLATOR.compare(left.avatar, right.avatar));
 
         const payloads = [];

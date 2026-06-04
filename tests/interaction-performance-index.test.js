@@ -16,6 +16,7 @@ import {
     isCharacterIndexSupported,
     listIndexedCharacterPayloads,
     markCharacterChatStatsDirty,
+    resetCharacterIndexDatabase,
 } from '../src/endpoints/character-index.js';
 import { write as writeCharacterCardPngData } from '../src/character-card-parser.js';
 import encodePngChunks from '../src/png/encode.js';
@@ -680,6 +681,32 @@ describe('character index', () => {
             { avatar: 'beta.png', character: null, index: -1 },
             { avatar: 'gamma.png', character: { avatar: 'gamma.png', name: 'Gamma' }, index: 1 },
         ]);
+    });
+
+    test('throws instead of returning an empty list when the sidecar is circuit-disabled', async () => {
+        const directories = makeDirectories('emberdesk-character-index-');
+        tempRoots.push(directories.root);
+        writeAvatarFile(directories, 'alpha.png', 'alpha');
+
+        await listIndexedCharacterPayloads({
+            userRoot: directories.root,
+            directories,
+            avatarFiles: ['alpha.png'],
+            useShallowPayload: false,
+            buildRow: createBuildRow([]),
+        });
+
+        resetCharacterIndexDatabase(directories.root);
+        resetCharacterIndexDatabase(directories.root);
+        resetCharacterIndexDatabase(directories.root);
+
+        await expect(listIndexedCharacterPayloads({
+            userRoot: directories.root,
+            directories,
+            avatarFiles: ['alpha.png'],
+            useShallowPayload: false,
+            buildRow: createBuildRow([]),
+        })).rejects.toThrow('Derived SQLite sidecar character-index is disabled');
     });
 
     test('does not refresh an edited character after it was removed locally', () => {

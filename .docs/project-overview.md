@@ -74,6 +74,7 @@ Current derived-cache scope is intentionally narrow:
 
 - canonical character cards and chats remain file-backed
 - `DiskCache` accelerates repeated PNG-to-JSON extraction
+- `src/derived-cache-sqlite.js` owns shared SQLite derived-cache lifecycle for sidecars that remain rebuildable from canonical files (see [derived-cache-sqlite](tech/derived-cache-sqlite.md))
 - the SQLite character index accelerates the character-library list API and safe steady-state single-character full reads
   - single-character indexed reuse still revalidates source PNG metadata, linked legacy world-info dependencies, and chat-derived aggregates before treating cached payloads as reusable
 - this slice does not introduce a database-first source of truth for chats, world info, or general workspace state

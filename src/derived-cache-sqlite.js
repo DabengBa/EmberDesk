@@ -3,6 +3,8 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import process from 'node:process';
 
+import { isPathUnderParent } from './util.js';
+
 const require = createRequire(import.meta.url);
 const DEFAULT_MODE_ENV_VAR = 'EMBERDESK_DERIVED_SQLITE_MODE';
 const DEFAULT_RESET_THRESHOLD = 3;
@@ -19,6 +21,18 @@ export const DERIVED_SQLITE_MODES = Object.freeze({
     FORCE_OFF: 'force_off',
 });
 
+export class DerivedSqliteDisabledError extends Error {
+    /**
+     * @param {string} message
+     * @param {string} reason
+     */
+    constructor(message, reason) {
+        super(message);
+        this.name = 'DerivedSqliteDisabledError';
+        this.reason = reason;
+    }
+}
+
 function loadDatabaseSync() {
     try {
         return require('node:sqlite').DatabaseSync;
@@ -31,13 +45,35 @@ function hasOption(options, key) {
     return Object.prototype.hasOwnProperty.call(options, key);
 }
 
-function getStateKey(userRoot, key) {
-    return `${userRoot}\0${key}`;
+function normalizeStatePath(value) {
+    const resolved = path.resolve(value);
+    return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
 }
 
-function removeDatabaseFiles(dbPath) {
+function getStateKey(userRoot, key) {
+    return `${normalizeStatePath(userRoot)}\0${key}`;
+}
+
+function resolveDatabasePath(userRoot, filename) {
+    const cacheRoot = path.resolve(userRoot, '_cache');
+    const dbPath = path.resolve(cacheRoot, filename);
+    if (dbPath === cacheRoot || !isPathUnderParent(cacheRoot, dbPath)) {
+        throw new Error(`Derived SQLite sidecar path escapes cache directory: ${filename}`);
+    }
+    return { cacheRoot, dbPath };
+}
+
+function removeDatabaseFiles(dbPath, cacheRoot, logger) {
     for (const suffix of ['', '-wal', '-shm']) {
-        fs.rmSync(`${dbPath}${suffix}`, { force: true });
+        const filePath = path.resolve(`${dbPath}${suffix}`);
+        if (!isPathUnderParent(cacheRoot, filePath)) {
+            throw new Error(`Derived SQLite sidecar cleanup path escapes cache directory: ${filePath}`);
+        }
+        try {
+            fs.rmSync(filePath, { force: true });
+        } catch (error) {
+            logger.warn?.(`Derived SQLite sidecar cleanup skipped for ${filePath}:`, error);
+        }
     }
 }
 
@@ -90,6 +126,7 @@ export function createDerivedSqliteManager(options = {}) {
                 userRoot,
                 db: null,
                 dbPath: null,
+                cacheRoot: null,
                 schemaVersion: null,
                 resetCount: 0,
                 disabledReason: null,
@@ -107,6 +144,7 @@ export function createDerivedSqliteManager(options = {}) {
     }
 
     /**
+     * The helper owns the `meta` table and `schema_version` key. Sidecar schemas must not drop or rename them.
      * @param {{
      *   userRoot: string,
      *   key: string,
@@ -118,7 +156,7 @@ export function createDerivedSqliteManager(options = {}) {
     function getStatus(options) {
         const mode = getMode(options.modeEnvVar);
         const state = states.get(getStateKey(options.userRoot, options.key));
-        const dbPath = state?.dbPath ?? path.join(options.userRoot, '_cache', options.filename);
+        const { dbPath } = resolveDatabasePath(options.userRoot, options.filename);
         const nodeSqliteAvailable = typeof DatabaseSync === 'function';
         const modeDisabled = mode === DERIVED_SQLITE_MODES.FORCE_OFF;
         const disabledReason = state?.disabledReason ?? (modeDisabled ? 'force_off' : (!nodeSqliteAvailable ? 'unsupported' : null));
@@ -135,6 +173,7 @@ export function createDerivedSqliteManager(options = {}) {
     }
 
     /**
+     * The helper owns the `meta` table and `schema_version` key. Sidecar schemas must not drop or rename them.
      * @param {{
      *   key: string,
      *   schemaVersion: number,
@@ -188,7 +227,7 @@ export function createDerivedSqliteManager(options = {}) {
      *   key: string,
      *   filename: string,
      *   schemaVersion: number,
-     *   initialize: (db: import('node:sqlite').DatabaseSync) => void,
+     *   ensureSchema: (db: import('node:sqlite').DatabaseSync) => void,
      *   resetSchema: (db: import('node:sqlite').DatabaseSync) => void,
      *   modeEnvVar?: string,
      * }} options
@@ -198,8 +237,9 @@ export function createDerivedSqliteManager(options = {}) {
     function openInternal(options, allowRetry) {
         const mode = getMode(options.modeEnvVar);
         const state = getOrCreateState(options.userRoot, options.key);
-        const dbPath = path.join(options.userRoot, '_cache', options.filename);
+        const { cacheRoot, dbPath } = resolveDatabasePath(options.userRoot, options.filename);
         state.dbPath = dbPath;
+        state.cacheRoot = cacheRoot;
         state.schemaVersion = options.schemaVersion;
 
         if (mode === DERIVED_SQLITE_MODES.FORCE_OFF) {
@@ -223,7 +263,10 @@ export function createDerivedSqliteManager(options = {}) {
                 action: 'disabled',
                 disabledReason: state.disabledReason,
             });
-            return null;
+            throw new DerivedSqliteDisabledError(
+                `Derived SQLite sidecar ${options.key} is disabled: ${state.disabledReason}`,
+                state.disabledReason,
+            );
         }
 
         if (typeof DatabaseSync !== 'function') {
@@ -248,7 +291,7 @@ export function createDerivedSqliteManager(options = {}) {
             db = new DatabaseSync(dbPath);
             applyPragmas(db);
             db.exec(META_TABLE_SQL);
-            options.initialize(db);
+            options.ensureSchema(db);
 
             let action = 'opened';
             const currentVersion = db.prepare('SELECT value FROM meta WHERE key = ?').get('schema_version')?.value;
@@ -260,6 +303,7 @@ export function createDerivedSqliteManager(options = {}) {
 
             state.db = db;
             state.dbPath = dbPath;
+            state.cacheRoot = cacheRoot;
             state.schemaVersion = options.schemaVersion;
             state.disabledReason = null;
             logStatus({
@@ -281,10 +325,12 @@ export function createDerivedSqliteManager(options = {}) {
             }
             reset(options.userRoot, options.key, {
                 dbPath,
+                cacheRoot,
                 reason: normalizeErrorMessage(error),
                 removeFiles: true,
+                countReset: allowRetry,
             });
-            if (allowRetry) {
+            if (allowRetry && !state.disabledReason) {
                 return openInternal(options, false);
             }
             throw error;
@@ -297,7 +343,7 @@ export function createDerivedSqliteManager(options = {}) {
      *   key: string,
      *   filename: string,
      *   schemaVersion: number,
-     *   initialize: (db: import('node:sqlite').DatabaseSync) => void,
+     *   ensureSchema: (db: import('node:sqlite').DatabaseSync) => void,
      *   resetSchema: (db: import('node:sqlite').DatabaseSync) => void,
      *   modeEnvVar?: string,
      * }} options
@@ -309,7 +355,7 @@ export function createDerivedSqliteManager(options = {}) {
     /**
      * @param {string} userRoot
      * @param {string} key
-     * @param {{dbPath?: string, reason?: string, removeFiles?: boolean}} [options]
+     * @param {{dbPath?: string, cacheRoot?: string, reason?: string, removeFiles?: boolean, countReset?: boolean}} [options]
      */
     function reset(userRoot, key, options = {}) {
         const state = states.get(getStateKey(userRoot, key));
@@ -326,9 +372,12 @@ export function createDerivedSqliteManager(options = {}) {
             state.db = null;
         }
 
-        state.resetCount++;
+        if (options.countReset !== false) {
+            state.resetCount++;
+        }
         if (options.removeFiles && dbPath) {
-            removeDatabaseFiles(dbPath);
+            const cacheRoot = options.cacheRoot ?? state.cacheRoot ?? path.resolve(userRoot, '_cache');
+            removeDatabaseFiles(dbPath, cacheRoot, logger);
         }
         if (state.resetCount >= resetThreshold) {
             state.disabledReason = 'reset_threshold_exceeded';

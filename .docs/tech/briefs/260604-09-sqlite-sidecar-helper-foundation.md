@@ -37,7 +37,7 @@
 | First shippable slice | 把存储层调研收敛成一个最小、低风险、可验证的设计切片 | Confirmed |
 | Derived-cache boundary | 继续把 SQLite 保持为派生 sidecar，而不是 canonical storage | Confirmed |
 | Scope control | 不把世界信息索引、搜索层替换、ORM 引入、runtime 迁移混进同一切片 | Confirmed |
-| Observability | helper 需要提供启动日志、状态查询纯函数、reset 计数和轻量熔断，避免静默 fallback | Confirmed |
+| Observability | helper 需要提供启动日志、只读状态查询、reset 计数和轻量熔断，避免静默 fallback | Confirmed |
 
 ## Implementation Traceability
 
@@ -46,11 +46,11 @@
 | First shippable slice | `src/derived-cache-sqlite.js`, `src/endpoints/character-index.js`, `tests/derived-cache-sqlite.test.js` | Delivered in the wrap-up commit for this brief |
 | Derived-cache boundary | `.docs/tech/derived-cache-sqlite.md`, `.docs/tech/interaction-performance-indexing.md` | Delivered; docs state filesystem data remains canonical and SQLite is rebuildable derived state |
 | Scope control | `src/endpoints/character-index.js`, `.docs/tech/derived-cache-sqlite.md` | Delivered; no world info/chat/preset/settings sidecar, search replacement, ORM, Bun runtime path, or filesystem migration was added |
-| Observability | `src/derived-cache-sqlite.js`, `src/server-main.js`, `src/endpoints/character-index.js`, `tests/derived-cache-sqlite.test.js` | Delivered; startup mode logging, structured sidecar logs, pure status wrappers, reset counts, and circuit breaking are covered |
+| Observability | `src/derived-cache-sqlite.js`, `src/server-main.js`, `src/endpoints/character-index.js`, `tests/derived-cache-sqlite.test.js` | Delivered; startup mode logging, structured sidecar logs, read-only status wrappers, reset counts, and circuit breaking are covered |
 
 ## Unresolved Questions
 
-无。当前请求足够收敛，可以直接形成设计。
+无当前未决问题。运行期恢复、熔断和单进程约束见 `.docs/tech/derived-cache-sqlite.md`。
 
 ## Change History
 

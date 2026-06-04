@@ -6,6 +6,7 @@ import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
 import {
     createDerivedSqliteManager,
+    DerivedSqliteDisabledError,
     DERIVED_SQLITE_MODES,
 } from '../src/derived-cache-sqlite.js';
 
@@ -42,7 +43,7 @@ function createSidecarOptions(userRoot, overrides = {}) {
         filename: 'character-index.sqlite',
         schemaVersion: 2,
         modeEnvVar: 'EMBERDESK_CHARACTER_INDEX_MODE',
-        initialize(db) {
+        ensureSchema(db) {
             db.exec(`
                 CREATE TABLE IF NOT EXISTS rows (
                     id TEXT PRIMARY KEY,
@@ -135,6 +136,49 @@ describe('derived sqlite manager', () => {
         }));
     });
 
+    test('reports force_off in startup status without opening a database', () => {
+        const logger = createLogger();
+        const manager = createDerivedSqliteManager({
+            env: { EMBERDESK_CHARACTER_INDEX_MODE: 'force_off' },
+            logger,
+        });
+        managers.push(manager);
+
+        expect(manager.getStartupStatus({
+            key: 'character-index',
+            schemaVersion: 2,
+            modeEnvVar: 'EMBERDESK_CHARACTER_INDEX_MODE',
+        })).toEqual(expect.objectContaining({
+            supported: false,
+            mode: 'force_off',
+            action: 'disabled',
+            disabledReason: 'force_off',
+        }));
+
+        manager.logStartupStatus({
+            key: 'character-index',
+            schemaVersion: 2,
+            modeEnvVar: 'EMBERDESK_CHARACTER_INDEX_MODE',
+        });
+
+        expect(logger.info).toHaveBeenCalledWith('Derived SQLite sidecar status', expect.objectContaining({
+            action: 'disabled',
+            mode: 'force_off',
+            dbPath: null,
+        }));
+    });
+
+    test('rejects database paths that escape the cache directory', () => {
+        const userRoot = makeRoot();
+        const manager = createManager();
+
+        expect(() => manager.open(createSidecarOptions(userRoot, {
+            filename: path.join('..', 'escaped.sqlite'),
+        }))).toThrow(/escapes cache directory/);
+
+        expect(fs.existsSync(path.join(userRoot, 'escaped.sqlite'))).toBe(false);
+    });
+
     test('reuses the same handle for the same user root and key while isolating different roots', () => {
         const firstRoot = makeRoot();
         const secondRoot = makeRoot();
@@ -209,13 +253,62 @@ describe('derived sqlite manager', () => {
         manager.open(options);
         manager.reset(userRoot, 'character-index', { reason: 'third failure' });
 
-        expect(manager.open(options)).toBeNull();
+        expect(() => manager.open(options)).toThrow(DerivedSqliteDisabledError);
         expect(manager.getStatus(userRoot, 'character-index', { filename: 'character-index.sqlite' })).toEqual(expect.objectContaining({
             supported: false,
             open: false,
             resetCount: 3,
             disabledReason: 'reset_threshold_exceeded',
         }));
+    });
+
+    test('counts one reset when open retry also fails', () => {
+        const userRoot = makeRoot();
+        let attempts = 0;
+        class ThrowingDatabaseSync {
+            constructor() {
+                attempts++;
+                throw new Error('open failed');
+            }
+        }
+        const manager = createDerivedSqliteManager({
+            DatabaseSync: ThrowingDatabaseSync,
+            logger: createLogger(),
+            resetThreshold: 3,
+        });
+        managers.push(manager);
+
+        expect(() => manager.open(createSidecarOptions(userRoot))).toThrow('open failed');
+        expect(attempts).toBe(2);
+        expect(manager.getStatus(userRoot, 'character-index', { filename: 'character-index.sqlite' })).toEqual(expect.objectContaining({
+            resetCount: 1,
+            disabledReason: null,
+        }));
+    });
+
+    test('keyed dispose closes only matching sidecars', () => {
+        const userRoot = makeRoot();
+        const manager = createManager();
+        const first = manager.open(createSidecarOptions(userRoot, {
+            key: 'first',
+            filename: 'first.sqlite',
+        }));
+        const second = manager.open(createSidecarOptions(userRoot, {
+            key: 'second',
+            filename: 'second.sqlite',
+        }));
+
+        manager.dispose('first');
+
+        expect(manager.getStatus(userRoot, 'first', { filename: 'first.sqlite' })).toEqual(expect.objectContaining({
+            open: false,
+            resetCount: 0,
+        }));
+        expect(manager.getStatus(userRoot, 'second', { filename: 'second.sqlite' })).toEqual(expect.objectContaining({
+            open: true,
+        }));
+        expect(second.prepare('SELECT value FROM meta WHERE key = ?').get('schema_version').value).toBe('2');
+        expect(() => first.prepare('SELECT 1').get()).toThrow();
     });
 
     test('dispose closes handles and allows later reopen', () => {
