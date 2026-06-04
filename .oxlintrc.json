@@ -1,0 +1,37 @@
+{
+    "$schema": "./node_modules/oxlint/configuration_schema.json",
+    "categories": {
+        "correctness": "warn",
+        "suspicious": "off",
+        "perf": "off",
+        "style": "off"
+    },
+    "ignorePatterns": [
+        "**/node_modules/**",
+        "**/dist/**",
+        "**/.git/**",
+        "public/lib/**",
+        "backups/**",
+        "data/**",
+        "cache/**",
+        "src/tokenizers/**",
+        "docker/**",
+        "plugins/**",
+        "**/*.min.js",
+        "public/scripts/extensions/third-party/**",
+        "public/scripts/extensions/quick-reply/lib/**",
+        "public/scripts/extensions/tts/lib/**"
+    ],
+    "rules": {
+        "eslint/no-control-regex": "off",
+        "eslint/no-constant-condition": "warn",
+        "eslint/require-yield": "off",
+        "eslint/no-unused-vars": "off",
+        "eslint/no-unused-expressions": "off",
+        "eslint/no-cond-assign": "warn",
+        "eslint/no-unneeded-ternary": "warn",
+        "eslint/no-irregular-whitespace": "warn",
+        "eslint/no-async-promise-executor": "off",
+        "eslint/no-inner-declarations": "off"
+    }
+}
