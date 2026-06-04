@@ -27,7 +27,7 @@ describe('world info import feedback', () => {
         const source = read('public/scripts/world-info.js');
         const changeHandler = extractBlock(
             source,
-            "$('#world_import_file').on('change'",
+            '$(\'#world_import_file\').on(\'change\'',
             '// More menu toggle',
         );
         const busyHelper = extractBlock(
@@ -44,10 +44,10 @@ describe('world info import feedback', () => {
         expect(changeHandler).toContain('try {');
         expect(changeHandler).toContain('await importWorldInfoFiles(files);');
         expect(changeHandler).toContain('finally {');
-        expect(changeHandler).toContain("e.target.value = '';");
+        expect(changeHandler).toContain('e.target.value = \'\';');
         expect(changeHandler).not.toContain('e.target.files[0]');
-        expect(busyHelper).toContain("$('#world_import_file').prop('disabled', worldInfoImportBusy);");
-        expect(busyHelper).toContain(".attr('aria-disabled', String(worldInfoImportBusy));");
+        expect(busyHelper).toContain('$(\'#world_import_file\').prop(\'disabled\', worldInfoImportBusy);');
+        expect(busyHelper).toContain('.attr(\'aria-disabled\', String(worldInfoImportBusy));');
         expect(busyHelper).toContain('fa-spinner fa-spin');
         expect(busyHelper).toContain('toastr.clear(worldInfoImportToast');
     });
@@ -56,13 +56,13 @@ describe('world info import feedback', () => {
         const source = read('public/scripts/world-info.js');
         const clickHandler = extractBlock(
             source,
-            "$('#world_import_menu_item').on('click'",
-            "$('#world_import_file').on('change'",
+            '$(\'#world_import_menu_item\').on(\'click\'',
+            '$(\'#world_import_file\').on(\'change\'',
         );
 
         expect(clickHandler).toContain('if (worldInfoImportBusy) {');
         expect(clickHandler).toContain('return;');
-        expect(clickHandler.indexOf('if (worldInfoImportBusy) {')).toBeLessThan(clickHandler.indexOf("$('#world_import_file').trigger('click');"));
+        expect(clickHandler.indexOf('if (worldInfoImportBusy) {')).toBeLessThan(clickHandler.indexOf('$(\'#world_import_file\').trigger(\'click\');'));
     });
 
     test('embedded world import reports a selected character without embedded data', () => {
@@ -99,11 +99,11 @@ describe('world info import feedback', () => {
             'export async function importWorldInfo(file',
         );
 
-        expect(source).toContain("import { createWorldInfoImportResult, summarizeWorldInfoBatchImport } from './world-info-import-results.js';");
+        expect(source).toContain('import { createWorldInfoImportResult, summarizeWorldInfoBatchImport } from \'./world-info-import-results.js\';');
         expect(source).toContain('function showWorldInfoBatchImportSummary(summary)');
         expect(source).toContain('summary.unprocessedCount === 0');
         expect(source).toContain('const WORLD_INFO_IMPORT_BATCH_FILE_LIMIT = 50;');
-        expect(source).toContain("const WORLD_INFO_IMPORT_ACCEPTED_EXTENSIONS = ['.json', '.lorebook', '.png'];");
+        expect(source).toContain('const WORLD_INFO_IMPORT_ACCEPTED_EXTENSIONS = [\'.json\', \'.lorebook\', \'.png\'];');
         expect(source).toContain('function prepareWorldInfoImportQueue(files)');
         expect(batchSource).toContain('const { selectedFiles, queue, unsupportedFiles, overflowFiles, skippedResults } = prepareWorldInfoImportQueue(files);');
         expect(batchSource).toContain('if (worldInfoImportBusy) {');
@@ -113,7 +113,7 @@ describe('world info import feedback', () => {
         expect(batchSource).toContain('await importWorldInfo(file');
         expect(batchSource).toContain('results.push(result);');
         expect(batchSource).toContain('catch (error) {');
-        expect(batchSource).toContain("createWorldInfoImportResult('failed', file)");
+        expect(batchSource).toContain('createWorldInfoImportResult(\'failed\', file)');
         expect(batchSource).toContain('showWorldInfoBatchImportSummary(summary);');
         expect(batchSource).toContain('setWorldImportBusy(false);');
         expect(batchSource).not.toContain('Promise.all');
@@ -123,7 +123,7 @@ describe('world info import feedback', () => {
         const source = read('public/scripts/world-info.js');
         const panelInit = extractBlock(
             source,
-            "if (!worldInfoPanelInitialized && document.querySelector('#world_editor_select')) {",
+            'if (!worldInfoPanelInitialized && document.querySelector(\'#world_editor_select\')) {',
             '// More menu toggle',
         );
         const batchSource = extractBlock(
@@ -132,8 +132,8 @@ describe('world info import feedback', () => {
             'export async function importWorldInfo(file',
         );
 
-        expect(source).toContain("import { DragAndDropHandler } from './dragdrop.js';");
-        expect(panelInit).toContain("new DragAndDropHandler('#world_popup'");
+        expect(source).toContain('import { DragAndDropHandler } from \'./dragdrop.js\';');
+        expect(panelInit).toContain('new DragAndDropHandler(\'#world_popup\'');
         expect(panelInit).toContain('await importWorldInfoFiles(files);');
         expect(source).toContain('function showWorldInfoBatchConflictPopup(conflicts)');
         expect(source).toContain('POPUP_RESULT.CUSTOM1');
@@ -141,13 +141,13 @@ describe('world info import feedback', () => {
         expect(source).toContain('function updateWorldInfoBatchProgress(batchState, index, total, file)');
         expect(source).toContain('world-info-batch-cancel');
         expect(source).toContain('batchState.cancelRequested = true;');
-        expect(source).toContain("role', 'status'");
-        expect(source).toContain("aria-live', 'polite'");
+        expect(source).toContain('role\', \'status\'');
+        expect(source).toContain('aria-live\', \'polite\'');
         expect(source).toContain('Cancel remaining imports?');
         expect(source).toContain('Ask for each conflict');
         expect(batchSource).toContain('if (batchState.cancelRequested) {');
-        expect(batchSource).toContain("createWorldInfoImportResult('skipped', file)");
-        expect(batchSource).toContain("unprocessed: true, reason: 'cancelled-remaining'");
+        expect(batchSource).toContain('createWorldInfoImportResult(\'skipped\', file)');
+        expect(batchSource).toContain('unprocessed: true, reason: \'cancelled-remaining\'');
     });
 
     test('world import derives reusable format and entry-count metadata', () => {
@@ -162,14 +162,14 @@ describe('world info import feedback', () => {
         expect(source).toContain('function detectWorldInfoImportMetadata(jsonData, { sourceFormatLabel = \'World Info JSON\' } = {})');
         expect(source).toContain('function countWorldInfoEntries(data)');
         expect(source).toContain('function formatWorldInfoImportSummary(metadata)');
-        expect(source).toContain("formatLabel: 'Novel Lorebook'");
-        expect(source).toContain("formatLabel: 'Agnai Memory Book'");
-        expect(source).toContain("formatLabel: 'Risu Lorebook'");
+        expect(source).toContain('formatLabel: \'Novel Lorebook\'');
+        expect(source).toContain('formatLabel: \'Agnai Memory Book\'');
+        expect(source).toContain('formatLabel: \'Risu Lorebook\'');
         expect(source).toContain('formatLabel: sourceFormatLabel');
-        expect(importSource).toContain("const isPngImport = file.name.toLowerCase().endsWith('.png');");
+        expect(importSource).toContain('const isPngImport = file.name.toLowerCase().endsWith(\'.png\');');
         expect(importSource).toContain('if (isPngImport) {');
-        expect(importSource).toContain("detectWorldInfoImportMetadata(jsonData, { sourceFormatLabel: isPngImport ? 'PNG NAI data' : 'World Info JSON' })");
-        expect(importSource).toContain("formData.append('convertedData', JSON.stringify(metadata.convertedData));");
+        expect(importSource).toContain('detectWorldInfoImportMetadata(jsonData, { sourceFormatLabel: isPngImport ? \'PNG NAI data\' : \'World Info JSON\' })');
+        expect(importSource).toContain('formData.append(\'convertedData\', JSON.stringify(metadata.convertedData));');
         expect(source).toContain('formatWorldInfoImportSummary(metadata)');
         expect(source).toContain('countWorldInfoEntries(metadata.convertedData');
     });
@@ -182,10 +182,10 @@ describe('world info import feedback', () => {
             'export function openWorldInfoEditor(worldName)',
         );
 
-        expect(importSource).toContain("return createWorldInfoImportResult('skipped', file);");
-        expect(importSource).toContain("return createWorldInfoImportResult('failed', file);");
-        expect(importSource).toContain("return createWorldInfoImportResult('cancelled', file, sanitizedWorldName);");
-        expect(importSource).toContain("return createWorldInfoImportResult('success', file, data.name);");
+        expect(importSource).toContain('return createWorldInfoImportResult(\'skipped\', file);');
+        expect(importSource).toContain('return createWorldInfoImportResult(\'failed\', file);');
+        expect(importSource).toContain('return createWorldInfoImportResult(\'cancelled\', file, sanitizedWorldName);');
+        expect(importSource).toContain('return createWorldInfoImportResult(\'success\', file, data.name);');
         expect(importSource).toContain('overwriteMode = WORLD_INFO_IMPORT_CONFLICT_CHOICE.CONFIRM');
         expect(importSource).toContain('prepareWorldInfoImportOverwrite(sanitizedWorldName, metadata, overwriteMode)');
     });
@@ -216,8 +216,8 @@ describe('world info import feedback', () => {
         expect(overwriteHelper).toContain('confirmOptions');
         expect(importSource).toContain('prepareWorldInfoImportOverwrite(sanitizedWorldName, metadata, overwriteMode)');
         expect(prepareOverwriteSource).toContain('contextHtml: buildWorldInfoImportContextHtml(metadata)');
-        expect(prepareOverwriteSource).toContain("okButton: buildWorldInfoOverwriteButtonLabel(metadata)");
-        expect(prepareOverwriteSource).toContain("cancelButton: t`Cancel`");
+        expect(prepareOverwriteSource).toContain('okButton: buildWorldInfoOverwriteButtonLabel(metadata)');
+        expect(prepareOverwriteSource).toContain('cancelButton: t`Cancel`');
         expect(prepareOverwriteSource).toContain('defaultResult: POPUP_RESULT.NEGATIVE');
         expect(prepareOverwriteSource).toContain('popup.cancelButton.focus()');
         expect(prepareOverwriteSource).toContain('buildWorldInfoOverwriteButtonLabel(metadata)');
@@ -234,8 +234,8 @@ describe('world info import feedback', () => {
 
         expect(importSource).toContain('file.size > WORLD_INFO_IMPORT_LARGE_FILE_THRESHOLD_BYTES');
         expect(importSource).toContain('toastr.info(t`This file is large. Importing may take longer than usual.`)');
-        expect(importSource).toContain("extractDataFromPng(buffer, 'naidata')");
-        expect(importSource).toContain("extractDataFromPng(buffer, 'chara')");
+        expect(importSource).toContain('extractDataFromPng(buffer, \'naidata\')');
+        expect(importSource).toContain('extractDataFromPng(buffer, \'chara\')');
         expect(importSource).toContain('This PNG contains character card data, but no World Info data. To import the character card, use character import.');
         expect(importSource).toContain('This PNG file does not contain importable World Info data.');
         expect(importSource).toContain('File contents are damaged or in an unsupported format. Please check that the file is complete.');

@@ -279,8 +279,8 @@ test('frontend getCharacters implementation uses /api/characters/all to preserve
     expect(getCharactersStart).toBeGreaterThanOrEqual(0);
 
     const getCharactersBody = scriptSource.slice(getCharactersStart, getCharactersStart + 800);
-    expect(getCharactersBody).toContain("fetch('/api/characters/all'");
-    expect(getCharactersBody).not.toContain("fetch('/api/characters/list'");
+    expect(getCharactersBody).toContain('fetch(\'/api/characters/all\'');
+    expect(getCharactersBody).not.toContain('fetch(\'/api/characters/list\'');
 });
 
 /**

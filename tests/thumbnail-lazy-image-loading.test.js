@@ -42,12 +42,12 @@ describe('thumbnail lazy image loading templates', () => {
     test('swipe picker removes inherited past-chat avatars', () => {
         const swipePicker = read('public/scripts/swipe-picker.js');
 
-        expect(swipePicker).toContain("template.find('.avatar').remove();");
+        expect(swipePicker).toContain('template.find(\'.avatar\').remove();');
     });
 
     test('group past chats replace the template avatar with the real group avatar element', () => {
         const scriptSource = read('public/script.js');
 
-        expect(scriptSource).toContain("template.find('.avatar').replaceWith(groupAvatar.clone());");
+        expect(scriptSource).toContain('template.find(\'.avatar\').replaceWith(groupAvatar.clone());');
     });
 });

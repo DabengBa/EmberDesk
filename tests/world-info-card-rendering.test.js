@@ -231,12 +231,12 @@ describe('world info card rendering', () => {
         expect(source).toContain('document.body.classList.remove(\'wi-content-editor-open\');');
         expect(source).toContain('contentEditor.insertAfter(contentEditorPlaceholder);');
         expect(source).toContain('contentEditorPlaceholder.detach();');
-        expect(source).toContain("const contentEditorTitle = editTemplate.find('.wi-content-editor-title');");
+        expect(source).toContain('const contentEditorTitle = editTemplate.find(\'.wi-content-editor-title\');');
         expect(source).toContain('contentEditorTitle.attr(\'id\', `world_entry_content_editor_title_${entry.uid}`);');
         expect(source).toContain('contentEditor.attr(\'aria-labelledby\', `world_entry_content_editor_title_${entry.uid}`);');
         expect(source).toContain('focusableControls[0]?.focus();');
         expect(source).toContain('focusableControls[focusableControls.length - 1]?.focus();');
         expect(source).toContain('$(contentEditorReturnFocus).trigger(\'focus\');');
-        expect(source).toContain("if (e.key === 'Escape')");
+        expect(source).toContain('if (e.key === \'Escape\')');
     });
 });

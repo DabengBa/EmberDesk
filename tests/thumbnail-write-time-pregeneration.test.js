@@ -3,7 +3,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import express from 'express';
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -41,10 +40,6 @@ async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled 
     const mockRefreshCharacterIndexEntrySafe = jest.fn(async () => {});
     const mockDeleteCharacterIndexEntrySafe = jest.fn();
     const mockUpsertCharacterIndexEntry = jest.fn();
-    const mockBuildCharacterIndexRow = jest.fn();
-    const mockApplyInteractionPerfHeaders = jest.fn();
-    const mockProcessCharacter = jest.fn(async () => ({ name: 'Character' }));
-    const mockToShallow = jest.fn(character => character);
     const mockGetFreshIndexedCharacterFullPayload = jest.fn(() => null);
     const mockListIndexedCharacterPayloads = jest.fn(async () => []);
     const mockFindCharactersBoundToWorld = jest.fn(() => []);

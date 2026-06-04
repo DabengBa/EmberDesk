@@ -39,10 +39,10 @@ describe('character detail sidebar structure', () => {
         const source = read('public/script.js');
 
         expect(source).toContain('function toggleCharacterExportPopup(referenceElement = document.getElementById(\'export_button\'))');
-        expect(source).toContain("case 'character_action_connected_personas':");
-        expect(source).toContain("case 'character_action_export':");
-        expect(source).toContain("case 'character_action_duplicate':");
-        expect(source).toContain("case 'character_action_advanced':");
+        expect(source).toContain('case \'character_action_connected_personas\':');
+        expect(source).toContain('case \'character_action_export\':');
+        expect(source).toContain('case \'character_action_duplicate\':');
+        expect(source).toContain('case \'character_action_advanced\':');
     });
 
     test('export format options are real buttons for keyboard and assistive tech', () => {
@@ -59,7 +59,7 @@ describe('character detail sidebar structure', () => {
         const source = read('public/script.js');
 
         expect(source).toContain('function closeCharacterExportPopup({ restoreFocus = true } = {})');
-        expect(source).toContain("exportPopup.querySelector('.export_format')?.focus();");
+        expect(source).toContain('exportPopup.querySelector(\'.export_format\')?.focus();');
         expect(source).toMatch(/event\.key === 'Escape'[\s\S]+closeCharacterExportPopup\(\)/);
         expect(source).toMatch(/exportPopupTrigger\.focus\(\)/);
         expect(source).toMatch(/toastr\.success\([\s\S]+Character export download started\./);

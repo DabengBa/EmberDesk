@@ -146,6 +146,7 @@
     "main": "server.js",
     "devDependencies": {
         "@chevrotain/types": "^11.2.0",
+        "@eslint/js": "10.0.1",
         "@types/archiver": "^6.0.3",
         "@types/bytes": "^3.1.5",
         "@types/command-exists": "^1.2.3",
@@ -172,10 +173,9 @@
         "@types/write-file-atomic": "^4.0.3",
         "@types/yargs": "^17.0.33",
         "@types/yauzl": "^2.10.3",
-        "eslint": "^8.57.1",
-        "eslint-plugin-jest": "^27.9.0",
-        "eslint-plugin-jsdoc": "^48.10.0",
-        "eslint-plugin-playwright": "^2.3.0",
+        "eslint": "10.4.0",
+        "eslint-plugin-jsdoc": "63.0.0",
+        "globals": "17.6.0",
         "oxlint": "1.67.0",
         "typescript": "^5.9.3"
     }

@@ -134,7 +134,7 @@ describe('character list structure', () => {
         expect(rowSource).toMatch(/const isActive = !selected_group && this_chid !== undefined && String\(this_chid\) === String\(id\);/);
         expect(rowSource).toMatch(/<input class="ch_fav" value="\$\{isFav\}" hidden \/>/);
         expect(rowSource).toMatch(/<div class="tags tags_inline">\$\{tagsHtml\}<\/div>/);
-        expect(scriptSource).toContain("$('#rm_print_characters_block .character_select').removeClass('is_active')");
+        expect(scriptSource).toContain('$(\'#rm_print_characters_block .character_select\').removeClass(\'is_active\')');
         expect(scriptSource).toContain('$(`#CharID${chid}`).addClass(\'is_active\')');
 
         const indexHtml = read('public/index.html');
@@ -165,8 +165,8 @@ describe('character list structure', () => {
         expect(scriptSource).toMatch(/const hasActiveCharacterListFilter = entitiesFilter\.hasAnyFilter\(\);/);
         expect(scriptSource).toMatch(/const searchQuery = entitiesFilter\.getFilterData\(FILTER_TYPES\.SEARCH\);/);
         expect(scriptSource).toMatch(/\.find\('\.clear_character_filters'\)\.on\('click'/);
-        expect(scriptSource).toContain("$('#character_search_bar').val('').trigger('input')");
-        expect(scriptSource).toContain("$('.rm_tag_filter .clearAllFilters').trigger('click')");
+        expect(scriptSource).toContain('$(\'#character_search_bar\').val(\'\').trigger(\'input\')');
+        expect(scriptSource).toContain('$(\'.rm_tag_filter .clearAllFilters\').trigger(\'click\')');
         expect(emptyBlockTemplate).toContain('class="empty_block_message"');
         expect(emptyBlockTemplate).toContain('class="menu_button clear_character_filters"');
         expect(emptyBlockTemplate).toContain('data-i18n="Clear search and filters"');
@@ -252,9 +252,9 @@ describe('character list structure', () => {
         expect(removeCharacterFromUISource).toMatch(/if \(!reconciled\) \{\s+const printCharactersStartedAt = performance\.now\(\);\s+await printCharacters\(true, \{ allowDuringCharacterDelete: true \}\);/);
         expect(reconcileSource).toContain('createCharacterDeleteReconcilePlan({');
         expect(reconcileSource).toContain('createCharacterBulkDeletePagePlan({');
-        expect(reconcileSource).toContain("const isBulkDeleteContext = deleteContext?.source === 'bulk';");
+        expect(reconcileSource).toContain('const isBulkDeleteContext = deleteContext?.source === \'bulk\';');
         expect(reconcileSource).toContain('const hasActiveFilter = entitiesFilter.hasAnyFilter();');
-        expect(reconcileSource).toContain("const isBulkEdit = $('#rm_print_characters_block').hasClass('bulk_select');");
+        expect(reconcileSource).toContain('const isBulkEdit = $(\'#rm_print_characters_block\').hasClass(\'bulk_select\');');
         expect(reconcileSource).toContain('isBulkEdit: isBulkEdit && !isBulkDeleteContext');
         expect(reconcileSource).toContain('applyCharacterListPageRenderPlan({');
         expect(reconcileSource).toContain('currentCharacterListPageEntities = plan.pageEntities;');
@@ -262,7 +262,7 @@ describe('character list structure', () => {
         expect(reconcileSource).toContain('await eventSource.emit(event_types.CHARACTER_PAGE_LOADED);');
 
         const updatePaginationSource = extractFunctionSource(scriptSource, 'updateCharacterListPaginationState');
-        expect(updatePaginationSource).toContain("dataSource: afterSnapshot.entities");
+        expect(updatePaginationSource).toContain('dataSource: afterSnapshot.entities');
         expect(updatePaginationSource).toContain('triggerPagingOnInit: !skipInitialCallback');
         expect(updatePaginationSource).not.toContain('paginationData.attributes.dataSource = afterSnapshot.entities;');
     });
@@ -283,7 +283,7 @@ describe('character list structure', () => {
         expect(indexHtml).toContain('data-i18n="Temporary chat"');
         expect(styleSource).toMatch(/#temporary_chat_status/);
         expect(scriptSource).toContain('function setTemporaryChatStatus');
-        expect(scriptSource).toContain("$('#temporary_chat_status')");
+        expect(scriptSource).toContain('$(\'#temporary_chat_status\')');
         expect(newAssistantChatSource).toContain('setTemporaryChatStatus(true)');
         expect(newAssistantChatSource).toContain('setTemporaryChatStatus(false)');
         expect(deleteCharacterSource).toContain('temporaryChatAcknowledged = false');
@@ -303,14 +303,14 @@ describe('character list structure', () => {
         expect(zhTwLocale).toContain('"Delete character \\"${0}\\"?": "刪除角色「${0}」？"');
 
         expect(overlaySource).toContain('temporaryChatAcknowledged: inTempChat');
-        expect(overlaySource).toContain("deleteContext: { source: 'bulk', selectedCount: count }");
+        expect(overlaySource).toContain('deleteContext: { source: \'bulk\', selectedCount: count }');
         expect(overlaySource).toContain('temporary chat — unsaved messages will be lost');
 
         const showDeleteConfirmWithCascadeSource = extractFunctionSource(cascadeDialogSource, 'showDeleteConfirmWithCascade');
         expect(showDeleteConfirmWithCascadeSource).toContain('defaultResult: POPUP_RESULT.NEGATIVE');
-        expect(showDeleteConfirmWithCascadeSource).toContain("const chatCb = document.getElementById('del_char_checkbox');");
+        expect(showDeleteConfirmWithCascadeSource).toContain('const chatCb = document.getElementById(\'del_char_checkbox\');');
         expect(showDeleteConfirmWithCascadeSource).toContain('if (chatCb) chatCb.checked = true;');
-        expect(showDeleteConfirmWithCascadeSource).toContain("document.querySelectorAll('.world-cascade-checkbox').forEach((cb) => { cb.checked = true; });");
+        expect(showDeleteConfirmWithCascadeSource).toContain('document.querySelectorAll(\'.world-cascade-checkbox\').forEach((cb) => { cb.checked = true; });');
     });
 
     test('keeps selected-character navigation safe when the current character was deleted', () => {
@@ -319,8 +319,8 @@ describe('character list structure', () => {
 
         expect(selectSelectedCharacterSource).toContain('const character = characters[chid];');
         expect(selectSelectedCharacterSource).toMatch(/if \(!character\) \{\s+if \(switchMenu\) \{\s+select_rm_characters\(\);\s+\}\s+return false;\s+\}/);
-        expect(selectSelectedCharacterSource).toContain("$('#rm_button_selected_ch').children('h2').text(character.name);");
-        expect(selectSelectedCharacterSource).not.toContain("$('#rm_button_selected_ch').children('h2').text(characters[chid].name);");
+        expect(selectSelectedCharacterSource).toContain('$(\'#rm_button_selected_ch\').children(\'h2\').text(character.name);');
+        expect(selectSelectedCharacterSource).not.toContain('$(\'#rm_button_selected_ch\').children(\'h2\').text(characters[chid].name);');
         expect(scriptSource).toMatch(/if \(this_chid !== undefined && characters\[this_chid\]\) \{\s+selected_button = 'character_edit';\s+select_selected_character\(this_chid\);\s+\} else \{\s+selected_button = 'characters';\s+select_rm_characters\(\);\s+\}/);
     });
 
@@ -352,31 +352,31 @@ describe('character list structure', () => {
         expect(indexHtml).toMatch(/id="bulkSelectedCount"[^>]*style="display: none;"[^>]*role="status"/);
         expect(indexHtml).toContain('role="status"');
         expect(indexHtml).toMatch(/id="bulkEditButton"[^>]*tabindex="0"/);
-        expect(scriptSource).toContain("setCharacterSearchBusy(true)");
-        expect(scriptSource).toContain("setCharacterSearchBusy(false)");
-        expect(scriptSource).toContain("updateCharListGridToggleLabel()");
-        expect(scriptSource).toContain("power_user.charListGrid ? 'Character Toolbar List' : 'Character Toolbar Grid'");
+        expect(scriptSource).toContain('setCharacterSearchBusy(true)');
+        expect(scriptSource).toContain('setCharacterSearchBusy(false)');
+        expect(scriptSource).toContain('updateCharListGridToggleLabel()');
+        expect(scriptSource).toContain('power_user.charListGrid ? \'Character Toolbar List\' : \'Character Toolbar Grid\'');
         expect(bulkEditSource).toMatch(/const checkbox = \$\('<input type=\\'checkbox\\' class=\\'bulk_select_checkbox\\' aria-label=\\'Select character for bulk edit\\'>'\);/);
-        expect(bulkEditSource).toContain("aria-describedby': 'bulkSelectionHint'");
-        expect(bulkEditSource).toContain("$(el).attr('role', 'checkbox')");
-        expect(bulkEditSource).toContain("$(el).attr('aria-checked', 'false')");
-        expect(overlaySource).toContain("character.setAttribute('aria-selected', 'true')");
-        expect(overlaySource).toContain("character.setAttribute('aria-selected', 'false')");
-        expect(overlaySource).toContain("character.setAttribute('aria-checked', 'true')");
-        expect(overlaySource).toContain("character.setAttribute('aria-checked', 'false')");
+        expect(bulkEditSource).toContain('aria-describedby\': \'bulkSelectionHint\'');
+        expect(bulkEditSource).toContain('$(el).attr(\'role\', \'checkbox\')');
+        expect(bulkEditSource).toContain('$(el).attr(\'aria-checked\', \'false\')');
+        expect(overlaySource).toContain('character.setAttribute(\'aria-selected\', \'true\')');
+        expect(overlaySource).toContain('character.setAttribute(\'aria-selected\', \'false\')');
+        expect(overlaySource).toContain('character.setAttribute(\'aria-checked\', \'true\')');
+        expect(overlaySource).toContain('character.setAttribute(\'aria-checked\', \'false\')');
         expect(overlaySource).toContain('syncBulkSelectionDomState({');
         expect(overlaySource).toContain('this.state !== BulkEditOverlayState.select');
         expect(overlaySource).toContain('updateBulkSelectionCountState({ selectedCount, deleteButton, fallbackFocusElement }, count)');
         expect(overlaySource).toContain('t`Delete ${count} characters?`');
-        expect(overlaySource).toContain("deleteContext: { source: 'bulk', selectedCount: count }");
+        expect(overlaySource).toContain('deleteContext: { source: \'bulk\', selectedCount: count }');
         expect(overlaySource).not.toContain('${t`Delete`} ${count} ${t`characters?`}');
         expect(stateSource).toContain('if (!selectedCount)');
         expect(stateSource).toContain('selectedCount.textContent = getBulkSelectionShortCountText(count);');
-        expect(stateSource).toContain("selectedCount.setAttribute('aria-label',");
+        expect(stateSource).toContain('selectedCount.setAttribute(\'aria-label\',');
         expect(stateSource).toContain('updateBulkDeleteButtonState(deleteButton, count > 0, fallbackFocusElement)');
         expect(stateSource).toContain('export function syncBulkSelectionDomState');
-        expect(stateSource).toContain("character.setAttribute('aria-checked', String(isSelected))");
-        expect(stateSource).toContain("checkbox.setAttribute('aria-checked', String(isSelected))");
+        expect(stateSource).toContain('character.setAttribute(\'aria-checked\', String(isSelected))');
+        expect(stateSource).toContain('checkbox.setAttribute(\'aria-checked\', String(isSelected))');
         expect(styleSource).toMatch(/#character_search_status/);
         expect(styleSource).toMatch(/#bulkSelectionHint/);
         expect(styleSource).toMatch(/#rm_print_characters_block \.character_select\.character_selected/);
@@ -398,21 +398,21 @@ describe('character list structure', () => {
 
         expect(enableBulkSelectSource).toMatch(/\$\(\'#rm_print_characters_block \.character_select\'\)\.each/);
         expect(enableBulkSelectSource).toMatch(/const checkbox = \$\('<input type=\\'checkbox\\' class=\\'bulk_select_checkbox\\' aria-label=\\'Select character for bulk edit\\'>'\);/);
-        expect(enableBulkSelectSource).toContain("$(el).attr('role', 'checkbox')");
-        expect(enableBulkSelectSource).toContain("$(el).attr('aria-selected', 'false')");
-        expect(enableBulkSelectSource).toContain("$(el).attr('aria-checked', 'false')");
-        expect(enableBulkSelectSource).toContain("$(el).attr('aria-describedby', 'bulkSelectionHint')");
-        expect(enableBulkSelectSource).toContain("$('#rm_print_characters_block').addClass('bulk_select')");
-        expect(enableBulkSelectSource).toContain("$(document).off('click.bulkSelectCheckbox').on('click.bulkSelectCheckbox'");
+        expect(enableBulkSelectSource).toContain('$(el).attr(\'role\', \'checkbox\')');
+        expect(enableBulkSelectSource).toContain('$(el).attr(\'aria-selected\', \'false\')');
+        expect(enableBulkSelectSource).toContain('$(el).attr(\'aria-checked\', \'false\')');
+        expect(enableBulkSelectSource).toContain('$(el).attr(\'aria-describedby\', \'bulkSelectionHint\')');
+        expect(enableBulkSelectSource).toContain('$(\'#rm_print_characters_block\').addClass(\'bulk_select\')');
+        expect(enableBulkSelectSource).toContain('$(document).off(\'click.bulkSelectCheckbox\').on(\'click.bulkSelectCheckbox\'');
         expect(bulkEditSource).toContain('if (is_bulk_edit) {');
         expect(bulkEditSource).toContain('characterGroupOverlay.onPageLoad();');
-        expect(bulkEditSource).toContain("$('#bulkSelectedCount').css('display', 'inline-flex')");
-        expect(disableBulkSelectSource).toContain("$('.bulk_select_checkbox').remove()");
-        expect(disableBulkSelectSource).toContain("$('#rm_print_characters_block .character_select').removeAttr('role')");
-        expect(disableBulkSelectSource).toContain("$('#rm_print_characters_block .character_select').removeAttr('aria-selected')");
-        expect(disableBulkSelectSource).toContain("$('#rm_print_characters_block .character_select').removeAttr('aria-checked aria-describedby')");
-        expect(disableBulkSelectSource).toContain("$('#rm_print_characters_block').removeClass('bulk_select')");
-        expect(disableBulkSelectSource).toContain("$(document).off('click.bulkSelectCheckbox')");
+        expect(bulkEditSource).toContain('$(\'#bulkSelectedCount\').css(\'display\', \'inline-flex\')');
+        expect(disableBulkSelectSource).toContain('$(\'.bulk_select_checkbox\').remove()');
+        expect(disableBulkSelectSource).toContain('$(\'#rm_print_characters_block .character_select\').removeAttr(\'role\')');
+        expect(disableBulkSelectSource).toContain('$(\'#rm_print_characters_block .character_select\').removeAttr(\'aria-selected\')');
+        expect(disableBulkSelectSource).toContain('$(\'#rm_print_characters_block .character_select\').removeAttr(\'aria-checked aria-describedby\')');
+        expect(disableBulkSelectSource).toContain('$(\'#rm_print_characters_block\').removeClass(\'bulk_select\')');
+        expect(disableBulkSelectSource).toContain('$(document).off(\'click.bulkSelectCheckbox\')');
     });
 
     test('keeps bulk destructive actions disabled until a selection exists', () => {
@@ -422,17 +422,17 @@ describe('character list structure', () => {
         const enableBulkEditSource = extractFunctionSource(bulkEditSource, 'enableBulkEdit');
         const disableBulkEditSource = extractFunctionSource(bulkEditSource, 'disableBulkEdit');
 
-        expect(overlaySource).toContain("static bulkDeleteButtonId = 'bulkDeleteButton'");
+        expect(overlaySource).toContain('static bulkDeleteButtonId = \'bulkDeleteButton\'');
         expect(overlaySource).toContain('updateBulkActionStates = (countOverride = undefined) => {');
         expect(overlaySource).toContain('updateBulkDeleteButtonState(deleteButton, hasSelection, fallbackFocusElement)');
         expect(overlaySource).toContain('updateBulkSelectionCountState({ selectedCount, deleteButton, fallbackFocusElement }, count)');
-        expect(read('public/scripts/character-list-state.js')).toContain("deleteButton.setAttribute('tabindex', '0')");
+        expect(read('public/scripts/character-list-state.js')).toContain('deleteButton.setAttribute(\'tabindex\', \'0\')');
         expect(enableBulkEditSource).toContain('characterGroupOverlay.updateSelectedCount(0)');
         expect(enableBulkEditSource).not.toContain('characterGroupOverlay.updateBulkActionStates(0)');
         expect(disableBulkEditSource).toContain('characterGroupOverlay.updateSelectedCount(0)');
         expect(disableBulkEditSource).not.toContain('characterGroupOverlay.updateBulkActionStates(0)');
-        expect(deleteButtonSource).toContain("if ($('#bulkDeleteButton').hasClass('disabled'))");
+        expect(deleteButtonSource).toContain('if ($(\'#bulkDeleteButton\').hasClass(\'disabled\'))');
         expect(deleteButtonSource).toContain('return;');
-        expect(deleteButtonSource).toContain("Reuse the overlay's delete flow; it also no-ops when selection is empty.");
+        expect(deleteButtonSource).toContain('Reuse the overlay\'s delete flow; it also no-ops when selection is empty.');
     });
 });
