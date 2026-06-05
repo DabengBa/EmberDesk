@@ -20,6 +20,11 @@ import { TavernCardValidator } from '../validator/TavernCardValidator.js';
 import { parse, read, write } from '../character-card-parser.js';
 import { readWorldInfoFile } from './worldinfo.js';
 import { calculateDataSize, processUnsetSentinels, toShallow, unsetPrivateFields } from './character-card-helpers.js';
+import {
+    readCharacterFullPayload,
+    readCharacterListPayload,
+    readCharacterSummaryPayload,
+} from './character-read-service.js';
 
 import { areThumbnailsEnabled, generateThumbnail, invalidateThumbnail } from './thumbnails.js';
 import { importRisuSprites } from './sprites.js';
@@ -561,6 +566,24 @@ async function buildCharacterIndexRow(directories, avatar) {
 }
 
 /**
+ * @returns {object}
+ */
+function createCharacterReadDependencies() {
+    return {
+        isCharacterIndexSupported,
+        listIndexedCharacterPayloads,
+        getFreshIndexedCharacterFullPayload,
+        upsertCharacterIndexEntry,
+        processCharacter,
+        buildCharacterIndexRow,
+        statCharacterFile,
+        toShallow,
+        getCharacterIndexWorldMetadata,
+        warn: console.warn,
+    };
+}
+
+/**
  * @param {import('../users.js').UserDirectoryList} directories
  * @param {string} avatar
  * @returns {Promise<void>}
@@ -631,46 +654,18 @@ function deleteCharacterIndexEntrySafe(directories, avatar, operation) {
 }
 
 /**
- * @param {import('../users.js').UserDirectoryList} directories
- * @param {boolean} shallow
- * @returns {Promise<object[]>}
- */
-async function listCharactersFromFiles(directories, shallow) {
-    const files = fs.readdirSync(directories.characters);
-    const pngFiles = files.filter(file => file.endsWith('.png'));
-    const processingPromises = pngFiles.map(file => processCharacter(file, directories, { shallow }));
-    return (await Promise.all(processingPromises)).filter(character => character.name);
-}
-
-/**
  * @param {import("express").Request} request
  * @param {import("express").Response} response
  * @returns {Promise<void>}
  */
 async function sendCharacterListResponse(request, response) {
     try {
-        let data = [];
+        const payload = await readCharacterSummaryPayload({
+            directories: request.user.directories,
+            dependencies: createCharacterReadDependencies(),
+        });
 
-        if (isCharacterIndexSupported()) {
-            try {
-                const files = fs.readdirSync(request.user.directories.characters);
-                const pngFiles = files.filter(file => file.endsWith('.png')).sort((left, right) => left.localeCompare(right));
-                data = await listIndexedCharacterPayloads({
-                    userRoot: request.user.directories.root,
-                    directories: request.user.directories,
-                    avatarFiles: pngFiles,
-                    useShallowPayload: true,
-                    buildRow: avatar => buildCharacterIndexRow(request.user.directories, avatar),
-                });
-            } catch (error) {
-                console.warn('Falling back to filesystem-backed character summary list after index read failure:', error);
-                data = await listCharactersFromFiles(request.user.directories, true);
-            }
-        } else {
-            data = await listCharactersFromFiles(request.user.directories, true);
-        }
-
-        response.send(data);
+        response.send(payload.result.data);
     } catch (err) {
         console.error(err);
         const isRangeError = err instanceof RangeError;
@@ -1769,31 +1764,14 @@ router.post('/delete', validateAvatarUrlMiddleware, async function (request, res
 router.post('/all', async function (request, response) {
     const startedAt = performance.now();
     try {
-        let data = [];
-        let interactionPath = 'characters_all:filesystem';
+        const payload = await readCharacterListPayload({
+            directories: request.user.directories,
+            shallow: useShallowCharacters,
+            dependencies: createCharacterReadDependencies(),
+        });
 
-        if (isCharacterIndexSupported()) {
-            try {
-                const files = fs.readdirSync(request.user.directories.characters);
-                const pngFiles = files.filter(file => file.endsWith('.png')).sort((left, right) => left.localeCompare(right));
-                data = await listIndexedCharacterPayloads({
-                    userRoot: request.user.directories.root,
-                    directories: request.user.directories,
-                    avatarFiles: pngFiles,
-                    useShallowPayload: useShallowCharacters,
-                    buildRow: avatar => buildCharacterIndexRow(request.user.directories, avatar),
-                });
-                interactionPath = 'characters_all:indexed';
-            } catch (error) {
-                console.warn('Falling back to filesystem-backed character list after index read failure:', error);
-                data = await listCharactersFromFiles(request.user.directories, useShallowCharacters);
-            }
-        } else {
-            data = await listCharactersFromFiles(request.user.directories, useShallowCharacters);
-        }
-
-        applyInteractionPerfHeaders(response, interactionPath, startedAt);
-        return response.send(data);
+        applyInteractionPerfHeaders(response, payload.interactionPath, startedAt);
+        return response.send(payload.result.data);
     } catch (err) {
         console.error(err);
         const isRangeError = err instanceof RangeError;
@@ -1811,59 +1789,19 @@ router.post('/get', validateAvatarUrlMiddleware, async function (request, respon
     try {
         if (!request.body) return response.sendStatus(400);
         const item = request.body.avatar_url;
-        const filePath = path.join(request.user.directories.characters, item);
-        let interactionPath = 'characters_get:filesystem';
 
-        let fileStat;
-        try {
-            fileStat = statCharacterFile(filePath);
-        } catch (error) {
-            if (error?.code === 'ENOENT') {
-                return response.sendStatus(404);
-            }
-            throw error;
+        const payload = await readCharacterFullPayload({
+            directories: request.user.directories,
+            avatarUrl: item,
+            dependencies: createCharacterReadDependencies(),
+        });
+
+        if (payload.status === 'not_found') {
+            return response.sendStatus(404);
         }
 
-        if (isCharacterIndexSupported()) {
-            try {
-                const indexedPayload = getFreshIndexedCharacterFullPayload(
-                    request.user.directories.root,
-                    request.user.directories,
-                    item,
-                    fileStat,
-                );
-
-                if (indexedPayload) {
-                    applyInteractionPerfHeaders(response, 'characters_get:indexed', startedAt);
-                    return response.send(indexedPayload);
-                }
-            } catch (error) {
-                console.warn(`Character index lookup skipped for ${item}:`, error);
-            }
-        }
-
-        const data = await processCharacter(item, request.user.directories, { shallow: false });
-
-        if (isCharacterIndexSupported() && data?.name) {
-            try {
-                fileStat = statCharacterFile(filePath);
-                upsertCharacterIndexEntry(request.user.directories.root, item, {
-                    avatar: item,
-                    fullPayload: data,
-                    shallowPayload: toShallow(data),
-                    sourceMtimeMs: fileStat.mtimeMs,
-                    sourceSize: fileStat.size,
-                    ...getCharacterIndexWorldMetadata(request.user.directories, data),
-                });
-            } catch (error) {
-                if (error?.code !== 'ENOENT') {
-                    console.warn(`Character index refresh skipped after get for ${item}:`, error);
-                }
-            }
-        }
-
-        applyInteractionPerfHeaders(response, interactionPath, startedAt);
-        return response.send(data);
+        applyInteractionPerfHeaders(response, payload.interactionPath, startedAt);
+        return response.send(payload.result.data);
     } catch (err) {
         console.error(err);
         applyInteractionPerfHeaders(response, 'characters_get:error', startedAt);

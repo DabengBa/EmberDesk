@@ -8,6 +8,7 @@ Primary files:
 
 - `src/endpoints/character-index.js`
 - `src/derived-cache-sqlite.js`
+- `src/endpoints/character-read-service.js`
 - `src/endpoints/characters.js`
 - `src/endpoints/chats.js`
 - `src/interaction-performance-report.js`
@@ -189,7 +190,7 @@ So the precise answer is:
 
 ### `/api/characters/all` fast path
 
-`src/endpoints/characters.js` now routes `POST /api/characters/all` through the index when runtime support exists.
+`src/endpoints/characters.js` now routes `POST /api/characters/all` through `src/endpoints/character-read-service.js`. The read service coordinates the index-first path when runtime support exists, and the Express route unwraps the internal snapshot envelope before sending the unchanged array response.
 
 Build source for each row:
 
@@ -212,9 +213,34 @@ Failure behavior:
   - `Server-Timing: route;dur=...`
   - this keeps benchmark-only path evidence out of the JSON contract
 
+### Character read service boundary
+
+`src/endpoints/character-read-service.js` owns read coordination for:
+
+- `POST /api/characters/all`
+- `POST /api/characters/list`
+- `POST /api/characters/get`
+
+The service is route-adjacent instead of storage-owned:
+
+- `characters.js` still owns Express routes, middleware, status mapping, JSON response bodies, and `applyInteractionPerfHeaders()`
+- `character-index.js` still owns SQLite schema, freshness checks, row rebuilds, reset behavior, and derived-cache lifecycle calls
+- `processCharacter()` and card conversion remain in the character endpoint boundary instead of moving into the service
+
+The service returns an internal result envelope such as:
+
+- `result.mode: 'snapshot'`
+- `result.data`
+- `interactionPath`
+- `latencyHint`
+
+That envelope is not part of the HTTP JSON contract. Route handlers unwrap `result.data` before responding, so existing browser and extension callers continue to receive the same arrays or character objects.
+
+The service accepts future read context fields for `filter` and `pagination`, but this delivered slice intentionally ignores them. Those fields exist only to keep the boundary ready for later character-library search, filtering, virtual scrolling, command-palette, or optimistic-update slices without bypassing the read service.
+
 ### `/api/characters/get` index-first path
 
-`src/endpoints/characters.js` now routes `POST /api/characters/get` through a narrower safe reuse path:
+`src/endpoints/characters.js` now routes `POST /api/characters/get` through `src/endpoints/character-read-service.js`, which preserves the narrower safe reuse path:
 
 1. validate the avatar path
 2. confirm the PNG still exists
