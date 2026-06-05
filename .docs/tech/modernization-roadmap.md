@@ -272,6 +272,7 @@ Phase 1 result:
 - 2026-06-05: Node 26.3.0 validation sweep completed. The working shell reports `node v26.3.0`, `npm 11.16.0`, `npx 11.16.0`, and Bun 1.3.14. The current modernization tree passes root lint, tests lint, compatibility, semantic docs check, focused World Info import/card tests, OpenAI/provider capability tests, user setup/storage tests, derived SQLite lifecycle tests, and chat import converter tests under Node 26.3.0. `bun run lint:fast` exits successfully with warnings only and remains a non-authoritative preflight.
 - 2026-06-05: Character-list page-slice helper delivered. `getCharacterListPageEntities()` now lives in `public/scripts/character-list-render-state.js`, preserving current `snapshot.entities` slicing semantics while leaving jQuery pagination, DOM patching, row identity, `CHARACTER_PAGE_LOADED`, and extension compatibility owned by `public/script.js`.
 - 2026-06-05: Chat route search/recent service delivered. `src/endpoints/chat-route-service.js` now owns deterministic `/api/chats/search` and `/api/chats/recent` assembly, including character/group/root chat discovery, query matching, pinned sorting, metadata flag propagation, and corrupt/missing-file skips. `src/endpoints/chats.js` keeps Express response handling, JSONL parsing through `getChatInfo()`, save/rename/delete/import/export response shapes, backup lifecycle, and chat-stat dirty marking.
+- 2026-06-05: Derived cache release hardening evidence closed. No code behavior changed; the release-risk matrix is covered by focused proof for unsupported `node:sqlite`, `force_off`, startup status, cache path guards, PRAGMA baseline, schema-version reset, corrupt DB rebuild, reset-threshold disable, keyed dispose, character-read filesystem fallback, circuit-disabled throw behavior, and `/api/characters/get` index refresh failures.
 
 ## Recommended Next Work
 
@@ -342,7 +343,7 @@ The independent design specs for these steps live in `.docs/specs/260605-02-char
    - Preserve save, rename, delete, import, backup, and chat-stat dirty marking response shapes.
 
 4. Derived cache release hardening.
-   - Confirm SQLite sidecar status, fallback, reset threshold, and schema reset behavior across current character-index usage.
+   - Delivered 2026-06-05: confirm SQLite sidecar status, fallback, reset threshold, and schema reset behavior across current character-index usage.
    - Keep derived-cache corruption or unavailability recoverable through file-backed behavior.
 
 5. Low-risk frontend controller slice.
