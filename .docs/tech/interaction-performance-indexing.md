@@ -289,6 +289,23 @@ Measured default scenarios:
 - `characters_all_warm_repeat`
 - `characters_get_warm_repeat`
 - `characters_all_after_chat_dirty`
+- `character_delete_refresh_ui`
+- `character_library_first_interactive`
+- `character_library_filter_response`
+- `character_library_pagination_scroll`
+
+The first four scenarios use `public/perf-harness.html` to measure API route behavior without booting the full app. The delete and character-library scenarios intentionally open the full app with `?emberdesk_perf_hooks=1` so the runner can measure the browser-visible list path.
+
+User-perceived character-library metrics:
+
+- `firstListItemVisibleMs`
+- `firstListItemClickableMs`
+- `characterPageLoadedLagMs`
+- `filterInputToPageLoadedMs`
+- `filterInputToBusyClearMs`
+- `paginationScrollRestored`
+
+The search metric is gathered through a perf-only `measureCharacterSearchForPerf()` hook exposed only when `emberdesk_perf_hooks=1` is present. It exercises the same `entitiesFilter` and `printCharacters()` path as the UI while avoiding duplicated hidden search inputs in the DOM from making the runner target the wrong field.
 
 Artifact contract:
 
@@ -298,13 +315,28 @@ Artifact contract:
 - `artifacts/interaction-perf/<timestamp>/config.json`
 - scenario screenshots
 
+Raw runner artifacts are local evidence and are not committed by default. Durable docs should record the command, runtime, scenario set, warnings, and the local artifact path used during the delivery.
+
 Important reliability controls:
 
 - baseline data is cloned per pair so index files and dirty-state mutations do not leak between variants
 - cloned roots preserve timestamps so file-backed aggregates stay comparable
 - the benchmark config sets `skipContentCheck: true` so default content injection does not pollute the synthetic dataset
+- the benchmark config explicitly disables user accounts and extensions so full-app proof stays in single-user mode and does not include extension startup noise
+- the seeded baseline includes the default transparent background asset so full-app runs do not produce synthetic 404 console errors
 - dirty-chat benchmark writes a fixed payload and forces a fixed chat-file `mtime` through a perf-only hook in `src/endpoints/chats.js`, avoiding false mismatches caused by variant run time
-- semantic comparison ignores fields that are not stable enough for same-machine A/B parity, such as humanized chat label text, while still checking the fields that matter for correctness
+- full-app character-library scenarios honor `--repeats` just like route scenarios, so app UX medians are based on the requested sample count rather than a single hidden sample
+- perf-only search measurement uses a bounded wait for `CHARACTER_PAGE_LOADED`; missing events become invalid runner evidence instead of hanging the browser session
+- resize-time autocomplete adjustment checks the jQuery UI instance before reading its widget, avoiding early full-app proof failures while widgets are still initializing
+- semantic comparison ignores fields that are not stable enough for same-machine A/B parity, such as humanized chat label text and scenario timing metrics, while still checking the fields that matter for correctness
+
+Current local proof command:
+
+```powershell
+node scripts/interaction-performance-runner.mjs --profile small --scenario suite --repeats 2 --pairs 1
+```
+
+On the 2026-06-05 Node.js 26.3.0 proof run, all eight scenarios produced `validPairCount: 1`, `invalidPairCount: 0`, and top-level `warnings: []`. The small seeded profile showed the expected shape: first indexed build paid rebuild cost, warm list reads favored SQLite, warm `/get` was effectively neutral at this scale, and full-app UX metrics produced first-row, filter, and pagination evidence without claiming skeleton/loading UX optimization.
 
 ### Mutation consistency
 

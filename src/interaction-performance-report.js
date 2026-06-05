@@ -40,6 +40,12 @@ function collectNumericMetric(samples, metricName) {
         .sort((left, right) => left - right);
 }
 
+function collectBooleanMetric(samples, metricName) {
+    return samples
+        .map(sample => sample?.timing?.[metricName])
+        .filter(value => typeof value === 'boolean');
+}
+
 export function summarizeInteractionSamples(samples) {
     const browserMs = collectNumericMetric(samples, 'browserMs');
     const serverRouteMs = collectNumericMetric(samples, 'serverRouteMs');
@@ -48,6 +54,12 @@ export function summarizeInteractionSamples(samples) {
     const preDeleteChatLookupMs = collectNumericMetric(samples, 'preDeleteChatLookupMs');
     const groupsRefreshMs = collectNumericMetric(samples, 'groupsRefreshMs');
     const characterPrintMs = collectNumericMetric(samples, 'characterPrintMs');
+    const characterPageLoadedLagMs = collectNumericMetric(samples, 'characterPageLoadedLagMs');
+    const firstListItemVisibleMs = collectNumericMetric(samples, 'firstListItemVisibleMs');
+    const firstListItemClickableMs = collectNumericMetric(samples, 'firstListItemClickableMs');
+    const filterInputToPageLoadedMs = collectNumericMetric(samples, 'filterInputToPageLoadedMs');
+    const filterInputToBusyClearMs = collectNumericMetric(samples, 'filterInputToBusyClearMs');
+    const paginationScrollRestored = collectBooleanMetric(samples, 'paginationScrollRestored');
 
     return {
         sampleCount: samples.length,
@@ -58,6 +70,12 @@ export function summarizeInteractionSamples(samples) {
         preDeleteChatLookupMs: summarizeMetric(preDeleteChatLookupMs),
         groupsRefreshMs: summarizeMetric(groupsRefreshMs),
         characterPrintMs: summarizeMetric(characterPrintMs),
+        characterPageLoadedLagMs: summarizeMetric(characterPageLoadedLagMs),
+        firstListItemVisibleMs: summarizeMetric(firstListItemVisibleMs),
+        firstListItemClickableMs: summarizeMetric(firstListItemClickableMs),
+        filterInputToPageLoadedMs: summarizeMetric(filterInputToPageLoadedMs),
+        filterInputToBusyClearMs: summarizeMetric(filterInputToBusyClearMs),
+        paginationScrollRestored: summarizeBooleanMetric(paginationScrollRestored),
     };
 }
 
@@ -67,6 +85,18 @@ function summarizeMetric(values) {
         p90: percentile(values, 0.9),
         min: values.length ? round(values[0]) : null,
         max: values.length ? round(values[values.length - 1]) : null,
+    };
+}
+
+function summarizeBooleanMetric(values) {
+    const trueCount = values.filter(Boolean).length;
+    const falseCount = values.length - trueCount;
+
+    return {
+        sampleCount: values.length,
+        trueCount,
+        falseCount,
+        allTrue: values.length === 0 ? null : falseCount === 0,
     };
 }
 
@@ -85,6 +115,11 @@ export function buildVariantComparison(onSamples, offSamples) {
             preDeleteChatLookupMsMedian: calculateDelta(onSummary.preDeleteChatLookupMs.median, offSummary.preDeleteChatLookupMs.median),
             groupsRefreshMsMedian: calculateDelta(onSummary.groupsRefreshMs.median, offSummary.groupsRefreshMs.median),
             characterPrintMsMedian: calculateDelta(onSummary.characterPrintMs.median, offSummary.characterPrintMs.median),
+            characterPageLoadedLagMsMedian: calculateDelta(onSummary.characterPageLoadedLagMs.median, offSummary.characterPageLoadedLagMs.median),
+            firstListItemVisibleMsMedian: calculateDelta(onSummary.firstListItemVisibleMs.median, offSummary.firstListItemVisibleMs.median),
+            firstListItemClickableMsMedian: calculateDelta(onSummary.firstListItemClickableMs.median, offSummary.firstListItemClickableMs.median),
+            filterInputToPageLoadedMsMedian: calculateDelta(onSummary.filterInputToPageLoadedMs.median, offSummary.filterInputToPageLoadedMs.median),
+            filterInputToBusyClearMsMedian: calculateDelta(onSummary.filterInputToBusyClearMs.median, offSummary.filterInputToBusyClearMs.median),
         },
     };
 }
@@ -134,26 +169,49 @@ function normalizeCharacterListPayload(payload) {
         .sort((left, right) => String(left.avatar).localeCompare(String(right.avatar)));
 }
 
-function normalizeDeleteRefreshPayload(payload) {
+function normalizeDeleteRefreshPayload(payload, { includeMetrics = false } = {}) {
     if (!payload || typeof payload !== 'object') {
         return null;
     }
 
-    return {
+    const normalized = {
         deletedAvatar: payload.deletedAvatar ?? '',
         characterCountBefore: Number(payload.characterCountBefore ?? 0),
         characterCountAfter: Number(payload.characterCountAfter ?? 0),
         groupCountAfter: Number(payload.groupCountAfter ?? 0),
         renderedCharacterCount: Number(payload.renderedCharacterCount ?? 0),
         renderedGroupCount: Number(payload.renderedGroupCount ?? 0),
-        metrics: {
+    };
+
+    if (includeMetrics) {
+        normalized.metrics = {
             deleteFlowMs: round(Number(payload.metrics?.deleteFlowMs ?? 0)),
             deleteRequestMs: round(Number(payload.metrics?.deleteRequestMs ?? 0)),
             preDeleteChatLookupMs: round(Number(payload.metrics?.preDeleteChatLookupMs ?? 0)),
             groupsRefreshMs: round(Number(payload.metrics?.groupsRefreshMs ?? 0)),
             characterPrintMs: round(Number(payload.metrics?.characterPrintMs ?? 0)),
             characterPageLoadedLagMs: round(Number(payload.metrics?.characterPageLoadedLagMs ?? 0)),
-        },
+        };
+    }
+
+    return normalized;
+}
+
+function normalizeCharacterLibraryUxPayload(payload) {
+    if (!payload || typeof payload !== 'object') {
+        return null;
+    }
+
+    return {
+        query: payload.query ?? '',
+        renderedCharacterCount: Number(payload.renderedCharacterCount ?? 0),
+        renderedGroupCount: Number(payload.renderedGroupCount ?? 0),
+        firstListItemClickable: Boolean(payload.firstListItemClickable),
+        busyCleared: Boolean(payload.busyCleared),
+        pageLoaded: Boolean(payload.pageLoaded),
+        paginationScrollRestored: typeof payload.paginationScrollRestored === 'boolean'
+            ? payload.paginationScrollRestored
+            : null,
     };
 }
 
@@ -224,6 +282,9 @@ export function compareScenarioPayloads(scenarioName, sqliteOnPayload, sqliteOff
     } else if (scenarioName.startsWith('characters_get')) {
         normalizedOn = normalizeCharacterGetPayload(sqliteOnPayload);
         normalizedOff = normalizeCharacterGetPayload(sqliteOffPayload);
+    } else if (scenarioName.startsWith('character_library_')) {
+        normalizedOn = normalizeCharacterLibraryUxPayload(sqliteOnPayload);
+        normalizedOff = normalizeCharacterLibraryUxPayload(sqliteOffPayload);
     } else {
         normalizedOn = sqliteOnPayload ?? null;
         normalizedOff = sqliteOffPayload ?? null;
@@ -262,7 +323,11 @@ export function summarizeScenarioPayload(scenarioName, payload) {
     }
 
     if (scenarioName.startsWith('character_delete_refresh')) {
-        return normalizeDeleteRefreshPayload(payload);
+        return normalizeDeleteRefreshPayload(payload, { includeMetrics: true });
+    }
+
+    if (scenarioName.startsWith('character_library_')) {
+        return normalizeCharacterLibraryUxPayload(payload);
     }
 
     return null;
@@ -287,6 +352,18 @@ export function validateInteractionPath(scenarioName, variant, observedPath) {
             sqlite_off: 'characters_all:filesystem',
         },
         character_delete_refresh_ui: {
+            sqlite_on: null,
+            sqlite_off: null,
+        },
+        character_library_first_interactive: {
+            sqlite_on: null,
+            sqlite_off: null,
+        },
+        character_library_filter_response: {
+            sqlite_on: null,
+            sqlite_off: null,
+        },
+        character_library_pagination_scroll: {
             sqlite_on: null,
             sqlite_off: null,
         },

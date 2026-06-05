@@ -2965,7 +2965,12 @@ export function forceCharacterEditorTokenize() {
 jQuery(() => {
     const adjustAutocompleteDebounced = debounce(() => {
         $('.ui-autocomplete-input').each(function () {
-            const isOpen = $(this).autocomplete('widget')[0].style.display !== 'none';
+            const instance = $(this).autocomplete('instance');
+            if (!instance) {
+                return;
+            }
+
+            const isOpen = instance.widget()[0].style.display !== 'none';
             if (isOpen) {
                 $(this).autocomplete('search');
             }

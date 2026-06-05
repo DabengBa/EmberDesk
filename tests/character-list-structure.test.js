@@ -141,6 +141,41 @@ describe('character list structure', () => {
         expect(indexHtml).toMatch(/<small class="entity_type_badge group_type_badge" data-i18n="Group">Group<\/small>/);
     });
 
+    test('keeps character-library perf-only search measurement hook wired', () => {
+        const scriptSource = read('public/script.js');
+        const hookSource = extractFunctionSource(scriptSource, 'measureCharacterSearchForPerf');
+
+        expect(scriptSource).toMatch(/globalThis\.__emberDeskPerf = \{[\s\S]*measureCharacterSearchForPerf,[\s\S]*printCharacters,/);
+        expect(hookSource).toContain('const timer = setTimeout(() => {');
+        expect(hookSource).toContain('resolve(null);');
+        expect(hookSource).toContain('pageLoaded: pageLoadedAt !== null');
+        expect(hookSource).toContain('entitiesFilter.setFilterData(FILTER_TYPES.SEARCH, normalizedQuery, true);');
+        expect(hookSource).toContain('await printCharacters(false);');
+        expect(hookSource).toContain('filterInputToBusyClearMs');
+        expect(hookSource).toContain('filterInputToPageLoadedMs');
+    });
+
+    test('keeps autocomplete resize handling safe before widgets finish initializing', () => {
+        const powerUserSource = read('public/scripts/power-user.js');
+
+        expect(powerUserSource).toContain('const instance = $(this).autocomplete(\'instance\');');
+        expect(powerUserSource).toContain('if (!instance) {');
+        expect(powerUserSource).toContain('const isOpen = instance.widget()[0].style.display !== \'none\';');
+        expect(powerUserSource).not.toContain('$(this).autocomplete(\'widget\')[0].style.display');
+    });
+
+    test('keeps character-library runner samples aligned with measured repeats', () => {
+        const runnerSource = read('scripts/interaction-performance-runner.mjs');
+        const captureSource = extractFunctionSource(runnerSource, 'captureScenarioMeasurements');
+        const branchMatch = /if \(isCharacterLibraryScenario\(scenarioName\)\) \{([\s\S]*?)\n {4}\} else \{/.exec(captureSource);
+
+        expect(branchMatch).not.toBeNull();
+        const characterLibraryBranch = branchMatch[1];
+        expect(characterLibraryBranch).toContain('for (let index = 0; index < measuredRepeats; index++)');
+        expect(characterLibraryBranch).toContain('normalizeSample(scenarioName, variant, sample, index + 1, measuredRepeats)');
+        expect(characterLibraryBranch).not.toContain('normalizeSample(scenarioName, variant, sample, 1, 1)');
+    });
+
     test('keeps empty, hidden, and tag-overflow list states wired to the character list', () => {
         const scriptSource = read('public/script.js');
         const printCharactersSource = extractFunctionSource(scriptSource, 'printCharacters');

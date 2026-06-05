@@ -122,8 +122,14 @@ async function seedBaselineDataset({ baselineRoot, datasetProfile }) {
 
     const charactersRoot = path.join(userRoot, 'characters');
     const chatsRoot = path.join(userRoot, 'chats');
+    const backgroundsRoot = path.join(userRoot, 'backgrounds');
     await fs.promises.mkdir(charactersRoot, { recursive: true });
     await fs.promises.mkdir(chatsRoot, { recursive: true });
+    await fs.promises.mkdir(backgroundsRoot, { recursive: true });
+    fs.copyFileSync(
+        path.join(repoRoot, 'default', 'content', 'backgrounds', '__transparent.png'),
+        path.join(backgroundsRoot, '__transparent.png'),
+    );
 
     for (let index = 0; index < datasetProfile.characters; index++) {
         const baseName = `perf-character-${String(index + 1).padStart(4, '0')}`;
@@ -231,6 +237,9 @@ async function runScenarioPairs({ runDir, baselineRoot, scenarioName, measuredRe
             sqliteOffResult?.payloadReference ?? null,
         );
 
+        const variantWarnings = pairVariantResults.flatMap(result => result.warnings ?? []);
+        warnings.push(...variantWarnings);
+
         const semanticValid = variantSelection === 'sqlite_on_only'
             ? Boolean(sqliteOnResult?.valid)
             : Boolean(sqliteOnResult?.valid && sqliteOffResult?.valid && comparison.matches);
@@ -332,22 +341,7 @@ async function captureScenarioMeasurements({ scenarioName, variant, url, screens
     const consoleMessages = [];
     const pageErrors = [];
 
-    page.on('console', message => {
-        consoleMessages.push({
-            type: message.type(),
-            text: message.text(),
-        });
-    });
-    page.on('pageerror', error => {
-        pageErrors.push({
-            message: error.message,
-        });
-    });
-
-    await page.goto(url, { waitUntil: 'load', timeout: 120000 });
-    await page.waitForTimeout(100);
-
-    const csrfToken = await getCsrfToken(page);
+    attachPageDiagnostics(page, { consoleMessages, pageErrors });
 
     const samples = [];
     let payloadReference = null;
@@ -356,6 +350,24 @@ async function captureScenarioMeasurements({ scenarioName, variant, url, screens
     if (!targetAvatar) {
         throw new Error(`Scenario ${scenarioName} could not find any characters to measure.`);
     }
+
+    if (isCharacterLibraryScenario(scenarioName)) {
+        await page.goto(toAppUrl(url), { waitUntil: 'load', timeout: 120000 });
+        await waitForAppReady(page, targetAvatar);
+        await page.waitForTimeout(250);
+
+        for (let index = 0; index < measuredRepeats; index++) {
+            const sample = await invokeCharacterLibraryScenario(page, scenarioName);
+            warnings = collectCharacterLibraryWarnings(warnings, scenarioName, variant, sample);
+            payloadReference = payloadReference ?? sample.payload;
+            samples.push(normalizeSample(scenarioName, variant, sample, index + 1, measuredRepeats));
+        }
+    } else {
+        await page.goto(url, { waitUntil: 'load', timeout: 120000 });
+        await page.waitForTimeout(100);
+    }
+
+    const csrfToken = isCharacterLibraryScenario(scenarioName) ? null : await getCsrfToken(page);
 
     if (scenarioName === 'characters_all_first_build') {
         const sample = await invokeScenarioRequest(page, csrfToken, scenarioName, targetAvatar);
@@ -391,17 +403,9 @@ async function captureScenarioMeasurements({ scenarioName, variant, url, screens
         samples.push(normalizeSample(scenarioName, variant, sample, 1, 1));
     } else if (scenarioName === 'character_delete_refresh_ui') {
         const appPage = await context.newPage();
+        attachPageDiagnostics(appPage, { consoleMessages, pageErrors });
         await appPage.goto(url.replace('/perf-harness.html', '/?emberdesk_perf_hooks=1'), { waitUntil: 'load', timeout: 120000 });
-        await appPage.waitForFunction(
-            avatar => Array.isArray(globalThis.SillyTavern?.getContext?.()?.characters)
-                && globalThis.SillyTavern.getContext().characters.some(item => item?.avatar === avatar),
-            targetAvatar,
-            { timeout: 120000 },
-        );
-        await appPage.waitForFunction(
-            () => globalThis.__emberDeskStartup?.marks?.some(mark => mark?.name === 'app:ready'),
-            { timeout: 120000 },
-        );
+        await waitForAppReady(appPage, targetAvatar);
         await appPage.waitForTimeout(250);
 
         const sample = await invokeDeleteRefreshScenario(appPage, targetAvatar);
@@ -410,7 +414,9 @@ async function captureScenarioMeasurements({ scenarioName, variant, url, screens
 
         await appPage.close();
     } else {
-        throw new Error(`Unsupported scenario: ${scenarioName}`);
+        if (!isCharacterLibraryScenario(scenarioName)) {
+            throw new Error(`Unsupported scenario: ${scenarioName}`);
+        }
     }
 
     const screenshotPath = path.join(
@@ -422,19 +428,61 @@ async function captureScenarioMeasurements({ scenarioName, variant, url, screens
     await context.close();
     await browser.close();
 
+    const finalWarnings = [
+        ...warnings,
+        ...pageErrors.map(error => `[${scenarioName}] ${variant}: page error: ${error.message}`),
+        ...consoleMessages.filter(message => message.type === 'error').map(message => {
+            const location = message.location ? ` (${message.location})` : '';
+            return `[${scenarioName}] ${variant}: console error: ${message.text}${location}`;
+        }),
+    ];
+
     return {
         scenarioName,
         variant,
-        valid: warnings.length === 0 && pageErrors.length === 0,
-        warnings: [
-            ...warnings,
-            ...pageErrors.map(error => `[${scenarioName}] ${variant}: page error: ${error.message}`),
-            ...consoleMessages.filter(message => message.type === 'error').map(message => `[${scenarioName}] ${variant}: console error: ${message.text}`),
-        ],
+        valid: finalWarnings.length === 0,
+        warnings: finalWarnings,
         payloadReference,
         payloadPath: screenshotPath,
         samples,
     };
+}
+
+function attachPageDiagnostics(page, { consoleMessages, pageErrors }) {
+    page.on('console', message => {
+        const location = message.location();
+        consoleMessages.push({
+            type: message.type(),
+            text: message.text(),
+            location: location?.url ? `${location.url}:${location.lineNumber}:${location.columnNumber}` : null,
+        });
+    });
+    page.on('pageerror', error => {
+        pageErrors.push({
+            message: error.message,
+        });
+    });
+}
+
+function isCharacterLibraryScenario(scenarioName) {
+    return scenarioName.startsWith('character_library_');
+}
+
+function toAppUrl(harnessUrl) {
+    return harnessUrl.replace('/perf-harness.html', '/?emberdesk_perf_hooks=1');
+}
+
+async function waitForAppReady(page, targetAvatar) {
+    await page.waitForFunction(
+        avatar => Array.isArray(globalThis.SillyTavern?.getContext?.()?.characters)
+            && globalThis.SillyTavern.getContext().characters.some(item => item?.avatar === avatar),
+        targetAvatar,
+        { timeout: 120000 },
+    );
+    await page.waitForFunction(
+        () => globalThis.__emberDeskStartup?.marks?.some(mark => mark?.name === 'app:ready'),
+        { timeout: 120000 },
+    );
 }
 
 async function getCsrfToken(page) {
@@ -536,6 +584,203 @@ async function invokeScenarioRequest(page, csrfToken, scenarioName, avatar) {
     }
 
     throw new Error(`Unsupported scenario request: ${scenarioName}`);
+}
+
+async function invokeCharacterLibraryScenario(page, scenarioName) {
+    if (scenarioName === 'character_library_filter_response') {
+        return await invokeCharacterLibraryFilterScenario(page);
+    }
+
+    return await page.evaluate(async ({ targetScenario }) => {
+        const context = globalThis.SillyTavern?.getContext?.();
+        const perfHooks = globalThis.__emberDeskPerf;
+        if (!context) {
+            throw new Error('SillyTavern context is unavailable on the app page.');
+        }
+        if (!perfHooks) {
+            throw new Error('EmberDesk perf hooks are unavailable on the app page.');
+        }
+        if (typeof perfHooks.printCharacters !== 'function') {
+            throw new Error('printCharacters is unavailable on EmberDesk perf hooks.');
+        }
+
+        const listElement = document.querySelector('#rm_print_characters_block');
+        if (!listElement) {
+            throw new Error('Character list element is unavailable.');
+        }
+
+        const rowSelector = '.character_select,.group_select';
+        const nextFrame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+        const withTimeout = (promise, timeoutMs, fallbackValue = null) => Promise.race([
+            Promise.resolve(promise),
+            sleep(timeoutMs).then(() => fallbackValue),
+        ]);
+        const countRows = () => ({
+            renderedCharacterCount: listElement.querySelectorAll('.character_select').length,
+            renderedGroupCount: listElement.querySelectorAll('.group_select').length,
+        });
+        const waitForCondition = async (predicate, timeoutMs = 120000) => {
+            const startedAt = performance.now();
+            while (performance.now() - startedAt < timeoutMs) {
+                const value = predicate();
+                if (value) {
+                    return value;
+                }
+                await sleep(25);
+            }
+            return null;
+        };
+        const waitForCharacterPageLoaded = (timeoutMs = 5000) => {
+            return new Promise(resolve => {
+                let settled = false;
+                const listener = () => {
+                    if (settled) {
+                        return;
+                    }
+                    settled = true;
+                    clearTimeout(timer);
+                    context.eventSource.removeListener(context.eventTypes.CHARACTER_PAGE_LOADED, listener);
+                    resolve(performance.now());
+                };
+                const timer = setTimeout(() => {
+                    if (settled) {
+                        return;
+                    }
+                    settled = true;
+                    context.eventSource.removeListener(context.eventTypes.CHARACTER_PAGE_LOADED, listener);
+                    resolve(null);
+                }, timeoutMs);
+                context.eventSource.on(context.eventTypes.CHARACTER_PAGE_LOADED, listener);
+            });
+        };
+        const printCharactersBounded = (fullRefresh) => withTimeout(
+            perfHooks.printCharacters(fullRefresh),
+            10000,
+            null,
+        );
+        const showCharacterLibrary = async () => {
+            document.querySelector('#rm_button_characters')?.click();
+            await nextFrame();
+        };
+
+        await showCharacterLibrary();
+
+        if (targetScenario === 'character_library_first_interactive') {
+            context.accountStorage?.setItem?.('Characters_PerPage', '1000');
+
+            const pageLoadedPromise = waitForCharacterPageLoaded();
+            listElement.replaceChildren();
+            const startedAt = performance.now();
+            const printPromise = printCharactersBounded(true);
+            const firstItem = await waitForCondition(() => listElement.querySelector(rowSelector));
+            if (!firstItem) {
+                throw new Error('Timed out waiting for the first character-library row.');
+            }
+
+            const firstListItemVisibleMs = performance.now() - startedAt;
+            let firstListItemClickable = false;
+            firstItem.addEventListener('click', () => {
+                firstListItemClickable = true;
+            }, { once: true, capture: true });
+            firstItem.click();
+            await nextFrame();
+            const firstListItemClickableMs = performance.now() - startedAt;
+
+            await printPromise;
+            const pageLoadedAt = await pageLoadedPromise;
+            await nextFrame();
+            const browserMs = performance.now() - startedAt;
+            const rowCounts = countRows();
+
+            return {
+                browserMs,
+                path: null,
+                serverTiming: null,
+                payload: {
+                    ...rowCounts,
+                    firstListItemClickable,
+                    pageLoaded: pageLoadedAt !== null,
+                    metrics: {
+                        firstListItemVisibleMs,
+                        firstListItemClickableMs,
+                        characterPageLoadedLagMs: pageLoadedAt === null ? null : pageLoadedAt - startedAt,
+                    },
+                },
+            };
+        }
+
+        if (targetScenario === 'character_library_pagination_scroll') {
+            context.accountStorage?.setItem?.('Characters_PerPage', '10');
+            listElement.style.maxHeight = '240px';
+            listElement.style.overflowY = 'auto';
+            await printCharactersBounded(true);
+            await nextFrame();
+
+            const requestedScrollTop = Math.min(120, Math.max(1, listElement.scrollHeight - listElement.clientHeight));
+            listElement.scrollTop = requestedScrollTop;
+            const beforeScrollTop = listElement.scrollTop;
+            const pageLoadedPromise = waitForCharacterPageLoaded();
+            const startedAt = performance.now();
+            await printCharactersBounded(false);
+            const pageLoadedAt = await pageLoadedPromise;
+            await nextFrame();
+            const afterScrollTop = listElement.scrollTop;
+            const rowCounts = countRows();
+
+            return {
+                browserMs: performance.now() - startedAt,
+                path: null,
+                serverTiming: null,
+                payload: {
+                    ...rowCounts,
+                    pageLoaded: pageLoadedAt !== null,
+                    paginationScrollRestored: afterScrollTop === beforeScrollTop,
+                    metrics: {
+                        characterPageLoadedLagMs: pageLoadedAt === null ? null : pageLoadedAt - startedAt,
+                        paginationScrollRestored: afterScrollTop === beforeScrollTop,
+                    },
+                },
+            };
+        }
+
+        throw new Error(`Unsupported character-library scenario: ${targetScenario}`);
+    }, { targetScenario: scenarioName });
+}
+
+async function invokeCharacterLibraryFilterScenario(page) {
+    const query = 'Perf Character 1';
+
+    return await page.evaluate(async ({ targetQuery }) => {
+        const context = globalThis.SillyTavern?.getContext?.();
+        const perfHooks = globalThis.__emberDeskPerf;
+        if (!context) {
+            throw new Error('SillyTavern context is unavailable on the app page.');
+        }
+        if (!perfHooks || typeof perfHooks.measureCharacterSearchForPerf !== 'function') {
+            throw new Error('EmberDesk character-search perf hook is unavailable on the app page.');
+        }
+
+        const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+        const withTimeout = (promise, timeoutMs, fallbackValue = null) => Promise.race([
+            Promise.resolve(promise),
+            sleep(timeoutMs).then(() => fallbackValue),
+        ]);
+        const nextFrame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+        document.querySelector('#rm_button_characters')?.click();
+        context.accountStorage?.setItem?.('Characters_PerPage', '1000');
+        await withTimeout(perfHooks.printCharacters(true), 10000, null);
+        await nextFrame();
+
+        const searchForm = document.querySelector('#form_character_search_form');
+        if (searchForm && globalThis.getComputedStyle(searchForm).display === 'none') {
+            document.querySelector('#rm_button_search')?.click();
+            await nextFrame();
+        }
+
+        return await perfHooks.measureCharacterSearchForPerf(targetQuery);
+    }, { targetQuery: query });
 }
 
 async function invokeDeleteRefreshScenario(page, avatar) {
@@ -645,7 +890,32 @@ function collectVariantWarnings(existingWarnings, pathCheck, sample) {
     return warnings;
 }
 
+function collectCharacterLibraryWarnings(existingWarnings, scenarioName, variant, sample) {
+    const warnings = [...existingWarnings];
+    const payload = sample.payload ?? {};
+
+    if (!payload.pageLoaded) {
+        warnings.push(`[${scenarioName}] ${variant}: CHARACTER_PAGE_LOADED was not observed`);
+    }
+
+    if (scenarioName === 'character_library_first_interactive' && !payload.firstListItemClickable) {
+        warnings.push(`[${scenarioName}] ${variant}: first character-library row did not receive a click`);
+    }
+
+    if (scenarioName === 'character_library_filter_response' && !payload.busyCleared) {
+        warnings.push(`[${scenarioName}] ${variant}: character search aria-busy did not clear`);
+    }
+
+    if (scenarioName === 'character_library_pagination_scroll' && payload.paginationScrollRestored !== true) {
+        warnings.push(`[${scenarioName}] ${variant}: character-list scrollTop was not restored`);
+    }
+
+    return warnings;
+}
+
 function normalizeSample(scenarioName, variant, sample, sampleIndex, sampleCount) {
+    const metrics = sample.payload?.metrics ?? {};
+
     return {
         scenario: scenarioName,
         variant,
@@ -660,6 +930,14 @@ function normalizeSample(scenarioName, variant, sample, sampleIndex, sampleCount
             preDeleteChatLookupMs: round(sample.payload?.metrics?.preDeleteChatLookupMs),
             groupsRefreshMs: round(sample.payload?.metrics?.groupsRefreshMs),
             characterPrintMs: round(sample.payload?.metrics?.characterPrintMs),
+            characterPageLoadedLagMs: round(metrics.characterPageLoadedLagMs),
+            firstListItemVisibleMs: round(metrics.firstListItemVisibleMs),
+            firstListItemClickableMs: round(metrics.firstListItemClickableMs),
+            filterInputToPageLoadedMs: round(metrics.filterInputToPageLoadedMs),
+            filterInputToBusyClearMs: round(metrics.filterInputToBusyClearMs),
+            paginationScrollRestored: typeof metrics.paginationScrollRestored === 'boolean'
+                ? metrics.paginationScrollRestored
+                : null,
         },
         payloadSummary: summarizeScenarioPayload(scenarioName, sample.payload),
     };
@@ -682,6 +960,9 @@ function resolveScenarios(selection) {
             'characters_get_warm_repeat',
             'characters_all_after_chat_dirty',
             'character_delete_refresh_ui',
+            'character_library_first_interactive',
+            'character_library_filter_response',
+            'character_library_pagination_scroll',
         ];
     }
 
@@ -744,8 +1025,9 @@ async function writeConfig(configPath, dataRoot, port) {
         'browserLaunch:',
         '  enabled: false',
         'whitelistMode: false',
+        'enableUserAccounts: false',
         'extensions:',
-        '  enabled: true',
+        '  enabled: false',
         '  autoUpdate: false',
         'skipContentCheck: true',
         'logging:',
@@ -867,6 +1149,8 @@ function renderMarkdownReport(report) {
                 `- Groups refresh median: ${scenario.comparison.sqliteOn.groupsRefreshMs.median ?? 'n/a'} ms`,
                 `- Character print median: ${scenario.comparison.sqliteOn.characterPrintMs.median ?? 'n/a'} ms`,
             ]
+            : scenario.scenario.startsWith('character_library_')
+                ? buildCharacterLibraryMetricLines(scenario.comparison.sqliteOn)
             : [];
 
         return [
@@ -897,6 +1181,25 @@ function renderMarkdownReport(report) {
         '',
         scenarioLines,
     ].join('\n');
+}
+
+function buildCharacterLibraryMetricLines(summary) {
+    return [
+        `- First list item visible median: ${summary.firstListItemVisibleMs.median ?? 'n/a'} ms`,
+        `- First list item clickable median: ${summary.firstListItemClickableMs.median ?? 'n/a'} ms`,
+        `- Character page loaded lag median: ${summary.characterPageLoadedLagMs.median ?? 'n/a'} ms`,
+        `- Filter input to page loaded median: ${summary.filterInputToPageLoadedMs.median ?? 'n/a'} ms`,
+        `- Filter input to busy clear median: ${summary.filterInputToBusyClearMs.median ?? 'n/a'} ms`,
+        `- Pagination scroll restored: ${formatBooleanSummary(summary.paginationScrollRestored)}`,
+    ];
+}
+
+function formatBooleanSummary(summary) {
+    if (!summary || summary.sampleCount === 0) {
+        return 'n/a';
+    }
+
+    return `${summary.trueCount}/${summary.sampleCount} true`;
 }
 
 function formatDelta(delta) {

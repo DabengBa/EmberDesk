@@ -3,6 +3,7 @@ import { describe, expect, test } from '@jest/globals';
 import {
     buildVariantComparison,
     compareScenarioPayloads,
+    summarizeScenarioPayload,
     summarizeInteractionSamples,
     validateInteractionPath,
 } from '../src/interaction-performance-report.js';
@@ -60,6 +61,79 @@ describe('interaction performance report helpers', () => {
                 min: null,
                 max: null,
             },
+            characterPageLoadedLagMs: {
+                median: null,
+                p90: null,
+                min: null,
+                max: null,
+            },
+            firstListItemVisibleMs: {
+                median: null,
+                p90: null,
+                min: null,
+                max: null,
+            },
+            firstListItemClickableMs: {
+                median: null,
+                p90: null,
+                min: null,
+                max: null,
+            },
+            filterInputToPageLoadedMs: {
+                median: null,
+                p90: null,
+                min: null,
+                max: null,
+            },
+            filterInputToBusyClearMs: {
+                median: null,
+                p90: null,
+                min: null,
+                max: null,
+            },
+            paginationScrollRestored: {
+                sampleCount: 0,
+                trueCount: 0,
+                falseCount: 0,
+                allTrue: null,
+            },
+        });
+    });
+
+    test('summarizes character-library UX metrics', () => {
+        const summary = summarizeInteractionSamples([
+            {
+                timing: {
+                    firstListItemVisibleMs: 42,
+                    firstListItemClickableMs: 55,
+                    characterPageLoadedLagMs: 65,
+                    filterInputToPageLoadedMs: 130,
+                    filterInputToBusyClearMs: 118,
+                    paginationScrollRestored: true,
+                },
+            },
+            {
+                timing: {
+                    firstListItemVisibleMs: 50,
+                    firstListItemClickableMs: 64,
+                    characterPageLoadedLagMs: 80,
+                    filterInputToPageLoadedMs: 160,
+                    filterInputToBusyClearMs: 140,
+                    paginationScrollRestored: false,
+                },
+            },
+        ]);
+
+        expect(summary.firstListItemVisibleMs.median).toBe(46);
+        expect(summary.firstListItemClickableMs.median).toBe(59.5);
+        expect(summary.characterPageLoadedLagMs.median).toBe(72.5);
+        expect(summary.filterInputToPageLoadedMs.median).toBe(145);
+        expect(summary.filterInputToBusyClearMs.median).toBe(129);
+        expect(summary.paginationScrollRestored).toEqual({
+            sampleCount: 2,
+            trueCount: 1,
+            falseCount: 1,
+            allTrue: false,
         });
     });
 
@@ -84,6 +158,34 @@ describe('interaction performance report helpers', () => {
         expect(comparison.delta.serverRouteMsMedian).toEqual({
             absoluteMs: -4.5,
             relativePct: -50,
+        });
+    });
+
+    test('builds variant comparison deltas for character-library UX timing metrics', () => {
+        const comparison = buildVariantComparison(
+            [
+                { timing: { firstListItemVisibleMs: 40, firstListItemClickableMs: 52, filterInputToBusyClearMs: 120 } },
+                { timing: { firstListItemVisibleMs: 44, firstListItemClickableMs: 58, filterInputToBusyClearMs: 140 } },
+            ],
+            [
+                { timing: { firstListItemVisibleMs: 80, firstListItemClickableMs: 104, filterInputToBusyClearMs: 200 } },
+                { timing: { firstListItemVisibleMs: 88, firstListItemClickableMs: 116, filterInputToBusyClearMs: 220 } },
+            ],
+        );
+
+        expect(comparison.sqliteOn.firstListItemVisibleMs.median).toBe(42);
+        expect(comparison.sqliteOn.firstListItemClickableMs.median).toBe(55);
+        expect(comparison.delta.firstListItemVisibleMsMedian).toEqual({
+            absoluteMs: -42,
+            relativePct: -50,
+        });
+        expect(comparison.delta.firstListItemClickableMsMedian).toEqual({
+            absoluteMs: -55,
+            relativePct: -50,
+        });
+        expect(comparison.delta.filterInputToBusyClearMsMedian).toEqual({
+            absoluteMs: -80,
+            relativePct: -38.1,
         });
     });
 
@@ -310,10 +412,19 @@ describe('interaction performance report helpers', () => {
             expectedPath: null,
             matches: true,
         });
+
+        expect(validateInteractionPath(
+            'character_library_first_interactive',
+            'sqlite_off',
+            null,
+        )).toEqual({
+            expectedPath: null,
+            matches: true,
+        });
     });
 
-    test('summarizes delete-refresh payloads with flow metrics', () => {
-        const summary = compareScenarioPayloads(
+    test('compares delete-refresh payloads without timing noise', () => {
+        const result = compareScenarioPayloads(
             'character_delete_refresh_ui',
             {
                 deletedAvatar: 'alpha.png',
@@ -339,6 +450,38 @@ describe('interaction performance report helpers', () => {
                 renderedCharacterCount: 179,
                 renderedGroupCount: 0,
                 metrics: {
+                    deleteFlowMs: 220,
+                    deleteRequestMs: 20,
+                    preDeleteChatLookupMs: 18,
+                    groupsRefreshMs: 4,
+                    characterPrintMs: 90,
+                    characterPageLoadedLagMs: 8,
+                },
+            },
+        );
+
+        expect(result.matches).toBe(true);
+        expect(result.normalizedOn).toEqual({
+            deletedAvatar: 'alpha.png',
+            characterCountBefore: 180,
+            characterCountAfter: 179,
+            groupCountAfter: 0,
+            renderedCharacterCount: 179,
+            renderedGroupCount: 0,
+        });
+    });
+
+    test('summarizes delete-refresh payloads with flow metrics', () => {
+        const summary = summarizeScenarioPayload(
+            'character_delete_refresh_ui',
+            {
+                deletedAvatar: 'alpha.png',
+                characterCountBefore: 180,
+                characterCountAfter: 179,
+                groupCountAfter: 0,
+                renderedCharacterCount: 179,
+                renderedGroupCount: 0,
+                metrics: {
                     deleteFlowMs: 120,
                     deleteRequestMs: 12,
                     preDeleteChatLookupMs: 14,
@@ -349,8 +492,7 @@ describe('interaction performance report helpers', () => {
             },
         );
 
-        expect(summary.matches).toBe(true);
-        expect(summary.normalizedOn).toEqual({
+        expect(summary).toEqual({
             deletedAvatar: 'alpha.png',
             characterCountBefore: 180,
             characterCountAfter: 179,
@@ -365,6 +507,43 @@ describe('interaction performance report helpers', () => {
                 characterPrintMs: 88,
                 characterPageLoadedLagMs: 5,
             },
+        });
+    });
+
+    test('compares character-library UX payloads without timing noise', () => {
+        const result = compareScenarioPayloads(
+            'character_library_filter_response',
+            {
+                query: 'Perf',
+                renderedCharacterCount: 12,
+                busyCleared: true,
+                pageLoaded: true,
+                metrics: {
+                    filterInputToBusyClearMs: 120,
+                    filterInputToPageLoadedMs: 140,
+                },
+            },
+            {
+                query: 'Perf',
+                renderedCharacterCount: 12,
+                busyCleared: true,
+                pageLoaded: true,
+                metrics: {
+                    filterInputToBusyClearMs: 220,
+                    filterInputToPageLoadedMs: 260,
+                },
+            },
+        );
+
+        expect(result.matches).toBe(true);
+        expect(result.normalizedOn).toEqual({
+            query: 'Perf',
+            renderedCharacterCount: 12,
+            renderedGroupCount: 0,
+            firstListItemClickable: false,
+            busyCleared: true,
+            pageLoaded: true,
+            paginationScrollRestored: null,
         });
     });
 });

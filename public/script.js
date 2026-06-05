@@ -268,6 +268,7 @@ if (globalThis.location?.pathname === '/' && globalThis.location?.search.include
     globalThis.__emberDeskPerf = {
         deleteCharacter,
         getPastCharacterChats,
+        measureCharacterSearchForPerf,
         printCharacters,
     };
 }
@@ -11540,6 +11541,70 @@ function initCharacterSearch() {
 }
 
 // MARK: DOM Handlers Start
+async function measureCharacterSearchForPerf(query) {
+    const listElement = document.querySelector('#rm_print_characters_block');
+    if (!listElement) {
+        throw new Error('Character list element is unavailable.');
+    }
+
+    const searchInputs = $('#character_search_bar');
+    const visibleSearchInput = searchInputs.filter(':visible').first();
+    const searchInput = visibleSearchInput.length ? visibleSearchInput : searchInputs.first();
+    const searchStatus = $('#character_search_status');
+    const normalizedQuery = String(query ?? '');
+    const startedAt = performance.now();
+    const pageLoadedPromise = new Promise(resolve => {
+        let settled = false;
+        const listener = () => {
+            if (settled) {
+                return;
+            }
+            settled = true;
+            clearTimeout(timer);
+            eventSource.removeListener(event_types.CHARACTER_PAGE_LOADED, listener);
+            resolve(performance.now());
+        };
+        const timer = setTimeout(() => {
+            if (settled) {
+                return;
+            }
+            settled = true;
+            eventSource.removeListener(event_types.CHARACTER_PAGE_LOADED, listener);
+            resolve(null);
+        }, 5000);
+        eventSource.on(event_types.CHARACTER_PAGE_LOADED, listener);
+    });
+
+    searchInput.val(normalizedQuery);
+    searchInput.attr('aria-busy', 'true');
+    searchStatus.prop('hidden', false);
+
+    entitiesFilter.setFilterData(FILTER_TYPES.SEARCH, normalizedQuery, true);
+    await printCharacters(false);
+    const pageLoadedAt = await pageLoadedPromise;
+
+    searchInput.attr('aria-busy', 'false');
+    searchStatus.prop('hidden', true);
+    const busyClearedAt = performance.now();
+
+    return {
+        browserMs: performance.now() - startedAt,
+        path: null,
+        serverTiming: null,
+        payload: {
+            query: normalizedQuery,
+            renderedCharacterCount: listElement.querySelectorAll('.character_select').length,
+            renderedGroupCount: listElement.querySelectorAll('.group_select').length,
+            busyCleared: true,
+            pageLoaded: pageLoadedAt !== null,
+            metrics: {
+                filterInputToBusyClearMs: busyClearedAt - startedAt,
+                filterInputToPageLoadedMs: pageLoadedAt === null ? null : pageLoadedAt - startedAt,
+            },
+        },
+    };
+}
+
 jQuery(async function () {
     setTimeout(function () {
         $('#groupControlsToggle').trigger('click');
