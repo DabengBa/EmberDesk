@@ -16,6 +16,8 @@ Closure evidence:
 - User intent and delivery traceability are recorded in `.docs/tech/briefs/260605-02-character-route-service-extraction.md` through `.docs/tech/briefs/260605-11-roadmap-freeze-successor-decision.md`.
 - Node.js 26.3.0 release validation passed for root/tests lint, compatibility, semantic docs, shared library, character route/index, Express route order, startup/config, user/auth/login/setup, and full unit suite.
 - Documentation topology closure passed `bun run docs:check` without changing `.docs/db` user-visible semantics.
+- Post-closure UX walkthrough follow-up on 2026-06-06 tightened the character-library entry affordance: the Character Management drawer icon and Characters tab now expose stable button roles, accessible names, and keyboard focus without changing character-list DOM identity or extension-facing selectors.
+- A second post-closure UX follow-up on 2026-06-06 tightened the chat send-form and chat-options affordance: visible send controls and common chat option menu actions now expose stable button/textbox roles, accessible names, and keyboard focus without touching message rendering, streaming, slash-command parsing, or extension mount points.
 
 ## Goals
 
@@ -261,7 +263,7 @@ Phase 1 result:
 ## Known Execution Gaps
 
 - Node.js 26.3.0 release validation proof now exists for the current modernization surfaces: root lint, tests lint, compatibility, semantic docs check, shared browser library, character route/index, Express route order, startup/config, user/auth/login/setup, and the full unit suite.
-- Full Playwright E2E remains conditional. The 2026-06-05 release validation sweep skipped Playwright because the validation scope changed no visible browser behavior; run affected E2E when a later slice changes a primary browser flow, page structure, CTA sequencing, or visible UI behavior.
+- Full Playwright E2E remains conditional. The 2026-06-05 release validation sweep skipped Playwright because the validation scope changed no visible browser behavior. 2026-06-06 focused browser follow-ups validated the character-library entry affordance and chat send-form/options affordance through role/name locators after UX walkthroughs found those primary controls too hard to discover; continue running affected E2E or focused browser checks when a later slice changes a primary browser flow, page structure, CTA sequencing, or visible UI behavior.
 - Startup and interaction performance runners remain required before claiming latency wins.
 - Vendored third-party extension artifacts are intentionally excluded from whole-repo lint; do not auto-format or refactor them as first-party source.
 
@@ -286,6 +288,8 @@ Phase 1 result:
 - 2026-06-05: Derived cache release hardening evidence closed. No code behavior changed; the release-risk matrix is covered by focused proof for unsupported `node:sqlite`, `force_off`, startup status, cache path guards, PRAGMA baseline, schema-version reset, corrupt DB rebuild, reset-threshold disable, keyed dispose, character-read filesystem fallback, circuit-disabled throw behavior, and `/api/characters/get` index refresh failures.
 - 2026-06-05: Background panel controller boundary delivered. `public/scripts/background-panel-controller.js` now owns root-scoped loading-state helper behavior for the background library panel, while `public/scripts/backgrounds.js` keeps request flow, upload/delete/rename/folder behavior, thumbnail handling, slash-command registration, selectors, and visible copy unchanged. Focused proof lives in `tests/background-panel-controller.test.js`.
 - 2026-06-05: Compatibility hardening pass delivered. `tests/third-party-extension-compatibility.test.js` now freezes slash-command public exports in addition to extension mount points, Tavern Helper assets, `@sillytavern/*` aliases, key module exports, event values, regex placement values, and character-list row identity. `tests/interaction-performance-index.test.js` now verifies character read-service envelope fields stay internal to the route layer.
+- 2026-06-06: Character-library entry affordance hardening delivered. `#rightNavDrawerIcon` and `#rm_button_characters` now expose button roles, accessible names, and keyboard focus so browser automation and assistive users can discover the character library by role/name while protected character-list selectors and extension compatibility remain unchanged. Focused proof lives in `tests/character-list-structure.test.js` plus compatibility and browser role/name checks.
+- 2026-06-06: Chat send-form affordance hardening delivered. `#options_button`, `#send_textarea`, `#mes_stop`, `#mes_impersonate`, `#mes_continue`, `#send_but`, and common chat option menu actions now expose role/name/focus affordances so browser automation, keyboard users, and assistive users can discover the primary chat controls by role/name. Message DOM identity, message rendering, streaming, slash-command execution, extension mount points, and existing IDs/classes remain unchanged. Focused proof lives in `tests/chat-workspace-structure.test.js` plus compatibility and browser role/name checks.
 - 2026-06-05: Build dependency closure delivered. Node.js 26.3.0 remains the application runtime, Bun 1.3.14 remains package manager/script runner, Webpack remains scoped to `/lib.js`, ESLint remains the authoritative lint gate, oxlint remains a warning-only fast preflight, and no package, lockfile, build, Docker, or Electron lifecycle drift required a code change.
 - 2026-06-05: Documentation topology closure delivered. `.docs/tech/briefs/README.md` now indexes retained closure briefs as persistent intent records, and this roadmap now distinguishes durable briefs from spec-local `design.md`/`plan.md` process artifacts that are deleted during wrap-up. `.docs/db` semantics were unchanged and `bun run docs:check` stayed green.
 
@@ -331,7 +335,9 @@ Durable user intent for these steps lives in `.docs/tech/briefs/260605-02-charac
 
 5. Low-risk frontend controller slice.
    - Delivered 2026-06-05: Pick one non-extension, non-message-rendering panel or toolbar root and apply the login/setup controller pattern.
-   - Keep the main chat workspace, message rendering, slash-command parser, regex internals, and extension mount points out of scope.
+   - Follow-up delivered 2026-06-06: Tighten the character-library entry affordance with role/name/focus attributes, preserving existing IDs, classes, titles, and compatibility selectors.
+   - Follow-up delivered 2026-06-06: Tighten the chat send-form and chat-options affordance with role/name/focus attributes, preserving existing IDs, classes, titles, menu actions, message DOM identity, and handler ownership.
+   - Keep main chat workspace extraction, message rendering, slash-command parser, regex internals, and extension mount points out of scope.
 
 6. Compatibility hardening pass.
    - Delivered 2026-06-05: Expand or refresh focused tests around protected character-list DOM identity, shared-library exports, regex placement values, slash-command surfaces, and `@sillytavern/*` import aliases.

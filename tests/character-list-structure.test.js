@@ -54,7 +54,9 @@ describe('character list structure', () => {
 
         [
             'id="rm_characters_block"',
+            'id="rightNavDrawerIcon"',
             'id="charListFixedTop"',
+            'id="rm_button_characters"',
             'id="rm_button_bar"',
             'class="character-list-tool-group character-list-create-group"',
             'class="character-list-tool-group character-list-sort-group"',
@@ -81,6 +83,13 @@ describe('character list structure', () => {
             'id="rm_print_characters_pagination"',
             'id="rm_print_characters_block"',
         ].forEach(marker => expect(indexHtml).toContain(marker));
+
+        expect(indexHtml).toMatch(/id="rightNavDrawerIcon"[^>]*\brole="button"/);
+        expect(indexHtml).toMatch(/id="rightNavDrawerIcon"[^>]*\baria-label="Open Character Management"/);
+        expect(indexHtml).toMatch(/id="rightNavDrawerIcon"[^>]*\btabindex="0"/);
+        expect(indexHtml).toMatch(/id="rm_button_characters"[^>]*\brole="button"/);
+        expect(indexHtml).toMatch(/id="rm_button_characters"[^>]*\baria-label="Characters"/);
+        expect(indexHtml).toMatch(/id="rm_button_characters"[^>]*\btabindex="0"/);
 
         [
             ['rm_button_create', 'Character Toolbar New', 'New', 'Create New Character'],

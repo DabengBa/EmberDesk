@@ -2475,7 +2475,7 @@
         </div>
         <div id="rightNavHolder" class="drawer">
             <div id="unimportantYes" class="drawer-toggle drawer-header">
-                <div id="rightNavDrawerIcon" class="drawer-icon fa-solid fa-address-card fa-fw closedIcon" title="Character Management" data-i18n="[title]Character Management">
+                <div id="rightNavDrawerIcon" class="drawer-icon fa-solid fa-address-card fa-fw closedIcon" title="Character Management" data-i18n="[title]Character Management;[aria-label]Open Character Management" role="button" aria-label="Open Character Management" tabindex="0">
                 </div>
             </div>
             <nav id="right-nav-panel" class="drawer-content closedDrawer fillRight">
@@ -2490,7 +2490,7 @@
                                 <div class="fa-solid checked fa-lock right_menu_button" alt=""></div>
                             </label>
                         </div>
-                        <div class="right_menu_button fa-solid fa-list-ul" id="rm_button_characters" title="Select/Create Characters" data-i18n="[title]Select/Create Characters"></div>
+                        <div class="right_menu_button fa-solid fa-list-ul" id="rm_button_characters" title="Select/Create Characters" data-i18n="[title]Select/Create Characters;[aria-label]Characters" role="button" aria-label="Characters" tabindex="0"></div>
                     </div>
                     <div id="HotSwapWrapper" class="alignitemscenter flex-container margin0auto wide100p">
                         <div class="hotswap avatars_inline scroll-reset-container expander" data-i18n="[no_favs]Favorite characters to add them to HotSwaps" no_favs="Favorite characters to add them to HotSwaps">
@@ -4548,9 +4548,9 @@
                 </form>
                 <div id="nonQRFormItems">
                     <div id="leftSendForm" class="alignContentCenter">
-                        <div id="options_button" class="fa-solid fa-bars interactable"></div>
+                        <div id="options_button" class="fa-solid fa-bars interactable" title="Chat options" data-i18n="[title]Chat options;[aria-label]Chat options" role="button" aria-label="Chat options" tabindex="0"></div>
                     </div>
-                    <textarea id="send_textarea" name="text" class="mdHotkeys" data-i18n="[no_connection_text]Not connected to API!;[connected_text]Type a message, or /? for help" placeholder="Not connected to API!" no_connection_text="Not connected to API!" connected_text="Type a message, or /? for help" autocomplete="off"></textarea>
+                    <textarea id="send_textarea" name="text" class="mdHotkeys" data-i18n="[aria-label]Chat message;[no_connection_text]Not connected to API!;[connected_text]Type a message, or /? for help" aria-label="Chat message" placeholder="Not connected to API!" no_connection_text="Not connected to API!" connected_text="Type a message, or /? for help" autocomplete="off"></textarea>
                     <div id="rightSendForm" class="alignContentCenter">
                         <div id="stscript_continue" title="Continue script execution" class="stscript_btn stscript_continue" data-i18n="[title]Continue script execution">
                             <i class="fa-solid fa-play"></i>
@@ -4561,12 +4561,12 @@
                         <div id="stscript_stop" title="Abort script execution" class="stscript_btn stscript_stop" data-i18n="[title]Abort script execution">
                             <i class="fa-solid fa-stop"></i>
                         </div>
-                        <div id="mes_stop" title="Abort request" class="mes_stop" data-i18n="[title]Abort request">
+                        <div id="mes_stop" title="Abort request" class="mes_stop" data-i18n="[title]Abort request;[aria-label]Abort request" role="button" aria-label="Abort request" tabindex="0">
                             <i class="fa-solid fa-circle-stop"></i>
                         </div>
-                        <div id="mes_impersonate" class="fa-solid fa-user-secret interactable displayNone" title="Ask AI to write your message for you" data-i18n="[title]Ask AI to write your message for you" tabindex="0"></div>
-                        <div id="mes_continue" class="fa-fw fa-solid fa-arrow-right interactable displayNone" title="Continue the last message" data-i18n="[title]Continue the last message"></div>
-                        <div id="send_but" class="fa-solid fa-paper-plane interactable displayNone" title="Send a message" data-i18n="[title]Send a message"></div>
+                        <div id="mes_impersonate" class="fa-solid fa-user-secret interactable displayNone" title="Ask AI to write your message for you" data-i18n="[title]Ask AI to write your message for you;[aria-label]Ask AI to write your message" role="button" aria-label="Ask AI to write your message" tabindex="0"></div>
+                        <div id="mes_continue" class="fa-fw fa-solid fa-arrow-right interactable displayNone" title="Continue the last message" data-i18n="[title]Continue the last message;[aria-label]Continue last message" role="button" aria-label="Continue last message" tabindex="0"></div>
+                        <div id="send_but" class="fa-solid fa-paper-plane interactable displayNone" title="Send a message" data-i18n="[title]Send a message;[aria-label]Send message" role="button" aria-label="Send message" tabindex="0"></div>
                     </div>
                 </div>
             </div>
@@ -4583,15 +4583,15 @@
                 <i class="fa-lg fa-solid fa-cog"></i>
                 <span data-i18n="Toggle Panels">Toggle Panels</span>
             </a>
-            <a id="option_toggle_AN">
+            <a id="option_toggle_AN" role="button" tabindex="0">
                 <i class="fa-lg fa-solid fa-note-sticky"></i>
                 <span data-i18n="Author's Note">Author's Note</span>
             </a>
-            <a id="option_toggle_CFG">
+            <a id="option_toggle_CFG" role="button" tabindex="0">
                 <i class="fa-lg fa-solid fa-scale-balanced"></i>
                 <span data-i18n="CFG Scale">CFG Scale</span>
             </a>
-            <a id="option_toggle_logprobs">
+            <a id="option_toggle_logprobs" role="button" tabindex="0">
                 <i class="fa-lg fa-solid fa-pie-chart"></i>
                 <span data-i18n="Token Probabilities">Token Probabilities</span>
             </a>
@@ -4608,7 +4608,7 @@
                 <span data-i18n="Convert to group">Convert to group</span>
             </a>
             <hr>
-            <a id="option_start_new_chat">
+            <a id="option_start_new_chat" role="button" tabindex="0">
                 <i class="fa-lg fa-solid fa-comments"></i>
                 <span data-i18n="Start new chat">Start new chat</span>
             </a>
@@ -4616,24 +4616,24 @@
                 <i class="fa-lg fa-solid fa-times"></i>
                 <span data-i18n="Close chat">Close chat</span>
             </a>
-            <a id="option_select_chat">
+            <a id="option_select_chat" role="button" tabindex="0">
                 <i class="fa-lg fa-solid fa-address-book"></i>
                 <span data-i18n="Manage chat files">Manage chat files</span>
             </a>
             <hr>
-            <a id="option_delete_mes">
+            <a id="option_delete_mes" role="button" tabindex="0">
                 <i class="fa-lg fa-solid fa-trash-can"></i>
                 <span data-i18n="Delete messages">Delete messages</span>
             </a>
-            <a id="option_regenerate">
+            <a id="option_regenerate" role="button" tabindex="0">
                 <i class="fa-lg fa-solid fa-repeat"></i>
                 <span data-i18n="Regenerate">Regenerate</span>
             </a>
-            <a id="option_impersonate" title="Ask AI to write your message for you" data-i18n="[title]Ask AI to write your message for you">
+            <a id="option_impersonate" title="Ask AI to write your message for you" data-i18n="[title]Ask AI to write your message for you" role="button" tabindex="0">
                 <i class="fa-lg fa-solid fa-user-secret"></i>
                 <span data-i18n="Impersonate">Impersonate</span>
             </a>
-            <a id="option_continue" title="Continue the last message" data-i18n="[title]Continue the last message">
+            <a id="option_continue" title="Continue the last message" data-i18n="[title]Continue the last message" role="button" tabindex="0">
                 <i class="fa-lg fa-solid fa-arrow-right"></i>
                 <span data-i18n="Continue">Continue</span>
             </a>
