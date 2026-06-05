@@ -6,6 +6,17 @@ This roadmap records the recommended modernization sequence for EmberDesk. It is
 
 It does not redefine user-facing product semantics. User-visible pages, features, and terms remain owned by `.docs/db/`.
 
+## Status
+
+Status: frozen on 2026-06-05 after the 10-step closure program completed. Keep this document as the historical modernization baseline and successor-decision intake; do not append new implementation slices here.
+
+Closure evidence:
+
+- Delivered slice history is recorded in `.docs/PROJECT_HISTORY.md`.
+- User intent and delivery traceability are recorded in `.docs/tech/briefs/260605-02-character-route-service-extraction.md` through `.docs/tech/briefs/260605-11-roadmap-freeze-successor-decision.md`.
+- Node.js 26.3.0 release validation passed for root/tests lint, compatibility, semantic docs, shared library, character route/index, Express route order, startup/config, user/auth/login/setup, and full unit suite.
+- Documentation topology closure passed `bun run docs:check` without changing `.docs/db` user-visible semantics.
+
 ## Goals
 
 - Reduce inherited SillyTavern complexity without disrupting power-user workflows.
@@ -280,66 +291,34 @@ Phase 1 result:
 
 ## Recommended Next Work
 
-The next recommended implementation slice is roadmap freeze and successor decision. Documentation topology closure is complete, so the useful move is to mark this 10-step roadmap closed and move remaining large migrations into an explicit successor proposal instead of leaving them as unfinished work.
+No implementation slice remains in this roadmap. New work should start from a successor proposal or ADR-backed design when it changes architecture, compatibility surfaces, storage source of truth, or frontend framework boundaries.
 
-Decision for the next turn:
+Successor entry points:
 
-- Start from `.docs/specs/260605-11-roadmap-freeze-successor-decision`.
-- Freeze this modernization roadmap only against delivered facts already recorded in `.docs/PROJECT_HISTORY.md`, briefs, and owning tech docs.
-- Move future SPA, TypeScript, database-first storage, broad endpoint splits, and broad dependency migrations into successor-roadmap language instead of treating them as unfinished items here.
-- Preserve compatibility and file-backed canonical storage boundaries as explicit successor constraints.
+- Main chat workspace, message rendering, and streaming slices need their own design plus browser proof because they are primary user flows and extension surfaces.
+- SPA framework or TypeScript application migration needs explicit user approval, ADR coverage, compatibility plan, and staged migration proof.
+- Database-first canonical storage remains outside this roadmap. Any future proposal must preserve migration/recovery paths and prove why file-backed canonical data is no longer the right source of truth.
+- Broad endpoint splits, Electron lifecycle migration, dependency/runtime churn, and `/lib.js` replacement each need dedicated designs with focused validation.
+- Performance claims still require startup or interaction performance runner evidence before they become shipped facts.
 
-Scope:
+Before starting a successor roadmap, verify current release evidence still matches the active runtime and package boundaries.
 
-- Decide the closure state of this roadmap using delivered slice evidence.
-- Update this roadmap and owning docs with successor boundaries and non-goals.
-- Avoid inventing new implementation work during freeze.
+## Closed Sequence Result
 
-First shippable target:
+The 10-step closure program ended with Node 26 validation and documentation topology proof green. Startup and interaction performance runners remain the evidence path for future latency claims, but no further slice is planned inside this roadmap.
 
-1. Compare delivered slices in `.docs/PROJECT_HISTORY.md` with the 10-step closure plan.
-2. Mark what is closed, what remains intentionally deferred, and what must move to a successor roadmap.
-3. Update durable docs without changing product semantics.
-4. Run docs validation and close the final spec process files.
+## 10-Step Roadmap Closure Result
 
-Not in this slice:
-
-- Do not implement deferred migrations.
-- Do not re-open delivered slices unless current evidence contradicts their closure.
-- Do not delete briefs or semantic docs as a way to make the roadmap look finished.
-
-Minimum validation:
-
-- Commands named by the 11 plan.
-- `bun run docs:check`.
-- `bun run lint` as the closeout gate.
-
-## Recommended Near-Term Sequence
-
-1. Run build/dependency closure.
-   - Confirm package boundaries and current tool versions.
-   - Keep dependency churn out unless the spec has a specific, validated reason.
-
-2. Then run the Node 26 release validation sweep.
-   - Use Node.js 26.3.0 proof as release evidence, not non-contract diagnostic runtimes.
-   - Keep the login/setup controller pattern: pure helpers, explicit root, dependency injection, cleanup, and focused proof.
-
-3. Run startup and interaction performance reports after any slice that claims a latency improvement.
-
-4. Update owning docs after each shipped slice, then record only shipped architecture evolution in `.docs/PROJECT_HISTORY.md`.
-
-## 10-Step Roadmap Closure Plan
-
-If the remaining modernization roadmap must close in exactly 10 shippable steps, use this order. Each step starts with a small process `design.md`, runs through `delivery-workflow`, preserves compatibility proof, and records durable facts only after the slice is delivered.
+The closure program used this order. Each step started with a small process `design.md`, ran through `delivery-workflow`, preserved compatibility proof, and recorded durable facts only after delivery.
 
 Durable user intent for these steps lives in `.docs/tech/briefs/260605-02-character-route-service-extraction.md` through `.docs/tech/briefs/260605-11-roadmap-freeze-successor-decision.md`. Spec-local `design.md` and `plan.md` files are process artifacts and are deleted as each slice completes wrap-up.
 
 1. Character route service extraction.
-   - Extract one deterministic helper or service boundary from `src/endpoints/characters.js`.
+   - Delivered 2026-06-05: Extract one deterministic helper or service boundary from `src/endpoints/characters.js`.
    - Keep `/api/characters/all`, `/api/characters/get`, cache/index refresh, thumbnail side effects, path guards, and file-backed canonical storage stable.
 
 2. Character route performance proof.
-   - Run focused route/helper tests plus `interaction-performance-index.test.js` and the interaction performance runner where the slice claims latency impact.
+   - Delivered 2026-06-05: Run focused route/helper tests plus `interaction-performance-index.test.js` and the interaction performance runner where the slice claims latency impact.
    - Record cold/warm state, Node version, data shape, and any degraded fallback.
 
 3. Chat route service extraction.
@@ -359,19 +338,19 @@ Durable user intent for these steps lives in `.docs/tech/briefs/260605-02-charac
    - Treat any public-surface removal as a separate migration, not cleanup.
 
 7. Build and dependency closure.
-   - Keep Bun as package/script runner and Node as application runtime.
+   - Delivered 2026-06-05: Keep Bun as package/script runner and Node as application runtime.
    - Audit Webpack `/lib.js` boundary, oxlint fast-lane status, ESLint authority, and dependency drift without broad churn.
 
 8. Release validation sweep.
-   - Run the current release gate under Node.js 26.3.0: lint, tests lint, docs build/check, compatibility, focused startup/config, route-order, shared-library, user/auth/setup/login, and full unit suite.
+   - Delivered 2026-06-05: Run the current release gate under Node.js 26.3.0: lint, tests lint, docs build/check, compatibility, focused startup/config, route-order, shared-library, user/auth/setup/login, and full unit suite.
    - Run Playwright E2E only for release or UI slices where the route changed visible browser behavior.
 
 9. Documentation and topology closure.
-   - Remove stale process docs, keep only high-signal briefs, and ensure `.docs/PROJECT_HISTORY.md`, owning `.docs/tech/`, `.docs/adr/`, and `.docs/db/` docs agree.
+   - Delivered 2026-06-05: Remove stale process docs, keep only high-signal briefs, and ensure `.docs/PROJECT_HISTORY.md`, owning `.docs/tech/`, `.docs/adr/`, and `.docs/db/` docs agree.
    - Run docs validation and inspect semantic topology for unresolved or orphaned nodes.
 
 10. Roadmap freeze and successor decision.
-    - Mark this modernization roadmap closed only after delivered slices, validation evidence, and durable docs agree.
+    - Delivered 2026-06-05: Mark this modernization roadmap closed only after delivered slices, validation evidence, and durable docs agree.
     - Move any remaining SPA, TypeScript, database-first, or broad endpoint split ideas into a successor roadmap or ADR-backed proposal instead of treating them as unfinished work in this roadmap.
 
 ## Non-Goals

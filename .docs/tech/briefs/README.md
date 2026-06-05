@@ -36,4 +36,4 @@ Delete or avoid adding briefs that are:
 | `260605-08-build-dependency-closure.md` | Preserves the build/toolchain closure facts for Node, Bun, Webpack, ESLint, oxlint, and dependency drift. |
 | `260605-09-node26-release-validation-sweep.md` | Records the Node 26.3.0 release validation matrix and the scoped Playwright skip decision. |
 | `260605-10-documentation-topology-closure.md` | Records the delivered documentation topology closure: retained briefs are indexed, spec-local process files are not durable archives, and semantic docs stayed unchanged. |
-| `260605-11-roadmap-freeze-successor-decision.md` | Pending successor-decision intent for freezing this roadmap and moving remaining large migrations to a future proposal. |
+| `260605-11-roadmap-freeze-successor-decision.md` | Records the delivered roadmap freeze and successor-decision boundary for future SPA, TypeScript, database-first storage, broad endpoint, Electron, dependency/runtime, and `/lib.js` migration proposals. |
