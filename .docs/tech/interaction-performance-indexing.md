@@ -382,6 +382,7 @@ The boundary is deliberately narrow:
 - `getCharacterListEntityKey()` provides stable internal keys for future reconcile work:
   - character keys prefer `avatar`, because `chid` is an array index and can shift after deletion
   - group and tag keys use their stable ids
+- `getCharacterListPageEntities()` selects the current page slice from a render snapshot while preserving the existing `Number(pageSize) || 1` and first-page fallback semantics.
 - `createCharacterListPageRenderPlan()` describes the current page’s back-block, empty-block, display-count, and hidden-count decisions without rendering DOM.
 - `createCharacterListPageReconcilePlan()` compares the mounted visible page against the next page and either returns ordered/reused/inserted/removed keys plus a render plan, or returns a named fallback reason such as `back-block`, `missing-entity-data`, or `duplicate-entity-key`.
 - `getCharacterListPaginationRangeLabel()` keeps the navigator range formatting reusable while preserving the existing `1-14 / 14` style.
@@ -425,6 +426,7 @@ Stability-sensitive binding points:
 - `enableBulkSelect()` / `disableBulkSelect()` in `public/scripts/bulk-edit.js`
 - `getCharacterListEntityKey()` in `public/scripts/character-list-render-state.js`
 - `createCharacterListEntitySnapshot()` in `public/scripts/character-list-render-state.js`
+- `getCharacterListPageEntities()` in `public/scripts/character-list-render-state.js`
 - `createCharacterListPageRenderPlan()` in `public/scripts/character-list-render-state.js`
 - `createCharacterDeleteReconcilePlan()` in `public/scripts/character-list-render-state.js`
 - `syncCharacterListRowIdentity()` in `public/scripts/character-list-render-state.js`

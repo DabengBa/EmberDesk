@@ -7,6 +7,7 @@ import {
     createCharacterListPageRenderPlan,
     createCharacterBulkDeletePagePlan,
     createCharacterDeleteReconcilePlan,
+    getCharacterListPageEntities,
     getCharacterListEntityKey,
     getCharacterListPaginationRangeLabel,
     shouldSuppressCharacterDeleteListReprintState,
@@ -101,6 +102,19 @@ describe('character list render state helpers', () => {
             pageSize: 10,
             fallbackTotal: 0,
         })).toBe('0-0 / 0');
+    });
+
+    test('returns the current character-list page entities with existing fallback semantics', () => {
+        const snapshot = createCharacterListEntitySnapshot([
+            characterEntity(0, 'alpha.png'),
+            characterEntity(1, 'beta.png'),
+            characterEntity(2, 'gamma.png'),
+        ]);
+
+        expect(getCharacterListPageEntities(snapshot, 2, 2).map(entity => entity.item.avatar)).toEqual(['gamma.png']);
+        expect(getCharacterListPageEntities(snapshot, 'bad-page', 'bad-size').map(entity => entity.item.avatar)).toEqual(['alpha.png']);
+        expect(getCharacterListPageEntities(snapshot, 0, 0).map(entity => entity.item.avatar)).toEqual(['alpha.png']);
+        expect(getCharacterListPageEntities(createCharacterListEntitySnapshot([]), 1, 25)).toEqual([]);
     });
 
     test('describes current page rendering without rendering DOM', () => {

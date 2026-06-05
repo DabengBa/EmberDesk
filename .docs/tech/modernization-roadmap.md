@@ -69,7 +69,7 @@ Phase 0 result:
 
 - Whole-repo lint is green after excluding vendored third-party extension build artifacts and fixing first-party lint debt.
 - The core modernization gates are green locally: semantic docs, compatibility, Express route/order, shared browser library, startup/config, user/auth/setup/login, character-list focused tests, performance tooling tests, and full unit suite.
-- Local proof ran under Node 25.4.0, while the project runtime contract is now Node.js 26.3.0 Current. Treat local results as useful diagnostic evidence, not release proof.
+- Historical Phase 0 proof ran under Node 25.4.0, while the project runtime contract is now Node.js 26.3.0 Current. Treat those historical results as useful diagnostic evidence, not release proof.
 - Full Playwright E2E and performance runners were skipped because Phase 0 did not change user-visible behavior or implement a performance slice.
 
 ### Phase 1: Complexity Mapping
@@ -249,7 +249,7 @@ Phase 1 result:
 
 ## Known Execution Gaps
 
-- Node.js 26.3.0 proof remains required before release because the Phase 0 local baseline ran under Node 25.4.0, which is outside the supported engine range and is not a release-proof runtime.
+- Node.js 26.3.0 focused proof now exists for the current modernization surfaces: root lint, tests lint, compatibility, semantic docs check, oxlint fast-lane preflight, and focused tests for World Info import, OpenAI/provider capability helpers, user setup/storage, derived SQLite lifecycle, and chat import converters.
 - Full Playwright E2E remains a release or UI-slice gate, not yet part of the Phase 0/1 local proof.
 - Startup and interaction performance runners remain required before claiming latency wins.
 - Vendored third-party extension artifacts are intentionally excluded from whole-repo lint; do not auto-format or refactor them as first-party source.
@@ -262,66 +262,65 @@ Phase 1 result:
 - 2026-06-03: World-info external converter helper boundary delivered. Novel Lorebook, Agnai Memory Book, Risu Lorebook, and embedded Character Book converters now live in `public/scripts/world-info-converters.js` with focused proof in `tests/world-info-converters.test.js`. `public/scripts/world-info.js` continues to own file parsing, overwrite checks, `/api/worldinfo/import`, `saveWorldInfo()`, editor refresh side effects, and the public `convertCharacterBook` re-export used by `@sillytavern/scripts/world-info`.
 - 2026-06-03: World-info import feedback delivered. The file import entry now exposes busy/disabled feedback, spinner state, and a persistent loading toast while `importWorldInfo(file)` is active, then restores on success, cancel, parse failure, overwrite denial, or network failure. `importEmbeddedWorldInfo()` now reports when the selected character has no embedded `character_book` data. Converter logic, import API shapes, overwrite decisions, editor rendering, and compatibility exports remain unchanged.
 - 2026-06-04: World-info import decision quality delivered. Single-file import now derives detected format and entry count for overwrite confirmation and success feedback, uses action-labeled overwrite confirmation with cancel as the safe default, distinguishes PNG character-card/no-data cases, unsupported formats, oversized uploads, parse failures, and network/import failures, and preserves converter output plus `/api/worldinfo/import` payload shape.
-- 2026-06-04: OpenAI/provider capability helper extraction delivered. public/scripts/openai-provider-capabilities.js now owns pure model, reasoning, verbosity, and media-support helpers, while public/scripts/openai.js keeps compatibility wrappers and request assembly. Focused unit tests now exercise structured descriptors and the current helper branches without changing provider UI or payload semantics.
-- 2026-06-04: oxlint fast-lane preflight delivered. Root `bun run lint:fast` now runs `oxlint src public *.js` with `.oxlintrc.json` preserving the existing ESLint ignored-path boundary. `bun run lint` remains the authoritative ESLint gate, and `bun run --cwd tests lint` remains a known red baseline for the follow-up ESLint flat-config slice.
+- 2026-06-04: World-info batch import delivered. The import entry now accepts multiple selected files and dropped files, filters unsupported formats, caps batch size, pre-scans conflicts, offers skip/overwrite/ask-per-conflict choices, processes files sequentially through the existing single-file importer, supports cancel-remaining, and summarizes imported/failed/skipped/unprocessed results without changing converter output, world-info schema, editor card DOM identity, or `/api/worldinfo/import` payload shape.
+- 2026-06-04: World-info batch import review hardening delivered. Batch import now keeps result objects factory-owned, reports conflict pre-scan fallback to the user, uses a named busy-state option instead of positional `arguments`, exposes More-menu actions as keyboard-operable menu items, localizes new batch/overwrite feedback in `zh-cn`, and shows a checking-target progress state while overwrite confirmation is pending instead of claiming the file is already imported.
+- 2026-06-04: OpenAI/provider capability helper extraction delivered. `public/scripts/openai-provider-capabilities.js` now owns pure model, reasoning, verbosity, and media-support helpers, while `public/scripts/openai.js` keeps compatibility wrappers and request assembly. Focused unit tests now exercise structured descriptors and the current helper branches without changing provider UI or payload semantics.
+- 2026-06-04: Node 26.3.0 runtime contract delivered. The project runtime is Node.js 26.3.0 Current (`>=26.3.0 <27`), Bun remains the package manager and script runner, and local non-26 proof is diagnostic only. The workstation shell now resolves `node` to `v26.3.0`, so the blocker is no longer toolchain availability but rerunning the gates under the supported runtime.
+- 2026-06-04: Derived SQLite sidecar helper foundation delivered. `src/derived-cache-sqlite.js` now owns reusable derived SQLite lifecycle, PRAGMA setup, status reporting, schema reset, dispose, and reset-threshold behavior, while the character index keeps business rules and canonical file-backed behavior. Focused proof lives in `tests/derived-cache-sqlite.test.js`.
+- 2026-06-04: oxlint fast-lane preflight delivered. Root `bun run lint:fast` now runs `oxlint src public *.js` with `.oxlintrc.json` preserving the existing ESLint ignored-path boundary. `bun run lint` remained the authoritative ESLint gate, and `bun run --cwd tests lint` was left as the known red baseline for the follow-up ESLint flat-config slice.
 - 2026-06-04: ESLint 10 flat config upgrade delivered. Root and tests linting now use `eslint.config.js` / `tests/eslint.config.js`, legacy `.eslintrc.cjs` files are retired, tests own their Jest and Playwright lint plugins directly, `bun run lint` and `bun run --cwd tests lint` both pass, and `bun run lint:fast` remains a non-authoritative oxlint preflight.
+- 2026-06-05: Node 26.3.0 validation sweep completed. The working shell reports `node v26.3.0`, `npm 11.16.0`, `npx 11.16.0`, and Bun 1.3.14. The current modernization tree passes root lint, tests lint, compatibility, semantic docs check, focused World Info import/card tests, OpenAI/provider capability tests, user setup/storage tests, derived SQLite lifecycle tests, and chat import converter tests under Node 26.3.0. `bun run lint:fast` exits successfully with warnings only and remains a non-authoritative preflight.
+- 2026-06-05: Character-list page-slice helper delivered. `getCharacterListPageEntities()` now lives in `public/scripts/character-list-render-state.js`, preserving current `snapshot.entities` slicing semantics while leaving jQuery pagination, DOM patching, row identity, `CHARACTER_PAGE_LOADED`, and extension compatibility owned by `public/script.js`.
 
 ## Recommended Next Work
 
-The next recommended implementation slice after the delivered OpenAI/provider capability helper extraction is character-list helper extraction inside `public/script.js`. That area still has repeated render/state logic that can be isolated without touching the main chat workspace shell or extension surfaces.
+The next recommended implementation slice is character route service extraction. The delivered character-list page-slice helper leaves the remaining visible list behavior stable, so the next useful modernization target moves back to the backend character route boundary.
+
+Decision for the next turn:
+
+- Start with a small design/spec mapping step before moving route code.
+- Prefer read/list service wrappers or import-format helpers that can be proven with focused route/helper tests.
+- Keep `/api/characters/all`, `/api/characters/get`, cache/index refresh, thumbnail side effects, and file-backed canonical storage behavior stable unless a separate design approves a behavior change.
 
 Scope:
 
-- Move the file input from first-file-only handling to an explicit multi-file queue.
-- Keep detected format, entry count, overwrite confirmation, and actionable per-file errors visible for each import attempt.
-- Prevent duplicate submissions while a batch is active and make partial success/failure outcomes clear.
-- Keep converter logic, prompt activation, regex placement values, slash-command registration, editor card DOM identity, pagination, and import API shapes stable unless a later design explicitly approves a behavior change.
+- Extract one narrow backend character route helper or service boundary.
+- Keep routers thin while preserving current response shapes.
+- Prefer deterministic file-backed read/list or import-format work over broad endpoint file splitting.
+- Keep SQLite character index and DiskCache derived-only.
 
 First shippable target:
 
-1. Add `multiple` input support only after defining explicit per-file sequencing and user feedback.
-2. Reuse the current single-file metadata and error-classification helpers for each file.
-3. Keep retry UI out unless the same slice defines where retry state lives and how duplicate submissions are prevented.
-4. Prove the changes with focused import-flow tests or browser evidence depending on the executable surface available.
+1. Map `src/endpoints/characters.js` around `/api/characters/all`, `/api/characters/get`, cache/index refresh, thumbnail side effects, and existing helper imports.
+2. Select one route-adjacent helper or service with deterministic inputs and focused test coverage.
+3. Add or extend focused tests before moving call sites.
+4. Keep response shape, cache/index invalidation, thumbnail behavior, path guards, and file-backed canonical data equivalent unless the slice explicitly proves and documents the behavior change.
 
 Not in this slice:
 
-- Do not change external-format converter output, regex matching semantics, placement values, or slash-command surfaces.
-- Do not change prompt activation recursion, timed effects, inclusion-group behavior, editor card templates, DOM identity, pagination, or world-info file schema.
-- Do not split the whole world-info module or introduce a framework/controller rewrite.
-- Do not change converter output, import API shape, world-info schema, or editor card DOM identity as part of batch import.
+- Do not split all of `src/endpoints/characters.js` at once.
+- Do not change character endpoint response shapes, avatar path handling, thumbnail generation policy, world-info cascade behavior, or extension import aliases as part of the first backend helper slice.
+- Do not treat SQLite character index rows or DiskCache entries as canonical data.
 
 Minimum validation:
 
-- New focused proof for detected-format/entry-count display and actionable error branches, or browser proof if no stable unit surface exists.
-- `world-info-card-rendering.test.js` and browser proof only if visible editor rendering changes.
-- `bun run test:compat` if regex, slash-command, extension, import alias, or world-info regex surfaces are touched.
+- Focused helper/route tests for the extracted character route boundary.
+- `interaction-performance-index.test.js` when `/api/characters/all`, `/api/characters/get`, or character-index behavior changes.
+- `bun run test:compat` only if frontend selector, extension, regex, slash-command, or public import compatibility is touched.
 - `bun run lint` as the closeout gate.
 
 ## Recommended Near-Term Sequence
 
-1. Add World Info batch import as a separate UX/API slice.
-   - Move from first-file-only handling to an explicit per-file queue after import feedback and conversion boundaries stay green.
-   - Keep per-file error reporting and overwrite decisions explicit.
-
-2. Extract OpenAI/provider capability helpers.
-   - Start with reasoning effort, verbosity, media inlining, and model-selection helpers.
-   - Use source-backed provider docs before changing API syntax, model-specific behavior, or request payload semantics.
-
-3. Continue character-list helper extraction inside `public/script.js`.
-   - Extend existing `character-list-state.js` and `character-list-render-state.js` boundaries.
-   - Preserve row identity selectors and run compatibility proof when identity/export surfaces are touched.
-
-4. Continue character route service extraction only after the delivered helper boundary stays green.
+1. Continue character route service extraction now that the character-list helper boundary is green.
    - Prefer read/list service wrappers or import-format helpers with route proof.
    - Keep `/api/characters/all`, `/api/characters/get`, cache/index refresh, and thumbnail side effects stable.
 
-5. Pick a low-risk frontend panel or toolbar controller only after the helper slices above are green.
+2. Pick a low-risk frontend panel or toolbar controller only after the helper slices above are green.
    - Keep the login/setup controller pattern: pure helpers, explicit root, dependency injection, cleanup, and focused proof.
 
-6. Run startup and interaction performance reports after any slice that claims a latency improvement.
+3. Run startup and interaction performance reports after any slice that claims a latency improvement.
 
-7. Update owning docs after each shipped slice, then record only shipped architecture evolution in `.docs/PROJECT_HISTORY.md`.
+4. Update owning docs after each shipped slice, then record only shipped architecture evolution in `.docs/PROJECT_HISTORY.md`.
 
 ## Non-Goals
 

@@ -69,6 +69,20 @@ export function getCharacterListPaginationRangeLabel({ currentPage, totalNumber,
 }
 
 /**
+ * Returns the current page slice from a character-list entity snapshot.
+ * @param {{entities: Array<object>}} snapshot
+ * @param {number} currentPage
+ * @param {number} pageSize
+ * @returns {Array<object>}
+ */
+export function getCharacterListPageEntities(snapshot, currentPage, pageSize) {
+    const safePageSize = Number(pageSize) || 1;
+    const safeCurrentPage = Math.max(Number(currentPage) || 1, 1);
+    const pageStart = (safeCurrentPage - 1) * safePageSize;
+    return snapshot.entities.slice(pageStart, pageStart + safePageSize);
+}
+
+/**
  * Describes what the current page callback needs to render.
  * @param {object} options
  * @param {Array<object>} options.pageEntities

@@ -249,6 +249,7 @@ import {
     createCharacterBulkDeletePagePlan,
     createCharacterDeleteReconcilePlan,
     createCharacterListEntitySnapshot,
+    getCharacterListPageEntities,
     createCharacterListPageReconcilePlan,
     createCharacterListPageRenderPlan,
     getCharacterListPaginationRangeLabel,
@@ -1484,13 +1485,6 @@ function renderCharacterListEntityBlock(entity) {
         default:
             return null;
     }
-}
-
-function getCharacterListPageEntities(snapshot, currentPage, pageSize) {
-    const safePageSize = Number(pageSize) || 1;
-    const safeCurrentPage = Math.max(Number(currentPage) || 1, 1);
-    const pageStart = (safeCurrentPage - 1) * safePageSize;
-    return snapshot.entities.slice(pageStart, pageStart + safePageSize);
 }
 
 function indexExistingCharacterListElements(listElement, beforePageEntities) {
