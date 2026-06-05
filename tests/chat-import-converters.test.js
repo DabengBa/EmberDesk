@@ -59,24 +59,32 @@ describe('chat import converters', () => {
         ]);
     });
 
-    test('preserves current CAI Tools empty and non-empty history behavior', () => {
+    test('imports CAI Tools histories as separate chats', () => {
         expect(importCAIChat('User', 'Bot', {
             histories: {
                 histories: [],
             },
         })).toEqual([]);
 
-        expect(() => importCAIChat('User', 'Bot', {
+        const chats = importCAIChat('User', 'Bot', {
             histories: {
                 histories: [
                     {
                         msgs: [
                             { src: { is_human: true }, text: 'hello' },
+                            { src: { is_human: false }, text: 'hi' },
                         ],
                     },
                 ],
             },
-        })).toThrow(ReferenceError);
+        });
+
+        expect(chats).toHaveLength(1);
+        expect(parseJsonl(chats[0])).toEqual([
+            { chat_metadata: {}, user_name: 'unused', character_name: 'unused' },
+            { name: 'User', is_user: true, send_date: FIXED_ISO_DATE, mes: 'hello', extra: {} },
+            { name: 'Bot', is_user: false, send_date: FIXED_ISO_DATE, mes: 'hi', extra: {} },
+        ]);
     });
 
     test('imports Kobold Lite using savedsettings names and prompt markers', () => {
@@ -97,6 +105,21 @@ describe('chat import converters', () => {
             { name: 'Kobold Bot', is_user: false, mes: 'opening prompt', send_date: FIXED_ISO_DATE, extra: {} },
             { name: 'Kobold User', is_user: true, mes: 'user action', send_date: FIXED_ISO_DATE, extra: {} },
             { name: 'Kobold Bot', is_user: false, mes: 'bot action', send_date: FIXED_ISO_DATE, extra: {} },
+        ]);
+    });
+
+    test('imports Kobold Lite with argument names when savedsettings are missing', () => {
+        const chat = parseJsonl(importKoboldLiteChat('Fallback User', 'Fallback Bot', {
+            actions: [
+                '{{[INPUT]}} user action',
+                '{{[OUTPUT]}} bot action',
+            ],
+        }));
+
+        expect(chat).toEqual([
+            { chat_metadata: {}, user_name: 'unused', character_name: 'unused' },
+            { name: 'Fallback User', is_user: true, mes: 'user action', send_date: FIXED_ISO_DATE, extra: {} },
+            { name: 'Fallback Bot', is_user: false, mes: 'bot action', send_date: FIXED_ISO_DATE, extra: {} },
         ]);
     });
 

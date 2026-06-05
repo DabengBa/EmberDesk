@@ -20,7 +20,7 @@ import { SlashCommandClosure } from './slash-commands/SlashCommandClosure.js';
 import { callGenericPopup, Popup, POPUP_RESULT, POPUP_TYPE } from './popup.js';
 import { StructuredCloneMap } from './util/StructuredCloneMap.js';
 import { renderTemplateAsync } from './templates.js';
-import { t } from './i18n.js';
+import { t, translate } from './i18n.js';
 import { accountStorage } from './util/AccountStorage.js';
 import { getOrCreatePersonaDescriptor, setPersonaDescription, user_avatar } from './personas.js';
 import { buildWorldInfoReplayState } from './deferred-panel-replays.js';
@@ -94,9 +94,14 @@ export let world_info_character_strategy = world_info_insertion_strategy.charact
 export let world_info_budget_cap = 0;
 export let world_info_max_recursion_steps = 0;
 const saveWorldDebounced = debounce(async (name, data) => await _save(name, data), debounce_timeout.relaxed);
-function closeMoreMenu() {
+function closeMoreMenu({ restoreFocus = false } = {}) {
     $('#world_more_menu_dropdown').hide();
+    const moreMenu = $('#world_more_menu');
+    moreMenu.attr('aria-expanded', 'false');
     $('#WorldInfo').removeClass('wi-more-menu-open');
+    if (restoreFocus) {
+        moreMenu.trigger('focus');
+    }
 }
 
 function setWorldImportBusy(isBusy, { showToast = true } = {}) {
@@ -207,8 +212,9 @@ function formatWorldInfoImportSummary(metadata) {
         return '';
     }
 
+    const formatLabel = translate(metadata.formatLabel);
     const entryCount = formatWorldInfoEntryCount(metadata.entryCount);
-    return entryCount ? `${metadata.formatLabel}, ${entryCount}` : metadata.formatLabel;
+    return entryCount ? `${formatLabel}, ${entryCount}` : formatLabel;
 }
 
 function buildWorldInfoImportContextHtml(metadata) {
@@ -326,10 +332,15 @@ function showWorldInfoBatchImportSummary(summary) {
     toastr.warning(t`World Info batch import finished with no new World Info imported: ${detail} (${total}).`);
 }
 
-function buildWorldInfoBatchProgressHtml(index, total, file) {
-    const percent = total > 0 ? Math.round((index / total) * 100) : 0;
+function buildWorldInfoBatchProgressHtml(index, total, file, { status = 'importing' } = {}) {
+    const isCheckingTarget = status === 'checking-target';
+    const percent = total > 0 ? Math.round(((isCheckingTarget ? index - 1 : index) / total) * 100) : 0;
+    const statusText = isCheckingTarget
+        ? t`Checking import target for file ${index} of ${total}`
+        : t`Importing file ${index} of ${total}`;
+
     return `
-        <div>${t`Importing file ${index} of ${total}`}</div>
+        <div>${statusText}</div>
         <div><strong>${escapeHtml(file?.name ?? t`Unknown file`)}</strong></div>
         <div>${t`Progress`}: ${percent}%</div>
         <button type="button" class="menu_button world-info-batch-cancel" aria-label="${escapeHtml(t`Cancel remaining World Info imports`)}">${t`Cancel remaining`}</button>
@@ -342,12 +353,13 @@ async function waitForWorldInfoBatchCancelPrompt(batchState) {
     }
 }
 
-function updateWorldInfoBatchProgress(batchState, index, total, file) {
+function updateWorldInfoBatchProgress(batchState, index, total, file, { status = 'importing' } = {}) {
     const progressIndex = index + 1;
-    const progressHtml = buildWorldInfoBatchProgressHtml(progressIndex, total, file);
+    const progressHtml = buildWorldInfoBatchProgressHtml(progressIndex, total, file, { status });
+    const progressTitle = status === 'checking-target' ? t`Preparing World Info Import` : t`Importing World Info`;
 
     if (!worldInfoImportToast) {
-        worldInfoImportToast = toastr.info(progressHtml, t`Importing World Info`, {
+        worldInfoImportToast = toastr.info(progressHtml, progressTitle, {
             timeOut: 0,
             extendedTimeOut: 0,
             tapToDismiss: false,
@@ -356,6 +368,7 @@ function updateWorldInfoBatchProgress(batchState, index, total, file) {
             html: true,
         });
     } else {
+        worldInfoImportToast.find('.toast-title').text(progressTitle);
         worldInfoImportToast.find('.toast-message').html(progressHtml);
     }
 
@@ -3927,14 +3940,15 @@ function initAccordionState($container) {
 }
 
 export async function getWorldEntry(name, data, entry) {
-    if (!data.entries[entry.uid]) return;
-
-    const headerTemplate = WI_ENTRY_HEADER_TEMPLATE.clone();
-    headerTemplate.data('uid', entry.uid);
-    headerTemplate.attr('uid', entry.uid);
+    const headerTemplate = renderCollapsedCard(name, data, entry);
+    if (!headerTemplate) return;
 
     if (typeof power_user.wi_key_input_plaintext === 'undefined') power_user.wi_key_input_plaintext = true;
 
+    const outlet = headerTemplate.find('.inline-drawer-outlet');
+    const editTemplate = WI_ENTRY_EDIT_TEMPLATE.clone();
+    setupEditFormBindings(editTemplate, outlet, name, data, entry);
+    initAccordionState(outlet);
     headerTemplate.find('.inline-drawer-content').css('display', 'none');
 
     return headerTemplate;
@@ -6245,14 +6259,14 @@ export async function importWorldInfoFiles(files) {
                 continue;
             }
 
-            updateWorldInfoBatchProgress(batchState, index, queue.length, file);
-
             if (skippedConflictFiles.has(file)) {
                 results.push(createWorldInfoImportResult('skipped', file));
                 continue;
             }
 
             const overwriteMode = conflictFiles.has(file) ? conflictChoice : WORLD_INFO_IMPORT_CONFLICT_CHOICE.CONFIRM;
+            const progressStatus = overwriteMode === WORLD_INFO_IMPORT_CONFLICT_CHOICE.CONFIRM ? 'checking-target' : 'importing';
+            updateWorldInfoBatchProgress(batchState, index, queue.length, file, { status: progressStatus });
 
             try {
                 const result = await importWorldInfo(file, { overwriteMode });
@@ -6823,11 +6837,44 @@ export function initWorldInfo() {
         }
 
         // More menu toggle
-        $('#world_more_menu').off('click.worldMoreMenuToggle').on('click.worldMoreMenuToggle', function (e) {
+        $('#world_more_menu').off('click.worldMoreMenuToggle keydown.worldMoreMenuToggle').on('click.worldMoreMenuToggle', function (e) {
             e.stopPropagation();
             const menu = $('#world_more_menu_dropdown');
             menu.toggle();
-            $('#WorldInfo').toggleClass('wi-more-menu-open', menu.is(':visible'));
+            const isVisible = menu.is(':visible');
+            $('#WorldInfo').toggleClass('wi-more-menu-open', isVisible);
+            $(this).attr('aria-expanded', String(isVisible));
+            if (isVisible) {
+                menu.find('[role="menuitem"]:visible').first().trigger('focus');
+            }
+        }).on('keydown.worldMoreMenuToggle', function (e) {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                closeMoreMenu({ restoreFocus: true });
+                return;
+            }
+
+            if (e.key !== 'Enter' && e.key !== ' ') {
+                return;
+            }
+
+            e.preventDefault();
+            $(this).trigger('click');
+        });
+
+        $('#world_more_menu_dropdown .options-menu').off('keydown.worldMoreMenuItem').on('keydown.worldMoreMenuItem', function (e) {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                closeMoreMenu({ restoreFocus: true });
+                return;
+            }
+
+            if (e.key !== 'Enter' && e.key !== ' ') {
+                return;
+            }
+
+            e.preventDefault();
+            $(this).trigger('click');
         });
 
         $(document).off('click.worldMoreMenu').on('click.worldMoreMenu', function (e) {

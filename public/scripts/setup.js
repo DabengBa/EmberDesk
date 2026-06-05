@@ -8,6 +8,7 @@ export const setupMessages = {
     userExists: '该用户名已被占用',
     setupComplete: '设置完成，正在进入...',
     missingFields: '请填写必填项',
+    passwordTooShort: '密码至少需要 8 个字符',
     creating: '创建中...',
     setting: '设置中...',
     showPassword: '显示密码',
@@ -17,6 +18,7 @@ export const setupMessages = {
 const serverErrorMessages = new Map([
     ['Setup already completed', '设置已完成，请直接登录。'],
     ['Missing required fields', setupMessages.missingFields],
+    ['Password must be at least 8 characters long', setupMessages.passwordTooShort],
     ['Invalid handle', '用户名格式不正确'],
     ['User already exists', setupMessages.userExists],
 ]);
@@ -187,6 +189,9 @@ export function createSetupController(root = document, dependencyOverrides = {})
             const response = await dependencies.fetch('/api/users/setup-mode');
             if (response.ok) {
                 const data = await response.json();
+                if (data.mode === 'complete') {
+                    return 'complete';
+                }
                 return data.mode === 'set-password' ? 'set-password' : 'fresh';
             }
         } catch {
@@ -283,6 +288,11 @@ export function createSetupController(root = document, dependencyOverrides = {})
         csrfToken = await getCsrfToken();
 
         const mode = await getSetupMode();
+        if (mode === 'complete') {
+            dependencies.redirect('/login');
+            return;
+        }
+
         if (mode === 'set-password') {
             applySetPasswordMode();
         }

@@ -190,6 +190,8 @@ rateLimiting:
   accountsLoginMaxAttempts: 5
   # Duration of the account lockout window in seconds after too many failed login attempts.
   accountsLoginLockoutDuration: 300
+  # Set the maximum number of allowed first-time setup attempts before rate limiting is applied. Set to 0 to disable rate limiting for setup.
+  accountsSetupMaxAttempts: 5
   # Set the maximum number of allowed failed account recovery attempts before rate limiting is applied. Set to 0 to disable rate limiting for account recovery.
   accountsRecoverMaxAttempts: 5
 # Set to true to enable support for real IPs in certain request headers for features like IP whitelisting, rate limiting and access logging.

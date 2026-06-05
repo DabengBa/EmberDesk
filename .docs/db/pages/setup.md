@@ -56,7 +56,7 @@ The page does not allow passwordless accounts. In `fresh` mode, both handle and 
 
 | Key | Default | Effect |
 |---|---|---|
-| `enableUserAccounts` | `true` | Activates the setup page. Without this, EmberDesk skips authentication and the setup page is never shown. |
+| `enableUserAccounts` | `true` in the default config; omitted keys fall back to `false` for legacy deployments | Activates the setup page. Without this, EmberDesk skips authentication and the setup page is never shown. |
 
 ## Behavioral Notes
 

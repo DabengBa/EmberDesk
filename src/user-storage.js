@@ -14,7 +14,7 @@ let _enableAccounts;
  */
 export function getEnableAccounts() {
     if (_enableAccounts === undefined) {
-        _enableAccounts = getConfigValue('enableUserAccounts', true, 'boolean');
+        _enableAccounts = getConfigValue('enableUserAccounts', false, 'boolean');
     }
     return _enableAccounts;
 }

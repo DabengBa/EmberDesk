@@ -162,6 +162,7 @@ describe('setup page controller helpers', () => {
 
         expect(getSetupErrorMessage('Setup already completed')).toBe('设置已完成，请直接登录。');
         expect(getSetupErrorMessage('Missing required fields')).toBe('请填写必填项');
+        expect(getSetupErrorMessage('Password must be at least 8 characters long')).toBe('密码至少需要 8 个字符');
         expect(getSetupErrorMessage('Invalid handle')).toBe('用户名格式不正确');
         expect(getSetupErrorMessage('User already exists')).toBe('该用户名已被占用');
         expect(getSetupErrorMessage(undefined)).toBe('发生错误，请稍后重试');
@@ -407,17 +408,14 @@ describe('setup page controller helpers', () => {
 
     test('redirects to login when setup has already completed', async () => {
         const { initSetupPage } = await importFreshSetupModule();
-        const { root, elements } = createSetupRoot();
+        const { root } = createSetupRoot();
         const redirectMock = jest.fn();
         const fetchMock = jest.fn(async (url) => {
             if (url === '/csrf-token') {
                 return jsonResponse({ token: 'csrf-token' });
             }
             if (url === '/api/users/setup-mode') {
-                return jsonResponse({ mode: 'fresh' });
-            }
-            if (url === '/api/users/setup') {
-                return jsonResponse({ error: 'Setup already completed' }, { ok: false, status: 403 });
+                return jsonResponse({ mode: 'complete' });
             }
             throw new Error(`Unexpected fetch: ${url}`);
         });
@@ -427,13 +425,9 @@ describe('setup page controller helpers', () => {
             redirect: redirectMock,
             initAccessibility: () => {},
         });
-        elements.handle.value = 'admin';
-        elements.password.value = 'secret';
-        elements.confirmPassword.value = 'secret';
-
-        await elements.setupForm.submit();
 
         expect(redirectMock).toHaveBeenCalledWith('/login');
+        expect(fetchMock).toHaveBeenCalledTimes(2);
 
         cleanup();
     });

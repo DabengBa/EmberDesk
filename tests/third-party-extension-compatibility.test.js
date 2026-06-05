@@ -50,6 +50,9 @@ const tavernHelperCriticalEvents = {
     PRESET_DELETED: 'preset_deleted',
     PRESET_RENAMED_BEFORE: 'preset_renamed_before',
     SETTINGS_UPDATED: 'settings_updated',
+    TTS_AUDIO_READY: 'tts_audio_ready',
+    TTS_JOB_COMPLETE: 'tts_job_complete',
+    TTS_JOB_STARTED: 'tts_job_started',
     USER_MESSAGE_RENDERED: 'user_message_rendered',
 };
 

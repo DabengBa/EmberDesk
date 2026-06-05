@@ -15,7 +15,7 @@ import { getConfigValue, safeReadFileSync } from '../util.js';
 import { getIpAddress, retryAfter } from '../express-common.js';
 
 const PER_USER_BASIC_AUTH = !!getConfigValue('perUserBasicAuth', false, 'boolean');
-const ENABLE_ACCOUNTS = !!getConfigValue('enableUserAccounts', true, 'boolean');
+const ENABLE_ACCOUNTS = !!getConfigValue('enableUserAccounts', false, 'boolean');
 const PREFER_REAL_IP_HEADER = !!getConfigValue('rateLimiting.preferRealIpHeader', false, 'boolean');
 const BASIC_AUTH_ATTEMPTS = getConfigValue('rateLimiting.basicAuthMaxAttempts', 5, 'number');
 

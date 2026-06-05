@@ -68,6 +68,30 @@ describe('world info card rendering', () => {
         expect(createCardSource).not.toContain('if (built) return;');
     });
 
+    test('legacy getWorldEntry export returns a populated edit form', () => {
+        const source = read('public/scripts/world-info.js');
+        const entryStart = source.indexOf('export async function getWorldEntry');
+        const entryEnd = source.indexOf('export function createWorldEntryCard', entryStart);
+        const entrySource = source.slice(entryStart, entryEnd);
+
+        expect(entryStart).toBeGreaterThanOrEqual(0);
+        expect(entryEnd).toBeGreaterThan(entryStart);
+        expect(entrySource).toContain('const editTemplate = WI_ENTRY_EDIT_TEMPLATE.clone();');
+        expect(entrySource).toContain('setupEditFormBindings(editTemplate, outlet, name, data, entry);');
+        expect(entrySource).toContain('initAccordionState(outlet);');
+    });
+
+    test('more menu opener and items support keyboard operation', () => {
+        const panelHtml = read('public/panels/world-info-body.html');
+        const source = read('public/scripts/world-info.js');
+
+        expect(panelHtml).toContain('id="world_more_menu" class="menu_button fa-solid fa-ellipsis" role="button" tabindex="0"');
+        expect(source).toContain('keydown.worldMoreMenuToggle');
+        expect(source).toContain('e.key === \'Escape\'');
+        expect(source).toContain('closeMoreMenu({ restoreFocus: true })');
+        expect(source).toContain('keydown.worldMoreMenuItem');
+    });
+
     test('entry template exposes the collapsed card shell before edit controls', () => {
         const indexHtml = read('public/index.html');
         const templateStart = indexHtml.indexOf('<div id="entry_edit_template" class="template_element">');

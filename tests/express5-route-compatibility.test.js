@@ -131,52 +131,78 @@ describe('Express 5 route compatibility', () => {
     });
 
     test('CORS proxy route captures the full target URL and disabled mode remains 404', async () => {
+        const originalPrivateWhitelistEnabled = process.env.EMBERDESK_PRIVATEADDRESSWHITELIST_ENABLED;
+        const originalPrivateWhitelistRanges = process.env.EMBERDESK_PRIVATEADDRESSWHITELIST_ALLOWEDRANGES;
         const upstream = express();
         upstream.all('/a/b', (request, response) => {
             response.type('text/plain').send(`proxied ${request.query.x}`);
         });
 
-        await usingApp(upstream, async (upstreamUrl) => {
-            const enabledApp = express();
-            enabledApp.use(CORS_PROXY_ROUTE, corsProxyMiddleware);
+        try {
+            await usingApp(upstream, async (upstreamUrl) => {
+                const blockedApp = express();
+                blockedApp.use(CORS_PROXY_ROUTE, corsProxyMiddleware);
+                await usingApp(blockedApp, async (url) => {
+                    const blockedPrivateTarget = await fetch(`${url}/proxy/${upstreamUrl}/a/b?x=1`);
+                    expect(blockedPrivateTarget.status).toBe(403);
+                    expect(await blockedPrivateTarget.text()).toContain('CORS proxy target is not allowed');
+                });
 
-            await usingApp(enabledApp, async (url) => {
-                const response = await fetch(`${url}/proxy/${upstreamUrl}/a/b?x=1`);
-                expect(response.status).toBe(200);
-                expect(await response.text()).toBe('proxied 1');
+                process.env.EMBERDESK_PRIVATEADDRESSWHITELIST_ENABLED = 'true';
+                process.env.EMBERDESK_PRIVATEADDRESSWHITELIST_ALLOWEDRANGES = JSON.stringify(['127.0.0.0/8']);
 
-                const circular = await fetch(`${url}/proxy/${url}/loop`);
-                expect(circular.status).toBe(400);
-                expect(await circular.text()).toContain('Circular requests are not allowed');
+                const enabledApp = express();
+                enabledApp.use(CORS_PROXY_ROUTE, corsProxyMiddleware);
 
-                const usernameBypass = await fetch(`${url}/proxy/http://example.test@127.0.0.1:${new URL(url).port}/loop`);
-                expect(usernameBypass.status).toBe(400);
-                expect(await usernameBypass.text()).toContain('Circular requests are not allowed');
+                await usingApp(enabledApp, async (url) => {
+                    const response = await fetch(`${url}/proxy/${upstreamUrl}/a/b?x=1`);
+                    expect(response.status).toBe(200);
+                    expect(await response.text()).toBe('proxied 1');
 
-                const encodedHost = await fetch(`${url}/proxy/http://%31%32%37.0.0.1:${new URL(url).port}/loop`);
-                expect(encodedHost.status).toBe(400);
-                expect(await encodedHost.text()).toContain('Circular requests are not allowed');
+                    const circular = await fetch(`${url}/proxy/${url}/loop`);
+                    expect(circular.status).toBe(400);
+                    expect(await circular.text()).toContain('Circular requests are not allowed');
 
-                const invalidTarget = await fetch(`${url}/proxy/http://example.test%40127.0.0.1:${new URL(url).port}/loop`);
-                expect(invalidTarget.status).toBe(400);
-                expect(await invalidTarget.text()).toContain('Invalid CORS proxy target URL');
+                    const usernameBypass = await fetch(`${url}/proxy/http://example.test@127.0.0.1:${new URL(url).port}/loop`);
+                    expect(usernameBypass.status).toBe(400);
+                    expect(await usernameBypass.text()).toContain('Circular requests are not allowed');
+
+                    const encodedHost = await fetch(`${url}/proxy/http://%31%32%37.0.0.1:${new URL(url).port}/loop`);
+                    expect(encodedHost.status).toBe(400);
+                    expect(await encodedHost.text()).toContain('Circular requests are not allowed');
+
+                    const invalidTarget = await fetch(`${url}/proxy/http://example.test%40127.0.0.1:${new URL(url).port}/loop`);
+                    expect(invalidTarget.status).toBe(400);
+                    expect(await invalidTarget.text()).toContain('Invalid CORS proxy target URL');
+                });
             });
-        });
 
-        const encodedUpstream = express();
-        encodedUpstream.all('/encoded/*tail', (request, response) => {
-            response.type('text/plain').send(request.originalUrl);
-        });
-        await usingApp(encodedUpstream, async (upstreamUrl) => {
-            const enabledApp = express();
-            enabledApp.use(CORS_PROXY_ROUTE, corsProxyMiddleware);
-
-            await usingApp(enabledApp, async (url) => {
-                const response = await fetch(`${url}/proxy/${upstreamUrl}/encoded/a%252Fb?x=1`);
-                expect(response.status).toBe(200);
-                expect(await response.text()).toBe('/encoded/a%252Fb?x=1');
+            const encodedUpstream = express();
+            encodedUpstream.all('/encoded/*tail', (request, response) => {
+                response.type('text/plain').send(request.originalUrl);
             });
-        });
+            await usingApp(encodedUpstream, async (upstreamUrl) => {
+                const enabledApp = express();
+                enabledApp.use(CORS_PROXY_ROUTE, corsProxyMiddleware);
+
+                await usingApp(enabledApp, async (url) => {
+                    const response = await fetch(`${url}/proxy/${upstreamUrl}/encoded/a%252Fb?x=1`);
+                    expect(response.status).toBe(200);
+                    expect(await response.text()).toBe('/encoded/a%252Fb?x=1');
+                });
+            });
+        } finally {
+            if (originalPrivateWhitelistEnabled === undefined) {
+                delete process.env.EMBERDESK_PRIVATEADDRESSWHITELIST_ENABLED;
+            } else {
+                process.env.EMBERDESK_PRIVATEADDRESSWHITELIST_ENABLED = originalPrivateWhitelistEnabled;
+            }
+            if (originalPrivateWhitelistRanges === undefined) {
+                delete process.env.EMBERDESK_PRIVATEADDRESSWHITELIST_ALLOWEDRANGES;
+            } else {
+                process.env.EMBERDESK_PRIVATEADDRESSWHITELIST_ALLOWEDRANGES = originalPrivateWhitelistRanges;
+            }
+        }
 
         const disabledApp = express();
         disabledApp.use(CORS_PROXY_ROUTE, disabledCorsProxyMiddleware);

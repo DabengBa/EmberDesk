@@ -1397,8 +1397,9 @@ async function applyCharacterListPageRenderPlan({ listElement, renderPlan, befor
         desiredElements.push((await getHiddenBlock(renderPlan.hiddenCount))[0]);
     }
 
+    const desiredElementSet = new Set(desiredElements);
     for (const child of Array.from(listElement.children)) {
-        if (!desiredElements.includes(child)) {
+        if (!desiredElementSet.has(child)) {
             child.remove();
         }
     }
@@ -11540,7 +11541,6 @@ function initCharacterSearch() {
     });
 }
 
-// MARK: DOM Handlers Start
 async function measureCharacterSearchForPerf(query) {
     const listElement = document.querySelector('#rm_print_characters_block');
     if (!listElement) {
@@ -11605,6 +11605,7 @@ async function measureCharacterSearchForPerf(query) {
     };
 }
 
+// MARK: DOM Handlers Start
 jQuery(async function () {
     setTimeout(function () {
         $('#groupControlsToggle').trigger('click');

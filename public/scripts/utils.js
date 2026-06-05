@@ -15,7 +15,7 @@ import { Popup, POPUP_RESULT, POPUP_TYPE } from './popup.js';
 import { SlashCommandClosure } from './slash-commands/SlashCommandClosure.js';
 import { getTagsList } from './tags.js';
 import { groups, selected_group } from './group-chats.js';
-import { getCurrentLocale, t } from './i18n.js';
+import { getCurrentLocale, t, translate } from './i18n.js';
 import { importWorldInfo } from './world-info.js';
 
 export const shiftUpByOne = (e, i, a) => a[i] = e + 1;
@@ -504,7 +504,13 @@ export async function parseJsonFile(file) {
     return new Promise((resolve, reject) => {
         const fileReader = new FileReader();
         fileReader.readAsText(file);
-        fileReader.onload = event => resolve(JSON.parse(String(event.target.result)));
+        fileReader.onload = event => {
+            try {
+                resolve(JSON.parse(String(event.target.result)));
+            } catch (error) {
+                reject(error);
+            }
+        };
         fileReader.onerror = error => reject(error);
     });
 }
@@ -2439,13 +2445,19 @@ export async function checkOverwriteExistingData(type, existingNames, name, { in
         return true;
     }
 
-    const overwrite = interactive && await Popup.show.confirm(`${type} ${actionName}`, `<p>A ${type.toLowerCase()} with the same name already exists:<br />${escapeHtml(existing)}</p>${contextHtml ?? ''}<p>Do you want to overwrite it?</p>`, confirmOptions);
+    const typeLabel = translate(type);
+    const actionLabel = translate(actionName);
+    const actionLabelLower = actionLabel.toLocaleLowerCase();
+    const actionTitle = `${type} ${actionName}`;
+    const translatedActionTitle = translate(actionTitle);
+    const title = translatedActionTitle === actionTitle ? `${typeLabel} ${actionLabel}` : translatedActionTitle;
+    const overwrite = interactive && await Popup.show.confirm(title, `<p>${t`A ${typeLabel} with the same name already exists:`}<br />${escapeHtml(existing)}</p>${contextHtml ?? ''}<p>${t`Do you want to overwrite it?`}</p>`, confirmOptions);
     if (!overwrite) {
-        toastr.warning(`${type} ${actionName.toLowerCase()} cancelled. A ${type.toLowerCase()} with the same name already exists:<br />${escapeHtml(existing)}`, `${type} ${actionName}`, { escapeHtml: false });
+        toastr.warning(`${t`${typeLabel} ${actionLabelLower} cancelled. A ${typeLabel} with the same name already exists:`}<br />${escapeHtml(existing)}`, title, { escapeHtml: false });
         return false;
     }
 
-    toastr.info(`Overwriting Existing ${type}:<br />${escapeHtml(existing)}`, `${type} ${actionName}`, { escapeHtml: false });
+    toastr.info(`${t`Overwriting Existing ${typeLabel}:`}<br />${escapeHtml(existing)}`, title, { escapeHtml: false });
 
     // If there is an action to delete the existing data, do it, as the name might be slightly different so file name would not be the same
     if (deleteAction) {

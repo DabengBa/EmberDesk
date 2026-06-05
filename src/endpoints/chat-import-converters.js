@@ -101,7 +101,7 @@ export function importCAIChat(userName, characterName, jsonData) {
         return [starter, ...historyData];
     }
 
-    const newChats = (jsonData.histories.histories ?? []).map(history => newChats.push(convert(history).map(obj => JSON.stringify(obj)).join('\n')));
+    const newChats = (jsonData.histories.histories ?? []).map(history => convert(history).map(obj => JSON.stringify(obj)).join('\n'));
     return newChats;
 }
 
@@ -129,8 +129,8 @@ export function importKoboldLiteChat(_userName, _characterName, data) {
     }
 
     // Create the header
-    const userName = String(data.savedsettings.chatname);
-    const characterName = String(data.savedsettings.chatopponent).split('||$||')[0];
+    const userName = String(data.savedsettings?.chatname ?? _userName);
+    const characterName = String(data.savedsettings?.chatopponent ?? _characterName).split('||$||')[0];
     const header = {
         chat_metadata: {},
         user_name: 'unused',

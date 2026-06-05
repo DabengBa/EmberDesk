@@ -154,6 +154,7 @@ describe('login page controller helpers', () => {
 
         expect(getLoginErrorMessage('Incorrect credentials')).toBe('账号或密码不正确');
         expect(getLoginErrorMessage('User is disabled')).toBe('此账号已被禁用');
+        expect(getLoginErrorMessage('Password must be at least 8 characters long')).toBe('密码至少需要 8 个字符');
         expect(getLoginErrorMessage(undefined)).toBe('发生错误，请稍后重试');
         expect(getLoginErrorMessage('Custom server text')).toBe('Custom server text');
     });

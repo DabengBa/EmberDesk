@@ -40,4 +40,24 @@ describe('settings cache invalidation', () => {
         })).resolves.toEqual({ revision: 'fresh' });
         expect(calls).toBe(2);
     });
+
+    test('rebuilds cached payloads after the TTL expires', async () => {
+        const {
+            getCachedPayload,
+        } = await import('../src/endpoints/settings-cache.js');
+
+        let calls = 0;
+        await expect(getCachedPayload('/tmp/themes', async () => {
+            calls++;
+            return { revision: calls };
+        }, { ttlMs: 1 })).resolves.toEqual({ revision: 1 });
+
+        await new Promise(resolve => setTimeout(resolve, 5));
+
+        await expect(getCachedPayload('/tmp/themes', async () => {
+            calls++;
+            return { revision: calls };
+        }, { ttlMs: 1 })).resolves.toEqual({ revision: 2 });
+        expect(calls).toBe(2);
+    });
 });

@@ -32,12 +32,21 @@ const privateIpRanges = [
 ];
 
 /**
+ * Checks whether an IP address belongs to a private or loopback range.
+ * @param {string} address IP address
+ * @returns {boolean} Whether the address is private
+ */
+export function isPrivateIpAddress(address) {
+    return privateIpRanges.some(range => range.matches(address));
+}
+
+/**
  * Custom HTTP/HTTPS agent that blocks requests to private IP addresses unless they are explicitly allowed in the private address whitelist.
  * This is used to prevent Server-Side Request Forgery (SSRF) attacks by ensuring that the server cannot make requests to internal services or resources that are not intended to be exposed.
  * The agent checks if the target host resolves to a private IP address and blocks the request if it does, unless the IP address is included in the private address whitelist.
  * The private address whitelist can contain specific IP addresses or CIDR ranges that are allowed to be accessed even if they fall within private IP ranges.
  */
-class PrivateRequestAgent extends Agent {
+export class PrivateRequestAgent extends Agent {
     /**
      * List of private IP addresses or CIDR ranges to allow
      * @type {Readonly<import('ip-matching').IPMatch[]>}
@@ -80,15 +89,6 @@ class PrivateRequestAgent extends Agent {
         this.allowUnresolvedHosts = options.allowUnresolvedHosts;
         this.logBlocked = options.logBlocked;
         this.logAllowed = options.logAllowed;
-    }
-
-    /**
-     * Check if the given address is a private IP address.
-     * @param {string} address The IP address to check.
-     * @returns {boolean} Whether the given address is a private IP address.
-     */
-    #isPrivateIp(address) {
-        return privateIpRanges.some(range => range.matches(address));
     }
 
     /**
@@ -142,7 +142,7 @@ class PrivateRequestAgent extends Agent {
          */
         const validateIpAddress = (ip) => {
             // Not a private IP address, allow the request
-            if (!this.#isPrivateIp(ip)) {
+            if (!isPrivateIpAddress(ip)) {
                 return connect(ip);
             }
 

@@ -69,16 +69,20 @@ const audioSupportedModels = [
     'gpt-realtime',
 ];
 
+const excludedOpenAiVisionModels = [
+    'gpt-4-turbo-preview',
+    'o1-mini',
+    'o3-mini',
+];
+
 function includesAnyModel(model, candidates) {
     return candidates.some(candidate => String(model ?? '').includes(candidate));
 }
 
 function openAiVisionModelMatchesCurrentRule(model) {
     const modelToCheck = String(model ?? '');
-    return visionSupportedModels.some(candidate =>
-        modelToCheck.includes(candidate)
-        && ['gpt-4-turbo-preview', 'o1-mini', 'o3-mini'].some(excluded => !modelToCheck.includes(excluded)),
-    );
+    return includesAnyModel(modelToCheck, visionSupportedModels)
+        && !includesAnyModel(modelToCheck, excludedOpenAiVisionModels);
 }
 
 export function getChatCompletionModelFromSettings(settings = {}) {

@@ -63,3 +63,4 @@ test-results/
 .playwright-cli/
 .tmp/
 config.dev-local.yaml
+.docs/audit.md

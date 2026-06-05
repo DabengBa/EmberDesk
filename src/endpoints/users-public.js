@@ -16,10 +16,30 @@ const DISCREET_LOGIN = getConfigValue('enableDiscreetLogin', false, 'boolean');
 const PREFER_REAL_IP_HEADER = getConfigValue('rateLimiting.preferRealIpHeader', false, 'boolean');
 const LOGIN_POINTS = getConfigValue('rateLimiting.accountsLoginMaxAttempts', 5, 'number');
 const RECOVER_POINTS = getConfigValue('rateLimiting.accountsRecoverMaxAttempts', 5, 'number');
+const SETUP_POINTS = getConfigValue('rateLimiting.accountsSetupMaxAttempts', LOGIN_POINTS, 'number');
 const LOCKOUT_DURATION = getConfigValue('rateLimiting.accountsLoginLockoutDuration', 300, 'number');
 const MFA_CACHE = new Cache(5 * 60 * 1000);
+let setupQueue = Promise.resolve();
+const MIN_PASSWORD_LENGTH = 8;
 
 const generateRecoveryCode = () => Array.from({ length: 6 }, () => crypto.randomInt(0, 10)).join('');
+
+/**
+ * Validates a password accepted by public setup/recovery flows.
+ * @param {unknown} password Password candidate
+ * @returns {{ valid: true } | { valid: false, error: string }}
+ */
+function validatePublicPassword(password) {
+    if (typeof password !== 'string' || password.length === 0) {
+        return { valid: false, error: 'Missing required fields' };
+    }
+
+    if (password.length < MIN_PASSWORD_LENGTH) {
+        return { valid: false, error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters long` };
+    }
+
+    return { valid: true };
+}
 
 export const router = express.Router();
 const loginLimiter = new RateLimiterMemory({
@@ -35,6 +55,27 @@ const recoverLimiter = new RateLimiterMemory({
     points: RECOVER_POINTS > 0 ? RECOVER_POINTS : Number.MAX_SAFE_INTEGER,
     duration: 300,
 });
+const setupLimiter = new RateLimiterMemory({
+    points: SETUP_POINTS > 0 ? SETUP_POINTS : Number.MAX_SAFE_INTEGER,
+    duration: 300,
+    keyPrefix: 'setup:',
+});
+
+async function withSetupLock(callback) {
+    const previous = setupQueue;
+    let release = () => {};
+    setupQueue = new Promise(resolve => {
+        release = resolve;
+    });
+
+    await previous;
+
+    try {
+        return await callback();
+    } finally {
+        release();
+    }
+}
 
 router.post('/list', async (_request, response) => {
     try {
@@ -208,14 +249,16 @@ router.post('/recover-step2', async (request, response) => {
             return response.status(403).json({ error: 'Incorrect code' });
         }
 
+        const passwordValidation = validatePublicPassword(request.body.newPassword);
+        if (!passwordValidation.valid) {
+            console.warn('Recover step 2 failed:', passwordValidation.error);
+            return response.status(400).json({ error: passwordValidation.error });
+        }
+
         if (request.body.newPassword) {
             const salt = getPasswordSalt();
             user.password = getPasswordHash(request.body.newPassword, salt);
             user.salt = salt;
-            await storage.setItem(toKey(user.handle), user);
-        } else {
-            user.password = '';
-            user.salt = '';
             await storage.setItem(toKey(user.handle), user);
         }
 
@@ -248,6 +291,10 @@ function slugify(text) {
 
 router.get('/setup-mode', async (_request, response) => {
     try {
+        if (!(await needsSetup())) {
+            return response.json({ mode: 'complete' });
+        }
+
         const handles = await getAllUserHandles();
         if (handles.length === 1) {
             const user = await storage.getItem(toKey(handles[0]));
@@ -264,85 +311,99 @@ router.get('/setup-mode', async (_request, response) => {
 
 router.post('/setup', async (request, response) => {
     try {
-        if (!(await needsSetup())) {
-            console.warn('Setup rejected: already completed');
-            return response.status(403).json({ error: 'Setup already completed' });
-        }
-
-        if (!request.body.password) {
-            console.warn('Setup failed: Missing password');
-            return response.status(400).json({ error: 'Missing required fields' });
-        }
-
-        // Mode 1: Existing passwordless user — set password only
-        const handles = await getAllUserHandles();
-        if (handles.length === 1) {
-            const user = await storage.getItem(toKey(handles[0]));
-            if (user && !user.password) {
-                const salt = getPasswordSalt();
-                user.password = getPasswordHash(request.body.password, salt);
-                user.salt = salt;
-                await storage.setItem(toKey(user.handle), user);
-
-                if (!request.session) {
-                    console.error('Session not available');
-                    return response.sendStatus(500);
-                }
-
-                request.session.handle = user.handle;
-                request.session.version = getAccountVersion(user);
-                console.info('Password set for existing user:', user.handle);
-                return response.json({ handle: user.handle });
+        const ip = getIpAddress(request, PREFER_REAL_IP_HEADER);
+        try {
+            await setupLimiter.consume(ip);
+        } catch (error) {
+            if (error instanceof RateLimiterRes) {
+                console.error('Setup failed: Rate limited from', ip);
+                return retryAfter(response, error).status(429).send({ error: 'Too many setup attempts. Try again later.' });
             }
+            throw error;
         }
 
-        // Mode 2: Fresh deploy — create new admin account
-        if (!request.body.handle) {
-            console.warn('Setup failed: Missing required fields');
-            return response.status(400).json({ error: 'Missing required fields' });
-        }
+        return await withSetupLock(async () => {
+            if (!(await needsSetup())) {
+                console.warn('Setup rejected: already completed');
+                return response.status(403).json({ error: 'Setup already completed' });
+            }
 
-        const handle = slugify(request.body.handle);
+            const passwordValidation = validatePublicPassword(request.body.password);
+            if (!passwordValidation.valid) {
+                console.warn('Setup failed:', passwordValidation.error);
+                return response.status(400).json({ error: passwordValidation.error });
+            }
 
-        if (!handle) {
-            console.warn('Setup failed: Invalid handle');
-            return response.status(400).json({ error: 'Invalid handle' });
-        }
+            // Mode 1: Existing passwordless user — set password only
+            const handles = await getAllUserHandles();
+            if (handles.length === 1) {
+                const user = await storage.getItem(toKey(handles[0]));
+                if (user && !user.password) {
+                    const salt = getPasswordSalt();
+                    user.password = getPasswordHash(request.body.password, salt);
+                    user.salt = salt;
+                    await storage.setItem(toKey(user.handle), user);
 
-        if (handles.some(x => x === handle)) {
-            console.warn('Setup failed: User already exists');
-            return response.status(409).json({ error: 'User already exists' });
-        }
+                    if (!request.session) {
+                        console.error('Session not available');
+                        return response.sendStatus(500);
+                    }
 
-        const salt = getPasswordSalt();
-        const password = getPasswordHash(request.body.password, salt);
+                    request.session.handle = user.handle;
+                    request.session.version = getAccountVersion(user);
+                    console.info('Password set for existing user:', user.handle);
+                    return response.json({ handle: user.handle });
+                }
+            }
 
-        const newUser = {
-            handle: handle,
-            name: request.body.name || handle,
-            created: Date.now(),
-            password: password,
-            salt: salt,
-            admin: true,
-            enabled: true,
-        };
+            // Mode 2: Fresh deploy — create new admin account
+            if (!request.body.handle) {
+                console.warn('Setup failed: Missing required fields');
+                return response.status(400).json({ error: 'Missing required fields' });
+            }
 
-        await storage.setItem(toKey(handle), newUser);
+            const handle = slugify(request.body.handle);
 
-        console.info('Creating data directories for', newUser.handle);
-        await ensurePublicDirectoriesExist();
-        const directories = getUserDirectories(newUser.handle);
-        await checkForNewContent([directories], [CONTENT_TYPES.SETTINGS]);
+            if (!handle) {
+                console.warn('Setup failed: Invalid handle');
+                return response.status(400).json({ error: 'Invalid handle' });
+            }
 
-        if (!request.session) {
-            console.error('Session not available');
-            return response.sendStatus(500);
-        }
+            if (handles.some(x => x === handle)) {
+                console.warn('Setup failed: User already exists');
+                return response.status(409).json({ error: 'User already exists' });
+            }
 
-        request.session.handle = newUser.handle;
-        request.session.version = getAccountVersion(newUser);
-        console.info('Setup completed for admin:', newUser.handle);
-        return response.json({ handle: newUser.handle });
+            const salt = getPasswordSalt();
+            const password = getPasswordHash(request.body.password, salt);
+
+            const newUser = {
+                handle: handle,
+                name: request.body.name || handle,
+                created: Date.now(),
+                password: password,
+                salt: salt,
+                admin: true,
+                enabled: true,
+            };
+
+            await storage.setItem(toKey(handle), newUser);
+
+            console.info('Creating data directories for', newUser.handle);
+            await ensurePublicDirectoriesExist();
+            const directories = getUserDirectories(newUser.handle);
+            await checkForNewContent([directories], [CONTENT_TYPES.SETTINGS]);
+
+            if (!request.session) {
+                console.error('Session not available');
+                return response.sendStatus(500);
+            }
+
+            request.session.handle = newUser.handle;
+            request.session.version = getAccountVersion(newUser);
+            console.info('Setup completed for admin:', newUser.handle);
+            return response.json({ handle: newUser.handle });
+        });
     } catch (error) {
         console.error('Setup failed:', error);
         return response.sendStatus(500);

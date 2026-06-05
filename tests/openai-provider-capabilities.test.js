@@ -20,7 +20,7 @@ const SOURCES = {
 function settings(overrides = {}) {
     return {
         chat_completion_source: SOURCES.OPENAI,
-        openai_model: 'gpt-5.4',
+        openai_model: 'gpt-5.2',
         claude_model: 'claude-sonnet-4',
         google_model: 'gemini-2.5-pro',
         reasoning_effort: 'high',
@@ -36,7 +36,7 @@ describe('OpenAI provider capability helpers', () => {
 
         expect(descriptor).toEqual({
             source: SOURCES.OPENAI,
-            model: 'gpt-5.4',
+            model: 'gpt-5.2',
             capabilities: {
                 vision: true,
                 video: false,
@@ -49,7 +49,7 @@ describe('OpenAI provider capability helpers', () => {
     });
 
     test('keeps provider-specific model selection compatible with current settings', () => {
-        expect(getChatCompletionModelFromSettings(settings({ chat_completion_source: SOURCES.OPENAI }))).toBe('gpt-5.4');
+        expect(getChatCompletionModelFromSettings(settings({ chat_completion_source: SOURCES.OPENAI }))).toBe('gpt-5.2');
         expect(getChatCompletionModelFromSettings(settings({ chat_completion_source: SOURCES.CLAUDE }))).toBe('claude-sonnet-4');
         expect(getChatCompletionModelFromSettings(settings({ chat_completion_source: SOURCES.MAKERSUITE }))).toBe('gemini-2.5-pro');
         expect(getChatCompletionModelFromSettings(settings({ chat_completion_source: SOURCES.VERTEXAI }))).toBe('gemini-2.5-pro');
@@ -57,14 +57,14 @@ describe('OpenAI provider capability helpers', () => {
     });
 
     test('resolves current reasoning effort aliases and official OpenAI effort values', () => {
-        expect(resolveReasoningEffort(settings({ reasoning_effort: 'auto' }), 'gpt-5.4')).toBeUndefined();
-        expect(resolveReasoningEffort(settings({ reasoning_effort: 'min' }), 'gpt-5.4')).toBe('none');
+        expect(resolveReasoningEffort(settings({ reasoning_effort: 'auto' }), 'gpt-5.2')).toBeUndefined();
+        expect(resolveReasoningEffort(settings({ reasoning_effort: 'min' }), 'gpt-5.5-2026-04-23')).toBe('none');
         expect(resolveReasoningEffort(settings({ reasoning_effort: 'min' }), 'gpt-5')).toBe('min');
         expect(resolveReasoningEffort(settings({ reasoning_effort: 'min' }), 'gpt-4o')).toBe('low');
-        expect(resolveReasoningEffort(settings({ reasoning_effort: 'max' }), 'gpt-5.4')).toBe('high');
-        expect(resolveReasoningEffort(settings({ reasoning_effort: 'none' }), 'gpt-5.4')).toBe('none');
-        expect(resolveReasoningEffort(settings({ reasoning_effort: 'minimal' }), 'gpt-5.4')).toBe('minimal');
-        expect(resolveReasoningEffort(settings({ reasoning_effort: 'xhigh' }), 'gpt-5.4')).toBe('xhigh');
+        expect(resolveReasoningEffort(settings({ reasoning_effort: 'max' }), 'gpt-5.2')).toBe('high');
+        expect(resolveReasoningEffort(settings({ reasoning_effort: 'none' }), 'gpt-5.2')).toBe('none');
+        expect(resolveReasoningEffort(settings({ reasoning_effort: 'minimal' }), 'gpt-5.2')).toBe('minimal');
+        expect(resolveReasoningEffort(settings({ reasoning_effort: 'xhigh' }), 'gpt-5.2')).toBe('xhigh');
     });
 
     test('passes through non-OpenAI reasoning effort behavior', () => {
@@ -89,7 +89,7 @@ describe('OpenAI provider capability helpers', () => {
         expect(isImageInliningSupportedForSettings(settings({ media_inlining: false }), { mainApi: 'openai' })).toBe(false);
         expect(isImageInliningSupportedForSettings(settings(), { mainApi: 'kobold' })).toBe(false);
         expect(isAudioInliningSupportedForSettings(settings({ openai_model: 'gpt-4o-mini-audio' }), { mainApi: 'openai' })).toBe(true);
-        expect(isVideoInliningSupportedForSettings(settings({ openai_model: 'gpt-5.4' }), { mainApi: 'openai' })).toBe(false);
+        expect(isVideoInliningSupportedForSettings(settings({ openai_model: 'gpt-5.2' }), { mainApi: 'openai' })).toBe(false);
     });
 
     test('keeps descriptor capabilities independent from the media inlining toggle', () => {
@@ -97,5 +97,14 @@ describe('OpenAI provider capability helpers', () => {
 
         expect(descriptor.capabilities.vision).toBe(true);
         expect(isImageInliningSupportedForSettings(settings({ media_inlining: false }), { mainApi: 'openai' })).toBe(false);
+    });
+
+    test('excludes OpenAI image models blocked by the current vision rule', () => {
+        for (const openai_model of ['gpt-4-turbo-preview', 'o1-mini', 'o3-mini']) {
+            const descriptor = resolveChatCompletionModel(settings({ openai_model }), { mainApi: 'openai' });
+
+            expect(descriptor.capabilities.vision).toBe(false);
+            expect(isImageInliningSupportedForSettings(settings({ openai_model }), { mainApi: 'openai' })).toBe(false);
+        }
     });
 });

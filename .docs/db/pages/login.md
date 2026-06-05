@@ -60,7 +60,7 @@ The login page does not expose a user list. The user must know their handle to l
 
 | Key | Default | Effect |
 |---|---|---|
-| `enableUserAccounts` | `true` | Activates the login page. Without this, EmberDesk skips authentication entirely. |
+| `enableUserAccounts` | `true` in the default config; omitted keys fall back to `false` for legacy deployments | Activates the login page. Without this, EmberDesk skips authentication entirely. |
 
 ### Optional
 
@@ -70,6 +70,7 @@ The login page does not expose a user list. The user must know their handle to l
 | `sessionTimeout` | `-1` | Session lifetime in seconds. `-1` = never expires, `0` = expires on browser close. |
 | `rateLimiting.accountsLoginMaxAttempts` | `5` | Failed login attempts before per-account lockout. `0` disables. |
 | `rateLimiting.accountsLoginLockoutDuration` | `300` | Lockout window in seconds (5 minutes). |
+| `rateLimiting.accountsSetupMaxAttempts` | `5` | First-time setup attempts before IP rate limiting. `0` disables. |
 | `rateLimiting.accountsRecoverMaxAttempts` | `5` | Failed recovery attempts before rate limiting. `0` disables. |
 | `rateLimiting.preferRealIpHeader` | `false` | Use forwarded IP headers for rate-limit tracking behind a reverse proxy. |
 | `disableCsrfProtection` | `false` | Disables CSRF token enforcement on login API. Not recommended. |

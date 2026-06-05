@@ -7,8 +7,8 @@ import _ from 'lodash';
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import { tryParse } from '../util.js';
 import { invalidateDirectory } from './settings-cache.js';
-import { findCharactersBoundToWorld, isCharacterIndexSupported } from './character-index.js';
-import { parse, write } from '../character-card-parser.js';
+import { deleteCharacterIndexEntry, findCharactersBoundToWorld, isCharacterIndexSupported } from './character-index.js';
+import { read, write } from '../character-card-parser.js';
 
 /**
  * Reads a World Info file and returns its contents
@@ -230,12 +230,17 @@ router.post('/delete-cascade', async (request, response) => {
 
                         try {
                             const imageBuffer = fs.readFileSync(charPath);
-                            const jsonString = await parse(charPath);
+                            const jsonString = read(imageBuffer);
                             const card = JSON.parse(jsonString);
                             if (card?.data?.extensions?.world === worldName) {
                                 card.data.extensions.world = '';
                                 const newBuffer = write(imageBuffer, JSON.stringify(card));
-                                fs.writeFileSync(charPath, newBuffer);
+                                writeFileAtomicSync(charPath, newBuffer);
+                                try {
+                                    deleteCharacterIndexEntry(directories.root, avatar);
+                                } catch (error) {
+                                    console.warn(`Character index delete skipped after world cascade for ${avatar}:`, error);
+                                }
                             }
                         } catch {
                             // Skip characters that can't be updated

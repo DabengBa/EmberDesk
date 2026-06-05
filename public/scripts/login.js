@@ -11,6 +11,7 @@ export const loginMessages = {
     missingFields: '请填写必填项',
     tooManyLoginAttempts: '尝试次数过多，请稍后重试或重置密码。',
     tooManyRecoveryAttempts: '尝试次数过多，请稍后重试或联系管理员。',
+    passwordTooShort: '密码至少需要 8 个字符',
     signingIn: '登录中...',
     showPassword: '显示密码',
     hidePassword: '隐藏密码',
@@ -22,6 +23,7 @@ const serverErrorMessages = new Map([
     ['User not found', loginMessages.userNotFound],
     ['Incorrect code', loginMessages.incorrectCode],
     ['Missing required fields', loginMessages.missingFields],
+    ['Password must be at least 8 characters long', loginMessages.passwordTooShort],
     ['Too many attempts. Try again later or recover your password.', loginMessages.tooManyLoginAttempts],
     ['Too many attempts. Try again later or contact your admin.', loginMessages.tooManyRecoveryAttempts],
 ]);

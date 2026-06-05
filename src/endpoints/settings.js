@@ -19,7 +19,7 @@ import {
 
 const ENABLE_EXTENSIONS = !!getConfigValue('extensions.enabled', true, 'boolean');
 const ENABLE_EXTENSIONS_AUTO_UPDATE = !!getConfigValue('extensions.autoUpdate', true, 'boolean');
-const ENABLE_ACCOUNTS = !!getConfigValue('enableUserAccounts', true, 'boolean');
+const ENABLE_ACCOUNTS = !!getConfigValue('enableUserAccounts', false, 'boolean');
 const ENABLE_REQUEST_COMPRESSION = !!getConfigValue('performance.requestCompression.enabled', false, 'boolean');
 const REQUEST_COMPRESSION_MIN = bytes.parse(getConfigValue('performance.requestCompression.minPayloadSize', '256kb'));
 const REQUEST_COMPRESSION_MAX = bytes.parse(getConfigValue('performance.requestCompression.maxPayloadSize', '8mb'));
@@ -179,6 +179,7 @@ router.post('/get', async (request, response) => {
         { fileContents: novelai_settings, fileNames: novelai_setting_names },
         { fileContents: openai_settings, fileNames: openai_setting_names },
         { fileContents: koboldai_settings, fileNames: koboldai_setting_names },
+        { fileContents: textgenerationwebui_presets, fileNames: textgenerationwebui_preset_names },
         world_names,
         themes,
         movingUIPresets,
@@ -191,6 +192,7 @@ router.post('/get', async (request, response) => {
         getCachedPayload(dirs.novelAI_Settings, () => readPresetsFromDirectoryAsync(dirs.novelAI_Settings, presetOpts(dirs.novelAI_Settings))),
         getCachedPayload(dirs.openAI_Settings, () => readPresetsFromDirectoryAsync(dirs.openAI_Settings, presetOpts(dirs.openAI_Settings))),
         getCachedPayload(dirs.koboldAI_Settings, () => readPresetsFromDirectoryAsync(dirs.koboldAI_Settings, presetOpts(dirs.koboldAI_Settings))),
+        getCachedPayload(dirs.textGen_Settings, () => readPresetsFromDirectoryAsync(dirs.textGen_Settings, presetOpts(dirs.textGen_Settings))),
         getCachedPayload(dirs.worlds, () => readWorldNamesAsync(dirs.worlds)),
         getCachedPayload(dirs.themes, () => readAndParseFromDirectoryAsync(dirs.themes)),
         getCachedPayload(dirs.movingUI, () => readAndParseFromDirectoryAsync(dirs.movingUI)),
@@ -205,6 +207,8 @@ router.post('/get', async (request, response) => {
         settings,
         koboldai_settings,
         koboldai_setting_names,
+        textgenerationwebui_presets,
+        textgenerationwebui_preset_names,
         world_names,
         novelai_settings,
         novelai_setting_names,

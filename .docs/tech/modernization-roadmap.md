@@ -322,6 +322,52 @@ Minimum validation:
 
 4. Update owning docs after each shipped slice, then record only shipped architecture evolution in `.docs/PROJECT_HISTORY.md`.
 
+## 10-Step Roadmap Closure Plan
+
+If the remaining modernization roadmap must close in exactly 10 shippable steps, use this order. Each step starts with a small `design.md`, runs through `delivery-workflow`, preserves compatibility proof, and records durable facts only after the slice is delivered.
+
+The independent design specs for these steps live in `.docs/specs/260605-02-character-route-service-extraction` through `.docs/specs/260605-11-roadmap-freeze-successor-decision`.
+
+1. Character route service extraction.
+   - Extract one deterministic helper or service boundary from `src/endpoints/characters.js`.
+   - Keep `/api/characters/all`, `/api/characters/get`, cache/index refresh, thumbnail side effects, path guards, and file-backed canonical storage stable.
+
+2. Character route performance proof.
+   - Run focused route/helper tests plus `interaction-performance-index.test.js` and the interaction performance runner where the slice claims latency impact.
+   - Record cold/warm state, Node version, data shape, and any degraded fallback.
+
+3. Chat route service extraction.
+   - Continue from delivered chat import and backup helper boundaries into one route-adjacent chat service slice.
+   - Preserve save, rename, delete, import, backup, and chat-stat dirty marking response shapes.
+
+4. Derived cache release hardening.
+   - Confirm SQLite sidecar status, fallback, reset threshold, and schema reset behavior across current character-index usage.
+   - Keep derived-cache corruption or unavailability recoverable through file-backed behavior.
+
+5. Low-risk frontend controller slice.
+   - Pick one non-extension, non-message-rendering panel or toolbar root and apply the login/setup controller pattern.
+   - Keep the main chat workspace, message rendering, slash-command parser, regex internals, and extension mount points out of scope.
+
+6. Compatibility hardening pass.
+   - Expand or refresh focused tests around protected character-list DOM identity, shared-library exports, regex placement values, slash-command surfaces, and `@sillytavern/*` import aliases.
+   - Treat any public-surface removal as a separate migration, not cleanup.
+
+7. Build and dependency closure.
+   - Keep Bun as package/script runner and Node as application runtime.
+   - Audit Webpack `/lib.js` boundary, oxlint fast-lane status, ESLint authority, and dependency drift without broad churn.
+
+8. Release validation sweep.
+   - Run the current release gate under Node.js 26.3.0: lint, tests lint, docs build/check, compatibility, focused startup/config, route-order, shared-library, user/auth/setup/login, and full unit suite.
+   - Run Playwright E2E only for release or UI slices where the route changed visible browser behavior.
+
+9. Documentation and topology closure.
+   - Remove stale process docs, keep only high-signal briefs, and ensure `.docs/PROJECT_HISTORY.md`, owning `.docs/tech/`, `.docs/adr/`, and `.docs/db/` docs agree.
+   - Run docs validation and inspect semantic topology for unresolved or orphaned nodes.
+
+10. Roadmap freeze and successor decision.
+    - Mark this modernization roadmap closed only after delivered slices, validation evidence, and durable docs agree.
+    - Move any remaining SPA, TypeScript, database-first, or broad endpoint split ideas into a successor roadmap or ADR-backed proposal instead of treating them as unfinished work in this roadmap.
+
 ## Non-Goals
 
 - No SPA migration in this roadmap.

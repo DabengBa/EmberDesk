@@ -7,7 +7,10 @@ import path from 'node:path';
  * Value: { payload, inflight }
  */
 
-/** @type {Map<string, { payload: any, inflight: Promise<any> | null }>} */
+const DEFAULT_CACHE_TTL_MS = 5_000;
+const MAX_CACHE_ENTRIES = 512;
+
+/** @type {Map<string, { payload: any, inflight: Promise<any> | null, timestamp: number }>} */
 const cache = new Map();
 /** @type {Map<string, number>} */
 const generations = new Map();
@@ -98,11 +101,13 @@ export async function readWorldNamesAsync(directoryPath) {
  * Concurrent callers for the same directory share one rebuild.
  * @param {string} dirPath  Absolute directory path
  * @param {() => Promise<any>} rebuild  Async function that produces the payload
+ * @param {{ ttlMs?: number }} [options] Cache options
  * @returns {Promise<any>}
  */
-export async function getCachedPayload(dirPath, rebuild) {
+export async function getCachedPayload(dirPath, rebuild, options = {}) {
+    const ttlMs = options.ttlMs ?? DEFAULT_CACHE_TTL_MS;
     const entry = cache.get(dirPath);
-    if (entry && entry.payload !== undefined) {
+    if (entry && entry.payload !== undefined && (ttlMs <= 0 || Date.now() - entry.timestamp < ttlMs)) {
         return entry.payload;
     }
 
@@ -117,7 +122,8 @@ export async function getCachedPayload(dirPath, rebuild) {
             const latestEntry = cache.get(dirPath);
             const latestGeneration = generations.get(dirPath) ?? 0;
             if (latestEntry?.inflight === promise && latestGeneration === generation) {
-                cache.set(dirPath, { payload, inflight: null });
+                cache.set(dirPath, { payload, inflight: null, timestamp: Date.now() });
+                pruneCache();
             }
             return payload;
         } catch (err) {
@@ -129,8 +135,15 @@ export async function getCachedPayload(dirPath, rebuild) {
         }
     })();
 
-    cache.set(dirPath, { payload: undefined, inflight: promise });
+    cache.set(dirPath, { payload: undefined, inflight: promise, timestamp: Date.now() });
     return promise;
+}
+
+function pruneCache() {
+    while (cache.size > MAX_CACHE_ENTRIES) {
+        const oldestKey = cache.keys().next().value;
+        cache.delete(oldestKey);
+    }
 }
 
 /**

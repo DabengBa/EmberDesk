@@ -56,9 +56,8 @@ describe('getCookieSessionName', () => {
 });
 
 describe('getSessionCookieAge', () => {
-    test('returns a number or undefined', () => {
-        const age = getSessionCookieAge();
-        expect(typeof age === 'number' || typeof age === 'undefined').toBe(true);
+    test('defaults to the RFC 6265 no-expiration cap', () => {
+        expect(getSessionCookieAge()).toBe(400 * 24 * 60 * 60 * 1000);
     });
 });
 

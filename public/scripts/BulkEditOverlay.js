@@ -1036,6 +1036,12 @@ class BulkEditOverlay {
             .forEach(element => {
                 element.classList.remove(BulkEditOverlay.selectedClass);
                 element.setAttribute('aria-selected', 'false');
+                element.setAttribute('aria-checked', 'false');
+                const legacyBulkEditCheckbox = element.querySelector('.bulk_select_checkbox');
+                if (legacyBulkEditCheckbox) {
+                    legacyBulkEditCheckbox.checked = false;
+                    legacyBulkEditCheckbox.setAttribute('aria-checked', 'false');
+                }
             });
         this.selectedCharacters.length = 0;
     };

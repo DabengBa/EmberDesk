@@ -377,6 +377,7 @@ describe('character list structure', () => {
         const stateSource = read('public/scripts/character-list-state.js');
         const styleSource = read('public/style.css');
         const zhCnLocale = read('public/locales/zh-cn.json');
+        const powerUserSource = read('public/scripts/power-user.js');
 
         expect(indexHtml).toContain('id="character_search_status"');
         expect(indexHtml).toContain('data-i18n="Filtering characters…"');
@@ -394,6 +395,11 @@ describe('character list structure', () => {
         expect(scriptSource).toContain('setCharacterSearchBusy(false)');
         expect(scriptSource).toContain('updateCharListGridToggleLabel()');
         expect(scriptSource).toContain('power_user.charListGrid ? \'Character Toolbar List\' : \'Character Toolbar Grid\'');
+        expect(scriptSource).toContain('const desiredElementSet = new Set(desiredElements);');
+        expect(scriptSource).not.toContain('desiredElements.includes(child)');
+        expect(powerUserSource).toContain('const instance = $(this).autocomplete(\'instance\');');
+        expect(powerUserSource).toContain('if (!instance) {');
+        expect(powerUserSource).not.toContain('$(this).autocomplete(\'widget\')[0].style.display');
         expect(bulkEditSource).toMatch(/const checkbox = \$\('<input type=\\'checkbox\\' class=\\'bulk_select_checkbox\\' aria-label=\\'Select character for bulk edit\\'>'\);/);
         expect(bulkEditSource).toContain('aria-describedby\': \'bulkSelectionHint\'');
         expect(bulkEditSource).toContain('$(el).attr(\'role\', \'checkbox\')');
@@ -402,6 +408,7 @@ describe('character list structure', () => {
         expect(overlaySource).toContain('character.setAttribute(\'aria-selected\', \'false\')');
         expect(overlaySource).toContain('character.setAttribute(\'aria-checked\', \'true\')');
         expect(overlaySource).toContain('character.setAttribute(\'aria-checked\', \'false\')');
+        expect(overlaySource).toContain('legacyBulkEditCheckbox.setAttribute(\'aria-checked\', \'false\')');
         expect(overlaySource).toContain('syncBulkSelectionDomState({');
         expect(overlaySource).toContain('this.state !== BulkEditOverlayState.select');
         expect(overlaySource).toContain('updateBulkSelectionCountState({ selectedCount, deleteButton, fallbackFocusElement }, count)');
