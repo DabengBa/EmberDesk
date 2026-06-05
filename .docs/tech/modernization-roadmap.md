@@ -271,6 +271,7 @@ Phase 1 result:
 - 2026-06-04: ESLint 10 flat config upgrade delivered. Root and tests linting now use `eslint.config.js` / `tests/eslint.config.js`, legacy `.eslintrc.cjs` files are retired, tests own their Jest and Playwright lint plugins directly, `bun run lint` and `bun run --cwd tests lint` both pass, and `bun run lint:fast` remains a non-authoritative oxlint preflight.
 - 2026-06-05: Node 26.3.0 validation sweep completed. The working shell reports `node v26.3.0`, `npm 11.16.0`, `npx 11.16.0`, and Bun 1.3.14. The current modernization tree passes root lint, tests lint, compatibility, semantic docs check, focused World Info import/card tests, OpenAI/provider capability tests, user setup/storage tests, derived SQLite lifecycle tests, and chat import converter tests under Node 26.3.0. `bun run lint:fast` exits successfully with warnings only and remains a non-authoritative preflight.
 - 2026-06-05: Character-list page-slice helper delivered. `getCharacterListPageEntities()` now lives in `public/scripts/character-list-render-state.js`, preserving current `snapshot.entities` slicing semantics while leaving jQuery pagination, DOM patching, row identity, `CHARACTER_PAGE_LOADED`, and extension compatibility owned by `public/script.js`.
+- 2026-06-05: Chat route search/recent service delivered. `src/endpoints/chat-route-service.js` now owns deterministic `/api/chats/search` and `/api/chats/recent` assembly, including character/group/root chat discovery, query matching, pinned sorting, metadata flag propagation, and corrupt/missing-file skips. `src/endpoints/chats.js` keeps Express response handling, JSONL parsing through `getChatInfo()`, save/rename/delete/import/export response shapes, backup lifecycle, and chat-stat dirty marking.
 
 ## Recommended Next Work
 
@@ -337,7 +338,7 @@ The independent design specs for these steps live in `.docs/specs/260605-02-char
    - Record cold/warm state, Node version, data shape, and any degraded fallback.
 
 3. Chat route service extraction.
-   - Continue from delivered chat import and backup helper boundaries into one route-adjacent chat service slice.
+   - Delivered 2026-06-05: continue from delivered chat import and backup helper boundaries into one route-adjacent search/recent service slice.
    - Preserve save, rename, delete, import, backup, and chat-stat dirty marking response shapes.
 
 4. Derived cache release hardening.

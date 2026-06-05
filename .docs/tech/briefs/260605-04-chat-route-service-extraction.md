@@ -17,6 +17,14 @@ Date: 2026-06-05
 - 不移除 character-index chat-stat dirty marking。
 - 不合并 group 与 character chat routes。
 
+## Delivery Trace
+
+- Status: Delivered on 2026-06-05.
+- Code path: `src/endpoints/chat-route-service.js` owns deterministic `/api/chats/search` and `/api/chats/recent` assembly.
+- Route boundary: `src/endpoints/chats.js` keeps Express request/response handling, JSONL parsing through `getChatInfo()`, save/rename/delete/import/export response shapes, backup lifecycle, and character-index chat-stat dirty marking.
+- Proof: `tests/chat-route-service.test.js` covers character chats, group chats, root chats, pinned sorting, metadata propagation, missing files, and corrupt group JSON. Baseline proof also kept `chat-import-converters.test.js`, `chat-backup-helpers.test.js`, and root lint green.
+
 ## Change History
 
 - 2026-06-05: 记录 10-step roadmap closure program 中第 3 步的用户意图。
+- 2026-06-05: 交付 search/recent route-adjacent service，并记录代码路径、边界和验证证据。

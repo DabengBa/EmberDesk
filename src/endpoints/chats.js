@@ -28,6 +28,10 @@ import {
     getJsonChatImportConverter,
 } from './chat-import-converters.js';
 import { createChatBackupPlan } from './chat-backup-helpers.js';
+import {
+    readRecentChatPayload,
+    searchChatPayload,
+} from './chat-route-service.js';
 
 const isBackupEnabled = !!getConfigValue('backups.chat.enabled', true, 'boolean');
 const maxTotalChatBackups = Number(getConfigValue('backups.chat.maxTotalBackups', -1, 'number'));
@@ -124,23 +128,6 @@ function getBackupFunction(handle) {
         backupFunctions.set(handle, _.throttle(backupChat, throttleInterval, { leading: true, trailing: true }));
     }
     return backupFunctions.get(handle) || (() => { });
-}
-
-/**
- * Gets a preview message from a chat message string.
- * @param {string} [lastMessage] - The message to truncate
- * @returns {string} A truncated preview of the last message or empty string if no messages
- */
-function getPreviewMessage(lastMessage) {
-    const strlen = 400;
-
-    if (!lastMessage) {
-        return '';
-    }
-
-    return lastMessage.length > strlen
-        ? '...' + lastMessage.substring(lastMessage.length - strlen)
-        : lastMessage;
 }
 
 process.on('exit', () => {
@@ -714,102 +701,20 @@ router.post('/group/save', async function (request, response) {
 router.post('/search', validateAvatarUrlMiddleware, async function (request, response) {
     try {
         const { query, avatar_url, group_id } = request.body;
+        const payload = await searchChatPayload({
+            directories: request.user.directories,
+            query,
+            avatarUrl: avatar_url,
+            groupId: group_id,
+            dependencies: {
+                fs,
+                path,
+                getChatInfo,
+                warn: console.warn,
+            },
+        });
 
-        /** @type {string[]} */
-        let chatFiles = [];
-
-        if (group_id) {
-            // Find group's chat IDs first
-            const groupDir = path.join(request.user.directories.groups);
-            const groupFiles = fs.readdirSync(groupDir)
-                .filter(file => path.extname(file) === '.json');
-
-            let targetGroup;
-            for (const groupFile of groupFiles) {
-                try {
-                    const groupData = JSON.parse(fs.readFileSync(path.join(groupDir, groupFile), 'utf8'));
-                    if (groupData.id === group_id) {
-                        targetGroup = groupData;
-                        break;
-                    }
-                } catch (error) {
-                    console.warn(groupFile, 'group file is corrupted:', error);
-                }
-            }
-
-            if (!Array.isArray(targetGroup?.chats)) {
-                return response.send([]);
-            }
-
-            // Find group chat files for given group ID
-            const groupChatsDir = path.join(request.user.directories.groupChats);
-            chatFiles = targetGroup.chats
-                .map(chatId => path.join(groupChatsDir, `${chatId}.jsonl`))
-                .filter(fileName => fs.existsSync(fileName));
-        } else {
-            // Regular character chat directory
-            const character_name = avatar_url.replace('.png', '');
-            const directoryPath = path.join(request.user.directories.chats, character_name);
-
-            if (!fs.existsSync(directoryPath)) {
-                return response.send([]);
-            }
-
-            chatFiles = fs.readdirSync(directoryPath)
-                .filter(file => path.extname(file) === '.jsonl')
-                .map(fileName => path.join(directoryPath, fileName));
-        }
-
-        /**
-         * @type {SearchChatResult[]}
-         * @typedef {object} SearchChatResult
-         * @property {string} [file_name] - The name of the chat file
-         * @property {string} [file_size] - The size of the chat file in a human-readable format
-         * @property {number} [message_count] - The number of messages in the chat
-         * @property {number|string} [last_mes] - The timestamp of the last message
-         * @property {string} [preview_message] - A preview of the last message
-         */
-        const results = [];
-
-        /** @type {string[]} */
-        const fragments = query ? query.trim().toLowerCase().split(/\s+/).filter(x => x) : [];
-
-        /** @type {ChatMatchFunction} */
-        const hasTextMatch = (textArray) => {
-            if (fragments.length === 0) {
-                return true;
-            }
-            return fragments.every(fragment => textArray.some(text => String(text ?? '').toLowerCase().includes(fragment)));
-        };
-
-        for (const chatFile of chatFiles) {
-            const matcher = query ? hasTextMatch : null;
-            const chatInfo = await getChatInfo(chatFile, {}, false, matcher);
-            const hasMatch = chatInfo.match || hasTextMatch([chatInfo.file_id ?? '']);
-
-            // Skip corrupted or invalid chat files
-            if (!chatInfo.file_name) {
-                continue;
-            }
-
-            // Empty chats without a file name match are skipped when searching with a query
-            if (query && chatInfo.chat_items === 0 && !hasMatch) {
-                continue;
-            }
-
-            // If no search query or a match was found, include the chat in results
-            if (!query || hasMatch) {
-                results.push({
-                    file_name: chatInfo.file_id,
-                    file_size: chatInfo.file_size,
-                    message_count: chatInfo.chat_items,
-                    last_mes: chatInfo.last_mes,
-                    preview_message: getPreviewMessage(chatInfo.mes),
-                });
-            }
-        }
-
-        return response.send(results);
+        return response.send(payload);
     } catch (error) {
         console.error('Chat search error:', error);
         return response.status(500).json({ error: 'Search failed' });
@@ -818,98 +723,19 @@ router.post('/search', validateAvatarUrlMiddleware, async function (request, res
 
 router.post('/recent', async function (request, response) {
     try {
-        /** @typedef {{pngFile?: string, groupId?: string, filePath: string, mtime: number}} ChatFile */
-        /** @type {ChatFile[]} */
-        const allChatFiles = [];
-        /** @type {import('../../public/scripts/welcome-screen.js').PinnedChat[]} */
-        const pinnedChats = Array.isArray(request.body.pinned) ? request.body.pinned : [];
-
-        const getCharacterChatFiles = async () => {
-            const pngDirents = await fs.promises.readdir(request.user.directories.characters, { withFileTypes: true });
-            const pngFiles = pngDirents.filter(e => e.isFile() && path.extname(e.name) === '.png').map(e => e.name);
-
-            for (const pngFile of pngFiles) {
-                const chatsDirectory = pngFile.replace('.png', '');
-                const pathToChats = path.join(request.user.directories.chats, chatsDirectory);
-                if (!fs.existsSync(pathToChats)) {
-                    continue;
-                }
-                const pathStats = await fs.promises.stat(pathToChats);
-                if (pathStats.isDirectory()) {
-                    const chatFiles = await fs.promises.readdir(pathToChats);
-                    const jsonlFiles = chatFiles.filter(file => path.extname(file) === '.jsonl');
-
-                    for (const file of jsonlFiles) {
-                        const filePath = path.join(pathToChats, file);
-                        const stats = await fs.promises.stat(filePath);
-                        allChatFiles.push({ pngFile, filePath, mtime: stats.mtimeMs });
-                    }
-                }
-            }
-        };
-
-        const getGroupChatFiles = async () => {
-            const groupDirents = await fs.promises.readdir(request.user.directories.groups, { withFileTypes: true });
-            const groups = groupDirents.filter(e => e.isFile() && path.extname(e.name) === '.json').map(e => e.name);
-
-            for (const group of groups) {
-                try {
-                    const groupPath = path.join(request.user.directories.groups, group);
-                    const groupContents = await fs.promises.readFile(groupPath, 'utf8');
-                    const groupData = JSON.parse(groupContents);
-
-                    if (Array.isArray(groupData.chats)) {
-                        for (const chat of groupData.chats) {
-                            const filePath = path.join(request.user.directories.groupChats, `${chat}.jsonl`);
-                            if (!fs.existsSync(filePath)) {
-                                continue;
-                            }
-                            const stats = await fs.promises.stat(filePath);
-                            allChatFiles.push({ groupId: groupData.id, filePath, mtime: stats.mtimeMs });
-                        }
-                    }
-                } catch (error) {
-                    // Skip group files that can't be read or parsed
-                    continue;
-                }
-            }
-        };
-
-        const getRootChatFiles = async () => {
-            const dirents = await fs.promises.readdir(request.user.directories.chats, { withFileTypes: true });
-            const chatFiles = dirents.filter(e => e.isFile() && path.extname(e.name) === '.jsonl').map(e => e.name);
-
-            for (const file of chatFiles) {
-                const filePath = path.join(request.user.directories.chats, file);
-                const stats = await fs.promises.stat(filePath);
-                allChatFiles.push({ filePath, mtime: stats.mtimeMs });
-            }
-        };
-
-        await Promise.allSettled([getCharacterChatFiles(), getGroupChatFiles(), getRootChatFiles()]);
-
-        const max = parseInt(request.body.max ?? Number.MAX_SAFE_INTEGER) + pinnedChats.length;
-        const isPinned = (/** @type {ChatFile} */ chatFile) => pinnedChats.some(p => p.file_name === path.basename(chatFile.filePath) && (p.avatar === chatFile.pngFile || p.group === chatFile.groupId));
-        const recentChats = allChatFiles.sort((a, b) => {
-            const isAPinned = isPinned(a);
-            const isBPinned = isPinned(b);
-
-            if (isAPinned && !isBPinned) return -1;
-            if (!isAPinned && isBPinned) return 1;
-
-            return b.mtime - a.mtime;
-        }).slice(0, max);
-        const jsonFilesPromise = recentChats.map((file) => {
-            const withMetadata = !!request.body.metadata;
-            return file.groupId
-                ? getChatInfo(file.filePath, { group: file.groupId }, withMetadata)
-                : getChatInfo(file.filePath, { avatar: file.pngFile }, withMetadata);
+        const payload = await readRecentChatPayload({
+            directories: request.user.directories,
+            pinned: request.body.pinned,
+            max: request.body.max,
+            metadata: !!request.body.metadata,
+            dependencies: {
+                fs,
+                path,
+                getChatInfo,
+            },
         });
 
-        const chatData = (await Promise.allSettled(jsonFilesPromise)).filter(x => x.status === 'fulfilled').map(x => x.value);
-        const validFiles = chatData.filter(i => i.file_name);
-
-        return response.send(validFiles);
+        return response.send(payload);
     } catch (error) {
         console.error(error);
         return response.sendStatus(500);

@@ -282,7 +282,7 @@ Safe extraction candidates:
 - Backup policy and throttled function cache into a focused backup helper.
 - Pure preview and metadata extraction helpers.
 - Shared file-path resolution helpers that keep `isPathUnderParent()` validation explicit.
-- Search/recent assembly helpers with focused fake-directory tests.
+- Search/recent assembly helpers with focused fake-directory tests (delivered 2026-06-05 in `src/endpoints/chat-route-service.js`).
 
 Do not start with:
 
@@ -351,7 +351,7 @@ Defer these until the smaller helpers above are already covered:
 | OpenAI/provider request semantics | `chat-completions-google.test.js` and related backend/provider tests; source-backed provider docs check |
 | Character route helper/service | focused unit/route tests plus interaction performance index tests if list/get/index behavior changes |
 | Character mutation side effects | thumbnail write-time pregeneration tests and character-index refresh/delete proof |
-| Chat route helper/service | focused chat endpoint/import tests; interaction performance index tests when chat aggregate dirty marking changes |
+| Chat route helper/service | `chat-route-service.test.js` plus focused chat endpoint/import tests; interaction performance index tests when chat aggregate dirty marking changes |
 | Express mount/order change | `bun run --cwd tests test:unit -- express5-route-compatibility.test.js --runInBand` |
 | Semantic docs change | `bun run docs:check` or `bun run docs:build` |
 
@@ -406,6 +406,7 @@ Delivered follow-up:
 - 2026-06-02: The first recommended slice extracted the pure character-card helper boundary from `src/endpoints/characters.js` into `src/endpoints/character-card-helpers.js` with direct helper tests. `readFromV2` remains in `characters.js` because its current default and warning behavior is not yet a clean pure-helper boundary.
 - 2026-06-02: The second recommended slice extracted chat import converters from `src/endpoints/chats.js` into `src/endpoints/chat-import-converters.js` with fixture-style tests for Ooba, Agnai, CAI Tools, Kobold Lite, Chub JSONL flattening, RisuAI, and JSON converter selection. `/api/chats/import` keeps route-owned upload cleanup, path checks, file writes/copy, response shape, fallback behavior, and chat-stat dirty marking.
 - 2026-06-02: The third recommended slice extracted chat backup planning from `src/endpoints/chats.js` into `src/endpoints/chat-backup-helpers.js` with focused tests for backup name normalization, backup path construction, cleanup prefixes, and total-retention boundaries. `backupChat()` keeps route-owned enablement, directory checks, file writes, cleanup calls, throttle map, process-exit flush, and failure logging.
+- 2026-06-05: The chat route service slice extracted search/recent assembly from `src/endpoints/chats.js` into `src/endpoints/chat-route-service.js` with fake-directory tests for character chats, group chats, root chats, pinned sorting, metadata propagation, missing files, and corrupt group JSON. `/api/chats/search` and `/api/chats/recent` keep their HTTP array response shapes, while save/rename/delete/import/export, backup behavior, JSONL parsing, and character-index dirty marking remain route-owned.
 
 The remaining safest near-term implementation sequence is:
 
