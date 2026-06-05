@@ -275,41 +275,40 @@ Phase 1 result:
 - 2026-06-05: Derived cache release hardening evidence closed. No code behavior changed; the release-risk matrix is covered by focused proof for unsupported `node:sqlite`, `force_off`, startup status, cache path guards, PRAGMA baseline, schema-version reset, corrupt DB rebuild, reset-threshold disable, keyed dispose, character-read filesystem fallback, circuit-disabled throw behavior, and `/api/characters/get` index refresh failures.
 - 2026-06-05: Background panel controller boundary delivered. `public/scripts/background-panel-controller.js` now owns root-scoped loading-state helper behavior for the background library panel, while `public/scripts/backgrounds.js` keeps request flow, upload/delete/rename/folder behavior, thumbnail handling, slash-command registration, selectors, and visible copy unchanged. Focused proof lives in `tests/background-panel-controller.test.js`.
 - 2026-06-05: Compatibility hardening pass delivered. `tests/third-party-extension-compatibility.test.js` now freezes slash-command public exports in addition to extension mount points, Tavern Helper assets, `@sillytavern/*` aliases, key module exports, event values, regex placement values, and character-list row identity. `tests/interaction-performance-index.test.js` now verifies character read-service envelope fields stay internal to the route layer.
+- 2026-06-05: Build dependency closure delivered. Node.js 26.3.0 remains the application runtime, Bun 1.3.14 remains package manager/script runner, Webpack remains scoped to `/lib.js`, ESLint remains the authoritative lint gate, oxlint remains a warning-only fast preflight, and no package, lockfile, build, Docker, or Electron lifecycle drift required a code change.
 
 ## Recommended Next Work
 
-The next recommended implementation slice is build and dependency closure. Compatibility hardening is now green, so the next useful move is to close build/dependency contracts without changing runtime behavior or the `/lib.js` compatibility boundary.
+The next recommended implementation slice is the Node 26 release validation sweep. Build/dependency closure is complete, so the useful move is to rerun the release-relevant gates under Node.js 26.3.0 and record which evidence is release proof versus diagnostic coverage.
 
 Decision for the next turn:
 
-- Start from `.docs/specs/260605-08-build-dependency-closure`.
-- Keep Bun as package manager/script runner and Node.js 26.3.0 as application runtime.
-- Keep Webpack scoped to `/lib.js` unless a replacement proves the same source-import, bundled-module, and legacy-global contract.
-- Avoid broad dependency churn; only close documented drift or proof gaps.
+- Start from `.docs/specs/260605-09-node26-release-validation-sweep`.
+- Treat Node.js 26.3.0 command output as the required runtime evidence.
+- Keep Bun as package manager/script runner, not app runtime.
+- Record any skipped Playwright or performance runner as an explicit release-scope decision, not as hidden missing evidence.
 
 Scope:
 
-- Audit root and tests package dependency/build contracts after the Node 26.3.0, ESLint 10, oxlint, and compatibility slices.
-- Close stale build/dependency documentation and validation gaps.
-- Preserve package boundaries: root, `tests/`, and `src/electron` remain separately owned unless a dedicated migration approves a change.
+- Run the release validation gates named by the 09 design under Node.js 26.3.0.
+- Confirm root lint, tests lint, docs check/build, compatibility, startup/config, route-order, shared-library, user/auth/setup/login, and full unit evidence.
+- Preserve package boundaries and avoid broad cleanup while failures are being localized.
 
 First shippable target:
 
-1. Map `package.json`, `bun.lock`, `tests/package.json`, `tests/bun.lock`, `bunfig.toml`, `tests/bunfig.toml`, `Dockerfile`, `webpack.config.js`, and `src/electron/package.json`.
-2. Verify dependency/tooling docs still match current package boundaries and commands.
-3. Run the focused build/dependency gates from the spec plan.
-4. Update durable docs only for current contracts, not future migration wishes.
+1. Confirm `node --version` and `bun --version`.
+2. Run the focused release gates from the 09 plan.
+3. Fix only real release-blocking failures or document intentional skips with scope.
+4. Update durable docs with the validation result before wrap-up.
 
 Not in this slice:
 
-- Do not upgrade or replace major tooling just to make the dependency map look cleaner.
-- Do not migrate Electron to Bun.
-- Do not replace Webpack or change `/lib.js` exports in this closure pass.
+- Do not use this sweep to migrate tooling, frontend architecture, storage, or Electron lifecycle.
+- Do not claim performance wins without the interaction/startup runners that prove them.
 
 Minimum validation:
 
-- Build/dependency commands named by the 08 plan.
-- `bun run --cwd tests test:unit -- frontend-shared-library-boundary.test.js --runInBand` if `/lib.js`, Webpack, or build docs are touched.
+- Commands named by the 09 plan.
 - `bun run docs:check` if docs change.
 - `bun run lint` as the closeout gate.
 

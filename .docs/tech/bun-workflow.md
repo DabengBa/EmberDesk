@@ -59,4 +59,4 @@ Validated migration surfaces should include:
 
 Known local boundary:
 
-- This workstation currently has local Node 25.4.0. It is useful for diagnostic Bun and docs checks, but exact Node.js 26.3.0 runtime proof must come from CI, Docker, or an installed Node 26.3.0 runtime.
+- This workstation currently resolves `node` to Node.js 26.3.0. Non-contract local Node majors remain diagnostic only; release proof should record the exact Node version used by the command or container.
