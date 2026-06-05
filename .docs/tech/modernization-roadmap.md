@@ -249,8 +249,8 @@ Phase 1 result:
 
 ## Known Execution Gaps
 
-- Node.js 26.3.0 focused proof now exists for the current modernization surfaces: root lint, tests lint, compatibility, semantic docs check, oxlint fast-lane preflight, and focused tests for World Info import, OpenAI/provider capability helpers, user setup/storage, derived SQLite lifecycle, and chat import converters.
-- Full Playwright E2E remains a release or UI-slice gate, not yet part of the Phase 0/1 local proof.
+- Node.js 26.3.0 release validation proof now exists for the current modernization surfaces: root lint, tests lint, compatibility, semantic docs check, shared browser library, character route/index, Express route order, startup/config, user/auth/login/setup, and the full unit suite.
+- Full Playwright E2E remains conditional. The 2026-06-05 release validation sweep skipped Playwright because the validation scope changed no visible browser behavior; run affected E2E when a later slice changes a primary browser flow, page structure, CTA sequencing, or visible UI behavior.
 - Startup and interaction performance runners remain required before claiming latency wins.
 - Vendored third-party extension artifacts are intentionally excluded from whole-repo lint; do not auto-format or refactor them as first-party source.
 
@@ -269,7 +269,7 @@ Phase 1 result:
 - 2026-06-04: Derived SQLite sidecar helper foundation delivered. `src/derived-cache-sqlite.js` now owns reusable derived SQLite lifecycle, PRAGMA setup, status reporting, schema reset, dispose, and reset-threshold behavior, while the character index keeps business rules and canonical file-backed behavior. Focused proof lives in `tests/derived-cache-sqlite.test.js`.
 - 2026-06-04: oxlint fast-lane preflight delivered. Root `bun run lint:fast` now runs `oxlint src public *.js` with `.oxlintrc.json` preserving the existing ESLint ignored-path boundary. `bun run lint` remained the authoritative ESLint gate, and `bun run --cwd tests lint` was left as the known red baseline for the follow-up ESLint flat-config slice.
 - 2026-06-04: ESLint 10 flat config upgrade delivered. Root and tests linting now use `eslint.config.js` / `tests/eslint.config.js`, legacy `.eslintrc.cjs` files are retired, tests own their Jest and Playwright lint plugins directly, `bun run lint` and `bun run --cwd tests lint` both pass, and `bun run lint:fast` remains a non-authoritative oxlint preflight.
-- 2026-06-05: Node 26.3.0 validation sweep completed. The working shell reports `node v26.3.0`, `npm 11.16.0`, `npx 11.16.0`, and Bun 1.3.14. The current modernization tree passes root lint, tests lint, compatibility, semantic docs check, focused World Info import/card tests, OpenAI/provider capability tests, user setup/storage tests, derived SQLite lifecycle tests, and chat import converter tests under Node 26.3.0. `bun run lint:fast` exits successfully with warnings only and remains a non-authoritative preflight.
+- 2026-06-05: Node 26.3.0 release validation sweep completed. The working shell reported `node v26.3.0`, `npm 11.16.0`, `npx 11.16.0`, and Bun 1.3.14. Root lint, tests lint, compatibility, semantic docs check, shared-library proof, character route/index proof, Express route-order proof, startup/config proof, user/auth/login/setup proof, and the full unit suite passed under Node 26.3.0; the full unit suite covered 63 suites and 689 tests. Playwright was intentionally skipped because this validation scope changed no visible browser behavior.
 - 2026-06-05: Character-list page-slice helper delivered. `getCharacterListPageEntities()` now lives in `public/scripts/character-list-render-state.js`, preserving current `snapshot.entities` slicing semantics while leaving jQuery pagination, DOM patching, row identity, `CHARACTER_PAGE_LOADED`, and extension compatibility owned by `public/script.js`.
 - 2026-06-05: Chat route search/recent service delivered. `src/endpoints/chat-route-service.js` now owns deterministic `/api/chats/search` and `/api/chats/recent` assembly, including character/group/root chat discovery, query matching, pinned sorting, metadata flag propagation, and corrupt/missing-file skips. `src/endpoints/chats.js` keeps Express response handling, JSONL parsing through `getChatInfo()`, save/rename/delete/import/export response shapes, backup lifecycle, and chat-stat dirty marking.
 - 2026-06-05: Derived cache release hardening evidence closed. No code behavior changed; the release-risk matrix is covered by focused proof for unsupported `node:sqlite`, `force_off`, startup status, cache path guards, PRAGMA baseline, schema-version reset, corrupt DB rebuild, reset-threshold disable, keyed dispose, character-read filesystem fallback, circuit-disabled throw behavior, and `/api/characters/get` index refresh failures.
@@ -279,37 +279,38 @@ Phase 1 result:
 
 ## Recommended Next Work
 
-The next recommended implementation slice is the Node 26 release validation sweep. Build/dependency closure is complete, so the useful move is to rerun the release-relevant gates under Node.js 26.3.0 and record which evidence is release proof versus diagnostic coverage.
+The next recommended implementation slice is documentation topology closure. Node 26 release validation is complete, so the useful move is to remove stale process docs, keep only high-signal briefs and owning docs, and prove the docs topology is ready for roadmap freeze.
 
 Decision for the next turn:
 
-- Start from `.docs/specs/260605-09-node26-release-validation-sweep`.
-- Treat Node.js 26.3.0 command output as the required runtime evidence.
-- Keep Bun as package manager/script runner, not app runtime.
-- Record any skipped Playwright or performance runner as an explicit release-scope decision, not as hidden missing evidence.
+- Start from `.docs/specs/260605-10-documentation-topology-closure`.
+- Preserve delivered facts in `.docs/PROJECT_HISTORY.md`, `.docs/tech/`, `.docs/adr/`, and `.docs/db/` owners instead of process docs.
+- Keep briefs that preserve user intent and implementation traceability; remove only stale process artifacts owned by the workflow.
+- Run docs validation and inspect topology before declaring the roadmap ready for freeze.
 
 Scope:
 
-- Run the release validation gates named by the 09 design under Node.js 26.3.0.
-- Confirm root lint, tests lint, docs check/build, compatibility, startup/config, route-order, shared-library, user/auth/setup/login, and full unit evidence.
-- Preserve package boundaries and avoid broad cleanup while failures are being localized.
+- Close stale documentation topology after the delivered 10-step slices.
+- Verify semantic docs, tech docs, project history, and briefs agree on runtime, compatibility, validation, and successor boundaries.
+- Keep user-facing semantic docs unchanged unless a real semantic mismatch is found.
 
 First shippable target:
 
-1. Confirm `node --version` and `bun --version`.
-2. Run the focused release gates from the 09 plan.
-3. Fix only real release-blocking failures or document intentional skips with scope.
-4. Update durable docs with the validation result before wrap-up.
+1. Inventory `.docs/specs`, `.docs/tech/briefs`, `.docs/PROJECT_HISTORY.md`, `.docs/tech/modernization-roadmap.md`, and semantic docs for stale process references.
+2. Remove or archive only workflow-owned process artifacts after durable facts are already preserved.
+3. Run `bun run docs:check` and inspect generated topology for unresolved or orphaned nodes.
+4. Update roadmap next-work language to point to roadmap freeze and successor decision.
 
 Not in this slice:
 
-- Do not use this sweep to migrate tooling, frontend architecture, storage, or Electron lifecycle.
-- Do not claim performance wins without the interaction/startup runners that prove them.
+- Do not rewrite product semantics or merge unrelated documentation cleanup.
+- Do not delete user-intent briefs that are the durable trace for delivered slices.
+- Do not create ADRs unless the topology closure uncovers a durable, non-obvious architecture decision.
 
 Minimum validation:
 
-- Commands named by the 09 plan.
-- `bun run docs:check` if docs change.
+- Commands named by the 10 plan.
+- `bun run docs:check`.
 - `bun run lint` as the closeout gate.
 
 ## Recommended Near-Term Sequence
