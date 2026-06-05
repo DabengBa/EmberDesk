@@ -167,6 +167,44 @@ describe('world info card rendering', () => {
         expect(source).not.toContain('globalWorldInfoSelector.next(\'span.select2-container\').find(\'textarea\').trigger(\'blur\');');
     });
 
+    test('empty editor state makes new-entry prerequisite visible', () => {
+        const panelHtml = read('public/panels/world-info-body.html');
+        const source = read('public/scripts/world-info.js');
+
+        expect(panelHtml).toContain('data-i18n="[title]Create or select a World Info file first"');
+        expect(source).toContain('function setWorldEntryCreationAvailable(available)');
+        expect(source).toContain('setWorldEntryCreationAvailable(false);');
+        expect(source).toContain('setWorldEntryCreationAvailable(true);');
+        expect(source).toContain('toastr.info(t`Create or import a new World Info file first.`, t`World Info is not set`');
+    });
+
+    test('world info editor localizes page-size and clear-selection labels', () => {
+        const source = read('public/scripts/world-info.js');
+        const locale = read('public/locales/zh-cn.json');
+
+        expect(source).toContain('function localizeWorldInfoPagination()');
+        expect(source).toContain('afterRender: localizeWorldInfoPagination,');
+        expect(source).toContain('replaceAll(\' / page\', ` ${t`/ page`}`)');
+        expect(source).toContain('function getWorldInfoSelect2Language()');
+        expect(source).toContain('language: getWorldInfoSelect2Language(),');
+        expect(locale).toContain('"/ page": "/ 页"');
+        expect(locale).toContain('"Remove all items": "移除全部项目"');
+    });
+
+    test('world info panel rehydrates selected editor after drawer remount', () => {
+        const source = read('public/scripts/world-info.js');
+        const rehydrateStart = source.indexOf('export function rehydrateWorldInfoPanel');
+        const rehydrateEnd = source.indexOf('export function reloadEditor', rehydrateStart);
+        const rehydrateSource = source.slice(rehydrateStart, rehydrateEnd);
+
+        expect(rehydrateStart).toBeGreaterThanOrEqual(0);
+        expect(rehydrateEnd).toBeGreaterThan(rehydrateStart);
+        expect(rehydrateSource).toContain('syncWorldInfoSettingsUi({ syncGlobalSelect: false });');
+        expect(rehydrateSource).toContain('Array.isArray(world_names) && world_names.includes(selectedName)');
+        expect(rehydrateSource).toContain('void showWorldEditor(selectedName);');
+        expect(rehydrateSource).toContain('void hideWorldEditor();');
+    });
+
     test('world info drawer takes precedence over the character drawer when opened from the top bar', () => {
         const source = read('public/script.js');
 

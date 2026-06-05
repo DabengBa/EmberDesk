@@ -296,6 +296,12 @@
     width: 22px;
 }
 
+#world_create_button[aria-disabled="true"] {
+    opacity: 0.55;
+    cursor: not-allowed;
+    filter: grayscale(0.6);
+}
+
 #world_info_search {
     flex: 1;
     min-width: 12em;

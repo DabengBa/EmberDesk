@@ -1462,6 +1462,12 @@ function ensureWorldInfoRuntimeInitialized() {
 
 export function rehydrateWorldInfoPanel() {
     syncWorldInfoSettingsUi({ syncGlobalSelect: false });
+    const selectedName = String($('#world_editor_select').find(':selected').text() ?? '');
+    if (selectedName && Array.isArray(world_names) && world_names.includes(selectedName)) {
+        void showWorldEditor(selectedName);
+    } else {
+        void hideWorldEditor();
+    }
 }
 
 /**
@@ -2696,7 +2702,31 @@ export function sortWorldInfoEntries(data, { customSort = null } = {}) {
 }
 
 function nullWorldInfo() {
-    toastr.info('Create or import a new World Info file first.', 'World Info is not set', { timeOut: 10000, preventDuplicates: true });
+    toastr.info(t`Create or import a new World Info file first.`, t`World Info is not set`, { timeOut: 10000, preventDuplicates: true });
+}
+
+function setWorldEntryCreationAvailable(available) {
+    const button = $('#world_create_button');
+    button.toggleClass('wi-disabled-action', !available);
+    button.attr({
+        'aria-disabled': String(!available),
+        'data-i18n': available ? '[title]New Entry' : '[title]Create or select a World Info file first',
+        title: available ? t`New Entry` : t`Create or select a World Info file first`,
+    });
+}
+
+function localizeWorldInfoPagination() {
+    $('#world_info_pagination .J-paginationjs-size-select option').each(function () {
+        const option = $(this);
+        option.text(String(option.text()).replaceAll(' / page', ` ${t`/ page`}`));
+    });
+}
+
+function getWorldInfoSelect2Language() {
+    return {
+        removeAllItems: () => t`Remove all items`,
+        removeItem: () => t`Remove item`,
+    };
 }
 
 /** @type {Select2Option[]} Cache all keys as selectable dropdown option */
@@ -2801,6 +2831,7 @@ async function displayWorldEntries(name, data, navigation = navigation_option.no
     worldEntriesList.show();
 
     if (!data || !('entries' in data)) {
+        setWorldEntryCreationAvailable(false);
         $('#world_create_button').off('click').on('click', nullWorldInfo);
         $('#world_rename_menu_item').off('click').on('click', nullWorldInfo);
         $('#world_export_menu_item').off('click').on('click', nullWorldInfo);
@@ -2810,6 +2841,8 @@ async function displayWorldEntries(name, data, navigation = navigation_option.no
         $('#world_info_pagination').html('');
         return;
     }
+
+    setWorldEntryCreationAvailable(true);
 
     // Regardless of whether success is displayed or not. Make sure the delete button is available.
     // Do not put this code behind.
@@ -2967,6 +3000,7 @@ async function displayWorldEntries(name, data, navigation = navigation_option.no
         nextText: '>',
         formatNavigator: PAGINATION_TEMPLATE,
         showNavigator: true,
+        afterRender: localizeWorldInfoPagination,
         callback: async function (/** @type {object[]} */ page) {
             try {
                 clearEntryList(worldEntriesList);
@@ -6781,6 +6815,7 @@ export function initWorldInfo() {
                 placeholder: globalWorldInfoSelector.attr('data-placeholder') || t`No global worlds active. Select one or more worlds.`,
                 allowClear: true,
                 closeOnSelect: false,
+                language: getWorldInfoSelect2Language(),
             });
             globalWorldInfoSelector.on('select2:select select2:unselect', () => refreshGlobalWorldInfoSelectorState());
             refreshGlobalWorldInfoSelectorLabels();
@@ -6932,6 +6967,7 @@ export function initWorldInfo() {
                 allowClear: true,
                 closeOnSelect: true,
                 multiple: false,
+                language: getWorldInfoSelect2Language(),
             });
         }
 
