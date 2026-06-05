@@ -163,6 +163,26 @@ describe('background panel controller', () => {
         });
     });
 
+    test('uses a stable priority order for combined panel state inputs', async () => {
+        const { getBackgroundPanelState } = await importFreshBackgroundPanelModule();
+
+        expect(getBackgroundPanelState({
+            disabled: true,
+            error: new Error('boom'),
+            isLoading: true,
+            itemCount: 2,
+        }).status).toBe('disabled');
+        expect(getBackgroundPanelState({
+            error: new Error('boom'),
+            isLoading: true,
+            itemCount: 2,
+        }).status).toBe('error');
+        expect(getBackgroundPanelState({
+            isLoading: true,
+            itemCount: 2,
+        }).status).toBe('loading');
+    });
+
     test('fails fast when the required system background container is missing', async () => {
         const { createBackgroundPanelController } = await importFreshBackgroundPanelModule();
         const document = new FakeDocument();
@@ -195,6 +215,38 @@ describe('background panel controller', () => {
         controller.setLoading(false);
 
         expect(systemContent.children).toHaveLength(0);
+    });
+
+    test('cleans up the previous controller when replacing a stale background container', async () => {
+        const {
+            BACKGROUND_STARTUP_LOADING_ID,
+            createBackgroundPanelController,
+            replaceBackgroundPanelController,
+        } = await importFreshBackgroundPanelModule();
+        const document = new FakeDocument();
+        const firstContainer = document.createElement('div');
+        const secondContainer = document.createElement('div');
+        firstContainer.id = 'bg_menu_content';
+        secondContainer.id = 'bg_menu_content';
+        document.body.appendChild(firstContainer);
+
+        const firstController = createBackgroundPanelController(document, {
+            loadingText: 'Loading backgrounds...',
+        });
+        firstController.setLoading(true);
+
+        firstContainer.remove();
+        document.body.appendChild(secondContainer);
+        const secondController = replaceBackgroundPanelController({
+            currentController: firstController,
+            root: document,
+            container: secondContainer,
+            loadingText: 'Loading backgrounds...',
+        });
+        secondController.setLoading(true);
+
+        expect(firstContainer.querySelector(`#${BACKGROUND_STARTUP_LOADING_ID}`)).toBeNull();
+        expect(secondContainer.querySelector(`#${BACKGROUND_STARTUP_LOADING_ID}`)).not.toBeNull();
     });
 
     test('cleanup is idempotent and removes controller-owned loading state', async () => {

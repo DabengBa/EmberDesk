@@ -5,6 +5,8 @@ import path from 'node:path';
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
 import {
+    createTextMatcher,
+    getPreviewMessage,
     readRecentChatPayload,
     searchChatPayload,
 } from '../src/endpoints/chat-route-service.js';
@@ -68,6 +70,23 @@ afterEach(() => {
 });
 
 describe('chat route service', () => {
+    test('builds preview messages from empty and long chat text', () => {
+        const suffix = 'x'.repeat(400);
+        const longMessage = `prefix-${suffix}`;
+
+        expect(getPreviewMessage()).toBe('');
+        expect(getPreviewMessage('')).toBe('');
+        expect(getPreviewMessage('short message')).toBe('short message');
+        expect(getPreviewMessage(longMessage)).toBe(`...${suffix}`);
+    });
+
+    test('matches all query fragments across message text while empty queries match all text', () => {
+        expect(createTextMatcher('hello engine')(['Hello Ada', 'analytical engine'])).toBe(true);
+        expect(createTextMatcher('hello missing')(['Hello Ada', 'analytical engine'])).toBe(false);
+        expect(createTextMatcher('')(['anything'])).toBe(true);
+        expect(createTextMatcher('   ')([])).toBe(true);
+    });
+
     test('searches character chat files by message fragments and file name fallback', async () => {
         const directories = makeDirectories();
         const adaChats = path.join(directories.chats, 'Ada');
@@ -117,6 +136,21 @@ describe('chat route service', () => {
             }),
         ]);
         expect(dependencies.warn).toHaveBeenCalledWith(expect.stringContaining('broken.json'), expect.anything(), expect.anything());
+    });
+
+    test('returns no character search results when the character chat directory is missing', async () => {
+        const directories = makeDirectories();
+        const dependencies = createDependencies();
+
+        const result = await searchChatPayload({
+            directories,
+            query: 'anything',
+            avatarUrl: 'Missing.png',
+            dependencies,
+        });
+
+        expect(result).toEqual([]);
+        expect(dependencies.getChatInfo).not.toHaveBeenCalled();
     });
 
     test('returns recent character, group, and root chats with pinned chats first and metadata preserved', async () => {

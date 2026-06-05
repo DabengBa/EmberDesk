@@ -106,3 +106,26 @@ export function createBackgroundPanelController(root = globalThis.document, depe
         },
     };
 }
+
+/**
+ * Replaces a background panel controller when its container changed.
+ * @param {object} options
+ * @param {ReturnType<typeof createBackgroundPanelController> | null} [options.currentController]
+ * @param {Document | HTMLElement} options.root
+ * @param {HTMLElement} options.container
+ * @param {string} options.loadingText
+ * @returns {ReturnType<typeof createBackgroundPanelController>}
+ */
+export function replaceBackgroundPanelController({
+    currentController = null,
+    root,
+    container,
+    loadingText,
+}) {
+    if (currentController?.container === container) {
+        return currentController;
+    }
+
+    currentController?.cleanup?.();
+    return createBackgroundPanelController(root, { loadingText });
+}

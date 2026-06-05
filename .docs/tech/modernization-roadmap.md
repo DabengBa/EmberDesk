@@ -330,11 +330,11 @@ Durable user intent for these steps lives in `.docs/tech/briefs/260605-02-charac
    - Keep derived-cache corruption or unavailability recoverable through file-backed behavior.
 
 5. Low-risk frontend controller slice.
-   - Pick one non-extension, non-message-rendering panel or toolbar root and apply the login/setup controller pattern.
+   - Delivered 2026-06-05: Pick one non-extension, non-message-rendering panel or toolbar root and apply the login/setup controller pattern.
    - Keep the main chat workspace, message rendering, slash-command parser, regex internals, and extension mount points out of scope.
 
 6. Compatibility hardening pass.
-   - Expand or refresh focused tests around protected character-list DOM identity, shared-library exports, regex placement values, slash-command surfaces, and `@sillytavern/*` import aliases.
+   - Delivered 2026-06-05: Expand or refresh focused tests around protected character-list DOM identity, shared-library exports, regex placement values, slash-command surfaces, and `@sillytavern/*` import aliases.
    - Treat any public-surface removal as a separate migration, not cleanup.
 
 7. Build and dependency closure.

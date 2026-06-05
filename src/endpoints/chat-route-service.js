@@ -40,7 +40,7 @@ function normalizeDependencies(dependencies) {
  * @param {string} query
  * @returns {(textArray: string[]) => boolean}
  */
-function createTextMatcher(query) {
+export function createTextMatcher(query) {
     const fragments = query ? query.trim().toLowerCase().split(/\s+/).filter(x => x) : [];
 
     return (textArray) => {

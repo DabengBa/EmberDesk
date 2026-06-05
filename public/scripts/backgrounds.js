@@ -4,7 +4,7 @@ import { openThirdPartyExtensionMenu, saveMetadataDebounced } from './extensions
 import { SlashCommand } from './slash-commands/SlashCommand.js';
 import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
 import { createSingleFlightTask } from './startup-helpers.js';
-import { createBackgroundPanelController } from './background-panel-controller.js';
+import { replaceBackgroundPanelController } from './background-panel-controller.js';
 import { createThumbnail, flashHighlight, getBase64Async, stringFormat, debounce, setupScrollToTop, saveBase64AsFile, getFileExtension, sortIgnoreCaseAndAccents } from './utils.js';
 import { debounce_timeout } from './constants.js';
 import { t } from './i18n.js';
@@ -754,7 +754,10 @@ function setBackgroundCatalogLoading(isLoading) {
     }
 
     if (!backgroundPanelController || backgroundPanelController.container !== container) {
-        backgroundPanelController = createBackgroundPanelController(document, {
+        backgroundPanelController = replaceBackgroundPanelController({
+            currentController: backgroundPanelController,
+            root: document,
+            container,
             loadingText: t`Loading backgrounds...`,
         });
     }

@@ -43,6 +43,7 @@ import {
 } from './character-index.js';
 
 const CHARACTER_INDEX_REFRESH_CONCURRENCY = 10;
+const DELETE_PREFLIGHT_AVATAR_LIMIT = 500;
 
 // With 100 MB limit it would take roughly 3000 characters to reach this limit
 const memoryCacheCapacity = getConfigValue('performance.memoryCacheCapacity', '100mb');
@@ -1639,6 +1640,10 @@ router.post('/delete-preflight', async function (request, response) {
         const avatars = request.body?.avatars;
         if (!Array.isArray(avatars) || avatars.length === 0) {
             return response.send({ worldInfos: [] });
+        }
+
+        if (avatars.length > DELETE_PREFLIGHT_AVATAR_LIMIT) {
+            return response.status(400).send({ error: 'Too many avatars requested.' });
         }
 
         const directories = request.user.directories;

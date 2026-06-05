@@ -22,10 +22,6 @@ Delete or avoid adding briefs that are:
 
 | Brief | Why it remains |
 |---|---|
-| `260604-03-node-26-upgrade.md` | Captures the user decision to move the runtime contract to exact Node.js 26.3.0 Current before LTS. |
-| `260604-06-data-storage-optimal-solution.md` | Preserves the corrected storage strategy: filesystem remains canonical; SQLite stays derived; ORM/runtime migrations are not near-term defaults. |
-| `260604-07-eslint-upgrade-oxlint-migration.md` | Records the corrected lint-tooling migration intent, package-cooling constraints, and authoritative ESLint vs non-authoritative oxlint boundary. |
-| `260604-09-sqlite-sidecar-helper-foundation.md` | Captures the first delivered storage-sidecar slice and the constraints behind the shared derived SQLite helper. |
 | `260605-01-character-list-page-slice-helper.md` | Preserves the delivered boundary for the character-list page-slice helper: pure snapshot slicing moved to render-state while DOM and pagination plugin ownership stayed in `public/script.js`. |
 | `260605-02-character-route-service-extraction.md` | Preserves the user-approved route-service boundary and UX-facing constraints behind the character read-service extraction. |
 | `260605-03-character-route-performance-proof.md` | Records why the third closure slice became Node 26 route/perf/UX evidence instead of another route extraction. |

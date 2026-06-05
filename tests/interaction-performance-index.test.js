@@ -336,6 +336,18 @@ function getCharactersListRouteHandler() {
 }
 
 /**
+ * @returns {(request: any, response: any) => Promise<void>}
+ */
+function getCharactersDeletePreflightRouteHandler() {
+    const layer = charactersRouter.stack.find(entry => entry.route?.path === '/delete-preflight');
+    if (!layer?.route?.stack?.length) {
+        throw new Error('Could not locate /api/characters/delete-preflight route handler');
+    }
+
+    return layer.route.stack[layer.route.stack.length - 1].handle;
+}
+
+/**
  * @param {{ root: string, characters: string, chats: string }} directories
  * @param {string} avatar
  * @returns {Promise<ReturnType<typeof createMockResponse>>}
@@ -379,6 +391,22 @@ async function invokeCharactersAll(directories) {
     return response;
 }
 
+/**
+ * @param {{ root: string, characters: string, chats: string }} directories
+ * @param {string[]} avatars
+ * @returns {Promise<ReturnType<typeof createMockResponse>>}
+ */
+async function invokeCharactersDeletePreflight(directories, avatars) {
+    const handler = getCharactersDeletePreflightRouteHandler();
+    const request = {
+        body: { avatars },
+        user: { directories },
+    };
+    const response = createMockResponse();
+    await handler(request, response);
+    return response;
+}
+
 const tempRoots = [];
 let sharedDataRoot = '';
 const DEFAULT_AVATAR_BUFFER = fs.readFileSync(new URL('../public/img/ai4.png', import.meta.url));
@@ -411,6 +439,17 @@ afterAll(() => {
 });
 
 describe('character index', () => {
+    test('rejects oversized delete preflight avatar batches before scanning files', async () => {
+        const directories = makeDirectories('emberdesk-character-delete-preflight-');
+        tempRoots.push(directories.root);
+        const avatars = Array.from({ length: 501 }, (_, index) => `avatar-${index}.png`);
+
+        const response = await invokeCharactersDeletePreflight(directories, avatars);
+
+        expect(response.statusCode).toBe(400);
+        expect(response.body).toEqual({ error: 'Too many avatars requested.' });
+    });
+
     test('rebuilds a missing index and serves both full and shallow payload modes from the same rows', async () => {
         const directories = makeDirectories('emberdesk-character-index-');
         tempRoots.push(directories.root);
