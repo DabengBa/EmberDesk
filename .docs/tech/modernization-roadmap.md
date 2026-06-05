@@ -273,51 +273,53 @@ Phase 1 result:
 - 2026-06-05: Character-list page-slice helper delivered. `getCharacterListPageEntities()` now lives in `public/scripts/character-list-render-state.js`, preserving current `snapshot.entities` slicing semantics while leaving jQuery pagination, DOM patching, row identity, `CHARACTER_PAGE_LOADED`, and extension compatibility owned by `public/script.js`.
 - 2026-06-05: Chat route search/recent service delivered. `src/endpoints/chat-route-service.js` now owns deterministic `/api/chats/search` and `/api/chats/recent` assembly, including character/group/root chat discovery, query matching, pinned sorting, metadata flag propagation, and corrupt/missing-file skips. `src/endpoints/chats.js` keeps Express response handling, JSONL parsing through `getChatInfo()`, save/rename/delete/import/export response shapes, backup lifecycle, and chat-stat dirty marking.
 - 2026-06-05: Derived cache release hardening evidence closed. No code behavior changed; the release-risk matrix is covered by focused proof for unsupported `node:sqlite`, `force_off`, startup status, cache path guards, PRAGMA baseline, schema-version reset, corrupt DB rebuild, reset-threshold disable, keyed dispose, character-read filesystem fallback, circuit-disabled throw behavior, and `/api/characters/get` index refresh failures.
+- 2026-06-05: Background panel controller boundary delivered. `public/scripts/background-panel-controller.js` now owns root-scoped loading-state helper behavior for the background library panel, while `public/scripts/backgrounds.js` keeps request flow, upload/delete/rename/folder behavior, thumbnail handling, slash-command registration, selectors, and visible copy unchanged. Focused proof lives in `tests/background-panel-controller.test.js`.
 
 ## Recommended Next Work
 
-The next recommended implementation slice is character route service extraction. The delivered character-list page-slice helper leaves the remaining visible list behavior stable, so the next useful modernization target moves back to the backend character route boundary.
+The next recommended implementation slice is compatibility hardening. The delivered route-service, derived-cache, performance-proof, and low-risk frontend-controller slices have expanded modernization boundaries; the next useful move is to re-freeze protected compatibility surfaces before build/dependency closure.
 
 Decision for the next turn:
 
-- Start with a small design/spec mapping step before moving route code.
-- Prefer read/list service wrappers or import-format helpers that can be proven with focused route/helper tests.
-- Keep `/api/characters/all`, `/api/characters/get`, cache/index refresh, thumbnail side effects, and file-backed canonical storage behavior stable unless a separate design approves a behavior change.
+- Start from `.docs/specs/260605-07-compatibility-hardening-pass`.
+- Treat extension mount points, `@sillytavern/*` aliases, regex placement values, slash-command exports, character-list DOM identity, shared-library globals, and event bridge exports as release boundaries.
+- Prefer focused compatibility proof and documentation closure over broad frontend refactors.
 
 Scope:
 
-- Extract one narrow backend character route helper or service boundary.
-- Keep routers thin while preserving current response shapes.
-- Prefer deterministic file-backed read/list or import-format work over broad endpoint file splitting.
-- Keep SQLite character index and DiskCache derived-only.
+- Audit and harden compatibility proof for protected frontend and extension-adjacent surfaces.
+- Update compatibility docs only where the current contract or gate has drifted.
+- Preserve existing public exports, selectors, route shapes, and numeric compatibility values unless a separate migration design approves a change.
 
 First shippable target:
 
-1. Map `src/endpoints/characters.js` around `/api/characters/all`, `/api/characters/get`, cache/index refresh, thumbnail side effects, and existing helper imports.
-2. Select one route-adjacent helper or service with deterministic inputs and focused test coverage.
-3. Add or extend focused tests before moving call sites.
-4. Keep response shape, cache/index invalidation, thumbnail behavior, path guards, and file-backed canonical data equivalent unless the slice explicitly proves and documents the behavior change.
+1. Map the current compatibility tests against the protected surfaces in AGENTS.md and `.docs/tech/third-party-extension-compatibility.md`.
+2. Close any missing proof around public import aliases, extension mount points, slash-command exports, regex placement values, and character-list identity.
+3. Keep fixes narrow and evidence-backed; avoid product UI redesign or unrelated cleanup.
+4. Run `bun run test:compat` as the primary gate, plus any focused tests for newly covered surfaces.
 
 Not in this slice:
 
-- Do not split all of `src/endpoints/characters.js` at once.
-- Do not change character endpoint response shapes, avatar path handling, thumbnail generation policy, world-info cascade behavior, or extension import aliases as part of the first backend helper slice.
-- Do not treat SQLite character index rows or DiskCache entries as canonical data.
+- Do not change compatibility contracts as part of the hardening pass unless the change is explicitly designed as a migration.
+- Do not introduce a frontend framework, SPA router, TypeScript application code, or shared-library replacement.
+- Do not treat this pass as a broad UX cleanup.
 
 Minimum validation:
 
-- Focused helper/route tests for the extracted character route boundary.
-- `interaction-performance-index.test.js` when `/api/characters/all`, `/api/characters/get`, or character-index behavior changes.
-- `bun run test:compat` only if frontend selector, extension, regex, slash-command, or public import compatibility is touched.
+- `bun run test:compat`.
+- Focused unit tests for any newly hardened compatibility surface.
+- `bun run docs:check` if semantic or linked compatibility docs change.
 - `bun run lint` as the closeout gate.
 
 ## Recommended Near-Term Sequence
 
-1. Continue character route service extraction now that the character-list helper boundary is green.
-   - Prefer read/list service wrappers or import-format helpers with route proof.
-   - Keep `/api/characters/all`, `/api/characters/get`, cache/index refresh, and thumbnail side effects stable.
+1. Run the compatibility hardening pass before deeper frontend or build changes.
+   - Freeze public import aliases, extension mount points, regex placement, slash-command exports, and character-list identity.
+   - Keep the pass proof-first and avoid visible behavior changes.
 
-2. Pick a low-risk frontend panel or toolbar controller only after the helper slices above are green.
+2. Then proceed to build/dependency closure.
+   - Keep Bun/Node roles separate.
+   - Preserve the `/lib.js` Webpack boundary until replacement proof exists.
    - Keep the login/setup controller pattern: pure helpers, explicit root, dependency injection, cleanup, and focused proof.
 
 3. Run startup and interaction performance reports after any slice that claims a latency improvement.

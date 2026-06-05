@@ -4,6 +4,7 @@ import { openThirdPartyExtensionMenu, saveMetadataDebounced } from './extensions
 import { SlashCommand } from './slash-commands/SlashCommand.js';
 import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
 import { createSingleFlightTask } from './startup-helpers.js';
+import { createBackgroundPanelController } from './background-panel-controller.js';
 import { createThumbnail, flashHighlight, getBase64Async, stringFormat, debounce, setupScrollToTop, saveBase64AsFile, getFileExtension, sortIgnoreCaseAndAccents } from './utils.js';
 import { debounce_timeout } from './constants.js';
 import { t } from './i18n.js';
@@ -105,7 +106,7 @@ let lazyLoadObserver = null;
  * @type {Array<{filename: string, isAnimated: boolean}>}
  */
 let cachedSystemBackgrounds = [];
-const BACKGROUND_STARTUP_LOADING_ID = 'bg_startup_loading';
+let backgroundPanelController = null;
 const backgroundCatalogTask = createSingleFlightTask(loadBackgroundCatalog);
 
 export let background_settings = {
@@ -747,27 +748,18 @@ async function loadBackgroundCatalog() {
 }
 
 function setBackgroundCatalogLoading(isLoading) {
-    const container = $('#bg_menu_content');
-    if (!container.length) {
+    const container = document.getElementById('bg_menu_content');
+    if (!container) {
         return;
     }
 
-    const existingIndicator = $(`#${BACKGROUND_STARTUP_LOADING_ID}`);
-    if (isLoading) {
-        if (!existingIndicator.length) {
-            const loadingIndicator = $(`
-                <div id="${BACKGROUND_STARTUP_LOADING_ID}" class="wide100p textAlignCenter marginTop10">
-                    <i class="fa-solid fa-spinner fa-spin"></i>
-                    <span>${t`Loading backgrounds...`}</span>
-                </div>
-            `);
-            container.prepend(loadingIndicator);
-        }
-
-        return;
+    if (!backgroundPanelController || backgroundPanelController.container !== container) {
+        backgroundPanelController = createBackgroundPanelController(document, {
+            loadingText: t`Loading backgrounds...`,
+        });
     }
 
-    existingIndicator.remove();
+    backgroundPanelController.setLoading(isLoading);
 }
 
 /**

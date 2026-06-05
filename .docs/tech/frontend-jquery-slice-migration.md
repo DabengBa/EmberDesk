@@ -13,6 +13,8 @@ The shipped slices are:
 - `public/scripts/setup.js` - setup page behavior, exported helpers, controller initializer, and production auto-init wrapper
 - `public/setup.html` - stable setup page markup and script host
 - `tests/setup-page-controller.test.js` - focused helper and controller regression proof for `fresh` and `set-password` setup modes
+- `public/scripts/background-panel-controller.js` - background-library panel loading state helper and root-scoped controller
+- `tests/background-panel-controller.test.js` - focused proof for background panel state classification, fail-fast initialization, root scoping, and cleanup
 
 This is not a framework migration. EmberDesk still uses the existing HTML/CSS/jQuery frontend, and this pattern only removes page-local jQuery dependencies when the slice can stay small and independently validated.
 
@@ -59,6 +61,15 @@ The setup slice keeps the existing API boundary:
 
 It does not remove the global jQuery script tag from `public/setup.html`; that cleanup has a broader compatibility surface than this page-controller extraction.
 
+For the background library panel, the controller owns only the local loading indicator under `#bg_menu_content`:
+
+- required-element detection for the system background container
+- loading indicator creation/removal using the existing `bg_startup_loading` id and existing visual classes
+- injected loading copy so production keeps the localized `Loading backgrounds...` text
+- cleanup that removes controller-owned loading state
+
+The background slice intentionally does not own upload, delete, rename, folder assignment, background selection, slash-command registration, thumbnail generation, or `/api/backgrounds/*` request behavior. `public/scripts/backgrounds.js` still owns those flows and only delegates `setBackgroundCatalogLoading()` to the controller.
+
 ## Core Implementation
 
 `public/scripts/login.js` now follows this shape:
@@ -85,6 +96,8 @@ The recovery success behavior now matches the semantic contract: after a success
 
 `public/scripts/setup.js` follows the same shape with `createSetupController(root, dependencies)`, `initSetupPage(root, dependencies)`, `globalThis.EMBERDESK_SETUP_TEST_MODE`, focused setup helper exports, and page-owned listener cleanup.
 
+`public/scripts/background-panel-controller.js` is a smaller panel-local variant of the same migration rule. It exports pure state classification through `getBackgroundPanelState()`, fail-fast controller creation through `createBackgroundPanelController(root, dependencies)`, and cleanup for controller-owned DOM state. Production code keeps the existing background module load order and routes all network, folder, thumbnail, and slash-command work through `public/scripts/backgrounds.js`.
+
 ## Migration Rules For Future Slices
 
 Use this pattern only for small, bounded frontend surfaces:
@@ -108,6 +121,7 @@ Focused proof for this slice:
 cd tests
 bun run test:unit -- login-page-controller.test.js --runInBand
 bun run test:unit -- setup-page-controller.test.js --runInBand
+bun run test:unit -- background-panel-controller.test.js --runInBand
 bun run test:e2e -- login.e2e.js
 bun run test:e2e -- sample.e2e.js
 ```
@@ -132,6 +146,7 @@ Semantic IDs:
 - `feature.account_lockout`
 - `page.setup`
 - `feature.first_time_setup`
+- `feature.background_library_panel`
 
 Stable binding points:
 
@@ -143,9 +158,13 @@ Stable binding points:
 - `createSetupController()` in `public/scripts/setup.js`
 - `globalThis.EMBERDESK_SETUP_TEST_MODE` import guard in `public/scripts/setup.js`
 - setup page markup IDs in `public/setup.html`
+- `createBackgroundPanelController()` in `public/scripts/background-panel-controller.js`
+- `getBackgroundPanelState()` in `public/scripts/background-panel-controller.js`
+- `setBackgroundCatalogLoading()` delegation in `public/scripts/backgrounds.js`
 
 Related docs:
 
 - [Login Page](../db/pages/login.md)
 - [Setup Page](../db/pages/setup.md)
 - [Password Recovery](../db/features/password-recovery.md)
+- [Background Library Panel](../db/features/background-library-panel.md)
