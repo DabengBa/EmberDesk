@@ -174,6 +174,9 @@ describe('character list structure', () => {
         expect(characterLibraryBranch).toContain('for (let index = 0; index < measuredRepeats; index++)');
         expect(characterLibraryBranch).toContain('normalizeSample(scenarioName, variant, sample, index + 1, measuredRepeats)');
         expect(characterLibraryBranch).not.toContain('normalizeSample(scenarioName, variant, sample, 1, 1)');
+        expect(runnerSource).toContain('firstItem.classList.contains(\'is_active\')');
+        expect(runnerSource).toContain('listElement.querySelectorAll(\'.character_select.is_active\')');
+        expect(runnerSource).not.toContain('firstItem.addEventListener(\'click\'');
     });
 
     test('keeps empty, hidden, and tag-overflow list states wired to the character list', () => {

@@ -305,7 +305,9 @@ User-perceived character-library metrics:
 - `filterInputToBusyClearMs`
 - `paginationScrollRestored`
 
-The search metric is gathered through a perf-only `measureCharacterSearchForPerf()` hook exposed only when `emberdesk_perf_hooks=1` is present. It exercises the same `entitiesFilter` and `printCharacters()` path as the UI while avoiding duplicated hidden search inputs in the DOM from making the runner target the wrong field.
+`firstListItemClickableMs` means the first visible character row accepted a click and reached the application-owned selected-row state (`.is_active`). It is not just a synthetic DOM listener check.
+
+The search metric is gathered through a perf-only `measureCharacterSearchForPerf()` hook exposed only when `emberdesk_perf_hooks=1` is present. It exercises the same `entitiesFilter` and `printCharacters()` render path as the UI while avoiding duplicated hidden search inputs in the DOM from making the runner target the wrong field. The timing intentionally excludes the UI debounce delay; it measures filter/render response after the search command is applied.
 
 Artifact contract:
 

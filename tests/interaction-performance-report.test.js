@@ -546,4 +546,29 @@ describe('interaction performance report helpers', () => {
             paginationScrollRestored: null,
         });
     });
+
+    test('summarizes character-library UX payloads through the exported helper', () => {
+        expect(summarizeScenarioPayload(
+            'character_library_first_interactive',
+            {
+                renderedCharacterCount: 12,
+                renderedGroupCount: 1,
+                firstListItemClickable: true,
+                busyCleared: false,
+                pageLoaded: true,
+                paginationScrollRestored: true,
+                metrics: {
+                    firstListItemClickableMs: 72,
+                },
+            },
+        )).toEqual({
+            query: '',
+            renderedCharacterCount: 12,
+            renderedGroupCount: 1,
+            firstListItemClickable: true,
+            busyCleared: false,
+            pageLoaded: true,
+            paginationScrollRestored: true,
+        });
+    });
 });

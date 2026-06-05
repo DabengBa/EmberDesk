@@ -55,7 +55,7 @@ Date: 2026-06-05
 - Full-app reliability: `public/scripts/power-user.js` skips resize-time autocomplete adjustment until the jQuery UI instance exists, preventing early full-app proof page errors.
 - Static guards: `tests/character-list-structure.test.js` covers the perf-only search hook, app-scenario repeat sampling, autocomplete initialization guard, and existing character-list DOM compatibility seams.
 - Durable docs: `.docs/tech/interaction-performance-indexing.md` records the scenario set, metric names, artifact policy, reliability controls, and 2026-06-05 Node 26.3.0 proof shape; `.docs/PROJECT_HISTORY.md` records this delivery node.
-- Final local proof: `artifacts/interaction-perf/2026-06-05T06-07-19-000Z/report.md` recorded 8/8 scenarios with `Valid pairs: 1/1`, JSON `warnings: []`, and character-library UX evidence. Raw artifacts remain local evidence and are not committed by default.
+- Final local proof: `artifacts/interaction-perf/2026-06-05T06-56-33-800Z/report.md` recorded 8/8 scenarios with `Valid pairs: 1/1`, JSON `warnings: []`, and character-library UX evidence. Raw artifacts remain local evidence and are not committed by default.
 - Delivery status: implemented, reviewed, validated, and archived in the containing wrap-up commit on 2026-06-05.
 
 ## Change History
@@ -64,3 +64,4 @@ Date: 2026-06-05
 - 2026-06-05: 根据已交付的 character read service 和 edge-case tests，更新本 brief：第 3 个 spec 不再设计 route/service extraction，而是证明当前 read service/index hot path 在 Node 26.3.0 下可重复验证。
 - 2026-06-05: 接受 UX 复核中“proof 不能只看 API latency”的意见，新增首屏可见、首条目可点击、过滤响应和分页滚动保持的测量意图；将 skeleton、incremental first batch、fallback toast、infinite scroll 标记为后续 UI slice。
 - 2026-06-05: delivery 后冻结实现追溯：runner/report/frontend perf hook、autocomplete guard、focused tests、Node 26.3.0 proof report 与 durable docs 均已落地。
+- 2026-06-05: review correction 后更新追溯：`firstListItemClickableMs` 改为等待应用选中态，`summarizeScenarioPayload(character_library_*)` 增加直接单测，filter 指标文档明确不包含 debounce。

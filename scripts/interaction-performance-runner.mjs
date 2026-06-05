@@ -679,12 +679,19 @@ async function invokeCharacterLibraryScenario(page, scenarioName) {
             }
 
             const firstListItemVisibleMs = performance.now() - startedAt;
-            let firstListItemClickable = false;
-            firstItem.addEventListener('click', () => {
-                firstListItemClickable = true;
-            }, { once: true, capture: true });
+            const firstItemId = firstItem.getAttribute('data-chid');
             firstItem.click();
-            await nextFrame();
+            const selectedFirstItem = await waitForCondition(() => {
+                if (firstItem.classList.contains('is_active')) {
+                    return firstItem;
+                }
+                if (firstItemId === null) {
+                    return null;
+                }
+                return Array.from(listElement.querySelectorAll('.character_select.is_active'))
+                    .find(row => row.getAttribute('data-chid') === firstItemId) ?? null;
+            }, 5000);
+            const firstListItemClickable = selectedFirstItem !== null;
             const firstListItemClickableMs = performance.now() - startedAt;
 
             await printPromise;
