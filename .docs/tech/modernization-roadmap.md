@@ -276,40 +276,41 @@ Phase 1 result:
 - 2026-06-05: Background panel controller boundary delivered. `public/scripts/background-panel-controller.js` now owns root-scoped loading-state helper behavior for the background library panel, while `public/scripts/backgrounds.js` keeps request flow, upload/delete/rename/folder behavior, thumbnail handling, slash-command registration, selectors, and visible copy unchanged. Focused proof lives in `tests/background-panel-controller.test.js`.
 - 2026-06-05: Compatibility hardening pass delivered. `tests/third-party-extension-compatibility.test.js` now freezes slash-command public exports in addition to extension mount points, Tavern Helper assets, `@sillytavern/*` aliases, key module exports, event values, regex placement values, and character-list row identity. `tests/interaction-performance-index.test.js` now verifies character read-service envelope fields stay internal to the route layer.
 - 2026-06-05: Build dependency closure delivered. Node.js 26.3.0 remains the application runtime, Bun 1.3.14 remains package manager/script runner, Webpack remains scoped to `/lib.js`, ESLint remains the authoritative lint gate, oxlint remains a warning-only fast preflight, and no package, lockfile, build, Docker, or Electron lifecycle drift required a code change.
+- 2026-06-05: Documentation topology closure delivered. `.docs/tech/briefs/README.md` now indexes retained closure briefs as persistent intent records, and this roadmap now distinguishes durable briefs from spec-local `design.md`/`plan.md` process artifacts that are deleted during wrap-up. `.docs/db` semantics were unchanged and `bun run docs:check` stayed green.
 
 ## Recommended Next Work
 
-The next recommended implementation slice is documentation topology closure. Node 26 release validation is complete, so the useful move is to remove stale process docs, keep only high-signal briefs and owning docs, and prove the docs topology is ready for roadmap freeze.
+The next recommended implementation slice is roadmap freeze and successor decision. Documentation topology closure is complete, so the useful move is to mark this 10-step roadmap closed and move remaining large migrations into an explicit successor proposal instead of leaving them as unfinished work.
 
 Decision for the next turn:
 
-- Start from `.docs/specs/260605-10-documentation-topology-closure`.
-- Preserve delivered facts in `.docs/PROJECT_HISTORY.md`, `.docs/tech/`, `.docs/adr/`, and `.docs/db/` owners instead of process docs.
-- Keep briefs that preserve user intent and implementation traceability; remove only stale process artifacts owned by the workflow.
-- Run docs validation and inspect topology before declaring the roadmap ready for freeze.
+- Start from `.docs/specs/260605-11-roadmap-freeze-successor-decision`.
+- Freeze this modernization roadmap only against delivered facts already recorded in `.docs/PROJECT_HISTORY.md`, briefs, and owning tech docs.
+- Move future SPA, TypeScript, database-first storage, broad endpoint splits, and broad dependency migrations into successor-roadmap language instead of treating them as unfinished items here.
+- Preserve compatibility and file-backed canonical storage boundaries as explicit successor constraints.
 
 Scope:
 
-- Close stale documentation topology after the delivered 10-step slices.
-- Verify semantic docs, tech docs, project history, and briefs agree on runtime, compatibility, validation, and successor boundaries.
-- Keep user-facing semantic docs unchanged unless a real semantic mismatch is found.
+- Decide the closure state of this roadmap using delivered slice evidence.
+- Update this roadmap and owning docs with successor boundaries and non-goals.
+- Avoid inventing new implementation work during freeze.
 
 First shippable target:
 
-1. Inventory `.docs/specs`, `.docs/tech/briefs`, `.docs/PROJECT_HISTORY.md`, `.docs/tech/modernization-roadmap.md`, and semantic docs for stale process references.
-2. Remove or archive only workflow-owned process artifacts after durable facts are already preserved.
-3. Run `bun run docs:check` and inspect generated topology for unresolved or orphaned nodes.
-4. Update roadmap next-work language to point to roadmap freeze and successor decision.
+1. Compare delivered slices in `.docs/PROJECT_HISTORY.md` with the 10-step closure plan.
+2. Mark what is closed, what remains intentionally deferred, and what must move to a successor roadmap.
+3. Update durable docs without changing product semantics.
+4. Run docs validation and close the final spec process files.
 
 Not in this slice:
 
-- Do not rewrite product semantics or merge unrelated documentation cleanup.
-- Do not delete user-intent briefs that are the durable trace for delivered slices.
-- Do not create ADRs unless the topology closure uncovers a durable, non-obvious architecture decision.
+- Do not implement deferred migrations.
+- Do not re-open delivered slices unless current evidence contradicts their closure.
+- Do not delete briefs or semantic docs as a way to make the roadmap look finished.
 
 Minimum validation:
 
-- Commands named by the 10 plan.
+- Commands named by the 11 plan.
 - `bun run docs:check`.
 - `bun run lint` as the closeout gate.
 
@@ -329,9 +330,9 @@ Minimum validation:
 
 ## 10-Step Roadmap Closure Plan
 
-If the remaining modernization roadmap must close in exactly 10 shippable steps, use this order. Each step starts with a small `design.md`, runs through `delivery-workflow`, preserves compatibility proof, and records durable facts only after the slice is delivered.
+If the remaining modernization roadmap must close in exactly 10 shippable steps, use this order. Each step starts with a small process `design.md`, runs through `delivery-workflow`, preserves compatibility proof, and records durable facts only after the slice is delivered.
 
-The independent design specs for these steps live in `.docs/specs/260605-02-character-route-service-extraction` through `.docs/specs/260605-11-roadmap-freeze-successor-decision`.
+Durable user intent for these steps lives in `.docs/tech/briefs/260605-02-character-route-service-extraction.md` through `.docs/tech/briefs/260605-11-roadmap-freeze-successor-decision.md`. Spec-local `design.md` and `plan.md` files are process artifacts and are deleted as each slice completes wrap-up.
 
 1. Character route service extraction.
    - Extract one deterministic helper or service boundary from `src/endpoints/characters.js`.
