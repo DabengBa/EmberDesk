@@ -274,52 +274,53 @@ Phase 1 result:
 - 2026-06-05: Chat route search/recent service delivered. `src/endpoints/chat-route-service.js` now owns deterministic `/api/chats/search` and `/api/chats/recent` assembly, including character/group/root chat discovery, query matching, pinned sorting, metadata flag propagation, and corrupt/missing-file skips. `src/endpoints/chats.js` keeps Express response handling, JSONL parsing through `getChatInfo()`, save/rename/delete/import/export response shapes, backup lifecycle, and chat-stat dirty marking.
 - 2026-06-05: Derived cache release hardening evidence closed. No code behavior changed; the release-risk matrix is covered by focused proof for unsupported `node:sqlite`, `force_off`, startup status, cache path guards, PRAGMA baseline, schema-version reset, corrupt DB rebuild, reset-threshold disable, keyed dispose, character-read filesystem fallback, circuit-disabled throw behavior, and `/api/characters/get` index refresh failures.
 - 2026-06-05: Background panel controller boundary delivered. `public/scripts/background-panel-controller.js` now owns root-scoped loading-state helper behavior for the background library panel, while `public/scripts/backgrounds.js` keeps request flow, upload/delete/rename/folder behavior, thumbnail handling, slash-command registration, selectors, and visible copy unchanged. Focused proof lives in `tests/background-panel-controller.test.js`.
+- 2026-06-05: Compatibility hardening pass delivered. `tests/third-party-extension-compatibility.test.js` now freezes slash-command public exports in addition to extension mount points, Tavern Helper assets, `@sillytavern/*` aliases, key module exports, event values, regex placement values, and character-list row identity. `tests/interaction-performance-index.test.js` now verifies character read-service envelope fields stay internal to the route layer.
 
 ## Recommended Next Work
 
-The next recommended implementation slice is compatibility hardening. The delivered route-service, derived-cache, performance-proof, and low-risk frontend-controller slices have expanded modernization boundaries; the next useful move is to re-freeze protected compatibility surfaces before build/dependency closure.
+The next recommended implementation slice is build and dependency closure. Compatibility hardening is now green, so the next useful move is to close build/dependency contracts without changing runtime behavior or the `/lib.js` compatibility boundary.
 
 Decision for the next turn:
 
-- Start from `.docs/specs/260605-07-compatibility-hardening-pass`.
-- Treat extension mount points, `@sillytavern/*` aliases, regex placement values, slash-command exports, character-list DOM identity, shared-library globals, and event bridge exports as release boundaries.
-- Prefer focused compatibility proof and documentation closure over broad frontend refactors.
+- Start from `.docs/specs/260605-08-build-dependency-closure`.
+- Keep Bun as package manager/script runner and Node.js 26.3.0 as application runtime.
+- Keep Webpack scoped to `/lib.js` unless a replacement proves the same source-import, bundled-module, and legacy-global contract.
+- Avoid broad dependency churn; only close documented drift or proof gaps.
 
 Scope:
 
-- Audit and harden compatibility proof for protected frontend and extension-adjacent surfaces.
-- Update compatibility docs only where the current contract or gate has drifted.
-- Preserve existing public exports, selectors, route shapes, and numeric compatibility values unless a separate migration design approves a change.
+- Audit root and tests package dependency/build contracts after the Node 26.3.0, ESLint 10, oxlint, and compatibility slices.
+- Close stale build/dependency documentation and validation gaps.
+- Preserve package boundaries: root, `tests/`, and `src/electron` remain separately owned unless a dedicated migration approves a change.
 
 First shippable target:
 
-1. Map the current compatibility tests against the protected surfaces in AGENTS.md and `.docs/tech/third-party-extension-compatibility.md`.
-2. Close any missing proof around public import aliases, extension mount points, slash-command exports, regex placement values, and character-list identity.
-3. Keep fixes narrow and evidence-backed; avoid product UI redesign or unrelated cleanup.
-4. Run `bun run test:compat` as the primary gate, plus any focused tests for newly covered surfaces.
+1. Map `package.json`, `bun.lock`, `tests/package.json`, `tests/bun.lock`, `bunfig.toml`, `tests/bunfig.toml`, `Dockerfile`, `webpack.config.js`, and `src/electron/package.json`.
+2. Verify dependency/tooling docs still match current package boundaries and commands.
+3. Run the focused build/dependency gates from the spec plan.
+4. Update durable docs only for current contracts, not future migration wishes.
 
 Not in this slice:
 
-- Do not change compatibility contracts as part of the hardening pass unless the change is explicitly designed as a migration.
-- Do not introduce a frontend framework, SPA router, TypeScript application code, or shared-library replacement.
-- Do not treat this pass as a broad UX cleanup.
+- Do not upgrade or replace major tooling just to make the dependency map look cleaner.
+- Do not migrate Electron to Bun.
+- Do not replace Webpack or change `/lib.js` exports in this closure pass.
 
 Minimum validation:
 
-- `bun run test:compat`.
-- Focused unit tests for any newly hardened compatibility surface.
-- `bun run docs:check` if semantic or linked compatibility docs change.
+- Build/dependency commands named by the 08 plan.
+- `bun run --cwd tests test:unit -- frontend-shared-library-boundary.test.js --runInBand` if `/lib.js`, Webpack, or build docs are touched.
+- `bun run docs:check` if docs change.
 - `bun run lint` as the closeout gate.
 
 ## Recommended Near-Term Sequence
 
-1. Run the compatibility hardening pass before deeper frontend or build changes.
-   - Freeze public import aliases, extension mount points, regex placement, slash-command exports, and character-list identity.
-   - Keep the pass proof-first and avoid visible behavior changes.
+1. Run build/dependency closure.
+   - Confirm package boundaries and current tool versions.
+   - Keep dependency churn out unless the spec has a specific, validated reason.
 
-2. Then proceed to build/dependency closure.
-   - Keep Bun/Node roles separate.
-   - Preserve the `/lib.js` Webpack boundary until replacement proof exists.
+2. Then run the Node 26 release validation sweep.
+   - Use Node.js 26.3.0 proof as release evidence, not non-contract diagnostic runtimes.
    - Keep the login/setup controller pattern: pure helpers, explicit root, dependency injection, cleanup, and focused proof.
 
 3. Run startup and interaction performance reports after any slice that claims a latency improvement.

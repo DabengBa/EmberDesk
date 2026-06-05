@@ -72,6 +72,39 @@ High-risk import surfaces include:
 
 Do not rename, move, or narrow these exported browser modules as incidental cleanup during jQuery slice migration.
 
+## Slash Command Public Surface
+
+`public/scripts/slash-commands.js` is a public browser module surface for compatible scripts and helper extensions. The protected exports include:
+
+- `executeSlashCommands`
+- `executeSlashCommandsWithOptions`
+- `getSlashCommandsHelp`
+- `registerSlashCommand`
+- `parser`
+- `CONNECT_API_MAP`
+- `UNIQUE_APIS`
+- `initDefaultSlashCommands`
+- `COMMENT_NAME_DEFAULT`
+- `processChatSlashCommands`
+- `generateSystemMessage`
+- `validateArrayArgString`
+- `validateArrayArg`
+- `getNameAndAvatarForMessage`
+- `sendMessageAs`
+- `sendNarratorMessage`
+- `promptQuietForLoudResponse`
+- `isExecutingCommandsFromChatInput`
+- `commandsFromChatInputAbortController`
+- `activateScriptButtons`
+- `deactivateScriptButtons`
+- `pauseScriptExecution`
+- `stopScriptExecution`
+- `executeSlashCommandsOnChatInput`
+- `setSlashCommandAutoComplete`
+- `initSlashCommandAutoComplete`
+
+Do not remove, rename, or narrow these exports as incidental cleanup. Parser, command-registration, and execution semantics require focused compatibility proof before behavior changes.
+
 ## Regex Data Contract
 
 The current regex feature is stateful across global settings, character cards, and presets:
@@ -115,6 +148,18 @@ Stable event names include:
 
 `eventSource` must keep `on`, `once`, `emit`, `emitAndWait`, `makeFirst`, `makeLast`, and `removeListener`.
 
+## Character Route Compatibility
+
+Character read internals may use service envelopes such as `result.mode`, `latencyHint`, `interactionPath`, filter context, or pagination context. Those are route-service implementation details, not browser or extension payload contracts.
+
+The public character routes must continue to send legacy-shaped payloads:
+
+- `/api/characters/all` returns an array of character payloads.
+- `/api/characters/list` returns an array of shallow character summaries.
+- `/api/characters/get` returns the character payload object or a legacy HTTP status such as 404.
+
+Do not expose the internal read-service envelope fields to browser callers without a separate migration design.
+
 ## Frontend Migration Rules
 
 Before each frontend jQuery slice, classify whether the slice touches this compatibility boundary.
@@ -147,5 +192,13 @@ bun run test:unit -- third-party-extension-compatibility.test.js --runInBand
 Pop-Location
 ```
 
-This test verifies mount points, Tavern Helper manifest and distributable files, `@sillytavern/*` import resolution, key module exports, event values, and regex placement values.
+This test verifies mount points, Tavern Helper manifest and distributable files, `@sillytavern/*` import resolution, key module exports, slash-command public exports, event values, and regex placement values.
 It also verifies the generated character-list row identity contract used by character library slices.
+
+When character read-service or character route work changes `/api/characters/all`, `/api/characters/list`, or `/api/characters/get`, also run:
+
+```powershell
+bun run --cwd tests test:unit -- character-read-service.test.js interaction-performance-index.test.js character-list-structure.test.js --runInBand
+```
+
+That focused route proof verifies the internal read-service envelope stays internal and the legacy browser-facing payload shape remains stable.

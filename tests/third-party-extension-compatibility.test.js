@@ -37,6 +37,35 @@ const requiredRegexExports = [
     'regex_placement',
 ];
 
+const requiredSlashCommandExports = [
+    'executeSlashCommands',
+    'executeSlashCommandsWithOptions',
+    'getSlashCommandsHelp',
+    'registerSlashCommand',
+    'parser',
+    'CONNECT_API_MAP',
+    'UNIQUE_APIS',
+    'initDefaultSlashCommands',
+    'COMMENT_NAME_DEFAULT',
+    'processChatSlashCommands',
+    'generateSystemMessage',
+    'validateArrayArgString',
+    'validateArrayArg',
+    'getNameAndAvatarForMessage',
+    'sendMessageAs',
+    'sendNarratorMessage',
+    'promptQuietForLoudResponse',
+    'isExecutingCommandsFromChatInput',
+    'commandsFromChatInputAbortController',
+    'activateScriptButtons',
+    'deactivateScriptButtons',
+    'pauseScriptExecution',
+    'stopScriptExecution',
+    'executeSlashCommandsOnChatInput',
+    'setSlashCommandAutoComplete',
+    'initSlashCommandAutoComplete',
+];
+
 const tavernHelperCriticalEvents = {
     APP_READY: 'app_ready',
     CHAT_CHANGED: 'chat_id_changed',
@@ -224,6 +253,12 @@ describe('third-party extension compatibility boundary', () => {
         expectNamedExports(readPublicFile('script.js'), requiredScriptExports);
         expectNamedExports(readPublicFile('scripts', 'extensions.js'), requiredExtensionExports);
         expectNamedExports(readPublicFile('scripts', 'extensions', 'regex', 'engine.js'), requiredRegexExports);
+    });
+
+    test('keeps slash-command public exports stable for compatible extensions', () => {
+        const slashCommandSource = readPublicFile('scripts', 'slash-commands.js');
+
+        expectNamedExports(slashCommandSource, requiredSlashCommandExports);
     });
 
     test('keeps generated character list rows compatible with legacy selector contracts', () => {

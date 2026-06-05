@@ -272,6 +272,22 @@ function createMockResponse(statusCode = 200) {
     };
 }
 
+function expectNoCharacterReadEnvelope(payload) {
+    expect(payload).not.toHaveProperty('result');
+    expect(payload).not.toHaveProperty('mode');
+    expect(payload).not.toHaveProperty('latencyHint');
+    expect(payload).not.toHaveProperty('interactionPath');
+
+    if (Array.isArray(payload)) {
+        for (const item of payload) {
+            expect(item).not.toHaveProperty('result');
+            expect(item).not.toHaveProperty('mode');
+            expect(item).not.toHaveProperty('latencyHint');
+            expect(item).not.toHaveProperty('interactionPath');
+        }
+    }
+}
+
 test('frontend getCharacters implementation uses /api/characters/all to preserve eager payload mode', () => {
     const scriptSource = fs.readFileSync(path.join(repoRoot, 'public', 'script.js'), 'utf8');
     const getCharactersStart = scriptSource.indexOf('export async function getCharacters()');
@@ -742,6 +758,7 @@ describe('character index', () => {
             name: 'Full alpha',
             json_data: 'json:alpha',
         }));
+        expectNoCharacterReadEnvelope(response.body);
     });
 
     test('refreshes dirty chat stats before serving /api/characters/get from a fresh indexed row', async () => {
@@ -1175,6 +1192,7 @@ describe('character index', () => {
             avatar: 'alpha.png',
             name: 'Alpha Live',
         }));
+        expectNoCharacterReadEnvelope(response.body);
         expect(response.body.name).not.toBe('Full alpha');
         expect(response.headers['x-emberdesk-interaction-path']).toBe('characters_get:filesystem');
     });
@@ -1202,6 +1220,7 @@ describe('character index', () => {
 
         expect(response.statusCode).toBe(200);
         expect(Array.isArray(response.body)).toBe(true);
+        expectNoCharacterReadEnvelope(response.body);
         expect(response.body).toHaveLength(1);
         expect(response.body[0]).toEqual(expect.objectContaining({
             shallow: true,
@@ -1239,6 +1258,7 @@ describe('character index', () => {
 
         expect(response.statusCode).toBe(200);
         expect(Array.isArray(response.body)).toBe(true);
+        expectNoCharacterReadEnvelope(response.body);
         expect(response.body).toHaveLength(1);
         expect(response.body[0]).toEqual(expect.objectContaining({
             avatar: 'alpha.png',
