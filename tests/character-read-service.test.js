@@ -182,6 +182,80 @@ describe('character read service', () => {
         expect(dependencies.processCharacter).toHaveBeenCalledWith('alpha.png', directories, { shallow: true });
     });
 
+    test('reads /list shallow summaries through the index', async () => {
+        const directories = makeDirectories();
+        writeAvatar(directories, 'beta.png');
+        writeAvatar(directories, 'alpha.png');
+        fs.writeFileSync(path.join(directories.characters, 'notes.txt'), 'ignore', 'utf8');
+
+        const dependencies = createDependencies({
+            isCharacterIndexSupported: jest.fn(() => true),
+            listIndexedCharacterPayloads: jest.fn(async () => [
+                { avatar: 'alpha.png', name: 'Alpha' },
+                { avatar: 'beta.png', name: 'Beta' },
+            ]),
+        });
+
+        const result = await readCharacterSummaryPayload({
+            directories,
+            filter: { query: 'ignored' },
+            pagination: { offset: 0, limit: 10 },
+            dependencies,
+        });
+
+        expect(result).toEqual({
+            result: {
+                mode: 'snapshot',
+                data: [
+                    { avatar: 'alpha.png', name: 'Alpha' },
+                    { avatar: 'beta.png', name: 'Beta' },
+                ],
+            },
+            latencyHint: 'instant',
+        });
+        expect(dependencies.listIndexedCharacterPayloads).toHaveBeenCalledWith(expect.objectContaining({
+            userRoot: directories.root,
+            directories,
+            avatarFiles: ['alpha.png', 'beta.png'],
+            useShallowPayload: true,
+            buildRow: expect.any(Function),
+        }));
+        expect(dependencies.processCharacter).not.toHaveBeenCalled();
+    });
+
+    test('falls back to filesystem summaries when indexed /list read fails', async () => {
+        const directories = makeDirectories();
+        writeAvatar(directories, 'alpha.png');
+        writeAvatar(directories, 'broken.png');
+
+        const dependencies = createDependencies({
+            isCharacterIndexSupported: jest.fn(() => true),
+            listIndexedCharacterPayloads: jest.fn(async () => {
+                throw new Error('summary index unavailable');
+            }),
+            processCharacter: jest.fn(async (avatar) => avatar === 'broken.png'
+                ? { avatar, date_added: 0 }
+                : { avatar, name: `Summary ${avatar}` }),
+        });
+
+        const result = await readCharacterSummaryPayload({
+            directories,
+            dependencies,
+        });
+
+        expect(result).toEqual({
+            result: {
+                mode: 'snapshot',
+                data: [{ avatar: 'alpha.png', name: 'Summary alpha.png' }],
+            },
+            latencyHint: 'slow',
+        });
+        expect(dependencies.warn).toHaveBeenCalledWith(
+            'Falling back to filesystem-backed character summary list after index read failure:',
+            expect.any(Error),
+        );
+    });
+
     test('serves /get from a fresh indexed full payload', async () => {
         const directories = makeDirectories();
         writeAvatar(directories, 'alpha.png');
@@ -208,6 +282,41 @@ describe('character read service', () => {
             latencyHint: 'instant',
         });
         expect(dependencies.processCharacter).not.toHaveBeenCalled();
+    });
+
+    test('falls back to filesystem /get when index lookup throws', async () => {
+        const directories = makeDirectories();
+        writeAvatar(directories, 'alpha.png');
+        const livePayload = { avatar: 'alpha.png', name: 'Live Alpha', json_data: '{}' };
+
+        const dependencies = createDependencies({
+            isCharacterIndexSupported: jest.fn(() => true),
+            getFreshIndexedCharacterFullPayload: jest.fn(() => {
+                throw new Error('index lookup failed');
+            }),
+            processCharacter: jest.fn(async () => livePayload),
+        });
+
+        const result = await readCharacterFullPayload({
+            directories,
+            avatarUrl: 'alpha.png',
+            dependencies,
+        });
+
+        expect(result).toEqual({
+            status: 'found',
+            result: {
+                mode: 'snapshot',
+                data: livePayload,
+            },
+            interactionPath: 'characters_get:filesystem',
+            latencyHint: 'fast',
+        });
+        expect(dependencies.warn).toHaveBeenCalledWith(
+            'Character index lookup skipped for alpha.png:',
+            expect.any(Error),
+        );
+        expect(dependencies.upsertCharacterIndexEntry).toHaveBeenCalled();
     });
 
     test('falls back to filesystem /get and refreshes the index row', async () => {
@@ -241,6 +350,60 @@ describe('character read service', () => {
             fullPayload: livePayload,
             shallowPayload: { avatar: 'alpha.png', name: 'Live Alpha' },
         }));
+    });
+
+    test('does not hide non-missing stat errors during /get', async () => {
+        const directories = makeDirectories();
+        const statError = Object.assign(new Error('cannot stat character file'), { code: 'EACCES' });
+        const dependencies = createDependencies({
+            statCharacterFile: jest.fn(() => {
+                throw statError;
+            }),
+        });
+
+        await expect(readCharacterFullPayload({
+            directories,
+            avatarUrl: 'alpha.png',
+            dependencies,
+        })).rejects.toThrow('cannot stat character file');
+
+        expect(dependencies.processCharacter).not.toHaveBeenCalled();
+        expect(dependencies.warn).not.toHaveBeenCalled();
+    });
+
+    test('keeps filesystem /get response when index refresh throws', async () => {
+        const directories = makeDirectories();
+        writeAvatar(directories, 'alpha.png');
+        const livePayload = { avatar: 'alpha.png', name: 'Live Alpha', json_data: '{}' };
+
+        const dependencies = createDependencies({
+            isCharacterIndexSupported: jest.fn(() => true),
+            getFreshIndexedCharacterFullPayload: jest.fn(() => null),
+            processCharacter: jest.fn(async () => livePayload),
+            upsertCharacterIndexEntry: jest.fn(() => {
+                throw new Error('index refresh failed');
+            }),
+        });
+
+        const result = await readCharacterFullPayload({
+            directories,
+            avatarUrl: 'alpha.png',
+            dependencies,
+        });
+
+        expect(result).toEqual({
+            status: 'found',
+            result: {
+                mode: 'snapshot',
+                data: livePayload,
+            },
+            interactionPath: 'characters_get:filesystem',
+            latencyHint: 'fast',
+        });
+        expect(dependencies.warn).toHaveBeenCalledWith(
+            'Character index refresh skipped after get for alpha.png:',
+            expect.any(Error),
+        );
     });
 
     test('reports missing avatar as not_found without reparsing', async () => {
