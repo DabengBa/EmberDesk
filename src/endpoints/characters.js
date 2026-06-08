@@ -25,6 +25,11 @@ import {
     readCharacterListPayload,
     readCharacterSummaryPayload,
 } from './character-read-service.js';
+import {
+    createCharacterCard,
+    editCharacterCard,
+    renameCharacterCard,
+} from './character-write-service.js';
 
 import { areThumbnailsEnabled, generateThumbnail, invalidateThumbnail } from './thumbnails.js';
 import { importRisuSprites } from './sprites.js';
@@ -581,6 +586,29 @@ function createCharacterReadDependencies() {
         toShallow,
         getCharacterIndexWorldMetadata,
         warn: console.warn,
+    };
+}
+
+function createCharacterWriteDependencies({ bustCache = null } = {}) {
+    return {
+        defaultAvatarPath: DEFAULT_AVATAR_PATH,
+        sanitizeName: sanitize,
+        formatCharacterData: charaFormatData,
+        getPngName,
+        readCharacterData,
+        getCharaCardV2,
+        setValue: _.set,
+        fileExists: fs.existsSync,
+        makeDirectory: fs.mkdirSync,
+        unlinkFile: fs.unlinkSync,
+        copyDirectory: (from, to) => fs.cpSync(from, to, { recursive: true }),
+        removeDirectory: target => fs.rmSync(target, { recursive: true, force: true }),
+        joinPath: path.join,
+        parsePath: path.parse,
+        writeCharacterData,
+        refreshCharacterIndexEntry: refreshCharacterIndexEntrySafe,
+        deleteCharacterIndexEntry: deleteCharacterIndexEntrySafe,
+        bustCache,
     };
 }
 
@@ -1251,27 +1279,19 @@ router.post('/create', getFileNameValidationFunction('file_name'), async functio
     try {
         if (!request.body) return response.sendStatus(400);
 
-        request.body.ch_name = sanitize(request.body.ch_name);
+        const result = await createCharacterCard({
+            request,
+            body: request.body,
+            file: request.file ?? null,
+            crop: request.file ? tryParse(request.query.crop) : undefined,
+            dependencies: createCharacterWriteDependencies(),
+        });
 
-        const char = JSON.stringify(charaFormatData(request.body, request.user.directories));
-        const internalName = request.body.file_name || getPngName(request.body.ch_name, request.user.directories);
-        const avatarName = `${internalName}.png`;
-        const chatsPath = path.join(request.user.directories.chats, internalName);
-
-        if (!fs.existsSync(chatsPath)) fs.mkdirSync(chatsPath);
-
-        if (!request.file) {
-            await writeCharacterData(DEFAULT_AVATAR_PATH, char, internalName, request);
-            await refreshCharacterIndexEntrySafe(request.user.directories, avatarName, 'create');
-            return response.send(avatarName);
-        } else {
-            const crop = tryParse(request.query.crop);
-            const uploadPath = path.join(request.file.destination, request.file.filename);
-            await writeCharacterData(uploadPath, char, internalName, request, crop);
-            fs.unlinkSync(uploadPath);
-            await refreshCharacterIndexEntrySafe(request.user.directories, avatarName, 'create');
-            return response.send(avatarName);
+        if (!result.ok) {
+            return response.status(500).send(result.message);
         }
+
+        return response.send(result.avatarName);
     } catch (err) {
         console.error(err);
         response.sendStatus(500);
@@ -1283,44 +1303,19 @@ router.post('/rename', validateAvatarUrlMiddleware, async function (request, res
         return response.sendStatus(400);
     }
 
-    const oldAvatarName = request.body.avatar_url;
-    const newName = sanitize(request.body.new_name);
-    const oldInternalName = path.parse(request.body.avatar_url).name;
-    const newInternalName = getPngName(newName, request.user.directories);
-    const newAvatarName = `${newInternalName}.png`;
-
-    const oldAvatarPath = path.join(request.user.directories.characters, oldAvatarName);
-
-    const oldChatsPath = path.join(request.user.directories.chats, oldInternalName);
-    const newChatsPath = path.join(request.user.directories.chats, newInternalName);
-
     try {
-        // Read old file, replace name int it
-        const rawOldData = await readCharacterData(oldAvatarPath);
-        if (rawOldData === undefined) throw new Error('Failed to read character file');
+        const result = await renameCharacterCard({
+            request,
+            body: request.body,
+            dependencies: createCharacterWriteDependencies(),
+        });
 
-        const oldData = getCharaCardV2(JSON.parse(rawOldData), request.user.directories);
-        _.set(oldData, 'data.name', newName);
-        _.set(oldData, 'name', newName);
-        const newData = JSON.stringify(oldData);
-
-        // Write data to new location
-        await writeCharacterData(oldAvatarPath, newData, newInternalName, request);
-
-        // Rename chats folder
-        if (fs.existsSync(oldChatsPath) && !fs.existsSync(newChatsPath)) {
-            fs.cpSync(oldChatsPath, newChatsPath, { recursive: true });
-            fs.rmSync(oldChatsPath, { recursive: true, force: true });
+        if (!result.ok) {
+            return response.status(500).send(result.message);
         }
 
-        // Remove the old character file
-        fs.unlinkSync(oldAvatarPath);
-
-        deleteCharacterIndexEntrySafe(request.user.directories, oldAvatarName, 'rename');
-        await refreshCharacterIndexEntrySafe(request.user.directories, newAvatarName, 'rename');
-
         // Return new avatar name to ST
-        return response.send({ avatar: newAvatarName });
+        return response.send({ avatar: result.avatarName });
     } catch (err) {
         console.error(err);
         return response.sendStatus(500);
@@ -1346,39 +1341,27 @@ router.post('/edit', validateAvatarUrlMiddleware, async function (request, respo
         return;
     }
 
-    const avatarUrl = request.body.avatar_url.toString();
-    let char = charaFormatData(request.body, request.user.directories);
-    char.chat = request.body.chat;
-    char.create_date = request.body.create_date;
-    char = JSON.stringify(char);
-    let targetFile = avatarUrl.replace('.png', '');
-
     try {
-        if (!request.file) {
-            const avatarPath = path.join(request.user.directories.characters, avatarUrl);
-            if (!fs.existsSync(avatarPath)) {
-                console.warn('Error: character file does not exist', avatarPath);
-                return response.status(400).send('Error: character file does not exist');
-            }
+        const result = await editCharacterCard({
+            request,
+            response,
+            body: request.body,
+            file: request.file ?? null,
+            crop: request.file ? tryParse(request.query.crop) : undefined,
+            dependencies: createCharacterWriteDependencies({
+                bustCache: cacheBuster.bust,
+            }),
+        });
 
-            const result = await writeCharacterData(avatarPath, char, targetFile, request, undefined, { shouldRegenerateThumbnail: false });
-            if (!result) {
-                return response.status(500).send('Error: failed to write character data');
-            }
-        } else {
-            const crop = tryParse(request.query.crop);
-            const newAvatarPath = path.join(request.file.destination, request.file.filename);
-            const result = await writeCharacterData(newAvatarPath, char, targetFile, request, crop);
-            fs.unlinkSync(newAvatarPath);
-            if (!result) {
-                return response.status(500).send('Error: failed to write character data');
-            }
-
-            // Bust cache to reload the new avatar
-            cacheBuster.bust(request, response);
+        if (result.reason === 'missing_avatar') {
+            console.warn(result.message, result.avatarPath);
+            return response.status(400).send(result.message);
         }
 
-        await refreshCharacterIndexEntrySafe(request.user.directories, avatarUrl, 'edit');
+        if (!result.ok) {
+            return response.status(500).send(result.message);
+        }
+
         return response.sendStatus(200);
     } catch (err) {
         console.error('An error occurred, character edit invalidated.', err);

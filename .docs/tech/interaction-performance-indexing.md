@@ -9,6 +9,7 @@ Primary files:
 - `src/endpoints/character-index.js`
 - `src/derived-cache-sqlite.js`
 - `src/endpoints/character-read-service.js`
+- `src/endpoints/character-write-service.js`
 - `src/endpoints/characters.js`
 - `src/endpoints/chats.js`
 - `src/interaction-performance-report.js`
@@ -75,6 +76,13 @@ Separate from SQLite, thumbnail HTTP caching, lazy image fetch behavior, placeho
 - persona uploads now start `generateThumbnail(..., true, null)` after the canonical persona image lands, preserving the existing overwrite invalidation and cache-buster behavior
 - mutation success responses do not wait for thumbnail pregeneration to finish
 - if pregeneration fails or loses a race with a very fast follow-up request, the existing `/thumbnail` route remains the fallback source of truth for derived regeneration
+
+Separate from the read-side character route service, EmberDesk now also routes single-card character writes through `src/endpoints/character-write-service.js`:
+
+- `/api/characters/create` delegates canonical card formatting, target avatar naming, chats-directory creation, optional upload cleanup, and post-write character-index refresh to `createCharacterCard`
+- `/api/characters/edit` delegates metadata-only writes with `shouldRegenerateThumbnail: false`, replacement-avatar upload cleanup, cache busting, and post-write character-index refresh to `editCharacterCard`
+- the related single-card `/api/characters/rename` path delegates old-card read/update, chats-directory copy/remove, old avatar deletion, old index deletion, and new index refresh to `renameCharacterCard`
+- routes keep request validation and legacy HTTP response mapping; the service owns write-side effect ordering through explicit dependencies that are covered by `tests/character-write-service.test.js`
 
 ## Architecture And Constraints
 
