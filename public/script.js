@@ -167,7 +167,13 @@ import {
     applyCharacterTagsToMessageDivs,
 } from './scripts/tags.js';
 import { checkOpenRouterAuth, initSecrets, readSecretState, secret_state, SECRET_KEYS } from './scripts/secrets.js';
-import { hasFallbackProviderSettings, isMainChatVisibleGeneration, isRecoverableGenerationFailure } from './scripts/chat-generation-auto-recovery.js';
+import {
+    createGenerationLifecyclePlan,
+    getGenerationAttemptBaseline as getLifecycleGenerationAttemptBaseline,
+    getGenerationFailureDecision,
+    getGenerationSuccessFinalization,
+    hasFallbackProviderForGeneration,
+} from './scripts/chat-generation-lifecycle.js';
 import { markdownExclusionExt } from './scripts/showdown-exclusion.js';
 import { markdownUnderscoreExt } from './scripts/showdown-underscore.js';
 import { NOTE_MODULE_NAME, initAuthorsNote, metadata_keys, setFloatingPrompt, shouldWIAddPrompt } from './scripts/authors-note.js';
@@ -2082,15 +2088,27 @@ function showGenerationAutoRecoveryStatus(messageId, status) {
     messageElement.find('.generation_failure_retry').toggle(false);
 }
 
-function clearGenerationAttemptMessage(messageId) {
+function clearGenerationAttemptMessage(messageId, baseline = null) {
     const message = chat[messageId];
+    const hasBaseline = baseline?.messageId === messageId;
     if (message && !message.is_user && !message.is_system) {
-        message.mes = '';
-        if (Array.isArray(message.swipes)) {
+        message.mes = hasBaseline ? baseline.mes : '';
+        if (hasBaseline) {
+            if (Array.isArray(baseline.swipes)) {
+                message.swipes = structuredClone(baseline.swipes);
+            }
+            if (baseline.swipe_id !== undefined) {
+                message.swipe_id = baseline.swipe_id;
+            }
+            if (Array.isArray(baseline.swipe_info)) {
+                message.swipe_info = structuredClone(baseline.swipe_info);
+            }
+            if (baseline.extra && typeof baseline.extra === 'object') {
+                message.extra = structuredClone(baseline.extra);
+            }
+        } else if (Array.isArray(message.swipes)) {
             message.swipes = [''];
             message.swipe_id = 0;
-        }
-        if (Array.isArray(message.swipe_info)) {
             message.swipe_info = [{
                 send_date: message.send_date,
                 gen_started: message.gen_started,
@@ -2098,7 +2116,7 @@ function clearGenerationAttemptMessage(messageId) {
                 extra: structuredClone(message.extra ?? {}),
             }];
         }
-        if (message.extra) {
+        if (!hasBaseline && message.extra) {
             delete message.extra.reasoning;
             delete message.extra.reasoning_duration;
             delete message.extra.token_count;
@@ -2108,8 +2126,16 @@ function clearGenerationAttemptMessage(messageId) {
     }
 
     const messageElement = chatElement.find(`.mes[mesid="${messageId}"]`);
-    messageElement.find('.mes_text').empty();
-    messageElement.find('.mes_reasoning').empty();
+    if (hasBaseline && message) {
+        updateMessageElement(message, {
+            messageId,
+            messageElement,
+            adjustMediaScroll: SCROLL_BEHAVIOR.ADJUST,
+        });
+    } else {
+        messageElement.find('.mes_text').empty();
+        messageElement.find('.mes_reasoning').empty();
+    }
     messageElement.find('.generation_failure_notice').remove();
     messageElement.find('.generation_failure_retry').remove();
 }
@@ -2117,6 +2143,27 @@ function clearGenerationAttemptMessage(messageId) {
 function isAssistantRecoveryMessageId(messageId) {
     const message = chat[messageId];
     return typeof messageId === 'number' && messageId >= 0 && message && !message.is_user && !message.is_system;
+}
+
+function createExistingMessageRecoveryBaseline(type) {
+    if (!['continue', 'swipe'].includes(type)) {
+        return null;
+    }
+
+    const messageId = chat.length - 1;
+    if (!isAssistantRecoveryMessageId(messageId)) {
+        return null;
+    }
+
+    const message = chat[messageId];
+    return {
+        messageId,
+        mes: String(message.mes ?? ''),
+        swipes: Array.isArray(message.swipes) ? structuredClone(message.swipes) : null,
+        swipe_id: message.swipe_id,
+        swipe_info: Array.isArray(message.swipe_info) ? structuredClone(message.swipe_info) : null,
+        extra: message.extra && typeof message.extra === 'object' ? structuredClone(message.extra) : null,
+    };
 }
 
 async function replaceAssistantRecoveryMessage(messageId, { type, getMessage, title = '', swipes = [], reasoning = '', imageUrls = [], reasoningSignature = null }) {
@@ -2184,15 +2231,24 @@ async function replaceAssistantRecoveryMessage(messageId, { type, getMessage, ti
     return { type, getMessage };
 }
 
-function getGenerationAutoRecoveryAttempts() {
-    const attempts = [
-        { label: 'primary', status: '', fallbackProvider: false },
-        { label: 'primary_retry', status: t`正在重试`, fallbackProvider: false },
-    ];
+function getGenerationLifecycleStatusLabels() {
+    return {
+        primaryRetry: t`正在重试`,
+        fallback: t`正在使用备用服务商`,
+    };
+}
 
-    if (hasFallbackProviderSettings(oai_settings, secret_state, SECRET_KEYS.OPENAI_FALLBACK)) {
-        attempts.push({ label: 'fallback', status: t`正在使用备用服务商`, fallbackProvider: true });
-    }
+function getGenerationAutoRecoveryAttempts() {
+    const { attempts } = createGenerationLifecyclePlan({
+        type: 'normal',
+        mainApi: 'openai',
+        fallbackReady: hasFallbackProviderForGeneration({
+            settings: oai_settings,
+            secretState: secret_state,
+            fallbackSecretKey: SECRET_KEYS.OPENAI_FALLBACK,
+        }),
+        statusLabels: getGenerationLifecycleStatusLabels(),
+    });
 
     return attempts;
 }
@@ -5601,6 +5657,9 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
         is_send_press = true;
     }
 
+    const existingMessageRecoveryBaseline = createExistingMessageRecoveryBaseline(type);
+    const getGenerationAttemptBaseline = (messageId) => getLifecycleGenerationAttemptBaseline(messageId, existingMessageRecoveryBaseline);
+
     let generatedPromptCache = cyclePrompt || '';
     if (generatedPromptCache.length == 0 || type === 'continue') {
         console.debug('generating prompt');
@@ -6100,8 +6159,19 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
             return result;
         };
 
-        const shouldAutoRecover = isMainChatVisibleGeneration({ type, mainApi: main_api, dryRun, depth });
-        const attempts = shouldAutoRecover ? getGenerationAutoRecoveryAttempts() : [{ label: 'primary', fallbackProvider: false }];
+        const lifecyclePlan = createGenerationLifecyclePlan({
+            type,
+            mainApi: main_api,
+            dryRun,
+            depth,
+            fallbackReady: hasFallbackProviderForGeneration({
+                settings: oai_settings,
+                secretState: secret_state,
+                fallbackSecretKey: SECRET_KEYS.OPENAI_FALLBACK,
+            }),
+            statusLabels: getGenerationLifecycleStatusLabels(),
+        });
+        const { shouldAutoRecover, attempts } = lifecyclePlan;
         let lastException = null;
 
         for (let attemptIndex = 0; attemptIndex < attempts.length; attemptIndex++) {
@@ -6112,7 +6182,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
             if (isRetryAttempt) {
                 await ensureRecoveryMessage(activeRecoveryMessageId);
 
-                clearGenerationAttemptMessage(activeRecoveryMessageId);
+                clearGenerationAttemptMessage(activeRecoveryMessageId, getGenerationAttemptBaseline(activeRecoveryMessageId));
                 showGenerationAutoRecoveryStatus(activeRecoveryMessageId, attempt.status);
                 deactivateSendButtons();
                 showStopButton();
@@ -6125,24 +6195,29 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
             } catch (exception) {
                 lastException = exception;
                 const candidateRecoveryMessageId = exception?.messageId ?? streamingProcessor?.messageId ?? activeRecoveryMessageId;
+                const failureDecision = getGenerationFailureDecision({
+                    shouldAutoRecover,
+                    failure: exception,
+                    isIntermediateAttempt,
+                });
                 streamingProcessor = null;
 
-                if (!shouldAutoRecover || !isRecoverableGenerationFailure(exception) || !isIntermediateAttempt) {
-                    if (shouldAutoRecover && isRecoverableGenerationFailure(exception)) {
+                if (failureDecision.action !== 'retry') {
+                    if (failureDecision.shouldRestoreAttemptMessage) {
                         await ensureRecoveryMessage(candidateRecoveryMessageId);
-                        clearGenerationAttemptMessage(activeRecoveryMessageId);
+                        clearGenerationAttemptMessage(activeRecoveryMessageId, getGenerationAttemptBaseline(activeRecoveryMessageId));
                     } else if (isAssistantRecoveryMessageId(candidateRecoveryMessageId)) {
                         activeRecoveryMessageId = candidateRecoveryMessageId;
                     }
                     clearGenerationAutoRecoveryStatus(activeRecoveryMessageId);
-                    if (shouldAutoRecover && isAssistantRecoveryMessageId(activeRecoveryMessageId)) {
+                    if (failureDecision.shouldShowFailureRecovery && isAssistantRecoveryMessageId(activeRecoveryMessageId)) {
                         showGenerationFailureRecovery(activeRecoveryMessageId);
                     }
                     throw exception;
                 }
 
                 await ensureRecoveryMessage(candidateRecoveryMessageId);
-                clearGenerationAttemptMessage(activeRecoveryMessageId);
+                clearGenerationAttemptMessage(activeRecoveryMessageId, getGenerationAttemptBaseline(activeRecoveryMessageId));
             }
         }
 
@@ -6226,13 +6301,16 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
             return getMessage;
         } else {
             // Without streaming we'll be having a full message on continuation. Treat it as a last chunk.
-            if (isAssistantRecoveryMessageId(activeRecoveryMessageId)) {
+            const finalization = getGenerationSuccessFinalization({
+                hasActiveRecoveryMessage: isAssistantRecoveryMessageId(activeRecoveryMessageId),
+                originalType,
+                type,
+            });
+            if (finalization.action === 'replace_recovery_message') {
                 ({ type, getMessage } = await replaceAssistantRecoveryMessage(activeRecoveryMessageId, { type, getMessage, title, swipes, reasoning, imageUrls, reasoningSignature }));
                 clearGenerationAutoRecoveryStatus(activeRecoveryMessageId);
-            } else if (originalType !== 'continue') {
-                ({ type, getMessage } = await saveReply({ type, getMessage, title, swipes, reasoning, imageUrls, reasoningSignature }));
             } else {
-                ({ type, getMessage } = await saveReply({ type: 'appendFinal', getMessage, title, swipes, reasoning, imageUrls, reasoningSignature }));
+                ({ type, getMessage } = await saveReply({ type: finalization.type, getMessage, title, swipes, reasoning, imageUrls, reasoningSignature }));
             }
 
             // This relies on `saveReply` having been called to add the message to the chat, so it must be last.

@@ -1,33 +1,16 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 import { describe, expect, test } from '@jest/globals';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const repoRoot = path.resolve(__dirname, '..');
-
-function read(relativePath) {
-    return fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
-}
-
-function getTagByClass(html, className) {
-    const tagPattern = new RegExp(`<[^>]*\\bclass="[^"]*\\b${className}\\b[^"]*"[^>]*>`);
-    const match = html.match(tagPattern);
-    expect(match).not.toBeNull();
-    return match[0];
-}
-
-function expectButtonAffordance(tag, label) {
-    expect(tag).toMatch(/\brole="button"/);
-    expect(tag).toMatch(/\btabindex="0"/);
-    expect(tag).toMatch(new RegExp(`\\baria-label="${label}"`));
-}
+import {
+    expectButtonAffordance,
+    expectContainsMarkers,
+    expectDocumentOrder,
+    getTagByClass,
+    readRepoFile,
+} from './helpers/frontend-structure-contract.js';
 
 describe('chat workspace structure', () => {
     test('keeps send-form controls discoverable by role and accessible name', () => {
-        const indexHtml = read('public/index.html');
+        const indexHtml = readRepoFile('public/index.html');
 
         [
             ['options_button', 'Chat options'],
@@ -45,7 +28,7 @@ describe('chat workspace structure', () => {
     });
 
     test('keeps chat options menu items keyboard reachable as buttons', () => {
-        const indexHtml = read('public/index.html');
+        const indexHtml = readRepoFile('public/index.html');
 
         [
             'option_toggle_AN',
@@ -64,7 +47,7 @@ describe('chat workspace structure', () => {
     });
 
     test('keeps message template DOM identity stable', () => {
-        const indexHtml = read('public/index.html');
+        const indexHtml = readRepoFile('public/index.html');
 
         const messageRootTag = getTagByClass(indexHtml, 'mes');
         [
@@ -100,7 +83,7 @@ describe('chat workspace structure', () => {
     });
 
     test('keeps message row actions discoverable by role and accessible name', () => {
-        const indexHtml = read('public/index.html');
+        const indexHtml = readRepoFile('public/index.html');
 
         [
             ['extraMesButtonsHint', 'Message Actions'],
@@ -142,9 +125,9 @@ describe('chat workspace structure', () => {
     });
 
     test('keeps fallback provider controls embedded in the API configuration drawer', () => {
-        const indexHtml = read('public/index.html');
+        const indexHtml = readRepoFile('public/index.html');
 
-        [
+        const fallbackProviderContract = [
             'id="fallback_provider_section"',
             'id="fallback_provider_enabled"',
             'id="fallback_provider_status"',
@@ -155,10 +138,14 @@ describe('chat workspace structure', () => {
             'id="fallback_provider_save_key"',
             'id="fallback_provider_clear_key"',
             'id="fallback_provider_cost_warning"',
-        ].forEach(marker => expect(indexHtml).toContain(marker));
+        ];
+        expectContainsMarkers(indexHtml, fallbackProviderContract, { contractName: 'fallback provider selectors' });
 
-        expect(indexHtml.indexOf('id="openai_reverse_proxy"')).toBeLessThan(indexHtml.indexOf('id="fallback_provider_section"'));
-        expect(indexHtml.indexOf('id="fallback_provider_section"')).toBeLessThan(indexHtml.indexOf('id="prompt_post_processing_form"'));
+        expectDocumentOrder(indexHtml, [
+            'id="openai_reverse_proxy"',
+            'id="fallback_provider_section"',
+            'id="prompt_post_processing_form"',
+        ], { contractName: 'fallback provider drawer order' });
 
         expect(indexHtml).not.toMatch(/<dialog[^>]*id="fallback_provider_section"/);
         expect(indexHtml).toMatch(/id="fallback_provider_enabled"[^>]*type="checkbox"/);
@@ -174,8 +161,8 @@ describe('chat workspace structure', () => {
     });
 
     test('keeps automatic recovery status scoped outside message text', () => {
-        const scriptSource = read('public/script.js');
-        const styleSource = read('public/style.css');
+        const scriptSource = readRepoFile('public/script.js');
+        const styleSource = readRepoFile('public/style.css');
 
         expect(scriptSource).toContain('function showGenerationAutoRecoveryStatus(messageId, status)');
         expect(scriptSource).toContain('function clearGenerationAutoRecoveryStatus(messageId)');
@@ -191,15 +178,22 @@ describe('chat workspace structure', () => {
     });
 
     test('routes visible main chat generation through bounded auto recovery attempts', () => {
-        const scriptSource = read('public/script.js');
+        const scriptSource = readRepoFile('public/script.js');
+        const lifecycleSource = readRepoFile('public/scripts/chat-generation-lifecycle.js');
 
         expect(scriptSource).toContain('function getGenerationAutoRecoveryAttempts()');
-        expect(scriptSource).toContain("label: 'primary'");
-        expect(scriptSource).toContain("label: 'primary_retry'");
-        expect(scriptSource).toContain("label: 'fallback'");
+        expect(scriptSource).toContain('createGenerationLifecyclePlan({');
         expect(scriptSource).toContain("fallbackProvider: attempt.fallbackProvider");
-        expect(scriptSource).toContain('isRecoverableGenerationFailure(exception)');
-        expect(scriptSource).toContain('hasFallbackProviderSettings(oai_settings, secret_state, SECRET_KEYS.OPENAI_FALLBACK)');
-        expect(scriptSource).toContain('clearGenerationAttemptMessage(activeRecoveryMessageId);');
+        expect(scriptSource).toContain('getGenerationFailureDecision({');
+        expect(scriptSource).toContain('failureDecision.shouldRestoreAttemptMessage');
+        expect(scriptSource).toContain('hasFallbackProviderForGeneration({');
+        expect(scriptSource).toContain('clearGenerationAttemptMessage(activeRecoveryMessageId, getGenerationAttemptBaseline(activeRecoveryMessageId));');
+
+        expect(lifecycleSource).toContain("label: 'primary'");
+        expect(lifecycleSource).toContain("label: 'primary_retry'");
+        expect(lifecycleSource).toContain("label: 'fallback'");
+        expect(lifecycleSource).toContain('hasFallbackProviderSettings(settings, secretState, fallbackSecretKey)');
+        expect(lifecycleSource).toContain('isMainChatVisibleGeneration({ type, mainApi, dryRun, depth })');
+        expect(lifecycleSource).toContain('isRecoverableGenerationFailure(failure)');
     });
 });

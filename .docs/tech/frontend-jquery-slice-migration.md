@@ -17,6 +17,8 @@ The shipped slices are:
 - `tests/background-panel-controller.test.js` - focused proof for background panel state classification, fail-fast initialization, root scoping, and cleanup
 - `public/scripts/chat-message-actions-controller.js` - low-risk message action menu affordance controller for extra-action expand/collapse behavior
 - `tests/chat-message-actions-controller.test.js` - focused proof for delegated action dispatch, duplicate-init safety, expanded-action close rules, and cleanup
+- `public/scripts/provider-secret-field-state.js` - state-only API drawer helper for unified key and fallback provider secret status/save/clear decisions
+- `tests/helpers/frontend-structure-contract.js` - tests-only helper for selector, order, role/name, aria-live, and source-marker structure contracts
 
 This is not a framework migration. EmberDesk still uses the existing HTML/CSS/jQuery frontend, and this pattern only removes page-local jQuery dependencies when the slice can stay small and independently validated.
 
@@ -102,6 +104,10 @@ The recovery success behavior now matches the semantic contract: after a success
 
 `public/scripts/chat-message-actions-controller.js` applies the same root-scoped controller rule to a narrow main-chat affordance. It owns only the delegated expand/collapse behavior for `.extraMesButtonsHint` and `.extraMesButtons`, preserves existing selectors and animation settings, and exposes `MESSAGE_ACTION_TIERS` as a local implementation note for high-frequency, secondary, and danger action grouping. It does not own message body rendering, edit/delete business logic, swipe handling, reasoning controls, media controls, streaming, or slash-command message injection.
 
+`public/scripts/provider-secret-field-state.js` is not a page controller, but it follows the same small-slice rule: isolate decision logic, inject dependencies through callers and tests, and keep jQuery DOM binding in the existing owner. It covers unified-key placeholder/value state, fallback provider readiness, save/clear decisions, and mask toggling for the API drawer.
+
+`tests/helpers/frontend-structure-contract.js` is a tests-only companion for small frontend slices. It centralizes repeated contract assertions while keeping each test's contract inventory explicit. It should prefer role/name, label, `aria-live`, document order, and selector uniqueness before falling back to raw source markers.
+
 ## Migration Rules For Future Slices
 
 Use this pattern only for small, bounded frontend surfaces:
@@ -127,6 +133,8 @@ bun run test:unit -- login-page-controller.test.js --runInBand
 bun run test:unit -- setup-page-controller.test.js --runInBand
 bun run test:unit -- background-panel-controller.test.js --runInBand
 bun run test:unit -- chat-message-actions-controller.test.js --runInBand
+bun run test:unit -- provider-secret-field-state.test.js --runInBand
+bun run test:unit -- frontend-structure-contract.test.js --runInBand
 bun run test:e2e -- login.e2e.js
 bun run test:e2e -- sample.e2e.js
 ```
@@ -169,6 +177,9 @@ Stable binding points:
 - `createChatMessageActionsController()` in `public/scripts/chat-message-actions-controller.js`
 - `MESSAGE_ACTION_TIERS` in `public/scripts/chat-message-actions-controller.js`
 - extra message action menu delegation from `public/script.js`
+- `getFallbackProviderStatus()` in `public/scripts/provider-secret-field-state.js`
+- `saveProviderSecretField()` in `public/scripts/provider-secret-field-state.js`
+- `tests/helpers/frontend-structure-contract.js`
 
 Related docs:
 
@@ -176,3 +187,6 @@ Related docs:
 - [Setup Page](../db/pages/setup.md)
 - [Password Recovery](../db/features/password-recovery.md)
 - [Background Library Panel](../db/features/background-library-panel.md)
+- [API Configuration](../db/pages/api-configuration.md)
+- [Fallback Provider](../db/features/fallback-provider.md)
+- [Frontend Structure Contracts](frontend-structure-contracts.md)

@@ -57,6 +57,8 @@ Keep these message-row selectors and identity attributes stable unless a migrati
 
 Message-row actions should remain discoverable by role/name when visible, while stored-message rendering remains owned by the message rendering path and its browser proof. Focusable action buttons must keep keyboard reachability, and visible action affordances must not cover `.mes_text` in a way that prevents reading or touch interaction.
 
+Automatic generation recovery may add `.generation_auto_recovery_status` beside a message row, but that status must stay outside `.mes_text`. Recovery status text is a control/status surface, not part of the rendered message body that extensions and first-party actions read.
+
 ## Character List DOM Contract
 
 The character library panel is a shared DOM surface for selection, tags, keyboard navigation, bulk edit, and extension-adjacent scripts.
@@ -217,6 +219,8 @@ Pop-Location
 
 This test verifies mount points, Tavern Helper manifest and distributable files, `@sillytavern/*` import resolution, key module exports, slash-command public exports, event values, and regex placement values.
 It also verifies the generated character-list row identity contract used by character library slices.
+
+Structure tests may share assertions through `tests/helpers/frontend-structure-contract.js`, but the shared helper is a test-only contract boundary. It must not replace runtime compatibility proof for protected extension surfaces.
 
 When message row rendering, message actions, or main chat workspace structure changes, also run the focused message proof that matches the touched surface:
 

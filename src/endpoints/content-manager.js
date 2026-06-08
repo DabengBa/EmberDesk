@@ -4,7 +4,6 @@ import zlib from 'node:zlib';
 import { Buffer } from 'node:buffer';
 
 import express from 'express';
-import fetch from 'node-fetch';
 import sanitize from 'sanitize-filename';
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
 
@@ -14,6 +13,14 @@ import { serverDirectory } from '../server-directory.js';
 import { Jimp, JimpMime } from '../jimp.js';
 import { DEFAULT_AVATAR_PATH } from '../constants.js';
 import { invalidateDirectory } from './settings-cache.js';
+import {
+    classifyExternalContentId,
+    classifyExternalContentUrl,
+    downloadExternalContentArtifact,
+    fetchExternalResource,
+    getHostFromUrl as getExternalHostFromUrl,
+    isHostWhitelisted as isExternalHostWhitelisted,
+} from './external-content-import-service.js';
 
 const contentDirectory = path.join(serverDirectory, 'default/content');
 const scaffoldDirectory = path.join(serverDirectory, 'default/scaffold');
@@ -22,6 +29,19 @@ const scaffoldIndexPath = path.join(scaffoldDirectory, 'index.json');
 
 const WHITELIST_GENERIC_URL_DOWNLOAD_SOURCES = getConfigValue('whitelistImportDomains', []);
 const USER_AGENT = 'EmberDesk';
+
+async function fetchProviderResource({ url, options = undefined, source, stage, requireOk = false, fetchResource = fetchExternalResource }) {
+    const result = await fetchResource({ url, options, source, stage, requireOk });
+
+    if (!result.ok) {
+        const error = new Error(result.failure?.kind ?? 'external fetch failed');
+        error.failure = result.failure;
+        error.response = result.response;
+        throw error;
+    }
+
+    return result.response;
+}
 
 /**
  * @typedef {Object} ContentItem
@@ -401,11 +421,19 @@ function getContentLog(contentLogPath) {
     return contentLogText.split('\n');
 }
 
-async function downloadChubLorebook(id) {
+async function downloadChubLorebook(id, dependencies = {}) {
+    const fetchResource = dependencies.fetchExternalResource ?? fetchExternalResource;
     const [lorebooks, creatorName, projectName] = id.split('/');
-    const result = await fetch(`https://api.chub.ai/api/${lorebooks}/${creatorName}/${projectName}`, {
-        method: 'GET',
-        headers: { 'Accept': 'application/json', 'User-Agent': USER_AGENT },
+    const result = await fetchProviderResource({
+        url: `https://api.chub.ai/api/${lorebooks}/${creatorName}/${projectName}`,
+        options: {
+            method: 'GET',
+            headers: { 'Accept': 'application/json', 'User-Agent': USER_AGENT },
+        },
+        source: 'chub_lorebook',
+        stage: 'metadata',
+        requireOk: true,
+        fetchResource,
     });
 
     if (!result.ok) {
@@ -423,9 +451,16 @@ async function downloadChubLorebook(id) {
     }
 
     const downloadUrl = `https://api.chub.ai/api/v4/projects/${projectId}/repository/files/raw%252Fsillytavern_raw.json/raw`;
-    const downloadResult = await fetch(downloadUrl, {
-        method: 'GET',
-        headers: { 'Accept': 'application/json', 'User-Agent': USER_AGENT },
+    const downloadResult = await fetchProviderResource({
+        url: downloadUrl,
+        options: {
+            method: 'GET',
+            headers: { 'Accept': 'application/json', 'User-Agent': USER_AGENT },
+        },
+        source: 'chub_lorebook',
+        stage: 'artifact',
+        requireOk: true,
+        fetchResource,
     });
 
     if (!downloadResult.ok) {
@@ -442,11 +477,19 @@ async function downloadChubLorebook(id) {
     return { buffer, fileName, fileType };
 }
 
-async function downloadChubCharacter(id) {
+async function downloadChubCharacter(id, dependencies = {}) {
+    const fetchResource = dependencies.fetchExternalResource ?? fetchExternalResource;
     const [creatorName, projectName] = id.split('/');
-    const result = await fetch(`https://api.chub.ai/api/characters/${creatorName}/${projectName}?full=true`, {
-        method: 'GET',
-        headers: { 'Accept': 'application/json', 'User-Agent': USER_AGENT },
+    const result = await fetchProviderResource({
+        url: `https://api.chub.ai/api/characters/${creatorName}/${projectName}?full=true`,
+        options: {
+            method: 'GET',
+            headers: { 'Accept': 'application/json', 'User-Agent': USER_AGENT },
+        },
+        source: 'chub_character',
+        stage: 'metadata',
+        requireOk: true,
+        fetchResource,
     });
 
     if (!result.ok) {
@@ -490,7 +533,15 @@ async function downloadChubCharacter(id) {
     const imageUrl = metadata.node?.max_res_url;
 
     if (imageUrl) {
-        const downloadResult = await fetch(imageUrl);
+        const imageResource = await fetchResource({
+            url: imageUrl,
+            source: 'chub_character',
+            stage: 'avatar',
+        });
+        if (!imageResource.ok) {
+            throw new Error(imageResource.failure?.kind ?? 'Failed to download avatar');
+        }
+        const downloadResult = imageResource.response;
         if (downloadResult.ok) {
             imageBuffer = Buffer.from(await downloadResult.arrayBuffer());
         }
@@ -508,8 +559,15 @@ async function downloadChubCharacter(id) {
  * @param {string} id UUID of the character
  * @returns {Promise<{buffer: Buffer, fileName: string, fileType: string}>}
  */
-async function downloadPygmalionCharacter(id) {
-    const result = await fetch(`https://server.pygmalion.chat/api/export/character/${id}/v2`);
+async function downloadPygmalionCharacter(id, dependencies = {}) {
+    const fetchResource = dependencies.fetchExternalResource ?? fetchExternalResource;
+    const result = await fetchProviderResource({
+        url: `https://server.pygmalion.chat/api/export/character/${id}/v2`,
+        source: 'pygmalion_character',
+        stage: 'metadata',
+        requireOk: true,
+        fetchResource,
+    });
 
     if (!result.ok) {
         const text = await result.text();
@@ -534,7 +592,15 @@ async function downloadPygmalionCharacter(id) {
             throw new Error('Failed to download avatar');
         }
 
-        const avatarResult = await fetch(avatarUrl);
+        const avatarResource = await fetchResource({
+            url: avatarUrl,
+            source: 'pygmalion_character',
+            stage: 'avatar',
+        });
+        if (!avatarResource.ok) {
+            throw new Error(avatarResource.failure?.kind ?? 'Failed to download avatar');
+        }
+        const avatarResult = avatarResource.response;
         const avatarBuffer = Buffer.from(await avatarResult.arrayBuffer());
 
         const cardBuffer = write(avatarBuffer, JSON.stringify(characterData));
@@ -554,66 +620,39 @@ async function downloadPygmalionCharacter(id) {
     }
 }
 
-/**
- *
- * @param {String} str
- * @returns { { id: string, type: "character" | "lorebook" } | null }
- */
-function parseChubUrl(str) {
-    const splitStr = str.split('/');
-    const length = splitStr.length;
-
-    if (length < 2) {
-        return null;
-    }
-
-    let domainIndex = -1;
-
-    splitStr.forEach((part, index) => {
-        if (part === 'www.chub.ai' || part === 'chub.ai' || part === 'www.characterhub.org' || part === 'characterhub.org') {
-            domainIndex = index;
-        }
-    });
-
-    const lastTwo = domainIndex !== -1 ? splitStr.slice(domainIndex + 1) : splitStr;
-
-    const firstPart = lastTwo[0].toLowerCase();
-
-    if (firstPart === 'characters' || firstPart === 'lorebooks') {
-        const type = firstPart === 'characters' ? 'character' : 'lorebook';
-        const id = type === 'character' ? lastTwo.slice(1).join('/') : lastTwo.join('/');
-        return {
-            id: id,
-            type: type,
-        };
-    } else if (length === 2) {
-        return {
-            id: lastTwo.join('/'),
-            type: 'character',
-        };
-    }
-
-    return null;
-}
-
 // Warning: Some characters might not exist in JannyAI.me
-async function downloadJannyCharacter(uuid) {
+async function downloadJannyCharacter(uuid, dependencies = {}) {
+    const fetchResource = dependencies.fetchExternalResource ?? fetchExternalResource;
     // This endpoint is being guarded behind Bot Fight Mode of Cloudflare
     // So hosted ST on Azure/AWS/GCP/Collab might get blocked by IP
     // Should work normally on self-host PC/Android
-    const result = await fetch('https://api.jannyai.com/api/v1/download', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            'characterId': uuid,
-        }),
+    const result = await fetchProviderResource({
+        url: 'https://api.jannyai.com/api/v1/download',
+        options: {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                'characterId': uuid,
+            }),
+        },
+        source: 'janitor_character',
+        stage: 'metadata',
+        fetchResource,
     });
 
     if (result.ok) {
         /** @type {any} */
         const downloadResult = await result.json();
         if (downloadResult.status === 'ok') {
-            const imageResult = await fetch(downloadResult.downloadUrl);
+            const imageResource = await fetchResource({
+                url: downloadResult.downloadUrl,
+                source: 'janitor_character',
+                stage: 'artifact',
+            });
+            if (!imageResource.ok) {
+                throw new Error(imageResource.failure?.kind ?? 'Failed to download character');
+            }
+            const imageResult = imageResource.response;
             const buffer = Buffer.from(await imageResult.arrayBuffer());
             const fileName = `${sanitize(uuid)}.png`;
             const fileType = imageResult.headers.get('content-type');
@@ -630,10 +669,16 @@ async function downloadJannyCharacter(uuid) {
 }
 
 //Download Character Cards from AICharactersCards.com (AICC) API.
-async function downloadAICCCharacter(id) {
+async function downloadAICCCharacter(id, dependencies = {}) {
+    const fetchResource = dependencies.fetchExternalResource ?? fetchExternalResource;
     const apiURL = `https://aicharactercards.com/wp-json/pngapi/v1/image/${id}`;
     try {
-        const response = await fetch(apiURL);
+        const response = await fetchProviderResource({
+            url: apiURL,
+            source: 'aicc_character',
+            stage: 'artifact',
+            fetchResource,
+        });
         if (!response.ok) {
             throw new Error(`Failed to download character: ${response.statusText}`);
         }
@@ -654,40 +699,18 @@ async function downloadAICCCharacter(id) {
 }
 
 /**
- * Parses an aicharactercards URL to extract the path.
- * @param {string} url URL to parse
- * @returns {string | null} AICC path
- */
-function parseAICC(url) {
-    try {
-        if (isValidUrl(url)) {
-            const urlObj = new URL(url);
-            // Split the path and remove empty strings caused by trailing slashes
-            const parts = urlObj.pathname.split('/').filter(Boolean);
-            if (parts.length >= 2) {
-                // Always grab the last two segments (author/character)
-                return `${parts[parts.length - 2]}/${parts[parts.length - 1]}`;
-            }
-        } else {
-            // Fallback for relative paths or raw "author/character" strings
-            const parts = url.split('/').filter(Boolean);
-            if (parts.length >= 2) {
-                return `${parts[parts.length - 2]}/${parts[parts.length - 1]}`;
-            }
-        }
-    } catch (e) {
-        console.error('Error parsing AICC URL:', e);
-    }
-    return null;
-}
-
-/**
  * Download character card from generic url.
  * @param {String} url
  */
-async function downloadGenericPng(url) {
+async function downloadGenericPng(url, dependencies = {}) {
+    const fetchResource = dependencies.fetchExternalResource ?? fetchExternalResource;
     try {
-        const result = await fetch(url);
+        const result = await fetchProviderResource({
+            url,
+            source: 'generic_png',
+            stage: 'artifact',
+            fetchResource,
+        });
 
         if (result.ok) {
             const buffer = Buffer.from(await result.arrayBuffer());
@@ -720,25 +743,18 @@ async function downloadGenericPng(url) {
 }
 
 /**
- * Parse Risu Realm URL to extract the UUID.
- * @param {string} url Risu Realm URL
- * @returns {string | null} UUID of the character
- */
-function parseRisuUrl(url) {
-    // Example: https://realm.risuai.net/character/7adb0ed8d81855c820b3506980fb40f054ceef010ff0c4bab73730c0ebe92279
-    // or https://realm.risuai.net/character/7adb0ed8-d818-55c8-20b3-506980fb40f0
-    const pattern = /^https?:\/\/realm\.risuai\.net\/character\/([a-f0-9-]+)\/?$/i;
-    const match = url.match(pattern);
-    return match ? match[1] : null;
-}
-
-/**
  * Download RisuAI character card
  * @param {string} uuid UUID of the character
  * @returns {Promise<{buffer: Buffer, fileName: string, fileType: string}>}
  */
-async function downloadRisuCharacter(uuid) {
-    const result = await fetch(`https://realm.risuai.net/api/v1/download/png-v3/${uuid}?non_commercial=true`);
+async function downloadRisuCharacter(uuid, dependencies = {}) {
+    const fetchResource = dependencies.fetchExternalResource ?? fetchExternalResource;
+    const result = await fetchProviderResource({
+        url: `https://realm.risuai.net/api/v1/download/png-v3/${uuid}?non_commercial=true`,
+        source: 'risu_character',
+        stage: 'artifact',
+        fetchResource,
+    });
 
     if (!result.ok) {
         const text = await result.text();
@@ -753,39 +769,13 @@ async function downloadRisuCharacter(uuid) {
     return { buffer, fileName, fileType };
 }
 
-/** * Check if the given string is a valid Perchance UUID.
- * @param {string} uuid UUID string to check
- * @returns {boolean} True if the UUID is valid, false otherwise
- */
-function isPerchanceUUID(uuid) {
-    if (!uuid) {
-        return false;
-    }
-
-    //example: Personality_Advisor~6903e991c90fd1dba52c036d917e99c6.gz
-    //charactername~uuid.gz
-
-    const uuidRegex = /^\w+~[a-f0-9]{32}\.gz$/;
-    return uuidRegex.test(uuid);
-}
-
-/**
- * Parse Perchance URL to extract the character slug.
- * @param {string} url Perchance character URL
- * @returns {string} Slug of the character
- */
-function parsePerchanceSlug(url) {
-    // Example: https://perchance.org/ai-character-chat?data=Personality_Advisor~6903e991c90fd1dba52c036d917e99c6.gz
-    // or: Personality_Advisor~6903e991c90fd1dba52c036d917e99c6.gz
-    return url?.split('~')[1] || '';
-}
-
 /**
  * Download Perchance character card
  * @param {string} slug Slug of the character
  * @returns {Promise<{buffer: Buffer, fileName: string, fileType: string} | null>}
  */
-async function downloadPerchanceCharacter(slug) {
+async function downloadPerchanceCharacter(slug, dependencies = {}) {
+    const fetchResource = dependencies.fetchExternalResource ?? fetchExternalResource;
     // example of slug
     // 6903e991c90fd1dba52c036d917e99c6.gz
     const perchanceBaseURL = 'https://user.uploads.dev/file';
@@ -793,8 +783,14 @@ async function downloadPerchanceCharacter(slug) {
     try {
         const charURL = `${perchanceBaseURL}/${slug}`;
         console.log('Downloading Perchance character from URL:', charURL);
-        const result = await fetch(charURL, {
-            headers: { 'Content-Type': 'application/json', 'User-Agent': USER_AGENT },
+        const result = await fetchProviderResource({
+            url: charURL,
+            options: {
+                headers: { 'Content-Type': 'application/json', 'User-Agent': USER_AGENT },
+            },
+            source: 'perchance_character',
+            stage: 'metadata',
+            fetchResource,
         });
 
         //decompress gzipped content
@@ -833,7 +829,7 @@ async function downloadPerchanceCharacter(slug) {
                 },
             };
 
-            const avatarBuffer = await fetchPerchanceAvatar(avatarUrl, isAvatarBase64);
+            const avatarBuffer = await fetchPerchanceAvatar(avatarUrl, isAvatarBase64, { fetchExternalResource: fetchResource });
 
             // Character card
             const buffer = write(avatarBuffer, JSON.stringify({
@@ -887,7 +883,8 @@ async function extractPerchanceCharacterFromGz(result) {
  * @param {boolean} isAvatarBase64 Flag indicating if the avatar URL is a base64 string
  * @returns {Promise<Buffer>} Buffer containing the avatar image
  */
-async function fetchPerchanceAvatar(avatarUrl, isAvatarBase64) {
+async function fetchPerchanceAvatar(avatarUrl, isAvatarBase64, dependencies = {}) {
+    const fetchResource = dependencies.fetchExternalResource ?? fetchExternalResource;
     const defaultAvatarPath = path.join(serverDirectory, DEFAULT_AVATAR_PATH);
     const defaultAvatarBuffer = fs.readFileSync(defaultAvatarPath);
 
@@ -913,7 +910,16 @@ async function fetchPerchanceAvatar(avatarUrl, isAvatarBase64) {
 
     // Fetch avatar from URL
     console.log('Fetching Perchance avatar from URL:', avatarUrl);
-    const avatarResponse = await fetch(avatarUrl, { headers: { 'User-Agent': USER_AGENT } });
+    const avatarResource = await fetchResource({
+        url: avatarUrl,
+        options: { headers: { 'User-Agent': USER_AGENT } },
+        source: 'perchance_character',
+        stage: 'avatar',
+    });
+    if (!avatarResource.ok) {
+        throw new Error(avatarResource.failure?.kind ?? 'Failed to fetch Perchance avatar');
+    }
+    const avatarResponse = avatarResource.response;
 
     if (avatarResponse.ok) {
         const avatarContentType = avatarResponse.headers.get('content-type');
@@ -942,31 +948,12 @@ async function fetchPerchanceAvatar(avatarUrl, isAvatarBase64) {
 }
 
 /**
-* @param {String} url
-* @returns {String | null } UUID of the character
-*/
-function getUuidFromUrl(url) {
-    // Extract UUID from URL
-    const uuidRegex = /[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/;
-    const matches = url.match(uuidRegex);
-
-    // Check if UUID is found
-    const uuid = matches ? matches[0] : null;
-    return uuid;
-}
-
-/**
  * Filter to get the domain host of a url instead of a blanket string search.
  * @param {String} url URL to strip
  * @returns {String} Domain name
  */
 export function getHostFromUrl(url) {
-    try {
-        const urlObj = new URL(url);
-        return urlObj.hostname;
-    } catch {
-        return '';
-    }
+    return getExternalHostFromUrl(url);
 }
 
 /**
@@ -975,7 +962,41 @@ export function getHostFromUrl(url) {
  * @returns {boolean} If the host is on the whitelist.
  */
 export function isHostWhitelisted(host) {
-    return WHITELIST_GENERIC_URL_DOWNLOAD_SOURCES.includes(host);
+    return isExternalHostWhitelisted(host, WHITELIST_GENERIC_URL_DOWNLOAD_SOURCES);
+}
+
+export function getImportDomainAllowlist() {
+    return WHITELIST_GENERIC_URL_DOWNLOAD_SOURCES;
+}
+
+export const EXTERNAL_CONTENT_DOWNLOADERS = {
+    chub_character: (descriptor, dependencies) => downloadChubCharacter(descriptor.id, dependencies),
+    chub_lorebook: (descriptor, dependencies) => downloadChubLorebook(descriptor.id, dependencies),
+    pygmalion_character: (descriptor, dependencies) => downloadPygmalionCharacter(descriptor.id, dependencies),
+    janitor_character: (descriptor, dependencies) => downloadJannyCharacter(descriptor.id, dependencies),
+    aicc_character: (descriptor, dependencies) => downloadAICCCharacter(descriptor.id, dependencies),
+    risu_character: (descriptor, dependencies) => downloadRisuCharacter(descriptor.id, dependencies),
+    perchance_character: (descriptor, dependencies) => downloadPerchanceCharacter(descriptor.id, dependencies),
+    generic_png: (descriptor, dependencies) => downloadGenericPng(descriptor.id, dependencies),
+};
+
+function sendExternalContentArtifact(response, artifact, { encodeFileName = true } = {}) {
+    if (artifact.fileType) {
+        response.set('Content-Type', artifact.fileType);
+    }
+
+    const fileName = encodeFileName ? encodeURI(artifact.fileName) : artifact.fileName;
+    response.set('Content-Disposition', `attachment; filename="${fileName}"`);
+    response.set('X-Custom-Content-Type', artifact.type);
+    return response.send(artifact.buffer);
+}
+
+function sendExternalContentFailure(response, failure) {
+    if (failure?.kind === 'invalid_artifact' || failure?.kind === 'unsupported_host' || failure?.kind === 'invalid_url' || failure?.kind === 'unsupported_source') {
+        return response.sendStatus(404);
+    }
+
+    return response.sendStatus(500);
 }
 
 export const router = express.Router();
@@ -987,86 +1008,24 @@ router.post('/importURL', async (request, response) => {
 
     try {
         const url = request.body.url;
-        const host = getHostFromUrl(url);
-        let result;
-        let type;
-
-        const isChub = host.includes('chub.ai') || host.includes('characterhub.org');
-        const isJannnyContent = host.includes('janitorai');
-        const isPygmalionContent = host.includes('pygmalion.chat');
-        const isAICharacterCardsContent = host.includes('aicharactercards.com');
-        const isRisu = host.includes('realm.risuai.net');
-        const isPerchance = host.includes('perchance.org');
-        const isGeneric = isHostWhitelisted(host);
-
-        if (isPygmalionContent) {
-            const uuid = getUuidFromUrl(url);
-            if (!uuid) {
-                return response.sendStatus(404);
+        const classification = classifyExternalContentUrl(url, WHITELIST_GENERIC_URL_DOWNLOAD_SOURCES);
+        if (!classification.ok) {
+            if (classification.failure?.kind === 'unsupported_host') {
+                console.error(`Received an import for "${classification.failure.host}", but site is not whitelisted. This domain must be added to the config key "whitelistImportDomains" to allow import from this source.`);
             }
-
-            type = 'character';
-            result = await downloadPygmalionCharacter(uuid);
-        } else if (isJannnyContent) {
-            const uuid = getUuidFromUrl(url);
-            if (!uuid) {
-                return response.sendStatus(404);
-            }
-
-            type = 'character';
-            result = await downloadJannyCharacter(uuid);
-        } else if (isAICharacterCardsContent) {
-            const AICCParsed = parseAICC(url);
-            if (!AICCParsed) {
-                return response.sendStatus(404);
-            }
-            type = 'character';
-            result = await downloadAICCCharacter(AICCParsed);
-        } else if (isChub) {
-            const chubParsed = parseChubUrl(url);
-            type = chubParsed?.type;
-
-            if (chubParsed?.type === 'character') {
-                console.info('Downloading chub character:', chubParsed.id);
-                result = await downloadChubCharacter(chubParsed.id);
-            } else if (chubParsed?.type === 'lorebook') {
-                console.info('Downloading chub lorebook:', chubParsed.id);
-                result = await downloadChubLorebook(chubParsed.id);
-            } else {
-                return response.sendStatus(404);
-            }
-        } else if (isRisu) {
-            const uuid = parseRisuUrl(url);
-            if (!uuid) {
-                return response.sendStatus(404);
-            }
-
-            type = 'character';
-            result = await downloadRisuCharacter(uuid);
-        } else if (isPerchance) {
-            const perchanceSlug = parsePerchanceSlug(url);
-            if (!perchanceSlug) {
-                return response.sendStatus(404);
-            }
-            type = 'character';
-            result = await downloadPerchanceCharacter(perchanceSlug);
-        } else if (isGeneric) {
-            console.info('Downloading from generic url:', url);
-            type = 'character';
-            result = await downloadGenericPng(url);
-        } else {
-            console.error(`Received an import for "${getHostFromUrl(url)}", but site is not whitelisted. This domain must be added to the config key "whitelistImportDomains" to allow import from this source.`);
-            return response.sendStatus(404);
+            return sendExternalContentFailure(response, classification.failure);
         }
 
-        if (!result) {
-            return response.sendStatus(404);
+        const result = await downloadExternalContentArtifact({
+            descriptor: classification.descriptor,
+            downloaders: EXTERNAL_CONTENT_DOWNLOADERS,
+        });
+
+        if (!result.ok) {
+            return sendExternalContentFailure(response, result.failure);
         }
 
-        if (result.fileType) response.set('Content-Type', result.fileType);
-        response.set('Content-Disposition', `attachment; filename="${encodeURI(result.fileName)}"`);
-        response.set('X-Custom-Content-Type', type);
-        return response.send(result.buffer);
+        return sendExternalContentArtifact(response, result.artifact, { encodeFileName: true });
     } catch (error) {
         console.error('Importing custom content failed', error);
         return response.sendStatus(500);
@@ -1080,48 +1039,24 @@ router.post('/importUUID', async (request, response) => {
 
     try {
         const uuid = request.body.url;
-        let result;
+        const classification = classifyExternalContentId(uuid);
+        if (!classification.ok) {
+            return sendExternalContentFailure(response, classification.failure);
+        }
 
-        const isJannny = uuid.includes('_character');
-        const isPygmalion = (!isJannny && uuid.length == 36);
-        const isAICC = uuid.startsWith('AICC/');
-        const isPerchance = isPerchanceUUID(uuid);
-        const uuidType = uuid.includes('lorebook') ? 'lorebook' : 'character';
+        const result = await downloadExternalContentArtifact({
+            descriptor: classification.descriptor,
+            downloaders: EXTERNAL_CONTENT_DOWNLOADERS,
+        });
 
-        if (isPygmalion) {
-            console.info('Downloading Pygmalion character:', uuid);
-            result = await downloadPygmalionCharacter(uuid);
-        } else if (isJannny) {
-            console.info('Downloading Janitor character:', uuid.split('_')[0]);
-            result = await downloadJannyCharacter(uuid.split('_')[0]);
-        } else if (isAICC) {
-            const [, author, card] = uuid.split('/');
-            console.info('Downloading AICC character:', `${author}/${card}`);
-            result = await downloadAICCCharacter(`${author}/${card}`);
-        } else if (isPerchance) {
-            console.info('Downloading Perchance character:', uuid);
-            const parsedUuid = parsePerchanceSlug(uuid);
-            result = await downloadPerchanceCharacter(parsedUuid);
-        } else {
-            if (uuidType === 'character') {
-                console.info('Downloading chub character:', uuid);
-                result = await downloadChubCharacter(uuid);
-            } else if (uuidType === 'lorebook') {
-                console.info('Downloading chub lorebook:', uuid);
-                result = await downloadChubLorebook(uuid);
-            } else {
-                return response.sendStatus(404);
+        if (!result.ok) {
+            if (result.failure?.kind === 'invalid_artifact') {
+                throw new Error('Failed to download content');
             }
+            return sendExternalContentFailure(response, result.failure);
         }
 
-        if (!result) {
-            throw new Error('Failed to download content');
-        }
-
-        if (result.fileType) response.set('Content-Type', result.fileType);
-        response.set('Content-Disposition', `attachment; filename="${result.fileName}"`);
-        response.set('X-Custom-Content-Type', uuidType);
-        return response.send(result.buffer);
+        return sendExternalContentArtifact(response, result.artifact, { encodeFileName: false });
     } catch (error) {
         console.error('Importing custom content failed', error);
         return response.sendStatus(500);

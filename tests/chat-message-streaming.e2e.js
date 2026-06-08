@@ -157,6 +157,21 @@ async function startGeneration(page, prompt) {
     }, prompt);
 }
 
+async function startContinueGeneration(page) {
+    await page.evaluate(() => {
+        const context = window.SillyTavern.getContext();
+        window.__emberdeskStreamingGeneration = context.generate('continue', { automatic_trigger: false })
+            .then(result => {
+                window.__emberdeskStreamingGenerationResult = String(result ?? '');
+                return result;
+            })
+            .catch(error => {
+                window.__emberdeskStreamingGenerationError = String(error?.message ?? error);
+                throw error;
+            });
+    });
+}
+
 async function waitForGeneration(page, { allowAbort = false, allowFailure = false } = {}) {
     await page.evaluate(async ({ acceptAbort, acceptFailure }) => {
         try {
@@ -480,6 +495,46 @@ test.describe('chat message streaming', () => {
         expect(renderedEvents).toHaveLength(1);
         expect(messageEvents[0].messageId).toBe(rowCountBeforeGeneration + 1);
         expect(renderedEvents[0].messageId).toBe(rowCountBeforeGeneration + 1);
+    });
+
+    test('continue auto recovery final failure preserves the original assistant message', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterByName(page, characterName);
+        await enableOpenAiStreaming(page);
+        await enableFallbackProvider(page);
+        await installStreamingFetchSequenceStub(page, {
+            responses: [
+                { chunks: ['Discarded continue partial.'], delayMs: 30, failAfterChunks: true },
+                { chunks: [], delayMs: 30 },
+                { chunks: [], delayMs: 30 },
+            ],
+        });
+
+        const original = await page.evaluate(() => {
+            const context = window.SillyTavern.getContext();
+            const messageId = context.chat.length - 1;
+            return {
+                messageId,
+                text: String(context.chat[messageId]?.mes ?? ''),
+            };
+        });
+        expect(original.text.trim().length).toBeGreaterThan(0);
+
+        await startContinueGeneration(page);
+        await waitForGeneration(page, { allowFailure: true });
+
+        const restored = await page.evaluate((messageId) => {
+            const context = window.SillyTavern.getContext();
+            return String(context.chat[messageId]?.mes ?? '');
+        }, original.messageId);
+        expect(restored).toBe(original.text);
+
+        const continuedRow = page.locator(`#chat > .mes[mesid="${original.messageId}"]`);
+        await expect(continuedRow).toHaveCount(1);
+        await expect(continuedRow.locator('.mes_text')).not.toContainText('Discarded continue partial.');
+        await expect(continuedRow.getByRole('button', { name: 'Retry generation' })).toBeVisible();
+        const requestCount = await page.evaluate(() => window.__emberdeskStreamingRequests.length);
+        expect(requestCount).toBe(3);
     });
 
     test('provider failure before first token still restores retry recovery', async ({ page }) => {

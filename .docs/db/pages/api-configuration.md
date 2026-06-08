@@ -48,7 +48,7 @@ This page exists so a user can configure how EmberDesk connects to an LLM API pr
 - **Direct mode**: when the base URL is empty, the unified API key stores the current provider's secret key in the server-side secret store.
 - **Provider switch**: changing the chat completion source updates the unified key field placeholder to reflect whether a saved key exists for the new provider.
 - **Legacy settings**: old `proxies[]` and `selected_proxy` fields in settings files are silently ignored on load and dropped on next save; legacy main API values such as `kobold`, `koboldhorde`, `novel`, `poe`, and `textgenerationwebui` are redirected to the OpenAI chat-completion path during settings load.
-- **Fallback provider state**: the optional fallback provider lives in the same drawer, persists as ordinary settings plus a server-side secret, and stays independent from connection profile capture/apply behavior.
+- **Fallback provider state**: the optional fallback provider lives in the same drawer, persists as ordinary settings plus a dedicated server-side secret, preserves the entered fallback key when save fails, and stays independent from connection profile capture/apply behavior.
 
 ## Navigation
 

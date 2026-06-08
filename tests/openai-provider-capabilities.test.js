@@ -13,6 +13,7 @@ import {
     resolveReasoningEffort,
     resolveVerbosity,
 } from '../public/scripts/openai-provider-capabilities.js';
+import { getFallbackProviderStatus } from '../public/scripts/provider-secret-field-state.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -58,12 +59,25 @@ describe('OpenAI provider capability helpers', () => {
     test('requires the dedicated fallback secret before showing fallback provider as ready', () => {
         const source = fs.readFileSync(path.join(repoRoot, 'public/scripts/openai.js'), 'utf8');
 
-        expect(source).toContain('hasFallbackProviderSettings');
-        expect(source).toContain('hasFallbackProviderSettings(oai_settings, secret_state, SECRET_KEYS.OPENAI_FALLBACK)');
-        expect(source).toContain('await writeSecret(SECRET_KEYS.OPENAI_FALLBACK, value);');
-        expect(source).toContain('await deleteSecret(SECRET_KEYS.OPENAI_FALLBACK);');
-        expect(source).toMatch(/await writeSecret\(SECRET_KEYS\.OPENAI_FALLBACK, value\);[\s\S]*?updateFallbackProviderStatus\(\);/);
-        expect(source).toMatch(/await deleteSecret\(SECRET_KEYS\.OPENAI_FALLBACK\);[\s\S]*?updateFallbackProviderStatus\(\);/);
+        expect(getFallbackProviderStatus({
+            fallback_provider_enabled: true,
+            fallback_provider_base_url: 'https://fallback.example/v1',
+            fallback_provider_model: 'fallback-model',
+        }, { api_key_openai_fallback: [{ active: true }] }, 'api_key_openai_fallback')).toMatchObject({ state: 'ready', ready: true });
+        expect(getFallbackProviderStatus({
+            fallback_provider_enabled: true,
+            fallback_provider_base_url: 'https://fallback.example/v1',
+            fallback_provider_model: 'fallback-model',
+        }, {}, 'api_key_openai_fallback')).toMatchObject({ state: 'needs_setup', ready: false });
+
+        expect(source).toContain('getFallbackProviderStatus(oai_settings, secret_state, SECRET_KEYS.OPENAI_FALLBACK)');
+        expect(source).toContain('saveProviderSecretField({');
+        expect(source).toContain('clearProviderSecretField({');
+        expect(source).toContain('key: SECRET_KEYS.OPENAI_FALLBACK');
+        expect(source).toContain('writeSecret,');
+        expect(source).toContain('deleteSecret,');
+        expect(source).toMatch(/saveProviderSecretField\(\{[\s\S]*?key: SECRET_KEYS\.OPENAI_FALLBACK[\s\S]*?\}\);[\s\S]*?updateFallbackProviderStatus\(\);/);
+        expect(source).toMatch(/clearProviderSecretField\(\{[\s\S]*?key: SECRET_KEYS\.OPENAI_FALLBACK[\s\S]*?\}\);[\s\S]*?updateFallbackProviderStatus\(\);/);
     });
 
     test('builds fallback request payloads without mutating or inheriting primary connection settings', () => {

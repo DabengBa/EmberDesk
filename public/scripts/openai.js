@@ -76,7 +76,14 @@ import { t } from './i18n.js';
 import { ToolManager } from './tool-calling.js';
 import { accountStorage } from './util/AccountStorage.js';
 import { IGNORE_SYMBOL, MEDIA_DISPLAY, MEDIA_TYPE } from './constants.js';
-import { buildFallbackOpenAIRequestOverrides, hasFallbackProviderSettings } from './chat-generation-auto-recovery.js';
+import { buildFallbackOpenAIRequestOverrides } from './chat-generation-auto-recovery.js';
+import {
+    clearProviderSecretField,
+    getFallbackProviderStatus,
+    getUnifiedKeyFieldState,
+    saveProviderSecretField,
+    toggleSecretInputMask,
+} from './provider-secret-field-state.js';
 import {
     getChatCompletionModelFromSettings,
     isAudioInliningSupportedForSettings,
@@ -3859,30 +3866,17 @@ async function onNewPresetClick() {
 function updateUnifiedKeyField() {
     const $field = $('#api_key_unified');
     const source = oai_settings.chat_completion_source;
-    const isVertexExpress = source === chat_completion_sources.MAKERSUITE
-        && oai_settings.use_vertexai
-        && oai_settings.vertexai_auth_mode === 'express';
-    $('body').toggleClass('vertexai-active', isVertexExpress);
+    const state = getUnifiedKeyFieldState({
+        settings: oai_settings,
+        source,
+        secretKey: resolveSecretKey(),
+        secretState: secret_state,
+        chatCompletionSources: chat_completion_sources,
+    });
 
-    if (oai_settings.reverse_proxy) {
-        $field.attr('placeholder', 'Proxy password');
-        $field.val(oai_settings.proxy_password || '');
-    } else {
-        const secretKey = resolveSecretKey();
-        if (secretKey && secret_state[secretKey]) {
-            const label = Array.isArray(secret_state[secretKey])
-                ? (secret_state[secretKey].find(s => s.active)?.label || '')
-                : '';
-            $field.attr('placeholder', label ? `Saved (${label})` : 'Saved');
-        } else {
-            const placeholders = {
-                [chat_completion_sources.OPENAI]: 'sk-...',
-                [chat_completion_sources.CLAUDE]: 'sk-ant-...',
-            };
-            $field.attr('placeholder', placeholders[source] || 'Enter API key');
-        }
-        $field.val('');
-    }
+    $('body').toggleClass('vertexai-active', state.vertexAiActive);
+    $field.attr('placeholder', state.placeholder);
+    $field.val(state.value);
 }
 
 function onReverseProxyInput() {
@@ -3983,44 +3977,54 @@ function reconnectOpenAi() {
 }
 
 function onApiKeyUnifiedShowClick() {
-    const $input = $('#api_key_unified');
-    $input.toggleClass('api-key-masked');
-    $(this).toggleClass('fa-eye-slash fa-eye');
+    toggleSecretInputMask($('#api_key_unified')[0], this);
 }
 
 function updateFallbackProviderStatus() {
-    const isConfigured = hasFallbackProviderSettings(oai_settings, secret_state, SECRET_KEYS.OPENAI_FALLBACK);
-    const status = !oai_settings.fallback_provider_enabled
-        ? t`Disabled`
-        : isConfigured
-            ? t`Ready`
-            : t`Needs setup`;
-
-    $('#fallback_provider_status').text(status);
+    const status = getFallbackProviderStatus(oai_settings, secret_state, SECRET_KEYS.OPENAI_FALLBACK);
+    $('#fallback_provider_status').text(status.text);
 }
 
 function onFallbackProviderApiKeyShowClick() {
-    const $input = $('#fallback_provider_api_key');
-    $input.toggleClass('api-key-masked');
-    $(this).toggleClass('fa-eye-slash fa-eye');
+    toggleSecretInputMask($('#fallback_provider_api_key')[0], this);
 }
 
 async function onFallbackProviderSaveKeyClick() {
     const $input = $('#fallback_provider_api_key');
     const value = String($input.val()).trim();
-    if (!value) {
+    const result = await saveProviderSecretField({
+        key: SECRET_KEYS.OPENAI_FALLBACK,
+        value,
+        writeSecret,
+    });
+
+    if (result.status === 'empty') {
         toastr.warning(t`Enter a fallback API key first.`);
         return;
     }
 
-    await writeSecret(SECRET_KEYS.OPENAI_FALLBACK, value);
+    if (result.status === 'failed') {
+        updateFallbackProviderStatus();
+        toastr.error(t`Fallback API key could not be saved.`);
+        return;
+    }
+
+    if (result.shouldClearInput) {
+        $input.val('').trigger('input');
+    }
     updateFallbackProviderStatus();
     toastr.success(t`Fallback API key saved.`);
 }
 
 async function onFallbackProviderClearKeyClick() {
-    await deleteSecret(SECRET_KEYS.OPENAI_FALLBACK);
-    $('#fallback_provider_api_key').val('');
+    const result = await clearProviderSecretField({
+        key: SECRET_KEYS.OPENAI_FALLBACK,
+        deleteSecret,
+    });
+
+    if (result.shouldClearInput) {
+        $('#fallback_provider_api_key').val('').trigger('input');
+    }
     updateFallbackProviderStatus();
     toastr.success(t`Fallback API key cleared.`);
 }

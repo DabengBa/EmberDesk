@@ -140,7 +140,7 @@ const INPUT_MAP = {
     [SECRET_KEYS.HORDE]: '#horde_api_key',
     [SECRET_KEYS.MANCER]: '#api_key_mancer',
     [SECRET_KEYS.OPENAI]: '#api_key_openai',
-    [SECRET_KEYS.OPENAI_FALLBACK]: '#api_key_openai_fallback',
+    [SECRET_KEYS.OPENAI_FALLBACK]: '#fallback_provider_api_key',
     [SECRET_KEYS.NOVEL]: '#api_key_novel',
     [SECRET_KEYS.CLAUDE]: '#api_key_claude',
     [SECRET_KEYS.OPENROUTER]: '.api_key_openrouter',

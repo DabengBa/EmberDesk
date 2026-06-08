@@ -180,6 +180,19 @@ The 10-spec successor proof set closed the first main-chat successor checkpoint 
 - message action extra-menu expand/collapse behavior is owned by a root-scoped controller with duplicate-init and cleanup proof
 - interaction performance evidence covers warm open to first readable message, send to local echo, first token, stop to usable, and long-chat load-more to stable
 
+## Recovery Coordinator Addendum: 2026-06-09
+
+The next architecture-deepening slice extracted visible generation attempt planning into `public/scripts/chat-generation-lifecycle.js`. The successor scope remains active, but this slice did not reopen rendering or provider routing:
+
+- `Generate()` remains the browser compatibility entry point.
+- `StreamingProcessor` remains the token append owner.
+- automatic recovery stays limited to visible main-chat OpenAI-compatible generation.
+- quiet/background/nested/dry-run/user-abort paths stay excluded from lifecycle retries.
+- `continue` and `swipe` preserve the existing assistant-row baseline on final failure.
+- fallback readiness uses the same `hasFallbackProviderSettings()` helper as the API drawer.
+
+Detailed implementation notes live in [Main Chat Generation Lifecycle](main-chat-generation-lifecycle.md).
+
 UX closure status:
 
 | Area | Status | Evidence or Boundary |

@@ -39,6 +39,7 @@ This feature lets a user preconfigure a second OpenAI-compatible endpoint that E
 
 - The fallback provider is OpenAI-compatible only.
 - The fallback API key is stored in the dedicated server-side secret entry and is not written into the normal settings payload as plain text.
+- The fallback API key uses its own drawer input and secret mapping. If saving the key fails, the entered value remains in the input so the user can retry or copy it instead of losing the value.
 - The fallback provider is not a connection profile and is not captured or applied by profile switching.
 - Fallback use stays disabled until the user enables it and provides the required base URL, model, and secret.
 - The cost warning stays visible so the user understands fallback use can create extra API requests and charges.

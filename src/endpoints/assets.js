@@ -5,11 +5,11 @@ import { finished } from 'node:stream/promises';
 import mime from 'mime-types';
 import express from 'express';
 import sanitize from 'sanitize-filename';
-import fetch from 'node-fetch';
 
 import { UNSAFE_EXTENSIONS } from '../constants.js';
 import { clientRelativePath, isValidUrl } from '../util.js';
-import { getHostFromUrl, isHostWhitelisted } from './content-manager.js';
+import { getImportDomainAllowlist } from './content-manager.js';
+import { downloadExternalAsset, validateExternalAssetUrl } from './external-content-import-service.js';
 
 const VALID_CATEGORIES = ['bgm', 'ambient', 'blip', 'live2d', 'vrm', 'character', 'temp'];
 
@@ -197,10 +197,17 @@ router.post('/download', async (request, response) => {
         const url = String(request.body.url);
         const inputCategory = request.body.category;
 
-        const host = getHostFromUrl(url);
-        if (!isHostWhitelisted(host)) {
-            console.error(`Received an import for "${host}", but site is not whitelisted. This domain must be added to the config key "whitelistImportDomains" to allow import from this source.`);
-            return response.sendStatus(404);
+        const assetValidation = validateExternalAssetUrl({
+            url,
+            allowlist: getImportDomainAllowlist(),
+        });
+
+        if (!assetValidation.ok) {
+            if (assetValidation.failure?.kind === 'unsupported_host') {
+                console.error(`Received an import for "${assetValidation.failure.host}", but site is not whitelisted. This domain must be added to the config key "whitelistImportDomains" to allow import from this source.`);
+                return response.sendStatus(404);
+            }
+            throw new Error(`Unexpected response ${assetValidation.failure?.kind ?? 'external asset validation failed'}`);
         }
 
         // Check category
@@ -224,11 +231,19 @@ router.post('/download', async (request, response) => {
         const file_path = path.join(request.user.directories.assets, category, request.body.filename);
         console.info('Request received to download', url, 'to', file_path);
 
-        // Download to temp
-        const res = await fetch(url);
-        if (!res.ok || res.body === null) {
-            throw new Error(`Unexpected response ${res.statusText}`);
+        const assetDownload = await downloadExternalAsset({
+            url,
+            allowlist: getImportDomainAllowlist(),
+        });
+
+        if (!assetDownload.ok) {
+            if (assetDownload.failure?.kind === 'unsupported_host') {
+                console.error(`Received an import for "${assetDownload.failure.host}", but site is not whitelisted. This domain must be added to the config key "whitelistImportDomains" to allow import from this source.`);
+                return response.sendStatus(404);
+            }
+            throw new Error(`Unexpected response ${assetDownload.failure?.statusText ?? assetDownload.failure?.kind ?? 'external asset download failed'}`);
         }
+        const res = assetDownload.response;
         const destination = path.resolve(temp_path);
         // Delete if previous download failed
         if (fs.existsSync(temp_path)) {
