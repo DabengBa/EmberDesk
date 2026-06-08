@@ -59,6 +59,11 @@ export function summarizeInteractionSamples(samples) {
     const firstListItemClickableMs = collectNumericMetric(samples, 'firstListItemClickableMs');
     const filterInputToPageLoadedMs = collectNumericMetric(samples, 'filterInputToPageLoadedMs');
     const filterInputToBusyClearMs = collectNumericMetric(samples, 'filterInputToBusyClearMs');
+    const firstReadableMessageMs = collectNumericMetric(samples, 'firstReadableMessageMs');
+    const sendToLocalEchoMs = collectNumericMetric(samples, 'sendToLocalEchoMs');
+    const firstTokenMs = collectNumericMetric(samples, 'firstTokenMs');
+    const streamStopToUsableMs = collectNumericMetric(samples, 'streamStopToUsableMs');
+    const loadMoreToStableMs = collectNumericMetric(samples, 'loadMoreToStableMs');
     const paginationScrollRestored = collectBooleanMetric(samples, 'paginationScrollRestored');
 
     return {
@@ -75,6 +80,11 @@ export function summarizeInteractionSamples(samples) {
         firstListItemClickableMs: summarizeMetric(firstListItemClickableMs),
         filterInputToPageLoadedMs: summarizeMetric(filterInputToPageLoadedMs),
         filterInputToBusyClearMs: summarizeMetric(filterInputToBusyClearMs),
+        firstReadableMessageMs: summarizeMetric(firstReadableMessageMs),
+        sendToLocalEchoMs: summarizeMetric(sendToLocalEchoMs),
+        firstTokenMs: summarizeMetric(firstTokenMs),
+        streamStopToUsableMs: summarizeMetric(streamStopToUsableMs),
+        loadMoreToStableMs: summarizeMetric(loadMoreToStableMs),
         paginationScrollRestored: summarizeBooleanMetric(paginationScrollRestored),
     };
 }
@@ -120,6 +130,11 @@ export function buildVariantComparison(onSamples, offSamples) {
             firstListItemClickableMsMedian: calculateDelta(onSummary.firstListItemClickableMs.median, offSummary.firstListItemClickableMs.median),
             filterInputToPageLoadedMsMedian: calculateDelta(onSummary.filterInputToPageLoadedMs.median, offSummary.filterInputToPageLoadedMs.median),
             filterInputToBusyClearMsMedian: calculateDelta(onSummary.filterInputToBusyClearMs.median, offSummary.filterInputToBusyClearMs.median),
+            firstReadableMessageMsMedian: calculateDelta(onSummary.firstReadableMessageMs.median, offSummary.firstReadableMessageMs.median),
+            sendToLocalEchoMsMedian: calculateDelta(onSummary.sendToLocalEchoMs.median, offSummary.sendToLocalEchoMs.median),
+            firstTokenMsMedian: calculateDelta(onSummary.firstTokenMs.median, offSummary.firstTokenMs.median),
+            streamStopToUsableMsMedian: calculateDelta(onSummary.streamStopToUsableMs.median, offSummary.streamStopToUsableMs.median),
+            loadMoreToStableMsMedian: calculateDelta(onSummary.loadMoreToStableMs.median, offSummary.loadMoreToStableMs.median),
         },
     };
 }
@@ -215,6 +230,26 @@ function normalizeCharacterLibraryUxPayload(payload) {
     };
 }
 
+function normalizeMainChatPayload(payload) {
+    if (!payload || typeof payload !== 'object') {
+        return null;
+    }
+
+    return {
+        characterName: payload.characterName ?? '',
+        messageCount: Number(payload.messageCount ?? 0),
+        renderedMessageCount: Number(payload.renderedMessageCount ?? 0),
+        firstMesid: Number(payload.firstMesid ?? 0),
+        lastMesid: Number(payload.lastMesid ?? 0),
+        firstReadableMessageText: payload.firstReadableMessageText ?? '',
+        localEchoPresent: Boolean(payload.localEchoPresent),
+        finalTextPresent: Boolean(payload.finalTextPresent),
+        stopRestoredUsable: Boolean(payload.stopRestoredUsable),
+        loadMoreBeforeMesid: Number(payload.loadMoreBeforeMesid ?? 0),
+        loadMoreAfterMesid: Number(payload.loadMoreAfterMesid ?? 0),
+    };
+}
+
 function normalizeCharacterGetPayload(payload) {
     if (!payload || typeof payload !== 'object') {
         return null;
@@ -285,6 +320,9 @@ export function compareScenarioPayloads(scenarioName, sqliteOnPayload, sqliteOff
     } else if (scenarioName.startsWith('character_library_')) {
         normalizedOn = normalizeCharacterLibraryUxPayload(sqliteOnPayload);
         normalizedOff = normalizeCharacterLibraryUxPayload(sqliteOffPayload);
+    } else if (scenarioName.startsWith('main_chat_')) {
+        normalizedOn = normalizeMainChatPayload(sqliteOnPayload);
+        normalizedOff = normalizeMainChatPayload(sqliteOffPayload);
     } else {
         normalizedOn = sqliteOnPayload ?? null;
         normalizedOff = sqliteOffPayload ?? null;
@@ -330,6 +368,10 @@ export function summarizeScenarioPayload(scenarioName, payload) {
         return normalizeCharacterLibraryUxPayload(payload);
     }
 
+    if (scenarioName.startsWith('main_chat_')) {
+        return normalizeMainChatPayload(payload);
+    }
+
     return null;
 }
 
@@ -364,6 +406,26 @@ export function validateInteractionPath(scenarioName, variant, observedPath) {
             sqlite_off: null,
         },
         character_library_pagination_scroll: {
+            sqlite_on: null,
+            sqlite_off: null,
+        },
+        main_chat_warm_open_first_readable: {
+            sqlite_on: null,
+            sqlite_off: null,
+        },
+        main_chat_send_local_echo: {
+            sqlite_on: null,
+            sqlite_off: null,
+        },
+        main_chat_stream_first_token: {
+            sqlite_on: null,
+            sqlite_off: null,
+        },
+        main_chat_stream_stop_to_usable: {
+            sqlite_on: null,
+            sqlite_off: null,
+        },
+        main_chat_long_load_more: {
             sqlite_on: null,
             sqlite_off: null,
         },

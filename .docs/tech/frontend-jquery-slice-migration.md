@@ -15,6 +15,8 @@ The shipped slices are:
 - `tests/setup-page-controller.test.js` - focused helper and controller regression proof for `fresh` and `set-password` setup modes
 - `public/scripts/background-panel-controller.js` - background-library panel loading state helper and root-scoped controller
 - `tests/background-panel-controller.test.js` - focused proof for background panel state classification, fail-fast initialization, root scoping, and cleanup
+- `public/scripts/chat-message-actions-controller.js` - low-risk message action menu affordance controller for extra-action expand/collapse behavior
+- `tests/chat-message-actions-controller.test.js` - focused proof for delegated action dispatch, duplicate-init safety, expanded-action close rules, and cleanup
 
 This is not a framework migration. EmberDesk still uses the existing HTML/CSS/jQuery frontend, and this pattern only removes page-local jQuery dependencies when the slice can stay small and independently validated.
 
@@ -98,6 +100,8 @@ The recovery success behavior now matches the semantic contract: after a success
 
 `public/scripts/background-panel-controller.js` is a smaller panel-local variant of the same migration rule. It exports pure state classification through `getBackgroundPanelState()`, fail-fast controller creation through `createBackgroundPanelController(root, dependencies)`, and cleanup for controller-owned DOM state. Production code keeps the existing background module load order and routes all network, folder, thumbnail, and slash-command work through `public/scripts/backgrounds.js`.
 
+`public/scripts/chat-message-actions-controller.js` applies the same root-scoped controller rule to a narrow main-chat affordance. It owns only the delegated expand/collapse behavior for `.extraMesButtonsHint` and `.extraMesButtons`, preserves existing selectors and animation settings, and exposes `MESSAGE_ACTION_TIERS` as a local implementation note for high-frequency, secondary, and danger action grouping. It does not own message body rendering, edit/delete business logic, swipe handling, reasoning controls, media controls, streaming, or slash-command message injection.
+
 ## Migration Rules For Future Slices
 
 Use this pattern only for small, bounded frontend surfaces:
@@ -122,6 +126,7 @@ cd tests
 bun run test:unit -- login-page-controller.test.js --runInBand
 bun run test:unit -- setup-page-controller.test.js --runInBand
 bun run test:unit -- background-panel-controller.test.js --runInBand
+bun run test:unit -- chat-message-actions-controller.test.js --runInBand
 bun run test:e2e -- login.e2e.js
 bun run test:e2e -- sample.e2e.js
 ```
@@ -161,6 +166,9 @@ Stable binding points:
 - `createBackgroundPanelController()` in `public/scripts/background-panel-controller.js`
 - `getBackgroundPanelState()` in `public/scripts/background-panel-controller.js`
 - `setBackgroundCatalogLoading()` delegation in `public/scripts/backgrounds.js`
+- `createChatMessageActionsController()` in `public/scripts/chat-message-actions-controller.js`
+- `MESSAGE_ACTION_TIERS` in `public/scripts/chat-message-actions-controller.js`
+- extra message action menu delegation from `public/script.js`
 
 Related docs:
 

@@ -63,6 +63,7 @@ EmberDesk currently provides:
 - a main browser workspace for chat-centric LLM use
 - character-card management and large-library browsing
 - chat history storage and recovery
+- real-browser proof for stored chat message rendering into stable message rows, plus message-row and send-form role/name affordance coverage for future main-chat changes
 - world info / lorebook workflows
 - background and extension surfaces inside the main shell
 - a documented shared browser library for common frontend utilities and extension compatibility
@@ -99,6 +100,7 @@ EmberDesk does not currently aim to:
 - Keep derived caches scoped to proven hot paths; do not broaden them into general persistence without clear user-visible ROI.
 - Treat client-side derived lists as disposable views over canonical files; after destructive actions, stale delayed responses must not restore removed rows.
 - Keep compatibility-facing character row selectors and accessibility state synchronized when list rows are reused instead of re-rendered.
+- Treat main-chat message rows, send-form controls, `eventSource` / `event_types`, and slash-command surfaces as protected compatibility points; add focused browser and compatibility proof before changing rendering or streaming behavior.
 
 ## One-Line Summary
 

@@ -218,6 +218,8 @@ import { initInputMarkdown } from './scripts/input-md-formatting.js';
 import { AbortReason } from './scripts/util/AbortReason.js';
 import { initSystemPrompts } from './scripts/sysprompt.js';
 import { registerExtensionSlashCommands as initExtensionSlashCommands } from './scripts/extensions-slashcommands.js';
+import { buildChatMessageRenderDescriptor } from './scripts/chat-message-render-descriptor.js';
+import { createChatMessageActionsController } from './scripts/chat-message-actions-controller.js';
 import { ToolManager } from './scripts/tool-calling.js';
 import { addShowdownPatch } from './scripts/util/showdown-patch.js';
 import { applyBrowserFixes } from './scripts/browser-fixes.js';
@@ -3140,27 +3142,17 @@ export function updateMessageElement(mes, { messageId = chat.length - 1, message
     }
     const momentDate = timestampToMoment(mes.send_date);
     const timestamp = momentDate.isValid() ? momentDate.format('LL LT') : '';
+    const renderDescriptor = buildChatMessageRenderDescriptor(mes, { messageId, timestamp });
     const messageHTML = getMessageTextHTML(mes, { messageId });
-    const bookmarkLink = mes?.extra?.bookmark_link;
-    const tokenCount = mes.extra?.token_count;
+    const bookmarkLink = renderDescriptor.display.bookmarkLink;
+    const tokenCount = renderDescriptor.display.tokenCount;
     const { timerValue, timerTitle } = formatGenerationTimer(mes.gen_started, mes.gen_finished, mes.extra?.token_count, mes.extra?.reasoning_duration, mes.extra?.time_to_first_token);
 
-    messageElement.attr({
-        'mesid': messageId,
-        'swipeid': mes.swipe_id ?? 0,
-        'ch_name': mes.name,
-        'is_user': mes.is_user,
-        'is_system': !!mes.is_system,
-        'bookmark_link': bookmarkLink,
-        'force_avatar': !!mes.force_avatar,
-        'timestamp': timestamp,
-        // ...(type ?? { type }),
-        'type': mes.extra?.type ?? '',
-    });
+    messageElement.attr(renderDescriptor.attributes);
 
     messageElement.find('.avatar img').attr('src', avatarImg);
-    messageElement.find('.ch_name .name_text').text(mes.name);
-    messageElement.find('.timestamp').text(timestamp).attr('title', `${mes.extra?.api ? mes.extra.api + ' - ' : ''}${mes.extra?.model ?? ''}`);
+    messageElement.find('.ch_name .name_text').text(renderDescriptor.display.name);
+    messageElement.find('.timestamp').text(renderDescriptor.display.timestamp).attr('title', `${mes.extra?.api ? mes.extra.api + ' - ' : ''}${mes.extra?.model ?? ''}`);
     messageElement.find('.mesIDDisplay').text(`#${messageId}`);
     tokenCount && messageElement.find('.tokenCounterDisplay').text(`${tokenCount}t`);
     mes.title && messageElement.attr('title', mes.title);
@@ -3178,11 +3170,11 @@ export function updateMessageElement(mes, { messageId = chat.length - 1, message
         insertSVGIcon(messageElement, mes.extra);
     }
 
-    if (mes?.extra?.isSmallSys === true) {
+    if (renderDescriptor.classes.smallSysMes) {
         messageElement.addClass('smallSysMes');
     }
 
-    if (Array.isArray(mes?.extra?.tool_invocations)) {
+    if (renderDescriptor.classes.toolCall) {
         messageElement.addClass('toolCall');
     }
 
@@ -12430,73 +12422,11 @@ jQuery(async function () {
         }
     });
 
-    $(document).on('click', '.extraMesButtonsHint', function (e) {
-        const $hint = $(e.target);
-        const $buttons = $hint.siblings('.extraMesButtons');
-
-        $hint.transition({
-            opacity: 0,
-            duration: animation_duration,
-            easing: animation_easing,
-            complete: function () {
-                $hint.hide();
-                $buttons
-                    .addClass('visible')
-                    .css({
-                        opacity: 0,
-                        display: 'flex',
-                    })
-                    .transition({
-                        opacity: 1,
-                        duration: animation_duration,
-                        easing: animation_easing,
-                    });
-            },
-        });
-    });
-
-    $(document).on('click', function (e) {
-        // Expanded options don't need to be closed
-        if (power_user.expand_message_actions) {
-            return;
-        }
-
-        // Check if the click was outside the relevant elements
-        if (!$(e.target).closest('.extraMesButtons, .extraMesButtonsHint').length) {
-            const $visibleButtons = $('.extraMesButtons.visible');
-
-            if (!$visibleButtons.length) {
-                return;
-            }
-
-            const $hiddenHints = $('.extraMesButtonsHint:hidden');
-
-            // Transition out the .extraMesButtons first
-            $visibleButtons.transition({
-                opacity: 0,
-                duration: animation_duration,
-                easing: animation_easing,
-                complete: function () {
-                    // Hide the .extraMesButtons after the transition
-                    $(this)
-                        .hide()
-                        .removeClass('visible');
-
-                    // Transition the .extraMesButtonsHint back in
-                    $hiddenHints
-                        .show()
-                        .transition({
-                            opacity: 0.3,
-                            duration: animation_duration,
-                            easing: animation_easing,
-                            complete: function () {
-                                $(this).css('opacity', '');
-                            },
-                        });
-                },
-            });
-        }
-    });
+    createChatMessageActionsController(document, {
+        getExpandMessageActions: () => power_user.expand_message_actions,
+        animationDuration: animation_duration,
+        animationEasing: animation_easing,
+    }).init();
 
     $(document).on('click', '.mes_edit_cancel', async function () {
         await messageEditCancel.call(this, this_edit_mes_id);

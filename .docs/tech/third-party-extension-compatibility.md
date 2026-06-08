@@ -29,10 +29,33 @@ Keep these DOM surfaces stable unless a migration plan updates both first-party 
 - `#extensionsMenu`
 - `#chat > .mes`
 - `.mes_text`
+- `.mes[mesid]`
+- `.last_mes`
 
 `#extensionsMenuButton` and `#extensionsMenu` are rendered from `wandButton.html` and `wandMenu.html`, not from static `index.html`.
 
 Tavern Helper currently mounts its Vue panel by appending `#tavern_helper` to `#extensions_settings`.
+
+## Message Row DOM Contract
+
+The main chat message list is a shared surface for first-party message actions, rendering tests, slash-command injected messages, and extension-adjacent scripts.
+
+Keep these message-row selectors and identity attributes stable unless a migration plan updates first-party code and compatibility proof together:
+
+- `#chat > .mes`
+- `.mes_text`
+- `.mes[mesid]`
+- `.last_mes`
+- `is_user`
+- `is_system`
+- `.mes_reasoning_details`
+- `.mes_reasoning`
+- `.mes_media_wrapper`
+- `.mes_file_wrapper`
+- `.swipe_left`
+- `.swipe_right`
+
+Message-row actions should remain discoverable by role/name when visible, while stored-message rendering remains owned by the message rendering path and its browser proof. Focusable action buttons must keep keyboard reachability, and visible action affordances must not cover `.mes_text` in a way that prevents reading or touch interaction.
 
 ## Character List DOM Contract
 
@@ -194,6 +217,14 @@ Pop-Location
 
 This test verifies mount points, Tavern Helper manifest and distributable files, `@sillytavern/*` import resolution, key module exports, slash-command public exports, event values, and regex placement values.
 It also verifies the generated character-list row identity contract used by character library slices.
+
+When message row rendering, message actions, or main chat workspace structure changes, also run the focused message proof that matches the touched surface:
+
+```powershell
+bun run --cwd tests test:unit -- chat-workspace-structure.test.js third-party-extension-compatibility.test.js --runInBand
+bun run --cwd tests test:e2e -- chat-message-layout.e2e.js
+bun run --cwd tests test:e2e -- chat-message-rendering.e2e.js
+```
 
 When character read-service or character route work changes `/api/characters/all`, `/api/characters/list`, or `/api/characters/get`, also run:
 

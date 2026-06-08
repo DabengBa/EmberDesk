@@ -91,6 +91,36 @@ describe('interaction performance report helpers', () => {
                 min: null,
                 max: null,
             },
+            firstReadableMessageMs: {
+                median: null,
+                p90: null,
+                min: null,
+                max: null,
+            },
+            sendToLocalEchoMs: {
+                median: null,
+                p90: null,
+                min: null,
+                max: null,
+            },
+            firstTokenMs: {
+                median: null,
+                p90: null,
+                min: null,
+                max: null,
+            },
+            streamStopToUsableMs: {
+                median: null,
+                p90: null,
+                min: null,
+                max: null,
+            },
+            loadMoreToStableMs: {
+                median: null,
+                p90: null,
+                min: null,
+                max: null,
+            },
             paginationScrollRestored: {
                 sampleCount: 0,
                 trueCount: 0,
@@ -135,6 +165,35 @@ describe('interaction performance report helpers', () => {
             falseCount: 1,
             allTrue: false,
         });
+    });
+
+    test('summarizes main-chat user-perceived timing metrics', () => {
+        const summary = summarizeInteractionSamples([
+            {
+                timing: {
+                    firstReadableMessageMs: 90,
+                    sendToLocalEchoMs: 35,
+                    firstTokenMs: 120,
+                    streamStopToUsableMs: 45,
+                    loadMoreToStableMs: 150,
+                },
+            },
+            {
+                timing: {
+                    firstReadableMessageMs: 110,
+                    sendToLocalEchoMs: 45,
+                    firstTokenMs: 160,
+                    streamStopToUsableMs: 65,
+                    loadMoreToStableMs: 190,
+                },
+            },
+        ]);
+
+        expect(summary.firstReadableMessageMs.median).toBe(100);
+        expect(summary.sendToLocalEchoMs.median).toBe(40);
+        expect(summary.firstTokenMs.median).toBe(140);
+        expect(summary.streamStopToUsableMs.median).toBe(55);
+        expect(summary.loadMoreToStableMs.median).toBe(170);
     });
 
     test('builds an on/off variant comparison with deltas', () => {
@@ -569,6 +628,55 @@ describe('interaction performance report helpers', () => {
             busyCleared: false,
             pageLoaded: true,
             paginationScrollRestored: true,
+        });
+    });
+
+    test('compares main-chat payloads without timing noise', () => {
+        const result = compareScenarioPayloads(
+            'main_chat_warm_open_first_readable',
+            {
+                characterName: 'Perf Character 1',
+                messageCount: 500,
+                renderedMessageCount: 100,
+                firstMesid: 401,
+                lastMesid: 500,
+                firstReadableMessageText: 'Message 401',
+                loadMoreBeforeMesid: 401,
+                loadMoreAfterMesid: 301,
+                metrics: {
+                    firstReadableMessageMs: 110,
+                    loadMoreToStableMs: 180,
+                },
+            },
+            {
+                characterName: 'Perf Character 1',
+                messageCount: 500,
+                renderedMessageCount: 100,
+                firstMesid: 401,
+                lastMesid: 500,
+                firstReadableMessageText: 'Message 401',
+                loadMoreBeforeMesid: 401,
+                loadMoreAfterMesid: 301,
+                metrics: {
+                    firstReadableMessageMs: 220,
+                    loadMoreToStableMs: 260,
+                },
+            },
+        );
+
+        expect(result.matches).toBe(true);
+        expect(result.normalizedOn).toEqual({
+            characterName: 'Perf Character 1',
+            messageCount: 500,
+            renderedMessageCount: 100,
+            firstMesid: 401,
+            lastMesid: 500,
+            firstReadableMessageText: 'Message 401',
+            localEchoPresent: false,
+            finalTextPresent: false,
+            stopRestoredUsable: false,
+            loadMoreBeforeMesid: 401,
+            loadMoreAfterMesid: 301,
         });
     });
 });

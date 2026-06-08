@@ -161,6 +161,8 @@ test.describe('chat message rendering', () => {
         const renderedMessages = page.locator('#chat > .mes[mesid]');
         await expect(renderedMessages).toHaveCount(seededMessages.length);
         await expect(renderedMessages.first().locator('.mes_text')).toBeVisible();
+        await expect(page.locator('#chat > .mes.last_mes')).toHaveCount(1);
+        await expect(renderedMessages.last()).toHaveClass(/last_mes/);
 
         await expect(page.locator('#chat > .mes[is_user="true"][mesid]').first()).toBeVisible();
         await expect(page.locator('#chat > .mes[is_user="false"][is_system="false"][mesid]').first()).toBeVisible();
@@ -168,8 +170,12 @@ test.describe('chat message rendering', () => {
         await expectMessageTextMatches(page, characterMessageIndex, seededMessages[characterMessageIndex].mes);
 
         const sampleRow = page.locator(`#chat > .mes[mesid="${characterMessageIndex}"]`);
+        await expect(sampleRow).toHaveAttribute('is_user', 'false');
+        await expect(sampleRow).toHaveAttribute('is_system', 'false');
         await expect(sampleRow.locator('.mes_block')).toHaveCount(1);
         await expect(sampleRow.locator('.mes_buttons')).toHaveCount(1);
+        await expect(sampleRow.locator('.mes_reasoning_details')).toHaveCount(1);
+        await expect(sampleRow.locator('.mes_reasoning')).toHaveCount(1);
         await expect(sampleRow.locator('.mes_media_wrapper')).toHaveCount(1);
         await expect(sampleRow.locator('.mes_file_wrapper')).toHaveCount(1);
         await expect(sampleRow.locator('.swipe_left')).toHaveCount(1);
@@ -185,9 +191,23 @@ test.describe('chat message rendering', () => {
 
         const actionRow = renderedMessages.last();
         await actionRow.hover();
-        await expect(actionRow.getByRole('button', { name: 'Message Actions' })).toBeVisible();
+        const messageActionsButton = actionRow.getByRole('button', { name: 'Message Actions' });
+        await expect(messageActionsButton).toBeVisible();
         await expect(actionRow.getByRole('button', { name: 'Edit' })).toBeVisible();
-        await actionRow.getByRole('button', { name: 'Message Actions' }).click();
+        await messageActionsButton.focus();
+        await expect(messageActionsButton).toBeFocused();
+        const actionButtonBox = await messageActionsButton.boundingBox();
+        expect(actionButtonBox?.width ?? 0).toBeGreaterThanOrEqual(16);
+        expect(actionButtonBox?.height ?? 0).toBeGreaterThanOrEqual(16);
+        const messageTextBox = await actionRow.locator('.mes_text').boundingBox();
+        expect(actionButtonBox).not.toBeNull();
+        expect(messageTextBox).not.toBeNull();
+        const overlapsMessageText = actionButtonBox.x < messageTextBox.x + messageTextBox.width
+            && actionButtonBox.x + actionButtonBox.width > messageTextBox.x
+            && actionButtonBox.y < messageTextBox.y + messageTextBox.height
+            && actionButtonBox.y + actionButtonBox.height > messageTextBox.y;
+        expect(overlapsMessageText).toBe(false);
+        await messageActionsButton.click();
         await expect(actionRow.getByRole('button', { name: 'Copy' })).toBeVisible();
 
         const longMessages = getChatMessages(longChatPath);
@@ -202,6 +222,37 @@ test.describe('chat message rendering', () => {
 
         const firstRenderedLongMessageId = await page.locator('#chat > .mes[mesid]').first().getAttribute('mesid');
         expect(Number(firstRenderedLongMessageId)).toBe(longMessages.length - longChatLimit);
+
+        const firstRenderedLongMessageIndex = Number(firstRenderedLongMessageId);
+        await expectMessageTextMatches(page, firstRenderedLongMessageIndex, longMessages[firstRenderedLongMessageIndex].mes);
+        await expectMessageTextMatches(page, longMessages.length - 1, longMessages.at(-1).mes);
+
+        const anchorRow = page.locator(`#chat > .mes[mesid="${firstRenderedLongMessageIndex}"]`);
+        await anchorRow.scrollIntoViewIfNeeded();
+        const anchorTopBeforeLoadMore = await anchorRow.evaluate(element => element.getBoundingClientRect().top);
+
+        await page.locator('#show_more_messages').click();
+        await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(longChatLimit * 2);
+
+        const expectedFirstLoadedMessageIndex = longMessages.length - (longChatLimit * 2);
+        const loadedMessageIds = await page.locator('#chat > .mes[mesid]').evaluateAll(elements => {
+            return elements.map(element => Number(element.getAttribute('mesid')));
+        });
+        expect(loadedMessageIds[0]).toBe(expectedFirstLoadedMessageIndex);
+        expect(loadedMessageIds.at(-1)).toBe(longMessages.length - 1);
+        expect(loadedMessageIds).toContain(firstRenderedLongMessageIndex);
+
+        await expect(page.locator('#show_more_messages')).toBeVisible();
+        await expectMessageTextMatches(page, expectedFirstLoadedMessageIndex, longMessages[expectedFirstLoadedMessageIndex].mes);
+        await expectMessageTextMatches(page, firstRenderedLongMessageIndex, longMessages[firstRenderedLongMessageIndex].mes);
+
+        const anchorTopAfterLoadMore = await anchorRow.evaluate(element => element.getBoundingClientRect().top);
+        expect(Math.abs(anchorTopAfterLoadMore - anchorTopBeforeLoadMore)).toBeLessThanOrEqual(8);
+
+        const latestLongMessageRow = page.locator(`#chat > .mes[mesid="${longMessages.length - 1}"]`);
+        await latestLongMessageRow.scrollIntoViewIfNeeded();
+        await expect(latestLongMessageRow).toBeVisible();
+        await expectMessageTextMatches(page, longMessages.length - 1, longMessages.at(-1).mes);
         expect(getUnexpectedConsoleErrors(consoleErrors)).toEqual([]);
     });
 });

@@ -82,7 +82,7 @@ Resolved lint follow-up:
 | Full Playwright E2E | Skipped | Higher-cost browser/server validation. No user-facing behavior changed in Phase 0. Run before release or before/after UI slices. |
 | Startup performance runner | Skipped | No startup optimization was implemented in Phase 0. Use only when making or validating performance claims. |
 | Interaction performance runner | Skipped | No interaction-performance implementation changed in Phase 0. Use for character-list, delete, get/list, and cache changes. |
-| Contract Node runtime proof | Skipped locally | Local workstation is Node 25.4.0. Required before release on the active contract runtime. |
+| Contract Node runtime proof | Skipped in this historical baseline | The Phase 0 workstation used Node 25.4.0. This was superseded by the 2026-06-05 Node.js 26.3.0 release validation sweep recorded in `.docs/PROJECT_HISTORY.md`. |
 
 ## Baseline Gates For Later Slices
 
@@ -97,10 +97,12 @@ Use this baseline before future modernization work:
 - Run character-list focused tests before and after touching character-list state, rendering, row identity, pagination, bulk selection, or delete reconcile.
 - Run performance tooling tests plus the relevant runner before making performance claims.
 
-## Current Risk Register
+## Historical Risk Register
 
-- Local validation is not on the project runtime contract because Node 25.4.0 is installed locally.
-- Node 25 local proof is diagnostic only and must not be used to widen the supported engine range.
+These were Phase 0 risks from 2026-06-02, not the current repository risk register. The Node runtime items were superseded by the Node.js 26.3.0 contract update and the 2026-06-05 release validation sweep.
+
+- Phase 0 local validation was not on the active project runtime contract because that workstation used Node 25.4.0.
+- Node 25 local proof was diagnostic only and must not be used to widen the supported engine range.
 - Vendored third-party extension code is excluded from whole-repo lint and should not be auto-formatted casually.
 - Playwright E2E was not run in this Phase 0 pass.
 - Performance runners were not run because no performance change was made.

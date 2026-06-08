@@ -22,7 +22,7 @@ This page exists so a user can run their daily LLM workflow from one browser sur
 2. **Character and navigation region**: the area where users browse character cards and switch the active working context.
 3. **Main chat region**: the central conversation surface where messages, generation output, and chat actions are shown.
 4. **Supporting panels and drawers**: secondary UI surfaces for World Info, extensions, backgrounds, and related workspace tools.
-5. **Composer and action region**: the place where users type prompts and trigger chat actions.
+5. **Composer and action region**: the place where users type prompts and trigger chat actions, with the primary textarea, send button, stop/continue/impersonate actions, and chat-options entry discoverable through stable roles and accessible names.
 
 ## Page-Level Semantic IDs
 
@@ -63,6 +63,7 @@ This page exists so a user can run their daily LLM workflow from one browser sur
 - **Post-active-delete safe state**: after deleting the active character, the selected-character title area must route to a safe empty or library state rather than trying to reopen the deleted card.
 - **World Info panel state**: the World Info drawer keeps global activation controls separate from the editor selector; empty global selection and editor selection states must not leave stale entry content visible.
 - **Shared-library state**: the workspace loads a shared browser library during startup so first-party modules and compatible extensions can use documented imports and legacy globals without each surface bundling its own copy.
+- **Message rendering state**: stored or finalized messages render into stable `.mes[mesid]` rows with readable `.mes_text`, while message-row actions remain attached to the rendered row.
 
 ## Navigation
 

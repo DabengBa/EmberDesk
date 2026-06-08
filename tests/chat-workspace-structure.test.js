@@ -66,10 +66,18 @@ describe('chat workspace structure', () => {
     test('keeps message template DOM identity stable', () => {
         const indexHtml = read('public/index.html');
 
+        const messageRootTag = getTagByClass(indexHtml, 'mes');
+        [
+            'mesid=""',
+            'ch_name=""',
+            'is_user=""',
+            'is_system=""',
+            'bookmark_link=""',
+        ].forEach(attribute => expect(messageRootTag).toContain(attribute));
+
         [
             'id="message_template"',
             'class="mes"',
-            'mesid=""',
             'class="swipe_left fa-solid fa-chevron-left"',
             'class="mes_block"',
             'class="mes_buttons"',
@@ -79,9 +87,14 @@ describe('chat workspace structure', () => {
             'class="mes_text"',
             'class="mes_media_wrapper"',
             'class="mes_file_wrapper"',
+            'class="mes_bias"',
             'class="swipe_right fa-solid fa-chevron-right"',
+            'class="swipes-counter"',
         ].forEach(marker => expect(indexHtml).toContain(marker));
 
+        expect(indexHtml.indexOf('class="mes_reasoning_details"')).toBeLessThan(indexHtml.indexOf('class="mes_text"'));
+        expect(indexHtml.indexOf('class="mes_text"')).toBeLessThan(indexHtml.indexOf('class="mes_media_wrapper"'));
+        expect(indexHtml.indexOf('class="mes_media_wrapper"')).toBeLessThan(indexHtml.indexOf('class="mes_file_wrapper"'));
         expect(getTagByClass(indexHtml, 'mes_img_swipe_left')).toContain('mes_img_swipe_left');
         expect(getTagByClass(indexHtml, 'mes_img_swipe_right')).toContain('mes_img_swipe_right');
     });

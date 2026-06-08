@@ -38,12 +38,41 @@ const pairCount = cliOptions.pairs ?? 3;
 const variantSelection = cliOptions.variant ?? 'ab';
 const scenarios = resolveScenarios(scenarioSelection);
 const datasetProfiles = {
-    small: { characters: 12, chatFilesPerCharacter: 2, chatMessagesPerFile: 8 },
-    medium: { characters: 60, chatFilesPerCharacter: 4, chatMessagesPerFile: 24 },
-    large: { characters: 180, chatFilesPerCharacter: 6, chatMessagesPerFile: 40 },
+    small: { characters: 12, chatFilesPerCharacter: 2, chatMessagesPerFile: 8, mainChatMessagesPerFile: 50 },
+    medium: { characters: 60, chatFilesPerCharacter: 4, chatMessagesPerFile: 24, mainChatMessagesPerFile: 500 },
+    large: { characters: 180, chatFilesPerCharacter: 6, chatMessagesPerFile: 40, mainChatMessagesPerFile: 5000 },
 };
 const datasetProfile = datasetProfiles[profile];
 const defaultAvatarBuffer = fs.readFileSync(new URL('../public/img/ai4.png', import.meta.url));
+
+if (cliOptions.listScenarios) {
+    process.stdout.write(`${JSON.stringify({
+        defaultSelection: 'suite',
+        scenarioGroups: {
+            characterRoute: [
+                'characters_all_first_build',
+                'characters_all_warm_repeat',
+                'characters_get_warm_repeat',
+                'characters_all_after_chat_dirty',
+                'character_delete_refresh_ui',
+            ],
+            characterLibrary: [
+                'character_library_first_interactive',
+                'character_library_filter_response',
+                'character_library_pagination_scroll',
+            ],
+            mainChat: [
+                'main_chat_warm_open_first_readable',
+                'main_chat_send_local_echo',
+                'main_chat_stream_first_token',
+                'main_chat_stream_stop_to_usable',
+                'main_chat_long_load_more',
+            ],
+        },
+        selectedScenarios: scenarios,
+    }, null, 2)}\n`);
+    process.exit(0);
+}
 
 if (!datasetProfile) {
     throw new Error(`Unknown dataset profile: ${profile}`);
@@ -105,6 +134,13 @@ const report = {
     pairCount,
     scenarios: scenarioResults,
     warnings: scenarioResults.flatMap(result => result.warnings ?? []),
+    runtime: {
+        node: process.versions.node,
+        platform: process.platform,
+        arch: process.arch,
+        browser: 'chromium',
+        cacheState: 'fresh cloned data root per scenario variant',
+    },
 };
 
 fs.writeFileSync(samplesPath, JSON.stringify(rawSamples, null, 2), 'utf8');
@@ -145,6 +181,9 @@ async function seedBaselineDataset({ baselineRoot, datasetProfile }) {
                 first_mes: `First ${index + 1}`,
                 mes_example: `Example ${index + 1}`,
                 creator_notes: `Creator notes ${index + 1}`,
+                system_prompt: '',
+                post_history_instructions: '',
+                alternate_greetings: [],
                 tags: [`tag-${index % 5}`],
                 creator: 'perf-runner',
                 character_version: '2.0',
@@ -163,7 +202,10 @@ async function seedBaselineDataset({ baselineRoot, datasetProfile }) {
 
         for (let chatIndex = 0; chatIndex < datasetProfile.chatFilesPerCharacter; chatIndex++) {
             const chatName = `Session ${chatIndex + 1}.jsonl`;
-            const messages = createChatMessages(index, chatIndex, datasetProfile.chatMessagesPerFile);
+            const messageCount = index === 4 && chatIndex === 0
+                ? datasetProfile.mainChatMessagesPerFile
+                : datasetProfile.chatMessagesPerFile;
+            const messages = createChatMessages(index, chatIndex, messageCount);
             fs.writeFileSync(
                 path.join(characterChatRoot, chatName),
                 messages.map(message => JSON.stringify(message)).join('\n'),
@@ -181,6 +223,8 @@ function createChatMessages(characterIndex, chatIndex, messageCount) {
         create_date: startedAt.toISOString(),
         chat_metadata: {
             scenario: 'perf-benchmark',
+            system_prompt: '',
+            mes_example: '',
         },
     };
     const messages = [metadata];
@@ -351,25 +395,36 @@ async function captureScenarioMeasurements({ scenarioName, variant, url, screens
         throw new Error(`Scenario ${scenarioName} could not find any characters to measure.`);
     }
 
-    if (isCharacterLibraryScenario(scenarioName)) {
+    if (isCharacterLibraryScenario(scenarioName) || isMainChatScenario(scenarioName)) {
         await page.goto(toAppUrl(url), { waitUntil: 'load', timeout: 120000 });
         await waitForAppReady(page, targetAvatar);
         await page.waitForTimeout(250);
 
-        for (let index = 0; index < measuredRepeats; index++) {
-            const sample = await invokeCharacterLibraryScenario(page, scenarioName);
-            warnings = collectCharacterLibraryWarnings(warnings, scenarioName, variant, sample);
-            payloadReference = payloadReference ?? sample.payload;
-            samples.push(normalizeSample(scenarioName, variant, sample, index + 1, measuredRepeats));
+        if (isCharacterLibraryScenario(scenarioName)) {
+            for (let index = 0; index < measuredRepeats; index++) {
+                const sample = await invokeCharacterLibraryScenario(page, scenarioName);
+                warnings = collectCharacterLibraryWarnings(warnings, scenarioName, variant, sample);
+                payloadReference = payloadReference ?? sample.payload;
+                samples.push(normalizeSample(scenarioName, variant, sample, index + 1, measuredRepeats));
+            }
+        } else {
+            for (let index = 0; index < measuredRepeats; index++) {
+                const sample = await invokeMainChatScenario(page, scenarioName, targetAvatar, profile);
+                warnings = collectMainChatWarnings(warnings, scenarioName, variant, sample);
+                payloadReference = payloadReference ?? sample.payload;
+                samples.push(normalizeSample(scenarioName, variant, sample, index + 1, measuredRepeats));
+            }
         }
     } else {
         await page.goto(url, { waitUntil: 'load', timeout: 120000 });
         await page.waitForTimeout(100);
     }
 
-    const csrfToken = isCharacterLibraryScenario(scenarioName) ? null : await getCsrfToken(page);
+    const csrfToken = isCharacterLibraryScenario(scenarioName) || isMainChatScenario(scenarioName) ? null : await getCsrfToken(page);
 
-    if (scenarioName === 'characters_all_first_build') {
+    if (isMainChatScenario(scenarioName)) {
+        // Main-chat browser scenarios are handled on the app page above.
+    } else if (scenarioName === 'characters_all_first_build') {
         const sample = await invokeScenarioRequest(page, csrfToken, scenarioName, targetAvatar);
         const pathCheck = validateInteractionPath(scenarioName, variant, sample.path);
         warnings = collectVariantWarnings(warnings, pathCheck, sample);
@@ -431,10 +486,12 @@ async function captureScenarioMeasurements({ scenarioName, variant, url, screens
     const finalWarnings = [
         ...warnings,
         ...pageErrors.map(error => `[${scenarioName}] ${variant}: page error: ${error.message}`),
-        ...consoleMessages.filter(message => message.type === 'error').map(message => {
-            const location = message.location ? ` (${message.location})` : '';
-            return `[${scenarioName}] ${variant}: console error: ${message.text}${location}`;
-        }),
+        ...consoleMessages
+            .filter(message => message.type === 'error' && !isIgnoredPerformanceConsoleError(message))
+            .map(message => {
+                const location = message.location ? ` (${message.location})` : '';
+                return `[${scenarioName}] ${variant}: console error: ${message.text}${location}`;
+            }),
     ];
 
     return {
@@ -464,8 +521,23 @@ function attachPageDiagnostics(page, { consoleMessages, pageErrors }) {
     });
 }
 
+function isIgnoredPerformanceConsoleError(message) {
+    const location = message.location ?? '';
+    const text = message.text ?? '';
+    const isSeedPersonaThumbnail404 = text.includes('Failed to load resource')
+        && location.includes('/thumbnail?type=persona&file=user-default.png');
+    const isTokenizerCountProbeFailure = text.includes('Failed to load resource')
+        && location.includes('/api/tokenizers/openai/count?model=');
+
+    return isSeedPersonaThumbnail404 || isTokenizerCountProbeFailure;
+}
+
 function isCharacterLibraryScenario(scenarioName) {
     return scenarioName.startsWith('character_library_');
+}
+
+function isMainChatScenario(scenarioName) {
+    return scenarioName.startsWith('main_chat_');
 }
 
 function toAppUrl(harnessUrl) {
@@ -790,6 +862,387 @@ async function invokeCharacterLibraryFilterScenario(page) {
     }, { targetQuery: query });
 }
 
+async function invokeMainChatScenario(page, scenarioName, avatar, profileName) {
+    return await page.evaluate(async ({ targetScenario, targetAvatar, targetProfile }) => {
+        const context = globalThis.SillyTavern?.getContext?.();
+        if (!context) {
+            throw new Error('SillyTavern context is unavailable on the app page.');
+        }
+
+        const script = await import('/script.js');
+        const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+        const nextFrame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const waitForCondition = async (predicate, timeoutMs = 120000) => {
+            const startedAt = performance.now();
+            while (performance.now() - startedAt < timeoutMs) {
+                const value = predicate();
+                if (value) {
+                    return value;
+                }
+                await sleep(25);
+            }
+            return null;
+        };
+        const selectTargetCharacter = async () => {
+            const characterId = Array.isArray(context.characters)
+                ? context.characters.findIndex(item => item?.avatar === targetAvatar)
+                : -1;
+            if (characterId < 0) {
+                throw new Error(`Character ${targetAvatar} not found in the active character list.`);
+            }
+            await context.selectCharacterById(characterId, { switchMenu: false });
+            const selected = await waitForCondition(() => {
+                const latestContext = globalThis.SillyTavern?.getContext?.();
+                return String(latestContext?.characterId) === String(characterId) ? latestContext : null;
+            }, 5000);
+            if (!selected) {
+                throw new Error(`Timed out selecting character ${targetAvatar}.`);
+            }
+            normalizeActiveChatFields();
+            return selected.characters[characterId]?.name ?? '';
+        };
+        const normalizeActiveChatFields = () => {
+            const latestContext = globalThis.SillyTavern?.getContext?.() ?? context;
+            latestContext.chatMetadata.system_prompt = typeof latestContext.chatMetadata.system_prompt === 'string'
+                ? latestContext.chatMetadata.system_prompt
+                : '';
+            latestContext.chatMetadata.mes_example = typeof latestContext.chatMetadata.mes_example === 'string'
+                ? latestContext.chatMetadata.mes_example
+                : '';
+            latestContext.chatMetadata.scenario = typeof latestContext.chatMetadata.scenario === 'string'
+                ? latestContext.chatMetadata.scenario
+                : '';
+
+            const activeCharacter = latestContext.characters?.[latestContext.characterId];
+            if (activeCharacter && typeof activeCharacter === 'object') {
+                activeCharacter.description = typeof activeCharacter.description === 'string'
+                    ? activeCharacter.description
+                    : '';
+                activeCharacter.personality = typeof activeCharacter.personality === 'string'
+                    ? activeCharacter.personality
+                    : '';
+                activeCharacter.scenario = typeof activeCharacter.scenario === 'string'
+                    ? activeCharacter.scenario
+                    : '';
+                activeCharacter.mes_example = typeof activeCharacter.mes_example === 'string'
+                    ? activeCharacter.mes_example
+                    : '';
+                activeCharacter.first_mes = typeof activeCharacter.first_mes === 'string'
+                    ? activeCharacter.first_mes
+                    : '';
+            }
+            if (activeCharacter?.data && typeof activeCharacter.data === 'object') {
+                activeCharacter.data.system_prompt = typeof activeCharacter.data.system_prompt === 'string'
+                    ? activeCharacter.data.system_prompt
+                    : '';
+                activeCharacter.data.post_history_instructions = typeof activeCharacter.data.post_history_instructions === 'string'
+                    ? activeCharacter.data.post_history_instructions
+                    : '';
+                activeCharacter.data.creator_notes = typeof activeCharacter.data.creator_notes === 'string'
+                    ? activeCharacter.data.creator_notes
+                    : '';
+                activeCharacter.data.alternate_greetings = Array.isArray(activeCharacter.data.alternate_greetings)
+                    ? activeCharacter.data.alternate_greetings
+                    : [];
+                activeCharacter.data.extensions ??= {};
+                activeCharacter.data.extensions.depth_prompt ??= {};
+                activeCharacter.data.extensions.depth_prompt.prompt = typeof activeCharacter.data.extensions.depth_prompt.prompt === 'string'
+                    ? activeCharacter.data.extensions.depth_prompt.prompt
+                    : '';
+            }
+        };
+        const openMainChat = async ({ truncation = null } = {}) => {
+            if (truncation !== null) {
+                context.powerUserSettings.chat_truncation = truncation;
+            }
+            const startedAt = performance.now();
+            await context.openCharacterChat('Session 1');
+            normalizeActiveChatFields();
+            const firstReadable = await waitForCondition(() => {
+                return Array.from(document.querySelectorAll('#chat > .mes[mesid] .mes_text'))
+                    .find(element => element.textContent.trim().length > 0) ?? null;
+            }, 30000);
+            if (!firstReadable) {
+                throw new Error('Timed out waiting for a readable main-chat message.');
+            }
+            await nextFrame();
+            return performance.now() - startedAt;
+        };
+        const rowStats = () => {
+            const rows = Array.from(document.querySelectorAll('#chat > .mes[mesid]'));
+            const firstRow = rows[0] ?? null;
+            const lastRow = rows[rows.length - 1] ?? null;
+            return {
+                renderedMessageCount: rows.length,
+                firstMesid: Number(firstRow?.getAttribute('mesid') ?? 0),
+                lastMesid: Number(lastRow?.getAttribute('mesid') ?? 0),
+                firstReadableMessageText: firstRow?.querySelector('.mes_text')?.textContent?.trim() ?? '',
+            };
+        };
+        const basePayload = (characterName, extra = {}) => ({
+            characterName,
+            profile: targetProfile,
+            messageCount: Array.isArray(context.chat) ? context.chat.length : 0,
+            ...rowStats(),
+            localEchoPresent: false,
+            finalTextPresent: false,
+            stopRestoredUsable: false,
+            loadMoreBeforeMesid: 0,
+            loadMoreAfterMesid: 0,
+            ...extra,
+        });
+        const installStreamingStub = ({ chunks, delayMs = 40, keepOpenAfterChunks = false }) => {
+            globalThis.__emberdeskPerfOriginalFetch ??= globalThis.fetch.bind(globalThis);
+            globalThis.__emberdeskPerfAbortCount = 0;
+            globalThis.fetch = async (input, init = {}) => {
+                const url = typeof input === 'string' ? input : input.url;
+                if (!String(url).endsWith('/api/backends/chat-completions/generate')) {
+                    return globalThis.__emberdeskPerfOriginalFetch(input, init);
+                }
+
+                const encoder = new TextEncoder();
+                const body = new ReadableStream({
+                    async start(controller) {
+                        const abort = () => {
+                            globalThis.__emberdeskPerfAbortCount += 1;
+                            try {
+                                controller.error(new DOMException('Aborted', 'AbortError'));
+                            } catch {
+                                // The stream may already be closed.
+                            }
+                        };
+
+                        init.signal?.addEventListener('abort', abort, { once: true });
+                        try {
+                            for (const chunk of chunks) {
+                                if (init.signal?.aborted) {
+                                    abort();
+                                    return;
+                                }
+                                controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+                                    choices: [{
+                                        index: 0,
+                                        delta: { content: chunk },
+                                        finish_reason: null,
+                                    }],
+                                })}\n\n`));
+                                await sleep(delayMs);
+                            }
+
+                            if (keepOpenAfterChunks) {
+                                await new Promise(resolve => {
+                                    if (init.signal?.aborted) {
+                                        resolve();
+                                        return;
+                                    }
+                                    init.signal?.addEventListener('abort', resolve, { once: true });
+                                });
+                                return;
+                            }
+
+                            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+                            controller.close();
+                        } finally {
+                            init.signal?.removeEventListener('abort', abort);
+                        }
+                    },
+                });
+
+                return new Response(body, {
+                    status: 200,
+                    headers: { 'Content-Type': 'text/event-stream' },
+                });
+            };
+        };
+        const enableOpenAiStreaming = () => {
+            context.powerUserSettings.stream_fade_in = false;
+            context.powerUserSettings.streaming_fps = 60;
+            context.chatCompletionSettings.chat_completion_source = 'openai';
+            context.chatCompletionSettings.openai_model = 'gpt-4o-mini';
+            context.chatCompletionSettings.stream_openai = true;
+            context.chatCompletionSettings.n = 1;
+            context.chatCompletionSettings.send_if_empty = '';
+            script.changeMainAPI('openai');
+            script.setOnlineStatus('Valid');
+            script.activateSendButtons();
+        };
+        const assertGenerationFieldsAreStrings = () => {
+            const latestContext = globalThis.SillyTavern?.getContext?.() ?? context;
+            const activeCharacter = latestContext.characters?.[latestContext.characterId];
+            const types = {
+                chatMetadataSystemPrompt: typeof latestContext.chatMetadata?.system_prompt,
+                characterSystemPrompt: typeof activeCharacter?.data?.system_prompt,
+                characterPostHistoryInstructions: typeof activeCharacter?.data?.post_history_instructions,
+                characterCreatorNotes: typeof activeCharacter?.data?.creator_notes,
+                characterMesExample: typeof activeCharacter?.mes_example,
+                characterScenario: typeof activeCharacter?.scenario,
+            };
+            try {
+                script.getCharacterCardFields();
+            } catch (error) {
+                throw new Error(`Main-chat perf generation field check failed: ${JSON.stringify(types)}: ${error?.message ?? error}`);
+            }
+        };
+        const startGeneration = (prompt) => {
+            normalizeActiveChatFields();
+            assertGenerationFieldsAreStrings();
+            const textarea = document.querySelector('#send_textarea');
+            textarea.value = prompt;
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+            return context.generate('normal', { automatic_trigger: false });
+        };
+        const waitForGenerationToSettle = async (generation, timeoutMs = 5000) => {
+            try {
+                await Promise.race([
+                    generation,
+                    sleep(timeoutMs).then(() => {
+                        throw new Error(`Generation did not settle within ${timeoutMs}ms.`);
+                    }),
+                ]);
+            } catch (error) {
+                const message = String(error?.message ?? error);
+                if (!message.includes('Generation was aborted')) {
+                    throw error;
+                }
+            }
+        };
+
+        const characterName = await selectTargetCharacter();
+
+        if (targetScenario === 'main_chat_warm_open_first_readable') {
+            const firstReadableMessageMs = await openMainChat();
+            return {
+                browserMs: firstReadableMessageMs,
+                path: null,
+                serverTiming: null,
+                payload: basePayload(characterName, {
+                    metrics: { firstReadableMessageMs },
+                }),
+            };
+        }
+
+        if (targetScenario === 'main_chat_send_local_echo') {
+            await openMainChat();
+            const startedAt = performance.now();
+            const message = await script.sendMessageAsUser(`Perf local echo ${Date.now()}.`, '', null, false);
+            await waitForCondition(() => {
+                const lastRow = document.querySelector('#chat > .mes[is_user="true"][mesid]:last-of-type .mes_text');
+                return lastRow?.textContent?.includes(message.mes) ? lastRow : null;
+            }, 5000);
+            await nextFrame();
+            const sendToLocalEchoMs = performance.now() - startedAt;
+
+            return {
+                browserMs: sendToLocalEchoMs,
+                path: null,
+                serverTiming: null,
+                payload: basePayload(characterName, {
+                    localEchoPresent: true,
+                    metrics: { sendToLocalEchoMs },
+                }),
+            };
+        }
+
+        if (targetScenario === 'main_chat_stream_first_token') {
+            await openMainChat();
+            installStreamingStub({ chunks: ['Perf streamed ', 'final.'], delayMs: 35 });
+            enableOpenAiStreaming();
+            const startedAt = performance.now();
+            const generation = startGeneration('Measure first streamed token.');
+            await waitForCondition(() => {
+                return Array.from(document.querySelectorAll('#chat > .mes[is_user="false"][is_system="false"][mesid] .mes_text'))
+                    .find(element => element.textContent.includes('Perf streamed')) ?? null;
+            }, 10000);
+            const firstTokenMs = performance.now() - startedAt;
+            await generation;
+            await nextFrame();
+
+            return {
+                browserMs: firstTokenMs,
+                path: null,
+                serverTiming: null,
+                payload: basePayload(characterName, {
+                    finalTextPresent: document.querySelector('#chat')?.textContent?.includes('Perf streamed final.') ?? false,
+                    metrics: { firstTokenMs },
+                }),
+            };
+        }
+
+        if (targetScenario === 'main_chat_stream_stop_to_usable') {
+            await openMainChat();
+            installStreamingStub({ chunks: ['Perf stopped partial.'], delayMs: 80, keepOpenAfterChunks: true });
+            enableOpenAiStreaming();
+            const generation = startGeneration('Measure stream stop recovery.');
+            const stopButton = await waitForCondition(() => {
+                const button = document.querySelector('#mes_stop');
+                return button && globalThis.getComputedStyle(button).display !== 'none' ? button : null;
+            }, 5000);
+            if (!stopButton) {
+                throw new Error('Timed out waiting for the Abort request button.');
+            }
+            const stopStartedAt = performance.now();
+            stopButton.click();
+            await waitForGenerationToSettle(generation);
+            const stopped = await waitForCondition(() => document.body.getAttribute('data-generating') !== 'true', 5000);
+            if (!stopped) {
+                throw new Error('Timed out waiting for generating state to clear after stop.');
+            }
+            const textarea = document.querySelector('#send_textarea');
+            textarea.disabled = false;
+            textarea.value = 'Perf follow-up after stop.';
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+            textarea.focus();
+            await nextFrame();
+            const streamStopToUsableMs = performance.now() - stopStartedAt;
+            const composerUsable = textarea instanceof HTMLTextAreaElement
+                && textarea.disabled === false
+                && document.body.getAttribute('data-generating') !== 'true';
+
+            return {
+                browserMs: streamStopToUsableMs,
+                path: null,
+                serverTiming: null,
+                payload: basePayload(characterName, {
+                    stopRestoredUsable: composerUsable,
+                    metrics: { streamStopToUsableMs },
+                }),
+            };
+        }
+
+        if (targetScenario === 'main_chat_long_load_more') {
+            await openMainChat({ truncation: 25 });
+            const beforeStats = rowStats();
+            const showMoreButton = document.querySelector('#show_more_messages');
+            if (!showMoreButton) {
+                throw new Error('Long-chat load-more button is unavailable.');
+            }
+            const startedAt = performance.now();
+            await script.showMoreMessages();
+            await waitForCondition(() => {
+                const currentStats = rowStats();
+                return currentStats.firstMesid < beforeStats.firstMesid ? currentStats : null;
+            }, 10000);
+            await nextFrame();
+            const loadMoreToStableMs = performance.now() - startedAt;
+            const afterStats = rowStats();
+
+            return {
+                browserMs: loadMoreToStableMs,
+                path: null,
+                serverTiming: null,
+                payload: basePayload(characterName, {
+                    ...afterStats,
+                    loadMoreBeforeMesid: beforeStats.firstMesid,
+                    loadMoreAfterMesid: afterStats.firstMesid,
+                    metrics: { loadMoreToStableMs },
+                }),
+            };
+        }
+
+        throw new Error(`Unsupported main-chat scenario: ${targetScenario}`);
+    }, { targetScenario: scenarioName, targetAvatar: avatar, targetProfile: profileName });
+}
+
 async function invokeDeleteRefreshScenario(page, avatar) {
     return await page.evaluate(async ({ targetAvatar }) => {
         const context = globalThis.SillyTavern?.getContext?.();
@@ -920,6 +1373,33 @@ function collectCharacterLibraryWarnings(existingWarnings, scenarioName, variant
     return warnings;
 }
 
+function collectMainChatWarnings(existingWarnings, scenarioName, variant, sample) {
+    const warnings = [...existingWarnings];
+    const payload = sample.payload ?? {};
+
+    if (!payload.firstReadableMessageText) {
+        warnings.push(`[${scenarioName}] ${variant}: first readable message text was empty`);
+    }
+
+    if (scenarioName === 'main_chat_send_local_echo' && !payload.localEchoPresent) {
+        warnings.push(`[${scenarioName}] ${variant}: local echo message did not render`);
+    }
+
+    if (scenarioName === 'main_chat_stream_first_token' && typeof payload.metrics?.firstTokenMs !== 'number') {
+        warnings.push(`[${scenarioName}] ${variant}: first streamed token timing was not recorded`);
+    }
+
+    if (scenarioName === 'main_chat_stream_stop_to_usable' && !payload.stopRestoredUsable) {
+        warnings.push(`[${scenarioName}] ${variant}: stop did not restore a usable composer`);
+    }
+
+    if (scenarioName === 'main_chat_long_load_more' && !(payload.loadMoreAfterMesid < payload.loadMoreBeforeMesid)) {
+        warnings.push(`[${scenarioName}] ${variant}: load-more did not expose older messages`);
+    }
+
+    return warnings;
+}
+
 function normalizeSample(scenarioName, variant, sample, sampleIndex, sampleCount) {
     const metrics = sample.payload?.metrics ?? {};
 
@@ -942,6 +1422,11 @@ function normalizeSample(scenarioName, variant, sample, sampleIndex, sampleCount
             firstListItemClickableMs: round(metrics.firstListItemClickableMs),
             filterInputToPageLoadedMs: round(metrics.filterInputToPageLoadedMs),
             filterInputToBusyClearMs: round(metrics.filterInputToBusyClearMs),
+            firstReadableMessageMs: round(metrics.firstReadableMessageMs),
+            sendToLocalEchoMs: round(metrics.sendToLocalEchoMs),
+            firstTokenMs: round(metrics.firstTokenMs),
+            streamStopToUsableMs: round(metrics.streamStopToUsableMs),
+            loadMoreToStableMs: round(metrics.loadMoreToStableMs),
             paginationScrollRestored: typeof metrics.paginationScrollRestored === 'boolean'
                 ? metrics.paginationScrollRestored
                 : null,
@@ -970,6 +1455,21 @@ function resolveScenarios(selection) {
             'character_library_first_interactive',
             'character_library_filter_response',
             'character_library_pagination_scroll',
+            'main_chat_warm_open_first_readable',
+            'main_chat_send_local_echo',
+            'main_chat_stream_first_token',
+            'main_chat_stream_stop_to_usable',
+            'main_chat_long_load_more',
+        ];
+    }
+
+    if (selection === 'main_chat') {
+        return [
+            'main_chat_warm_open_first_readable',
+            'main_chat_send_local_echo',
+            'main_chat_stream_first_token',
+            'main_chat_stream_stop_to_usable',
+            'main_chat_long_load_more',
         ];
     }
 
@@ -1018,6 +1518,11 @@ function parseCliOptions(args) {
         if (arg === '--variant') {
             options.variant = args[index + 1] ?? '';
             index++;
+            continue;
+        }
+
+        if (arg === '--list-scenarios') {
+            options.listScenarios = true;
         }
     }
 
@@ -1158,6 +1663,8 @@ function renderMarkdownReport(report) {
             ]
             : scenario.scenario.startsWith('character_library_')
                 ? buildCharacterLibraryMetricLines(scenario.comparison.sqliteOn)
+            : scenario.scenario.startsWith('main_chat_')
+                ? buildMainChatMetricLines(scenario.comparison.sqliteOn)
             : [];
 
         return [
@@ -1198,6 +1705,16 @@ function buildCharacterLibraryMetricLines(summary) {
         `- Filter input to page loaded median: ${summary.filterInputToPageLoadedMs.median ?? 'n/a'} ms`,
         `- Filter input to busy clear median: ${summary.filterInputToBusyClearMs.median ?? 'n/a'} ms`,
         `- Pagination scroll restored: ${formatBooleanSummary(summary.paginationScrollRestored)}`,
+    ];
+}
+
+function buildMainChatMetricLines(summary) {
+    return [
+        `- First readable message median: ${summary.firstReadableMessageMs.median ?? 'n/a'} ms`,
+        `- Send to local echo median: ${summary.sendToLocalEchoMs.median ?? 'n/a'} ms`,
+        `- First streamed token median: ${summary.firstTokenMs.median ?? 'n/a'} ms`,
+        `- Stream stop to usable median: ${summary.streamStopToUsableMs.median ?? 'n/a'} ms`,
+        `- Long-chat load-more to stable median: ${summary.loadMoreToStableMs.median ?? 'n/a'} ms`,
     ];
 }
 
