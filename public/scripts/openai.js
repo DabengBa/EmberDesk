@@ -43,7 +43,7 @@ import {
 } from './PromptManager.js';
 
 import { forceCharacterEditorTokenize, getCustomStoppingStrings, persona_description_positions, power_user } from './power-user.js';
-import { SECRET_KEYS, secret_state, writeSecret, resolveSecretKey } from './secrets.js';
+import { SECRET_KEYS, secret_state, writeSecret, deleteSecret, resolveSecretKey } from './secrets.js';
 
 import { getEventSourceStream } from './sse-stream.js';
 import {
@@ -76,6 +76,7 @@ import { t } from './i18n.js';
 import { ToolManager } from './tool-calling.js';
 import { accountStorage } from './util/AccountStorage.js';
 import { IGNORE_SYMBOL, MEDIA_DISPLAY, MEDIA_TYPE } from './constants.js';
+import { buildFallbackOpenAIRequestOverrides, hasFallbackProviderSettings } from './chat-generation-auto-recovery.js';
 import {
     getChatCompletionModelFromSettings,
     isAudioInliningSupportedForSettings,
@@ -339,6 +340,9 @@ export const settingsToUpdate = {
     vertexai_auth_mode: ['#vertexai_auth_mode', 'vertexai_auth_mode', false, false],
     vertexai_region: ['#vertexai_region', 'vertexai_region', false, true],
     vertexai_express_project_id: ['#vertexai_express_project_id', 'vertexai_express_project_id', false, true],
+    fallback_provider_enabled: ['#fallback_provider_enabled', 'fallback_provider_enabled', true, false],
+    fallback_provider_base_url: ['#fallback_provider_base_url', 'fallback_provider_base_url', false, false],
+    fallback_provider_model: ['#fallback_provider_model', 'fallback_provider_model', false, false],
     extensions: ['#NULL_SELECTOR', 'extensions', false, false],
 };
 
@@ -401,6 +405,9 @@ const default_settings = {
     vertexai_auth_mode: 'express',
     vertexai_region: 'us-central1',
     vertexai_express_project_id: '',
+    fallback_provider_enabled: false,
+    fallback_provider_base_url: '',
+    fallback_provider_model: '',
     bind_preset_to_connection: true,
     extensions: {},
 };
@@ -1877,14 +1884,27 @@ export async function createGenerationParameters(settings, model, type, messages
  * @returns {Promise<unknown>}
  * @throws {Error}
  */
-async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null } = {}) {
+async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null, fallbackProvider = false } = {}) {
     // Provide default abort signal
     if (!signal) {
         signal = new AbortController().signal;
     }
 
-    const model = getChatCompletionModel(oai_settings);
-    const { generate_data, stream, canMultiSwipe } = await createGenerationParameters(oai_settings, model, type, messages, { jsonSchema });
+    const requestSettings = structuredClone(oai_settings);
+    const fallbackOverrides = fallbackProvider ? buildFallbackOpenAIRequestOverrides(oai_settings) : null;
+    if (fallbackOverrides) {
+        requestSettings.chat_completion_source = fallbackOverrides.chatCompletionSource;
+        requestSettings.openai_model = fallbackOverrides.model;
+        requestSettings.custom_url = fallbackOverrides.customUrl;
+        requestSettings.reverse_proxy = '';
+        requestSettings.proxy_password = '';
+    }
+
+    const model = getChatCompletionModel(requestSettings);
+    const { generate_data, stream, canMultiSwipe } = await createGenerationParameters(requestSettings, model, type, messages, { jsonSchema });
+    if (fallbackOverrides) {
+        generate_data.openai_secret_marker = fallbackOverrides.openaiSecretMarker;
+    }
     await eventSource.emit(event_types.CHAT_COMPLETION_SETTINGS_READY, generate_data);
 
     const generate_url = '/api/backends/chat-completions/generate';
@@ -3078,6 +3098,7 @@ function loadOpenAISettings(data, settings) {
 
     syncSegmentedFromSelect('openai_reasoning_effort');
     syncSegmentedFromSelect('openai_verbosity');
+    updateFallbackProviderStatus();
 
     // Restore VertexAI config visibility
     $('#vertexai_config').toggle(oai_settings.use_vertexai);
@@ -3967,6 +3988,43 @@ function onApiKeyUnifiedShowClick() {
     $(this).toggleClass('fa-eye-slash fa-eye');
 }
 
+function updateFallbackProviderStatus() {
+    const isConfigured = hasFallbackProviderSettings(oai_settings, secret_state, SECRET_KEYS.OPENAI_FALLBACK);
+    const status = !oai_settings.fallback_provider_enabled
+        ? t`Disabled`
+        : isConfigured
+            ? t`Ready`
+            : t`Needs setup`;
+
+    $('#fallback_provider_status').text(status);
+}
+
+function onFallbackProviderApiKeyShowClick() {
+    const $input = $('#fallback_provider_api_key');
+    $input.toggleClass('api-key-masked');
+    $(this).toggleClass('fa-eye-slash fa-eye');
+}
+
+async function onFallbackProviderSaveKeyClick() {
+    const $input = $('#fallback_provider_api_key');
+    const value = String($input.val()).trim();
+    if (!value) {
+        toastr.warning(t`Enter a fallback API key first.`);
+        return;
+    }
+
+    await writeSecret(SECRET_KEYS.OPENAI_FALLBACK, value);
+    updateFallbackProviderStatus();
+    toastr.success(t`Fallback API key saved.`);
+}
+
+async function onFallbackProviderClearKeyClick() {
+    await deleteSecret(SECRET_KEYS.OPENAI_FALLBACK);
+    $('#fallback_provider_api_key').val('');
+    updateFallbackProviderStatus();
+    toastr.success(t`Fallback API key cleared.`);
+}
+
 async function onCustomizeParametersClick() {
     const template = $(await renderTemplateAsync('customEndpointAdditionalParameters'));
 
@@ -4328,6 +4386,24 @@ export function initOpenAI() {
         saveSettingsDebounced();
     });
 
+    $('#fallback_provider_enabled').on('change', function () {
+        oai_settings.fallback_provider_enabled = !!$(this).prop('checked');
+        updateFallbackProviderStatus();
+        saveSettingsDebounced();
+    });
+
+    $('#fallback_provider_base_url').on('input', function () {
+        oai_settings.fallback_provider_base_url = String($(this).val());
+        updateFallbackProviderStatus();
+        saveSettingsDebounced();
+    });
+
+    $('#fallback_provider_model').on('input', function () {
+        oai_settings.fallback_provider_model = String($(this).val());
+        updateFallbackProviderStatus();
+        saveSettingsDebounced();
+    });
+
     $('#vertexai_service_account_json').on('input', function () {
         writeSecret(SECRET_KEYS.VERTEXAI_SERVICE_ACCOUNT, String($(this).val()));
     });
@@ -4542,6 +4618,9 @@ export function initOpenAI() {
     });
 
     $('#api_key_unified_show').on('click', onApiKeyUnifiedShowClick);
+    $('#fallback_provider_api_key_show').on('click', onFallbackProviderApiKeyShowClick);
+    $('#fallback_provider_save_key').on('click', onFallbackProviderSaveKeyClick);
+    $('#fallback_provider_clear_key').on('click', onFallbackProviderClearKeyClick);
     $('#customize_additional_parameters').on('click', onCustomizeParametersClick);
     eventSource.on(event_types.MAIN_API_CHANGED, updateUnifiedKeyField);
 }

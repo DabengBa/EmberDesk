@@ -1,3 +1,7 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { describe, expect, test } from '@jest/globals';
 
 import {
@@ -9,6 +13,10 @@ import {
     resolveReasoningEffort,
     resolveVerbosity,
 } from '../public/scripts/openai-provider-capabilities.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const repoRoot = path.resolve(__dirname, '..');
 
 const SOURCES = {
     OPENAI: 'openai',
@@ -31,6 +39,45 @@ function settings(overrides = {}) {
 }
 
 describe('OpenAI provider capability helpers', () => {
+    test('keeps fallback provider endpoint settings persistent but outside connection profiles', () => {
+        const source = fs.readFileSync(path.join(repoRoot, 'public/scripts/openai.js'), 'utf8');
+
+        expect(source).toContain("fallback_provider_enabled: ['#fallback_provider_enabled', 'fallback_provider_enabled', true, false]");
+        expect(source).toContain("fallback_provider_base_url: ['#fallback_provider_base_url', 'fallback_provider_base_url', false, false]");
+        expect(source).toContain("fallback_provider_model: ['#fallback_provider_model', 'fallback_provider_model', false, false]");
+        expect(source).toContain('fallback_provider_enabled: false');
+        expect(source).toContain("fallback_provider_base_url: ''");
+        expect(source).toContain("fallback_provider_model: ''");
+        expect(source).toContain('function updateFallbackProviderStatus()');
+        expect(source).toContain("$('#fallback_provider_enabled').on('change',");
+        expect(source).toContain("$('#fallback_provider_base_url').on('input',");
+        expect(source).toContain("$('#fallback_provider_model').on('input',");
+        expect(source).not.toContain('fallback_provider_api_key:');
+    });
+
+    test('requires the dedicated fallback secret before showing fallback provider as ready', () => {
+        const source = fs.readFileSync(path.join(repoRoot, 'public/scripts/openai.js'), 'utf8');
+
+        expect(source).toContain('hasFallbackProviderSettings');
+        expect(source).toContain('hasFallbackProviderSettings(oai_settings, secret_state, SECRET_KEYS.OPENAI_FALLBACK)');
+        expect(source).toContain('await writeSecret(SECRET_KEYS.OPENAI_FALLBACK, value);');
+        expect(source).toContain('await deleteSecret(SECRET_KEYS.OPENAI_FALLBACK);');
+        expect(source).toMatch(/await writeSecret\(SECRET_KEYS\.OPENAI_FALLBACK, value\);[\s\S]*?updateFallbackProviderStatus\(\);/);
+        expect(source).toMatch(/await deleteSecret\(SECRET_KEYS\.OPENAI_FALLBACK\);[\s\S]*?updateFallbackProviderStatus\(\);/);
+    });
+
+    test('builds fallback request payloads without mutating or inheriting primary connection settings', () => {
+        const source = fs.readFileSync(path.join(repoRoot, 'public/scripts/openai.js'), 'utf8');
+
+        expect(source).toContain('buildFallbackOpenAIRequestOverrides(oai_settings)');
+        expect(source).toContain('requestSettings.chat_completion_source = fallbackOverrides.chatCompletionSource;');
+        expect(source).toContain('requestSettings.openai_model = fallbackOverrides.model;');
+        expect(source).toContain('requestSettings.custom_url = fallbackOverrides.customUrl;');
+        expect(source).toContain("requestSettings.reverse_proxy = '';");
+        expect(source).toContain("requestSettings.proxy_password = '';");
+        expect(source).toContain('generate_data.openai_secret_marker = fallbackOverrides.openaiSecretMarker;');
+    });
+
     test('resolves model descriptors with structured capability fields', () => {
         const descriptor = resolveChatCompletionModel(settings(), { mainApi: 'openai' });
 

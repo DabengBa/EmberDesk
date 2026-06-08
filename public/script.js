@@ -166,7 +166,8 @@ import {
     tag_import_setting,
     applyCharacterTagsToMessageDivs,
 } from './scripts/tags.js';
-import { checkOpenRouterAuth, initSecrets, readSecretState } from './scripts/secrets.js';
+import { checkOpenRouterAuth, initSecrets, readSecretState, secret_state, SECRET_KEYS } from './scripts/secrets.js';
+import { hasFallbackProviderSettings, isMainChatVisibleGeneration, isRecoverableGenerationFailure } from './scripts/chat-generation-auto-recovery.js';
 import { markdownExclusionExt } from './scripts/showdown-exclusion.js';
 import { markdownUnderscoreExt } from './scripts/showdown-underscore.js';
 import { NOTE_MODULE_NAME, initAuthorsNote, metadata_keys, setFloatingPrompt, shouldWIAddPrompt } from './scripts/authors-note.js';
@@ -2059,10 +2060,148 @@ function jumpToLatestMessage() {
     latestMessage[0].scrollIntoView({ block: 'nearest' });
 }
 
-function showGenerationFailureRecovery(messageId) {
+function clearGenerationAutoRecoveryStatus(messageId) {
+    const messageElement = chatElement.find(`.mes[mesid="${messageId}"]`);
+    messageElement.find('.generation_auto_recovery_status').remove();
+    messageElement.find('.generation_failure_retry').toggle(true);
+}
+
+function showGenerationAutoRecoveryStatus(messageId, status) {
+    const messageElement = chatElement.find(`.mes[mesid="${messageId}"]`);
+    if (!messageElement.length) {
+        return;
+    }
+
+    messageElement.find('.generation_auto_recovery_status').remove();
+    const statusRow = $('<div class="generation_auto_recovery_status"></div>');
+    statusRow.attr('role', 'status');
+    statusRow.attr('aria-live', 'polite');
+    statusRow.append($('<i class="fa-solid fa-circle-notch"></i>'));
+    statusRow.append($('<span></span>').text(status));
+    messageElement.find('.mes_text').after(statusRow);
+    messageElement.find('.generation_failure_retry').toggle(false);
+}
+
+function clearGenerationAttemptMessage(messageId) {
+    const message = chat[messageId];
+    if (message && !message.is_user && !message.is_system) {
+        message.mes = '';
+        if (Array.isArray(message.swipes)) {
+            message.swipes = [''];
+            message.swipe_id = 0;
+        }
+        if (Array.isArray(message.swipe_info)) {
+            message.swipe_info = [{
+                send_date: message.send_date,
+                gen_started: message.gen_started,
+                gen_finished: message.gen_finished,
+                extra: structuredClone(message.extra ?? {}),
+            }];
+        }
+        if (message.extra) {
+            delete message.extra.reasoning;
+            delete message.extra.reasoning_duration;
+            delete message.extra.token_count;
+            delete message.extra.time_to_first_token;
+        }
+        syncMesToSwipe(messageId);
+    }
+
+    const messageElement = chatElement.find(`.mes[mesid="${messageId}"]`);
+    messageElement.find('.mes_text').empty();
+    messageElement.find('.mes_reasoning').empty();
+    messageElement.find('.generation_failure_notice').remove();
+    messageElement.find('.generation_failure_retry').remove();
+}
+
+function isAssistantRecoveryMessageId(messageId) {
+    const message = chat[messageId];
+    return typeof messageId === 'number' && messageId >= 0 && message && !message.is_user && !message.is_system;
+}
+
+async function replaceAssistantRecoveryMessage(messageId, { type, getMessage, title = '', swipes = [], reasoning = '', imageUrls = [], reasoningSignature = null }) {
+    if (!isAssistantRecoveryMessageId(messageId)) {
+        return null;
+    }
+
+    const message = chat[messageId];
+    const oldMessage = message.mes;
+    const generationFinished = new Date();
+    message.title = title;
+    message.mes = getMessage;
+    message.gen_started = generation_started;
+    message.gen_finished = generationFinished;
+    message.send_date = getMessageTimeStamp();
+    message.extra = message.extra || {};
+    message.extra.api = getGeneratingApi();
+    message.extra.model = getGeneratingModel();
+    message.extra.reasoning = reasoning;
+    message.extra.reasoning_duration = null;
+    message.extra.reasoning_signature = reasoningSignature;
+    await processImageAttachment(message, { imageUrls });
+
+    if (power_user.message_token_count_enabled) {
+        const tokenCountText = (reasoning || '') + message.mes;
+        message.extra.token_count = await getTokenCountAsync(tokenCountText, 0);
+    }
+
+    updateMessageElement(message, {
+        messageId,
+        messageElement: chatElement.find(`.mes[mesid="${messageId}"]`),
+        adjustMediaScroll: SCROLL_BEHAVIOR.ADJUST,
+    });
+
+    syncMesToSwipe(messageId);
+    message.swipe_id = 0;
+    message.swipes = [message.mes];
+    message.swipe_info = [{
+        send_date: message.send_date,
+        gen_started: message.gen_started,
+        gen_finished: message.gen_finished,
+        extra: structuredClone(message.extra ?? {}),
+    }];
+
+    if (Array.isArray(swipes) && swipes.length > 0) {
+        const swipeInfoExtra = structuredClone(message.extra ?? {});
+        delete swipeInfoExtra.token_count;
+        delete swipeInfoExtra.reasoning;
+        delete swipeInfoExtra.reasoning_duration;
+        const swipeInfo = {
+            send_date: message.send_date,
+            gen_started: message.gen_started,
+            gen_finished: message.gen_finished,
+            extra: swipeInfoExtra,
+        };
+        const swipeInfoArray = Array(swipes.length).fill().map(() => structuredClone(swipeInfo));
+        parseReasoningInSwipes(swipes, swipeInfoArray, message.extra?.reasoning_duration);
+        message.swipes.push(...swipes);
+        message.swipe_info.push(...swipeInfoArray);
+    }
+
+    statMesProcess(message, type, characters, this_chid, oldMessage);
+    await eventSource.emit(event_types.MESSAGE_RECEIVED, messageId, type);
+    await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, messageId, type);
+    return { type, getMessage };
+}
+
+function getGenerationAutoRecoveryAttempts() {
+    const attempts = [
+        { label: 'primary', status: '', fallbackProvider: false },
+        { label: 'primary_retry', status: t`正在重试`, fallbackProvider: false },
+    ];
+
+    if (hasFallbackProviderSettings(oai_settings, secret_state, SECRET_KEYS.OPENAI_FALLBACK)) {
+        attempts.push({ label: 'fallback', status: t`正在使用备用服务商`, fallbackProvider: true });
+    }
+
+    return attempts;
+}
+
+function showGenerationFailureRecovery(messageId, isRecovering = false) {
     const messageElement = chatElement.find(`.mes[mesid="${messageId}"]`);
 
     if (!messageElement.length || messageElement.find('.generation_failure_retry').length) {
+        messageElement.find('.generation_failure_retry').toggle(!isRecovering);
         return;
     }
 
@@ -2070,6 +2209,7 @@ function showGenerationFailureRecovery(messageId) {
     const retryButton = $('<div class="mes_button generation_failure_retry fa-solid fa-rotate-right" role="button" tabindex="0" title="Retry generation" aria-label="Retry generation" data-i18n="[title]Retry generation;[aria-label]Retry generation"></div>');
     messageElement.find('.mes_text').after(notice);
     messageElement.find('.mes_buttons').append(retryButton);
+    messageElement.find('.generation_failure_retry').toggle(!isRecovering);
 }
 
 export async function printMessages() {
@@ -4118,6 +4258,7 @@ class StreamingProcessor {
         this.images = [];
         /** @type {string?} */
         this.reasoningSignature = null;
+        this.suppressErrorRecovery = false;
     }
 
     /**
@@ -4352,8 +4493,7 @@ class StreamingProcessor {
         playMessageSound();
     }
 
-    async onErrorStreaming() {
-        this.abortController.abort();
+    async onErrorStreaming({ suppressRecovery = false } = {}) {
         this.isStopped = true;
 
         if (this.messageId !== -1 && this.result) {
@@ -4361,6 +4501,10 @@ class StreamingProcessor {
         }
 
         this.markUIGenStopped();
+        if (suppressRecovery) {
+            return;
+        }
+
         showGenerationFailureRecovery(this.messageId);
 
         const noEmitTypes = ['swipe', 'impersonate', 'continue'];
@@ -4441,7 +4585,7 @@ class StreamingProcessor {
             // in the case of a self-inflicted abort, we have already cleaned up
             if (!this.isFinished) {
                 console.error(err);
-                await this.onErrorStreaming();
+                await this.onErrorStreaming({ suppressRecovery: this.suppressErrorRecovery });
             }
             return this.result;
         }
@@ -5760,6 +5904,8 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
      * @returns {Promise<void|*|Awaited<*>|String|{fromStream}|string|undefined|Object>}
      * @throws {Error|object} Error with message text, or Error with response JSON
      */
+    let activeRecoveryMessageId = null;
+
     async function finishGenerating() {
         if (power_user.console_log_prompts) {
             console.log(generate_data.prompt);
@@ -5816,74 +5962,191 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
 
         console.debug(`pushed prompt bits to itemizedPrompts array. Length is now: ${itemizedPrompts.length}`);
 
-        if (isStreamingEnabled() && type !== 'quiet') {
-            continue_mag = promptReasoning.removePrefix(continue_mag);
-            streamingProcessor = new StreamingProcessor(type, force_name2, generation_started, continue_mag, promptReasoning);
-            if (isContinue) {
-                // Save reply does add cycle text to the prompt, so it's not needed here
-                streamingProcessor.firstMessageText = '';
+        const createEmptyReplyFailure = (messageId = null) => {
+            const error = new Error('empty reply');
+            error.emptyReply = true;
+            error.messageId = messageId;
+            return error;
+        };
+
+        const isEmptyGenerationResult = (result) => {
+            if (jsonSchema) {
+                return false;
             }
 
-            streamingProcessor.generator = await sendStreamingRequest(type, generate_data, { jsonSchema });
+            if (result?.fromStream) {
+                return String(result ?? '').trim().length === 0;
+            }
 
-            hideSwipeButtons();
-            let getMessage = await streamingProcessor.generate();
-            let messageChunk = cleanUpMessage({
-                getMessage: getMessage,
+            const text = cleanUpMessage({
+                getMessage: extractMessageFromData(result),
                 isImpersonate: isImpersonate,
                 isContinue: isContinue,
                 displayIncompleteSentences: false,
             });
+            return String(text ?? '').trim().length === 0;
+        };
 
-            if (isContinue) {
-                getMessage = continue_mag + getMessage;
+        const ensureRecoveryMessage = async (candidateMessageId = null) => {
+            if (isAssistantRecoveryMessageId(candidateMessageId)) {
+                activeRecoveryMessageId = candidateMessageId;
+                return activeRecoveryMessageId;
             }
 
-            const isStreamFinished = streamingProcessor && !streamingProcessor.isStopped && streamingProcessor.isFinished;
-            const isStreamWithToolCalls = streamingProcessor && Array.isArray(streamingProcessor.toolCalls) && streamingProcessor.toolCalls.length;
-            if (canPerformToolCalls && isStreamFinished && isStreamWithToolCalls) {
-                const lastMessage = chat[chat.length - 1];
-                const hasToolCalls = ToolManager.hasToolCalls(streamingProcessor.toolCalls);
-                const shouldDeleteMessage = type !== 'swipe' && ['', '...'].includes(lastMessage?.mes) && !lastMessage?.extra?.reasoning && ['', '...'].includes(streamingProcessor?.result);
-                hasToolCalls && shouldDeleteMessage && await deleteLastMessage();
-                if (hasToolCalls && !shouldDeleteMessage) {
-                    await streamingProcessor.finalizeIntermediaryMessage(streamingProcessor.messageId, getMessage, { unlockUI: false });
+            if (isAssistantRecoveryMessageId(activeRecoveryMessageId)) {
+                return activeRecoveryMessageId;
+            }
+
+            await saveReply({ type, getMessage: '', fromStreaming: true });
+            activeRecoveryMessageId = chat.length - 1;
+            return activeRecoveryMessageId;
+        };
+
+        const runGenerationAttempt = async (attempt, isIntermediateAttempt) => {
+            const requestOptions = {
+                jsonSchema,
+                fallbackProvider: attempt.fallbackProvider,
+            };
+
+            if (isStreamingEnabled() && type !== 'quiet') {
+                const attemptContinueMessage = promptReasoning.removePrefix(continue_mag);
+                streamingProcessor = new StreamingProcessor(type, force_name2, generation_started, attemptContinueMessage, promptReasoning);
+                streamingProcessor.suppressErrorRecovery = isIntermediateAttempt;
+                if (activeRecoveryMessageId !== null && activeRecoveryMessageId >= 0) {
+                    streamingProcessor.messageId = activeRecoveryMessageId;
                 }
-                const invocationResult = await ToolManager.invokeFunctionTools(streamingProcessor.toolCalls, {
-                    reasoningText: streamingProcessor.reasoningHandler.reasoning,
+                if (isContinue) {
+                    // Save reply does add cycle text to the prompt, so it's not needed here
+                    streamingProcessor.firstMessageText = '';
+                }
+
+                streamingProcessor.generator = await sendStreamingRequest(type, generate_data, requestOptions);
+
+                hideSwipeButtons();
+                let getMessage = await streamingProcessor.generate();
+                if (streamingProcessor.abortController.signal.aborted && streamingProcessor.isFinished) {
+                    throw new Error('Generation was aborted.');
+                }
+                let messageChunk = cleanUpMessage({
+                    getMessage: getMessage,
+                    isImpersonate: isImpersonate,
+                    isContinue: isContinue,
+                    displayIncompleteSentences: false,
                 });
-                const shouldStopGeneration = (!invocationResult.invocations.length && shouldDeleteMessage) || invocationResult.stealthCalls.length;
-                if (hasToolCalls) {
-                    if (shouldStopGeneration) {
-                        if (Array.isArray(invocationResult.errors) && invocationResult.errors.length) {
-                            ToolManager.showToolCallError(invocationResult.errors);
+
+                if (isContinue) {
+                    getMessage = attemptContinueMessage + getMessage;
+                }
+
+                const isStreamFinished = streamingProcessor && !streamingProcessor.isStopped && streamingProcessor.isFinished;
+                const isStreamWithToolCalls = streamingProcessor && Array.isArray(streamingProcessor.toolCalls) && streamingProcessor.toolCalls.length;
+                if (canPerformToolCalls && isStreamFinished && isStreamWithToolCalls) {
+                    const lastMessage = chat[chat.length - 1];
+                    const hasToolCalls = ToolManager.hasToolCalls(streamingProcessor.toolCalls);
+                    const shouldDeleteMessage = type !== 'swipe' && ['', '...'].includes(lastMessage?.mes) && !lastMessage?.extra?.reasoning && ['', '...'].includes(streamingProcessor?.result);
+                    hasToolCalls && shouldDeleteMessage && await deleteLastMessage();
+                    if (hasToolCalls && !shouldDeleteMessage) {
+                        await streamingProcessor.finalizeIntermediaryMessage(streamingProcessor.messageId, getMessage, { unlockUI: false });
+                    }
+                    const invocationResult = await ToolManager.invokeFunctionTools(streamingProcessor.toolCalls, {
+                        reasoningText: streamingProcessor.reasoningHandler.reasoning,
+                    });
+                    const shouldStopGeneration = (!invocationResult.invocations.length && shouldDeleteMessage) || invocationResult.stealthCalls.length;
+                    if (hasToolCalls) {
+                        if (shouldStopGeneration) {
+                            if (Array.isArray(invocationResult.errors) && invocationResult.errors.length) {
+                                ToolManager.showToolCallError(invocationResult.errors);
+                            }
+                            unblockGeneration(type);
+                            streamingProcessor = null;
+                            return;
                         }
-                        unblockGeneration(type);
+
                         streamingProcessor = null;
-                        return;
+                        depth = depth + 1;
+                        await ToolManager.saveFunctionToolInvocations(invocationResult.invocations);
+                        return Generate('normal', { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, force_chid, signal, quietImage, quietName, depth }, dryRun);
+                    }
+                }
+
+                if (isStreamFinished) {
+                    const finishedMessageId = streamingProcessor.messageId;
+                    if (!String(messageChunk ?? '').trim()) {
+                        streamingProcessor = null;
+                        throw createEmptyReplyFailure(finishedMessageId);
                     }
 
+                    await streamingProcessor.onFinishStreaming(finishedMessageId, getMessage);
                     streamingProcessor = null;
-                    depth = depth + 1;
-                    await ToolManager.saveFunctionToolInvocations(invocationResult.invocations);
-                    return Generate('normal', { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, force_chid, signal, quietImage, quietName, depth }, dryRun);
+                    clearGenerationAutoRecoveryStatus(finishedMessageId);
+                    triggerAutoContinue(messageChunk, isImpersonate);
+                    return Object.defineProperties(new String(getMessage), {
+                        'messageChunk': { value: messageChunk },
+                        'fromStream': { value: true },
+                    });
                 }
-            }
 
-            if (isStreamFinished) {
-                await streamingProcessor.onFinishStreaming(streamingProcessor.messageId, getMessage);
+                const failedMessageId = streamingProcessor?.messageId;
                 streamingProcessor = null;
-                triggerAutoContinue(messageChunk, isImpersonate);
-                return Object.defineProperties(new String(getMessage), {
-                    'messageChunk': { value: messageChunk },
-                    'fromStream': { value: true },
-                });
+                const streamError = new Error('stream connection closed before completion');
+                streamError.messageId = failedMessageId;
+                throw streamError;
             }
 
-            streamingProcessor = null;
-        } else {
-            return await sendGenerationRequest(type, generate_data, { jsonSchema });
+            const result = await sendGenerationRequest(type, generate_data, requestOptions);
+            if (isEmptyGenerationResult(result)) {
+                throw createEmptyReplyFailure(activeRecoveryMessageId);
+            }
+            return result;
+        };
+
+        const shouldAutoRecover = isMainChatVisibleGeneration({ type, mainApi: main_api, dryRun, depth });
+        const attempts = shouldAutoRecover ? getGenerationAutoRecoveryAttempts() : [{ label: 'primary', fallbackProvider: false }];
+        let lastException = null;
+
+        for (let attemptIndex = 0; attemptIndex < attempts.length; attemptIndex++) {
+            const attempt = attempts[attemptIndex];
+            const isRetryAttempt = attemptIndex > 0;
+            const isIntermediateAttempt = attemptIndex < attempts.length - 1;
+
+            if (isRetryAttempt) {
+                await ensureRecoveryMessage(activeRecoveryMessageId);
+
+                clearGenerationAttemptMessage(activeRecoveryMessageId);
+                showGenerationAutoRecoveryStatus(activeRecoveryMessageId, attempt.status);
+                deactivateSendButtons();
+                showStopButton();
+            }
+
+            try {
+                const result = await runGenerationAttempt(attempt, isIntermediateAttempt);
+                clearGenerationAutoRecoveryStatus(activeRecoveryMessageId ?? chat.length - 1);
+                return result;
+            } catch (exception) {
+                lastException = exception;
+                const candidateRecoveryMessageId = exception?.messageId ?? streamingProcessor?.messageId ?? activeRecoveryMessageId;
+                streamingProcessor = null;
+
+                if (!shouldAutoRecover || !isRecoverableGenerationFailure(exception) || !isIntermediateAttempt) {
+                    if (shouldAutoRecover && isRecoverableGenerationFailure(exception)) {
+                        await ensureRecoveryMessage(candidateRecoveryMessageId);
+                        clearGenerationAttemptMessage(activeRecoveryMessageId);
+                    } else if (isAssistantRecoveryMessageId(candidateRecoveryMessageId)) {
+                        activeRecoveryMessageId = candidateRecoveryMessageId;
+                    }
+                    clearGenerationAutoRecoveryStatus(activeRecoveryMessageId);
+                    if (shouldAutoRecover && isAssistantRecoveryMessageId(activeRecoveryMessageId)) {
+                        showGenerationFailureRecovery(activeRecoveryMessageId);
+                    }
+                    throw exception;
+                }
+
+                await ensureRecoveryMessage(candidateRecoveryMessageId);
+                clearGenerationAttemptMessage(activeRecoveryMessageId);
+            }
         }
+
+        throw lastException;
     }
 
     return finishGenerating().then(onSuccess, onError);
@@ -5963,7 +6226,10 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
             return getMessage;
         } else {
             // Without streaming we'll be having a full message on continuation. Treat it as a last chunk.
-            if (originalType !== 'continue') {
+            if (isAssistantRecoveryMessageId(activeRecoveryMessageId)) {
+                ({ type, getMessage } = await replaceAssistantRecoveryMessage(activeRecoveryMessageId, { type, getMessage, title, swipes, reasoning, imageUrls, reasoningSignature }));
+                clearGenerationAutoRecoveryStatus(activeRecoveryMessageId);
+            } else if (originalType !== 'continue') {
                 ({ type, getMessage } = await saveReply({ type, getMessage, title, swipes, reasoning, imageUrls, reasoningSignature }));
             } else {
                 ({ type, getMessage } = await saveReply({ type: 'appendFinal', getMessage, title, swipes, reasoning, imageUrls, reasoningSignature }));

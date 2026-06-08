@@ -140,4 +140,66 @@ describe('chat workspace structure', () => {
             expectButtonAffordance(getTagByClass(indexHtml, className), label);
         });
     });
+
+    test('keeps fallback provider controls embedded in the API configuration drawer', () => {
+        const indexHtml = read('public/index.html');
+
+        [
+            'id="fallback_provider_section"',
+            'id="fallback_provider_enabled"',
+            'id="fallback_provider_status"',
+            'id="fallback_provider_base_url"',
+            'id="fallback_provider_model"',
+            'id="fallback_provider_api_key"',
+            'id="fallback_provider_api_key_show"',
+            'id="fallback_provider_save_key"',
+            'id="fallback_provider_clear_key"',
+            'id="fallback_provider_cost_warning"',
+        ].forEach(marker => expect(indexHtml).toContain(marker));
+
+        expect(indexHtml.indexOf('id="openai_reverse_proxy"')).toBeLessThan(indexHtml.indexOf('id="fallback_provider_section"'));
+        expect(indexHtml.indexOf('id="fallback_provider_section"')).toBeLessThan(indexHtml.indexOf('id="prompt_post_processing_form"'));
+
+        expect(indexHtml).not.toMatch(/<dialog[^>]*id="fallback_provider_section"/);
+        expect(indexHtml).toMatch(/id="fallback_provider_enabled"[^>]*type="checkbox"/);
+        expect(indexHtml).toMatch(/id="fallback_provider_base_url"[^>]*\baria-label="Fallback provider Base URL"/);
+        expect(indexHtml).toMatch(/id="fallback_provider_model"[^>]*\bplaceholder="gpt-4.1-mini"/);
+        expect(indexHtml).toMatch(/id="fallback_provider_api_key"[^>]*\bautocomplete="off"/);
+        expect(indexHtml).toMatch(/id="fallback_provider_status"[^>]*\baria-live="polite"/);
+        expect(indexHtml).toMatch(/id="fallback_provider_cost_warning"[^>]*\brole="note"/);
+
+        expectButtonAffordance(getTagByClass(indexHtml, 'fallback_provider_api_key_show'), 'Show fallback API key');
+        expectButtonAffordance(getTagByClass(indexHtml, 'fallback_provider_save_key'), 'Save fallback API key');
+        expectButtonAffordance(getTagByClass(indexHtml, 'fallback_provider_clear_key'), 'Clear fallback API key');
+    });
+
+    test('keeps automatic recovery status scoped outside message text', () => {
+        const scriptSource = read('public/script.js');
+        const styleSource = read('public/style.css');
+
+        expect(scriptSource).toContain('function showGenerationAutoRecoveryStatus(messageId, status)');
+        expect(scriptSource).toContain('function clearGenerationAutoRecoveryStatus(messageId)');
+        expect(scriptSource).toContain("const statusRow = $('<div class=\"generation_auto_recovery_status\"");
+        expect(scriptSource).toContain('statusRow.attr(\'role\', \'status\');');
+        expect(scriptSource).toContain("messageElement.find('.mes_text').after(statusRow);");
+        expect(scriptSource).not.toContain("messageElement.find('.mes_text').text(status");
+        expect(scriptSource).toContain("messageElement.find('.generation_auto_recovery_status').remove();");
+        expect(scriptSource).toContain("messageElement.find('.generation_failure_retry').toggle(!isRecovering);");
+
+        expect(styleSource).toContain('.generation_auto_recovery_status');
+        expect(styleSource).toContain('@media (prefers-reduced-motion: reduce)');
+    });
+
+    test('routes visible main chat generation through bounded auto recovery attempts', () => {
+        const scriptSource = read('public/script.js');
+
+        expect(scriptSource).toContain('function getGenerationAutoRecoveryAttempts()');
+        expect(scriptSource).toContain("label: 'primary'");
+        expect(scriptSource).toContain("label: 'primary_retry'");
+        expect(scriptSource).toContain("label: 'fallback'");
+        expect(scriptSource).toContain("fallbackProvider: attempt.fallbackProvider");
+        expect(scriptSource).toContain('isRecoverableGenerationFailure(exception)');
+        expect(scriptSource).toContain('hasFallbackProviderSettings(oai_settings, secret_state, SECRET_KEYS.OPENAI_FALLBACK)');
+        expect(scriptSource).toContain('clearGenerationAttemptMessage(activeRecoveryMessageId);');
+    });
 });

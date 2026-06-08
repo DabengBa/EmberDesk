@@ -50,6 +50,18 @@ import {
 const API_OPENAI = 'https://api.openai.com/v1';
 const API_CLAUDE = 'https://api.anthropic.com/v1';
 const API_MAKERSUITE = 'https://generativelanguage.googleapis.com';
+const OPENAI_FALLBACK_SECRET_MARKER = 'openai_fallback_provider';
+
+function resolveOpenAISecretKey(request) {
+    const marker = request.body.openai_secret_marker;
+    if (!marker) {
+        return SECRET_KEYS.OPENAI;
+    }
+    if (marker === OPENAI_FALLBACK_SECRET_MARKER) {
+        return SECRET_KEYS.OPENAI_FALLBACK;
+    }
+    return null;
+}
 
 /**
  * Module-scoped Claude caching configuration values.
@@ -824,7 +836,12 @@ router.post('/generate', async function (request, response) {
 
         if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.OPENAI) {
             apiUrl = request.body.custom_url || new URL(request.body.reverse_proxy || API_OPENAI).toString();
-            apiKey = request.body.reverse_proxy ? request.body.proxy_password : readSecret(request.user.directories, SECRET_KEYS.OPENAI, request.body.secret_id);
+            const secretKey = resolveOpenAISecretKey(request);
+            if (!request.body.reverse_proxy && !secretKey) {
+                console.warn('Invalid OpenAI secret marker.');
+                return response.status(400).send({ error: true });
+            }
+            apiKey = request.body.reverse_proxy ? request.body.proxy_password : readSecret(request.user.directories, secretKey, request.body.secret_id);
             headers = {};
             bodyParams = {
                 logprobs: request.body.logprobs,

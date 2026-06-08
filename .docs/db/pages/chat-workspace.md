@@ -3,7 +3,7 @@ id: page.chat_workspace
 type: page
 name: Chat Workspace
 route: /
-related: [feature.startup_bootstrap, feature.character_library_panel, feature.chat_message_rendering, feature.chat_message_actions, feature.character_export, feature.character_delete, feature.world_info_panel, feature.background_library_panel, feature.extension_panel_open, term.character_card, term.shared_browser_library, page.login]
+related: [feature.startup_bootstrap, feature.character_library_panel, feature.chat_message_rendering, feature.chat_message_actions, feature.chat_generation_auto_recovery, feature.character_export, feature.character_delete, feature.world_info_panel, feature.background_library_panel, feature.extension_panel_open, term.character_card, term.shared_browser_library, page.login]
 ---
 
 # Page: Chat Workspace
@@ -30,6 +30,7 @@ This page exists so a user can run their daily LLM workflow from one browser sur
 - `feature.character_library_panel`: browsing and selecting character cards from the workspace.
 - `feature.chat_message_rendering`: displaying stored or finalized chat messages as readable text inside stable message rows.
 - `feature.chat_message_actions`: discovering and using actions attached to rendered chat messages.
+- `feature.chat_generation_auto_recovery`: bounded automatic retry behavior for visible main-chat generation failures.
 - `feature.character_export`: exporting the active character card as PNG or JSON with keyboard-reachable format selection and visible feedback.
 - `feature.character_delete`: removing a character from the active library.
 - `feature.world_info_panel`: activating global World Info and editing world-book entries from the workspace drawer.
@@ -44,6 +45,7 @@ This page exists so a user can run their daily LLM workflow from one browser sur
 !include feature.character_library_panel
 !include feature.chat_message_rendering
 !include feature.chat_message_actions
+!include feature.chat_generation_auto_recovery
 !include feature.character_export
 !include feature.character_delete
 !include feature.world_info_panel
@@ -65,6 +67,7 @@ This page exists so a user can run their daily LLM workflow from one browser sur
 - **Shared-library state**: the workspace loads a shared browser library during startup so first-party modules and compatible extensions can use documented imports and legacy globals without each surface bundling its own copy.
 - **Message rendering state**: stored or finalized messages render into stable `.mes[mesid]` rows with readable `.mes_text`, while message-row actions remain attached to the rendered row.
 - **Generation failure recovery state**: when generation fails after a user message or partial assistant output, the workspace keeps the existing rows readable, restores composer input, and exposes a local recovery action instead of requiring a refresh.
+- **Automatic recovery state**: visible main-chat generation can retry once on the primary provider and once on the optional fallback provider before the existing manual retry CTA appears.
 - **Long-chat recovery state**: after the user loads older messages from a bounded long-chat window, the workspace exposes a jump-to-latest entry so the user can return to the latest rendered message without deleting loaded history or changing message IDs.
 - **Mobile reachability state**: core composer controls, message actions, long-chat recovery, and generation stop or retry controls should remain visible or keyboard/role reachable on narrow phone and wider mobile/tablet viewports without relying on hover-only discovery.
 

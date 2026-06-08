@@ -25,7 +25,12 @@ async function selectCharacterByName(page, name) {
 }
 
 async function installStreamingFetchStub(page, { chunks, delayMs = 40, keepOpenAfterChunks = false, failAfterChunks = false }) {
-    await page.evaluate(({ streamChunks, streamDelayMs, keepStreamOpen, failAfterChunks }) => {
+    const responses = [{ chunks, delayMs, keepOpenAfterChunks, failAfterChunks }];
+    await installStreamingFetchSequenceStub(page, { responses });
+}
+
+async function installStreamingFetchSequenceStub(page, { responses }) {
+    await page.evaluate(({ streamResponses }) => {
         window.__emberdeskStreamingRequests = [];
         window.__emberdeskStreamingAbortCount = 0;
         window.__emberdeskStreamingOriginalFetch ??= window.fetch.bind(window);
@@ -37,6 +42,11 @@ async function installStreamingFetchStub(page, { chunks, delayMs = 40, keepOpenA
             }
 
             window.__emberdeskStreamingRequests.push(JSON.parse(String(init.body ?? '{}')));
+            const responseConfig = streamResponses[Math.min(window.__emberdeskStreamingRequests.length - 1, streamResponses.length - 1)] ?? {};
+            const streamChunks = responseConfig.chunks ?? [];
+            const streamDelayMs = responseConfig.delayMs ?? 40;
+            const keepStreamOpen = Boolean(responseConfig.keepOpenAfterChunks);
+            const shouldFailAfterChunks = Boolean(responseConfig.failAfterChunks);
 
             const encoder = new TextEncoder();
             const body = new ReadableStream({
@@ -68,7 +78,7 @@ async function installStreamingFetchStub(page, { chunks, delayMs = 40, keepOpenA
                             await new Promise(resolve => setTimeout(resolve, streamDelayMs));
                         }
 
-                        if (failAfterChunks) {
+                        if (shouldFailAfterChunks) {
                             throw new Error('Deterministic provider failure');
                         }
 
@@ -96,7 +106,7 @@ async function installStreamingFetchStub(page, { chunks, delayMs = 40, keepOpenA
                 headers: { 'Content-Type': 'text/event-stream' },
             });
         };
-    }, { streamChunks: chunks, streamDelayMs: delayMs, keepStreamOpen: keepOpenAfterChunks, failAfterChunks });
+    }, { streamResponses: responses });
 }
 
 async function enableOpenAiStreaming(page) {
@@ -118,6 +128,17 @@ async function enableOpenAiStreaming(page) {
     });
 }
 
+async function enableFallbackProvider(page) {
+    await page.evaluate(async () => {
+        const context = window.SillyTavern.getContext();
+        context.chatCompletionSettings.fallback_provider_enabled = true;
+        context.chatCompletionSettings.fallback_provider_base_url = 'https://fallback.example/v1';
+        context.chatCompletionSettings.fallback_provider_model = 'fallback-model';
+        const secrets = await import('/scripts/secrets.js');
+        secrets.secret_state[secrets.SECRET_KEYS.OPENAI_FALLBACK] = true;
+    });
+}
+
 async function startGeneration(page, prompt) {
     await page.evaluate((messageText) => {
         const textarea = document.querySelector('#send_textarea');
@@ -136,17 +157,59 @@ async function startGeneration(page, prompt) {
     }, prompt);
 }
 
-async function waitForGeneration(page, { allowAbort = false } = {}) {
-    await page.evaluate(async ({ acceptAbort }) => {
+async function waitForGeneration(page, { allowAbort = false, allowFailure = false } = {}) {
+    await page.evaluate(async ({ acceptAbort, acceptFailure }) => {
         try {
             await window.__emberdeskStreamingGeneration;
         } catch (error) {
             const message = String(error?.message ?? error);
-            if (!acceptAbort || !message.includes('Generation was aborted')) {
+            const acceptedAbort = acceptAbort && message.includes('Generation was aborted');
+            const acceptedFailure = acceptFailure && (
+                message.includes('stream connection closed before completion')
+                || message.includes('empty reply')
+            );
+            if (!acceptedAbort && !acceptedFailure) {
                 throw error;
             }
         }
-    }, { acceptAbort: allowAbort });
+    }, { acceptAbort: allowAbort, acceptFailure: allowFailure });
+}
+
+async function installMessageEventCounters(page) {
+    await page.evaluate(async () => {
+        const script = await import('/script.js');
+        const context = window.SillyTavern.getContext();
+        window.__emberdeskStreamingMessageEvents = [];
+        window.__emberdeskStreamingRenderedEvents = [];
+        context.eventSource.on(script.event_types.MESSAGE_RECEIVED, (messageId, type) => {
+            window.__emberdeskStreamingMessageEvents.push({ messageId, type });
+        });
+        context.eventSource.on(script.event_types.CHARACTER_MESSAGE_RENDERED, (messageId, type) => {
+            window.__emberdeskStreamingRenderedEvents.push({ messageId, type });
+        });
+    });
+}
+
+async function installRecoveryStatusRecorder(page) {
+    await page.evaluate(() => {
+        window.__emberdeskStreamingRecoveryStatuses = [];
+        const recordStatuses = () => {
+            for (const element of document.querySelectorAll('.generation_auto_recovery_status')) {
+                const text = String(element.textContent ?? '').trim();
+                if (text && !window.__emberdeskStreamingRecoveryStatuses.includes(text)) {
+                    window.__emberdeskStreamingRecoveryStatuses.push(text);
+                }
+            }
+        };
+        window.__emberdeskStreamingRecoveryStatusObserver?.disconnect?.();
+        window.__emberdeskStreamingRecoveryStatusObserver = new MutationObserver(recordStatuses);
+        window.__emberdeskStreamingRecoveryStatusObserver.observe(document.querySelector('#chat'), {
+            childList: true,
+            subtree: true,
+            characterData: true,
+        });
+        recordStatuses();
+    });
 }
 
 function lastAssistantRow(page) {
@@ -207,6 +270,7 @@ test.describe('chat message streaming', () => {
         await testSetup.awaitST({ page });
         await selectCharacterByName(page, characterName);
         await enableOpenAiStreaming(page);
+        await installMessageEventCounters(page);
         await installStreamingFetchStub(page, {
             chunks: ['Partial stop proof.'],
             delayMs: 120,
@@ -238,6 +302,90 @@ test.describe('chat message streaming', () => {
 
         const abortCount = await page.evaluate(() => window.__emberdeskStreamingAbortCount);
         expect(abortCount).toBeGreaterThanOrEqual(1);
+        const requestCount = await page.evaluate(() => window.__emberdeskStreamingRequests.length);
+        const messageEvents = await page.evaluate(() => window.__emberdeskStreamingMessageEvents);
+        const renderedEvents = await page.evaluate(() => window.__emberdeskStreamingRenderedEvents);
+        expect(requestCount).toBe(1);
+        expect(messageEvents).toHaveLength(0);
+        expect(renderedEvents).toHaveLength(0);
+    });
+
+    test('auto retries primary failures once, switches to fallback, and keeps one assistant row', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterByName(page, characterName);
+        await enableOpenAiStreaming(page);
+        await enableFallbackProvider(page);
+        await installMessageEventCounters(page);
+        await installRecoveryStatusRecorder(page);
+        await installStreamingFetchSequenceStub(page, {
+            responses: [
+                { chunks: ['Discarded primary partial.'], delayMs: 50, failAfterChunks: true },
+                { chunks: [], delayMs: 50 },
+                { chunks: ['Fallback recovery complete.'], delayMs: 50 },
+            ],
+        });
+
+        const rowCountBeforeGeneration = await page.locator('#chat > .mes[mesid]').count();
+        await startGeneration(page, 'Start a deterministic fallback recovery proof.');
+        const assistantRow = assistantRowForGeneration(page, rowCountBeforeGeneration);
+
+        await expect(assistantRow.locator('.mes_text')).toContainText('Fallback recovery complete.');
+        await waitForGeneration(page);
+        const statusHistory = await page.evaluate(() => window.__emberdeskStreamingRecoveryStatuses);
+        expect(statusHistory).toContain('正在重试');
+        expect(statusHistory).toContain('正在使用备用服务商');
+
+        const userRows = page.locator('#chat > .mes[is_user="true"]').filter({ hasText: 'Start a deterministic fallback recovery proof.' });
+        await expect(userRows).toHaveCount(1);
+        await expect(assistantRow).toHaveCount(1);
+        await expect(assistantRow.locator('.mes_text')).not.toContainText('Discarded primary partial.');
+        await expect(assistantRow.locator('.generation_auto_recovery_status')).toHaveCount(0);
+        await expect(assistantRow.getByRole('button', { name: 'Retry generation' })).toHaveCount(0);
+
+        const requests = await page.evaluate(() => window.__emberdeskStreamingRequests);
+        expect(requests).toHaveLength(3);
+        expect(requests[0].chat_completion_source).toBe('openai');
+        expect(requests[1].chat_completion_source).toBe('openai');
+        expect(requests[2].chat_completion_source).toBe('openai');
+        expect(requests[2].custom_url).toBe('https://fallback.example/v1');
+        expect(requests[2].model).toBe('fallback-model');
+        expect(requests[2].openai_secret_marker).toBe('openai_fallback_provider');
+        expect(requests[2].reverse_proxy ?? '').toBe('');
+        expect(requests[2].proxy_password ?? '').toBe('');
+
+        const finalEvents = await page.evaluate(() => ({
+            message: window.__emberdeskStreamingMessageEvents,
+            rendered: window.__emberdeskStreamingRenderedEvents,
+        }));
+        expect(finalEvents.message).toEqual([{ messageId: rowCountBeforeGeneration + 1, type: 'normal' }]);
+        expect(finalEvents.rendered).toEqual([{ messageId: rowCountBeforeGeneration + 1, type: 'normal' }]);
+    });
+
+    test('stop does not enter the auto recovery chain', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterByName(page, characterName);
+        await enableOpenAiStreaming(page);
+        await enableFallbackProvider(page);
+        await installStreamingFetchSequenceStub(page, {
+            responses: [
+                { chunks: ['Partial stop with fallback configured.'], delayMs: 120, keepOpenAfterChunks: true },
+                { chunks: ['Unexpected retry.'], delayMs: 20 },
+            ],
+        });
+
+        const rowCountBeforeGeneration = await page.locator('#chat > .mes[mesid]').count();
+        await startGeneration(page, 'Start a stop without retry proof.');
+        const assistantRow = assistantRowForGeneration(page, rowCountBeforeGeneration);
+        await expect(page.locator('#mes_stop')).toBeVisible();
+        await expect.poll(async () => page.evaluate(() => window.__emberdeskStreamingRequests.length)).toBe(1);
+
+        await page.locator('#mes_stop').click();
+        await waitForGeneration(page, { allowAbort: true });
+        await expect(page.locator('#chat > .mes[is_user="false"][is_system="false"][mesid]').filter({ hasText: 'Unexpected retry.' })).toHaveCount(0);
+        await expect(page.locator('.generation_auto_recovery_status')).toHaveCount(0);
+
+        const requestCount = await page.evaluate(() => window.__emberdeskStreamingRequests.length);
+        expect(requestCount).toBe(1);
     });
 
     test('provider failure leaves a readable recovery path without duplicating rows', async ({ page }) => {
@@ -252,14 +400,14 @@ test.describe('chat message streaming', () => {
 
         const rowCountBeforeGeneration = await page.locator('#chat > .mes[mesid]').count();
         await startGeneration(page, 'Start a deterministic provider failure proof.');
-        await waitForGeneration(page, { allowAbort: true });
+        await waitForGeneration(page, { allowFailure: true });
 
         const userRow = page.locator(`#chat > .mes[is_user="true"][mesid="${rowCountBeforeGeneration}"]`);
         await expect(userRow.locator('.mes_text')).toContainText('Start a deterministic provider failure proof.');
 
         const assistantRowsAfterFailure = page.locator(`#chat > .mes[is_user="false"][is_system="false"][mesid="${rowCountBeforeGeneration + 1}"]`);
         await expect(assistantRowsAfterFailure).toHaveCount(1);
-        await expect(assistantRowsAfterFailure.locator('.mes_text')).toContainText('Failure path partial text.');
+        await expect(assistantRowsAfterFailure.locator('.mes_text')).not.toContainText('Failure path partial text.');
 
         const recovery = page.getByRole('button', { name: /Retry generation|Continue last message|Send message/ }).first();
         await expect(recovery).toBeVisible();
@@ -269,6 +417,8 @@ test.describe('chat message streaming', () => {
         await expect(page.locator('body')).not.toHaveAttribute('data-generating', 'true');
         await expect.poll(async () => page.evaluate(() => window.SillyTavern.getContext().streamingProcessor === null)).toBe(true);
         await expect(page.locator(`#chat > .mes[mesid="${rowCountBeforeGeneration + 1}"]`)).toHaveCount(1);
+        const failedAttemptRequestCount = await page.evaluate(() => window.__emberdeskStreamingRequests.length);
+        expect(failedAttemptRequestCount).toBe(2);
 
         await installStreamingFetchStub(page, {
             chunks: ['Recovered retry text.'],
@@ -276,12 +426,60 @@ test.describe('chat message streaming', () => {
         });
         await recovery.click();
         await expect(assistantRowsAfterFailure.locator('.mes_text')).toContainText('Recovered retry text.');
-        await waitForGeneration(page);
+        await expect(page.locator('body')).not.toHaveAttribute('data-generating', 'true');
+        await expect.poll(async () => page.evaluate(() => window.SillyTavern.getContext().streamingProcessor === null)).toBe(true);
         await expect(userRow).toHaveCount(1);
         await expect(assistantRowsAfterFailure).toHaveCount(1);
         await expect(page.locator('#chat > .mes[is_user="true"]').filter({ hasText: 'Start a deterministic provider failure proof.' })).toHaveCount(1);
         const retryRequestCount = await page.evaluate(() => window.__emberdeskStreamingRequests.length);
         expect(retryRequestCount).toBe(1);
+    });
+
+    test('primary failure retries then fallback success reuses the same assistant row and clears partial text', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterByName(page, characterName);
+        await enableOpenAiStreaming(page);
+        await enableFallbackProvider(page);
+        await installMessageEventCounters(page);
+        await installStreamingFetchSequenceStub(page, {
+            responses: [
+                { chunks: ['Primary partial text.'], delayMs: 30, failAfterChunks: true },
+                { chunks: [], delayMs: 30 },
+                { chunks: ['Fallback final reply.'], delayMs: 30 },
+            ],
+        });
+
+        const rowCountBeforeGeneration = await page.locator('#chat > .mes[mesid]').count();
+        await startGeneration(page, 'Start a deterministic fallback recovery proof.');
+        await waitForGeneration(page);
+
+        const userRow = page.locator(`#chat > .mes[is_user="true"][mesid="${rowCountBeforeGeneration}"]`);
+        const assistantRow = assistantRowForGeneration(page, rowCountBeforeGeneration);
+        const duplicateAssistantRow = page.locator(`#chat > .mes[is_user="false"][is_system="false"][mesid="${rowCountBeforeGeneration + 2}"]`);
+
+        await expect(userRow.locator('.mes_text')).toContainText('Start a deterministic fallback recovery proof.');
+        await expect(assistantRow).toHaveCount(1);
+        await expect(assistantRow.locator('.mes_text')).toContainText('Fallback final reply.');
+        await expect(assistantRow.locator('.mes_text')).not.toContainText('Primary partial text.');
+        await expect(duplicateAssistantRow).toHaveCount(0);
+        await expect(assistantRow.getByRole('button', { name: 'Retry generation' })).not.toBeVisible();
+
+        const requestBodies = await page.evaluate(() => window.__emberdeskStreamingRequests);
+        expect(requestBodies).toHaveLength(3);
+        expect(requestBodies[0].chat_completion_source).toBe('openai');
+        expect(requestBodies[1].chat_completion_source).toBe('openai');
+        expect(requestBodies[2].openai_secret_marker).toBe('openai_fallback_provider');
+        expect(requestBodies[2].custom_url).toBe('https://fallback.example/v1');
+        expect(requestBodies[2].model).toBe('fallback-model');
+        expect(requestBodies[2]).not.toHaveProperty('reverse_proxy');
+        expect(requestBodies[2]).not.toHaveProperty('proxy_password');
+
+        const messageEvents = await page.evaluate(() => window.__emberdeskStreamingMessageEvents);
+        const renderedEvents = await page.evaluate(() => window.__emberdeskStreamingRenderedEvents);
+        expect(messageEvents).toHaveLength(1);
+        expect(renderedEvents).toHaveLength(1);
+        expect(messageEvents[0].messageId).toBe(rowCountBeforeGeneration + 1);
+        expect(renderedEvents[0].messageId).toBe(rowCountBeforeGeneration + 1);
     });
 
     test('provider failure before first token still restores retry recovery', async ({ page }) => {
@@ -296,7 +494,7 @@ test.describe('chat message streaming', () => {
 
         const rowCountBeforeGeneration = await page.locator('#chat > .mes[mesid]').count();
         await startGeneration(page, 'Start a deterministic pre-token provider failure proof.');
-        await waitForGeneration(page);
+        await waitForGeneration(page, { allowFailure: true });
 
         const userRow = page.locator(`#chat > .mes[is_user="true"][mesid="${rowCountBeforeGeneration}"]`);
         await expect(userRow.locator('.mes_text')).toContainText('Start a deterministic pre-token provider failure proof.');
@@ -309,6 +507,8 @@ test.describe('chat message streaming', () => {
         await expect(page.locator('#send_textarea')).toHaveValue('Follow-up after pre-token provider failure.');
         await expect(page.locator('body')).not.toHaveAttribute('data-generating', 'true');
         await expect.poll(async () => page.evaluate(() => window.SillyTavern.getContext().streamingProcessor === null)).toBe(true);
+        const failedRequestCount = await page.evaluate(() => window.__emberdeskStreamingRequests.length);
+        expect(failedRequestCount).toBe(2);
     });
 
     test('keeps streaming stop and failure recovery reachable on mobile viewports', async ({ page }) => {
@@ -346,15 +546,17 @@ test.describe('chat message streaming', () => {
             });
             rowCountBeforeGeneration = await page.locator('#chat > .mes[mesid]').count();
             await startGeneration(page, `Start ${viewport.name} mobile provider failure proof.`);
-            await waitForGeneration(page, { allowAbort: true });
+            await waitForGeneration(page, { allowFailure: true });
 
             const failedRow = assistantRowForGeneration(page, rowCountBeforeGeneration);
-            await expect(failedRow.locator('.mes_text')).toContainText(`${viewport.name} failure recovery text.`);
+            await expect(failedRow.locator('.mes_text')).not.toContainText(`${viewport.name} failure recovery text.`);
             const retry = failedRow.getByRole('button', { name: 'Retry generation' });
             await expect(retry, `${viewport.name} retry`).toBeVisible();
             await retry.focus();
             await expect(retry, `${viewport.name} retry focus`).toBeFocused();
             await expectReachableControlGeometry(page, `#chat > .mes[mesid="${rowCountBeforeGeneration + 1}"] .generation_failure_retry`, `${viewport.name} retry`);
+            const failedRequestCount = await page.evaluate(() => window.__emberdeskStreamingRequests.length);
+            expect(failedRequestCount).toBe(2);
         }
     });
 });

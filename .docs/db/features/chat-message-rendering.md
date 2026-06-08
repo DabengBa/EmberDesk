@@ -2,7 +2,7 @@
 id: feature.chat_message_rendering
 type: feature
 name: Chat Message Rendering
-related: [page.chat_workspace, feature.chat_message_actions]
+related: [page.chat_workspace, feature.chat_message_actions, feature.chat_generation_auto_recovery]
 ---
 
 # Feature: Chat Message Rendering
@@ -22,7 +22,7 @@ This feature lets users reliably read an opened chat history as message rows wit
 - **Stored chat entry**: open an existing character chat from the workspace.
 - **Rendered message entry**: a finalized user or character message appears in the main chat region.
 - **Long chat entry**: open a chat whose history is longer than the active visible-message window.
-- **Generation failure entry**: a provider or streaming failure leaves a user message and, when partial assistant text exists, one readable assistant row in the main chat region.
+- **Generation failure entry**: a recoverable provider or streaming failure keeps the user message visible, preserves a single assistant row for the failed generation attempt, and lets the workspace recover before falling back to the manual retry CTA.
 
 ## Interaction IDs
 
@@ -46,9 +46,10 @@ This feature lets users reliably read an opened chat history as message rows wit
 - Stored user and character messages should render faithfully enough that the visible text matches the source message after normal browser whitespace handling.
 - Protected rendered-message selectors include `#chat > .mes`, `.mes_text`, `.mes[mesid]`, `.last_mes`, `is_user`, `is_system`, `.mes_reasoning_details`, `.mes_reasoning`, `.mes_media_wrapper`, `.mes_file_wrapper`, `.swipe_left`, and `.swipe_right`.
 - Long chats may render only the recent visible window on first load, but the user must retain an affordance to load older messages and, after doing so, a recovery entry to jump back to the latest message.
-- Provider or streaming failure must not remove the user message or duplicate an empty assistant row. If partial assistant text was rendered, it remains attached to a single stable `.mes[mesid]` row.
+- Recoverable provider or streaming failure must not remove the user message or duplicate assistant rows. If partial assistant text was rendered during an intermediate attempt, it is cleared before automatic recovery continues; only the final success or final failed state remains visible in the stable `.mes[mesid]` row.
 - Message-row actions belong to [Chat Message Actions](feature.chat_message_actions). This feature only requires that rendering keeps the row identity those actions attach to.
 - Streaming token timing, provider responses, slash-command semantics, and chat-file migrations are outside this feature boundary.
+- Automatic retry timing and fallback-provider selection belong to [Chat Generation Auto Recovery](feature.chat_generation_auto_recovery).
 
 ## ID Boundary Notes
 
@@ -58,5 +59,5 @@ This feature is separate from [Chat Message Actions](feature.chat_message_action
 
 - **Success**: stored or finalized messages appear as readable `.mes_text` inside stable `.mes[mesid]` rows.
 - **Long chat state**: the initial DOM stays bounded by the configured visible-message window, exposes the existing load-more entry, and shows jump-to-latest after older messages are loaded.
-- **Failure recovery state**: generation failure keeps existing message text readable and row identity stable so the composer or message-row recovery action can continue from the failed context.
+- **Failure recovery state**: generation failure keeps row identity stable through automatic retry, and only the final failed state exposes the manual retry action from the preserved assistant row.
 - **Compatibility state**: first-party modules and compatible extensions can keep locating rendered messages through the protected selectors.

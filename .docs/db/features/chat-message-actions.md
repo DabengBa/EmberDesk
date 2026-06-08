@@ -2,7 +2,7 @@
 id: feature.chat_message_actions
 type: feature
 name: Chat Message Actions
-related: [page.chat_workspace, feature.chat_message_rendering]
+related: [page.chat_workspace, feature.chat_message_rendering, feature.chat_generation_auto_recovery]
 ---
 
 # Feature: Chat Message Actions
@@ -24,7 +24,7 @@ This feature lets users operate on an existing chat message without leaving the 
 - **Swipe entry**: use the message swipe controls when a message has visible swipe state.
 - **Reasoning entry**: use reasoning controls when the message includes an editable or collapsible reasoning block.
 - **Media gallery entry**: use gallery swipe controls when a message contains swipeable media.
-- **Failure recovery entry**: use the retry action attached to a failed generation row when provider or streaming failure leaves recoverable output in the conversation.
+- **Failure recovery entry**: use the retry action attached to a failed generation row after automatic recovery has been exhausted.
 
 ## Interaction IDs
 
@@ -36,7 +36,7 @@ This feature lets users operate on an existing chat message without leaving the 
 - `feature.chat_message_actions.swipe`: navigate message swipes when swipe controls are visible.
 - `feature.chat_message_actions.reasoning`: copy, edit, remove, or collapse reasoning blocks when reasoning controls are visible.
 - `feature.chat_message_actions.media_gallery`: navigate swipeable media attached to a message.
-- `feature.chat_message_actions.failure_retry`: retry generation from a recoverable failed assistant row without resubmitting the already-rendered user message as a new row.
+- `feature.chat_message_actions.failure_retry`: retry generation from a recoverable failed assistant row after automatic recovery has been exhausted, without resubmitting the already-rendered user message as a new row.
 
 ## User Flow
 
@@ -66,6 +66,6 @@ This feature is separate from [Chat Workspace](page.chat_workspace) because mess
 
 - **Success**: the user can discover and use the available actions on a rendered message row.
 - **Priority state**: common actions remain quicker to reach than secondary or destructive actions, including on touch/mobile viewports.
-- **Failure retry state**: a failed generation row can expose a retry action and short recovery copy while preserving the message row and composer usability.
+- **Failure retry state**: a failed generation row can expose a retry action and short recovery copy after automatic recovery has exhausted its bounded attempts, while preserving the message row and composer usability.
 - **Hidden state**: actions that are not valid for the current message remain hidden or inactive according to the existing UI rules.
 - **Compatibility state**: message DOM selectors and event-facing surfaces remain stable for compatible code.

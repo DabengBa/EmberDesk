@@ -36,3 +36,4 @@ Delete or avoid adding briefs that are:
 | `260606-01-chat-message-affordance-proof.md` | Preserves the first successor-slice intent for the main chat workspace: establish message-row affordance and rendering contract proof before any message rendering or streaming refactor. |
 | `260606-02-chat-message-rendering-proof.md` | Preserves the second successor-slice intent for the main chat workspace: establish real app proof for stored non-streaming message rendering before changing rendering or streaming internals. |
 | `260607-01-main-chat-successor-spec-set.md` | Preserves the user-requested 10-spec successor sequence for main-chat workspace modernization after the roadmap freeze. |
+| `260608-09-main-chat-auto-retry-fallback-provider.md` | Preserves the user-approved change from local manual provider-failure recovery to a bounded automatic retry chain with a fallback OpenAI-compatible provider for main-chat visible generation only. |
