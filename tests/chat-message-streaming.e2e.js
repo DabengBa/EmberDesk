@@ -267,6 +267,7 @@ test.describe('chat message streaming', () => {
         await page.locator('#send_textarea').fill('Follow-up after provider failure.');
         await expect(page.locator('#send_textarea')).toHaveValue('Follow-up after provider failure.');
         await expect(page.locator('body')).not.toHaveAttribute('data-generating', 'true');
+        await expect.poll(async () => page.evaluate(() => window.SillyTavern.getContext().streamingProcessor === null)).toBe(true);
         await expect(page.locator(`#chat > .mes[mesid="${rowCountBeforeGeneration + 1}"]`)).toHaveCount(1);
 
         await installStreamingFetchStub(page, {
@@ -281,6 +282,33 @@ test.describe('chat message streaming', () => {
         await expect(page.locator('#chat > .mes[is_user="true"]').filter({ hasText: 'Start a deterministic provider failure proof.' })).toHaveCount(1);
         const retryRequestCount = await page.evaluate(() => window.__emberdeskStreamingRequests.length);
         expect(retryRequestCount).toBe(1);
+    });
+
+    test('provider failure before first token still restores retry recovery', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterByName(page, characterName);
+        await enableOpenAiStreaming(page);
+        await installStreamingFetchStub(page, {
+            chunks: [],
+            delayMs: 35,
+            failAfterChunks: true,
+        });
+
+        const rowCountBeforeGeneration = await page.locator('#chat > .mes[mesid]').count();
+        await startGeneration(page, 'Start a deterministic pre-token provider failure proof.');
+        await waitForGeneration(page);
+
+        const userRow = page.locator(`#chat > .mes[is_user="true"][mesid="${rowCountBeforeGeneration}"]`);
+        await expect(userRow.locator('.mes_text')).toContainText('Start a deterministic pre-token provider failure proof.');
+
+        const failedRow = assistantRowForGeneration(page, rowCountBeforeGeneration);
+        await expect(failedRow).toHaveCount(1);
+        await expect(failedRow.locator('.generation_failure_notice')).toContainText('Generation failed.');
+        await expect(failedRow.getByRole('button', { name: 'Retry generation' })).toBeVisible();
+        await page.locator('#send_textarea').fill('Follow-up after pre-token provider failure.');
+        await expect(page.locator('#send_textarea')).toHaveValue('Follow-up after pre-token provider failure.');
+        await expect(page.locator('body')).not.toHaveAttribute('data-generating', 'true');
+        await expect.poll(async () => page.evaluate(() => window.SillyTavern.getContext().streamingProcessor === null)).toBe(true);
     });
 
     test('keeps streaming stop and failure recovery reachable on mobile viewports', async ({ page }) => {

@@ -5879,6 +5879,8 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
                     'fromStream': { value: true },
                 });
             }
+
+            streamingProcessor = null;
         } else {
             return await sendGenerationRequest(type, generate_data, { jsonSchema });
         }
