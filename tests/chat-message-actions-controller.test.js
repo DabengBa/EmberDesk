@@ -119,6 +119,27 @@ async function importFreshControllerModule() {
 }
 
 describe('chat message actions controller', () => {
+    test('declares task-based action tiers for core, secondary, and danger actions', async () => {
+        const { MESSAGE_ACTION_TIERS } = await importFreshControllerModule();
+
+        expect(MESSAGE_ACTION_TIERS.highFrequency).toEqual(expect.arrayContaining([
+            'extraMesButtonsHint',
+            'mes_copy',
+            'mes_edit',
+        ]));
+        expect(MESSAGE_ACTION_TIERS.secondary).toEqual(expect.arrayContaining([
+            'mes_bookmark',
+            'mes_swipe_picker',
+            'mes_reasoning_copy',
+            'mes_gallery',
+        ]));
+        expect(MESSAGE_ACTION_TIERS.danger).toEqual(expect.arrayContaining([
+            'mes_edit_delete',
+            'mes_reasoning_delete',
+        ]));
+        expect(MESSAGE_ACTION_TIERS.danger).not.toEqual(expect.arrayContaining(['mes_copy', 'mes_edit']));
+    });
+
     test('opens the delegated extra message actions menu', async () => {
         const { createChatMessageActionsController } = await importFreshControllerModule();
         const { root, hint, buttons } = createMessageActionsRoot();

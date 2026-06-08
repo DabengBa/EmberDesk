@@ -28,7 +28,9 @@ When a user opens the main chat workspace, they should quickly recover context a
 - navigate long chats without losing reading position
 - discover common message actions by pointer, keyboard, and touch
 
-This scope treats competitive trends as UX pressure, not as automatic feature commitments. ChatGPT Projects, ChatGPT Canvas, Claude Artifacts, Gemini Deep Research, Open WebUI, and Msty all point toward persistent context, adjacent workspaces, transparent process, and accessible tool/knowledge entry points. EmberDesk should absorb those as small, testable improvements before considering larger ADR-level changes.
+This scope treats competitive trends as UX pressure, not as automatic feature commitments. ChatGPT Projects, ChatGPT Canvas, ChatGPT rich in-chat writing/code blocks, Claude Artifacts, Claude Research, Gemini Deep Research, Open WebUI, Msty, and Perplexity Spaces all point toward persistent context, editable work outputs, transparent process, source-aware work, visible tool use, local ownership, and accessible tool/knowledge entry points. EmberDesk should absorb those as small, testable improvements before considering larger ADR-level changes.
+
+Current UX correction advice is recorded in `.docs/tech/main-chat-ux-trend-recommendations.md`. Treat that note as the next design pressure map for main-chat successor proposals: recovery, orientation, touch reachability, action clarity, context/tool scope disclosure, and source/tool usage evidence first; project memory, side workspaces, rich work blocks, knowledge/RAG, source-aware research, tools, MCP, code execution, and automations only through ADR-backed design.
 
 ## Current Successor Sequence
 
@@ -89,6 +91,19 @@ Any planned change to these surfaces needs focused compatibility proof and, when
 | Interaction performance evidence | `bun run --cwd tests test:unit -- interaction-performance-report.test.js --runInBand` plus the relevant runner scenario |
 | Streaming proof | a local deterministic streaming E2E or a documented blocker if no honest local streaming hook exists |
 
+## Successor Gate Classification Matrix
+
+Use this gate before turning a main-chat follow-up idea into implementation work:
+
+| Proposal Class | Route | Examples | Minimum Proof |
+|---|---|---|---|
+| Small spec | `.docs/specs/.../spec.md` with focused delivery | provider-error retry copy, jump-to-latest, mobile reachability proof, message action priority, pure helper extraction | Focused unit or E2E for the touched behavior, plus the validation row for the touched surface. |
+| Compatibility-hardening spec | `.docs/specs/.../spec.md` with explicit protected-surface proof | selector role/name hardening, extension import compatibility, message-row identity proof, `/lib.js` behavior proof | `bun run test:compat` plus focused structure/shared-library tests and semantic docs only when user-visible behavior changes. |
+| ADR-required | numbered `.docs/adr/` decision before implementation, or a successor proposal that explicitly leads to ADR | project memory, artifact/canvas side workspace, rich in-chat work block, RAG/knowledge stack, source-aware research mode, tool execution, MCP, code execution, scheduled automations, provider protocol rewrite, framework migration, `/lib.js` replacement, database-first canonical storage | ADR must cover data ownership, migration/recovery, extension compatibility, validation gates, security boundaries, pre-send scope disclosure, post-response usage evidence, and user-visible recovery behavior. |
+| Out of scope for main-chat successor | Do not implement in this workstream without a separate roadmap or product decision | SPA migration, TypeScript application migration, multi-user permissions, scheduled automations, canonical storage replacement, broad endpoint splits unrelated to main chat | No implementation. Preserve the frozen roadmap and open a separate design only after explicit approval. |
+
+Trend references are evidence for UX pressure, not approvals. If a proposal changes storage, security, provider protocol, framework boundary, extension compatibility, or user data ownership, route it as ADR-required even when the visible UI looks small.
+
 ## UX Evidence Fields
 
 Baseline and closure records should distinguish direct proof from narrative-only evidence for:
@@ -117,6 +132,41 @@ Future UX slices should consider:
 - context summary support that helps users re-enter very long chats without rendering or rereading the full history
 
 These remain successor candidates until approved by a separate spec or ADR-backed design.
+
+## Trend-Gated Successor Categories
+
+The following trend-inspired categories are not ordinary UI cleanup. They require a separate successor proposal or ADR before implementation:
+
+- project-scoped memory or workspace context
+- artifact/canvas side workspaces or rich in-chat work blocks
+- deep-research style long-running tasks, plans, reports, or source selection
+- knowledge/RAG stacks, chunk visualization, query tuning, retrieval/source transparency, or document sync
+- tool execution, OpenAPI/MCP tool binding, code execution, automations, or scheduled prompts
+- multi-user channels, permissions, sharing, or access control
+
+For each category, the design must state data ownership, user-visible context scope, pre-send scope disclosure, post-response source/tool evidence, recovery behavior, extension compatibility, validation gates, security boundaries, and whether canonical user data remains file-backed.
+
+## Post-Recovery UX Directions
+
+The 2026-06-08 recovery hardening pass delivered provider-failure retry, jump-to-latest, touch/action proof, row/control helpers, and the first ADR gate matrix. The next user-experience proposals should not restart with visual restyling. They should focus on trust surfaces that prepare EmberDesk for larger workspace capabilities:
+
+1. Context and tool scope disclosure.
+   - Show the active chat, files, memory, World Info, web, RAG, MCP, code, and automation scope before send.
+   - Keep the surface compact enough for the dense main-chat shell.
+
+2. Source and tool usage audit.
+   - Show which sources or tools were used, skipped, or failed after a response.
+   - Include retry or repair affordances when the failure is recoverable.
+
+3. Long-chat orientation beyond jump-to-latest.
+   - Search, jump-to-message, visible range, and summaries remain candidates, but must preserve `chat` order, `.mes[mesid]`, row identity, and extension selectors.
+
+4. Artifact/canvas or rich work-block ADR.
+   - Do not implement until versioning, export, sandboxing, mobile behavior, extension impact, and recovery after partial output are designed.
+   - Evaluate whether the work should live beside the transcript or inside stable rendered message rows before touching message rendering.
+
+5. Local ownership and backup affordances.
+   - Any durable memory, project, automation, or artifact proposal must define export, backup, missing-file recovery, and diagnostic path behavior.
 
 ## Closure Checkpoint: 2026-06-08
 
@@ -159,16 +209,22 @@ These are not part of the 10-spec sequence unless a later ADR or successor propo
 ## External Trend References
 
 - ChatGPT Projects: https://help.openai.com/en/articles/10169521-using-projects-in-chatgpt
-- ChatGPT Canvas: https://help.openai.com/en/articles/9930697-what-is-the-canvas-featue-in-chatgpt
+- ChatGPT Canvas: https://openai.com/index/introducing-canvas/
+- ChatGPT Release Notes: https://help.openai.com/en/articles/6825453-chatgpt-release-notes
 - Claude Artifacts: https://support.anthropic.com/en/articles/9487310-what-are-artifacts-and-how-do-i-use-them
-- Gemini Deep Research: https://gemini.google/overview/deep-research/
+- Claude Projects: https://support.anthropic.com/en/articles/9517075-what-are-projects
+- Claude Research: https://support.anthropic.com/en/articles/11088861-using-research-on-claude-ai
+- Gemini Deep Research: https://support.google.com/gemini/answer/15719111
 - Open WebUI features: https://docs.openwebui.com/features
 - Open WebUI tools: https://docs.openwebui.com/features/extensibility/plugin/tools/
-- Msty Knowledge Stacks: https://docs.msty.ai/studio/knowledge-stacks/overview
+- Open WebUI Agentic Search: https://docs.openwebui.com/features/chat-conversations/web-search/agentic-search/
+- Msty Studio: https://docs.msty.ai/studio/
+- Msty Claw: https://docs.msty.ai/claw/overview
 
 ## Related Local References
 
 - `.docs/tech/modernization-roadmap.md`
+- `.docs/tech/main-chat-ux-trend-recommendations.md`
 - `.docs/tech/briefs/260607-01-main-chat-successor-spec-set.md`
 - `.docs/tech/briefs/260606-01-chat-message-affordance-proof.md`
 - `.docs/tech/briefs/260606-02-chat-message-rendering-proof.md`

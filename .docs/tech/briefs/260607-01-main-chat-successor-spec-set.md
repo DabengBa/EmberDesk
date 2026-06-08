@@ -55,9 +55,9 @@ Date: 2026-06-07
 ## External References
 
 - ChatGPT Projects: https://help.openai.com/en/articles/10169521-using-projects-in-chatgpt
-- ChatGPT Canvas: https://help.openai.com/en/articles/9930697-what-is-the-canvas-featue-in-chatgpt
+- ChatGPT Canvas: https://openai.com/index/introducing-canvas/
 - Claude Artifacts: https://support.anthropic.com/en/articles/9487310-what-are-artifacts-and-how-do-i-use-them
-- Gemini Deep Research: https://gemini.google/overview/deep-research/
+- Gemini Deep Research: https://support.google.com/gemini/answer/15719111
 - Open WebUI features: https://docs.openwebui.com/features
 - Open WebUI tools: https://docs.openwebui.com/features/extensibility/plugin/tools/
 - Msty Knowledge Stacks: https://docs.msty.ai/studio/knowledge-stacks/overview

@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('chat message layout', () => {
-    test('centers message boxes without centering message text', async ({ page }) => {
+    async function loadStaticChatLayout(page) {
         await page.goto('/style.css');
         await page.setContent(`
             <!doctype html>
@@ -32,9 +32,19 @@ test.describe('chat message layout', () => {
                             <div class="swipe_right fa-solid fa-chevron-right" role="button" aria-label="Next swipe" tabindex="0"></div>
                         </article>
                     </main>
+                    <form id="send_form">
+                        <textarea id="send_textarea" aria-label="Send a message"></textarea>
+                        <button id="send_but" type="button" aria-label="Send message">Send</button>
+                        <button id="mes_stop" class="mes_stop" type="button" aria-label="Abort request">Stop</button>
+                        <button id="mes_continue" type="button" aria-label="Continue last message">Continue</button>
+                    </form>
                 </body>
             </html>
         `);
+    }
+
+    test('centers message boxes without centering message text', async ({ page }) => {
+        await loadStaticChatLayout(page);
 
         const chat = page.locator('#chat');
         const messageBlock = chat.locator('.mes .mes_block').first();
@@ -75,4 +85,61 @@ test.describe('chat message layout', () => {
         await expect(page.getByRole('button', { name: 'Previous swipe' })).toBeVisible();
         await expect(page.getByRole('button', { name: 'Next swipe' })).toBeVisible();
     });
+
+    for (const viewport of [
+        { name: 'narrow phone', width: 390, height: 844 },
+        { name: 'wide mobile', width: 768, height: 1024 },
+    ]) {
+        test(`keeps core chat controls reachable on a ${viewport.name} viewport`, async ({ page }) => {
+            await page.setViewportSize({ width: viewport.width, height: viewport.height });
+            await loadStaticChatLayout(page);
+
+            await expect(page.getByRole('textbox', { name: 'Send a message' })).toBeVisible();
+            await expect(page.getByRole('button', { name: 'Send message' })).toBeVisible();
+            await expect(page.getByRole('button', { name: 'Continue last message' })).toBeVisible();
+
+            const messageActions = page.getByRole('button', { name: 'Message Actions' });
+            await expect(messageActions).toBeVisible();
+            await messageActions.focus();
+            await expect(messageActions).toBeFocused();
+
+            await page.locator('body').evaluate(element => element.classList.add('expandMessageActions'));
+            await expect(page.getByRole('button', { name: 'Copy' })).toBeVisible();
+            await expect(page.getByRole('button', { name: 'Edit' })).toBeVisible();
+            await expect(page.getByRole('button', { name: 'Open checkpoint chat' })).toBeVisible();
+            await expect(page.getByRole('button', { name: 'Previous swipe' })).toBeVisible();
+            await expect(page.getByRole('button', { name: 'Next swipe' })).toBeVisible();
+
+            const geometry = await page.evaluate(() => {
+                const text = document.querySelector('.mes_text');
+                const buttons = document.querySelector('.mes_buttons');
+                const form = document.querySelector('#send_form');
+
+                if (!text || !buttons || !form) {
+                    return null;
+                }
+
+                const textRect = text.getBoundingClientRect();
+                const buttonsRect = buttons.getBoundingClientRect();
+                const formRect = form.getBoundingClientRect();
+                const overlapsText = buttonsRect.left < textRect.right
+                    && buttonsRect.right > textRect.left
+                    && buttonsRect.top < textRect.bottom
+                    && buttonsRect.bottom > textRect.top;
+
+                return {
+                    bodyScrollWidth: document.documentElement.scrollWidth,
+                    viewportWidth: window.innerWidth,
+                    overlapsText,
+                    textBottom: textRect.bottom,
+                    formTop: formRect.top,
+                };
+            });
+
+            expect(geometry).not.toBeNull();
+            expect(geometry.bodyScrollWidth).toBeLessThanOrEqual(geometry.viewportWidth + 1);
+            expect(geometry.overlapsText).toBe(false);
+            expect(geometry.textBottom).toBeLessThan(geometry.formTop);
+        });
+    }
 });

@@ -218,7 +218,8 @@ import { initInputMarkdown } from './scripts/input-md-formatting.js';
 import { AbortReason } from './scripts/util/AbortReason.js';
 import { initSystemPrompts } from './scripts/sysprompt.js';
 import { registerExtensionSlashCommands as initExtensionSlashCommands } from './scripts/extensions-slashcommands.js';
-import { buildChatMessageRenderDescriptor } from './scripts/chat-message-render-descriptor.js';
+import { buildChatMessageRenderDescriptor, buildChatMessageRowPopulation } from './scripts/chat-message-render-descriptor.js';
+import { getStreamingControlState } from './scripts/chat-streaming-control-state.js';
 import { createChatMessageActionsController } from './scripts/chat-message-actions-controller.js';
 import { ToolManager } from './scripts/tool-calling.js';
 import { addShowdownPatch } from './scripts/util/showdown-patch.js';
@@ -2002,6 +2003,7 @@ export async function showMoreMessages(messagesToLoad = null) {
     }
 
     console.debug('Inserting messages before', messageId, 'count', count, 'chat length', chat.length);
+    ensureJumpToLatestButton();
     const prevHeight = chatElement.prop('scrollHeight');
     const showMoreButton = $('#show_more_messages');
     const isButtonInView = isElementInViewport(showMoreButton[0]);
@@ -2034,6 +2036,42 @@ export async function showMoreMessages(messagesToLoad = null) {
     await eventSource.emit(event_types.MORE_MESSAGES_LOADED);
 }
 
+function ensureJumpToLatestButton() {
+    if (chatElement.find('#jump_to_latest_message').length) {
+        return;
+    }
+
+    const button = $('<button id="jump_to_latest_message" class="menu_button" type="button" data-i18n="[title]Jump to latest message;[aria-label]Jump to latest message;Jump to latest" title="Jump to latest message" aria-label="Jump to latest message">Jump to latest</button>');
+    chatElement.append(button);
+}
+
+function removeJumpToLatestButton() {
+    chatElement.find('#jump_to_latest_message').remove();
+}
+
+function jumpToLatestMessage() {
+    const latestMessage = chatElement.find('.mes[mesid]').last();
+
+    if (!latestMessage.length) {
+        return;
+    }
+
+    latestMessage[0].scrollIntoView({ block: 'nearest' });
+}
+
+function showGenerationFailureRecovery(messageId) {
+    const messageElement = chatElement.find(`.mes[mesid="${messageId}"]`);
+
+    if (!messageElement.length || messageElement.find('.generation_failure_retry').length) {
+        return;
+    }
+
+    const notice = $('<div class="generation_failure_notice" role="status" data-i18n="Generation failed. You can retry this response or keep chatting.">Generation failed. You can retry this response or keep chatting.</div>');
+    const retryButton = $('<div class="mes_button generation_failure_retry fa-solid fa-rotate-right" role="button" tabindex="0" title="Retry generation" aria-label="Retry generation" data-i18n="[title]Retry generation;[aria-label]Retry generation"></div>');
+    messageElement.find('.mes_text').after(notice);
+    messageElement.find('.mes_buttons').append(retryButton);
+}
+
 export async function printMessages() {
     let startIndex = 0;
     let count = power_user.chat_truncation || Number.MAX_SAFE_INTEGER;
@@ -2044,6 +2082,7 @@ export async function printMessages() {
     }
 
     await redisplayChat({ startIndex, fade: false });
+    removeJumpToLatestButton();
 
     scrollChatToBottom({ waitForFrame: true });
     delay(debounce_timeout.short).then(() => scrollOnMediaLoad());
@@ -3143,21 +3182,27 @@ export function updateMessageElement(mes, { messageId = chat.length - 1, message
     const momentDate = timestampToMoment(mes.send_date);
     const timestamp = momentDate.isValid() ? momentDate.format('LL LT') : '';
     const renderDescriptor = buildChatMessageRenderDescriptor(mes, { messageId, timestamp });
+    const timestampTitle = `${mes.extra?.api ? mes.extra.api + ' - ' : ''}${mes.extra?.model ?? ''}`;
     const messageHTML = getMessageTextHTML(mes, { messageId });
-    const bookmarkLink = renderDescriptor.display.bookmarkLink;
-    const tokenCount = renderDescriptor.display.tokenCount;
     const { timerValue, timerTitle } = formatGenerationTimer(mes.gen_started, mes.gen_finished, mes.extra?.token_count, mes.extra?.reasoning_duration, mes.extra?.time_to_first_token);
+    const rowPopulation = buildChatMessageRowPopulation(renderDescriptor, {
+        avatarImg,
+        messageTitle: mes.title,
+        timestampTitle,
+        timerValue,
+        timerTitle,
+    });
 
-    messageElement.attr(renderDescriptor.attributes);
+    messageElement.attr(rowPopulation.attributes);
 
-    messageElement.find('.avatar img').attr('src', avatarImg);
-    messageElement.find('.ch_name .name_text').text(renderDescriptor.display.name);
-    messageElement.find('.timestamp').text(renderDescriptor.display.timestamp).attr('title', `${mes.extra?.api ? mes.extra.api + ' - ' : ''}${mes.extra?.model ?? ''}`);
-    messageElement.find('.mesIDDisplay').text(`#${messageId}`);
-    tokenCount && messageElement.find('.tokenCounterDisplay').text(`${tokenCount}t`);
-    mes.title && messageElement.attr('title', mes.title);
-    timerValue && messageElement.find('.mes_timer').attr('title', timerTitle).text(timerValue);
-    bookmarkLink && updateBookmarkDisplay(messageElement);
+    messageElement.find('.avatar img').attr('src', rowPopulation.avatarSrc);
+    messageElement.find('.ch_name .name_text').text(rowPopulation.displayName);
+    messageElement.find('.timestamp').text(rowPopulation.timestampText).attr('title', rowPopulation.timestampTitle);
+    messageElement.find('.mesIDDisplay').text(rowPopulation.messageIdText);
+    rowPopulation.tokenCountText && messageElement.find('.tokenCounterDisplay').text(rowPopulation.tokenCountText);
+    rowPopulation.messageTitle && messageElement.attr('title', rowPopulation.messageTitle);
+    rowPopulation.timer.value && messageElement.find('.mes_timer').attr('title', rowPopulation.timer.title).text(rowPopulation.timer.value);
+    rowPopulation.bookmarkLink && updateBookmarkDisplay(messageElement);
 
     if (mes.extra?.bias !== '') {
         const bias = messageFormatting(mes.extra?.bias, '', false, false, -1, {}, false);
@@ -3170,11 +3215,11 @@ export function updateMessageElement(mes, { messageId = chat.length - 1, message
         insertSVGIcon(messageElement, mes.extra);
     }
 
-    if (renderDescriptor.classes.smallSysMes) {
+    if (rowPopulation.classes.smallSysMes) {
         messageElement.addClass('smallSysMes');
     }
 
-    if (renderDescriptor.classes.toolCall) {
+    if (rowPopulation.classes.toolCall) {
         messageElement.addClass('toolCall');
     }
 
@@ -4307,11 +4352,16 @@ class StreamingProcessor {
         playMessageSound();
     }
 
-    onErrorStreaming() {
+    async onErrorStreaming() {
         this.abortController.abort();
         this.isStopped = true;
 
+        if (this.messageId !== -1 && this.result) {
+            await this.onProgressStreaming(this.messageId, this.continueMessage + this.result, true);
+        }
+
         this.markUIGenStopped();
+        showGenerationFailureRecovery(this.messageId);
 
         const noEmitTypes = ['swipe', 'impersonate', 'continue'];
         if (!noEmitTypes.includes(this.type)) {
@@ -4391,7 +4441,7 @@ class StreamingProcessor {
             // in the case of a self-inflicted abort, we have already cleaned up
             if (!this.isFinished) {
                 console.error(err);
-                this.onErrorStreaming();
+                await this.onErrorStreaming();
             }
             return this.result;
         }
@@ -7309,18 +7359,30 @@ export function getGeneratingModel(mes) {
  */
 export function activateSendButtons() {
     is_send_press = false;
-    hideStopButton();
+    applyGenerationControlState(getStreamingControlState({ isFinished: true }));
     showSwipeButtons();
-    delete document.body.dataset.generating;
 }
 
 /**
  * A function mainly used to switch 'generating' state - setting it to true and deactivating the buttons
  */
 export function deactivateSendButtons() {
-    showStopButton();
+    applyGenerationControlState(getStreamingControlState({ isGenerating: true, hasStreamingProcessor: Boolean(streamingProcessor) }));
     hideSwipeButtons();
-    document.body.dataset.generating = 'true';
+}
+
+function applyGenerationControlState(controlState) {
+    if (controlState.stopVisible) {
+        showStopButton();
+    } else {
+        hideStopButton();
+    }
+
+    if (controlState.state === 'streaming') {
+        document.body.dataset.generating = 'true';
+    } else {
+        delete document.body.dataset.generating;
+    }
 }
 
 export function resetChatState() {
@@ -11645,6 +11707,14 @@ jQuery(async function () {
     //limit swiping to only last message clicks
     $(document).on('click', '.last_mes .swipe_right', async (e, data) => await swipe(e, SWIPE_DIRECTION.RIGHT, data));
     $(document).on('click', '.last_mes .swipe_left', async (e, data) => await swipe(e, SWIPE_DIRECTION.LEFT, data));
+    $(document).on('click', '#jump_to_latest_message', () => jumpToLatestMessage());
+    $(document).on('click keydown', '.generation_failure_retry', function (event) {
+        if (event.type === 'keydown' && !['Enter', ' '].includes(event.key)) {
+            return;
+        }
+        event.preventDefault();
+        $('#option_regenerate').trigger('click');
+    });
 
     initCharacterSearch();
 

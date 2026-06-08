@@ -64,6 +64,9 @@ This page exists so a user can run their daily LLM workflow from one browser sur
 - **World Info panel state**: the World Info drawer keeps global activation controls separate from the editor selector; empty global selection and editor selection states must not leave stale entry content visible.
 - **Shared-library state**: the workspace loads a shared browser library during startup so first-party modules and compatible extensions can use documented imports and legacy globals without each surface bundling its own copy.
 - **Message rendering state**: stored or finalized messages render into stable `.mes[mesid]` rows with readable `.mes_text`, while message-row actions remain attached to the rendered row.
+- **Generation failure recovery state**: when generation fails after a user message or partial assistant output, the workspace keeps the existing rows readable, restores composer input, and exposes a local recovery action instead of requiring a refresh.
+- **Long-chat recovery state**: after the user loads older messages from a bounded long-chat window, the workspace exposes a jump-to-latest entry so the user can return to the latest rendered message without deleting loaded history or changing message IDs.
+- **Mobile reachability state**: core composer controls, message actions, long-chat recovery, and generation stop or retry controls should remain visible or keyboard/role reachable on narrow phone and wider mobile/tablet viewports without relying on hover-only discovery.
 
 ## Navigation
 

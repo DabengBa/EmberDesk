@@ -63,6 +63,46 @@ export function buildChatMessageRenderDescriptor(message, { messageId, timestamp
     };
 }
 
+/**
+ * Builds deterministic row metadata population decisions for a rendered message.
+ * Message body HTML, formatter output, lifecycle events, and media rendering stay outside this helper.
+ *
+ * @param {object} descriptor Result from buildChatMessageRenderDescriptor
+ * @param {object} options Population options
+ * @param {string} options.avatarImg Resolved avatar image URL
+ * @param {string} [options.messageTitle=''] Optional row title
+ * @param {string} [options.timestampTitle=''] Timestamp hover title
+ * @param {string} [options.timerValue=''] Generation timer text
+ * @param {string} [options.timerTitle=''] Generation timer title
+ * @returns {object} Stable row metadata population decisions
+ */
+export function buildChatMessageRowPopulation(descriptor, {
+    avatarImg,
+    messageTitle = '',
+    timestampTitle = '',
+    timerValue = '',
+    timerTitle = '',
+} = {}) {
+    const tokenCount = descriptor.display.tokenCount;
+
+    return {
+        attributes: descriptor.attributes,
+        avatarSrc: avatarImg,
+        displayName: descriptor.display.name,
+        timestampText: descriptor.display.timestamp,
+        timestampTitle,
+        messageIdText: `#${descriptor.messageId}`,
+        tokenCountText: tokenCount ? `${tokenCount}t` : '',
+        messageTitle,
+        timer: {
+            value: timerValue || '',
+            title: timerTitle || '',
+        },
+        bookmarkLink: descriptor.display.bookmarkLink,
+        classes: descriptor.classes,
+    };
+}
+
 function getMessageRole({ isUser, isSystem }) {
     if (isUser) {
         return 'user';

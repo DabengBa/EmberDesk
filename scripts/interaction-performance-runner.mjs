@@ -985,6 +985,7 @@ async function invokeMainChatScenario(page, scenarioName, avatar, profileName) {
             messageCount: Array.isArray(context.chat) ? context.chat.length : 0,
             ...rowStats(),
             localEchoPresent: false,
+            firstTokenPresent: false,
             finalTextPresent: false,
             stopRestoredUsable: false,
             loadMoreBeforeMesid: 0,
@@ -1125,7 +1126,7 @@ async function invokeMainChatScenario(page, scenarioName, avatar, profileName) {
             await openMainChat();
             const startedAt = performance.now();
             const message = await script.sendMessageAsUser(`Perf local echo ${Date.now()}.`, '', null, false);
-            await waitForCondition(() => {
+            const localEcho = await waitForCondition(() => {
                 const lastRow = document.querySelector('#chat > .mes[is_user="true"][mesid]:last-of-type .mes_text');
                 return lastRow?.textContent?.includes(message.mes) ? lastRow : null;
             }, 5000);
@@ -1137,7 +1138,7 @@ async function invokeMainChatScenario(page, scenarioName, avatar, profileName) {
                 path: null,
                 serverTiming: null,
                 payload: basePayload(characterName, {
-                    localEchoPresent: true,
+                    localEchoPresent: Boolean(localEcho),
                     metrics: { sendToLocalEchoMs },
                 }),
             };
@@ -1149,7 +1150,7 @@ async function invokeMainChatScenario(page, scenarioName, avatar, profileName) {
             enableOpenAiStreaming();
             const startedAt = performance.now();
             const generation = startGeneration('Measure first streamed token.');
-            await waitForCondition(() => {
+            const firstTokenElement = await waitForCondition(() => {
                 return Array.from(document.querySelectorAll('#chat > .mes[is_user="false"][is_system="false"][mesid] .mes_text'))
                     .find(element => element.textContent.includes('Perf streamed')) ?? null;
             }, 10000);
@@ -1162,6 +1163,7 @@ async function invokeMainChatScenario(page, scenarioName, avatar, profileName) {
                 path: null,
                 serverTiming: null,
                 payload: basePayload(characterName, {
+                    firstTokenPresent: Boolean(firstTokenElement),
                     finalTextPresent: document.querySelector('#chat')?.textContent?.includes('Perf streamed final.') ?? false,
                     metrics: { firstTokenMs },
                 }),
@@ -1188,15 +1190,16 @@ async function invokeMainChatScenario(page, scenarioName, avatar, profileName) {
                 throw new Error('Timed out waiting for generating state to clear after stop.');
             }
             const textarea = document.querySelector('#send_textarea');
-            textarea.disabled = false;
-            textarea.value = 'Perf follow-up after stop.';
-            textarea.dispatchEvent(new Event('input', { bubbles: true }));
-            textarea.focus();
-            await nextFrame();
-            const streamStopToUsableMs = performance.now() - stopStartedAt;
             const composerUsable = textarea instanceof HTMLTextAreaElement
                 && textarea.disabled === false
                 && document.body.getAttribute('data-generating') !== 'true';
+            if (composerUsable) {
+                textarea.value = 'Perf follow-up after stop.';
+                textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                textarea.focus();
+            }
+            await nextFrame();
+            const streamStopToUsableMs = performance.now() - stopStartedAt;
 
             return {
                 browserMs: streamStopToUsableMs,
@@ -1383,6 +1386,10 @@ function collectMainChatWarnings(existingWarnings, scenarioName, variant, sample
 
     if (scenarioName === 'main_chat_send_local_echo' && !payload.localEchoPresent) {
         warnings.push(`[${scenarioName}] ${variant}: local echo message did not render`);
+    }
+
+    if (scenarioName === 'main_chat_stream_first_token' && !payload.firstTokenPresent) {
+        warnings.push(`[${scenarioName}] ${variant}: first streamed token did not render`);
     }
 
     if (scenarioName === 'main_chat_stream_first_token' && typeof payload.metrics?.firstTokenMs !== 'number') {

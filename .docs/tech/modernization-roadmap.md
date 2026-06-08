@@ -16,7 +16,7 @@ Closure evidence:
 - User intent and delivery traceability are recorded in `.docs/tech/briefs/260605-02-character-route-service-extraction.md` through `.docs/tech/briefs/260605-11-roadmap-freeze-successor-decision.md`.
 - Node.js 26.3.0 release validation passed for root/tests lint, compatibility, semantic docs, shared library, character route/index, Express route order, startup/config, user/auth/login/setup, and full unit suite.
 - Documentation topology closure passed `bun run docs:check` without changing `.docs/db` user-visible semantics.
-- Post-freeze successor evidence is recorded outside this roadmap in `.docs/PROJECT_HISTORY.md`, successor briefs, semantic docs, and owning compatibility docs.
+- Post-freeze successor evidence is recorded outside this roadmap in `.docs/PROJECT_HISTORY.md`, successor briefs, semantic docs, and owning compatibility docs. The main-chat successor proof set closed on 2026-06-08 and is owned by `.docs/tech/main-chat-successor-scope.md`, `.docs/tech/main-chat-baseline-validation.md`, `.docs/tech/main-chat-rendering-call-chain.md`, and `.docs/tech/main-chat-performance-evidence.md`.
 
 ## Goals
 
@@ -262,7 +262,7 @@ Phase 1 result:
 ## Known Execution Gaps
 
 - Node.js 26.3.0 release validation proof now exists for the current modernization surfaces: root lint, tests lint, compatibility, semantic docs check, shared browser library, character route/index, Express route order, startup/config, user/auth/login/setup, and the full unit suite.
-- Full Playwright E2E remains conditional. The 2026-06-05 release validation sweep skipped Playwright because the validation scope changed no visible browser behavior. 2026-06-06 focused browser follow-ups validated the character-library entry affordance and chat send-form/options affordance through role/name locators after UX walkthroughs found those primary controls too hard to discover; continue running affected E2E or focused browser checks when a later slice changes a primary browser flow, page structure, CTA sequencing, or visible UI behavior.
+- Full Playwright E2E remains conditional. The 2026-06-05 release validation sweep skipped Playwright because the validation scope changed no visible browser behavior. Later focused browser follow-ups validated character-library entry affordance, chat send-form/options affordance, stored-message rendering, deterministic streaming, long-chat load-more stability, and message action discoverability through targeted E2E or runner proof. Continue running affected E2E or focused browser checks when a later slice changes a primary browser flow, page structure, CTA sequencing, or visible UI behavior.
 - Startup and interaction performance runners remain required before claiming latency wins.
 - Vendored third-party extension artifacts are intentionally excluded from whole-repo lint; do not auto-format or refactor them as first-party source.
 
@@ -296,8 +296,8 @@ No implementation slice remains in this roadmap. New work should start from a su
 
 Successor entry points:
 
-- Main chat workspace, message rendering, and streaming slices need their own design plus browser proof because they are primary user flows and extension surfaces.
-- The 2026-06-06 successor records for chat message affordance/rendering and character-library entry affordance are evidence pointers for future proposals, not reopened roadmap steps.
+- Main chat workspace, message rendering, and streaming follow-ups should start from the archived 2026-06-08 successor scope and proof set, not from this frozen roadmap. Future changes still need their own approved spec or ADR-backed design when they alter rendering, streaming, action behavior, compatibility surfaces, framework boundaries, or storage.
+- The 2026-06-06 and 2026-06-08 successor records for chat message affordance/rendering, streaming proof, long-chat proof, performance evidence, and character-library entry affordance are evidence pointers for future proposals, not reopened roadmap steps.
 - SPA framework or TypeScript application migration needs explicit user approval, ADR coverage, compatibility plan, and staged migration proof.
 - Database-first canonical storage remains outside this roadmap. Any future proposal must preserve migration/recovery paths and prove why file-backed canonical data is no longer the right source of truth.
 - Broad endpoint splits, Electron lifecycle migration, dependency/runtime churn, and `/lib.js` replacement each need dedicated designs with focused validation.

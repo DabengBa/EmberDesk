@@ -156,4 +156,52 @@ describe('chat message render descriptor', () => {
         expect(JSON.stringify(descriptor)).not.toContain('loading');
         expect(JSON.stringify(descriptor)).not.toContain('retry');
     });
+
+    test('builds deterministic row population decisions without message body HTML', async () => {
+        const {
+            buildChatMessageRenderDescriptor,
+            buildChatMessageRowPopulation,
+        } = await importFreshDescriptorModule();
+
+        const descriptor = buildChatMessageRenderDescriptor(createMessage({
+            name: 'Ember',
+            title: 'Pinned response',
+            extra: {
+                api: 'openai',
+                model: 'gpt-4o-mini',
+                token_count: 17,
+                bookmark_link: 'checkpoint',
+            },
+        }), {
+            messageId: 8,
+            timestamp: 'June 8, 2026 8:00 AM',
+        });
+
+        const population = buildChatMessageRowPopulation(descriptor, {
+            avatarImg: '/thumbnail?type=avatar&file=ember.png',
+            messageTitle: 'Pinned response',
+            timestampTitle: 'openai - gpt-4o-mini',
+            timerValue: '1.2s',
+            timerTitle: 'Generation queued',
+        });
+
+        expect(population).toEqual({
+            attributes: descriptor.attributes,
+            avatarSrc: '/thumbnail?type=avatar&file=ember.png',
+            displayName: 'Ember',
+            timestampText: 'June 8, 2026 8:00 AM',
+            timestampTitle: 'openai - gpt-4o-mini',
+            messageIdText: '#8',
+            tokenCountText: '17t',
+            messageTitle: 'Pinned response',
+            timer: {
+                value: '1.2s',
+                title: 'Generation queued',
+            },
+            bookmarkLink: 'checkpoint',
+            classes: descriptor.classes,
+        });
+        expect(JSON.stringify(population)).not.toContain('mes_text');
+        expect(JSON.stringify(population)).not.toContain('<p>');
+    });
 });

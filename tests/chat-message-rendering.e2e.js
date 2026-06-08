@@ -16,9 +16,15 @@ const characterName = 'Dev Character 001';
 const chatFolder = 'dev-character-001';
 const seededChatName = 'Dev Character 001 Session 01';
 const longChatName = 'Dev Character 001 Long Rendering Proof';
+const mobileLongChatName = 'Dev Character 001 Mobile Long Rendering Proof';
 const seededChatPath = path.join(userRoot, 'chats', chatFolder, `${seededChatName}.jsonl`);
 const longChatPath = path.join(userRoot, 'chats', chatFolder, `${longChatName}.jsonl`);
+const mobileLongChatPath = path.join(userRoot, 'chats', chatFolder, `${mobileLongChatName}.jsonl`);
 const longChatLimit = 25;
+const mobileViewports = [
+    { name: 'narrow phone', width: 390, height: 844 },
+    { name: 'wide mobile', width: 768, height: 1024 },
+];
 
 function normalizeMessageText(value) {
     return String(value ?? '').replace(/\s+/g, ' ').trim();
@@ -233,6 +239,8 @@ test.describe('chat message rendering', () => {
 
         await page.locator('#show_more_messages').click();
         await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(longChatLimit * 2);
+        const jumpToLatest = page.getByRole('button', { name: 'Jump to latest message' });
+        await expect(jumpToLatest).toBeVisible();
 
         const expectedFirstLoadedMessageIndex = longMessages.length - (longChatLimit * 2);
         const loadedMessageIds = await page.locator('#chat > .mes[mesid]').evaluateAll(elements => {
@@ -250,9 +258,75 @@ test.describe('chat message rendering', () => {
         expect(Math.abs(anchorTopAfterLoadMore - anchorTopBeforeLoadMore)).toBeLessThanOrEqual(8);
 
         const latestLongMessageRow = page.locator(`#chat > .mes[mesid="${longMessages.length - 1}"]`);
-        await latestLongMessageRow.scrollIntoViewIfNeeded();
+        await jumpToLatest.click();
         await expect(latestLongMessageRow).toBeVisible();
         await expectMessageTextMatches(page, longMessages.length - 1, longMessages.at(-1).mes);
+        await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(longChatLimit * 2);
+        expect(getUnexpectedConsoleErrors(consoleErrors)).toEqual([]);
+    });
+
+    test('keeps long-chat recovery reachable on mobile viewports', async ({ page }) => {
+        expect(fs.existsSync(seededChatPath)).toBe(true);
+        createLongChatFixture(seededChatPath, mobileLongChatPath);
+        const longMessages = getChatMessages(mobileLongChatPath);
+
+        const consoleErrors = createConsoleErrorCollector(page);
+        await testSetup.awaitST({ page });
+        await selectCharacterByName(page, characterName);
+
+        for (const viewport of mobileViewports) {
+            await page.setViewportSize({ width: viewport.width, height: viewport.height });
+            await page.evaluate(async ({ chatName, truncationLimit }) => {
+                const context = window.SillyTavern.getContext();
+                context.powerUserSettings.chat_truncation = truncationLimit;
+                await context.openCharacterChat(chatName);
+            }, { chatName: mobileLongChatName, truncationLimit: longChatLimit });
+
+            const composer = page.getByRole('textbox', { name: 'Chat message' });
+            await expect(composer, `${viewport.name} composer`).toBeVisible();
+            await composer.focus();
+            await expect(composer, `${viewport.name} composer focus`).toBeFocused();
+            await expect(page.locator('#show_more_messages'), `${viewport.name} load more`).toBeVisible();
+
+            await page.locator('#show_more_messages').click();
+            await expect(page.locator('#chat > .mes[mesid]'), `${viewport.name} rendered messages`).toHaveCount(longChatLimit * 2);
+            const jumpToLatest = page.getByRole('button', { name: 'Jump to latest message' });
+            await expect(jumpToLatest, `${viewport.name} jump to latest`).toBeVisible();
+
+            const recoveryGeometry = await page.evaluate(() => {
+                const recovery = document.querySelector('#jump_to_latest_message');
+                const composerForm = document.querySelector('#send_form');
+
+                if (!recovery || !composerForm) {
+                    return null;
+                }
+
+                const recoveryRect = recovery.getBoundingClientRect();
+                const formRect = composerForm.getBoundingClientRect();
+                const overlapsComposer = recoveryRect.left < formRect.right
+                    && recoveryRect.right > formRect.left
+                    && recoveryRect.top < formRect.bottom
+                    && recoveryRect.bottom > formRect.top;
+
+                return {
+                    bodyScrollWidth: document.documentElement.scrollWidth,
+                    viewportWidth: window.innerWidth,
+                    overlapsComposer,
+                    recoveryHeight: recoveryRect.height,
+                };
+            });
+
+            expect(recoveryGeometry, viewport.name).not.toBeNull();
+            expect(recoveryGeometry.bodyScrollWidth).toBeLessThanOrEqual(recoveryGeometry.viewportWidth + 1);
+            expect(recoveryGeometry.overlapsComposer).toBe(false);
+            expect(recoveryGeometry.recoveryHeight).toBeGreaterThanOrEqual(32);
+
+            const latestLongMessageRow = page.locator(`#chat > .mes[mesid="${longMessages.length - 1}"]`);
+            await jumpToLatest.click();
+            await expect(latestLongMessageRow, `${viewport.name} latest row`).toBeVisible();
+            await expectMessageTextMatches(page, longMessages.length - 1, longMessages.at(-1).mes);
+        }
+
         expect(getUnexpectedConsoleErrors(consoleErrors)).toEqual([]);
     });
 });

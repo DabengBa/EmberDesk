@@ -24,6 +24,7 @@ This feature lets users operate on an existing chat message without leaving the 
 - **Swipe entry**: use the message swipe controls when a message has visible swipe state.
 - **Reasoning entry**: use reasoning controls when the message includes an editable or collapsible reasoning block.
 - **Media gallery entry**: use gallery swipe controls when a message contains swipeable media.
+- **Failure recovery entry**: use the retry action attached to a failed generation row when provider or streaming failure leaves recoverable output in the conversation.
 
 ## Interaction IDs
 
@@ -35,6 +36,7 @@ This feature lets users operate on an existing chat message without leaving the 
 - `feature.chat_message_actions.swipe`: navigate message swipes when swipe controls are visible.
 - `feature.chat_message_actions.reasoning`: copy, edit, remove, or collapse reasoning blocks when reasoning controls are visible.
 - `feature.chat_message_actions.media_gallery`: navigate swipeable media attached to a message.
+- `feature.chat_message_actions.failure_retry`: retry generation from a recoverable failed assistant row without resubmitting the already-rendered user message as a new row.
 
 ## User Flow
 
@@ -47,6 +49,9 @@ This feature lets users operate on an existing chat message without leaving the 
 ## Business Rules And Boundaries
 
 - Message text remains the primary content. Message actions should be discoverable without visually overwhelming the message body.
+- Message actions are tiered by task frequency and risk: Copy, Edit, and Message Actions are high-frequency; checkpoint, swipe, reasoning, and media/gallery actions are secondary; delete or remove actions are danger tier.
+- High-frequency actions should stay role/name reachable by pointer, keyboard focus, and touch/mobile paths. Secondary actions may remain in the expanded or overflow action surface when that keeps the message body readable.
+- Danger actions must keep clear accessible names and must not visually outrank Copy or Edit in normal reading state.
 - Message action controls must keep stable selectors and message DOM identity so first-party modules and compatible extensions can keep locating messages.
 - The protected message surfaces include `#chat > .mes`, `.mes_text`, `.mes[mesid]`, swipe controls, reasoning wrappers, media wrappers, and file wrappers.
 - Hidden or inactive message actions can remain hidden according to existing workspace state, but when an action becomes visible it should have a stable role, accessible name, and focus affordance.
@@ -60,5 +65,7 @@ This feature is separate from [Chat Workspace](page.chat_workspace) because mess
 ## Outcomes
 
 - **Success**: the user can discover and use the available actions on a rendered message row.
+- **Priority state**: common actions remain quicker to reach than secondary or destructive actions, including on touch/mobile viewports.
+- **Failure retry state**: a failed generation row can expose a retry action and short recovery copy while preserving the message row and composer usability.
 - **Hidden state**: actions that are not valid for the current message remain hidden or inactive according to the existing UI rules.
 - **Compatibility state**: message DOM selectors and event-facing surfaces remain stable for compatible code.

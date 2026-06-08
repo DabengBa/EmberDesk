@@ -5206,6 +5206,18 @@ input[type="range"]::-webkit-slider-thumb {
     outline-offset: 1px;
 }
 
+.generation_failure_notice {
+    width: fit-content;
+    max-width: 100%;
+    margin-top: 8px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 14%, transparent);
+    color: var(--SmartThemeBodyColor);
+    font-size: calc(var(--mainFontSize) * 0.92);
+    line-height: 1.35;
+}
+
 .mes_bookmark {
     display: none;
 }
@@ -7037,6 +7049,13 @@ body:not(.movingUI) .drawer-content.maximized {
 
 #show_more_messages:hover {
     filter: brightness(1.25);
+}
+
+#jump_to_latest_message {
+    display: flex;
+    margin: 8px auto;
+    order: 1;
+    min-height: 32px;
 }
 
 .draggable img {
