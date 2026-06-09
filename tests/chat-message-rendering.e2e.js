@@ -136,6 +136,9 @@ async function expectMessageTextMatches(page, messageIndex, expectedText) {
 }
 
 test.describe('chat message rendering', () => {
+    // These flows mutate the same seeded character/chat files.
+    test.describe.configure({ mode: 'serial' });
+
     test('renders seeded stored chat messages through the real app DOM', async ({ page }, testInfo) => {
         expect(fs.existsSync(seededChatPath)).toBe(true);
         createLongChatFixture(seededChatPath, longChatPath);
@@ -239,8 +242,7 @@ test.describe('chat message rendering', () => {
 
         await page.locator('#show_more_messages').click();
         await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(longChatLimit * 2);
-        const jumpToLatest = page.getByRole('button', { name: 'Jump to latest message' });
-        await expect(jumpToLatest).toBeVisible();
+        await expect(page.locator('#jump_to_latest_message')).toHaveCount(0);
 
         const expectedFirstLoadedMessageIndex = longMessages.length - (longChatLimit * 2);
         const loadedMessageIds = await page.locator('#chat > .mes[mesid]').evaluateAll(elements => {
@@ -258,14 +260,15 @@ test.describe('chat message rendering', () => {
         expect(Math.abs(anchorTopAfterLoadMore - anchorTopBeforeLoadMore)).toBeLessThanOrEqual(8);
 
         const latestLongMessageRow = page.locator(`#chat > .mes[mesid="${longMessages.length - 1}"]`);
-        await jumpToLatest.click();
+        await expect(latestLongMessageRow).toHaveCount(1);
+        await latestLongMessageRow.scrollIntoViewIfNeeded();
         await expect(latestLongMessageRow).toBeVisible();
         await expectMessageTextMatches(page, longMessages.length - 1, longMessages.at(-1).mes);
         await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(longChatLimit * 2);
         expect(getUnexpectedConsoleErrors(consoleErrors)).toEqual([]);
     });
 
-    test('keeps long-chat recovery reachable on mobile viewports', async ({ page }) => {
+    test('keeps long-chat load-more reachable on mobile viewports', async ({ page }) => {
         expect(fs.existsSync(seededChatPath)).toBe(true);
         createLongChatFixture(seededChatPath, mobileLongChatPath);
         const longMessages = getChatMessages(mobileLongChatPath);
@@ -290,39 +293,39 @@ test.describe('chat message rendering', () => {
 
             await page.locator('#show_more_messages').click();
             await expect(page.locator('#chat > .mes[mesid]'), `${viewport.name} rendered messages`).toHaveCount(longChatLimit * 2);
-            const jumpToLatest = page.getByRole('button', { name: 'Jump to latest message' });
-            await expect(jumpToLatest, `${viewport.name} jump to latest`).toBeVisible();
+            await expect(page.locator('#jump_to_latest_message'), `${viewport.name} jump to latest removed`).toHaveCount(0);
+            await expect(page.locator('#show_more_messages'), `${viewport.name} load more remains`).toBeVisible();
 
-            const recoveryGeometry = await page.evaluate(() => {
-                const recovery = document.querySelector('#jump_to_latest_message');
+            const loadMoreGeometry = await page.evaluate(() => {
+                const loadMore = document.querySelector('#show_more_messages');
                 const composerForm = document.querySelector('#send_form');
 
-                if (!recovery || !composerForm) {
+                if (!loadMore || !composerForm) {
                     return null;
                 }
 
-                const recoveryRect = recovery.getBoundingClientRect();
+                const loadMoreRect = loadMore.getBoundingClientRect();
                 const formRect = composerForm.getBoundingClientRect();
-                const overlapsComposer = recoveryRect.left < formRect.right
-                    && recoveryRect.right > formRect.left
-                    && recoveryRect.top < formRect.bottom
-                    && recoveryRect.bottom > formRect.top;
+                const overlapsComposer = loadMoreRect.left < formRect.right
+                    && loadMoreRect.right > formRect.left
+                    && loadMoreRect.top < formRect.bottom
+                    && loadMoreRect.bottom > formRect.top;
 
                 return {
                     bodyScrollWidth: document.documentElement.scrollWidth,
                     viewportWidth: window.innerWidth,
                     overlapsComposer,
-                    recoveryHeight: recoveryRect.height,
+                    loadMoreHeight: loadMoreRect.height,
                 };
             });
 
-            expect(recoveryGeometry, viewport.name).not.toBeNull();
-            expect(recoveryGeometry.bodyScrollWidth).toBeLessThanOrEqual(recoveryGeometry.viewportWidth + 1);
-            expect(recoveryGeometry.overlapsComposer).toBe(false);
-            expect(recoveryGeometry.recoveryHeight).toBeGreaterThanOrEqual(32);
+            expect(loadMoreGeometry, viewport.name).not.toBeNull();
+            expect(loadMoreGeometry.bodyScrollWidth).toBeLessThanOrEqual(loadMoreGeometry.viewportWidth + 1);
+            expect(loadMoreGeometry.overlapsComposer).toBe(false);
+            expect(loadMoreGeometry.loadMoreHeight).toBeGreaterThanOrEqual(32);
 
             const latestLongMessageRow = page.locator(`#chat > .mes[mesid="${longMessages.length - 1}"]`);
-            await jumpToLatest.click();
+            await latestLongMessageRow.scrollIntoViewIfNeeded();
             await expect(latestLongMessageRow, `${viewport.name} latest row`).toBeVisible();
             await expectMessageTextMatches(page, longMessages.length - 1, longMessages.at(-1).mes);
         }

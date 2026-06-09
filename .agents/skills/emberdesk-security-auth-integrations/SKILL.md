@@ -18,7 +18,7 @@ Use this for security-sensitive work and external service integration changes.
 - `src/private-request-filter.js`, `src/request-proxy.js`
 - `src/middleware/basicAuth.js`, `src/middleware/whitelist.js`, `src/middleware/hostWhitelist.js`, `src/middleware/corsProxy.js`
 - Provider route modules under `src/endpoints/` and `src/endpoints/backends/`
-- `docs/environments.md` before using remote test infrastructure
+- `.docs/tech/hostinger-sttest-deployment.md` before using remote test infrastructure
 
 ## Distinct Security Boundaries
 

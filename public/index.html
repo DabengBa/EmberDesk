@@ -497,41 +497,46 @@
                 <h3 class="margin0" id="title_api" data-i18n="API Connections">API 连接</h3>
                 <div class="flex-container flexFlowColumn">
                     <div id="api_connection_form">
-                        <div class="chat-completion-select">
-                            <div class="chat-completion-row">
-                                <label class="chat-completion-field provider-field" for="chat_completion_source">
-                                    <span class="field-label" data-i18n="Provider">Provider</span>
-                                    <select id="chat_completion_source">
-                                        <option value="openai">OpenAI</option>
-                                        <option value="claude">Claude</option>
-                                        <option value="makersuite">Google</option>
-                                    </select>
+                        <div class="api-primary-path">
+                            <div class="chat-completion-select">
+                                <div class="chat-completion-row">
+                                    <label class="chat-completion-field provider-field" for="chat_completion_source">
+                                        <span class="field-label" data-i18n="Provider">Provider</span>
+                                        <select id="chat_completion_source">
+                                            <option value="openai">OpenAI</option>
+                                            <option value="claude">Claude</option>
+                                            <option value="makersuite">Google</option>
+                                        </select>
+                                    </label>
+                                    <div id="openai_form" class="chat-completion-field model-field" data-source="openai">
+                                        <label class="field-label" for="model_openai_select" data-i18n="Model">Model</label>
+                                        <input id="model_openai_select" list="model_openai_list" class="text_pole" placeholder="Select or type a model" />
+                                        <datalist id="model_openai_list"></datalist>
+                                    </div>
+                                    <div id="claude_form" class="chat-completion-field model-field" data-source="claude">
+                                        <label class="field-label" for="model_claude_select" data-i18n="Model">Model</label>
+                                        <input id="model_claude_select" list="model_claude_list" class="text_pole" placeholder="Select or type a model" />
+                                        <datalist id="model_claude_list"></datalist>
+                                    </div>
+                                    <div id="makersuite_form" class="chat-completion-field model-field" data-source="makersuite">
+                                        <label class="field-label" for="model_google_select" data-i18n="Model">Model</label>
+                                        <input id="model_google_select" list="model_google_list" class="text_pole" placeholder="Select or type a model" />
+                                        <datalist id="model_google_list"></datalist>
+                                    </div>
+                                </div>
+                                <div id="api_key_section">
+                                    <div class="flex-container width100p">
+                                        <input id="api_key_unified" type="text" class="text_pole flex1 api-key-masked" autocomplete="off" data-lpignore="true" data-1p-ignore data-bwignore data-i18n="[placeholder]API Key" placeholder="API Key" />
+                                        <div id="api_key_unified_show" title="Peek a password" data-i18n="[title]Peek a password" class="menu_button fa-solid fa-eye-slash fa-fw"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="base-url-field wide100p" data-source="openai,claude,makersuite">
+                                <label class="chat-completion-field wide100p" for="openai_reverse_proxy">
+                                    <span class="field-label" data-i18n="Base URL">Base URL</span>
+                                    <input id="openai_reverse_proxy" type="text" class="text_pole" aria-label="Base URL" placeholder="Optional endpoint" />
                                 </label>
-                                <div id="openai_form" class="chat-completion-field model-field" data-source="openai">
-                                    <label class="field-label" for="model_openai_select" data-i18n="Model">Model</label>
-                                    <input id="model_openai_select" list="model_openai_list" class="text_pole" placeholder="Select or type a model" />
-                                    <datalist id="model_openai_list"></datalist>
-                                </div>
-                                <div id="claude_form" class="chat-completion-field model-field" data-source="claude">
-                                    <label class="field-label" for="model_claude_select" data-i18n="Model">Model</label>
-                                    <input id="model_claude_select" list="model_claude_list" class="text_pole" placeholder="Select or type a model" />
-                                    <datalist id="model_claude_list"></datalist>
-                                </div>
-                                <div id="makersuite_form" class="chat-completion-field model-field" data-source="makersuite">
-                                    <label class="field-label" for="model_google_select" data-i18n="Model">Model</label>
-                                    <input id="model_google_select" list="model_google_list" class="text_pole" placeholder="Select or type a model" />
-                                    <datalist id="model_google_list"></datalist>
-                                </div>
                             </div>
-                            <div id="api_key_section">
-                                <div class="flex-container width100p">
-                                    <input id="api_key_unified" type="text" class="text_pole flex1 api-key-masked" autocomplete="off" data-lpignore="true" data-1p-ignore data-bwignore data-i18n="[placeholder]API Key" placeholder="API Key" />
-                                    <div id="api_key_unified_show" title="Peek a password" data-i18n="[title]Peek a password" class="menu_button fa-solid fa-eye-slash fa-fw"></div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="wide100p" data-source="openai,claude,makersuite">
-                            <input id="openai_reverse_proxy" type="text" class="text_pole" placeholder="Base URL" />
                         </div>
                         <section id="fallback_provider_section" class="fallback-provider-section" data-doc-id="feature.fallback_provider" data-source="openai">
                             <div class="fallback-provider-header">
@@ -541,24 +546,26 @@
                                 </label>
                                 <span id="fallback_provider_status" class="fallback-provider-status" role="status" aria-live="polite" data-i18n="Disabled">Disabled</span>
                             </div>
-                            <div class="fallback-provider-fields">
-                                <label class="fallback-provider-field" for="fallback_provider_base_url">
-                                    <span class="field-label" data-i18n="Base URL">Base URL</span>
-                                    <input id="fallback_provider_base_url" type="text" class="text_pole" aria-label="Fallback provider Base URL" placeholder="https://api.openai.com/v1" />
-                                </label>
-                                <label class="fallback-provider-field" for="fallback_provider_model">
-                                    <span class="field-label" data-i18n="Model">Model</span>
-                                    <input id="fallback_provider_model" type="text" class="text_pole" placeholder="gpt-4.1-mini" />
-                                </label>
-                            </div>
-                            <div class="fallback-provider-key-row">
-                                <input id="fallback_provider_api_key" type="text" class="text_pole flex1 api-key-masked" autocomplete="off" data-lpignore="true" data-1p-ignore data-bwignore data-i18n="[placeholder]Fallback API Key" placeholder="Fallback API Key" />
-                                <div id="fallback_provider_api_key_show" class="menu_button menu_button_icon fallback_provider_api_key_show fa-solid fa-eye-slash fa-fw" title="Show fallback API key" data-i18n="[title]Show fallback API key" role="button" aria-label="Show fallback API key" tabindex="0"></div>
-                                <div id="fallback_provider_save_key" class="menu_button menu_button_icon fallback_provider_save_key fa-solid fa-save fa-fw" title="Save fallback API key" data-i18n="[title]Save fallback API key" role="button" aria-label="Save fallback API key" tabindex="0"></div>
-                                <div id="fallback_provider_clear_key" class="menu_button menu_button_icon fallback_provider_clear_key fa-solid fa-trash-can fa-fw" title="Clear fallback API key" data-i18n="[title]Clear fallback API key" role="button" aria-label="Clear fallback API key" tabindex="0"></div>
-                            </div>
-                            <div id="fallback_provider_cost_warning" class="info-block warning fallback-provider-warning" role="note" data-i18n="Fallback provider may use a different billing account and model pricing.">
-                                Fallback provider may use a different billing account and model pricing.
+                            <div class="fallback-provider-details">
+                                <div class="fallback-provider-fields">
+                                    <label class="fallback-provider-field" for="fallback_provider_base_url">
+                                        <span class="field-label" data-i18n="Base URL">Base URL</span>
+                                        <input id="fallback_provider_base_url" type="text" class="text_pole" aria-label="Fallback provider Base URL" placeholder="https://api.openai.com/v1" />
+                                    </label>
+                                    <label class="fallback-provider-field" for="fallback_provider_model">
+                                        <span class="field-label" data-i18n="Model">Model</span>
+                                        <input id="fallback_provider_model" type="text" class="text_pole" placeholder="gpt-4.1-mini" />
+                                    </label>
+                                </div>
+                                <div class="fallback-provider-key-row">
+                                    <input id="fallback_provider_api_key" type="text" class="text_pole flex1 api-key-masked" autocomplete="off" data-lpignore="true" data-1p-ignore data-bwignore data-i18n="[placeholder]Fallback API Key" placeholder="Fallback API Key" />
+                                    <div id="fallback_provider_api_key_show" class="menu_button menu_button_icon fallback_provider_api_key_show fa-solid fa-eye-slash fa-fw" title="Show fallback API key" data-i18n="[title]Show fallback API key" role="button" aria-label="Show fallback API key" tabindex="0"></div>
+                                    <div id="fallback_provider_save_key" class="menu_button menu_button_icon fallback_provider_save_key fa-solid fa-save fa-fw" title="Save fallback API key" data-i18n="[title]Save fallback API key" role="button" aria-label="Save fallback API key" tabindex="0"></div>
+                                    <div id="fallback_provider_clear_key" class="menu_button menu_button_icon fallback_provider_clear_key fa-solid fa-trash-can fa-fw" title="Clear fallback API key" data-i18n="[title]Clear fallback API key" role="button" aria-label="Clear fallback API key" tabindex="0"></div>
+                                </div>
+                                <div id="fallback_provider_cost_warning" class="info-block warning fallback-provider-warning" role="note" data-i18n="Fallback provider may use a different billing account and model pricing.">
+                                    Fallback provider may use a different billing account and model pricing.
+                                </div>
                             </div>
                         </section>
                         <div class="chat-completion-provider-options" data-source="makersuite">
@@ -623,7 +630,7 @@
                         <div class="flex-container flex chat-completion-actions">
                             <div id="api_button_openai" class="api_button menu_button menu_button_icon" type="submit" data-i18n="Connect">Connect</div>
                             <div class="api_loading menu_button menu_button_icon" style="opacity:0.6" data-i18n="Cancel">Cancel</div>
-                            <div data-source="openai" id="customize_additional_parameters" class="menu_button menu_button_icon" data-i18n="Additional Parameters">Additional Parameters</div>
+                            <div data-source="openai" id="customize_additional_parameters" class="menu_button menu_button_icon api-action-secondary" data-i18n="Additional Parameters">Parameters</div>
                             <div id="test_api_button" class="menu_button menu_button_icon" title="Send a short test message to verify your connection." data-i18n="[title]Send a short test message to verify your connection.;Test">Test</div>
                         </div>
                         <div class="online_status">

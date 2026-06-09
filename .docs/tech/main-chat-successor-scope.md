@@ -97,7 +97,7 @@ Use this gate before turning a main-chat follow-up idea into implementation work
 
 | Proposal Class | Route | Examples | Minimum Proof |
 |---|---|---|---|
-| Small spec | `.docs/specs/.../spec.md` with focused delivery | provider-error retry copy, jump-to-latest, mobile reachability proof, message action priority, pure helper extraction | Focused unit or E2E for the touched behavior, plus the validation row for the touched surface. |
+| Small spec | `.docs/specs/.../spec.md` with focused delivery | provider-error retry copy, long-chat load-more proof, mobile reachability proof, message action priority, pure helper extraction | Focused unit or E2E for the touched behavior, plus the validation row for the touched surface. |
 | Compatibility-hardening spec | `.docs/specs/.../spec.md` with explicit protected-surface proof | selector role/name hardening, extension import compatibility, message-row identity proof, `/lib.js` behavior proof | `bun run test:compat` plus focused structure/shared-library tests and semantic docs only when user-visible behavior changes. |
 | ADR-required | numbered `.docs/adr/` decision before implementation, or a successor proposal that explicitly leads to ADR | project memory, artifact/canvas side workspace, rich in-chat work block, RAG/knowledge stack, source-aware research mode, tool execution, MCP, code execution, scheduled automations, provider protocol rewrite, framework migration, `/lib.js` replacement, database-first canonical storage | ADR must cover data ownership, migration/recovery, extension compatibility, validation gates, security boundaries, pre-send scope disclosure, post-response usage evidence, and user-visible recovery behavior. |
 | Out of scope for main-chat successor | Do not implement in this workstream without a separate roadmap or product decision | SPA migration, TypeScript application migration, multi-user permissions, scheduled automations, canonical storage replacement, broad endpoint splits unrelated to main chat | No implementation. Preserve the frozen roadmap and open a separate design only after explicit approval. |
@@ -126,7 +126,6 @@ Spec 06 proves the existing bounded render window, load-more affordance, loaded 
 
 Future UX slices should consider:
 
-- jump-to-latest or equivalent recovery entry after the user loads older history
 - message search or jump-to-message for long histories
 - a lightweight visible range indicator so users know which part of a long chat they are reading
 - context summary support that helps users re-enter very long chats without rendering or rereading the full history
@@ -148,7 +147,7 @@ For each category, the design must state data ownership, user-visible context sc
 
 ## Post-Recovery UX Directions
 
-The 2026-06-08 recovery hardening pass delivered provider-failure retry, jump-to-latest, touch/action proof, row/control helpers, and the first ADR gate matrix. The next user-experience proposals should not restart with visual restyling. They should focus on trust surfaces that prepare EmberDesk for larger workspace capabilities:
+The 2026-06-08 recovery hardening pass delivered provider-failure retry, touch/action proof, row/control helpers, and the first ADR gate matrix. The separate long-chat jump-to-latest control was removed on 2026-06-09; current long-chat proof stays focused on load-more stability and latest-row reachability. The next user-experience proposals should not restart with visual restyling. They should focus on trust surfaces that prepare EmberDesk for larger workspace capabilities:
 
 1. Context and tool scope disclosure.
    - Show the active chat, files, memory, World Info, web, RAG, MCP, code, and automation scope before send.
@@ -158,7 +157,7 @@ The 2026-06-08 recovery hardening pass delivered provider-failure retry, jump-to
    - Show which sources or tools were used, skipped, or failed after a response.
    - Include retry or repair affordances when the failure is recoverable.
 
-3. Long-chat orientation beyond jump-to-latest.
+3. Long-chat orientation beyond load-more.
    - Search, jump-to-message, visible range, and summaries remain candidates, but must preserve `chat` order, `.mes[mesid]`, row identity, and extension selectors.
 
 4. Artifact/canvas or rich work-block ADR.

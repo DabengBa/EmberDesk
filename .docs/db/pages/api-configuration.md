@@ -18,14 +18,12 @@ This page exists so a user can configure how EmberDesk connects to an LLM API pr
 
 ## Page Structure (UI Layout)
 
-1. **Provider and model row**: Chat Completion provider selector (`OpenAI`, `Claude`, `Google`) plus the matching provider-specific model input backed by a datalist.
-2. **Unified credential row**: masked API key input with a visibility toggle.
-3. **Custom Base URL row**: optional base URL input shared by supported chat-completion providers.
-4. **Fallback provider section**: optional OpenAI-compatible fallback base URL, model, enabled toggle, secret-backed API key controls, and cost warning inside the same drawer.
-5. **Provider-specific section**: controls such as Vertex AI mode, credential type, region, and service account JSON shown when the selected provider needs them.
-6. **Prompt post-processing section**: collapsible selector for prompt post-processing behavior.
-7. **Connection actions**: Connect, Cancel, Additional Parameters, Test, and connection-status feedback.
-8. **Preset and sampling sections**: preset dropdown/actions, streaming, context/response limits, feature toggles, prompt manager, advanced sampling, image generation, and settings controls.
+1. **Primary connection path**: Chat Completion provider selector (`OpenAI`, `Claude`, `Google`), matching provider-specific model input backed by a datalist, unified masked API key input, and optional Base URL input grouped as the first visible task path.
+2. **Fallback provider section**: optional OpenAI-compatible fallback toggle and status chip are visible by default; fallback base URL, model, secret-backed API key controls, and cost warning stay inside the same drawer but are only visually expanded when fallback is enabled.
+3. **Provider-specific section**: controls such as Vertex AI mode, credential type, region, and service account JSON shown when the selected provider needs them.
+4. **Prompt post-processing section**: collapsible selector for prompt post-processing behavior.
+5. **Connection actions**: Connect remains the primary action; Cancel, parameters, Test, and connection-status feedback remain nearby but visually secondary.
+6. **Preset and sampling sections**: preset dropdown/actions, streaming, context/response limits, feature toggles, prompt manager, advanced sampling, image generation, and settings controls.
 
 ## Page-Level Semantic IDs
 
@@ -48,7 +46,7 @@ This page exists so a user can configure how EmberDesk connects to an LLM API pr
 - **Direct mode**: when the base URL is empty, the unified API key stores the current provider's secret key in the server-side secret store.
 - **Provider switch**: changing the chat completion source updates the unified key field placeholder to reflect whether a saved key exists for the new provider.
 - **Legacy settings**: old `proxies[]` and `selected_proxy` fields in settings files are silently ignored on load and dropped on next save; legacy main API values such as `kobold`, `koboldhorde`, `novel`, `poe`, and `textgenerationwebui` are redirected to the OpenAI chat-completion path during settings load.
-- **Fallback provider state**: the optional fallback provider lives in the same drawer, persists as ordinary settings plus a dedicated server-side secret, preserves the entered fallback key when save fails, and stays independent from connection profile capture/apply behavior.
+- **Fallback provider state**: the optional fallback provider lives in the same drawer, persists as ordinary settings plus a dedicated server-side secret, preserves the entered fallback key when save fails, stays independent from connection profile capture/apply behavior, and keeps its advanced fields visually collapsed until the fallback toggle is enabled.
 
 ## Navigation
 

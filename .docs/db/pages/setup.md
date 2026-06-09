@@ -18,8 +18,10 @@ This page exists so a new deployment operator must create a password-protected a
 
 ## Page Structure (UI Layout)
 
-1. **Setup card**: a single form with handle input, display name input (optional), password input with inline toggle, confirm password input with inline toggle, submit button, and error block.
-2. **Header**: logo and page title "初始设置".
+1. **Header row**: logo and page title "初始设置", visually separated from the setup controls.
+2. **Identity field group**: handle input and optional display-name input.
+3. **Security field group**: password input with inline toggle and confirm-password input with inline toggle.
+4. **Action region**: submit button and error block with consistent spacing and focus treatment.
 
 In `set-password` mode, the same card hides the handle and display-name fields, changes the title to "设置密码", and uses "设置密码并登录" as the submit CTA.
 

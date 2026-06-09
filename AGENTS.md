@@ -98,7 +98,7 @@ Use Node.js 26.3.0 for server release proof by default. Bun is the package manag
 - Long-form project documentation belongs under `.docs/` or `docs/`; keep root `AGENTS.md` concise.
 - `.docs/db` is the semantic doc database. When user-visible behavior changes, update the owning page/feature/term docs or document why no semantic update is needed.
 - Run `bun run docs:check` or `bun run docs:build` after `.docs/db` changes.
-- Keep credentials, cookies, session tokens, and exported browser storage out of the repository. `docs/environments.md` documents the remote test server without storing credentials.
+- Keep credentials, cookies, session tokens, and exported browser storage out of the repository. `.docs/tech/hostinger-sttest-deployment.md` documents the Hostinger sttest server without storing credentials.
 
 ## Validation Checklist
 

@@ -5,26 +5,28 @@
     align-items: center;
     justify-content: center;
     min-height: 100dvh;
-    background: var(--SmartThemeBlurTintColor);
-    padding: 16px;
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor) 92%, var(--black70a) 8%);
+    padding: 18px;
 }
 
 .login-card {
     width: 100%;
-    max-width: 380px;
-    padding: 20px;
-    background: rgba(0, 0, 0, 0.5);
-    border: 1px solid var(--SmartThemeBorderColor);
+    max-width: 392px;
+    padding: 18px 20px 20px;
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor) 72%, var(--black70a) 28%);
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 74%, var(--SmartThemeBodyColor) 10%);
     border-radius: 10px;
-    animation: loginFadeIn 300ms ease-out;
+    animation: loginFadeIn 180ms ease-out;
 }
 
 .login-header {
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     gap: 10px;
-    margin-bottom: 20px;
+    margin-bottom: 18px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 72%, transparent);
 }
 
 .login-logo {
@@ -34,18 +36,40 @@
 
 .login-header h1 {
     font-family: var(--mainFontFamily);
-    font-size: 1.05rem;
-    font-weight: 600;
+    font-size: 1.2rem;
+    font-weight: 700;
     color: var(--SmartThemeBodyColor);
     margin: 0;
-    line-height: 1.4;
+    line-height: 1.25;
     text-shadow: none;
+    text-wrap: balance;
 }
 
 /* Fields */
 
+.login-form,
+.login-field-stack,
+.login-field-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.login-form {
+    gap: 14px;
+}
+
+.login-field-stack,
+.login-field-group {
+    gap: 12px;
+}
+
+.login-field-group--security {
+    padding-top: 14px;
+    border-top: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 62%, transparent);
+}
+
 .login-field {
-    margin-bottom: 15px;
+    margin-bottom: 0;
 }
 
 .login-field label {
@@ -59,10 +83,16 @@
     text-shadow: none;
 }
 
+.login-label-note {
+    color: var(--SmartThemeEmColor);
+    font-size: 0.82em;
+    font-weight: 400;
+}
+
 .login-field input {
     width: 100%;
-    height: 36px;
-    padding: 3px 5px;
+    height: 38px;
+    padding: 4px 8px;
     background: var(--form-control-bg);
     border: 1px solid var(--form-control-border-color);
     border-radius: 5px;
@@ -75,12 +105,14 @@
 }
 
 .login-field input::placeholder {
-    color: var(--SmartThemeEmColor);
+    color: color-mix(in srgb, var(--SmartThemeBodyColor) 62%, var(--SmartThemeBlurTintColor) 38%);
 }
 
 .login-field input:focus {
     background: var(--form-control-bg-focus);
     border-color: var(--form-control-border-color-focus);
+    outline: 1px solid var(--interactable-outline-color-faint);
+    outline-offset: 1px;
 }
 
 .login-field--error input {
@@ -116,13 +148,25 @@
     color: var(--SmartThemeBodyColor);
 }
 
+.password-toggle:focus-visible {
+    outline: 1px solid var(--interactable-outline-color);
+    outline-offset: 2px;
+    border-radius: 5px;
+}
+
 /* Button — matches menu_button vocabulary */
+
+.login-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
 
 .login-btn {
     width: 100%;
     height: auto;
-    margin-top: 5px;
-    padding: 5px 10px;
+    margin-top: 0;
+    padding: 7px 10px;
     background: var(--SmartThemeBlurTintColor);
     color: var(--SmartThemeBodyColor);
     border: 1px solid var(--SmartThemeBorderColor);
@@ -143,6 +187,12 @@
 .login-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+.login-btn:focus-visible,
+.login-forgot:focus-visible {
+    outline: 1px solid var(--interactable-outline-color);
+    outline-offset: 2px;
 }
 
 /* Forgot link */
@@ -167,11 +217,11 @@
 
 .login-error {
     display: none;
-    margin-top: 10px;
+    margin-top: 12px;
     margin-bottom: 10px;
-    padding: 5px 10px;
-    background: rgba(100, 0, 0, 0.7);
-    color: rgba(255, 0, 0, 0.9);
+    padding: 7px 10px;
+    background: color-mix(in srgb, var(--ember-deep, rgb(100, 0, 0)) 72%, var(--black70a) 28%);
+    color: var(--clay-warning);
     border-radius: 5px;
     font-family: var(--mainFontFamily);
     font-size: 0.8rem;
@@ -207,7 +257,7 @@
 @media (max-width: 480px) {
     .login-card {
         max-width: 100%;
-        padding: 20px 15px;
+        padding: 18px 15px;
     }
 
     .login-field input {
@@ -216,5 +266,12 @@
 
     .login-btn {
         padding: 8px 10px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .login-card,
+    .login-error.login-error--shake {
+        animation: none;
     }
 }

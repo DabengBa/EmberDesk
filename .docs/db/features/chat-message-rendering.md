@@ -29,7 +29,7 @@ This feature lets users reliably read an opened chat history as message rows wit
 - `feature.chat_message_rendering`: the overall rendered-message contract.
 - `feature.chat_message_rendering.stored_chat`: stored JSONL messages displayed in the main chat region.
 - `feature.chat_message_rendering.message_dom`: stable message row selectors and semantic attributes.
-- `feature.chat_message_rendering.long_chat_window`: the initial visible window for long chats, the load-more affordance, and the jump-to-latest recovery entry after older messages are loaded.
+- `feature.chat_message_rendering.long_chat_window`: the initial visible window for long chats, the load-more affordance, and row identity preservation after older messages are loaded.
 
 ## User Flow
 
@@ -38,14 +38,14 @@ This feature lets users reliably read an opened chat history as message rows wit
 3. EmberDesk renders message rows in `#chat`.
 4. The user reads user and character messages from `.mes_text`.
 5. If the chat is longer than the visible window, the user can load older messages from the existing load-more entry.
-6. After older messages are loaded, the user can use the jump-to-latest entry to return to the newest rendered message without changing row identity.
+6. After older messages are loaded, EmberDesk keeps the loaded rows and newest rendered row in the same chat DOM without adding a separate return-to-newest control.
 
 ## Business Rules And Boundaries
 
 - Message body text is the primary content in each rendered message row.
 - Stored user and character messages should render faithfully enough that the visible text matches the source message after normal browser whitespace handling.
 - Protected rendered-message selectors include `#chat > .mes`, `.mes_text`, `.mes[mesid]`, `.last_mes`, `is_user`, `is_system`, `.mes_reasoning_details`, `.mes_reasoning`, `.mes_media_wrapper`, `.mes_file_wrapper`, `.swipe_left`, and `.swipe_right`.
-- Long chats may render only the recent visible window on first load, but the user must retain an affordance to load older messages and, after doing so, a recovery entry to jump back to the latest message.
+- Long chats may render only the recent visible window on first load, but the user must retain an affordance to load older messages. Loading older messages must preserve message row identity without adding a separate return-to-newest recovery entry.
 - Recoverable provider or streaming failure must not remove the user message or duplicate assistant rows. If partial assistant text was rendered during an intermediate attempt, it is cleared before automatic recovery continues; only the final success or final failed state remains visible in the stable `.mes[mesid]` row.
 - Message-row actions belong to [Chat Message Actions](feature.chat_message_actions). This feature only requires that rendering keeps the row identity those actions attach to.
 - Streaming token timing, provider responses, slash-command semantics, and chat-file migrations are outside this feature boundary.
@@ -58,6 +58,6 @@ This feature is separate from [Chat Message Actions](feature.chat_message_action
 ## Outcomes
 
 - **Success**: stored or finalized messages appear as readable `.mes_text` inside stable `.mes[mesid]` rows.
-- **Long chat state**: the initial DOM stays bounded by the configured visible-message window, exposes the existing load-more entry, and shows jump-to-latest after older messages are loaded.
+- **Long chat state**: the initial DOM stays bounded by the configured visible-message window, exposes the existing load-more entry, and keeps loaded message rows stable after older messages are loaded.
 - **Failure recovery state**: generation failure keeps row identity stable through automatic retry, and only the final failed state exposes the manual retry action from the preserved assistant row.
 - **Compatibility state**: first-party modules and compatible extensions can keep locating rendered messages through the protected selectors.

@@ -68,8 +68,8 @@ This page exists so a user can run their daily LLM workflow from one browser sur
 - **Message rendering state**: stored or finalized messages render into stable `.mes[mesid]` rows with readable `.mes_text`, while message-row actions remain attached to the rendered row.
 - **Generation failure recovery state**: when generation fails after a user message or partial assistant output, the workspace keeps the existing rows readable, restores composer input, and exposes a local recovery action instead of requiring a refresh.
 - **Automatic recovery state**: visible main-chat generation can retry once on the primary provider and once on the optional fallback provider before the existing manual retry CTA appears.
-- **Long-chat recovery state**: after the user loads older messages from a bounded long-chat window, the workspace exposes a jump-to-latest entry so the user can return to the latest rendered message without deleting loaded history or changing message IDs.
-- **Mobile reachability state**: core composer controls, message actions, long-chat recovery, and generation stop or retry controls should remain visible or keyboard/role reachable on narrow phone and wider mobile/tablet viewports without relying on hover-only discovery.
+- **Long-chat load-more state**: after the user loads older messages from a bounded long-chat window, the workspace preserves loaded history and message IDs without adding a separate return-to-newest control.
+- **Mobile reachability state**: core composer controls, message actions, long-chat load-more, and generation stop or retry controls should remain visible or keyboard/role reachable on narrow phone and wider mobile/tablet viewports without relying on hover-only discovery.
 
 ## Navigation
 

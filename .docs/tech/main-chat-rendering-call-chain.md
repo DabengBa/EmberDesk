@@ -93,7 +93,7 @@ Current proof:
 
 UX gap:
 
-- Search, jump-to-message, jump-to-latest, range indicators, and context summaries remain future UX candidates. The current proof covers bounded rendering and load-more position stability only.
+- Search, jump-to-message, range indicators, and context summaries remain future UX candidates. The current proof covers bounded rendering, load-more position stability, and latest-row reachability without a separate return-to-newest control.
 
 ### User Message Append
 

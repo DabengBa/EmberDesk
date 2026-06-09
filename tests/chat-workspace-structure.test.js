@@ -131,6 +131,7 @@ describe('chat workspace structure', () => {
             'id="fallback_provider_section"',
             'id="fallback_provider_enabled"',
             'id="fallback_provider_status"',
+            'class="fallback-provider-details"',
             'id="fallback_provider_base_url"',
             'id="fallback_provider_model"',
             'id="fallback_provider_api_key"',
@@ -149,6 +150,8 @@ describe('chat workspace structure', () => {
 
         expect(indexHtml).not.toMatch(/<dialog[^>]*id="fallback_provider_section"/);
         expect(indexHtml).toMatch(/id="fallback_provider_enabled"[^>]*type="checkbox"/);
+        expect(indexHtml).toMatch(/<div class="base-url-field wide100p"[^>]*data-source="openai,claude,makersuite">[\s\S]*<label class="chat-completion-field wide100p"[^>]*for="openai_reverse_proxy"/);
+        expect(indexHtml).toMatch(/<div class="fallback-provider-details">[\s\S]*id="fallback_provider_base_url"/);
         expect(indexHtml).toMatch(/id="fallback_provider_base_url"[^>]*\baria-label="Fallback provider Base URL"/);
         expect(indexHtml).toMatch(/id="fallback_provider_model"[^>]*\bplaceholder="gpt-4.1-mini"/);
         expect(indexHtml).toMatch(/id="fallback_provider_api_key"[^>]*\bautocomplete="off"/);
@@ -158,6 +161,10 @@ describe('chat workspace structure', () => {
         expectButtonAffordance(getTagByClass(indexHtml, 'fallback_provider_api_key_show'), 'Show fallback API key');
         expectButtonAffordance(getTagByClass(indexHtml, 'fallback_provider_save_key'), 'Save fallback API key');
         expectButtonAffordance(getTagByClass(indexHtml, 'fallback_provider_clear_key'), 'Clear fallback API key');
+
+        const styleSource = readRepoFile('public/style.css');
+        expect(styleSource).toContain('.fallback-provider-section:not(:has(#fallback_provider_enabled:checked)) .fallback-provider-details');
+        expect(styleSource).toContain('.fallback-provider-section:has(#fallback_provider_enabled:checked) .fallback-provider-details');
     });
 
     test('keeps automatic recovery status scoped outside message text', () => {

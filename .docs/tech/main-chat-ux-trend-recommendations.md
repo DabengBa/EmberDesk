@@ -62,14 +62,14 @@ Spec impact:
 
 ### 2. Keep Long-Chat Navigation Narrow Before Search Or Summary
 
-Correction: ship jump-to-latest first; defer search, range indicator, and summary until separate specs.
+Correction: keep the shipped long-chat surface at bounded rendering plus load-more stability; defer search, jump-to-message, range indicator, and summary until separate specs.
 
 Reason: ChatGPT Projects, Perplexity Spaces, and Open WebUI emphasize organizing persistent context, while EmberDesk already has bounded long-chat rendering. The first gap is user orientation after loading older messages, not a full information-retrieval surface.
 
 Spec impact:
 
-- `.docs/specs/260608-02-long-chat-navigation-recovery/spec.md` stays scoped to jump-to-latest.
-- It must not change `chat` order, `mesid`, `power_user.chat_truncation`, or `#show_more_messages` behavior.
+- Long-chat follow-up work must not change `chat` order, `mesid`, `power_user.chat_truncation`, or `#show_more_messages` behavior.
+- The separate jump-to-latest control was removed on 2026-06-09; reintroducing a return-to-newest control requires a fresh spec and proof.
 - Future search/range/summary work should require its own UX proof and extension compatibility check.
 - If a future range indicator is added, it should describe the visible slice of history without implying hidden summarization or retrieval.
 
@@ -154,7 +154,7 @@ These are the recommended design corrections ranked by user value and implementa
 | Priority | Correction | Why It Improves UX | Guardrail |
 |---|---|---|---|
 | P0 | Separate stop, provider error, and retry states in the composer and last assistant row. | Users can trust what happened and pick the next safe action without refreshing. | No duplicate assistant row; no lost user message; no provider protocol change. |
-| P0 | Add jump-to-latest after loading older history. | Users can inspect older context and return to active work without manual scrolling. | Preserve message identity, truncation, and extension selectors. |
+| P0 | Preserve long-chat load-more stability after loading older history. | Users can inspect older context without losing row identity or scroll position. | Preserve message identity, truncation, and extension selectors. |
 | P1 | Make message actions tiered and touch-safe. | Frequent operations stay fast; destructive actions stop competing with reading. | Preserve legacy classes, `chid`/`mesid`, role/name, keyboard focus, and hover behavior. |
 | P1 | Add mobile walkthrough proof for chat, composer, load-more, stop, retry, and actions. | Desktop success no longer hides broken reachability on narrow screens. | Prefer hit-area and overflow fixes over visible text that expands rows. |
 | P1 | Define context-scope disclosure for future projects, knowledge, or files. | Users know which local data is being used before generation. | Separate ADR; file-backed ownership and privacy boundaries must be explicit. |
@@ -168,9 +168,9 @@ These are the recommended design corrections ranked by user value and implementa
    - Highest user trust impact.
    - Smallest surface if implemented with deterministic local E2E.
 
-2. Long-chat jump-to-latest.
-   - Directly addresses orientation after load-more.
-   - Low risk if it only scrolls and preserves identity.
+2. Long-chat load-more stability.
+   - Directly protects orientation after load-more.
+   - Low risk when it preserves identity, anchor position, and latest-row reachability.
 
 3. Mobile walkthrough hardening.
    - Prevents desktop-only success from hiding touch and viewport failures.
@@ -204,7 +204,7 @@ The next UX proposal set should start from these directions:
    - Define the post-response evidence strip for sources used, tools called, skipped sources, failed tools, and retry options.
    - This should be ADR-linked when it touches RAG, web, MCP, or code execution.
 
-3. Long-chat orientation beyond jump-to-latest.
+3. Long-chat orientation beyond load-more.
    - Search, jump-to-message, visible range, and optional summary remain useful, but they need their own proof and must preserve message identity.
 
 4. Artifact/canvas or rich work-block ADR.

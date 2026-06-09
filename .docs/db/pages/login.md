@@ -18,9 +18,10 @@ This page exists so an unauthenticated user can identify themselves and reach [C
 
 ## Page Structure (UI Layout)
 
-1. **Login card**: the primary form with handle input, password input with inline toggle, submit button, error block, and "Forgot password?" link.
-2. **Recovery card**: a secondary form, hidden by default, with handle input, recovery code input, new-password input, and submit button.
-3. **Header**: logo and page title shared by both cards.
+1. **Header row**: logo and page title shared by both cards, visually separated from the form controls so the page reads as a focused entry surface rather than a generic form.
+2. **Credential field stack**: handle input and password input with inline toggle, kept as the only default decision path.
+3. **Action region**: submit button, error block, and "Forgot password?" link with consistent spacing and focus treatment.
+4. **Recovery card**: a secondary form, hidden by default, with the same header, field stack, recovery code input, new-password input, and action region.
 
 The two cards are mutually exclusive; only one is visible at a time.
 

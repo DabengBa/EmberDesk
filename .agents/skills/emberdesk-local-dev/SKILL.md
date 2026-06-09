@@ -12,7 +12,7 @@ Use this when setting up the repo, starting the server, changing runtime configu
 - `package.json`, `bunfig.toml`, `bun.lock`
 - `tests/package.json`, `tests/bunfig.toml`, `tests/bun.lock` when tests are involved
 - `.docs/tech/bun-workflow.md`
-- `docs/environments.md` if using the shared remote test server
+- `.docs/tech/hostinger-sttest-deployment.md` if using the shared remote test server
 - `default/config.yaml`
 - `src/command-line.js`, `src/config-init.js`, `src/server-main.js`
 - `Dockerfile`, `docker/docker-compose.yml`, `docker/build-lib.js` for container work
@@ -60,7 +60,7 @@ Use `node server.js --configPath <path> --dataRoot <path> --port <port>` for iso
 
 ## Remote Test Server
 
-`docs/environments.md` defines `https://sttest.tanyaleoallen.cloud/` as a shared test server for remote-only browser checks. Never store credentials, cookies, tokens, or exported browser storage in the repo.
+`.docs/tech/hostinger-sttest-deployment.md` defines `https://sttest.tanyaleoallen.cloud/` as a shared test server for remote-only browser checks. Never store credentials, cookies, tokens, or exported browser storage in the repo.
 
 ## Validation
 
