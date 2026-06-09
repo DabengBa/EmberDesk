@@ -54,7 +54,7 @@ Separate from both SQLite and thumbnail HTTP caching, EmberDesk now also marks l
 
 That front-end slice is intentionally narrow:
 
-- it applies to template-owned list surfaces such as character rows, inline avatar strips, group member/group collage avatars, past-chat rows, and welcome recent chats
+- it applies to template-owned list surfaces such as character rows, inline avatar strips, group member/group collage avatars, and past-chat rows
 - it does not change thumbnail URLs, cache-buster behavior, or active-chat avatar rendering
 - it reduces offscreen image fetch/decode work through native browser behavior rather than new JS scheduling logic
 

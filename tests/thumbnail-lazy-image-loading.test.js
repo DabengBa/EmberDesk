@@ -33,12 +33,6 @@ describe('thumbnail lazy image loading templates', () => {
         expectTemplateFragment(indexHtml, 'past_chat_template', '<div class="avatar"><img src="" loading="lazy" decoding="async"></div>');
     });
 
-    test('welcome recent chat template includes lazy-loading and async-decoding', () => {
-        const welcomePanel = read('public/scripts/templates/welcomePanel.html');
-
-        expect(welcomePanel).toContain('<img src="{{char_thumbnail}}" alt="{{char_name}}" loading="lazy" decoding="async">');
-    });
-
     test('swipe picker removes inherited past-chat avatars', () => {
         const swipePicker = read('public/scripts/swipe-picker.js');
 
