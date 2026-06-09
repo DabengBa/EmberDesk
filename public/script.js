@@ -171,6 +171,10 @@ import {
     createGenerationLifecyclePlan,
     getGenerationAttemptBaseline as getLifecycleGenerationAttemptBaseline,
     getGenerationFailureDecision,
+    getGenerationRecoveryBaselineSwipeId,
+    getGenerationRecoveryRetrySwipeId,
+    getGenerationRecoverySuccessReasoningState,
+    getGenerationRecoverySuccessSwipeId,
     getGenerationSuccessFinalization,
     hasFallbackProviderForGeneration,
 } from './scripts/chat-generation-lifecycle.js';
@@ -2156,17 +2160,43 @@ function createExistingMessageRecoveryBaseline(type) {
     }
 
     const message = chat[messageId];
+    const swipes = Array.isArray(message.swipes) ? structuredClone(message.swipes) : null;
+    const recoverySwipeId = message.swipe_id;
     return {
+        type,
         messageId,
         mes: String(message.mes ?? ''),
-        swipes: Array.isArray(message.swipes) ? structuredClone(message.swipes) : null,
-        swipe_id: message.swipe_id,
+        swipes,
+        recoverySwipeId,
+        swipe_id: getGenerationRecoveryBaselineSwipeId({
+            type,
+            swipeId: recoverySwipeId,
+            swipeCount: swipes?.length ?? 0,
+        }),
         swipe_info: Array.isArray(message.swipe_info) ? structuredClone(message.swipe_info) : null,
         extra: message.extra && typeof message.extra === 'object' ? structuredClone(message.extra) : null,
     };
 }
 
-async function replaceAssistantRecoveryMessage(messageId, { type, getMessage, title = '', swipes = [], reasoning = '', imageUrls = [], reasoningSignature = null }) {
+function prepareGenerationRetrySwipe(messageId, baseline = null) {
+    const message = chat[messageId];
+    if (!message || baseline?.messageId !== messageId) {
+        return;
+    }
+
+    const retrySwipeId = getGenerationRecoveryRetrySwipeId({
+        type: baseline.type,
+        swipeId: message.swipe_id,
+        recoverySwipeId: baseline.recoverySwipeId,
+        swipeCount: Array.isArray(message.swipes) ? message.swipes.length : 0,
+    });
+
+    if (typeof retrySwipeId === 'number') {
+        message.swipe_id = retrySwipeId;
+    }
+}
+
+async function replaceAssistantRecoveryMessage(messageId, { type, getMessage, title = '', swipes = [], reasoning = '', imageUrls = [], reasoningSignature = null, recoverySwipeId = undefined }) {
     if (!isAssistantRecoveryMessageId(messageId)) {
         return null;
     }
@@ -2180,15 +2210,21 @@ async function replaceAssistantRecoveryMessage(messageId, { type, getMessage, ti
     message.gen_finished = generationFinished;
     message.send_date = getMessageTimeStamp();
     message.extra = message.extra || {};
+    const reasoningState = getGenerationRecoverySuccessReasoningState({
+        type,
+        existingReasoning: message.extra.reasoning,
+        existingReasoningDuration: message.extra.reasoning_duration,
+        reasoning,
+    });
     message.extra.api = getGeneratingApi();
     message.extra.model = getGeneratingModel();
-    message.extra.reasoning = reasoning;
-    message.extra.reasoning_duration = null;
+    message.extra.reasoning = reasoningState.reasoning;
+    message.extra.reasoning_duration = reasoningState.reasoningDuration;
     message.extra.reasoning_signature = reasoningSignature;
     await processImageAttachment(message, { imageUrls });
 
     if (power_user.message_token_count_enabled) {
-        const tokenCountText = (reasoning || '') + message.mes;
+        const tokenCountText = (reasoningState.reasoning || '') + message.mes;
         message.extra.token_count = await getTokenCountAsync(tokenCountText, 0);
     }
 
@@ -2199,14 +2235,31 @@ async function replaceAssistantRecoveryMessage(messageId, { type, getMessage, ti
     });
 
     syncMesToSwipe(messageId);
-    message.swipe_id = 0;
-    message.swipes = [message.mes];
-    message.swipe_info = [{
+    const swipeInfo = {
         send_date: message.send_date,
         gen_started: message.gen_started,
         gen_finished: message.gen_finished,
         extra: structuredClone(message.extra ?? {}),
-    }];
+    };
+    const successSwipeId = getGenerationRecoverySuccessSwipeId({
+        type,
+        swipeId: message.swipe_id,
+        recoverySwipeId,
+        swipeCount: Array.isArray(message.swipes) ? message.swipes.length : 0,
+    });
+
+    if (successSwipeId === null || !Array.isArray(message.swipes)) {
+        message.swipe_id = 0;
+        message.swipes = [message.mes];
+        message.swipe_info = [swipeInfo];
+    } else {
+        message.swipe_id = successSwipeId;
+        if (!Array.isArray(message.swipe_info)) {
+            message.swipe_info = [];
+        }
+        message.swipes[successSwipeId] = message.mes;
+        message.swipe_info[successSwipeId] = swipeInfo;
+    }
 
     if (Array.isArray(swipes) && swipes.length > 0) {
         const swipeInfoExtra = structuredClone(message.extra ?? {});
@@ -2236,21 +2289,6 @@ function getGenerationLifecycleStatusLabels() {
         primaryRetry: t`正在重试`,
         fallback: t`正在使用备用服务商`,
     };
-}
-
-function getGenerationAutoRecoveryAttempts() {
-    const { attempts } = createGenerationLifecyclePlan({
-        type: 'normal',
-        mainApi: 'openai',
-        fallbackReady: hasFallbackProviderForGeneration({
-            settings: oai_settings,
-            secretState: secret_state,
-            fallbackSecretKey: SECRET_KEYS.OPENAI_FALLBACK,
-        }),
-        statusLabels: getGenerationLifecycleStatusLabels(),
-    });
-
-    return attempts;
 }
 
 function showGenerationFailureRecovery(messageId, isRecovering = false) {
@@ -6182,7 +6220,9 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
             if (isRetryAttempt) {
                 await ensureRecoveryMessage(activeRecoveryMessageId);
 
-                clearGenerationAttemptMessage(activeRecoveryMessageId, getGenerationAttemptBaseline(activeRecoveryMessageId));
+                const retryBaseline = getGenerationAttemptBaseline(activeRecoveryMessageId);
+                clearGenerationAttemptMessage(activeRecoveryMessageId, retryBaseline);
+                prepareGenerationRetrySwipe(activeRecoveryMessageId, retryBaseline);
                 showGenerationAutoRecoveryStatus(activeRecoveryMessageId, attempt.status);
                 deactivateSendButtons();
                 showStopButton();
@@ -6307,7 +6347,17 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
                 type,
             });
             if (finalization.action === 'replace_recovery_message') {
-                ({ type, getMessage } = await replaceAssistantRecoveryMessage(activeRecoveryMessageId, { type, getMessage, title, swipes, reasoning, imageUrls, reasoningSignature }));
+                const recoveryBaseline = getGenerationAttemptBaseline(activeRecoveryMessageId);
+                ({ type, getMessage } = await replaceAssistantRecoveryMessage(activeRecoveryMessageId, {
+                    type,
+                    getMessage,
+                    title,
+                    swipes,
+                    reasoning,
+                    imageUrls,
+                    reasoningSignature,
+                    recoverySwipeId: recoveryBaseline?.recoverySwipeId,
+                }));
                 clearGenerationAutoRecoveryStatus(activeRecoveryMessageId);
             } else {
                 ({ type, getMessage } = await saveReply({ type: finalization.type, getMessage, title, swipes, reasoning, imageUrls, reasoningSignature }));

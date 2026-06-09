@@ -109,17 +109,18 @@ async function installStreamingFetchSequenceStub(page, { responses }) {
     }, { streamResponses: responses });
 }
 
-async function enableOpenAiStreaming(page) {
-    await page.evaluate(() => {
+async function enableOpenAiStreaming(page, { chatCompletionSource = 'openai' } = {}) {
+    await page.evaluate(({ source }) => {
         const context = window.SillyTavern.getContext();
         context.powerUserSettings.stream_fade_in = false;
         context.powerUserSettings.streaming_fps = 60;
-        context.chatCompletionSettings.chat_completion_source = 'openai';
+        context.chatCompletionSettings.chat_completion_source = source;
         context.chatCompletionSettings.openai_model = 'gpt-4o-mini';
+        context.chatCompletionSettings.claude_model = 'claude-sonnet-4-5';
         context.chatCompletionSettings.stream_openai = true;
         context.chatCompletionSettings.n = 1;
         context.chatCompletionSettings.send_if_empty = '';
-    });
+    }, { source: chatCompletionSource });
     await page.evaluate(async () => {
         const script = await import('/script.js');
         script.changeMainAPI('openai');
@@ -170,6 +171,22 @@ async function startContinueGeneration(page) {
                 throw error;
             });
     });
+}
+
+async function startRightSwipeGeneration(page, messageId) {
+    await page.evaluate(async (targetMessageId) => {
+        const script = await import('/script.js');
+        const { SWIPE_DIRECTION } = await import('/scripts/constants.js');
+        window.__emberdeskStreamingGeneration = script.swipe(null, SWIPE_DIRECTION.RIGHT, { forceMesId: targetMessageId })
+            .then(result => {
+                window.__emberdeskStreamingGenerationResult = String(result ?? '');
+                return result;
+            })
+            .catch(error => {
+                window.__emberdeskStreamingGenerationError = String(error?.message ?? error);
+                throw error;
+            });
+    }, messageId);
 }
 
 async function waitForGeneration(page, { allowAbort = false, allowFailure = false } = {}) {
@@ -225,10 +242,6 @@ async function installRecoveryStatusRecorder(page) {
         });
         recordStatuses();
     });
-}
-
-function lastAssistantRow(page) {
-    return page.locator('#chat > .mes[is_user="false"][is_system="false"][mesid]').last();
 }
 
 function assistantRowForGeneration(page, rowCountBeforeGeneration) {
@@ -376,6 +389,34 @@ test.describe('chat message streaming', () => {
         expect(finalEvents.rendered).toEqual([{ messageId: rowCountBeforeGeneration + 1, type: 'normal' }]);
     });
 
+    test('parses fallback stream with fallback source when primary source has a different stream shape', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterByName(page, characterName);
+        await enableOpenAiStreaming(page, { chatCompletionSource: 'claude' });
+        await enableFallbackProvider(page);
+        await installStreamingFetchSequenceStub(page, {
+            responses: [
+                { chunks: [], delayMs: 30, failAfterChunks: true },
+                { chunks: [], delayMs: 30, failAfterChunks: true },
+                { chunks: ['Fallback OpenAI stream parsed.'], delayMs: 30 },
+            ],
+        });
+
+        const rowCountBeforeGeneration = await page.locator('#chat > .mes[mesid]').count();
+        await startGeneration(page, 'Start a fallback parser proof.');
+        const assistantRow = assistantRowForGeneration(page, rowCountBeforeGeneration);
+
+        await expect(assistantRow.locator('.mes_text')).toContainText('Fallback OpenAI stream parsed.');
+        await waitForGeneration(page);
+
+        const requests = await page.evaluate(() => window.__emberdeskStreamingRequests);
+        expect(requests).toHaveLength(3);
+        expect(requests[0].chat_completion_source).toBe('claude');
+        expect(requests[1].chat_completion_source).toBe('claude');
+        expect(requests[2].chat_completion_source).toBe('openai');
+        expect(requests[2].openai_secret_marker).toBe('openai_fallback_provider');
+    });
+
     test('stop does not enter the auto recovery chain', async ({ page }) => {
         await testSetup.awaitST({ page });
         await selectCharacterByName(page, characterName);
@@ -388,9 +429,7 @@ test.describe('chat message streaming', () => {
             ],
         });
 
-        const rowCountBeforeGeneration = await page.locator('#chat > .mes[mesid]').count();
         await startGeneration(page, 'Start a stop without retry proof.');
-        const assistantRow = assistantRowForGeneration(page, rowCountBeforeGeneration);
         await expect(page.locator('#mes_stop')).toBeVisible();
         await expect.poll(async () => page.evaluate(() => window.__emberdeskStreamingRequests.length)).toBe(1);
 
@@ -495,6 +534,56 @@ test.describe('chat message streaming', () => {
         expect(renderedEvents).toHaveLength(1);
         expect(messageEvents[0].messageId).toBe(rowCountBeforeGeneration + 1);
         expect(renderedEvents[0].messageId).toBe(rowCountBeforeGeneration + 1);
+    });
+
+    test('recovered overswipe appends a new swipe without replacing the existing swipe', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterByName(page, characterName);
+        await enableOpenAiStreaming(page);
+        await enableFallbackProvider(page);
+        await installStreamingFetchSequenceStub(page, {
+            responses: [
+                { chunks: ['Original swipe baseline.'], delayMs: 30 },
+                { chunks: ['Discarded overswipe partial.'], delayMs: 30, failAfterChunks: true },
+                { chunks: [], delayMs: 30, failAfterChunks: true },
+                { chunks: ['Recovered overswipe text.'], delayMs: 30 },
+            ],
+        });
+
+        const rowCountBeforeGeneration = await page.locator('#chat > .mes[mesid]').count();
+        await startGeneration(page, 'Create an assistant row for overswipe recovery.');
+        await waitForGeneration(page);
+        const messageId = rowCountBeforeGeneration + 1;
+
+        const beforeSwipe = await page.evaluate((targetMessageId) => {
+            const message = window.SillyTavern.getContext().chat[targetMessageId];
+            return {
+                swipeId: message.swipe_id,
+                swipes: [...message.swipes],
+            };
+        }, messageId);
+        expect(beforeSwipe.swipeId).toBe(0);
+        expect(beforeSwipe.swipes).toEqual(['Original swipe baseline.']);
+
+        await startRightSwipeGeneration(page, messageId);
+        await waitForGeneration(page);
+
+        const afterSwipe = await page.evaluate((targetMessageId) => {
+            const message = window.SillyTavern.getContext().chat[targetMessageId];
+            return {
+                text: message.mes,
+                swipeId: message.swipe_id,
+                swipes: [...message.swipes],
+            };
+        }, messageId);
+        expect(afterSwipe.text).toContain('Recovered overswipe text.');
+        expect(afterSwipe.swipeId).toBe(1);
+        expect(afterSwipe.swipes).toEqual(['Original swipe baseline.', 'Recovered overswipe text.']);
+        expect(afterSwipe.swipes[0]).not.toContain('Discarded overswipe partial.');
+
+        const requests = await page.evaluate(() => window.__emberdeskStreamingRequests);
+        expect(requests).toHaveLength(4);
+        expect(requests[3].openai_secret_marker).toBe('openai_fallback_provider');
     });
 
     test('continue auto recovery final failure preserves the original assistant message', async ({ page }) => {

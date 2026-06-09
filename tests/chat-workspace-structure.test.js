@@ -181,8 +181,8 @@ describe('chat workspace structure', () => {
         const scriptSource = readRepoFile('public/script.js');
         const lifecycleSource = readRepoFile('public/scripts/chat-generation-lifecycle.js');
 
-        expect(scriptSource).toContain('function getGenerationAutoRecoveryAttempts()');
         expect(scriptSource).toContain('createGenerationLifecyclePlan({');
+        expect(scriptSource).toContain('mainApi: main_api');
         expect(scriptSource).toContain("fallbackProvider: attempt.fallbackProvider");
         expect(scriptSource).toContain('getGenerationFailureDecision({');
         expect(scriptSource).toContain('failureDecision.shouldRestoreAttemptMessage');

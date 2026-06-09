@@ -1930,6 +1930,7 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null, fa
         const eventStream = getEventSourceStream();
         response.body.pipeThrough(eventStream);
         const reader = eventStream.readable.getReader();
+        const responseChatCompletionSource = requestSettings.chat_completion_source;
         return async function* streamData() {
             let text = '';
             const swipes = [];
@@ -1946,9 +1947,9 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null, fa
                 if (canMultiSwipe && Array.isArray(parsed?.choices) && parsed?.choices?.[0]?.index > 0) {
                     const swipeIndex = parsed.choices[0].index - 1;
                     // FIXME: state.reasoning should be an array to support multi-swipe
-                    swipes[swipeIndex] = (swipes[swipeIndex] || '') + getStreamingReply(parsed, state, { overrideShowThoughts: false });
+                    swipes[swipeIndex] = (swipes[swipeIndex] || '') + getStreamingReply(parsed, state, { chatCompletionSource: responseChatCompletionSource, overrideShowThoughts: false });
                 } else {
-                    text += getStreamingReply(parsed, state);
+                    text += getStreamingReply(parsed, state, { chatCompletionSource: responseChatCompletionSource });
                 }
 
                 ToolManager.parseToolCalls(toolCalls, parsed, state.toolSignatures);

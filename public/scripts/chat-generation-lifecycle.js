@@ -72,6 +72,88 @@ export function getGenerationAttemptBaseline(messageId, baseline) {
     return baseline?.messageId === messageId ? baseline : null;
 }
 
+export function getGenerationRecoveryBaselineSwipeId({
+    type,
+    swipeId,
+    swipeCount = 0,
+} = {}) {
+    if (!['continue', 'swipe'].includes(type) || typeof swipeId !== 'number' || swipeCount <= 0) {
+        return swipeId;
+    }
+
+    if (swipeId < 0) {
+        return 0;
+    }
+
+    if (swipeId >= swipeCount) {
+        return swipeCount - 1;
+    }
+
+    return swipeId;
+}
+
+export function getGenerationRecoverySuccessSwipeId({
+    type,
+    swipeId,
+    recoverySwipeId = swipeId,
+    swipeCount = 0,
+} = {}) {
+    const successSwipeId = typeof recoverySwipeId === 'number' ? recoverySwipeId : swipeId;
+
+    if (!['continue', 'swipe', 'appendFinal'].includes(type) || typeof successSwipeId !== 'number' || successSwipeId < 0) {
+        return null;
+    }
+
+    if (type === 'swipe') {
+        return Math.min(successSwipeId, Math.max(0, swipeCount));
+    }
+
+    if (swipeCount <= 0) {
+        return 0;
+    }
+
+    return Math.min(successSwipeId, swipeCount - 1);
+}
+
+export function getGenerationRecoveryRetrySwipeId({
+    type,
+    swipeId,
+    recoverySwipeId,
+    swipeCount = 0,
+} = {}) {
+    if (type !== 'swipe') {
+        return swipeId;
+    }
+
+    return getGenerationRecoverySuccessSwipeId({
+        type,
+        swipeId,
+        recoverySwipeId,
+        swipeCount,
+    });
+}
+
+export function getGenerationRecoverySuccessReasoningState({
+    type,
+    existingReasoning = '',
+    existingReasoningDuration = null,
+    reasoning = '',
+} = {}) {
+    const nextReasoning = String(reasoning ?? '');
+
+    if (type === 'continue') {
+        return {
+            reasoning: `${String(existingReasoning ?? '')}${nextReasoning}`,
+            reasoningDuration: existingReasoningDuration ?? null,
+        };
+    }
+
+    return {
+        reasoning: nextReasoning,
+        reasoningDuration: null,
+    };
+}
+
 export function getGenerationFailureDecision({
     shouldAutoRecover = false,
     failure,

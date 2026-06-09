@@ -4,6 +4,10 @@ import {
     createGenerationLifecyclePlan,
     getGenerationAttemptBaseline,
     getGenerationFailureDecision,
+    getGenerationRecoveryBaselineSwipeId,
+    getGenerationRecoveryRetrySwipeId,
+    getGenerationRecoverySuccessReasoningState,
+    getGenerationRecoverySuccessSwipeId,
     getGenerationSuccessFinalization,
     hasFallbackProviderForGeneration,
 } from '../public/scripts/chat-generation-lifecycle.js';
@@ -88,6 +92,91 @@ describe('chat generation lifecycle coordinator', () => {
         expect(getGenerationAttemptBaseline(7, baseline)).toBe(baseline);
         expect(getGenerationAttemptBaseline(8, baseline)).toBeNull();
         expect(getGenerationAttemptBaseline(7, null)).toBeNull();
+    });
+
+    test('clamps recovery baselines to an existing swipe before final failure restore', () => {
+        expect(getGenerationRecoveryBaselineSwipeId({
+            type: 'swipe',
+            swipeId: 3,
+            swipeCount: 3,
+        })).toBe(2);
+
+        expect(getGenerationRecoveryBaselineSwipeId({
+            type: 'continue',
+            swipeId: 1,
+            swipeCount: 3,
+        })).toBe(1);
+
+        expect(getGenerationRecoveryBaselineSwipeId({
+            type: 'normal',
+            swipeId: 3,
+            swipeCount: 3,
+        })).toBe(3);
+    });
+
+    test('keeps recovered continue on the active swipe while allowing recovered swipe to append one slot', () => {
+        expect(getGenerationRecoverySuccessSwipeId({
+            type: 'continue',
+            swipeId: 1,
+            swipeCount: 3,
+        })).toBe(1);
+
+        expect(getGenerationRecoverySuccessSwipeId({
+            type: 'swipe',
+            swipeId: 3,
+            swipeCount: 3,
+        })).toBe(3);
+
+        expect(getGenerationRecoverySuccessSwipeId({
+            type: 'swipe',
+            swipeId: 2,
+            swipeCount: 3,
+            recoverySwipeId: 3,
+        })).toBe(3);
+
+        expect(getGenerationRecoverySuccessSwipeId({
+            type: 'normal',
+            swipeId: 0,
+            swipeCount: 1,
+        })).toBeNull();
+    });
+
+    test('restores recovered swipe retries to the intended append slot after baseline cleanup', () => {
+        expect(getGenerationRecoveryRetrySwipeId({
+            type: 'swipe',
+            swipeId: 0,
+            swipeCount: 1,
+            recoverySwipeId: 1,
+        })).toBe(1);
+
+        expect(getGenerationRecoveryRetrySwipeId({
+            type: 'continue',
+            swipeId: 0,
+            swipeCount: 1,
+            recoverySwipeId: 1,
+        })).toBe(0);
+    });
+
+    test('preserves existing reasoning state when recovered continue replaces the active message', () => {
+        expect(getGenerationRecoverySuccessReasoningState({
+            type: 'continue',
+            existingReasoning: 'Original reasoning. ',
+            existingReasoningDuration: 4200,
+            reasoning: 'Continuation reasoning.',
+        })).toEqual({
+            reasoning: 'Original reasoning. Continuation reasoning.',
+            reasoningDuration: 4200,
+        });
+
+        expect(getGenerationRecoverySuccessReasoningState({
+            type: 'swipe',
+            existingReasoning: 'Original reasoning.',
+            existingReasoningDuration: 4200,
+            reasoning: 'Replacement reasoning.',
+        })).toEqual({
+            reasoning: 'Replacement reasoning.',
+            reasoningDuration: null,
+        });
     });
 
     test('classifies recoverable intermediate failures as retry with baseline restore', () => {

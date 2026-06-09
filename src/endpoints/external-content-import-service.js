@@ -79,6 +79,15 @@ function okDescriptor(descriptor) {
     return { ok: true, descriptor };
 }
 
+function normalizeHost(host) {
+    return String(host ?? '').trim().toLowerCase().replace(/\.$/, '');
+}
+
+function isExactHost(host, allowedHosts) {
+    const normalizedHost = normalizeHost(host);
+    return allowedHosts.some(allowedHost => normalizedHost === normalizeHost(allowedHost));
+}
+
 function unsupportedHost(url, host) {
     return {
         ok: false,
@@ -92,14 +101,14 @@ function unsupportedHost(url, host) {
 
 export function getHostFromUrl(url) {
     try {
-        return new URL(url).hostname;
+        return normalizeHost(new URL(url).hostname);
     } catch {
         return '';
     }
 }
 
 export function isHostWhitelisted(host, allowlist = []) {
-    return allowlist.includes(host);
+    return isExactHost(host, allowlist);
 }
 
 export function classifyExternalContentUrl(url, allowlist = []) {
@@ -115,28 +124,28 @@ export function classifyExternalContentUrl(url, allowlist = []) {
         };
     }
 
-    if (host.includes('pygmalion.chat')) {
+    if (isExactHost(host, ['pygmalion.chat', 'www.pygmalion.chat'])) {
         const id = getUuidFromUrl(url);
         return id
             ? okDescriptor({ source: 'pygmalion_character', type: 'character', id, url, host })
             : unsupportedHost(url, host);
     }
 
-    if (host.includes('janitorai')) {
+    if (isExactHost(host, ['janitorai.com', 'www.janitorai.com'])) {
         const id = getUuidFromUrl(url);
         return id
             ? okDescriptor({ source: 'janitor_character', type: 'character', id, url, host })
             : unsupportedHost(url, host);
     }
 
-    if (host.includes('aicharactercards.com')) {
+    if (isExactHost(host, ['aicharactercards.com', 'www.aicharactercards.com'])) {
         const id = parseAICC(url);
         return id
             ? okDescriptor({ source: 'aicc_character', type: 'character', id, url, host })
             : unsupportedHost(url, host);
     }
 
-    if (host.includes('chub.ai') || host.includes('characterhub.org')) {
+    if (isExactHost(host, ['chub.ai', 'www.chub.ai', 'characterhub.org', 'www.characterhub.org'])) {
         const chub = parseChubUrl(url);
         if (chub?.type === 'character') {
             return okDescriptor({ source: 'chub_character', type: 'character', id: chub.id, url, host });
@@ -147,14 +156,14 @@ export function classifyExternalContentUrl(url, allowlist = []) {
         return unsupportedHost(url, host);
     }
 
-    if (host.includes('realm.risuai.net')) {
+    if (isExactHost(host, ['realm.risuai.net'])) {
         const id = parseRisuUrl(url);
         return id
             ? okDescriptor({ source: 'risu_character', type: 'character', id, url, host })
             : unsupportedHost(url, host);
     }
 
-    if (host.includes('perchance.org')) {
+    if (isExactHost(host, ['perchance.org', 'www.perchance.org'])) {
         const id = parsePerchanceSlug(url);
         return id
             ? okDescriptor({ source: 'perchance_character', type: 'character', id, url, host })

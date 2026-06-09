@@ -102,6 +102,24 @@ describe('external content import service', () => {
         });
     });
 
+    test.each([
+        ['pygmalion', 'https://pygmalion.chat.evil.test/character/123e4567-e89b-12d3-a456-426614174000', 'pygmalion.chat.evil.test'],
+        ['janitor', 'https://janitorai.com.evil.test/characters/123e4567-e89b-12d3-a456-426614174000', 'janitorai.com.evil.test'],
+        ['ai character cards', 'https://aicharactercards.com.evil.test/author/card-name', 'aicharactercards.com.evil.test'],
+        ['chub', 'https://chub.ai.evil.test/characters/creator/name', 'chub.ai.evil.test'],
+        ['risu', 'https://realm.risuai.net.evil.test/character/7adb0ed8-d818-55c8-20b3-506980fb40f0', 'realm.risuai.net.evil.test'],
+        ['perchance', 'https://perchance.org.evil.test/ai-character-chat?data=Personality_Advisor~6903e991c90fd1dba52c036d917e99c6.gz', 'perchance.org.evil.test'],
+    ])('rejects provider-looking superdomain for %s imports', (_name, url, host) => {
+        expect(classifyExternalContentUrl(url, [])).toEqual({
+            ok: false,
+            failure: {
+                kind: 'unsupported_host',
+                host,
+                url,
+            },
+        });
+    });
+
     test('classifies invalid and unsupported hosts as typed failures', () => {
         expect(classifyExternalContentUrl('not a url', [])).toEqual({
             ok: false,

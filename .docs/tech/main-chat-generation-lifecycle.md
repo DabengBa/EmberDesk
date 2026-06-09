@@ -33,7 +33,7 @@ Important constraints:
 - `createGenerationLifecyclePlan()` creates the attempt list for a visible generation
 - `getGenerationAttemptBaseline()` returns the restore baseline that should be used for the active message row
 - `getGenerationFailureDecision()` classifies intermediate versus final failure cleanup
-- `getGenerationSuccessDecision()` describes successful finalization state
+- `getGenerationSuccessFinalization()` describes successful finalization state
 - `hasFallbackProviderForGeneration()` delegates fallback readiness to `hasFallbackProviderSettings()`
 
 `public/script.js` keeps the compatibility entry point in `Generate()`. Before a visible generation starts, it captures an existing-message baseline with `createExistingMessageRecoveryBaseline(type)` for `continue` and `swipe`. Failed intermediate attempts call `clearGenerationAttemptMessage(messageId, baseline)` so partial failed text does not leak into the next attempt, while final failure restores the original assistant row when the generation started from an existing row.

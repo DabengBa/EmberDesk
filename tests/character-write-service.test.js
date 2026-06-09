@@ -252,4 +252,38 @@ describe('character write service', () => {
             ['refresh-index', 'New.png', 'rename'],
         ]);
     });
+
+    test('does not copy chats, delete the old avatar, or refresh indexes when rename write fails', async () => {
+        const directories = {
+            characters: 'user/characters',
+            chats: 'user/chats',
+        };
+        const request = makeRequest(directories);
+        const { calls, dependencies } = makeDependencies({
+            existingPaths: ['user/chats/Old'],
+            writeResult: false,
+        });
+
+        const result = await renameCharacterCard({
+            request,
+            body: {
+                avatar_url: 'Old.png',
+                new_name: 'New',
+            },
+            dependencies,
+        });
+
+        expect(result).toEqual({
+            ok: false,
+            reason: 'write_failed',
+            message: 'Error: failed to write character data',
+            avatarName: 'New.png',
+        });
+        expect(calls).toEqual([
+            ['read', 'user/characters/Old.png'],
+            ['set', 'data.name', 'New'],
+            ['set', 'name', 'New'],
+            ['write', 'user/characters/Old.png', '{"name":"New","data":{"name":"New"}}', 'New', undefined, undefined],
+        ]);
+    });
 });
