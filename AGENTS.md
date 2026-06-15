@@ -15,7 +15,7 @@ EmberDesk is a self-hosted browser LLM workspace forked from SillyTavern. The pr
 | Language | JavaScript ES modules |
 | Server | Express 5 |
 | Frontend | HTML / CSS / jQuery, no SPA framework |
-| Build | Webpack for browser shared library output |
+| Build | Vite 8 for browser shared library output (Webpack deprecated as fallback) |
 | Tests | Jest unit tests and Playwright E2E under `tests/` |
 | License | AGPL-3.0 |
 
@@ -45,6 +45,8 @@ EmberDesk is a self-hosted browser LLM workspace forked from SillyTavern. The pr
 ```powershell
 bun ci
 Push-Location tests; bun ci; Pop-Location
+bun run build:lib              # Vite 构建 (主构建)
+bun run build:lib:webpack      # Webpack 构建 (deprecated 回退)
 bun run start
 bun run start:no-csrf
 bun run test:unit
@@ -60,7 +62,7 @@ Use Node.js 26.3.0 for server release proof by default. Bun is the package manag
 ## Architecture Rules
 
 - `server.js` is the only normal entry point. It calls `CommandLineParser.parse(process.argv)`, sets `globalThis.DATA_ROOT` and `globalThis.COMMAND_LINE_ARGS`, changes cwd to `serverDirectory`, then imports `src/server-main.js`.
-- `src/server-main.js` owns boot orchestration: data initialization, middleware/public routes, private routes, cleanup hooks, request filter/proxy, Webpack compile, error/404 handlers, listen, and post-listen tasks.
+- `src/server-main.js` owns boot orchestration: data initialization, middleware/public routes, private routes, cleanup hooks, request filter/proxy, frontend library serve (Vite/Webpack), error/404 handlers, listen, and post-listen tasks.
 - `src/server-startup.js` owns HTTP/HTTPS server creation, IPv4/IPv6 behavior, SSL validation, and listen failures.
 - `src/command-line.js` owns config resolution. Keep argv parsing, filesystem prep, and config merge separable and testable.
 - `src/users.js` is a compatibility barrel plus middleware/routes. Storage, directories, migrations, and auth live in `src/user-storage.js`, `src/user-directories.js`, `src/user-migrations.js`, and `src/user-auth.js`.

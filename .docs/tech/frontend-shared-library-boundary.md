@@ -7,8 +7,10 @@ This document covers EmberDesk's browser shared-library boundary at `public/lib.
 Primary files:
 
 - `public/lib.js` - shared browser-library entrypoint and legacy shim installer
-- `webpack.config.js` - Webpack module-output build for `/lib.js`
-- `src/middleware/webpack-serve.js` - development/runtime serving path for generated `/lib.js`
+- `vite.config.ts` - Vite library-mode build for `/lib.js` (main build)
+- `webpack.config.js` - Webpack module-output build (deprecated fallback)
+- `src/middleware/vite-lib-serve.js` - Vite-built `/lib.js` serving middleware
+- `src/middleware/webpack-serve.js` - Webpack-built `/lib.js` serving middleware (deprecated)
 - `tests/frontend-shared-library-boundary.test.js` - regression proof for exports, shims, and built output
 
 ## Architecture And Constraints
@@ -20,11 +22,15 @@ Primary files:
 
 Browser ES modules do not automatically leak imported names to `window`. Any global exposed by this boundary must be installed intentionally by `initLibraryShims()` and covered by tests.
 
-Webpack remains the bundler for this boundary. It is currently scoped to `public/lib.js` and emits module output with `experiments.outputModule` and `libraryTarget: 'module'`.
+**Build Tools:**
 
-The same source file is also imported directly by Node/Jest tests. Dependency export interop therefore has to work in two environments:
+- **Vite 8** (main): Library mode build outputting ES module format to `dist/lib/lib.js`. Fast HMR support for development (< 200ms). Build time ~34s.
+- **Webpack** (deprecated fallback): Module output with `experiments.outputModule` and `libraryTarget: 'module'`. Use `bun run build:lib:webpack` if Vite compatibility issues arise.
 
-- Webpack's browser module build, where packages such as `slidetoggle` can expose ESM-style named exports.
+The same source file is also imported directly by Node/Jest tests. Dependency export interop therefore has to work in multiple environments:
+
+- Vite's browser module build (ES module output)
+- Webpack's browser module build (ES module output, deprecated)
 - Node's direct source import path, where a CommonJS package can appear under `default`, `slidetoggle`, or `module.exports`.
 
 This dual boundary is intentional and recorded in [ADR-0006](../adr/0006-preserve-dual-libjs-source-and-bundled-boundary.md).
@@ -147,7 +153,9 @@ Stability-sensitive binding points:
 - `initLibraryShims()` in `public/lib.js`
 - `initLibraryShims()` call during `public/script.js` startup
 - `slideToggle` resolver in `public/lib.js`
-- `getPublicLibConfig()` in `webpack.config.js`
-- `getWebpackServeMiddleware()` in `src/middleware/webpack-serve.js`
+- Vite library config in `vite.config.ts`
+- `getViteLibServeMiddleware()` in `src/middleware/vite-lib-serve.js`
+- `getPublicLibConfig()` in `webpack.config.js` (deprecated)
+- `getWebpackServeMiddleware()` in `src/middleware/webpack-serve.js` (deprecated)
 
 Current processing rules are documented in [Frontend Shared Library Boundary Processing Flow](../logic-description/frontend_shared_library_boundary_processing_flow.md).

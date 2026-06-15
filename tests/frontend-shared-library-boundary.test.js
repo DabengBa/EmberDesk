@@ -159,6 +159,17 @@ describe('frontend shared library boundary', () => {
         expect(window.DOMPurify).toBe(sentinel);
     });
 
+    test('vite output remains importable as a module', async () => {
+        const viteOutputFile = path.resolve(process.cwd(), '..', 'dist/lib/lib.js');
+
+        // Vite 构建应该已经完成（由 CI 或手动运行 bun run build:lib）
+        expect(fs.existsSync(viteOutputFile)).toBe(true);
+
+        const builtLib = await import(`${pathToFileURL(viteOutputFile).href}?cacheBust=${Date.now()}`);
+        expect(builtLib).toHaveProperty('initLibraryShims');
+        expect(Object.keys(builtLib.default).sort()).toEqual(expectedExportNames.toSorted());
+    });
+
     test('webpack output remains importable as a module', async () => {
         const dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-lib-boundary-'));
         tmpRoots.push(dataRoot);

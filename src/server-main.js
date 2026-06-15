@@ -44,6 +44,7 @@ import {
 } from './users.js';
 
 import getWebpackServeMiddleware from './middleware/webpack-serve.js';
+import getViteLibServeMiddleware from './middleware/vite-lib-serve.js';
 import basicAuthMiddleware from './middleware/basicAuth.js';
 import getWhitelistMiddleware from './middleware/whitelist.js';
 import accessLoggerMiddleware, { getAccessLogPath, migrateAccessLog } from './middleware/accessLogWriter.js';
@@ -248,6 +249,8 @@ async function registerMiddleware(app, cli) {
     app.get('/login', loginPageMiddleware);
 
     // Host frontend assets
+    const viteLibMiddleware = getViteLibServeMiddleware();
+    app.use(viteLibMiddleware);
     webpackMiddleware = getWebpackServeMiddleware();
     app.use(webpackMiddleware);
     app.use(userCssMiddleware);

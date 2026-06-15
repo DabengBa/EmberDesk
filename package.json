@@ -121,6 +121,8 @@
         "test:e2e": "bun run --cwd tests test:e2e",
         "start": "node server.js",
         "debug": "node --inspect server.js",
+        "build:lib": "vite build",
+        "build:lib:webpack": "node -e \"import('webpack').then(webpack => { const config = (await import('./webpack.config.js')).default(); webpack.webpack(config).run((err, stats) => { console.log(stats?.toString(config.stats)); process.exit(err ? 1 : 0); }); })\"",
         "docs:check": "node .docs/db/scripts/doc-compiler.js check",
         "docs:build": "node .docs/db/scripts/doc-compiler.js build",
         "perf:startup": "node scripts/startup-performance-runner.mjs",
@@ -177,6 +179,7 @@
         "eslint-plugin-jsdoc": "63.0.0",
         "globals": "17.6.0",
         "oxlint": "1.67.0",
-        "typescript": "^5.9.3"
+        "typescript": "^5.9.3",
+        "vite": "^8.0.16"
     }
 }
