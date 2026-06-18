@@ -13,7 +13,7 @@ related: [page.chat_workspace, feature.character_delete, feature.character_expor
 
 ## Feature Purpose
 
-This feature lets users work with large character libraries without leaving the main workspace.
+This feature lets users work with large character libraries, search/filter them, and enter bulk edit flows without leaving the main workspace.
 
 ## Trigger Entry
 
@@ -29,13 +29,15 @@ This feature lets users work with large character libraries without leaving the 
 ## User Flow
 
 1. The user opens or focuses the character library panel.
-2. EmberDesk renders the available [character cards](term.character_card) with their summary metadata.
-3. The user scrolls, searches mentally through the list, or reopens it during the same session.
-4. The user selects a card to continue work in the main workspace.
+2. EmberDesk shows the same workspace entry point regardless of migration state: when the guarded React version is available it mounts the updated toolbar/list surface in place, otherwise the legacy panel remains available from the same entry.
+3. The user scrolls the list, searches, changes sort order, or filters by tags without leaving the panel.
+4. The user may enter bulk-select mode, select one or more cards, and continue into the existing bulk tag or delete flows.
+5. The user selects a card to continue work in the main workspace.
 
 ## Business Rules And Boundaries
 
 - The panel should remain usable for large libraries during ordinary repeated use.
+- The character-library entry point stays in the main workspace; users do not need to learn a new route or separate page for the migrated panel.
 - Summary metadata such as last-chat information should reflect the latest known state when the list is shown.
 - In steady-state repeated use, EmberDesk may reuse precomputed card-summary state so reopening the panel feels faster than a full cold re-derivation of every card.
 - Reopening the panel in non-Firefox browsers may also reuse short-lived cached avatar thumbnails, reducing repeated image transfer cost without changing character-card source-of-truth behavior.
@@ -45,6 +47,8 @@ This feature lets users work with large character libraries without leaving the 
 - When a character card image is newly created, imported, duplicated, edited, or overwritten, EmberDesk now starts best-effort avatar thumbnail pregeneration immediately after the canonical write succeeds so the next ordinary library open is more likely to hit a ready file instead of triggering first-read thumbnail work.
 - If a delayed edit response targets a card that has already been deleted from the local library, EmberDesk skips refreshing that row so the visible list stays aligned with the user's delete action.
 - Character rows expose a stable DOM identity contract for list browsing and extension-adjacent scripts: `data-chid` is the standard identity, legacy `chid` remains available for older selectors, and `id="CharID${chid}"` remains the active-row and bulk-edit hook.
+- Search, sort, and tag filtering remain part of the same panel surface and keep the existing mixed character/group/folder browsing semantics instead of switching to a different list definition.
+- On very large page sizes such as `1000 / page`, the migrated panel keeps the current pagination shell but reduces the number of simultaneously mounted visible rows to the scroll window instead of rendering every row at once.
 - During ordinary sort, search, filter, pagination, or page-size changes, the panel now keeps matching visible rows mounted when the next page is unambiguous, so safe browsing updates do not need to visibly clear and rebuild the whole list.
 - If the panel is in a bogus-folder back-navigation state or the next visible page becomes ambiguous, EmberDesk may still fall back to the full list refresh path to preserve correctness instead of leaving a stale mixed view behind.
 - After an ordinary unfiltered single-character delete, the panel keeps the remaining visible character rows aligned with the shifted `characters` array by rewriting `data-chid`, legacy `chid`, and `CharID${chid}` values instead of forcing a whole-list redraw or clearing the character-list container.
@@ -55,6 +59,7 @@ This feature lets users work with large character libraries without leaving the 
 - When bulk-select mode is active, the toolbar exposes a short visible hint that character cards can be clicked to select them, so selection is not discoverable only through the checkbox or tooltip.
 - Character cards in bulk-select mode keep visual selected styling, the legacy `.bulk_select_checkbox` affordance, and accessible selected/checked state synchronized on both the card row and checkbox after clicks, sorting, filtering, and pagination redraws.
 - Bulk delete remains unavailable until at least one character is selected, even when the compact toolbar keeps the bulk status controls visible in the same operation context.
+- The same bulk-select affordances and delete/tag flows remain available whether the workspace is showing the guarded React island or the legacy fallback version of the panel.
 - Ordinary character rows keep their Character type badge in the DOM for localization and compatibility, but it is visually quiet by default so users can scan names, avatars, and tags first.
 - Group rows continue to show their Group badge so mixed character/group lists remain distinguishable.
 - Browsing and selecting cards belong to this feature; destructive removal belongs to [Delete Character](feature.character_delete), and exporting a selected card belongs to [Character Export](feature.character_export).
@@ -65,5 +70,5 @@ This feature covers browsing, visibility, and selection of character rows. Confi
 
 ## Outcomes
 
-- **Success**: the list appears, rows are browseable, and a selected card becomes the active workspace context.
+- **Success**: the list appears, rows are browseable, search/sort/tag filters and bulk mode remain usable, and a selected card becomes the active workspace context.
 - **Repeat-open expectation**: reopening the panel in the same session should feel like a steady-state interaction rather than a full cold rescan, because EmberDesk can reuse precomputed card summaries for this surface.

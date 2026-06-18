@@ -1,4 +1,4 @@
-import { characterGroupOverlay } from '../script.js';
+import { characterGroupOverlay, syncReactCharacterLibraryToolbarState } from '../script.js';
 import { BulkEditOverlay, BulkEditOverlayState, CharacterContextMenu } from './BulkEditOverlay.js';
 import { event_types, eventSource } from './events.js';
 
@@ -12,6 +12,7 @@ const enableBulkEdit = () => {
     $('#bulkSelectedCount').css('display', 'inline-flex');
     is_bulk_edit = true;
     characterGroupOverlay.updateSelectedCount(0);
+    void syncReactCharacterLibraryToolbarState();
 };
 
 const disableBulkEdit = () => {
@@ -21,6 +22,7 @@ const disableBulkEdit = () => {
     $('.bulkEditOptionElement').hide();
     is_bulk_edit = false;
     characterGroupOverlay.updateSelectedCount(0);
+    void syncReactCharacterLibraryToolbarState();
 };
 
 const toggleBulkEditMode = (isBulkEdit) => {
@@ -141,6 +143,7 @@ export function initBulkEdit() {
             enableBulkSelect();
         }
         characterGroupOverlay.onPageLoad();
+        void syncReactCharacterLibraryToolbarState();
     });
     console.debug('Character context menu initialized', characterContextMenu);
 }

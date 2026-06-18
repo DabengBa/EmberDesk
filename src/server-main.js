@@ -76,6 +76,7 @@ import {
 } from './util.js';
 import { UPLOADS_DIRECTORY } from './constants.js';
 import { REACT_LOGIN_BASE_PATH } from './react-login-feature.js';
+import { getWorkspaceReactFeatures, injectWorkspaceReactFeatures } from './workspace-react-features.js';
 
 // Routers
 import { router as usersPublicRouter } from './endpoints/users-public.js';
@@ -109,6 +110,8 @@ https.globalAgent = new https.Agent({ keepAlive: cliArgs.enableKeepAlive });
 const app = express();
 const startupProfiler = createServerStartupProfiler(process.env.EMBERDESK_STARTUP_PROFILE);
 let webpackMiddleware;
+const publicRoot = path.join(serverDirectory, 'public');
+const workspaceIndexPath = path.join(publicRoot, 'index.html');
 
 /**
  * Phase 2: Register Express middleware and static file routes.
@@ -239,7 +242,13 @@ async function registerMiddleware(app, cli) {
             return response.redirect(redirectUrl);
         }
 
-        return response.sendFile('index.html', { root: path.join(serverDirectory, 'public') });
+        const workspaceIndexHtml = safeReadFileSync(workspaceIndexPath);
+        if (typeof workspaceIndexHtml === 'string') {
+            response.type('html');
+            return response.send(injectWorkspaceReactFeatures(workspaceIndexHtml, getWorkspaceReactFeatures()));
+        }
+
+        return response.sendFile('index.html', { root: publicRoot });
     });
 
     // Callback endpoint for OAuth PKCE flows (e.g. OpenRouter)

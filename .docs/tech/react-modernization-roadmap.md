@@ -6,9 +6,10 @@
 
 ## 状态
 
-状态：草案，待 ADR 批准  
+状态：执行中；Phase 1 已交付，Phase 2 Sprint 1-3 已交付  
 创建日期：2026-06-15  
 前置条件：`.docs/tech/modernization-roadmap.md` 已于 2026-06-05 冻结完成
+当前决策记录：[ADR-0007: React page and panel islands with legacy fallbacks](../adr/0007-react-page-islands-with-legacy-fallbacks.md)
 
 本路线图不改变用户可见的产品语义。用户界面行为仍由 `.docs/db/` 拥有。
 
@@ -42,6 +43,7 @@
 4. **测试驱动**：每个迁移步骤必须有对应的单元测试或 E2E 测试
 5. **性能可测**：保留 startup/interaction performance runner，迁移后性能不能劣化
 6. **TanStack 收口优先**：React 页面迁移默认必须使用 TanStack Form + Zod 管理表单和校验，使用 TanStack Query 管理服务端状态；任何例外都必须在对应 spec/ADR 中说明原因和退出计划
+7. **Page / panel island 优先**：Phase 1 的 React 页面和早期 Phase 2 的工作区面板都以 feature-flagged island 形式上线，必须保留 legacy fallback；全站 SPA、主工作区 shell 和扩展宿主迁移仍按后续 Phase 推进
 
 ## 迁移阶段
 
@@ -61,14 +63,14 @@
 
 ### Phase 1: 独立页面迁移（3 个月）
 
-**目标**：迁移登录、设置、角色库等独立页面到 React
+**目标**：迁移登录、Setup、Settings 等独立页面到 React
 
 📋 **详细规范**：[Phase 1 README](../specs/react-phase1-independent-pages/README.md)
 
 **当前执行状态**：
 - `Sprint 1 / Login`：React 页面已上线并默认开启，`/login.html` 保留 legacy 回退入口；React 登录流程已按路线图完成 TanStack Form / Zod / TanStack Query 收口。
 - `Sprint 2 / Setup`：React 页面已交付并由 `features.react.pages.setup` 控制，默认保持关闭；`/setup.html` 保留 legacy 回退入口；React setup 流程已按路线图完成 TanStack Form / Zod / TanStack Query 收口。
-- `Sprint 3 / Settings`：React `/settings` 已交付并由 `features.react.pages.settings` 控制；flag 开启且 React build 存在时进入独立 Settings 页面，关闭或缺 build 时回退到 legacy `/` 工作区；本 Sprint 已严格采用 TanStack Form / Zod / TanStack Query，覆盖更广的 General 控制、fallback / Vertex AI / prompt post-processing、更多 UI 设置，以及 Advanced 中的大部分 power-user 设置面。用户可见语义见 [`page.settings`](../db/pages/settings.md)。
+- `Sprint 3 / Settings`：React `/settings` 已交付并由 `features.react.pages.settings` 控制；flag 开启且 React build 存在时进入独立 Settings 页面，关闭或缺 build 时回退到 legacy `/` 工作区；本 Sprint 已严格采用 TanStack Form / Zod / TanStack Query，覆盖更广的 General 控制、fallback / Vertex AI / prompt post-processing、更多 UI 设置，以及 Advanced 中的大部分 power-user 设置面。legacy `vertexai` source 会显示为 Google + Vertex AI 并在未关闭 Vertex AI 时保存回 `vertexai`；高级 reasoning effort 值 `min` / `max` / `none` / `minimal` / `xhigh` 保持可见和可保存。用户可见语义见 [`page.settings`](../db/pages/settings.md)，当前 payload 规则见 [React settings payload processing flow](../logic-description/react_settings_payload_processing_flow.md)。
 
 **Sprint 列表**：
 - ✅ [Sprint 1: Login 页面 React 重写](../specs/react-phase1-independent-pages/phase1-sprint1-login-page.md)（2 周，React 实现已上线并默认开启 feature flag；TanStack Form / Zod / Query 已完成收口）
@@ -83,10 +85,15 @@
 
 📋 **详细规范**：[Phase 2 README](../specs/react-phase2-sidebars/README.md)
 
+**当前执行状态**：
+- `Sprint 1-3 / Character Library`：已作为同一条交付路径收束为受 `features.react.panels.characterLibrary` 控制的 React character-library panel island。flag 开启且 bundle 可用时，用户仍从原工作区入口打开角色库，但 toolbar/list surface 改为 React island；flag 关闭或 build 缺失时继续走 legacy panel fallback。
+- 当前交付保持现有 pagination shell、`entitiesFilter` / `getEntitiesList()` 语义、bulk delete / bulk tag 流程、delete dialog 和受保护 DOM 选择器；只把列表渲染、搜索/排序视图状态和 bulk 呈现收口到 React。
+- TanStack 收口状态：`/api/characters/all` 的读取与 refresh / invalidation 由 TanStack Query 承接；搜索 / 排序 / bulk toolbar 视图状态由 TanStack Form + Zod 承接；当前页 rows 在 `1000 / 页` 下通过 `@tanstack/react-virtual` 保持可见窗口挂载，而不是一次性挂载整页角色。
+
 **Sprint 列表**：
-- 📋 [Sprint 1: 角色库面板 - 列表基础](../specs/react-phase2-sidebars/phase2-sprint1-character-library-list.md)（3 周）
-- 📋 [Sprint 2: 角色库面板 - 搜索过滤](../specs/react-phase2-sidebars/phase2-sprint2-character-library-search.md)（2 周）
-- 📋 [Sprint 3: 角色库面板 - 批量操作](../specs/react-phase2-sidebars/phase2-sprint3-character-library-bulk.md)（2 周）
+- ✅ [Sprint 1: 角色库面板 - 列表基础](../specs/react-phase2-sidebars/phase2-sprint1-character-library-list.md)（3 周，已交付为 guarded React panel island；保留 row DOM 合约，并在 `1000 / 页` 下验证虚拟滚动窗口挂载）
+- ✅ [Sprint 2: 角色库面板 - 搜索过滤](../specs/react-phase2-sidebars/phase2-sprint2-character-library-search.md)（2 周，已交付；搜索、排序、标签过滤在同一工作区入口可用，并继续复用现有 folder / bogus-folder / group 混排语义）
+- ✅ [Sprint 3: 角色库面板 - 批量操作](../specs/react-phase2-sidebars/phase2-sprint3-character-library-bulk.md)（2 周，已交付；bulk 选择/删除/标签流程继续复用现有确认对话框和 overlay 链路，`Del` 在无选中项时保持 disabled）
 - 📋 [Sprint 4: 世界信息面板 - 编辑器](../specs/react-phase2-sidebars/phase2-sprint4-world-info-editor.md)（3 周）
 - 📋 [Sprint 5: 世界信息面板 - 导入导出](../specs/react-phase2-sidebars/phase2-sprint5-world-info-import.md)（2 周）
 - 📋 [Sprint 6: 背景库面板](../specs/react-phase2-sidebars/phase2-sprint6-background-library.md)（2 周）
@@ -204,10 +211,10 @@ bun run test:compat
 
 以下变更需要独立 ADR 批准：
 
-1. **ADR-XXXX: 从 jQuery 迁移到 React 生态**
-   - 决策：选择 React + TanStack Start 作为前端框架
-   - 理由：现代化、性能、开发体验、生态成熟度
-   - 权衡：学习曲线、迁移成本、扩展兼容性
+1. **[ADR-0007: React page and panel islands with legacy fallbacks](../adr/0007-react-page-islands-with-legacy-fallbacks.md)**
+   - 决策：先以 feature-flagged React islands 迁移 `/login`、`/setup`、`/settings`，以及像 character library 这样的早期工作区 panel
+   - 理由：降低早期 React 化风险，保持 legacy rollback、扩展兼容边界和同入口迁移体验
+   - 权衡：短期保留 React/jQuery 双实现、共享 build fallback，以及面板 bridge 复杂度
 
 2. **ADR-YYYY: 从 Express 迁移到 Hono**
    - 决策：用 Hono 替代 Express 作为 API 框架
@@ -233,7 +240,7 @@ bun run test:compat
   └─ 月 9: Settings 面板 React 重写
 
 2026 Q4 - 2027 Q1 (月 10-2)：Phase 2 侧边栏和面板迁移
-  ├─ 月 10: 角色库面板 React 重写（含虚拟滚动）
+  ├─ 月 10: 角色库面板 React island（列表/搜索/批量，含虚拟滚动）
   ├─ 月 11: 世界信息面板 React 重写
   ├─ 月 12: 背景库面板 React 重写
   └─ 月 2: Extensions 面板宿主 React 重写
@@ -313,8 +320,7 @@ bun run test:compat
 
 ## 下一步行动
 
-1. **创建 ADR-XXXX**：从 jQuery 迁移到 React 生态
-2. **搭建 PoC**：用 2 周时间搭建 TanStack Start + Vite 基础，验证可行性
-3. **团队培训**：React 19、TanStack 生态、TypeScript 最佳实践
-4. **预算评估**：12-18 个月时间投入和人力成本
-5. **社区沟通**：向用户和扩展开发者预告迁移计划
+1. **继续 Phase 2**：推进 `World Info`、`Backgrounds`、`Extensions` 宿主面板的 React island 迁移，同时保持同入口 fallback 和兼容门。
+2. **收敛 workspace bridge**：把早期 page/panel island 的共享挂载、feature flag、asset fallback 和 rollback 规则沉淀成稳定约束，避免每个新面板各自复制一套桥接。
+3. **保持 TanStack 约束**：后续 React 页面/面板默认继续用 TanStack Form + Zod + TanStack Query；任何偏离都要在 spec/ADR 中说明原因和退出计划。
+4. **等待清理时机**：只有在更多 workspace 面板完成迁移且兼容证据充足后，才讨论移除 legacy panel fallback 或把主工作区推进到更重的 SPA shell。

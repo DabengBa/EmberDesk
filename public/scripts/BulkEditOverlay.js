@@ -16,6 +16,7 @@ import {
     this_chid,
     name2,
     neutralCharacterName,
+    syncReactCharacterLibraryToolbarState,
 } from '../script.js';
 
 import { favsToHotswap } from './RossAscends-mods.js';
@@ -762,6 +763,7 @@ class BulkEditOverlay {
         const deleteButton = document.getElementById(BulkEditOverlay.bulkDeleteButtonId);
         const fallbackFocusElement = document.getElementById('bulkEditButton');
         updateBulkSelectionCountState({ selectedCount, deleteButton, fallbackFocusElement }, count);
+        void syncReactCharacterLibraryToolbarState();
     };
 
     /**

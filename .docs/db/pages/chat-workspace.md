@@ -19,7 +19,7 @@ This page exists so a user can run their daily LLM workflow from one browser sur
 ## Page Structure (UI Layout)
 
 1. **Primary shell frame**: the always-present application chrome that becomes usable after the startup overlay disappears.
-2. **Character and navigation region**: the area where users browse character cards and switch the active working context.
+2. **Character and navigation region**: the area where users browse character cards, search/filter the library, enter bulk edit flows, and switch the active working context.
 3. **Main chat region**: the central conversation surface where messages, generation output, and chat actions are shown.
 4. **Supporting panels and drawers**: secondary UI surfaces for World Info, extensions, backgrounds, and related workspace tools.
 5. **Composer and action region**: the place where users type prompts and trigger chat actions, with the primary textarea, send button, stop/continue/impersonate actions, and chat-options entry discoverable through stable roles and accessible names.
@@ -61,6 +61,7 @@ This page exists so a user can run their daily LLM workflow from one browser sur
 - **Thumbnail paint state**: avatar-heavy list surfaces can show a theme-tinted placeholder on the image box before thumbnail pixels fully paint, reducing harsh flashes without changing the page flow.
 - **Thumbnail cache state**: newly regenerated JPEG thumbnails only pick up the lower shipped default after two separate conditions are satisfied where relevant: an existing install with an explicit `thumbnails.quality` override must first change or remove that config value, and already-cached thumbnail files must still be cleared before regeneration can produce lower-quality replacements.
 - **Post-write thumbnail warm state**: after character-avatar or persona-image writes succeed, EmberDesk can kick off best-effort thumbnail pregeneration in the background so the next normal workspace revisit is less likely to stall on first thumbnail generation; if that background work fails, the existing on-demand thumbnail route still remains the fallback.
+- **Character-library migration state**: the character library stays in this workspace even while it is being modernized; when the guarded React panel is available the toolbar/list surface can upgrade in place, and when the flag is off or the build is missing the same entry keeps the legacy drawer behavior.
 - **Post-delete consistency state**: after a character is deleted, stale delayed saves or edit responses for that card should not restore it into the visible library.
 - **Temporary chat state**: when the user opens a temporary Assistant chat, the workspace shows a visible temporary-chat status near the current-character title area; it is cleared when a normal character context is selected or a permanent Assistant chat is opened.
 - **Post-active-delete safe state**: after deleting the active character, the selected-character title area must route to a safe empty or library state rather than trying to reopen the deleted card.
@@ -76,5 +77,5 @@ This page exists so a user can run their daily LLM workflow from one browser sur
 ## Navigation
 
 - The workspace is the product's main destination and root route.
-- From this shell, users can move between the character library, chat context, World Info drawer, background surface, and extension surface without leaving [Chat Workspace](page.chat_workspace).
+- From this shell, users can move between the character library, chat context, World Info drawer, background surface, and extension surface without leaving [Chat Workspace](page.chat_workspace); the migrated character-library panel does not introduce a separate route.
 - React [Settings](page.settings) is a separate route for the migrated settings slice; unavailable React settings routes fall back here.

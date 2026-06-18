@@ -3105,6 +3105,11 @@ input[type="file"] {
     align-items: center;
 }
 
+#rm_characters_block.react-character-library-toolbar-active #rm_button_bar,
+#rm_characters_block.react-character-library-toolbar-active #form_character_search_form {
+    display: none !important;
+}
+
 #rm_button_bar .character-list-tool-group {
     display: inline-flex;
     align-items: center;

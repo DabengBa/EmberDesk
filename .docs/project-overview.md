@@ -30,8 +30,9 @@ It is not optimized for users who want a managed cloud product or a minimal one-
 - Package manager and task runner: Bun 1.3.14
 - Server: Express-based API and startup pipeline
 - Frontend: HTML/CSS/jQuery main shell with progressive performance refactors
-- Build: Bun-managed scripts plus Webpack for client-side libraries
+- Build: Bun-managed scripts plus Vite for shared browser library output; Webpack remains a deprecated fallback
 - Entry point: `server.js` -> `src/server-main.js`
+- React migration: feature-flagged page islands for `/login`, `/setup`, and `/settings`, plus a guarded workspace panel island for the character library, with legacy fallbacks preserved (see [ADR-0007](adr/0007-react-page-islands-with-legacy-fallbacks.md))
 
 Current architectural boundaries:
 
@@ -62,11 +63,13 @@ EmberDesk currently provides:
 
 - a main browser workspace for chat-centric LLM use
 - character-card management and large-library browsing
+- a guarded React character-library panel island inside the main workspace, keeping the same entry point while adding virtualized row rendering for large page sizes and preserving legacy fallback behavior
 - chat history storage and recovery
 - real-browser proof for stored chat message rendering into stable message rows, plus message-row and send-form role/name affordance coverage for future main-chat changes
 - world info / lorebook workflows
 - background and extension surfaces inside the main shell
 - a documented shared browser library for common frontend utilities and extension compatibility
+- feature-flagged React page islands for login, setup, and the migrated Settings slice, plus the first guarded workspace panel island for the character library, using TanStack Form, Zod, TanStack Query, and TanStack Virtual while preserving legacy rollback surfaces
 - Docker-friendly deployment and browser access across devices
 - focused startup and interaction performance work for daily-use paths
 - client-side character-list incremental reconcile and consistency guards so ordinary browsing and delete flows keep visible rows, pagination, selected-character navigation, temporary-chat status, and bulk-selection hooks aligned without always redrawing the whole list, while delayed edit/save responses still cannot undo confirmed deletion actions
@@ -84,7 +87,7 @@ Current derived-cache scope is intentionally narrow:
 
 EmberDesk does not currently aim to:
 
-- introduce a SPA framework just to replace jQuery
+- replace the jQuery workspace shell with a full SPA in one step
 - replace canonical character/chat files with a database-first product model
 - provide a hosted SaaS control plane
 - treat every upstream SillyTavern feature as mandatory to preserve forever
@@ -101,6 +104,7 @@ EmberDesk does not currently aim to:
 - Treat client-side derived lists as disposable views over canonical files; after destructive actions, stale delayed responses must not restore removed rows.
 - Keep compatibility-facing character row selectors and accessibility state synchronized when list rows are reused instead of re-rendered.
 - Treat main-chat message rows, send-form controls, `eventSource` / `event_types`, and slash-command surfaces as protected compatibility points; add focused browser and compatibility proof before changing rendering or streaming behavior.
+- Treat React modernization as feature-flagged page and panel islands until later phases prove workspace-shell and extension-host compatibility; preserve legacy fallback routes and panels until a cleanup spec removes them with evidence.
 
 ## One-Line Summary
 

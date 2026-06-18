@@ -6,6 +6,7 @@ import path from 'node:path';
 export default defineConfig(({ mode }) => {
     const isLibBuild = mode === 'lib';
     const isLoginBuild = mode === 'login';
+    const isCharacterLibraryPanelBuild = mode === 'character-library-panel';
 
     if (isLibBuild) {
         // Library mode for /lib.js
@@ -25,6 +26,36 @@ export default defineConfig(({ mode }) => {
             resolve: {
                 alias: {
                     '@sillytavern': path.resolve(process.cwd(), 'public/scripts'),
+                },
+            },
+        };
+    }
+
+    if (isCharacterLibraryPanelBuild) {
+        return {
+            publicDir: false,
+            define: {
+                'process.env.NODE_ENV': JSON.stringify('production'),
+            },
+            plugins: [
+                react(),
+            ],
+            resolve: {
+                alias: {
+                    '@': path.resolve(process.cwd(), 'app'),
+                    '@sillytavern': path.resolve(process.cwd(), 'public/scripts'),
+                },
+            },
+            build: {
+                lib: {
+                    entry: path.resolve(process.cwd(), 'app/character-library-panel.tsx'),
+                    formats: ['es'] as const,
+                    fileName: () => 'assets/character-library-panel.js',
+                },
+                outDir: 'app/dist',
+                emptyOutDir: false,
+                rollupOptions: {
+                    external: [],
                 },
             },
         };

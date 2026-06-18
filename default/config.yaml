@@ -109,6 +109,8 @@ features:
       login: true
       setup: false
       settings: false
+    panels:
+      characterLibrary: false
 
 # -- SSO LOGIN CONFIGURATION --
 sso:

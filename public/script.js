@@ -287,6 +287,261 @@ if (globalThis.location?.pathname === '/' && globalThis.location?.search.include
     };
 }
 
+export function getWorkspaceReactFeatures() {
+    return globalThis.__emberDeskWorkspaceFeatures ?? {
+        reactPanels: {
+            characterLibrary: false,
+        },
+    };
+}
+
+export function isReactCharacterLibraryPanelEnabled() {
+    return Boolean(getWorkspaceReactFeatures()?.reactPanels?.characterLibrary);
+}
+
+const REACT_CHARACTER_LIBRARY_PANEL_ASSET_PATH = '/react/login/assets/character-library-panel.js';
+const REACT_CHARACTER_LIBRARY_TOOLBAR_HOST_ID = 'emberdesk-react-character-library-toolbar';
+let reactCharacterLibraryPanelModulePromise = null;
+let reactCharacterLibraryPanelMounted = false;
+let reactCharacterLibraryToolbarMounted = false;
+
+function getCharacterLibrarySortOptionValue(option, index) {
+    const field = option?.dataset?.field ?? '';
+    const order = option?.dataset?.order ?? '';
+    const rule = option?.dataset?.rule ?? '';
+    return `${index}:${field}:${order}:${rule}`;
+}
+
+function getCharacterLibrarySortOptions() {
+    return Array.from(document.querySelectorAll('#character_sort_order option')).map((option, index) => ({
+        value: getCharacterLibrarySortOptionValue(option, index),
+        label: option.textContent ?? '',
+        hidden: option.hidden,
+    }));
+}
+
+function getSelectedCharacterLibrarySortValue() {
+    const selector = /** @type {HTMLSelectElement|null} */ (document.getElementById('character_sort_order'));
+    if (!selector) {
+        return '0:::';
+    }
+
+    const selectedOption = selector.selectedOptions?.[0] ?? selector.options?.[selector.selectedIndex] ?? selector.options?.[0];
+    const selectedIndex = Array.from(selector.options).indexOf(selectedOption);
+    return getCharacterLibrarySortOptionValue(selectedOption, Math.max(selectedIndex, 0));
+}
+
+function ensureReactCharacterLibraryToolbarHost() {
+    const charListFixedTop = document.getElementById('charListFixedTop');
+    if (!charListFixedTop) {
+        return null;
+    }
+
+    let host = document.getElementById(REACT_CHARACTER_LIBRARY_TOOLBAR_HOST_ID);
+    if (host) {
+        return host;
+    }
+
+    host = document.createElement('div');
+    host.id = REACT_CHARACTER_LIBRARY_TOOLBAR_HOST_ID;
+    charListFixedTop.prepend(host);
+    return host;
+}
+
+function hideLegacyCharacterLibraryToolbarChrome() {
+    document.getElementById('rm_characters_block')?.classList.add('react-character-library-toolbar-active');
+}
+
+function showLegacyCharacterLibraryToolbarChrome() {
+    document.getElementById('rm_characters_block')?.classList.remove('react-character-library-toolbar-active');
+}
+
+function getReactCharacterLibraryPanelBridge() {
+    return globalThis.__emberDeskCharacterLibraryPanelBridge ??= {
+        createEntityElement(entity) {
+            switch (entity?.type) {
+                case 'character':
+                    return getCharacterBlock(entity.item, entity.id)[0] ?? null;
+                case 'group':
+                    return getGroupBlock(entity.item)[0] ?? null;
+                case 'tag':
+                    return getTagBlock(entity.item, entity.entities, entity.hidden, entity.isUseless)[0] ?? null;
+                default:
+                    return null;
+            }
+        },
+        createBackBlockElement() {
+            return getBackBlock()[0] ?? null;
+        },
+        async createEmptyElement() {
+            return (await getEmptyBlock())[0] ?? null;
+        },
+        async createHiddenElement(hiddenCount) {
+            return (await getHiddenBlock(hiddenCount))[0] ?? null;
+        },
+        getAllCharacters() {
+            return characters.map(character => structuredClone(character));
+        },
+        fetchAllCharacters() {
+            return fetchAllCharactersDataOnly();
+        },
+        async syncCharactersFromQuery(queryCharacters) {
+            await syncCharactersFromQuery(queryCharacters);
+        },
+        clickLegacyAction(actionId) {
+            document.getElementById(actionId)?.click();
+        },
+        applySearchQuery(searchQuery) {
+            const input = $('#character_search_bar');
+            const normalizedQuery = String(searchQuery ?? '');
+            if (String(input.val() ?? '') === normalizedQuery) {
+                return;
+            }
+
+            input.val(normalizedQuery).trigger('input');
+        },
+        applySortOption(sortValue) {
+            const selector = /** @type {HTMLSelectElement|null} */ (document.getElementById('character_sort_order'));
+            if (!selector) {
+                return;
+            }
+
+            const [indexToken] = String(sortValue).split(':');
+            const optionIndex = Number(indexToken);
+            if (!Number.isFinite(optionIndex) || optionIndex < 0 || optionIndex >= selector.options.length) {
+                return;
+            }
+
+            selector.selectedIndex = optionIndex;
+            $('#character_sort_order').trigger('change');
+        },
+        toggleGrid() {
+            doCharListDisplaySwitch();
+        },
+        toggleBulkEdit() {
+            document.getElementById('bulkEditButton')?.click();
+        },
+        selectAllInBulkMode() {
+            document.getElementById('bulkSelectAllButton')?.click();
+        },
+        deleteSelectedInBulkMode() {
+            document.getElementById('bulkDeleteButton')?.click();
+        },
+    };
+}
+
+async function loadReactCharacterLibraryPanelModule() {
+    if (!reactCharacterLibraryPanelModulePromise) {
+        reactCharacterLibraryPanelModulePromise = import(REACT_CHARACTER_LIBRARY_PANEL_ASSET_PATH).catch(error => {
+            reactCharacterLibraryPanelModulePromise = null;
+            throw error;
+        });
+    }
+
+    return reactCharacterLibraryPanelModulePromise;
+}
+
+function createCharacterLibraryPanelStateSnapshot({ listElement, pageEntities, renderPlan, currentPage, pageSize }) {
+    return {
+        currentPage,
+        pageSize,
+        pageEntities,
+        renderPlan,
+        estimatedRowHeight: power_user.charListGrid ? 224 : 112,
+        scrollElement: listElement,
+    };
+}
+
+function createCharacterLibraryToolbarStateSnapshot() {
+    return {
+        searchQuery: String(entitiesFilter.getFilterData(FILTER_TYPES.SEARCH) ?? ''),
+        sortValue: getSelectedCharacterLibrarySortValue(),
+        sortOptions: getCharacterLibrarySortOptions(),
+        selectedTagIds: [...(entitiesFilter.getFilterData(FILTER_TYPES.TAG)?.selected ?? [])],
+        isGrid: Boolean(power_user.charListGrid),
+        isBulkEdit: $('#rm_print_characters_block').hasClass('bulk_select'),
+        bulkSelectedCount: characterGroupOverlay?.selectedCharacters?.length ?? 0,
+        tagControlsElement: document.querySelector('#charListFixedTop .rm_tag_controls'),
+        extensionButtonsElement: document.getElementById('rm_buttons_container'),
+    };
+}
+
+async function mountReactCharacterLibraryPanel(state) {
+    if (!isReactCharacterLibraryPanelEnabled()) {
+        return false;
+    }
+
+    const listElement = state.scrollElement;
+    if (!listElement) {
+        return false;
+    }
+
+    const panelBridge = getReactCharacterLibraryPanelBridge();
+
+    try {
+        const panelModule = await loadReactCharacterLibraryPanelModule();
+        if (!reactCharacterLibraryPanelMounted) {
+            listElement.replaceChildren();
+            panelModule.mountCharacterLibraryPanel(listElement, panelBridge, state);
+            reactCharacterLibraryPanelMounted = true;
+            return true;
+        }
+
+        panelModule.updateCharacterLibraryPanel(state);
+        return true;
+    } catch (error) {
+        console.warn('React character library panel failed to load. Falling back to legacy render path.', error);
+        reactCharacterLibraryPanelMounted = false;
+        return false;
+    }
+}
+
+async function mountReactCharacterLibraryToolbar(state = createCharacterLibraryToolbarStateSnapshot()) {
+    if (!isReactCharacterLibraryPanelEnabled()) {
+        showLegacyCharacterLibraryToolbarChrome();
+        return false;
+    }
+
+    const host = ensureReactCharacterLibraryToolbarHost();
+    if (!host) {
+        showLegacyCharacterLibraryToolbarChrome();
+        return false;
+    }
+
+    hideLegacyCharacterLibraryToolbarChrome();
+
+    try {
+        const panelModule = await loadReactCharacterLibraryPanelModule();
+        const toolbarBridge = getReactCharacterLibraryPanelBridge();
+        if (!reactCharacterLibraryToolbarMounted) {
+            panelModule.mountCharacterLibraryToolbar(host, toolbarBridge, state);
+            reactCharacterLibraryToolbarMounted = true;
+            return true;
+        }
+
+        panelModule.updateCharacterLibraryToolbar(state);
+        return true;
+    } catch (error) {
+        showLegacyCharacterLibraryToolbarChrome();
+        console.warn('React character library toolbar failed to load. Falling back to legacy toolbar path.', error);
+        reactCharacterLibraryToolbarMounted = false;
+        return false;
+    }
+}
+
+export async function syncReactCharacterLibraryToolbarState() {
+    if (!reactCharacterLibraryToolbarMounted) {
+        return false;
+    }
+
+    return mountReactCharacterLibraryToolbar(createCharacterLibraryToolbarStateSnapshot());
+}
+
+async function renderCharacterListPageReact(state) {
+    await mountReactCharacterLibraryToolbar(createCharacterLibraryToolbarStateSnapshot());
+    return mountReactCharacterLibraryPanel(state);
+}
+
 function getPerfInteractionTrace() {
     return globalThis.__emberDeskPerf?.interactionTrace ?? null;
 }
@@ -1447,6 +1702,22 @@ async function renderCharacterListPage(data, { fullRefresh = false } = {}) {
         hasActiveFilter: entitiesFilter.hasAnyFilter(),
     });
 
+    if (listElement) {
+        const reactPanelRendered = await renderCharacterListPageReact(createCharacterLibraryPanelStateSnapshot({
+            listElement,
+            pageEntities: data,
+            renderPlan,
+            currentPage: getCharacterListCurrentPage(),
+            pageSize: getCharacterListCurrentPageSize(),
+        }));
+        if (reactPanelRendered) {
+            currentCharacterListPageEntities = data;
+            localizePagination($('#rm_print_characters_pagination'));
+            await eventSource.emit(event_types.CHARACTER_PAGE_LOADED);
+            return;
+        }
+    }
+
     if (!listElement) {
         await renderCharacterListPageFull(renderPlan);
     } else if (fullRefresh || reconcilePlan.mode !== 'incremental') {
@@ -1863,27 +2134,77 @@ export function getCharacterSource(chId = this_chid) {
     return '';
 }
 
-export async function getCharacters() {
+function normalizeCharacterListPayload(payload) {
+    if (!Array.isArray(payload)) {
+        return [];
+    }
+
+    return payload.map(character => {
+        const normalizedCharacter = structuredClone(character);
+        normalizedCharacter.name = DOMPurify.sanitize(normalizedCharacter.name);
+
+        if (!normalizedCharacter.chat) {
+            normalizedCharacter.chat = `${normalizedCharacter.name} - ${humanizedDateTime()}`;
+        }
+
+        normalizedCharacter.chat = String(normalizedCharacter.chat);
+        return normalizedCharacter;
+    });
+}
+
+function getCharacterLibraryQueryFingerprint(characterList) {
+    return JSON.stringify(characterList.map(character => ({
+        avatar: character?.avatar ?? '',
+        name: character?.name ?? '',
+        chat: character?.chat ?? '',
+        fav: character?.fav ?? false,
+    })));
+}
+
+async function fetchAllCharactersDataOnly() {
     const response = await fetch('/api/characters/all', {
         method: 'POST',
         headers: getRequestHeaders(),
         body: JSON.stringify({}),
     });
-    if (response.ok) {
-        const previousAvatar = this_chid !== undefined ? characters[this_chid]?.avatar : null;
-        characters.splice(0, characters.length);
-        const getData = await response.json();
-        for (let i = 0; i < getData.length; i++) {
-            characters[i] = getData[i];
-            characters[i].name = DOMPurify.sanitize(characters[i].name);
 
-            // For dropped-in cards
-            if (!characters[i].chat) {
-                characters[i].chat = `${characters[i].name} - ${humanizedDateTime()}`;
-            }
+    if (!response.ok) {
+        throw new Error(`Failed to fetch characters: ${response.status} ${response.statusText}`);
+    }
 
-            characters[i].chat = String(characters[i].chat);
+    return normalizeCharacterListPayload(await response.json());
+}
+
+async function syncCharactersFromQuery(queryCharacters) {
+    const normalizedCharacters = normalizeCharacterListPayload(queryCharacters);
+    const currentFingerprint = getCharacterLibraryQueryFingerprint(characters);
+    const nextFingerprint = getCharacterLibraryQueryFingerprint(normalizedCharacters);
+
+    if (currentFingerprint === nextFingerprint) {
+        return false;
+    }
+
+    const previousAvatar = this_chid !== undefined ? characters[this_chid]?.avatar : null;
+    characters.splice(0, characters.length, ...normalizedCharacters);
+
+    if (previousAvatar) {
+        const newCharacterId = characters.findIndex(x => x.avatar === previousAvatar);
+        if (newCharacterId >= 0) {
+            setCharacterId(newCharacterId);
+            await selectCharacterById(newCharacterId, { switchMenu: false });
         }
+    }
+
+    await getGroups();
+    await printCharacters(true);
+    return true;
+}
+
+export async function getCharacters() {
+    try {
+        const previousAvatar = this_chid !== undefined ? characters[this_chid]?.avatar : null;
+        const normalizedCharacters = await fetchAllCharactersDataOnly();
+        characters.splice(0, characters.length, ...normalizedCharacters);
 
         if (previousAvatar) {
             const newCharacterId = characters.findIndex(x => x.avatar === previousAvatar);
@@ -1898,9 +2219,9 @@ export async function getCharacters() {
 
         await getGroups();
         await printCharacters(true);
-    } else {
-        console.error('Failed to fetch characters:', response.statusText);
-        const errorData = await response.json();
+    } catch (error) {
+        console.error('Failed to fetch characters:', error);
+        const errorData = error instanceof Error ? null : error;
         if (errorData?.overflow) {
             await Popup.show.text(t`Character data length limit reached`, t`To resolve this, set "performance.lazyLoadCharacters" to "true" in config.yaml and restart the server.`);
         }
@@ -11551,6 +11872,7 @@ function doCharListDisplaySwitch() {
     document.body.classList.toggle('charListGrid', power_user.charListGrid);
     updateCharListGridToggleLabel();
     saveSettingsDebounced();
+    void syncReactCharacterLibraryToolbarState();
 }
 
 function updateCharListGridToggleLabel() {

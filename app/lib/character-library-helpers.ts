@@ -1,0 +1,39 @@
+import { z } from 'zod';
+
+export interface CharacterLibraryToolbarSortOption {
+    value: string;
+    label: string;
+    hidden?: boolean;
+}
+
+export interface CharacterLibraryToolbarState {
+    searchQuery: string;
+    sortValue: string;
+    sortOptions: CharacterLibraryToolbarSortOption[];
+    selectedTagIds: string[];
+    isGrid: boolean;
+    isBulkEdit: boolean;
+    bulkSelectedCount: number;
+    tagControlsElement: HTMLElement | null;
+    extensionButtonsElement: HTMLElement | null;
+}
+
+export const characterLibraryToolbarSchema = z.object({
+    searchQuery: z.string(),
+    sortValue: z.string(),
+    selectedTagIds: z.array(z.string()),
+    isGrid: z.boolean(),
+    isBulkEdit: z.boolean(),
+    bulkSelectedCount: z.number().int().min(0),
+});
+
+export function buildCharacterLibraryToolbarDefaults(state: CharacterLibraryToolbarState) {
+    return {
+        searchQuery: state.searchQuery,
+        sortValue: state.sortValue,
+        selectedTagIds: state.selectedTagIds,
+        isGrid: state.isGrid,
+        isBulkEdit: state.isBulkEdit,
+        bulkSelectedCount: state.bulkSelectedCount,
+    };
+}

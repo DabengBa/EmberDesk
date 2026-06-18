@@ -67,6 +67,7 @@ This feature lets a user remove unwanted characters and immediately see the work
 - Deletion is destructive and must remain an explicit user-confirmed action.
 - The selected-character delete affordance must remain directly discoverable and keyboard/screen-reader reachable; the menu option is a compatibility entry, not the only visible path.
 - Both single and batch delete use a unified confirmation dialog — ordinary UI delete flows do not show a separate temporary-chat or world-info confirmation after the user confirms that dialog.
+- Whether the character library is showing the guarded React island or the legacy fallback panel, bulk delete keeps the same count rules, disabled-until-selection behavior, and unified confirmation dialog.
 - When deletion starts from a temporary chat, the temporary-chat loss warning appears inside that same unified confirmation dialog, and the workspace also exposes the temporary-chat state outside the dialog so users are not relying on the confirmation alone.
 - After deleting the active character, clicking the selected-character title area must not read or display stale deleted-card data.
 - The success path should update the visible library immediately.

@@ -290,12 +290,18 @@ function expectNoCharacterReadEnvelope(payload) {
 
 test('frontend getCharacters implementation uses /api/characters/all to preserve eager payload mode', () => {
     const scriptSource = fs.readFileSync(path.join(repoRoot, 'public', 'script.js'), 'utf8');
+    const fetchAllCharactersDataOnlyStart = scriptSource.indexOf('async function fetchAllCharactersDataOnly()');
     const getCharactersStart = scriptSource.indexOf('export async function getCharacters()');
 
+    expect(fetchAllCharactersDataOnlyStart).toBeGreaterThanOrEqual(0);
     expect(getCharactersStart).toBeGreaterThanOrEqual(0);
 
+    const fetchAllCharactersDataOnlyBody = scriptSource.slice(fetchAllCharactersDataOnlyStart, fetchAllCharactersDataOnlyStart + 500);
     const getCharactersBody = scriptSource.slice(getCharactersStart, getCharactersStart + 800);
-    expect(getCharactersBody).toContain('fetch(\'/api/characters/all\'');
+
+    expect(fetchAllCharactersDataOnlyBody).toContain('fetch(\'/api/characters/all\'');
+    expect(fetchAllCharactersDataOnlyBody).not.toContain('fetch(\'/api/characters/list\'');
+    expect(getCharactersBody).toContain('await fetchAllCharactersDataOnly()');
     expect(getCharactersBody).not.toContain('fetch(\'/api/characters/list\'');
 });
 
