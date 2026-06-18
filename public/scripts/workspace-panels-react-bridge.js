@@ -36,6 +36,7 @@ export async function mountReactWorkspacePanel({
     kind,
     container,
     state,
+    bridge,
     features,
     loadModule = loadWorkspacePanelsModule,
     onError = (error, panelKind) => console.warn(`React ${panelKind} workspace panel failed to load. Falling back to legacy panel.`, error),
@@ -46,7 +47,7 @@ export async function mountReactWorkspacePanel({
 
     try {
         const panelModule = await loadModule();
-        panelModule.mountWorkspacePanel(kind, container, { state });
+        panelModule.mountWorkspacePanel(kind, container, { state, bridge });
         return true;
     } catch (error) {
         onError(error, kind);

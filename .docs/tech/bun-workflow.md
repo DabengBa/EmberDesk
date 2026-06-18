@@ -20,6 +20,10 @@ Use Bun for local install and task execution:
 
 ```powershell
 bun ci
+bun run build:lib
+bun run build:react
+bun run build:react:character-library
+bun run build:react:workspace-panels
 bun run docs:build
 bun run test:unit
 bun run test:compat
@@ -28,6 +32,14 @@ Push-Location tests; bun ci; Pop-Location
 ```
 
 Use `bun run test:compat` before and after frontend jQuery slices that must preserve regex, Tavern Helper / JS-Slash-Runner, or character-list DOM compatibility. It delegates to the focused Jest proof in the `tests` package and is a compatibility gate, not a replacement for slice-specific tests.
+
+Use Vite build scripts for frontend build proof:
+
+- `bun run build:lib` builds the shared `/lib.js` browser library.
+- `bun run build:react` builds the shared React page app used by `/login`, `/setup`, and `/settings`.
+- `bun run build:react:character-library` builds the guarded character-library workspace panel bundle.
+- `bun run build:react:workspace-panels` builds the shared guarded workspace-panel action-island bundle for World Info, Background Library, and Extensions Host; React owns the visible host controls and action bridges, while prompt/regex/background file/slash/extension protocol behavior remains with the legacy owners until a later migration explicitly retires those boundaries.
+- `bun run build:lib:webpack` remains a deprecated `/lib.js` fallback check only.
 
 Docker and release install verification also use Bun:
 
@@ -55,7 +67,7 @@ Validated migration surfaces should include:
 - `bun run test:unit`.
 - `bun run test:e2e` when runtime or startup compatibility must be proven end to end.
 - `docker run --rm node:26.3.0-alpine3.23 node --version`.
-- `docker build .` through Bun production install and Webpack precompile.
+- `docker build .` through Bun production install and the current legacy `docker/build-lib.js` Webpack precompile. Frontend build proof for touched browser surfaces should still use the Vite build script first; removing the Docker Webpack precompile is a separate build-path change.
 
 Known local boundary:
 

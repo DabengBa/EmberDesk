@@ -6,7 +6,7 @@
 
 ## 状态
 
-状态：执行中；Phase 0 基础设施已落地，Phase 1 已交付，Phase 2 Sprint 1-3 已交付；Phase 2 Sprint 4-7 当前处于 flag / bridge / bundle scaffold 阶段，World Info、Background Library 和 Extensions Host 已有独立 guarded host/status bridge，flag 关闭时不会插入空迁移 host，panel-specific 行为迁移仍未完成
+状态：执行中；Phase 0 基础设施已落地，Phase 1 已交付，Phase 2 Sprint 1-7 已按 guarded panel island 边界交付；Character Library、World Info、Background Library 和 Extensions Host 均保留同入口 legacy fallback，flag 关闭或 bundle 缺失时不替换原面板
 创建日期：2026-06-15  
 前置条件：`.docs/tech/modernization-roadmap.md` 已于 2026-06-05 冻结完成
 
@@ -25,12 +25,12 @@
 | 语言 | TypeScript 6 + React 19 | 已采用 | `app/**/*.{ts,tsx}`、`src/**/*`、`public/**/*` 纳入当前 TypeScript / ESLint 边界；迁移仍是渐进式。 |
 | Lint/格式化 | ESLint 10 + typescript-eslint | 已采用 | `eslint.config.js` 覆盖 `src`、`public`、`app` 与根 JS/TS 文件；Prettier 不作为当前强制 gate。 |
 | 包管理/运行 | Bun scripts + Node.js runtime | 已采用 | Bun 1.3.14 是包管理器和脚本 runner；应用运行时仍是 Node.js 26.3.0。 |
-| 构建 | Vite 8 + deprecated Webpack fallback | 已采用 | Vite 构建 `/lib.js`、共享 React app、character-library panel bundle，以及后续 workspace panel host scaffold bundle；Webpack 仅保留为 `/lib.js` deprecated fallback / Docker precompile path。 |
+| 构建 | Vite 8 + deprecated Webpack fallback | 已采用 | Vite 构建 `/lib.js`、共享 React app、character-library panel bundle，以及 workspace panel action-island bundle；Webpack 仅保留为 `/lib.js` deprecated fallback / Docker precompile path。 |
 | 样式 | Tailwind CSS v4 + 既有 CSS | 已采用 | Tailwind v4 接入 React app；主工作区 legacy CSS 仍是现有页面和扩展兼容面的 owner。 |
 | UI 组件 | 本地 React 组件 | 已采用 | 当前代码使用 `app/components/*` 本地组件；shadcn/ui、Ant Design 尚未进入 `package.json`，不能写成已采用依赖。 |
 | API | Express 5 | 当前保留 | Hono 属于 Phase 5 未来候选，尚未安装或接管 API；迁移前必须有 ADR 和路由兼容证明。 |
-| 数据获取 | TanStack Query | 已采用 | React login/setup/settings 和 character-library panel 的服务端状态读取、提交或刷新路径已使用 TanStack Query。 |
-| 表单 | TanStack Form + Zod | 已采用 | React login/setup/settings 和 character-library toolbar 的 React-owned 表单/呈现态使用 TanStack Form + Zod；legacy-owned 控件可通过 host 边界保留。 |
+| 数据获取 | TanStack Query | 已采用 | React login/setup/settings、character-library panel、workspace panel shell，以及 World Info / Background Library / Extensions Host 的 guarded React state/action surfaces 已使用 TanStack Query。 |
+| 表单 | TanStack Form + Zod | 已采用 | React login/setup/settings、character-library toolbar、World Info controls、Background Library filter/sort controls 和 Extensions Host Extras controls 的 React-owned 表单/呈现态使用 TanStack Form + Zod；legacy-owned 控件可通过 host 边界保留。 |
 | 列表性能 | TanStack Virtual | 已采用 | Character Library panel 在大页尺寸下用 `@tanstack/react-virtual` 限制同时挂载行数。 |
 | 状态 | legacy globals / jQuery state | 当前保留 | Zustand 属于 Phase 4 未来候选，尚未进入当前依赖；`globalThis.SillyTavern`、`eventSource`、`event_types` 仍是兼容 owner。 |
 | 数据层 | file-backed user data + derived SQLite cache | 当前保留 | Drizzle ORM 尚未采用；SQLite 仍只作为 derived cache，不是用户数据正本。 |
@@ -56,7 +56,7 @@
 📋 **详细规范**：[Phase 0 README](../specs/react-phase0-infrastructure/README.md)
 
 **当前执行状态**：
-- Phase 0 基础设施已落地到当前代码：`vite.config.ts` 同时承载 `/lib.js` 构建、共享 React app 构建、character-library panel bundle 和后续 workspace panel host scaffold bundle；`tsconfig.json` 覆盖 `app/**/*`、`src/**/*` 与 `public/**/*`；`eslint.config.js` 已把 `app/**/*.{ts,tsx}` 纳入 TS/TSX lint 边界。
+- Phase 0 基础设施已落地到当前代码：`vite.config.ts` 同时承载 `/lib.js` 构建、共享 React app 构建、character-library panel bundle 和 workspace panel action-island bundle；`tsconfig.json` 覆盖 `app/**/*`、`src/**/*` 与 `public/**/*`；`eslint.config.js` 已把 `app/**/*.{ts,tsx}` 纳入 TS/TSX lint 边界。
 - React app shell 已存在于 `app/client.tsx`、`app/router.tsx`、`app/routes/*` 和 `app/routeTree.gen.ts`；Tailwind v4 通过 `tailwind.config.js`、`postcss.config.js` 与 `app/styles/globals.css` 接入 React app。
 - Webpack 只保留为 `/lib.js` deprecated fallback；当前主构建入口是 Vite。
 
@@ -96,30 +96,31 @@
 - `Sprint 1-3 / Character Library`：已作为同一条交付路径收束为受 `features.react.panels.characterLibrary` 控制的 React character-library panel island。flag 开启且 bundle 可用时，用户仍从原工作区入口打开角色库，但 toolbar/list surface 改为 React island；flag 关闭或 build 缺失时继续走 legacy panel fallback。
 - 当前交付保持现有 pagination shell、`entitiesFilter` / `getEntitiesList()` 语义、bulk delete / bulk tag 流程、delete dialog 和受保护 DOM 选择器；只把列表渲染、搜索/排序视图状态和 bulk 呈现收口到 React。
 - TanStack 收口状态：`/api/characters/all` 的读取与 mount-time refresh 由 TanStack Query 承接；搜索 / 排序 / bulk toolbar 呈现态由 TanStack Form + Zod 承接；标签过滤继续复用 legacy tag controls 与 `entitiesFilter` 语义，并通过 `LegacyElementHost` 挂入 React toolbar，tag 选择值不进入当前 TanStack Form / Zod schema；当前页 rows 在 `1000 / 页` 下通过 `@tanstack/react-virtual` 保持可见窗口挂载，而不是一次性挂载整页角色。React island 同步会按完整 normalized character payload 判断是否需要更新 legacy `characters` 数组，并保留 `/api/characters/all` 的结构化 overflow 错误给既有提示路径；当前规则见 [React character-library sync processing flow](../logic-description/react_character_library_sync_processing_flow.md)。
+- `Sprint 4-5 / World Info`：已交付为 `features.react.panels.worldInfo` 控制的 guarded React workspace panel island。React host 在 legacy World Info editor 内显示 global/editor selector readiness、当前 world、entry count、search/sort 控件、创建/导入/导出/刷新入口和 entry 快捷入口；这些 React controls 通过 bridge 调用 legacy DOM actions，World Info scanning、prompt injection、regex placement、converter/import result handling 和 world-book delete cascade 仍由 legacy owner 执行。
+- `Sprint 6 / Background Library`：已交付为 `features.react.panels.backgroundLibrary` 控制的 guarded React workspace panel island。React host 显示 loading/empty/success/error 状态、filter/sort controls、global/chat gallery counts 和背景动作入口；filter/sort/upload/select/lock/unlock/auto/refresh 通过 bridge 调用 legacy background controls，`/api/backgrounds/*`、thumbnail/lazy-load、文件夹、选择、lock 和 slash-command 行为仍由 legacy owner 执行。
+- `Sprint 7 / Extensions Host`：已交付为 `features.react.panels.extensionsHost` 控制的 guarded React workspace panel island。React host 显示 notify updates、Manage、Install、Extras API URL/API key/autoconnect/connect controls、loader state 和 protected mount-point readiness；这些 controls 通过 bridge 调用 `public/scripts/extensions.js` 的既有 DOM actions，`#extensions_settings`、`#extensions_settings2`、`#regex_container`、`#extensionsMenuButton`、`#extensionsMenu`、Tavern Helper、regex extension、install/update/delete protocol 和 `@sillytavern/*` 兼容面保持 legacy owner。
 
 **Sprint 列表**：
 - ✅ [Sprint 1: 角色库面板 - 列表基础](../specs/react-phase2-sidebars/phase2-sprint1-character-library-list.md)（3 周，已交付为 guarded React panel island；保留 row DOM 合约，并在 `1000 / 页` 下验证虚拟滚动窗口挂载）
 - ✅ [Sprint 2: 角色库面板 - 搜索过滤](../specs/react-phase2-sidebars/phase2-sprint2-character-library-search.md)（2 周，已交付；搜索、排序、标签过滤在同一工作区入口可用，并继续复用现有 folder / bogus-folder / group 混排语义）
 - ✅ [Sprint 3: 角色库面板 - 批量操作](../specs/react-phase2-sidebars/phase2-sprint3-character-library-bulk.md)（2 周，已交付；bulk 选择/删除/标签流程继续复用现有确认对话框和 overlay 链路，`Del` 在无选中项时保持 disabled）
-- 📋 [Sprint 4: 世界信息面板 - 编辑器](../specs/react-phase2-sidebars/phase2-sprint4-world-info-editor.md)（3 周）
-- 📋 [Sprint 5: 世界信息面板 - 导入导出](../specs/react-phase2-sidebars/phase2-sprint5-world-info-import.md)（2 周）
-- 📋 [Sprint 6: 背景库面板](../specs/react-phase2-sidebars/phase2-sprint6-background-library.md)（2 周）
-- 📋 [Sprint 7: Extensions 面板宿主](../specs/react-phase2-sidebars/phase2-sprint7-extensions-host.md)（3 周，迁移 `Extensions` drawer 宿主 UI、保留 `#extensions_settings` / `#extensions_settings2` / `#regex_container` 等受保护挂载点）
+- ✅ [Sprint 4: 世界信息面板 - 编辑器](../specs/react-phase2-sidebars/phase2-sprint4-world-info-editor.md)（3 周，已交付 guarded React host/editor controls；legacy prompt/regex/delete 语义保留）
+- ✅ [Sprint 5: 世界信息面板 - 导入导出](../specs/react-phase2-sidebars/phase2-sprint5-world-info-import.md)（2 周，已交付 React import/export/create/refresh entry points；legacy converter/import 结果链路保留）
+- ✅ [Sprint 6: 背景库面板](../specs/react-phase2-sidebars/phase2-sprint6-background-library.md)（2 周，已交付 React status/filter/gallery/action island；legacy background file/API/slash 行为保留）
+- ✅ [Sprint 7: Extensions 面板宿主](../specs/react-phase2-sidebars/phase2-sprint7-extensions-host.md)（3 周，已交付 Extensions drawer 宿主 controls；保留 `#extensions_settings` / `#extensions_settings2` / `#regex_container` / wand menu 等受保护挂载点）
 
 **Phase 1 Sprint 3 后续边界**：`World Info`、`Backgrounds`、`Extensions` 没有混入 React `/settings`。它们按路线图进入 Phase 2：World Info 在 Sprint 4-5，Backgrounds 在 Sprint 6，Extensions drawer 宿主在 Sprint 7；第三方扩展 API、挂载兼容和迁移指南仍由 Phase 4 / Phase 6 负责。
 
 **Sprint 4-7 当前边界**：
-- Sprint 4-7 仍未完成；当前代码已经扩展 `features.react.panels.worldInfo` / `backgroundLibrary` / `extensionsHost` 的 config payload、`public/scripts/workspace-panels-react-bridge.js` 的 fail-closed bundle loader，以及 `build:react:workspace-panels` bundle scaffold。World Info 已在 `public/script.js` 的 legacy replay hook 中按 flag 创建独立 React host 并挂载 selector/import/drop-target readiness placeholder；Background Library 已在 `#Backgrounds` 内按 flag 创建独立 React host，并通过 `emberdesk:background-library-state-change` 同步 loading state、empty/success classification 和 global/chat gallery counts；Extensions Host 已在 `#rm_extensions_block` 内按 flag 创建独立 React host，并通过 `emberdesk:extensions-host-state-change` 同步 protected mount points、Extras API controls 和 deferred loader state。三个 wrappers 都先检查对应 flag，flag 关闭时直接回到 legacy 面板，不创建空 host。
-- `app/workspace-panels.tsx` 当前提供 TanStack Query provider shell、World Info bridge-state panel、Background Library bridge-state panel，以及 Extensions Host bridge-state panel；`public/scripts/workspace-panels-react-bridge.js` 当前负责按 flag、host container、bridge state 和 bundle import 成功与否返回 mounted/fallback 结果。bundle import 失败时结果为 fallback，legacy 控制仍是行为 owner；World Info 的实际用户行为仍由 legacy `public/scripts/world-info.js` 承担；Backgrounds 的实际上传/删除/重命名/选择/slash 行为仍由 legacy `public/scripts/backgrounds.js` 和 `public/scripts/background-panel-controller.js` 承担；Extensions 的实际 discovery、manifest loading、script/style injection、wand menu、Tavern Helper、regex extension、install/update/delete 和 mount-point behavior 仍由 legacy `public/scripts/extensions.js`、`public/index.html` mount points、wand templates 和 `src/endpoints/extensions.js` 承担。
-- 后续 World Info React island 必须先保留扫描、prompt 注入、regex、slash-command、converter/import 结果和世界书删除链路的 legacy 归属；React 可以承接宿主壳、toolbar、列表/编辑器呈现态和可验证的导入反馈，但不能把 prompt 激活语义顺手改写。
-- 后续 Backgrounds React island 必须保留 `/api/backgrounds/*`、上传/删除/重命名/文件夹、背景选择、thumbnail 生成和 slash-command 行为；当前 React 只承接面板宿主、loading/empty/success 状态和 global/chat gallery count 呈现。
-- 后续 Extensions 宿主 React island 必须继续保留 `#extensions_settings`、`#extensions_settings2`、`#regex_container`、`#extensionsMenuButton`、`#extensionsMenu` 和 `@sillytavern/*` 兼容面；当前 React 只承接受保护 mount-point readiness、Extras API controls presence 和 loader state 呈现，第三方扩展 API 和迁移指南仍由 Phase 4 / Phase 6 处理。
+- Sprint 4-7 已完成本阶段的 guarded island 交付：共享 `app/workspace-panels.tsx` bundle 提供 TanStack Query shell，并为 World Info、Background Library、Extensions Host 提供 TanStack Form + Zod 控制面、action mutation bridge、status rows 和 safe legacy-slot markers。
+- `public/scripts/workspace-panels-react-bridge.js` 继续负责按 flag、host container、bridge state/action 和 bundle import 成功与否返回 mounted/fallback 结果。bundle import 失败时结果为 fallback，legacy 控制仍是行为 owner。
+- World Info React island 当前接管宿主壳、world select、search/sort、create/import/export/refresh buttons 和 entry shortcut 呈现；World Info prompt activation、regex engine、converter/import result semantics 和 deletion cascade 仍由 `public/scripts/world-info.js` 及相关 legacy modules 拥有。
+- Background Library React island 当前接管宿主壳、filter/sort controls、gallery presentation 和 upload/select/lock/unlock/auto/refresh entry points；background file APIs、thumbnail/lazy-load、folder state、selection effects 和 slash commands 仍由 `public/scripts/backgrounds.js` / `public/scripts/background-panel-controller.js` 拥有。
+- Extensions Host React island 当前接管宿主壳、notify/manage/install/Extras API host controls 和 protected mount-point status presentation；extension discovery、manifest loading、script/style injection、Tavern Helper、regex extension、wand menu templates、install/update/delete protocols 和 `@sillytavern/*` aliases 仍由 legacy extension compatibility boundary 拥有。第三方扩展 API 和迁移指南仍由 Phase 4 / Phase 6 处理。
 
 **Sprint 4-7 验证门**：
 ```powershell
-bun run --cwd tests test:unit -- world-info-*.test.js --runInBand
-bun run --cwd tests test:unit -- workspace-react-panel-flags.test.js react-workspace-panels-helpers.test.js --runInBand
-bun run --cwd tests test:unit -- background-panel-controller.test.js --runInBand
+bun run --cwd tests test:unit -- world-info-card-rendering.test.js world-info-import-feedback.test.js world-info-converters.test.js worldinfo-delete-cascade.test.js background-panel-controller.test.js thumbnail-placeholder-background.test.js workspace-react-panel-flags.test.js react-workspace-panels-helpers.test.js --runInBand
 bun run build:react:workspace-panels
 bun run test:compat
 uv run python .docs/logic-description/react_workspace_panel_flags_sandbox_proof.py
@@ -317,7 +318,7 @@ bun run test:compat
 - `src/react-login-feature.js`, `src/react-setup-feature.js`, `src/react-settings-feature.js`, `src/react-character-library-feature.js`, `src/workspace-react-features.js` (feature flag 和 workspace panel bootstrap；当前 payload 包含 `characterLibrary`、`worldInfo`、`backgroundLibrary`、`extensionsHost`)
 - `public/script.js`, `public/scripts/backgrounds.js`, `public/scripts/extensions.js`, `public/scripts/character-library-react-sync.js`, `public/scripts/workspace-panels-react-bridge.js` (legacy workspace bridge、Background Library status event、Extensions Host status event、character-library sync、workspace-panel fail-closed bundle loader 和 fallback path)
 - `src/users.js`, `src/server-main.js`, `src/middleware/react-login-serve.js` (React route hosting、build-missing fallback 和 legacy redirect)
-- `app/workspace-panels.tsx` (后续 workspace panel host scaffold；当前提供 TanStack Query provider shell、World Info bridge-state panel、Background Library bridge-state panel 和 Extensions Host bridge-state panel，不是 World Info / Backgrounds / Extensions 的完成迁移)
+- `app/workspace-panels.tsx` (workspace panel bundle；提供 TanStack Query provider shell、World Info editor/import/export controls、Background Library filter/gallery/action controls、Extensions Host notify/manage/install/Extras controls，以及 protected legacy-slot readiness，不迁移 legacy prompt/regex/background file/extension protocol owners)
 - `default/config.yaml` (当前 `features.react.pages.*` 和 `features.react.panels.*` 默认值)
 - `globalThis.SillyTavern`, `eventSource` / `event_types`, `@sillytavern/*` (兼容层保持)
 
@@ -335,13 +336,13 @@ bun run test:compat
 - [React settings payload processing flow](../logic-description/react_settings_payload_processing_flow.md) - React `/settings` form defaults、save payload、legacy Vertex AI round-trip 与 advanced reasoning effort 兼容规则
 - [React character-library sync processing flow](../logic-description/react_character_library_sync_processing_flow.md) - React character-library island 与 legacy `characters` 状态同步规则
 - [React workspace panel flags processing flow](../logic-description/react_workspace_panel_flags_processing_flow.md) - workspace React feature payload、HTML bootstrap 注入和 workspace-panel host/status bridge 边界
-- [Background Library Panel](../db/features/background-library-panel.md) - Phase 2 Sprint 6 当前 guarded status host 与 legacy-owned 行为边界
-- [Extensions Panel Open](../db/features/extension-panel-open.md) - Phase 2 Sprint 7 当前 guarded status host 与 legacy-owned 扩展行为边界
+- [Background Library Panel](../db/features/background-library-panel.md) - Phase 2 Sprint 6 当前 guarded action island 与 legacy-owned 行为边界
+- [Extensions Panel Open](../db/features/extension-panel-open.md) - Phase 2 Sprint 7 当前 guarded action island 与 legacy-owned 扩展行为边界
 - React 推荐技术栈：`C:\SyncFiles\Softwares_Downloads\dev\Agents-Prompt\.docs\tech\recommended-stacks\react.md` - 技术选型来源
 
 ## 下一步行动
 
-1. **继续 Phase 2**：推进 `World Info`、`Backgrounds`、`Extensions` 宿主面板的 React island 迁移，同时保持同入口 fallback 和兼容门。
-2. **收敛 workspace bridge**：把早期 page/panel island 的共享挂载、feature flag、asset fallback 和 rollback 规则沉淀成稳定约束，避免每个新面板各自复制一套桥接。
+1. **进入 Phase 3 准备**：以当前 page/panel islands 和 legacy fallback 规则为前提，推进主聊天工作区迁移前的 rendering、streaming、input 和 message-action proof。
+2. **收敛 workspace bridge**：把 page/panel island 的共享挂载、feature flag、asset fallback、action bridge 和 rollback 规则沉淀成稳定约束，避免每个新面板各自复制一套桥接。
 3. **保持 TanStack 约束**：后续 React 页面/面板默认继续用 TanStack Form + Zod + TanStack Query；任何偏离都要在 spec/ADR 中说明原因和退出计划。
 4. **等待清理时机**：只有在更多 workspace 面板完成迁移且兼容证据充足后，才讨论移除 legacy panel fallback 或把主工作区推进到更重的 SPA shell。

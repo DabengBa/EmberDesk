@@ -32,8 +32,8 @@ It is not optimized for users who want a managed cloud product or a minimal one-
 - Frontend: HTML/CSS/jQuery main shell with progressive performance refactors
 - Build: Bun-managed scripts plus Vite for shared browser library output, the shared React app, and guarded React panel bundles; Webpack remains a deprecated `/lib.js` fallback
 - Entry point: `server.js` -> `src/server-main.js`
-- React migration: feature-flagged page islands for `/login`, `/setup`, and `/settings`, plus a guarded workspace panel island for the character library, with legacy fallbacks preserved (see [ADR-0007](adr/0007-react-page-islands-with-legacy-fallbacks.md))
-- Workspace panel scaffold: the server bootstrap payload and browser bridge helper now carry disabled flags for planned World Info, Background Library, and Extensions Host islands, Vite can build the shared workspace-panel bundle, and World Info, Background Library, and Extensions Host have independent guarded host/status surfaces behind their panel flags; flag-off paths do not insert empty migration hosts, and actual World Info activation/import/regex/delete behavior, Background upload/delete/rename/select/slash behavior, and extension discovery/mount/API behavior remain legacy-owned until panel-specific proof retires each fallback
+- React migration: feature-flagged page islands for `/login`, `/setup`, and `/settings`, plus guarded workspace panel islands for Character Library, World Info, Background Library, and Extensions Host, with legacy fallbacks preserved (see [ADR-0007](adr/0007-react-page-islands-with-legacy-fallbacks.md))
+- Workspace panel islands: the server bootstrap payload and browser bridge helper carry independent flags for workspace panels; Vite builds the shared workspace-panel bundle; World Info, Background Library, and Extensions Host now expose guarded React host/action surfaces behind their panel flags. Flag-off paths do not insert empty migration hosts, and legacy owners still perform World Info prompt/regex/delete semantics, Background file/API/slash behavior, and extension discovery/mount/protocol behavior.
 
 Current architectural boundaries:
 
@@ -70,7 +70,7 @@ EmberDesk currently provides:
 - world info / lorebook workflows
 - background and extension surfaces inside the main shell
 - a documented shared browser library for common frontend utilities and extension compatibility
-- feature-flagged React page islands for login, setup, and the migrated Settings slice, plus guarded workspace panel islands/status hosts for the character library, World Info, Background Library, and Extensions Host; TanStack Form, Zod, TanStack Query, and TanStack Virtual are used where React owns the migrated slice, while legacy rollback surfaces and legacy-owned controls stay in place until later cleanup specs retire them
+- feature-flagged React page islands for login, setup, and the migrated Settings slice, plus guarded workspace panel islands for the character library, World Info, Background Library, and Extensions Host; TanStack Form, Zod, TanStack Query, and TanStack Virtual are used where React owns the migrated slice, while legacy rollback surfaces and legacy-owned behavior owners stay in place until later cleanup specs retire them
 - Docker-friendly deployment and browser access across devices
 - focused startup and interaction performance work for daily-use paths
 - client-side character-list incremental reconcile and consistency guards so ordinary browsing and delete flows keep visible rows, pagination, selected-character navigation, temporary-chat status, and bulk-selection hooks aligned without always redrawing the whole list, while delayed edit/save responses still cannot undo confirmed deletion actions

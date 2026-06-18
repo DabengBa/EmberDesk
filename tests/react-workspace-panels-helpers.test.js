@@ -106,7 +106,23 @@ describe('React workspace panels bridge helpers', () => {
             loadModule: async () => panelModule,
             onError,
         })).resolves.toBe(true);
-        expect(panelModule.mountWorkspacePanel).toHaveBeenCalledWith('worldInfo', container, { state: { selectorsSeparated: true } });
+        expect(panelModule.mountWorkspacePanel).toHaveBeenCalledWith('worldInfo', container, expect.objectContaining({ state: { selectorsSeparated: true } }));
+    });
+
+    test('uses a shared Query-backed workspace panel shell with safe legacy slot markers', () => {
+        const workspacePanelSource = read('app/workspace-panels.tsx');
+
+        expect(workspacePanelSource).toContain('import { QueryClient, QueryClientProvider, useQuery } from \'@tanstack/react-query\';');
+        expect(workspacePanelSource).toContain('function workspacePanelStateQueryKey(kind: WorkspacePanelKind)');
+        expect(workspacePanelSource).toContain('queryKey: workspacePanelStateQueryKey(kind)');
+        expect(workspacePanelSource).toContain('queryClient.setQueryData(workspacePanelStateQueryKey(mount.kind), mount.state ?? null);');
+        expect(workspacePanelSource).toContain('function WorkspacePanelShell');
+        expect(workspacePanelSource).toContain('data-react-workspace-panel-shell={kind}');
+        expect(workspacePanelSource).toContain('data-workspace-panel-status={status}');
+        expect(workspacePanelSource).toContain('data-workspace-legacy-slot={slot.id}');
+        expect(workspacePanelSource).toContain('slot.id === \'extensions-settings\'');
+        expect(workspacePanelSource).not.toContain('id="extensions_settings"');
+        expect(workspacePanelSource).not.toContain('id="regex_container"');
     });
 
     test('wires World Info deferred replay to an independent React host with legacy editor/import state', () => {
@@ -130,14 +146,52 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).not.toContain('mountReactWorkspacePanel({\n        kind: \'worldInfo\',\n        container: document.getElementById(\'world_popup\')');
 
         expect(workspacePanelSource).toContain('function WorldInfoWorkspacePanel');
-        expect(workspacePanelSource).toContain('data-react-workspace-panel="worldInfo"');
+        expect(workspacePanelSource).toContain('kind="worldInfo"');
         expect(workspacePanelSource).toContain('interface WorldInfoWorkspacePanelState');
         expect(workspacePanelSource).toContain('data-world-info-bridge-state={stateId}');
         expect(workspacePanelSource).toContain('stateId="global-selector"');
         expect(workspacePanelSource).toContain('stateId="editor-selector"');
         expect(workspacePanelSource).toContain('stateId="import"');
         expect(workspacePanelSource).toContain('stateId="drop-target"');
-        expect(workspacePanelSource).toContain('data-world-info-legacy-boundary="activation-import-regex-prompt-delete"');
+        expect(workspacePanelSource).toContain('legacyBoundary="activation-import-regex-prompt-delete"');
+        expect(workspacePanelSource).toContain("{ id: 'legacy-editor', label: 'Legacy editor', ready: bridgeState.dropTargetPresent }");
+    });
+
+    test('renders a World Info editor/import/export workflow through React-owned controls and legacy actions', () => {
+        const scriptSource = read('public/script.js');
+        const bridgeSource = read('public/scripts/workspace-panels-react-bridge.js');
+        const workspacePanelSource = read('app/workspace-panels.tsx');
+
+        expect(scriptSource).toContain('function getWorldInfoReactBridge()');
+        expect(scriptSource).toContain('worldNames: getWorldInfoReactWorldNames(editorSelector)');
+        expect(scriptSource).toContain('selectedWorldName: getWorldInfoReactSelectedWorldName(editorSelector)');
+        expect(scriptSource).toContain('entrySummaries: getWorldInfoReactEntrySummaries()');
+        expect(scriptSource).toContain('searchQuery: worldInfoSearch?.value ?? \'\'');
+        expect(scriptSource).toContain('sortOptions: getWorldInfoReactSortOptions(worldInfoSortOrder)');
+        expect(scriptSource).toContain('case \'applySearchQuery\':');
+        expect(scriptSource).toContain('$(\'#world_info_search\').val(String(payload?.searchQuery ?? \'\')).trigger(\'input\');');
+        expect(scriptSource).toContain('case \'importWorld\':');
+        expect(scriptSource).toContain('document.getElementById(\'world_import_menu_item\')?.click();');
+        expect(scriptSource).toContain('case \'exportWorld\':');
+        expect(scriptSource).toContain('document.getElementById(\'world_export_menu_item\')?.click();');
+        expect(scriptSource).toContain('bridge: getWorldInfoReactBridge()');
+
+        expect(bridgeSource).toContain('bridge,');
+        expect(bridgeSource).toContain('panelModule.mountWorkspacePanel(kind, container, { state, bridge });');
+
+        expect(workspacePanelSource).toContain('import { useForm } from \'@tanstack/react-form\';');
+        expect(workspacePanelSource).toContain('import { z } from \'zod\';');
+        expect(workspacePanelSource).toContain('const worldInfoPanelFormSchema = z.object(');
+        expect(workspacePanelSource).toContain('function buildWorldInfoPanelFormDefaults');
+        expect(workspacePanelSource).toContain('const worldInfoActionMutation = useMutation({');
+        expect(workspacePanelSource).toContain('data-world-info-react-control="world-select"');
+        expect(workspacePanelSource).toContain('data-world-info-react-control="search"');
+        expect(workspacePanelSource).toContain('data-world-info-react-control="sort"');
+        expect(workspacePanelSource).toContain('data-world-info-react-action="import"');
+        expect(workspacePanelSource).toContain('data-world-info-react-action="export"');
+        expect(workspacePanelSource).toContain('data-world-info-react-entry={entry.uid}');
+        expect(workspacePanelSource).toContain('worldInfoActionMutation.mutate({ action: \'importWorld\' })');
+        expect(workspacePanelSource).toContain('worldInfoActionMutation.mutate({ action: \'exportWorld\' })');
     });
 
     test('wires Background Library to an independent React host with load and refresh state', () => {
@@ -166,11 +220,49 @@ describe('React workspace panels bridge helpers', () => {
 
         expect(workspacePanelSource).toContain('interface BackgroundLibraryWorkspacePanelState');
         expect(workspacePanelSource).toContain('function BackgroundLibraryWorkspacePanel');
-        expect(workspacePanelSource).toContain('data-react-workspace-panel="backgroundLibrary"');
+        expect(workspacePanelSource).toContain('kind="backgroundLibrary"');
         expect(workspacePanelSource).toContain('data-background-library-bridge-state="status"');
         expect(workspacePanelSource).toContain('data-background-library-bridge-state="global-gallery"');
         expect(workspacePanelSource).toContain('data-background-library-bridge-state="chat-gallery"');
-        expect(workspacePanelSource).toContain('data-background-library-legacy-boundary="upload-delete-rename-select-lock-slash"');
+        expect(workspacePanelSource).toContain('legacyBoundary="upload-delete-rename-select-lock-slash"');
+        expect(workspacePanelSource).toContain("{ id: 'background-actions', label: 'Background actions', ready: bridgeState.systemContainerPresent || bridgeState.chatContainerPresent }");
+    });
+
+    test('renders a Background Library gallery workflow through React-owned filters and legacy actions', () => {
+        const scriptSource = read('public/script.js');
+        const workspacePanelSource = read('app/workspace-panels.tsx');
+
+        expect(scriptSource).toContain('function getBackgroundLibraryReactBridge()');
+        expect(scriptSource).toContain('systemBackgrounds: getBackgroundLibraryReactGalleryItems(systemContainer)');
+        expect(scriptSource).toContain('chatBackgrounds: getBackgroundLibraryReactGalleryItems(chatContainer)');
+        expect(scriptSource).toContain('sortValue: backgroundSort?.value ?? \'\'');
+        expect(scriptSource).toContain('folderViewActive: document.getElementById(\'Backgrounds\')?.classList.contains(\'in-folder-view\') === true');
+        expect(scriptSource).toContain('case \'applyBackgroundFilter\':');
+        expect(scriptSource).toContain('case \'applyBackgroundSort\':');
+        expect(scriptSource).toContain('$(\'#bg-sort\').val(String(payload?.sortValue ?? \'\')).trigger(\'change\');');
+        expect(scriptSource).toContain('case \'uploadBackground\':');
+        expect(scriptSource).toContain('document.getElementById(\'add_bg_button\')?.click();');
+        expect(scriptSource).toContain('case \'selectBackground\':');
+        expect(scriptSource).toContain('backgroundElement?.click();');
+        expect(scriptSource).toContain('const lockControl = document.querySelector(\'.bg_example.selected-background .jg-lock\') ?? document.querySelector(\'.bg_example .jg-lock\');');
+        expect(scriptSource).toContain('const unlockControl = document.querySelector(\'.bg_example.locked-background .jg-unlock\') ?? document.querySelector(\'.bg_example .jg-unlock\');');
+        expect(scriptSource).toContain('bridge: getBackgroundLibraryReactBridge()');
+
+        expect(workspacePanelSource).toContain('const backgroundLibraryPanelFormSchema = z.object(');
+        expect(workspacePanelSource).toContain('function buildBackgroundLibraryPanelFormDefaults');
+        expect(workspacePanelSource).toContain('const backgroundLibraryActionMutation = useMutation({');
+        expect(workspacePanelSource).toContain('data-background-library-react-control="filter"');
+        expect(workspacePanelSource).toContain('data-background-library-react-control="sort"');
+        expect(workspacePanelSource).toContain('data-background-library-react-action="upload"');
+        expect(workspacePanelSource).toContain('data-background-library-react-action="lock"');
+        expect(workspacePanelSource).toContain('data-background-library-react-action="unlock"');
+        expect(workspacePanelSource).toContain('data-background-library-react-gallery={source}');
+        expect(workspacePanelSource).toContain('<BackgroundGallery source="global" items={systemBackgrounds} actionMutation={backgroundLibraryActionMutation} />');
+        expect(workspacePanelSource).toContain('<BackgroundGallery source="chat" items={chatBackgrounds} actionMutation={backgroundLibraryActionMutation} />');
+        expect(workspacePanelSource).toContain('data-background-library-react-item={item.id}');
+        expect(workspacePanelSource).toContain('backgroundLibraryActionMutation.mutate({ action: \'uploadBackground\' })');
+        expect(workspacePanelSource).toContain('backgroundLibraryActionMutation.mutate({ action: \'lockBackground\' })');
+        expect(workspacePanelSource).toContain('backgroundLibraryActionMutation.mutate({ action: \'unlockBackground\' })');
     });
 
     test('wires Extensions Host to an independent React host without replacing protected mount points', () => {
@@ -204,13 +296,58 @@ describe('React workspace panels bridge helpers', () => {
 
         expect(workspacePanelSource).toContain('interface ExtensionsHostWorkspacePanelState');
         expect(workspacePanelSource).toContain('function ExtensionsHostWorkspacePanel');
-        expect(workspacePanelSource).toContain('data-react-workspace-panel="extensionsHost"');
+        expect(workspacePanelSource).toContain('kind="extensionsHost"');
         expect(workspacePanelSource).toContain('data-extensions-host-bridge-state={stateId}');
         expect(workspacePanelSource).toContain('stateId="extensions-settings"');
         expect(workspacePanelSource).toContain('stateId="extensions-settings2"');
         expect(workspacePanelSource).toContain('stateId="regex-container"');
         expect(workspacePanelSource).toContain('stateId="wand-menu"');
         expect(workspacePanelSource).toContain('stateId="extras-api"');
-        expect(workspacePanelSource).toContain('data-extensions-host-legacy-boundary="mount-points-loader-wand-regex-aliases"');
+        expect(workspacePanelSource).toContain('legacyBoundary="mount-points-loader-wand-regex-aliases"');
+        expect(workspacePanelSource).toContain("{ id: 'extensions-menu', label: 'Wand menu', ready: bridgeState.extensionsMenuPresent }");
+    });
+
+    test('renders an Extensions Host workflow through React-owned controls and protected legacy actions', () => {
+        const scriptSource = read('public/script.js');
+        const workspacePanelSource = read('app/workspace-panels.tsx');
+
+        expect(scriptSource).toContain('function getExtensionsHostReactBridge()');
+        expect(scriptSource).toContain('notifyUpdatesEnabled: document.getElementById(\'extensions_notify_updates\')?.checked === true');
+        expect(scriptSource).toContain('extrasApiUrl: extensionsUrl?.value ?? \'\'');
+        expect(scriptSource).toContain('extrasApiKeySet: Boolean(extensionsApiKey?.value)');
+        expect(scriptSource).toContain('autoconnectEnabled: extensionsAutoconnect?.checked === true');
+        expect(scriptSource).toContain('extrasStatusText: extensionsStatus?.textContent?.trim() ?? \'\'');
+        expect(scriptSource).toContain('mountPointStatuses: getExtensionsHostReactMountPointStatuses()');
+        expect(scriptSource).toContain('case \'toggleNotifyUpdates\':');
+        expect(scriptSource).toContain('document.getElementById(\'extensions_notify_updates\')?.click();');
+        expect(scriptSource).toContain('case \'openManageExtensions\':');
+        expect(scriptSource).toContain('document.getElementById(\'extensions_details\')?.click();');
+        expect(scriptSource).toContain('case \'openInstallExtension\':');
+        expect(scriptSource).toContain('document.getElementById(\'third_party_extension_button\')?.click();');
+        expect(scriptSource).toContain('case \'updateExtrasApiUrl\':');
+        expect(scriptSource).toContain('$(\'#extensions_url\').val(String(payload?.url ?? \'\')).trigger(\'input\');');
+        expect(scriptSource).toContain('case \'updateExtrasApiKey\':');
+        expect(scriptSource).toContain('$(\'#extensions_api_key\').val(String(payload?.apiKey ?? \'\')).trigger(\'input\');');
+        expect(scriptSource).toContain('case \'connectExtrasApi\':');
+        expect(scriptSource).toContain('document.getElementById(\'extensions_connect\')?.click();');
+        expect(scriptSource).toContain('case \'toggleAutoconnect\':');
+        expect(scriptSource).toContain('document.getElementById(\'extensions_autoconnect\')?.click();');
+        expect(scriptSource).toContain('bridge: getExtensionsHostReactBridge()');
+
+        expect(workspacePanelSource).toContain('const extensionsHostPanelFormSchema = z.object(');
+        expect(workspacePanelSource).toContain('function buildExtensionsHostPanelFormDefaults');
+        expect(workspacePanelSource).toContain('const extensionsHostActionMutation = useMutation({');
+        expect(workspacePanelSource).toContain('data-extensions-host-react-control="notify-updates"');
+        expect(workspacePanelSource).toContain('data-extensions-host-react-action="manage"');
+        expect(workspacePanelSource).toContain('data-extensions-host-react-action="install"');
+        expect(workspacePanelSource).toContain('data-extensions-host-react-control="extras-url"');
+        expect(workspacePanelSource).toContain('data-extensions-host-react-control="extras-api-key"');
+        expect(workspacePanelSource).toContain('data-extensions-host-react-control="autoconnect"');
+        expect(workspacePanelSource).toContain('data-extensions-host-react-action="connect"');
+        expect(workspacePanelSource).toContain('data-extensions-host-react-mount-point={mountPoint.id}');
+        expect(workspacePanelSource).toContain('extensionsHostActionMutation.mutate({ action: \'toggleNotifyUpdates\' })');
+        expect(workspacePanelSource).toContain('extensionsHostActionMutation.mutate({ action: \'openManageExtensions\' })');
+        expect(workspacePanelSource).toContain('extensionsHostActionMutation.mutate({ action: \'openInstallExtension\' })');
+        expect(workspacePanelSource).toContain('extensionsHostActionMutation.mutate({ action: \'connectExtrasApi\' })');
     });
 });

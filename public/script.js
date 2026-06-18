@@ -338,12 +338,65 @@ function ensureWorldInfoReactHost() {
     return host;
 }
 
+function getWorldInfoReactWorldNames(editorSelector) {
+    if (!(editorSelector instanceof HTMLSelectElement)) {
+        return [];
+    }
+
+    return Array.from(editorSelector.options)
+        .filter(option => option.value !== '')
+        .map(option => ({
+            value: option.value,
+            label: option.textContent?.trim() || option.label || option.value,
+            selected: option.selected,
+        }));
+}
+
+function getWorldInfoReactSelectedWorldName(editorSelector) {
+    if (!(editorSelector instanceof HTMLSelectElement) || editorSelector.value === '') {
+        return '';
+    }
+
+    return editorSelector.selectedOptions[0]?.textContent?.trim() ?? '';
+}
+
+function getWorldInfoReactSortOptions(worldInfoSortOrder) {
+    if (!(worldInfoSortOrder instanceof HTMLSelectElement)) {
+        return [];
+    }
+
+    return Array.from(worldInfoSortOrder.options).map(option => ({
+        value: option.value,
+        label: option.textContent?.trim() || option.label || option.value,
+        hidden: option.hidden,
+    }));
+}
+
+function getWorldInfoReactEntrySummaries() {
+    return Array.from(document.querySelectorAll('#world_popup_entries_list .world_entry')).map((entry, index) => {
+        const titleInput = entry.querySelector('textarea[name="comment"], input[name="comment"]');
+        const title = titleInput instanceof HTMLInputElement || titleInput instanceof HTMLTextAreaElement
+            ? titleInput.value || titleInput.placeholder
+            : entry.textContent?.trim();
+
+        return {
+            uid: entry.getAttribute('uid') ?? String(index),
+            title: title?.trim() || `Entry ${index + 1}`,
+            disabled: entry.querySelector('[name="entryKillSwitch"]')?.getAttribute('aria-pressed') === 'false',
+        };
+    });
+}
+
 function getWorldInfoReactBridgeState() {
     const globalSelector = document.getElementById('world_info');
-    const editorSelector = document.getElementById('world_editor_select');
+    const editorSelector = /** @type {HTMLSelectElement|null} */ (document.getElementById('world_editor_select'));
     const importMenuItem = document.getElementById('world_import_menu_item');
     const importFileInput = /** @type {HTMLInputElement|null} */ (document.getElementById('world_import_file'));
     const worldPopup = document.getElementById('world_popup');
+    const worldInfoSearch = /** @type {HTMLInputElement|null} */ (document.getElementById('world_info_search'));
+    const worldInfoSortOrder = /** @type {HTMLSelectElement|null} */ (document.getElementById('world_info_sort_order'));
+    const createEntryButton = document.getElementById('world_create_button');
+    const entrySummaries = getWorldInfoReactEntrySummaries();
 
     return {
         globalSelectorPresent: Boolean(globalSelector),
@@ -352,6 +405,71 @@ function getWorldInfoReactBridgeState() {
         importMenuPresent: Boolean(importMenuItem),
         importBusy: importMenuItem?.getAttribute('aria-disabled') === 'true' || importFileInput?.disabled === true,
         dropTargetPresent: Boolean(worldPopup),
+        worldNames: getWorldInfoReactWorldNames(editorSelector),
+        selectedWorldName: getWorldInfoReactSelectedWorldName(editorSelector),
+        selectedWorldIndex: editorSelector?.value ?? '',
+        entryCount: entrySummaries.length,
+        entrySummaries: getWorldInfoReactEntrySummaries(),
+        searchQuery: worldInfoSearch?.value ?? '',
+        sortValue: worldInfoSortOrder?.value ?? '',
+        sortOptions: getWorldInfoReactSortOptions(worldInfoSortOrder),
+        canCreateEntry: createEntryButton?.getAttribute('aria-disabled') !== 'true',
+        exportMenuPresent: Boolean(document.getElementById('world_export_menu_item')),
+        createWorldMenuPresent: Boolean(document.getElementById('world_create_world')),
+        refreshMenuPresent: Boolean(document.getElementById('world_refresh')),
+    };
+}
+
+function getWorldInfoReactBridge() {
+    return {
+        dispatchAction(action, payload = {}) {
+            switch (action) {
+                case 'selectWorld':
+                    $('#world_editor_select').val(String(payload?.worldIndex ?? '')).trigger('change');
+                    break;
+                case 'applySearchQuery':
+                    $('#world_info_search').val(String(payload?.searchQuery ?? '')).trigger('input');
+                    break;
+                case 'applySortOption':
+                    $('#world_info_sort_order').val(String(payload?.sortValue ?? '')).trigger('change');
+                    break;
+                case 'createEntry':
+                    document.getElementById('world_create_button')?.click();
+                    break;
+                case 'createWorld':
+                    document.getElementById('world_create_world')?.click();
+                    break;
+                case 'importWorld':
+                    document.getElementById('world_import_menu_item')?.click();
+                    break;
+                case 'exportWorld':
+                    document.getElementById('world_export_menu_item')?.click();
+                    break;
+                case 'renameWorld':
+                    document.getElementById('world_rename_menu_item')?.click();
+                    break;
+                case 'duplicateWorld':
+                    document.getElementById('world_duplicate_menu_item')?.click();
+                    break;
+                case 'deleteWorld':
+                    document.getElementById('world_delete_menu_item')?.click();
+                    break;
+                case 'refreshWorld':
+                    document.getElementById('world_refresh')?.click();
+                    break;
+                case 'openEntry': {
+                    const uid = String(payload?.uid ?? '');
+                    const entry = Array.from(document.querySelectorAll('#world_popup_entries_list .world_entry'))
+                        .find(element => element.getAttribute('uid') === uid);
+                    entry?.querySelector('.wi-card-expand-button')?.click();
+                    break;
+                }
+                default:
+                    console.warn('Unknown World Info React action', action);
+            }
+
+            void mountReactWorldInfoPanel();
+        },
     };
 }
 
@@ -364,6 +482,7 @@ async function mountReactWorldInfoPanel() {
         kind: 'worldInfo',
         container: ensureWorldInfoReactHost(),
         state: getWorldInfoReactBridgeState(),
+        bridge: getWorldInfoReactBridge(),
         features: getWorkspaceReactFeatures(),
     });
 }
@@ -393,12 +512,30 @@ function ensureBackgroundLibraryReactHost() {
     return host;
 }
 
+function getBackgroundLibraryReactGalleryItems(container) {
+    if (!container) {
+        return [];
+    }
+
+    return Array.from(container.querySelectorAll('.bg_example')).map((element, index) => ({
+        id: element.getAttribute('bgfile') || `${container.id}-${index}`,
+        title: element.getAttribute('title') || element.querySelector('.BGSampleTitle')?.textContent?.trim() || `Background ${index + 1}`,
+        url: $(element).data('url') ?? '',
+        isCustom: element.getAttribute('custom') === 'true',
+        animated: element.getAttribute('animated') === 'true',
+        selected: element.classList.contains('selected-background'),
+        locked: element.classList.contains('locked-background'),
+    }));
+}
+
 function getBackgroundLibraryReactBridgeState(stateOverrides = {}) {
     const systemContainer = document.getElementById('bg_menu_content');
     const chatContainer = document.getElementById('bg_custom_content');
     const loadingIndicator = document.getElementById('bg_startup_loading');
     const systemItemCount = systemContainer?.querySelectorAll('.bg_example').length ?? 0;
     const chatItemCount = chatContainer?.querySelectorAll('.bg_example').length ?? 0;
+    const backgroundFilter = /** @type {HTMLInputElement|null} */ (document.getElementById('bg-filter'));
+    const backgroundSort = /** @type {HTMLSelectElement|null} */ (document.getElementById('bg-sort'));
     const panelState = getBackgroundPanelState({
         isLoading: Boolean(stateOverrides.isLoading) || Boolean(loadingIndicator),
         itemCount: systemItemCount + chatItemCount,
@@ -412,6 +549,66 @@ function getBackgroundLibraryReactBridgeState(stateOverrides = {}) {
         systemItemCount,
         chatItemCount,
         refreshQueued: Boolean(stateOverrides.refreshQueued),
+        systemBackgrounds: getBackgroundLibraryReactGalleryItems(systemContainer),
+        chatBackgrounds: getBackgroundLibraryReactGalleryItems(chatContainer),
+        filterQuery: backgroundFilter?.value ?? '',
+        sortValue: backgroundSort?.value ?? '',
+        folderViewActive: document.getElementById('Backgrounds')?.classList.contains('in-folder-view') === true,
+        lockedCount: document.querySelectorAll('.bg_example.locked-background').length,
+        selectedCount: document.querySelectorAll('.bg_example.selected-background').length,
+    };
+}
+
+function getBackgroundLibraryReactBridge() {
+    return {
+        dispatchAction(action, payload = {}) {
+            switch (action) {
+                case 'applyBackgroundFilter':
+                    $('#bg-filter').val(String(payload?.filterQuery ?? '')).trigger('input');
+                    break;
+                case 'applyBackgroundSort':
+                    $('#bg-sort').val(String(payload?.sortValue ?? '')).trigger('change');
+                    break;
+                case 'uploadBackground':
+                    document.getElementById('add_bg_button')?.click();
+                    break;
+                case 'selectBackground': {
+                    const backgroundId = String(payload?.id ?? '');
+                    const source = String(payload?.source ?? '');
+                    const candidates = source === 'chat'
+                        ? document.querySelectorAll('#bg_custom_content .bg_example')
+                        : document.querySelectorAll('#bg_menu_content .bg_example');
+                    const backgroundElement = Array.from(candidates)
+                        .find(element => element.getAttribute('bgfile') === backgroundId);
+                    backgroundElement?.click();
+                    break;
+                }
+                case 'lockBackground':
+                    {
+                        const lockControl = document.querySelector('.bg_example.selected-background .jg-lock') ?? document.querySelector('.bg_example .jg-lock');
+                        lockControl?.click();
+                    }
+                    break;
+                case 'unlockBackground':
+                    {
+                        const unlockControl = document.querySelector('.bg_example.locked-background .jg-unlock') ?? document.querySelector('.bg_example .jg-unlock');
+                        unlockControl?.click();
+                    }
+                    break;
+                case 'autoBackground':
+                    document.getElementById('auto_background')?.click();
+                    break;
+                case 'refreshBackgrounds':
+                    void getBackgrounds({ force: true }).finally(() => {
+                        void mountReactBackgroundLibraryPanel({ refreshQueued: false });
+                    });
+                    break;
+                default:
+                    console.warn('Unknown Background Library React action', action);
+            }
+
+            void mountReactBackgroundLibraryPanel();
+        },
     };
 }
 
@@ -424,6 +621,7 @@ async function mountReactBackgroundLibraryPanel(stateOverrides = {}) {
         kind: 'backgroundLibrary',
         container: ensureBackgroundLibraryReactHost(),
         state: getBackgroundLibraryReactBridgeState(stateOverrides),
+        bridge: getBackgroundLibraryReactBridge(),
         features: getWorkspaceReactFeatures(),
     });
 }
@@ -489,8 +687,63 @@ function getExtensionsHostReactBridgeState(stateOverrides = {}) {
         extrasApiControlsPresent: Boolean(extensionsStatus && extensionsUrl && extensionsApiKey && extensionsConnect && extensionsAutoconnect),
         manageButtonPresent: Boolean(document.getElementById('extensions_details')),
         installButtonPresent: Boolean(document.getElementById('third_party_extension_button')),
+        notifyUpdatesEnabled: document.getElementById('extensions_notify_updates')?.checked === true,
+        extrasApiUrl: extensionsUrl?.value ?? '',
+        extrasApiKeySet: Boolean(extensionsApiKey?.value),
+        autoconnectEnabled: extensionsAutoconnect?.checked === true,
+        extrasStatusText: extensionsStatus?.textContent?.trim() ?? '',
+        mountPointStatuses: getExtensionsHostReactMountPointStatuses(),
         deferredState: stateOverrides.deferredState ?? 'idle',
         deferredPlaceholderPresent: Boolean(deferredPlaceholder),
+    };
+}
+
+function getExtensionsHostReactMountPointStatuses() {
+    return [
+        { id: 'extensions_settings', label: 'Settings column', ready: Boolean(document.getElementById('extensions_settings')) },
+        { id: 'extensions_settings2', label: 'Settings column 2', ready: Boolean(document.getElementById('extensions_settings2')) },
+        { id: 'regex_container', label: 'Regex container', ready: Boolean(document.getElementById('regex_container')) },
+        { id: 'extensionsMenuButton', label: 'Wand button', ready: Boolean(document.getElementById('extensionsMenuButton')) },
+        { id: 'extensionsMenu', label: 'Wand menu', ready: Boolean(document.getElementById('extensionsMenu')) },
+    ];
+}
+
+function getExtensionsHostReactBridge() {
+    return {
+        dispatchAction(action, payload = {}) {
+            let shouldRefresh = true;
+            switch (action) {
+                case 'toggleNotifyUpdates':
+                    document.getElementById('extensions_notify_updates')?.click();
+                    break;
+                case 'openManageExtensions':
+                    document.getElementById('extensions_details')?.click();
+                    break;
+                case 'openInstallExtension':
+                    document.getElementById('third_party_extension_button')?.click();
+                    break;
+                case 'updateExtrasApiUrl':
+                    $('#extensions_url').val(String(payload?.url ?? '')).trigger('input');
+                    shouldRefresh = false;
+                    break;
+                case 'updateExtrasApiKey':
+                    $('#extensions_api_key').val(String(payload?.apiKey ?? '')).trigger('input');
+                    shouldRefresh = false;
+                    break;
+                case 'connectExtrasApi':
+                    document.getElementById('extensions_connect')?.click();
+                    break;
+                case 'toggleAutoconnect':
+                    document.getElementById('extensions_autoconnect')?.click();
+                    break;
+                default:
+                    console.warn('Unknown Extensions Host React action', action);
+            }
+
+            if (shouldRefresh) {
+                void mountReactExtensionsHostPanel();
+            }
+        },
     };
 }
 
@@ -503,6 +756,7 @@ async function mountReactExtensionsHostPanel(stateOverrides = {}) {
         kind: 'extensionsHost',
         container: ensureExtensionsHostReactHost(),
         state: getExtensionsHostReactBridgeState(stateOverrides),
+        bridge: getExtensionsHostReactBridge(),
         features: getWorkspaceReactFeatures(),
     });
 }

@@ -10,7 +10,7 @@
 
 Phase 2 迁移主聊天界面的侧边栏模块。这些模块涉及大量列表渲染和复杂交互，是性能优化的关键区域。
 
-**核心策略**：用虚拟滚动优化长列表性能。
+**核心策略**：用 guarded React panel islands 逐步替换高频工作区面板；React 只接管已验证的宿主、列表、表单和动作入口，legacy 面板继续保留 fallback 与扩展兼容面。
 
 ---
 
@@ -18,16 +18,17 @@ Phase 2 迁移主聊天界面的侧边栏模块。这些模块涉及大量列表
 
 ### 主要目标
 
-1. **角色库面板 React 重写**：虚拟滚动、搜索/过滤、标签管理
-2. **世界信息面板 React 重写**：Lorebook 编辑、导入/导出
-3. **背景库面板 React 重写**：背景选择、上传/删除
-4. **Extensions 面板宿主 React 重写**：保留扩展挂载点、扩展列表入口与 Extras API 区域
+1. **角色库面板 React island**：虚拟滚动、搜索/过滤、批量操作呈现
+2. **世界信息面板 React island**：宿主状态、world 选择、搜索/排序、创建、导入/导出和 entry 入口，实际扫描/prompt/regex/delete 语义继续由 legacy owner 执行
+3. **背景库面板 React island**：宿主状态、filter/sort、global/chat gallery 呈现和背景动作入口，文件/API/slash 行为继续由 legacy owner 执行
+4. **Extensions 面板宿主 React island**：通知、Manage、Install、Extras API host controls 与受保护 mount-point 状态，第三方扩展协议和挂载点继续保持 legacy owner
 
 ### 性能目标
 
 - 1000+ 角色列表流畅滚动（60fps）
 - 搜索响应 < 100ms
 - 虚拟滚动内存占用 < 现有版本
+- World Info、Backgrounds、Extensions 的 React host 失败或 flag 关闭时不影响 legacy 面板可用性
 
 ---
 
@@ -86,54 +87,26 @@ function CharacterList({ characters }: { characters: Character[] }) {
 }
 ```
 
-### 状态管理
+### 状态和表单边界
 
-使用 Zustand 管理角色库状态：
-
-```typescript
-// app/stores/characterStore.ts
-import { create } from 'zustand';
-
-interface CharacterStore {
-  characters: Character[];
-  selectedId: string | null;
-  searchQuery: string;
-  filterTags: string[];
-  
-  setCharacters: (characters: Character[]) => void;
-  selectCharacter: (id: string) => void;
-  setSearchQuery: (query: string) => void;
-  toggleFilterTag: (tag: string) => void;
-}
-
-export const useCharacterStore = create<CharacterStore>((set) => ({
-  characters: [],
-  selectedId: null,
-  searchQuery: '',
-  filterTags: [],
-  
-  setCharacters: (characters) => set({ characters }),
-  selectCharacter: (id) => set({ selectedId: id }),
-  setSearchQuery: (query) => set({ searchQuery: query }),
-  toggleFilterTag: (tag) => set((state) => ({
-    filterTags: state.filterTags.includes(tag)
-      ? state.filterTags.filter(t => t !== tag)
-      : [...state.filterTags, tag],
-  })),
-}));
-```
+- React-owned server/readiness state 使用 TanStack Query。
+- React-owned form or control state 使用 TanStack Form + Zod。
+- 长列表窗口化使用 `@tanstack/react-virtual`。
+- Zustand 不属于 Phase 2 已采用依赖；全局状态迁移仍留给 Phase 4。
+- 仍由 legacy 拥有的 tag filter、World Info prompt activation、regex、background file operations、slash commands 和 third-party extension protocol 不进入 React form schema。
 
 ---
 
 ## 验证门
 
-### Phase 2 完成标准
+### Phase 2 当前完成标准
 
 - [x] ✅ 角色库虚拟滚动实现
 - [x] ✅ 1000+ 角色性能测试通过
-- [x] ✅ 世界信息编辑器功能完整
-- [x] ✅ 背景库上传/删除正常
-- [x] ✅ 所有兼容性测试通过
+- [x] ✅ World Info guarded React host/action island 已接入；legacy 扫描、prompt、regex、delete 语义保留
+- [x] ✅ Background Library guarded React host/action island 已接入；legacy 上传/删除/重命名/选择/slash 语义保留
+- [x] ✅ Extensions Host guarded React host/action island 已接入；受保护 mount points 和第三方扩展兼容面保留
+- [x] ✅ 兼容性证明覆盖 third-party extension boundary
 
 ---
 
@@ -141,7 +114,9 @@ export const useCharacterStore = create<CharacterStore>((set) => ({
 
 - [React 现代化路线图](../../tech/react-modernization-roadmap.md)
 - [TanStack Virtual 文档](https://tanstack.com/virtual/latest)
-- [Zustand 文档](https://zustand-demo.pmnd.rs/)
+- [TanStack Query 文档](https://tanstack.com/query/latest)
+- [TanStack Form 文档](https://tanstack.com/form/latest)
+- [Zod 文档](https://zod.dev/)
 
 ---
 

@@ -63,11 +63,16 @@ def is_react_workspace_panel_enabled(kind, features):
 
 
 class FakeElement:
-    def __init__(self, element_id):
+    def __init__(self, element_id, value="", text=""):
         self.id = element_id
         self.class_name = ""
         self.attributes = {}
         self.disabled = False
+        self.value = value
+        self.text = text
+        self.checked = False
+        self.options = []
+        self.clicks = 0
         self.parent_element = None
         self.children = []
 
@@ -91,8 +96,14 @@ class FakeElement:
         child.parent_element = self
         self.children.append(child)
 
+    def click(self):
+        self.clicks += 1
+
     def get_attribute(self, name):
         return self.attributes.get(name)
+
+    def text_content(self):
+        return self.text
 
     def query_selector_all(self, selector):
         if selector != ".bg_example":
@@ -109,6 +120,31 @@ class FakeElement:
         for child in self.children:
             visit(child)
         return matches
+
+
+class FakeOption:
+    def __init__(self, value, label, selected=False, hidden=False):
+        self.value = value
+        self.label = label
+        self.selected = selected
+        self.hidden = hidden
+
+
+def get_element_value(element):
+    return element.value if element is not None else ""
+
+
+def click_element(document, element_id):
+    element = document.get(element_id)
+    if element is not None:
+        element.click()
+
+
+def set_element_value(document, element_id, value):
+    element = document.get(element_id)
+    if element is not None:
+        element.value = value
+        document.setdefault("__events", []).append((element_id, "input", value))
 
 
 def ensure_world_info_react_host(document):
@@ -139,6 +175,11 @@ def get_world_info_react_bridge_state(document):
     import_menu_item = document.get("world_import_menu_item")
     import_file_input = document.get("world_import_file")
     world_popup = document.get("world_popup")
+    world_info_search = document.get("world_info_search")
+    world_info_sort_order = document.get("world_info_sort_order")
+    create_entry_button = document.get("world_create_button")
+    entry_summaries = document.get("world_entries", [])
+    selected_option = next((option for option in getattr(editor_selector, "options", []) if option.selected), None)
 
     return {
         "globalSelectorPresent": global_selector is not None,
@@ -150,7 +191,49 @@ def get_world_info_react_bridge_state(document):
             or (import_file_input is not None and import_file_input.disabled is True)
         ),
         "dropTargetPresent": world_popup is not None,
+        "worldNames": [
+            {"value": option.value, "label": option.label, "selected": option.selected}
+            for option in getattr(editor_selector, "options", [])
+            if option.value != ""
+        ],
+        "selectedWorldName": selected_option.label if selected_option is not None and selected_option.value != "" else "",
+        "selectedWorldIndex": get_element_value(editor_selector),
+        "entryCount": len(entry_summaries),
+        "entrySummaries": entry_summaries,
+        "searchQuery": get_element_value(world_info_search),
+        "sortValue": get_element_value(world_info_sort_order),
+        "sortOptions": [
+            {"value": option.value, "label": option.label, "hidden": option.hidden}
+            for option in getattr(world_info_sort_order, "options", [])
+        ],
+        "canCreateEntry": create_entry_button is None or create_entry_button.get_attribute("aria-disabled") != "true",
+        "exportMenuPresent": document.get("world_export_menu_item") is not None,
+        "createWorldMenuPresent": document.get("world_create_world") is not None,
+        "refreshMenuPresent": document.get("world_refresh") is not None,
     }
+
+
+def dispatch_world_info_action(document, action, payload=None):
+    payload = payload or {}
+    document.setdefault("__actions", []).append(("worldInfo", action, payload))
+    if action == "selectWorld":
+        set_element_value(document, "world_editor_select", str(payload.get("worldIndex", "")))
+        document.setdefault("__events", []).append(("world_editor_select", "change", payload.get("worldIndex", "")))
+    elif action == "applySearchQuery":
+        set_element_value(document, "world_info_search", str(payload.get("searchQuery", "")))
+    elif action == "applySortOption":
+        set_element_value(document, "world_info_sort_order", str(payload.get("sortValue", "")))
+        document.setdefault("__events", []).append(("world_info_sort_order", "change", payload.get("sortValue", "")))
+    elif action == "createEntry":
+        click_element(document, "world_create_button")
+    elif action == "importWorld":
+        click_element(document, "world_import_menu_item")
+    elif action == "exportWorld":
+        click_element(document, "world_export_menu_item")
+    elif action == "refreshWorld":
+        click_element(document, "world_refresh")
+    elif action == "openEntry":
+        document["__opened_entry"] = str(payload.get("uid", ""))
 
 
 def ensure_background_library_react_host(document):
@@ -217,7 +300,65 @@ def get_background_library_react_bridge_state(document, state_overrides=None):
         "systemItemCount": system_item_count,
         "chatItemCount": chat_item_count,
         "refreshQueued": bool(state_overrides.get("refreshQueued")),
+        "systemBackgrounds": get_background_gallery_items(system_container),
+        "chatBackgrounds": get_background_gallery_items(chat_container),
+        "filterQuery": get_element_value(document.get("bg-filter")),
+        "sortValue": get_element_value(document.get("bg-sort")),
+        "folderViewActive": bool(document.get("Backgrounds") and "in-folder-view" in document["Backgrounds"].class_name.split()),
+        "lockedCount": count_backgrounds(document, "locked-background"),
+        "selectedCount": count_backgrounds(document, "selected-background"),
     }
+
+
+def get_background_gallery_items(container):
+    if container is None:
+        return []
+
+    items = []
+    for index, element in enumerate(container.query_selector_all(".bg_example")):
+        classes = element.class_name.split()
+        items.append({
+            "id": element.get_attribute("bgfile") or f"{container.id}-{index}",
+            "title": element.get_attribute("title") or element.text_content() or f"Background {index + 1}",
+            "url": element.get_attribute("data-url") or "",
+            "isCustom": element.get_attribute("custom") == "true",
+            "animated": element.get_attribute("animated") == "true",
+            "selected": "selected-background" in classes,
+            "locked": "locked-background" in classes,
+        })
+    return items
+
+
+def count_backgrounds(document, class_name):
+    count = 0
+    for container_id in ("bg_menu_content", "bg_custom_content"):
+        container = document.get(container_id)
+        if container is None:
+            continue
+        count += sum(1 for item in container.query_selector_all(".bg_example") if class_name in item.class_name.split())
+    return count
+
+
+def dispatch_background_library_action(document, action, payload=None):
+    payload = payload or {}
+    document.setdefault("__actions", []).append(("backgroundLibrary", action, payload))
+    if action == "applyBackgroundFilter":
+        set_element_value(document, "bg-filter", str(payload.get("filterQuery", "")))
+    elif action == "applyBackgroundSort":
+        set_element_value(document, "bg-sort", str(payload.get("sortValue", "")))
+        document.setdefault("__events", []).append(("bg-sort", "change", payload.get("sortValue", "")))
+    elif action == "uploadBackground":
+        click_element(document, "add_bg_button")
+    elif action == "selectBackground":
+        document["__selected_background"] = (payload.get("source"), payload.get("id"))
+    elif action == "lockBackground":
+        document["__lock_requested"] = True
+    elif action == "unlockBackground":
+        document["__unlock_requested"] = True
+    elif action == "autoBackground":
+        click_element(document, "auto_background")
+    elif action == "refreshBackgrounds":
+        document["__background_refresh_forced"] = True
 
 
 def ensure_extensions_host_react_host(document):
@@ -254,6 +395,7 @@ def get_extensions_host_react_bridge_state(document, state_overrides=None):
     extensions_api_key = document.get("extensions_api_key")
     extensions_connect = document.get("extensions_connect")
     extensions_autoconnect = document.get("extensions_autoconnect")
+    extensions_notify_updates = document.get("extensions_notify_updates")
     deferred_placeholder = document.get("extensions_startup_loading")
 
     return {
@@ -271,9 +413,48 @@ def get_extensions_host_react_bridge_state(document, state_overrides=None):
         ]),
         "manageButtonPresent": document.get("extensions_details") is not None,
         "installButtonPresent": document.get("third_party_extension_button") is not None,
+        "notifyUpdatesEnabled": extensions_notify_updates.checked is True if extensions_notify_updates else False,
+        "extrasApiUrl": get_element_value(extensions_url),
+        "extrasApiKeySet": bool(get_element_value(extensions_api_key)),
+        "autoconnectEnabled": extensions_autoconnect.checked is True if extensions_autoconnect else False,
+        "extrasStatusText": extensions_status.text_content().strip() if extensions_status else "",
+        "mountPointStatuses": get_extensions_host_mount_point_statuses(document),
         "deferredState": state_overrides.get("deferredState", "idle"),
         "deferredPlaceholderPresent": deferred_placeholder is not None,
     }
+
+
+def get_extensions_host_mount_point_statuses(document):
+    return [
+        {"id": "extensions_settings", "label": "Settings column", "ready": document.get("extensions_settings") is not None},
+        {"id": "extensions_settings2", "label": "Settings column 2", "ready": document.get("extensions_settings2") is not None},
+        {"id": "regex_container", "label": "Regex container", "ready": document.get("regex_container") is not None},
+        {"id": "extensionsMenuButton", "label": "Wand button", "ready": document.get("extensionsMenuButton") is not None},
+        {"id": "extensionsMenu", "label": "Wand menu", "ready": document.get("extensionsMenu") is not None},
+    ]
+
+
+def dispatch_extensions_host_action(document, action, payload=None):
+    payload = payload or {}
+    document.setdefault("__actions", []).append(("extensionsHost", action, payload))
+    if action == "toggleNotifyUpdates":
+        click_element(document, "extensions_notify_updates")
+        if document.get("extensions_notify_updates"):
+            document["extensions_notify_updates"].checked = not document["extensions_notify_updates"].checked
+    elif action == "openManageExtensions":
+        click_element(document, "extensions_details")
+    elif action == "openInstallExtension":
+        click_element(document, "third_party_extension_button")
+    elif action == "updateExtrasApiUrl":
+        set_element_value(document, "extensions_url", str(payload.get("url", "")))
+    elif action == "updateExtrasApiKey":
+        set_element_value(document, "extensions_api_key", str(payload.get("apiKey", "")))
+    elif action == "connectExtrasApi":
+        click_element(document, "extensions_connect")
+    elif action == "toggleAutoconnect":
+        click_element(document, "extensions_autoconnect")
+        if document.get("extensions_autoconnect"):
+            document["extensions_autoconnect"].checked = not document["extensions_autoconnect"].checked
 
 
 class FakeWorkspacePanelsLoader:
@@ -307,13 +488,13 @@ class FakeWorkspacePanelModule:
         self.mounted.append((kind, container, options or {}))
 
 
-def mount_react_workspace_panel(kind, container, features, loader, on_error, state=None):
+def mount_react_workspace_panel(kind, container, features, loader, on_error, state=None, bridge=None):
     if not is_react_workspace_panel_enabled(kind, features) or container is None:
         return False
 
     try:
         panel_module = loader.load()
-        panel_module.mount_workspace_panel(kind, container, {"state": state})
+        panel_module.mount_workspace_panel(kind, container, {"state": state, "bridge": bridge})
         return True
     except Exception as error:
         on_error(error, kind)
@@ -331,6 +512,7 @@ def mount_world_info_panel(document, features, loader, on_error):
         loader,
         on_error,
         get_world_info_react_bridge_state(document),
+        {"dispatchAction": lambda action, payload=None: dispatch_world_info_action(document, action, payload)},
     )
 
 
@@ -345,6 +527,7 @@ def mount_background_library_panel(document, features, loader, on_error, state_o
         loader,
         on_error,
         get_background_library_react_bridge_state(document, state_overrides),
+        {"dispatchAction": lambda action, payload=None: dispatch_background_library_action(document, action, payload)},
     )
 
 
@@ -359,6 +542,7 @@ def mount_extensions_host_panel(document, features, loader, on_error, state_over
         loader,
         on_error,
         get_extensions_host_react_bridge_state(document, state_overrides),
+        {"dispatchAction": lambda action, payload=None: dispatch_extensions_host_action(document, action, payload)},
     )
 
 
@@ -477,9 +661,18 @@ def main():
     assert editor_panel.children == [world_info_host, world_popup]
 
     document["world_info"] = FakeElement("world_info")
-    document["world_editor_select"] = FakeElement("world_editor_select")
+    document["world_editor_select"] = FakeElement("world_editor_select", value="0")
+    document["world_editor_select"].options = [FakeOption("", "--- Pick to Edit ---"), FakeOption("0", "World A", selected=True)]
     document["world_import_menu_item"] = FakeElement("world_import_menu_item")
     document["world_import_file"] = FakeElement("world_import_file")
+    document["world_info_search"] = FakeElement("world_info_search", value="castle")
+    document["world_info_sort_order"] = FakeElement("world_info_sort_order", value="custom")
+    document["world_info_sort_order"].options = [FakeOption("custom", "Custom")]
+    document["world_create_button"] = FakeElement("world_create_button")
+    document["world_export_menu_item"] = FakeElement("world_export_menu_item")
+    document["world_create_world"] = FakeElement("world_create_world")
+    document["world_refresh"] = FakeElement("world_refresh")
+    document["world_entries"] = [{"uid": "42", "title": "Entry 42", "disabled": False}]
     ready_world_info_state = get_world_info_react_bridge_state(document)
     assert ready_world_info_state == {
         "globalSelectorPresent": True,
@@ -488,10 +681,28 @@ def main():
         "importMenuPresent": True,
         "importBusy": False,
         "dropTargetPresent": True,
+        "worldNames": [{"value": "0", "label": "World A", "selected": True}],
+        "selectedWorldName": "World A",
+        "selectedWorldIndex": "0",
+        "entryCount": 1,
+        "entrySummaries": [{"uid": "42", "title": "Entry 42", "disabled": False}],
+        "searchQuery": "castle",
+        "sortValue": "custom",
+        "sortOptions": [{"value": "custom", "label": "Custom", "hidden": False}],
+        "canCreateEntry": True,
+        "exportMenuPresent": True,
+        "createWorldMenuPresent": True,
+        "refreshMenuPresent": True,
     }
 
     document["world_import_menu_item"].attributes["aria-disabled"] = "true"
     assert get_world_info_react_bridge_state(document)["importBusy"] is True
+    dispatch_world_info_action(document, "applySearchQuery", {"searchQuery": "dragon"})
+    assert document["world_info_search"].value == "dragon"
+    dispatch_world_info_action(document, "exportWorld")
+    assert document["world_export_menu_item"].clicks == 1
+    dispatch_world_info_action(document, "openEntry", {"uid": "42"})
+    assert document["__opened_entry"] == "42"
 
     detached_popup_document = {"wiEditorPanel": FakeElement("wiEditorPanel")}
     fallback_host = ensure_world_info_react_host(detached_popup_document)
@@ -507,13 +718,20 @@ def main():
         "bg_tabs": background_tabs,
         "bg_menu_content": FakeElement("bg_menu_content"),
         "bg_custom_content": FakeElement("bg_custom_content"),
+        "bg-filter": FakeElement("bg-filter", value="forest"),
+        "bg-sort": FakeElement("bg-sort", value="az"),
+        "add_bg_button": FakeElement("add_bg_button"),
+        "auto_background": FakeElement("auto_background"),
     }
     background_document["bg_menu_content"].append(FakeElement("system-one"))
-    background_document["bg_menu_content"].children[0].class_name = "bg_example"
+    background_document["bg_menu_content"].children[0].class_name = "bg_example selected-background"
+    background_document["bg_menu_content"].children[0].attributes.update({"bgfile": "system-a.png", "title": "System A"})
     background_document["bg_menu_content"].append(FakeElement("system-two"))
     background_document["bg_menu_content"].children[1].class_name = "bg_example"
+    background_document["bg_menu_content"].children[1].attributes.update({"bgfile": "system-b.png", "title": "System B"})
     background_document["bg_custom_content"].append(FakeElement("chat-one"))
-    background_document["bg_custom_content"].children[0].class_name = "bg_example"
+    background_document["bg_custom_content"].children[0].class_name = "bg_example locked-background"
+    background_document["bg_custom_content"].children[0].attributes.update({"bgfile": "chat-a.png", "title": "Chat A"})
 
     background_host = ensure_background_library_react_host(background_document)
     assert background_host.id == BACKGROUND_LIBRARY_REACT_HOST_ID
@@ -532,7 +750,50 @@ def main():
         "systemItemCount": 2,
         "chatItemCount": 1,
         "refreshQueued": False,
+        "systemBackgrounds": [
+            {
+                "id": "system-a.png",
+                "title": "System A",
+                "url": "",
+                "isCustom": False,
+                "animated": False,
+                "selected": True,
+                "locked": False,
+            },
+            {
+                "id": "system-b.png",
+                "title": "System B",
+                "url": "",
+                "isCustom": False,
+                "animated": False,
+                "selected": False,
+                "locked": False,
+            },
+        ],
+        "chatBackgrounds": [
+            {
+                "id": "chat-a.png",
+                "title": "Chat A",
+                "url": "",
+                "isCustom": False,
+                "animated": False,
+                "selected": False,
+                "locked": True,
+            },
+        ],
+        "filterQuery": "forest",
+        "sortValue": "az",
+        "folderViewActive": False,
+        "lockedCount": 1,
+        "selectedCount": 1,
     }
+
+    dispatch_background_library_action(background_document, "applyBackgroundFilter", {"filterQuery": "snow"})
+    assert background_document["bg-filter"].value == "snow"
+    dispatch_background_library_action(background_document, "selectBackground", {"source": "global", "id": "system-a.png"})
+    assert background_document["__selected_background"] == ("global", "system-a.png")
+    dispatch_background_library_action(background_document, "uploadBackground")
+    assert background_document["add_bg_button"].clicks == 1
 
     loading_background_state = get_background_library_react_bridge_state(
         background_document,
@@ -568,15 +829,17 @@ def main():
         "regex_container": FakeElement("regex_container"),
         "extensionsMenuButton": FakeElement("extensionsMenuButton"),
         "extensionsMenu": FakeElement("extensionsMenu"),
-        "extensions_status": FakeElement("extensions_status"),
-        "extensions_url": FakeElement("extensions_url"),
-        "extensions_api_key": FakeElement("extensions_api_key"),
+        "extensions_status": FakeElement("extensions_status", text="Connected"),
+        "extensions_url": FakeElement("extensions_url", value="http://localhost:5100"),
+        "extensions_api_key": FakeElement("extensions_api_key", value="secret"),
         "extensions_connect": FakeElement("extensions_connect"),
         "extensions_autoconnect": FakeElement("extensions_autoconnect"),
+        "extensions_notify_updates": FakeElement("extensions_notify_updates"),
         "extensions_details": FakeElement("extensions_details"),
         "third_party_extension_button": FakeElement("third_party_extension_button"),
         "extensions_startup_loading": FakeElement("extensions_startup_loading"),
     }
+    extensions_document["extensions_notify_updates"].checked = True
 
     extensions_host = ensure_extensions_host_react_host(extensions_document)
     assert extensions_host.id == EXTENSIONS_HOST_REACT_HOST_ID
@@ -597,9 +860,28 @@ def main():
         "extrasApiControlsPresent": True,
         "manageButtonPresent": True,
         "installButtonPresent": True,
+        "notifyUpdatesEnabled": True,
+        "extrasApiUrl": "http://localhost:5100",
+        "extrasApiKeySet": True,
+        "autoconnectEnabled": False,
+        "extrasStatusText": "Connected",
+        "mountPointStatuses": [
+            {"id": "extensions_settings", "label": "Settings column", "ready": True},
+            {"id": "extensions_settings2", "label": "Settings column 2", "ready": True},
+            {"id": "regex_container", "label": "Regex container", "ready": True},
+            {"id": "extensionsMenuButton", "label": "Wand button", "ready": True},
+            {"id": "extensionsMenu", "label": "Wand menu", "ready": True},
+        ],
         "deferredState": "loading",
         "deferredPlaceholderPresent": True,
     }
+
+    dispatch_extensions_host_action(extensions_document, "toggleNotifyUpdates")
+    assert extensions_document["extensions_notify_updates"].checked is False
+    dispatch_extensions_host_action(extensions_document, "updateExtrasApiUrl", {"url": "http://localhost:5200"})
+    assert extensions_document["extensions_url"].value == "http://localhost:5200"
+    dispatch_extensions_host_action(extensions_document, "connectExtrasApi")
+    assert extensions_document["extensions_connect"].clicks == 1
 
     missing_extensions_state = get_extensions_host_react_bridge_state({})
     assert missing_extensions_state["extensionsSettingsPresent"] is False
@@ -612,18 +894,19 @@ def main():
     loader = FakeWorkspacePanelsLoader([panel_module])
     errors = []
     capture_error = lambda error, kind: errors.append((error, kind))
+    fake_bridge = {"dispatchAction": lambda action, payload=None: None}
 
     assert mount_react_workspace_panel("worldInfo", "host", disabled_features, loader, capture_error) is False
     assert mount_react_workspace_panel("worldInfo", None, enabled_features, loader, capture_error) is False
     assert loader.calls == []
 
-    assert mount_react_workspace_panel("worldInfo", "host", enabled_features, loader, capture_error, ready_world_info_state) is True
+    assert mount_react_workspace_panel("worldInfo", "host", enabled_features, loader, capture_error, ready_world_info_state, fake_bridge) is True
     assert loader.calls == [REACT_WORKSPACE_PANELS_ASSET_PATH]
-    assert panel_module.mounted == [("worldInfo", "host", {"state": ready_world_info_state})]
+    assert panel_module.mounted == [("worldInfo", "host", {"state": ready_world_info_state, "bridge": fake_bridge})]
 
     assert mount_react_workspace_panel("worldInfo", "host-2", enabled_features, loader, capture_error, {"dropTargetPresent": True}) is True
     assert loader.calls == [REACT_WORKSPACE_PANELS_ASSET_PATH]
-    assert panel_module.mounted[-1] == ("worldInfo", "host-2", {"state": {"dropTargetPresent": True}})
+    assert panel_module.mounted[-1] == ("worldInfo", "host-2", {"state": {"dropTargetPresent": True}, "bridge": None})
 
     recovered_module = FakeWorkspacePanelModule()
     failing_loader = FakeWorkspacePanelsLoader([RuntimeError("missing bundle"), recovered_module])
@@ -634,7 +917,7 @@ def main():
         REACT_WORKSPACE_PANELS_ASSET_PATH,
         REACT_WORKSPACE_PANELS_ASSET_PATH,
     ]
-    assert recovered_module.mounted == [("worldInfo", "host", {"state": {"selectorsSeparated": True}})]
+    assert recovered_module.mounted == [("worldInfo", "host", {"state": {"selectorsSeparated": True}, "bridge": None})]
 
 
 if __name__ == "__main__":
