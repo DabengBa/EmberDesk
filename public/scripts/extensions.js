@@ -81,12 +81,21 @@ let deferredExtensionLoader = null;
 let deferredExtensionLoaderState = 'idle';
 const EXTENSIONS_STARTUP_PLACEHOLDER_ID = 'extensions_startup_loading';
 
+function dispatchExtensionsHostStateChange(detail = {}) {
+    if (typeof document === 'undefined' || typeof CustomEvent === 'undefined') {
+        return;
+    }
+
+    document.dispatchEvent(new CustomEvent('emberdesk:extensions-host-state-change', { detail }));
+}
+
 export function setDeferredExtensionLoader(loader = null, { state } = {}) {
     deferredExtensionLoader = typeof loader === 'function' ? loader : null;
     deferredExtensionLoaderState = deferredExtensionLoader
         ? (state ?? 'loading')
         : 'idle';
     renderDeferredExtensionPlaceholder();
+    dispatchExtensionsHostStateChange({ deferredState: deferredExtensionLoaderState });
 }
 
 async function ensureDeferredExtensionsReady() {

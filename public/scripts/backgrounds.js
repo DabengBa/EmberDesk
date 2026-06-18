@@ -109,6 +109,14 @@ let cachedSystemBackgrounds = [];
 let backgroundPanelController = null;
 const backgroundCatalogTask = createSingleFlightTask(loadBackgroundCatalog);
 
+function dispatchBackgroundLibraryStateChange(detail = {}) {
+    if (typeof document === 'undefined' || typeof CustomEvent === 'undefined') {
+        return;
+    }
+
+    document.dispatchEvent(new CustomEvent('emberdesk:background-library-state-change', { detail }));
+}
+
 export let background_settings = {
     name: '__transparent.png',
     url: generateUrlParameter('__transparent.png', false),
@@ -763,6 +771,7 @@ function setBackgroundCatalogLoading(isLoading) {
     }
 
     backgroundPanelController.setLoading(isLoading);
+    dispatchBackgroundLibraryStateChange({ isLoading });
 }
 
 /**

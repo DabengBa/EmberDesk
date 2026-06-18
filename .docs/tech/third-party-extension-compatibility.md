@@ -80,6 +80,10 @@ Keep these selectors and identity attributes stable unless a migration plan upda
 
 `data-chid` is the standard row identity for new code. The legacy `chid` attribute remains a compatibility affordance because existing selectors still use `.character_select[chid="..."]`. New code should not prefer `chid` over `data-chid`.
 
+The guarded React character-library panel island is inside this same compatibility boundary. When the React island is enabled, it may host the toolbar and virtualized list window, but generated rows must keep the protected selectors above, tag filtering continues to use the legacy tag controls and `entitiesFilter` semantics, and the React toolbar only hosts those controls instead of owning their selected tag state. Build-missing or flag-off states must keep the legacy panel path available from the same workspace entry.
+
+The shared workspace-panel React scaffold for World Info, Background Library, and Extensions Host is not a compatibility exemption. The current World Info readiness host, Background Library status host, and Extensions Host protected-mount-point status host are additive surfaces beside legacy nodes; they do not own the legacy World Info editor/import DOM, background action controls, extension settings columns, regex container, wand menu, or extension install/update/delete controls. When the matching flag is off, the current wrappers do not insert an empty migration host. If a flagged scaffold bundle fails to import, protected legacy nodes still remain the behavior owner. A future React host must mount beside or around protected legacy nodes rather than clearing them as an incidental render target.
+
 ## Protected Module Surface
 
 Tavern Helper source imports use the `@sillytavern/*` alias. Its build resolves those imports to browser files below `public/`.

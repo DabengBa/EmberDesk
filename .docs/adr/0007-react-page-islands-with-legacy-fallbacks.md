@@ -10,7 +10,10 @@ Consequences:
 
 - React page routes must have explicit feature flags and build-missing fallbacks.
 - Early React workspace panels must keep the same user entry point and preserve legacy panel fallback behavior when the flag is off or the build is unavailable.
+- Workspace panel mount wrappers must check their feature flag before creating independent React hosts. A disabled panel flag should leave the legacy panel DOM without an empty migration host, while build/import failures must leave protected legacy nodes in place and keep the legacy behavior owner active.
 - Early React pages must preserve existing API contracts, visible copy, and redirect outcomes.
 - TanStack Form, Zod, and TanStack Query are the default adoption gate for React page/panel forms and server state unless a later spec or ADR records an exception and exit plan; virtualization is expected for large-list panel slices when DOM pressure is part of the migration goal.
+- React islands may carry legacy-owned controls or state when that preserves product semantics and extension compatibility; the owning spec or tech doc must state that boundary instead of implying React has taken over the legacy subsystem.
+- Future panel flags, host bundles, or bridge helpers may be scaffolded before the user-facing migration is complete, but the surface remains legacy-owned until the panel-specific activation bridge, fallback, and compatibility proof are implemented.
 - Legacy surfaces remain valid rollback and compatibility owners until a later cleanup spec removes them with focused proof.
 - User-facing page semantics stay in `.docs/db`; this ADR only records the migration boundary decision.

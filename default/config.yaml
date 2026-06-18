@@ -111,6 +111,9 @@ features:
       settings: false
     panels:
       characterLibrary: false
+      worldInfo: false
+      backgroundLibrary: false
+      extensionsHost: false
 
 # -- SSO LOGIN CONFIGURATION --
 sso:

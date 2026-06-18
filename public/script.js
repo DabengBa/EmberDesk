@@ -208,6 +208,7 @@ import {
     isPersonaPanelOpen,
 } from './scripts/personas.js';
 import { getBackgrounds, initBackgrounds, loadBackgroundSettings, background_settings } from './scripts/backgrounds.js';
+import { getBackgroundPanelState } from './scripts/background-panel-controller.js';
 import { loader } from './scripts/action-loader.js';
 import { createSingleFlightTask, resolvePersistedCurrentVersion, resolveStartupSettingsPlan } from './scripts/startup-helpers.js';
 import { ensurePanel, registerPanelHook } from './scripts/deferred-panels.js';
@@ -270,6 +271,7 @@ import {
     shouldSuppressCharacterDeleteListReprintState,
     syncCharacterListRowIdentity,
 } from './scripts/character-list-render-state.js';
+import { mountReactWorkspacePanel } from './scripts/workspace-panels-react-bridge.js';
 import { runDeleteCharacterClosePreflight } from './scripts/delete-character-preflight.js';
 
 // API OBJECT FOR EXTERNAL WIRING
@@ -291,6 +293,9 @@ export function getWorkspaceReactFeatures() {
     return globalThis.__emberDeskWorkspaceFeatures ?? {
         reactPanels: {
             characterLibrary: false,
+            worldInfo: false,
+            backgroundLibrary: false,
+            extensionsHost: false,
         },
     };
 }
@@ -299,11 +304,222 @@ export function isReactCharacterLibraryPanelEnabled() {
     return Boolean(getWorkspaceReactFeatures()?.reactPanels?.characterLibrary);
 }
 
+const WORLD_INFO_REACT_HOST_ID = 'emberdesk-react-world-info-panel-host';
+const BACKGROUND_LIBRARY_REACT_HOST_ID = 'emberdesk-react-background-library-panel-host';
+const EXTENSIONS_HOST_REACT_HOST_ID = 'emberdesk-react-extensions-host-panel-host';
 const REACT_CHARACTER_LIBRARY_PANEL_ASSET_PATH = '/react/login/assets/character-library-panel.js';
 const REACT_CHARACTER_LIBRARY_TOOLBAR_HOST_ID = 'emberdesk-react-character-library-toolbar';
 let reactCharacterLibraryPanelModulePromise = null;
 let reactCharacterLibraryPanelMounted = false;
 let reactCharacterLibraryToolbarMounted = false;
+
+function ensureWorldInfoReactHost() {
+    const editorPanel = document.getElementById('wiEditorPanel');
+    if (!editorPanel) {
+        return null;
+    }
+
+    let host = document.getElementById(WORLD_INFO_REACT_HOST_ID);
+    if (host) {
+        return host;
+    }
+
+    host = document.createElement('div');
+    host.id = WORLD_INFO_REACT_HOST_ID;
+    host.className = 'emberdesk-react-world-info-panel-host';
+
+    const worldPopup = document.getElementById('world_popup');
+    if (worldPopup?.parentElement === editorPanel) {
+        editorPanel.insertBefore(host, worldPopup);
+    } else {
+        editorPanel.prepend(host);
+    }
+
+    return host;
+}
+
+function getWorldInfoReactBridgeState() {
+    const globalSelector = document.getElementById('world_info');
+    const editorSelector = document.getElementById('world_editor_select');
+    const importMenuItem = document.getElementById('world_import_menu_item');
+    const importFileInput = /** @type {HTMLInputElement|null} */ (document.getElementById('world_import_file'));
+    const worldPopup = document.getElementById('world_popup');
+
+    return {
+        globalSelectorPresent: Boolean(globalSelector),
+        editorSelectorPresent: Boolean(editorSelector),
+        selectorsSeparated: Boolean(globalSelector && editorSelector && globalSelector !== editorSelector),
+        importMenuPresent: Boolean(importMenuItem),
+        importBusy: importMenuItem?.getAttribute('aria-disabled') === 'true' || importFileInput?.disabled === true,
+        dropTargetPresent: Boolean(worldPopup),
+    };
+}
+
+async function mountReactWorldInfoPanel() {
+    if (!getWorkspaceReactFeatures()?.reactPanels?.worldInfo) {
+        return false;
+    }
+
+    return mountReactWorkspacePanel({
+        kind: 'worldInfo',
+        container: ensureWorldInfoReactHost(),
+        state: getWorldInfoReactBridgeState(),
+        features: getWorkspaceReactFeatures(),
+    });
+}
+
+function ensureBackgroundLibraryReactHost() {
+    const backgroundPanel = document.getElementById('Backgrounds');
+    if (!backgroundPanel) {
+        return null;
+    }
+
+    let host = document.getElementById(BACKGROUND_LIBRARY_REACT_HOST_ID);
+    if (host) {
+        return host;
+    }
+
+    host = document.createElement('div');
+    host.id = BACKGROUND_LIBRARY_REACT_HOST_ID;
+    host.className = 'emberdesk-react-background-library-panel-host';
+
+    const backgroundTabs = document.getElementById('bg_tabs');
+    if (backgroundTabs?.parentElement === backgroundPanel) {
+        backgroundPanel.insertBefore(host, backgroundTabs);
+    } else {
+        backgroundPanel.prepend(host);
+    }
+
+    return host;
+}
+
+function getBackgroundLibraryReactBridgeState(stateOverrides = {}) {
+    const systemContainer = document.getElementById('bg_menu_content');
+    const chatContainer = document.getElementById('bg_custom_content');
+    const loadingIndicator = document.getElementById('bg_startup_loading');
+    const systemItemCount = systemContainer?.querySelectorAll('.bg_example').length ?? 0;
+    const chatItemCount = chatContainer?.querySelectorAll('.bg_example').length ?? 0;
+    const panelState = getBackgroundPanelState({
+        isLoading: Boolean(stateOverrides.isLoading) || Boolean(loadingIndicator),
+        itemCount: systemItemCount + chatItemCount,
+        error: stateOverrides.error ?? null,
+    });
+
+    return {
+        ...panelState,
+        systemContainerPresent: Boolean(systemContainer),
+        chatContainerPresent: Boolean(chatContainer),
+        systemItemCount,
+        chatItemCount,
+        refreshQueued: Boolean(stateOverrides.refreshQueued),
+    };
+}
+
+async function mountReactBackgroundLibraryPanel(stateOverrides = {}) {
+    if (!getWorkspaceReactFeatures()?.reactPanels?.backgroundLibrary) {
+        return false;
+    }
+
+    return mountReactWorkspacePanel({
+        kind: 'backgroundLibrary',
+        container: ensureBackgroundLibraryReactHost(),
+        state: getBackgroundLibraryReactBridgeState(stateOverrides),
+        features: getWorkspaceReactFeatures(),
+    });
+}
+
+function handleReactBackgroundLibraryStateChange(event) {
+    const stateOverrides = event instanceof CustomEvent && event.detail ? event.detail : {};
+    void mountReactBackgroundLibraryPanel(stateOverrides);
+}
+
+function initReactBackgroundLibraryBridge() {
+    document.removeEventListener('emberdesk:background-library-state-change', handleReactBackgroundLibraryStateChange);
+    document.addEventListener('emberdesk:background-library-state-change', handleReactBackgroundLibraryStateChange);
+    $('#backgrounds-drawer-toggle').off('click.reactBackgroundLibrary').on('click.reactBackgroundLibrary', () => {
+        void mountReactBackgroundLibraryPanel();
+    });
+    void mountReactBackgroundLibraryPanel();
+}
+
+function ensureExtensionsHostReactHost() {
+    const extensionsPanel = document.getElementById('rm_extensions_block');
+    if (!extensionsPanel) {
+        return null;
+    }
+
+    let host = document.getElementById(EXTENSIONS_HOST_REACT_HOST_ID);
+    if (host) {
+        return host;
+    }
+
+    host = document.createElement('div');
+    host.id = EXTENSIONS_HOST_REACT_HOST_ID;
+    host.className = 'emberdesk-react-extensions-host-panel-host';
+
+    const extensionsBlock = extensionsPanel.querySelector(':scope > .extensions_block');
+    if (extensionsBlock?.parentElement === extensionsPanel) {
+        extensionsPanel.insertBefore(host, extensionsBlock);
+    } else {
+        extensionsPanel.prepend(host);
+    }
+
+    return host;
+}
+
+function getExtensionsHostReactBridgeState(stateOverrides = {}) {
+    const extensionsSettings = document.getElementById('extensions_settings');
+    const extensionsSettings2 = document.getElementById('extensions_settings2');
+    const regexContainer = document.getElementById('regex_container');
+    const extensionsMenuButton = document.getElementById('extensionsMenuButton');
+    const extensionsMenu = document.getElementById('extensionsMenu');
+    const extensionsStatus = document.getElementById('extensions_status');
+    const extensionsUrl = document.getElementById('extensions_url');
+    const extensionsApiKey = document.getElementById('extensions_api_key');
+    const extensionsConnect = document.getElementById('extensions_connect');
+    const extensionsAutoconnect = document.getElementById('extensions_autoconnect');
+    const deferredPlaceholder = document.getElementById('extensions_startup_loading');
+
+    return {
+        extensionsSettingsPresent: Boolean(extensionsSettings),
+        extensionsSettings2Present: Boolean(extensionsSettings2),
+        regexContainerPresent: Boolean(regexContainer),
+        extensionsMenuButtonPresent: Boolean(extensionsMenuButton),
+        extensionsMenuPresent: Boolean(extensionsMenu),
+        extrasApiControlsPresent: Boolean(extensionsStatus && extensionsUrl && extensionsApiKey && extensionsConnect && extensionsAutoconnect),
+        manageButtonPresent: Boolean(document.getElementById('extensions_details')),
+        installButtonPresent: Boolean(document.getElementById('third_party_extension_button')),
+        deferredState: stateOverrides.deferredState ?? 'idle',
+        deferredPlaceholderPresent: Boolean(deferredPlaceholder),
+    };
+}
+
+async function mountReactExtensionsHostPanel(stateOverrides = {}) {
+    if (!getWorkspaceReactFeatures()?.reactPanels?.extensionsHost) {
+        return false;
+    }
+
+    return mountReactWorkspacePanel({
+        kind: 'extensionsHost',
+        container: ensureExtensionsHostReactHost(),
+        state: getExtensionsHostReactBridgeState(stateOverrides),
+        features: getWorkspaceReactFeatures(),
+    });
+}
+
+function handleReactExtensionsHostStateChange(event) {
+    const stateOverrides = event instanceof CustomEvent && event.detail ? event.detail : {};
+    void mountReactExtensionsHostPanel(stateOverrides);
+}
+
+function initReactExtensionsHostBridge() {
+    document.removeEventListener('emberdesk:extensions-host-state-change', handleReactExtensionsHostStateChange);
+    document.addEventListener('emberdesk:extensions-host-state-change', handleReactExtensionsHostStateChange);
+    $('#extensions-settings-button .drawer-toggle').off('click.reactExtensionsHost').on('click.reactExtensionsHost', () => {
+        void mountReactExtensionsHostPanel();
+    });
+    void mountReactExtensionsHostPanel();
+}
 
 function getCharacterLibrarySortOptionValue(option, index) {
     const field = option?.dataset?.field ?? '';
@@ -934,6 +1150,7 @@ function startDeferredStartupTasks() {
 function _replayWorldInfoSettings() {
     initWorldInfo();
     rehydrateWorldInfoPanel();
+    void mountReactWorldInfoPanel();
 }
 
 
@@ -1164,6 +1381,7 @@ async function firstLoadInit() {
         initSystemPrompts();
     }));
     await measureStartupStage('initExtensions', () => initExtensions());
+    initReactExtensionsHostBridge();
     await measureStartupStage('registerExtensionSlashCommands', () => Promise.resolve().then(() => {
         initExtensionSlashCommands();
         ToolManager.initToolSlashCommands();
@@ -1183,6 +1401,7 @@ async function firstLoadInit() {
     await measureStartupStage('initTokenizers', () => initTokenizers());
     await measureStartupStage('hydrateFeatureModules', async () => {
         initBackgrounds();
+        initReactBackgroundLibraryBridge();
         initAuthorsNote();
         await initPersonas();
         await initSlashCommandAutoComplete();

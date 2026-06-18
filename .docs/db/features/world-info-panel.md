@@ -40,6 +40,7 @@ This feature lets users keep lorebook context close to the chat workspace: they 
 5. EmberDesk shows editor controls for searching, sorting, creating, importing, exporting, renaming, duplicating, deleting, refreshing, backfilling metadata, and applying sorting. When one or more files are being imported, the import action is disabled and shows visible in-progress feedback until the active import batch finishes.
 6. World entries appear as cards so the user can scan the list before expanding or editing a specific entry.
 7. When entry content needs more room, the content editor opens as a modal dialog with its own title, metadata, close control, and text area.
+8. In builds where the guarded React migration flag is enabled, the drawer can show a small host above the legacy editor that reports whether the global selector, editor selector, import action, and drop target are present or busy. The same legacy controls still perform the actual World Info actions.
 
 ## Business Rules And Boundaries
 
@@ -55,6 +56,7 @@ This feature lets users keep lorebook context close to the chat workspace: they 
 - Embedded World/Lorebook import is a toolbar-adjacent character action: if a selected character has no embedded book data, EmberDesk reports that empty state instead of silently doing nothing.
 - Destructive world-book deletion is a separate semantic feature: [Delete World Book](feature.world_book_delete).
 - Character deletion may also delete selected world info files through its cascade section, but that destructive flow belongs to [Delete Character](feature.character_delete).
+- The guarded migration host is additive. If the migration flag is off, no extra World Info host is inserted; if the bundle cannot mount, the legacy controls remain the behavior owner. The host does not replace global activation, editor selection, import parsing, regex placement, prompt activation, or world-book deletion behavior.
 - Entry scanning, prompt injection, token budget calculations, server endpoints, and persistence details are outside this semantic ID.
 
 ## Outcomes
@@ -72,3 +74,4 @@ This feature lets users keep lorebook context close to the chat workspace: they 
 - **Import failed**: failed imports show a recoverable reason instead of exposing raw technical error text as the primary message.
 - **No embedded book**: trying to import embedded World/Lorebook data from a selected character without embedded data produces an informational message.
 - **Deletion requested**: the user is routed into the separate [Delete World Book](feature.world_book_delete) confirmation flow.
+- **Migration status shown**: when the guarded host is enabled, it reports selector/import/drop-target readiness without changing which controls complete the World Info workflow.

@@ -22,6 +22,8 @@ The shipped slices are:
 
 This is not a framework migration. EmberDesk still uses the existing HTML/CSS/jQuery frontend, and this pattern only removes page-local jQuery dependencies when the slice can stay small and independently validated.
 
+React page and panel islands are a separate modernization route recorded in [ADR-0007](../adr/0007-react-page-islands-with-legacy-fallbacks.md) and [React Modernization Roadmap](react-modernization-roadmap.md). The jQuery slice pattern remains valid for small legacy controller extractions, but it is not the owner for `/login`, `/setup`, `/settings`, or the guarded character-library React island.
+
 ## Architecture And Constraints
 
 Frontend migration slices must preserve the existing product flow unless the semantic docs and implementation already disagree and the slice explicitly resolves that drift.
@@ -73,6 +75,8 @@ For the background library panel, the controller owns only the local loading ind
 - cleanup that removes controller-owned loading state
 
 The background slice intentionally does not own upload, delete, rename, folder assignment, background selection, slash-command registration, thumbnail generation, or `/api/backgrounds/*` request behavior. `public/scripts/backgrounds.js` still owns those flows and only delegates `setBackgroundCatalogLoading()` to the controller.
+
+When `features.react.panels.backgroundLibrary` is enabled, the React workspace-panel scaffold reads this same loading state as an additive status host inside `#Backgrounds`. That host reports loading/empty/success state and global/chat gallery counts, but it does not become the owner of any background action flow. The bridge helper can accept an error override for future callers, but the current production background event only dispatches loading state.
 
 ## Core Implementation
 
@@ -174,6 +178,8 @@ Stable binding points:
 - `createBackgroundPanelController()` in `public/scripts/background-panel-controller.js`
 - `getBackgroundPanelState()` in `public/scripts/background-panel-controller.js`
 - `setBackgroundCatalogLoading()` delegation in `public/scripts/backgrounds.js`
+- `emberdesk:background-library-state-change` dispatch in `public/scripts/backgrounds.js`
+- `ensureBackgroundLibraryReactHost()` and `getBackgroundLibraryReactBridgeState()` in `public/script.js`
 - `createChatMessageActionsController()` in `public/scripts/chat-message-actions-controller.js`
 - `MESSAGE_ACTION_TIERS` in `public/scripts/chat-message-actions-controller.js`
 - extra message action menu delegation from `public/script.js`
@@ -190,3 +196,5 @@ Related docs:
 - [API Configuration](../db/pages/api-configuration.md)
 - [Fallback Provider](../db/features/fallback-provider.md)
 - [Frontend Structure Contracts](frontend-structure-contracts.md)
+- [ADR-0007: React page and panel islands with legacy fallbacks](../adr/0007-react-page-islands-with-legacy-fallbacks.md)
+- [React Modernization Roadmap](react-modernization-roadmap.md)

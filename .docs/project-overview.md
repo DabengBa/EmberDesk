@@ -30,9 +30,10 @@ It is not optimized for users who want a managed cloud product or a minimal one-
 - Package manager and task runner: Bun 1.3.14
 - Server: Express-based API and startup pipeline
 - Frontend: HTML/CSS/jQuery main shell with progressive performance refactors
-- Build: Bun-managed scripts plus Vite for shared browser library output; Webpack remains a deprecated fallback
+- Build: Bun-managed scripts plus Vite for shared browser library output, the shared React app, and guarded React panel bundles; Webpack remains a deprecated `/lib.js` fallback
 - Entry point: `server.js` -> `src/server-main.js`
 - React migration: feature-flagged page islands for `/login`, `/setup`, and `/settings`, plus a guarded workspace panel island for the character library, with legacy fallbacks preserved (see [ADR-0007](adr/0007-react-page-islands-with-legacy-fallbacks.md))
+- Workspace panel scaffold: the server bootstrap payload and browser bridge helper now carry disabled flags for planned World Info, Background Library, and Extensions Host islands, Vite can build the shared workspace-panel bundle, and World Info, Background Library, and Extensions Host have independent guarded host/status surfaces behind their panel flags; flag-off paths do not insert empty migration hosts, and actual World Info activation/import/regex/delete behavior, Background upload/delete/rename/select/slash behavior, and extension discovery/mount/API behavior remain legacy-owned until panel-specific proof retires each fallback
 
 Current architectural boundaries:
 
@@ -63,13 +64,13 @@ EmberDesk currently provides:
 
 - a main browser workspace for chat-centric LLM use
 - character-card management and large-library browsing
-- a guarded React character-library panel island inside the main workspace, keeping the same entry point while adding virtualized row rendering for large page sizes and preserving legacy fallback behavior
+- a guarded React character-library panel island inside the main workspace, keeping the same entry point while adding virtualized row rendering for large page sizes, preserving full library refresh/error semantics, and retaining legacy fallback behavior
 - chat history storage and recovery
 - real-browser proof for stored chat message rendering into stable message rows, plus message-row and send-form role/name affordance coverage for future main-chat changes
 - world info / lorebook workflows
 - background and extension surfaces inside the main shell
 - a documented shared browser library for common frontend utilities and extension compatibility
-- feature-flagged React page islands for login, setup, and the migrated Settings slice, plus the first guarded workspace panel island for the character library, using TanStack Form, Zod, TanStack Query, and TanStack Virtual while preserving legacy rollback surfaces
+- feature-flagged React page islands for login, setup, and the migrated Settings slice, plus guarded workspace panel islands/status hosts for the character library, World Info, Background Library, and Extensions Host; TanStack Form, Zod, TanStack Query, and TanStack Virtual are used where React owns the migrated slice, while legacy rollback surfaces and legacy-owned controls stay in place until later cleanup specs retire them
 - Docker-friendly deployment and browser access across devices
 - focused startup and interaction performance work for daily-use paths
 - client-side character-list incremental reconcile and consistency guards so ordinary browsing and delete flows keep visible rows, pagination, selected-character navigation, temporary-chat status, and bulk-selection hooks aligned without always redrawing the whole list, while delayed edit/save responses still cannot undo confirmed deletion actions

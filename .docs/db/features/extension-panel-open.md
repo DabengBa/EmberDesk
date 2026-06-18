@@ -32,11 +32,15 @@ This feature allows users to access extension controls without forcing the whole
 2. If the deferred extension load is still in progress, EmberDesk shows a local placeholder in that area.
 3. If the deferred load succeeds, the panel fills with the extension content.
 4. If the deferred load fails, EmberDesk replaces the indefinite loading placeholder with an explicit retry state.
+5. Extension-specific settings and menu entries continue to appear in the established extension areas rather than moving to a separate route.
+6. In builds where the guarded React migration flag is enabled, the panel can also show a small status host above the existing extensions surface that reports whether the protected settings columns, regex container, wand menu, Extras API controls, and deferred loader state are present.
 
 ## Business Rules And Boundaries
 
 - Extension loading should not keep the entire workspace blocked.
 - A loading failure must not leave the user with a permanent spinner and no next action.
+- The visible extensions surface must keep installed extension settings, regex settings, and wand-menu entries reachable from their existing workspace locations.
+- The guarded status host is additive. If the migration flag is off, no extra Extensions Host is inserted; if the bundle cannot mount, the established extension surface remains the behavior owner. The host must not clone, rename, or replace the established extension settings columns, regex container, wand menu button, wand menu, or extension install/update/delete controls.
 - ES-module extensions should treat [Shared Browser Library](term.shared_browser_library) as the stable source for documented common browser utilities.
 - This feature describes the visible panel behavior, not extension activation internals.
 
@@ -48,3 +52,4 @@ This semantic feature covers the panel-open contract and local recovery state on
 
 - **Success**: the panel opens and eventually resolves into usable extension content.
 - **Failure with recovery**: the panel exposes a retry path instead of remaining in an endless loading state.
+- **Migration status shown**: when the guarded status host is enabled, it reports protected mount-point readiness and loader state while extension content continues to mount in the established locations.

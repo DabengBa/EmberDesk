@@ -135,6 +135,7 @@
         "build:lib:webpack": "node -e \"import('webpack').then(webpack => { const config = (await import('./webpack.config.js')).default(); webpack.webpack(config).run((err, stats) => { console.log(stats?.toString(config.stats)); process.exit(err ? 1 : 0); }); })\"",
         "build:react": "vite build --mode login",
         "build:react:character-library": "vite build --mode character-library-panel",
+        "build:react:workspace-panels": "vite build --mode workspace-panels",
         "preview": "vite preview",
         "typecheck": "tsc --noEmit",
         "docs:check": "node .docs/db/scripts/doc-compiler.js check",
