@@ -11,6 +11,35 @@ export function getFallbackProviderStatus(settings, secretState, fallbackSecretK
         : { state: 'needs_setup', text: 'Needs setup', ready: false };
 }
 
+export function resolveProviderSecretKeyForSettings({
+    settings,
+    source,
+    secretKey,
+    chatCompletionSources,
+}) {
+    if (settings?.reverse_proxy) {
+        return null;
+    }
+
+    const isVertexAi = source === chatCompletionSources.MAKERSUITE && settings?.use_vertexai;
+    if (!isVertexAi) {
+        return secretKey;
+    }
+
+    switch (settings?.vertexai_auth_mode) {
+        case 'express':
+            return 'api_key_vertexai';
+        case 'full':
+            return null;
+        default:
+            return secretKey;
+    }
+}
+
+export function canUseDirectProviderSecret({ settings, secretKey }) {
+    return !settings?.reverse_proxy && Boolean(secretKey);
+}
+
 export function getUnifiedKeyFieldState({
     settings,
     source,
@@ -44,6 +73,7 @@ export function getUnifiedKeyFieldState({
     const placeholders = {
         [chatCompletionSources.OPENAI]: 'sk-...',
         [chatCompletionSources.CLAUDE]: 'sk-ant-...',
+        [chatCompletionSources.MAKERSUITE]: 'AIza...',
     };
 
     return {

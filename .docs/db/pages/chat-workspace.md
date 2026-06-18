@@ -3,7 +3,7 @@ id: page.chat_workspace
 type: page
 name: Chat Workspace
 route: /
-related: [feature.startup_bootstrap, feature.character_library_panel, feature.chat_message_rendering, feature.chat_message_actions, feature.chat_generation_auto_recovery, feature.character_export, feature.character_delete, feature.world_info_panel, feature.background_library_panel, feature.extension_panel_open, term.character_card, term.shared_browser_library, page.login]
+related: [page.login, page.settings, feature.startup_bootstrap, feature.character_library_panel, feature.chat_message_rendering, feature.chat_message_actions, feature.chat_generation_auto_recovery, feature.character_export, feature.character_delete, feature.world_info_panel, feature.background_library_panel, feature.extension_panel_open, term.character_card, term.shared_browser_library]
 ---
 
 # Page: Chat Workspace
@@ -38,6 +38,7 @@ This page exists so a user can run their daily LLM workflow from one browser sur
 - `feature.extension_panel_open`: opening the extensions surface and handling its loading state.
 - `term.character_card`: the core object users browse and operate on in the character library.
 - `term.shared_browser_library`: the stable browser utility surface used by first-party modules and ES-module extensions.
+- `page.settings`: the standalone React settings route; when it is not enabled or its build is unavailable, `/settings` redirects users back to this workspace.
 
 ## Included Features
 
@@ -70,8 +71,10 @@ This page exists so a user can run their daily LLM workflow from one browser sur
 - **Automatic recovery state**: visible main-chat generation can retry once on the primary provider and once on the optional fallback provider before the existing manual retry CTA appears.
 - **Long-chat load-more state**: after the user loads older messages from a bounded long-chat window, the workspace preserves loaded history and message IDs without adding a separate return-to-newest control.
 - **Mobile reachability state**: core composer controls, message actions, long-chat load-more, and generation stop or retry controls should remain visible or keyboard/role reachable on narrow phone and wider mobile/tablet viewports without relying on hover-only discovery.
+- **Settings fallback state**: if React [Settings](page.settings) is disabled or its build is missing, opening `/settings` returns the user to this legacy workspace so existing drawers remain the available settings path.
 
 ## Navigation
 
 - The workspace is the product's main destination and root route.
 - From this shell, users can move between the character library, chat context, World Info drawer, background surface, and extension surface without leaving [Chat Workspace](page.chat_workspace).
+- React [Settings](page.settings) is a separate route for the migrated settings slice; unavailable React settings routes fall back here.

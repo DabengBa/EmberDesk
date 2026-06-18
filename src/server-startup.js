@@ -46,6 +46,7 @@ import { router as speechRouter } from './endpoints/speech.js';
 import { router as dataMaidRouter } from './endpoints/data-maid.js';
 import { router as backupsRouter } from './endpoints/backups.js';
 import { router as imageMetadataRouter } from './endpoints/image-metadata.js';
+import { setupHealthEndpoint } from './endpoints/health.js';
 
 /**
  * @typedef {object} ServerStartupResult
@@ -126,6 +127,14 @@ export function redirectDeprecatedEndpoints(app) {
     redirect('/api/serpapi/search', '/api/search/serpapi');
     redirect('/api/serpapi/visit', '/api/search/visit');
     redirect('/api/serpapi/transcript', '/api/search/transcript');
+}
+
+/**
+ * Setup the routers for the endpoints.
+ * @param {import('express').Express} app The Express app to use
+ */
+export function setupPublicEndpoints(app) {
+    setupHealthEndpoint(app);
 }
 
 /**

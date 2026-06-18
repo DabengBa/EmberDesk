@@ -36,6 +36,7 @@ whitelist.txt
 .idea/
 secrets.json
 /dist
+/app/dist/
 /backups/
 public/movingUI/
 public/QuickReplies/

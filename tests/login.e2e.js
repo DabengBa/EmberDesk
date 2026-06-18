@@ -1,6 +1,29 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('login page', () => {
+    test('declares stable auth autofill semantics on login surfaces', async ({ page }) => {
+        const expectAuthInputSemantics = async () => {
+            await expect(page.locator('#handle')).toHaveAttribute('name', 'handle');
+            await expect(page.locator('#handle')).toHaveAttribute('autocomplete', 'username');
+            await expect(page.locator('#password')).toHaveAttribute('name', 'password');
+            await expect(page.locator('#password')).toHaveAttribute('autocomplete', 'current-password');
+            await expect(page.locator('#recoverHandle')).toHaveAttribute('name', 'recoverHandle');
+            await expect(page.locator('#recoverHandle')).toHaveAttribute('autocomplete', 'username');
+            await expect(page.locator('#recoveryCode')).toHaveAttribute('name', 'recoveryCode');
+            await expect(page.locator('#recoveryCode')).toHaveAttribute('autocomplete', 'one-time-code');
+            await expect(page.locator('#newPassword')).toHaveAttribute('name', 'newPassword');
+            await expect(page.locator('#newPassword')).toHaveAttribute('autocomplete', 'new-password');
+        };
+
+        await page.goto('/login');
+        await expect(page.getByRole('heading', { name: 'EmberDesk' })).toBeVisible();
+        await expectAuthInputSemantics();
+
+        await page.goto('/login.html');
+        await expect(page.getByRole('heading', { name: 'EmberDesk' })).toBeVisible();
+        await expectAuthInputSemantics();
+    });
+
     test('uses Chinese auth copy and clears stale login errors after credential edits', async ({ page }) => {
         await page.goto('/login');
 

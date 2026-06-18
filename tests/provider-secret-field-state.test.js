@@ -2,9 +2,11 @@ import { describe, expect, jest, test } from '@jest/globals';
 
 import { hasFallbackProviderSettings } from '../public/scripts/chat-generation-auto-recovery.js';
 import {
+    canUseDirectProviderSecret,
     clearProviderSecretField,
     getFallbackProviderStatus,
     getUnifiedKeyFieldState,
+    resolveProviderSecretKeyForSettings,
     saveProviderSecretField,
     toggleSecretInputMask,
 } from '../public/scripts/provider-secret-field-state.js';
@@ -57,6 +59,82 @@ describe('provider secret field state', () => {
             secretState: {},
             chatCompletionSources: { OPENAI: 'openai', CLAUDE: 'claude', MAKERSUITE: 'makersuite' },
         })).toMatchObject({ placeholder: 'sk-ant-...', value: '' });
+
+        expect(getUnifiedKeyFieldState({
+            settings: {
+                chat_completion_source: 'makersuite',
+                use_vertexai: true,
+                vertexai_auth_mode: 'express',
+            },
+            source: 'makersuite',
+            secretKey: 'api_key_makersuite',
+            secretState: {},
+            chatCompletionSources: { OPENAI: 'openai', CLAUDE: 'claude', MAKERSUITE: 'makersuite' },
+        })).toMatchObject({ placeholder: 'AIza...', value: '', vertexAiActive: true });
+    });
+
+    test('resolves React settings provider secret keys for Vertex AI express and full modes', () => {
+        const sources = { OPENAI: 'openai', CLAUDE: 'claude', MAKERSUITE: 'makersuite' };
+
+        const expressSecretKey = resolveProviderSecretKeyForSettings({
+            settings: {
+                reverse_proxy: '',
+                use_vertexai: true,
+                vertexai_auth_mode: 'express',
+            },
+            source: 'makersuite',
+            secretKey: 'api_key_makersuite',
+            chatCompletionSources: sources,
+        });
+        expect(expressSecretKey).toBe('api_key_vertexai');
+        expect(canUseDirectProviderSecret({
+            settings: {
+                reverse_proxy: '',
+                use_vertexai: true,
+                vertexai_auth_mode: 'express',
+            },
+            secretKey: expressSecretKey,
+        })).toBe(true);
+
+        const fullSecretKey = resolveProviderSecretKeyForSettings({
+            settings: {
+                reverse_proxy: '',
+                use_vertexai: true,
+                vertexai_auth_mode: 'full',
+            },
+            source: 'makersuite',
+            secretKey: 'api_key_makersuite',
+            chatCompletionSources: sources,
+        });
+        expect(fullSecretKey).toBeNull();
+        expect(canUseDirectProviderSecret({
+            settings: {
+                reverse_proxy: '',
+                use_vertexai: true,
+                vertexai_auth_mode: 'full',
+            },
+            secretKey: fullSecretKey,
+        })).toBe(false);
+
+        const proxySecretKey = resolveProviderSecretKeyForSettings({
+            settings: {
+                reverse_proxy: 'https://proxy.example',
+                use_vertexai: true,
+                vertexai_auth_mode: 'express',
+            },
+            source: 'openai',
+            secretKey: 'api_key_openai',
+            chatCompletionSources: sources,
+        });
+        expect(proxySecretKey).toBeNull();
+        expect(canUseDirectProviderSecret({
+            settings: {
+                reverse_proxy: 'https://proxy.example',
+                use_vertexai: true,
+                vertexai_auth_mode: 'express',
+            },
+            secretKey: proxySecretKey,
+        })).toBe(false);
     });
 
     test('saves fallback secrets only when a value exists and preserves input on failure', async () => {

@@ -45,14 +45,14 @@
                 <div class="login-field-stack">
                     <div class="login-field" id="handleField">
                         <label for="handle">用户名</label>
-                        <input id="handle" type="text" autocomplete="username"
+                        <input id="handle" name="handle" type="text" autocomplete="username"
                                placeholder="请输入用户名" required aria-required="true">
                     </div>
 
                     <div class="login-field login-field--password" id="passwordField">
                         <label for="password">密码</label>
                         <div class="login-input-wrap">
-                            <input id="password" type="password" autocomplete="current-password"
+                            <input id="password" name="password" type="password" autocomplete="current-password"
                                    placeholder="请输入密码">
                             <button type="button" class="password-toggle" id="passwordToggle"
                                     aria-label="显示密码" aria-pressed="false">
@@ -83,7 +83,7 @@
                 <div class="login-field-stack">
                     <div class="login-field">
                         <label for="recoverHandle">用户名</label>
-                        <input id="recoverHandle" type="text" autocomplete="username"
+                        <input id="recoverHandle" name="recoverHandle" type="text" autocomplete="username"
                                placeholder="请输入用户名" required>
                     </div>
                 </div>
@@ -96,12 +96,12 @@
                     <div class="login-field-stack">
                         <div class="login-field">
                             <label for="recoveryCode">恢复码</label>
-                            <input id="recoveryCode" type="text" inputmode="numeric"
+                            <input id="recoveryCode" name="recoveryCode" type="text" autocomplete="one-time-code" inputmode="numeric"
                                    placeholder="000000" maxlength="6">
                         </div>
                         <div class="login-field">
                             <label for="newPassword">新密码</label>
-                            <input id="newPassword" type="password" autocomplete="new-password"
+                            <input id="newPassword" name="newPassword" type="password" autocomplete="new-password"
                                    placeholder="请输入新密码">
                         </div>
                     </div>

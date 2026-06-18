@@ -25,6 +25,7 @@ import getPublicLibConfig from '../webpack.config.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
+const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
 const globalExtensionRoot = path.join(process.cwd(), 'public', 'scripts', 'extensions', 'third-party', 'express5-local');
 const configTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-express5-config-'));
 const configPath = path.join(configTmpDir, 'config.yaml');
@@ -33,7 +34,7 @@ setConfigFilePath(configPath);
 
 const { router: userDataRouter, requireLoginMiddleware } = await import('../src/users.js');
 const { router: imagesRouter } = await import('../src/endpoints/images.js');
-const { redirectDeprecatedEndpoints } = await import('../src/server-startup.js');
+const { redirectDeprecatedEndpoints, setupPublicEndpoints } = await import('../src/server-startup.js');
 
 function listen(app) {
     const server = http.createServer(app);
@@ -314,6 +315,33 @@ describe('Express 5 route compatibility', () => {
 
             expect(response.status).toBe(308);
             expect(response.headers.get('location')).toBe('/api/characters/all');
+        });
+    });
+
+    test('public health endpoint stays in front of the private route gate', async () => {
+        const app = express();
+        app.get('/login', (_request, response) => response.type('text/plain').send('login page'));
+        app.use((request, _response, next) => {
+            if (request.get('x-test-user')) {
+                request.user = { profile: { handle: 'test-user' }, directories: {} };
+            }
+            next();
+        });
+        setupPublicEndpoints(app);
+        app.use(requireLoginMiddleware);
+        app.get('/api/private', (_request, response) => response.json({ ok: true }));
+
+        await usingApp(app, async (url) => {
+            const healthResponse = await fetch(`${url}/api/ping`);
+            expect(healthResponse.status).toBe(200);
+            expect(await healthResponse.json()).toEqual(expect.objectContaining({
+                status: 'ok',
+                message: 'EmberDesk API is running',
+                version: packageJson.version,
+            }));
+
+            const blockedPrivate = await fetch(`${url}/api/private`);
+            expect(blockedPrivate.status).toBe(403);
         });
     });
 

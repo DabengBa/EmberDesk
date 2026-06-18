@@ -19,6 +19,7 @@ This feature ensures that every deployment reaches a password-protected account 
 
 - **Automatic entry**: visiting any route when `enableUserAccounts` is true and storage either has no users or has exactly one user without a password.
 - **Direct entry**: navigating to `/setup` (redirects to `/login` if setup is already complete).
+- **Legacy rollback entry**: navigating to `/setup.html` always opens the legacy setup page for rollback testing or operator fallback.
 
 ## Interaction IDs
 
@@ -75,4 +76,6 @@ This feature is separate from [Login Submit](feature.login_submit) because setup
 
 - `needsSetup()` in `src/user-storage.js` owns server-side setup gating.
 - `GET /api/users/setup-mode` and `POST /api/users/setup` in `src/endpoints/users-public.js` own setup mode and submission behavior.
-- `createSetupController()` and `initSetupPage()` in `public/scripts/setup.js` own setup page behavior.
+- `setupPageMiddleware()` in `src/users.js` owns `/setup` route selection, including the React feature flag and legacy fallback decision.
+- `app/routes/setup.tsx` owns the React setup behavior for `/setup` when `features.react.pages.setup` is enabled.
+- `createSetupController()` and `initSetupPage()` in `public/scripts/setup.js` own the legacy setup behavior, including the stable `/setup.html` fallback surface.

@@ -1,0 +1,56 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+
+    // 渐进式迁移
+    "allowJs": true,
+    "checkJs": false,
+    "strict": true,
+    "strictNullChecks": true,
+
+    // 互操作性
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+
+    // 输出控制
+    "noEmit": true,
+    "skipLibCheck": true,
+
+    // React 支持
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
+
+    // 类型定义
+    "types": ["node", "bun"],
+
+    // 忽略 TS 6.0 路径别名废弃警告
+    "ignoreDeprecations": "6.0",
+
+    // 路径别名（与 Vite 保持一致）
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["app/*"],
+      "@sillytavern/*": ["public/scripts/*"]
+    }
+  },
+  "include": [
+    "src/**/*",
+    "public/**/*",
+    "app/**/*",
+    "*.js",
+    "*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "app/dist",
+    "tests",
+    "public/scripts/extensions/third-party",
+    "vite.config.ts"
+  ]
+}

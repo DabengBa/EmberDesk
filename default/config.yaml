@@ -103,6 +103,12 @@ requestProxy:
 enableUserAccounts: true
 # Enable discreet login mode: hides user list on the login screen
 enableDiscreetLogin: false
+features:
+  react:
+    pages:
+      login: true
+      setup: false
+      settings: false
 
 # -- SSO LOGIN CONFIGURATION --
 sso:

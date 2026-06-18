@@ -3,18 +3,18 @@ id: page.api_configuration
 type: page
 name: API Configuration
 route: / (drawer: rm_api_block)
-related: [feature.custom_base_url, feature.connection_profile, feature.chat_completion_select, feature.fallback_provider]
+related: [page.settings, page.chat_workspace, feature.custom_base_url, feature.connection_profile, feature.chat_completion_select, feature.fallback_provider]
 ---
 
 # Page: API Configuration
 
 ## ID 解释
 
-`page.api_configuration` represents the API configuration drawer inside the Chat Workspace. It covers provider selection, model selection, custom base URL, API key management, and connection profiles. It does not cover backend server configuration, environment variables, or Docker-level networking.
+`page.api_configuration` represents the API configuration drawer inside the Chat Workspace. It covers provider selection, model selection, custom base URL, API key management, connection profiles, and legacy-only provider credential details. It does not cover backend server configuration, environment variables, Docker-level networking, or the standalone React [Settings](page.settings) route.
 
 ## Page Purpose
 
-This page exists so a user can configure how EmberDesk connects to an LLM API provider: which provider to use, which model to target, and what credentials and endpoint to use for the connection.
+This page exists so a user can configure how EmberDesk connects to an LLM API provider: which provider to use, which model to target, and what credentials and endpoint to use for the connection. During the React migration it remains the legacy workspace owner for connection-profile behavior, provider-specific credential details, and fields not yet exposed on [Settings](page.settings).
 
 ## Page Structure (UI Layout)
 
@@ -31,6 +31,7 @@ This page exists so a user can configure how EmberDesk connects to an LLM API pr
 - `feature.connection_profile`: creating, applying, and switching named configuration snapshots.
 - `feature.chat_completion_select`: selecting the chat completion source and model.
 - `feature.fallback_provider`: configuring the optional OpenAI-compatible fallback provider and its dedicated secret.
+- `page.settings`: the standalone React route that now overlaps the Sprint 3 provider/model, reverse proxy, Vertex AI Express, fallback provider, and secret-state slice while keeping legacy-only provider details here.
 
 ## Included Features
 
@@ -47,8 +48,11 @@ This page exists so a user can configure how EmberDesk connects to an LLM API pr
 - **Provider switch**: changing the chat completion source updates the unified key field placeholder to reflect whether a saved key exists for the new provider.
 - **Legacy settings**: old `proxies[]` and `selected_proxy` fields in settings files are silently ignored on load and dropped on next save; legacy main API values such as `kobold`, `koboldhorde`, `novel`, `poe`, and `textgenerationwebui` are redirected to the OpenAI chat-completion path during settings load.
 - **Fallback provider state**: the optional fallback provider lives in the same drawer, persists as ordinary settings plus a dedicated server-side secret, preserves the entered fallback key when save fails, stays independent from connection profile capture/apply behavior, and keeps its advanced fields visually collapsed until the fallback toggle is enabled.
+- **React settings overlap**: when `/settings` is available, users can edit the Sprint 3 React-owned provider slice there; this drawer still owns service-account JSON, connection-profile capture/apply behavior, deeper provider profile details, and any provider fields not listed in the React settings coverage ledger.
+- **Vertex AI boundary**: React `/settings` owns Vertex AI Express metadata and the Vertex API-key secret state; full Service Account JSON remains in this legacy drawer.
 
 ## Navigation
 
 - This drawer is accessed from the [Chat Workspace](page.chat_workspace) sidebar.
 - Connection profiles can be switched without leaving the page.
+- Users may use [Settings](page.settings) for the migrated standalone provider slice when the React settings feature flag and build are available.

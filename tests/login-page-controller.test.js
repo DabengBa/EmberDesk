@@ -203,6 +203,26 @@ describe('login page controller helpers', () => {
         expect(loginHtml).toContain('<div class="login-error" id="recoveryError" role="alert" aria-live="assertive"></div>');
     });
 
+    test('declares stable autofill semantics across legacy and React login inputs', () => {
+        const loginHtml = fs.readFileSync(path.join(repoRoot, 'public/login.html'), 'utf8');
+        const loginFormSource = fs.readFileSync(path.join(repoRoot, 'app/components/login/LoginForm.tsx'), 'utf8');
+        const recoveryFormSource = fs.readFileSync(path.join(repoRoot, 'app/components/login/RecoveryForm.tsx'), 'utf8');
+        const passwordInputSource = fs.readFileSync(path.join(repoRoot, 'app/components/login/PasswordInput.tsx'), 'utf8');
+
+        expect(loginHtml).toMatch(/<input id="handle" name="handle" type="text" autocomplete="username"/);
+        expect(loginHtml).toMatch(/<input id="password" name="password" type="password" autocomplete="current-password"/);
+        expect(loginHtml).toMatch(/<input id="recoverHandle" name="recoverHandle" type="text" autocomplete="username"/);
+        expect(loginHtml).toMatch(/<input id="recoveryCode" name="recoveryCode" type="text" autocomplete="one-time-code" inputmode="numeric"/);
+        expect(loginHtml).toMatch(/<input id="newPassword" name="newPassword" type="password" autocomplete="new-password"/);
+
+        expect(loginFormSource).toContain('name="handle"');
+        expect(recoveryFormSource).toContain('name="recoverHandle"');
+        expect(recoveryFormSource).toContain('name="recoveryCode"');
+        expect(recoveryFormSource).toContain('autoComplete="one-time-code"');
+        expect(recoveryFormSource).toContain('name="newPassword"');
+        expect(passwordInputSource).toContain('name={name}');
+    });
+
     test('initializes deliberately and cleanup removes page-owned listeners', async () => {
         const { initLoginPage } = await importFreshLoginModule();
         const { root, elements } = createLoginRoot();

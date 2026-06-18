@@ -39,12 +39,14 @@ import {
     verifySecuritySettings,
     loginPageMiddleware,
     setupPageMiddleware,
+    settingsPageMiddleware,
     needsSetup,
     migratePublicOverrides,
 } from './users.js';
 
 import getWebpackServeMiddleware from './middleware/webpack-serve.js';
 import getViteLibServeMiddleware from './middleware/vite-lib-serve.js';
+import { getReactLoginServeMiddleware } from './middleware/react-login-serve.js';
 import basicAuthMiddleware from './middleware/basicAuth.js';
 import getWhitelistMiddleware from './middleware/whitelist.js';
 import accessLoggerMiddleware, { getAccessLogPath, migrateAccessLog } from './middleware/accessLogWriter.js';
@@ -73,13 +75,14 @@ import {
     getConfigValue,
 } from './util.js';
 import { UPLOADS_DIRECTORY } from './constants.js';
+import { REACT_LOGIN_BASE_PATH } from './react-login-feature.js';
 
 // Routers
 import { router as usersPublicRouter } from './endpoints/users-public.js';
 import { init as statsInit, onExit as statsOnExit } from './endpoints/stats.js';
 import { checkForNewContent } from './endpoints/content-manager.js';
 import { init as settingsInit } from './endpoints/settings.js';
-import { redirectDeprecatedEndpoints, ServerStartup, setupPrivateEndpoints } from './server-startup.js';
+import { redirectDeprecatedEndpoints, ServerStartup, setupPrivateEndpoints, setupPublicEndpoints } from './server-startup.js';
 import { diskCache } from './endpoints/characters.js';
 import { disposeCharacterIndexDatabases, logCharacterIndexStartupStatus } from './endpoints/character-index.js';
 import { migrateFlatSecrets } from './endpoints/secrets.js';
@@ -248,16 +251,21 @@ async function registerMiddleware(app, cli) {
     // Host login page
     app.get('/login', loginPageMiddleware);
 
+    // Host settings route
+    app.get('/settings', settingsPageMiddleware);
+
     // Host frontend assets
     const viteLibMiddleware = getViteLibServeMiddleware();
     app.use(viteLibMiddleware);
     webpackMiddleware = getWebpackServeMiddleware();
     app.use(webpackMiddleware);
+    app.use(REACT_LOGIN_BASE_PATH, getReactLoginServeMiddleware());
     app.use(userCssMiddleware);
     app.use(express.static(path.join(serverDirectory, 'public'), {}));
 
     // Public API
     app.use('/api/users', usersPublicRouter);
+    setupPublicEndpoints(app);
 
     // Everything below this line requires authentication
     app.use(requireLoginMiddleware);

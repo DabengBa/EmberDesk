@@ -53,7 +53,11 @@ import { extensionsEnabledFeatureGuard } from './endpoints/extensions.js';
 import { serverDirectory } from './server-directory.js';
 import { getEnableAccounts, toKey, getAccountVersion, getAllEnabledUsers, needsSetup } from './user-storage.js';
 import { getUserDirectories } from './user-directories.js';
-import { tryAutoLogin } from './user-auth.js';
+import { shouldRedirectToLogin, tryAutoLogin } from './user-auth.js';
+import { isReactLoginEnabled } from './react-login-feature.js';
+import { isReactSetupEnabled } from './react-setup-feature.js';
+import { isReactSettingsEnabled } from './react-settings-feature.js';
+import { hasReactLoginBuild, sendReactLoginIndex } from './middleware/react-login-serve.js';
 
 /**
  * @typedef {Object} User
@@ -280,6 +284,14 @@ export async function loginPageMiddleware(request, response) {
         console.error('Error during auto-login:', error);
     }
 
+    if (isReactLoginEnabled()) {
+        if (hasReactLoginBuild()) {
+            return sendReactLoginIndex(response);
+        }
+
+        console.warn('React login flag is enabled, but app/dist/index.html was not found. Falling back to public/login.html.');
+    }
+
     return response.sendFile('login.html', { root: path.join(serverDirectory, 'public') });
 }
 
@@ -289,10 +301,40 @@ export async function loginPageMiddleware(request, response) {
  * @param {import('express').Response} response Response object
  */
 export async function setupPageMiddleware(request, response) {
-    if (await needsSetup()) {
-        return response.sendFile('setup.html', { root: path.join(serverDirectory, 'public') });
+    if (!await needsSetup()) {
+        return response.redirect('/login');
     }
-    return response.redirect('/login');
+
+    if (isReactSetupEnabled()) {
+        if (hasReactLoginBuild()) {
+            return sendReactLoginIndex(response);
+        }
+
+        console.warn('React setup flag is enabled, but app/dist/index.html was not found. Falling back to public/setup.html.');
+    }
+
+    return response.sendFile('setup.html', { root: path.join(serverDirectory, 'public') });
+}
+
+/**
+ * Middleware to host the React settings page or fall back to the legacy workspace.
+ * @param {import('express').Request} request Request object
+ * @param {import('express').Response} response Response object
+ */
+export function settingsPageMiddleware(request, response) {
+    if (shouldRedirectToLogin(request)) {
+        return response.redirect('/login');
+    }
+
+    if (isReactSettingsEnabled()) {
+        if (hasReactLoginBuild()) {
+            return sendReactLoginIndex(response);
+        }
+
+        console.warn('React settings flag is enabled, but app/dist/index.html was not found. Falling back to /.');
+    }
+
+    return response.redirect('/');
 }
 
 /**

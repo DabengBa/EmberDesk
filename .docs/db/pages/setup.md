@@ -60,9 +60,16 @@ The page does not allow passwordless accounts. In `fresh` mode, both handle and 
 |---|---|---|
 | `enableUserAccounts` | `true` in the default config; omitted keys fall back to `false` for legacy deployments | Activates the setup page. Without this, EmberDesk skips authentication and the setup page is never shown. |
 
+### Optional
+
+| Key | Default | Effect |
+|---|---|---|
+| `features.react.pages.setup` | `false` | `true` serves the React implementation at `/setup`; `/setup.html` remains the legacy jQuery fallback surface. |
+
 ## Behavioral Notes
 
 - The setup page is shown until the user store has a password-protected account. After setup is complete, `/setup` redirects to `/login`.
 - The display name field is optional; if left empty, the handle is used as the display name.
 - The created account is always admin and enabled.
-- `public/scripts/setup.js` owns the page controller via `createSetupController()` and `initSetupPage()`. Tests disable auto-init with `globalThis.EMBERDESK_SETUP_TEST_MODE`.
+- `/setup` and `/setup.html` keep the same visible setup semantics, Chinese copy, and redirect targets even when the implementation switches between React and the legacy jQuery page.
+- `app/routes/setup.tsx` owns the React setup page when `features.react.pages.setup` is enabled. `public/scripts/setup.js` continues to own the legacy controller via `createSetupController()` and `initSetupPage()`, including the stable `/setup.html` fallback surface. Tests disable legacy auto-init with `globalThis.EMBERDESK_SETUP_TEST_MODE`.

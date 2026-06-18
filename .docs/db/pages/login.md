@@ -68,6 +68,7 @@ The login page does not expose a user list. The user must know their handle to l
 | Key | Default | Effect |
 |---|---|---|
 | `enableDiscreetLogin` | `false` | `true` hides the user list; the user must type their handle manually. |
+| `features.react.pages.login` | `true` | `true` serves the React implementation at `/login`; `/login.html` remains the legacy jQuery fallback. |
 | `sessionTimeout` | `-1` | Session lifetime in seconds. `-1` = never expires, `0` = expires on browser close. |
 | `rateLimiting.accountsLoginMaxAttempts` | `5` | Failed login attempts before per-account lockout. `0` disables. |
 | `rateLimiting.accountsLoginLockoutDuration` | `300` | Lockout window in seconds (5 minutes). |

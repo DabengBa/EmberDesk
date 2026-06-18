@@ -1,5 +1,6 @@
 import js from '@eslint/js';
 import jsdoc from 'eslint-plugin-jsdoc';
+import tseslint from 'typescript-eslint';
 import globals from 'globals';
 
 const ignoredPaths = [
@@ -13,6 +14,8 @@ const ignoredPaths = [
     'src/tokenizers/**',
     'docker/**',
     'plugins/**',
+    '**/*.d.ts',
+    'app/routeTree.gen.ts',
     '**/*.min.js',
     'public/scripts/extensions/third-party/**',
     'public/scripts/extensions/quick-reply/lib/**',
@@ -120,6 +123,60 @@ export default [
             ...baseLanguageOptions,
             sourceType: 'module',
             globals: globals.node,
+        },
+    },
+    {
+        files: ['src/**/*.ts', 'vite.config.ts'],
+        languageOptions: {
+            ...baseLanguageOptions,
+            parser: tseslint.parser,
+            parserOptions: {
+                sourceType: 'module',
+            },
+            globals: {
+                ...globals.node,
+                globalThis: 'readonly',
+            },
+        },
+        plugins: {
+            '@typescript-eslint': tseslint.plugin,
+        },
+        rules: {
+            'no-undef': 'off',
+            'no-unused-vars': 'off',
+            'jsdoc/no-undefined-types': 'off',
+            '@typescript-eslint/no-unused-vars': ['error', {
+                args: 'none',
+                caughtErrors: 'none',
+            }],
+        },
+    },
+    {
+        files: ['app/**/*.{ts,tsx}'],
+        languageOptions: {
+            ...baseLanguageOptions,
+            parser: tseslint.parser,
+            parserOptions: {
+                ecmaFeatures: {
+                    jsx: true,
+                },
+                sourceType: 'module',
+            },
+            globals: {
+                ...globals.browser,
+            },
+        },
+        plugins: {
+            '@typescript-eslint': tseslint.plugin,
+        },
+        rules: {
+            'no-undef': 'off',
+            'no-unused-vars': 'off',
+            'jsdoc/no-undefined-types': 'off',
+            '@typescript-eslint/no-unused-vars': ['error', {
+                args: 'none',
+                caughtErrors: 'none',
+            }],
         },
     },
     {
