@@ -181,6 +181,28 @@ async function expectReactRichBodyState(page, messageId) {
     await expect(richBodyOwner).toHaveAttribute('data-main-chat-rich-body-owner', 'react');
 }
 
+async function openCharacterChatWithTruncation(page, chatName, truncationLimit) {
+    await page.evaluate(async ({ nextChatName, nextTruncationLimit }) => {
+        const context = window.SillyTavern.getContext();
+        context.powerUserSettings.chat_truncation = nextTruncationLimit;
+        await context.openCharacterChat(nextChatName);
+    }, { nextChatName: chatName, nextTruncationLimit: truncationLimit });
+}
+
+async function positionMessageRowNearViewportTop(page, messageId, topOffset = 120) {
+    return page.evaluate(async ({ targetMessageId, viewportTopOffset }) => {
+        const chatContainer = document.getElementById('chat');
+        const anchorRow = document.querySelector(`#chat > .mes[mesid="${targetMessageId}"]`);
+        if (!(chatContainer instanceof HTMLElement) || !(anchorRow instanceof HTMLElement)) {
+            throw new Error(`Unable to position anchor row ${targetMessageId}`);
+        }
+
+        chatContainer.scrollTop = Math.max(anchorRow.offsetTop - viewportTopOffset, 0);
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        return anchorRow.getBoundingClientRect().top;
+    }, { targetMessageId: String(messageId), viewportTopOffset: topOffset });
+}
+
 test.describe('chat message rendering', () => {
     // These flows mutate the same seeded character/chat files.
     test.describe.configure({ mode: 'serial' });
@@ -200,6 +222,10 @@ test.describe('chat message rendering', () => {
 
         await testSetup.awaitST({ page });
         await selectCharacterByName(page, characterName);
+        await page.evaluate((truncationLimit) => {
+            const context = window.SillyTavern.getContext();
+            context.powerUserSettings.chat_truncation = truncationLimit;
+        }, seededMessages.length);
 
         const firstMessageVisibleMs = await openChatAndMeasureFirstMessage(page, seededChatName);
         testInfo.annotations.push({
@@ -317,6 +343,49 @@ test.describe('chat message rendering', () => {
         await expect(latestLongMessageRow).toBeVisible();
         await expectMessageTextMatches(page, longMessages.length - 1, longMessages.at(-1).mes);
         await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(longChatLimit * 2);
+
+        await openCharacterChatWithTruncation(page, seededChatName, seededMessages.length);
+        await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(seededMessages.length);
+        expect(getUnexpectedConsoleErrors(consoleErrors)).toEqual([]);
+    });
+
+    test('restores per-chat reading position when switching back to a long chat', async ({ page }) => {
+        test.skip(!reactMainChatMessageListEnabled, 'scroll restore is only required behind the React main-chat flag');
+
+        expect(fs.existsSync(seededChatPath)).toBe(true);
+        createLongChatFixture(seededChatPath, longChatPath);
+
+        const seededMessages = getChatMessages(seededChatPath);
+        const longMessages = getChatMessages(longChatPath);
+        const consoleErrors = createConsoleErrorCollector(page);
+        const seededVisibleMessageCount = Math.min(seededMessages.length, longChatLimit);
+
+        await testSetup.awaitST({ page });
+        await selectCharacterByName(page, characterName);
+        await openCharacterChatWithTruncation(page, seededChatName, longChatLimit);
+        await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(seededVisibleMessageCount);
+        await openCharacterChatWithTruncation(page, longChatName, longChatLimit);
+
+        await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(longChatLimit);
+        await expectMainChatMessageListHostState(page, longChatLimit);
+
+        const anchorMessageId = longMessages.length - Math.ceil(longChatLimit / 2);
+        const anchorRow = page.locator(`#chat > .mes[mesid="${anchorMessageId}"]`);
+        const anchorTopBeforeSwitch = await positionMessageRowNearViewportTop(page, anchorMessageId);
+
+        await openCharacterChatWithTruncation(page, seededChatName, longChatLimit);
+        await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(seededVisibleMessageCount);
+
+        await openCharacterChatWithTruncation(page, longChatName, longChatLimit);
+        await expect(page.locator(`#chat > .mes[mesid="${anchorMessageId}"]`)).toBeVisible();
+
+        const anchorTopAfterSwitch = await anchorRow.evaluate(async (element) => {
+            await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            return element.getBoundingClientRect().top;
+        });
+
+        expect(Math.abs(anchorTopAfterSwitch - anchorTopBeforeSwitch)).toBeLessThanOrEqual(12);
+        await expect(page.locator('#jump_to_latest_message')).toHaveCount(0);
         expect(getUnexpectedConsoleErrors(consoleErrors)).toEqual([]);
     });
 

@@ -1,9 +1,10 @@
-import { StrictMode, useEffect, useMemo, type ReactNode } from 'react';
+import { StrictMode, useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { useMutation } from '@tanstack/react-query';
 import { useForm } from '@tanstack/react-form';
+import { measureElement, useVirtualizer, type ReactVirtualizer, type VirtualItem } from '@tanstack/react-virtual';
 import { z } from 'zod';
 
 export type WorkspacePanelKind = 'worldInfo' | 'backgroundLibrary' | 'extensionsHost' | 'mainChatMessageList';
@@ -131,12 +132,16 @@ interface ExtensionsHostReactMountPointStatus {
 }
 
 interface MainChatMessageListWorkspacePanelState {
+    chatId?: string;
     hasChatContainer?: boolean;
     messageCount?: number;
     firstMessageId?: string;
     lastMessageId?: string;
     showMoreVisible?: boolean;
     visibleMessageIds?: string[];
+    scrollTop?: number;
+    scrollHeight?: number;
+    clientHeight?: number;
     chatContainer?: HTMLElement | null;
     host?: HTMLElement | null;
     messageNodes?: HTMLElement[];
@@ -157,8 +162,23 @@ interface MainChatRichBodySnapshot {
     biasHtml: string;
 }
 
+interface MainChatMessageListScrollSnapshot {
+    chatId: string;
+    anchorMessageId: string;
+    scrollOffset: number;
+    measurements: VirtualItem[];
+    firstRenderedMessageId: string;
+    lastRenderedMessageId: string;
+    visibleMessageCount: number;
+    wasNearBottom: boolean;
+}
+
 const queryClient = new QueryClient();
 const mountedPanels = new Map<WorkspacePanelKind, WorkspacePanelMount>();
+const mainChatMessageListScrollSnapshots = new Map<string, MainChatMessageListScrollSnapshot>();
+const MAIN_CHAT_VIRTUAL_INDEX_ATTRIBUTE = 'data-main-chat-virtual-index';
+const MAIN_CHAT_SCROLL_RESTORE_THRESHOLD_PX = 12;
+const MAIN_CHAT_DEFAULT_ROW_HEIGHT_PX = 160;
 
 const worldInfoPanelFormSchema = z.object({
     selectedWorldIndex: z.string(),
@@ -189,6 +209,114 @@ const mainChatRichBodySnapshotSchema = z.object({
     biasHtml: z.string(),
 });
 
+const mainChatMessageListStateSchema = z.object({
+    chatId: z.string().optional(),
+    hasChatContainer: z.boolean().optional(),
+    messageCount: z.number().int().nonnegative().optional(),
+    firstMessageId: z.string().optional(),
+    lastMessageId: z.string().optional(),
+    showMoreVisible: z.boolean().optional(),
+    visibleMessageIds: z.array(z.string()).optional(),
+    scrollTop: z.number().nonnegative().optional(),
+    scrollHeight: z.number().nonnegative().optional(),
+    clientHeight: z.number().nonnegative().optional(),
+});
+
+function getMainChatRenderableMessageNodes(chatContainer: HTMLElement | null) {
+    if (!(chatContainer instanceof HTMLElement)) {
+        return [];
+    }
+
+    return Array.from(chatContainer.querySelectorAll<HTMLElement>(':scope > .mes[mesid]'))
+        .filter((node) => node.parentElement === chatContainer);
+}
+
+function syncMainChatVirtualIndexes(messageNodes: HTMLElement[]) {
+    let nextIndex = 0;
+    for (const node of messageNodes) {
+        node.setAttribute(MAIN_CHAT_VIRTUAL_INDEX_ATTRIBUTE, String(nextIndex));
+        nextIndex += 1;
+    }
+}
+
+function getMainChatEstimatedRowHeight(snapshot?: MainChatMessageListScrollSnapshot | null) {
+    const measuredItems = snapshot?.measurements ?? [];
+    if (measuredItems.length === 0) {
+        return MAIN_CHAT_DEFAULT_ROW_HEIGHT_PX;
+    }
+
+    const totalHeight = measuredItems.reduce((sum, item) => sum + Math.max(item.size, 0), 0);
+    return Math.max(Math.round(totalHeight / measuredItems.length), 1);
+}
+
+function getMainChatMessageId(messageRow: HTMLElement | null | undefined) {
+    return messageRow?.getAttribute('mesid') ?? '';
+}
+
+function getMainChatDistanceFromEnd(chatContainer: HTMLElement) {
+    return Math.max(chatContainer.scrollHeight - (chatContainer.scrollTop + chatContainer.clientHeight), 0);
+}
+
+function getMainChatVisibleAnchorRow(chatContainer: HTMLElement, messageNodes: HTMLElement[]) {
+    const chatRect = chatContainer.getBoundingClientRect();
+    const firstVisibleRow = messageNodes.find((node) => {
+        const rowRect = node.getBoundingClientRect();
+        return rowRect.bottom > chatRect.top && rowRect.top < chatRect.bottom;
+    });
+
+    return firstVisibleRow ?? messageNodes[0] ?? null;
+}
+
+function shouldRestoreExpandedMainChatWindow(snapshot: MainChatMessageListScrollSnapshot, currentFirstMessageId: string) {
+    const snapshotFirstMessageIndex = Number(snapshot.firstRenderedMessageId);
+    const currentFirstMessageIndex = Number(currentFirstMessageId);
+
+    if (!Number.isInteger(snapshotFirstMessageIndex) || !Number.isInteger(currentFirstMessageIndex)) {
+        return false;
+    }
+
+    return snapshotFirstMessageIndex < currentFirstMessageIndex;
+}
+
+function persistMainChatMessageListScrollSnapshot(
+    state: MainChatMessageListWorkspacePanelState,
+    virtualizer: ReactVirtualizer<HTMLElement, HTMLElement>,
+) {
+    const chatId = state.chatId?.trim();
+    if (!chatId) {
+        return;
+    }
+
+    const chatContainer = state.chatContainer;
+    if (!(chatContainer instanceof HTMLElement)) {
+        return;
+    }
+
+    const messageNodes = getMainChatRenderableMessageNodes(chatContainer);
+    if (messageNodes.length === 0) {
+        return;
+    }
+
+    syncMainChatVirtualIndexes(messageNodes);
+    const anchorRow = getMainChatVisibleAnchorRow(chatContainer, messageNodes);
+    const anchorMessageId = getMainChatMessageId(anchorRow);
+    const scrollOffset = chatContainer.scrollTop;
+    if (!anchorMessageId || !Number.isFinite(scrollOffset)) {
+        return;
+    }
+
+    mainChatMessageListScrollSnapshots.set(chatId, {
+        chatId,
+        anchorMessageId,
+        scrollOffset,
+        measurements: virtualizer.takeSnapshot(),
+        firstRenderedMessageId: getMainChatMessageId(messageNodes[0]),
+        lastRenderedMessageId: getMainChatMessageId(messageNodes.at(-1)),
+        visibleMessageCount: messageNodes.length,
+        wasNearBottom: getMainChatDistanceFromEnd(chatContainer) <= MAIN_CHAT_SCROLL_RESTORE_THRESHOLD_PX,
+    });
+}
+
 function buildWorldInfoPanelFormDefaults(state: WorldInfoWorkspacePanelState) {
     return {
         selectedWorldIndex: state.selectedWorldIndex ?? '',
@@ -217,10 +345,12 @@ function asMainChatMessageListState(state: unknown): MainChatMessageListWorkspac
     }
 
     const bridgeState = state as MainChatMessageListWorkspacePanelState;
+    const parsedBridgeState = mainChatMessageListStateSchema.safeParse(bridgeState);
     const richBodySnapshots = z.array(mainChatRichBodySnapshotSchema).safeParse(bridgeState.richBodySnapshots ?? []);
 
     return {
         ...bridgeState,
+        ...(parsedBridgeState.success ? parsedBridgeState.data : {}),
         richBodySnapshots: richBodySnapshots.success ? richBodySnapshots.data : [],
     };
 }
@@ -1033,7 +1163,185 @@ function ExtensionsHostWorkspacePanel({ state, bridge }: { state?: unknown; brid
     );
 }
 
-function MainChatMessageListWorkspacePanel({ state }: { state?: unknown }) {
+function MainChatMessageListRestoreController({
+    state,
+    bridge,
+}: {
+    state: MainChatMessageListWorkspacePanelState;
+    bridge?: WorkspacePanelBridge;
+}) {
+    const chatContainerRef = useRef<HTMLElement | null>(state.chatContainer ?? null);
+    const stateRef = useRef(state);
+    const bridgeRef = useRef(bridge);
+    const initialSnapshotRef = useRef<MainChatMessageListScrollSnapshot | null>(
+        state.chatId ? mainChatMessageListScrollSnapshots.get(state.chatId) ?? null : null,
+    );
+    const previousFirstMessageIdRef = useRef(state.firstMessageId ?? '');
+    const previousMessageCountRef = useRef(state.messageCount ?? 0);
+    const restoreAttemptedRef = useRef(false);
+    const messageIds = state.visibleMessageIds ?? [];
+    const isPrependingHistoryWindow = Boolean(
+        previousFirstMessageIdRef.current
+        && state.firstMessageId
+        && previousFirstMessageIdRef.current !== state.firstMessageId
+        && (state.messageCount ?? 0) > previousMessageCountRef.current,
+    );
+
+    useLayoutEffect(() => {
+        syncMainChatVirtualIndexes(state.messageNodes ?? []);
+    }, [state.messageNodes, state.visibleMessageIds]);
+
+    const virtualizer = useVirtualizer({
+        count: messageIds.length,
+        enabled: Boolean(state.chatId && state.chatContainer instanceof HTMLElement && messageIds.length > 0),
+        getScrollElement: () => chatContainerRef.current,
+        estimateSize: () => getMainChatEstimatedRowHeight(initialSnapshotRef.current),
+        getItemKey: (index) => messageIds[index] ?? index,
+        indexAttribute: MAIN_CHAT_VIRTUAL_INDEX_ATTRIBUTE,
+        measureElement,
+        initialOffset: initialSnapshotRef.current?.scrollOffset ?? state.scrollTop ?? 0,
+        initialMeasurementsCache: initialSnapshotRef.current?.measurements ?? [],
+        anchorTo: isPrependingHistoryWindow ? 'start' : 'end',
+        scrollEndThreshold: MAIN_CHAT_SCROLL_RESTORE_THRESHOLD_PX,
+        overscan: 0,
+        useFlushSync: false,
+        onChange: (instance, sync) => {
+            if (!sync) {
+                persistMainChatMessageListScrollSnapshot(stateRef.current, instance);
+            }
+        },
+    });
+    virtualizer.shouldAdjustScrollPositionOnItemSizeChange = () => false;
+
+    useEffect(() => {
+        stateRef.current = state;
+        chatContainerRef.current = state.chatContainer ?? null;
+        bridgeRef.current = bridge;
+    }, [bridge, state]);
+
+    useEffect(() => {
+        previousFirstMessageIdRef.current = state.firstMessageId ?? '';
+        previousMessageCountRef.current = state.messageCount ?? 0;
+    }, [state.firstMessageId, state.messageCount]);
+
+    useEffect(() => {
+        const chatContainer = state.chatContainer;
+        if (!(chatContainer instanceof HTMLElement)) {
+            return;
+        }
+
+        let frameId = 0;
+        const persistOnNextFrame = () => {
+            if (frameId !== 0) {
+                return;
+            }
+
+            frameId = requestAnimationFrame(() => {
+                frameId = 0;
+                persistMainChatMessageListScrollSnapshot(stateRef.current, virtualizer);
+            });
+        };
+
+        chatContainer.addEventListener('scroll', persistOnNextFrame, { passive: true });
+        return () => {
+            if (frameId !== 0) {
+                cancelAnimationFrame(frameId);
+            }
+            chatContainer.removeEventListener('scroll', persistOnNextFrame);
+        };
+    }, [state.chatContainer, virtualizer]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const waitForPaint = async () => {
+            await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+            await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        };
+
+        const measureRenderedRows = () => {
+            const chatContainer = stateRef.current.chatContainer;
+            if (!(chatContainer instanceof HTMLElement)) {
+                return [];
+            }
+
+            const messageNodes = getMainChatRenderableMessageNodes(chatContainer);
+            virtualizer.measureElement(null);
+            syncMainChatVirtualIndexes(messageNodes);
+            for (const messageNode of messageNodes) {
+                virtualizer.measureElement(messageNode);
+            }
+            virtualizer.measure();
+            return messageNodes;
+        };
+
+        const restoreSnapshot = async () => {
+            const chatId = state.chatId?.trim();
+            const chatContainer = state.chatContainer;
+            if (!chatId || !(chatContainer instanceof HTMLElement)) {
+                return;
+            }
+
+            await waitForPaint();
+            if (cancelled) {
+                return;
+            }
+
+            let messageNodes = measureRenderedRows();
+            if (restoreAttemptedRef.current) {
+                persistMainChatMessageListScrollSnapshot(stateRef.current, virtualizer);
+                return;
+            }
+
+            restoreAttemptedRef.current = true;
+            const snapshot = mainChatMessageListScrollSnapshots.get(chatId);
+            if (!snapshot) {
+                persistMainChatMessageListScrollSnapshot(stateRef.current, virtualizer);
+                return;
+            }
+
+            const currentFirstMessageId = getMainChatMessageId(messageNodes[0]);
+            if (shouldRestoreExpandedMainChatWindow(snapshot, currentFirstMessageId)) {
+                await bridgeRef.current?.dispatchAction?.('loadMoreUntilMessage', {
+                    anchorMessageId: snapshot.firstRenderedMessageId || snapshot.anchorMessageId,
+                });
+                await waitForPaint();
+                if (cancelled || stateRef.current.chatId !== chatId) {
+                    return;
+                }
+
+                messageNodes = measureRenderedRows();
+            }
+
+            const anchorRow = messageNodes.find((node) => getMainChatMessageId(node) === snapshot.anchorMessageId);
+            if (!anchorRow) {
+                mainChatMessageListScrollSnapshots.delete(chatId);
+                persistMainChatMessageListScrollSnapshot(stateRef.current, virtualizer);
+                return;
+            }
+
+            if (snapshot.wasNearBottom) {
+                virtualizer.scrollToEnd({ behavior: 'auto' });
+            } else {
+                virtualizer.scrollToOffset(snapshot.scrollOffset, { behavior: 'auto' });
+            }
+
+            await waitForPaint();
+            if (!cancelled) {
+                persistMainChatMessageListScrollSnapshot(stateRef.current, virtualizer);
+            }
+        };
+
+        void restoreSnapshot();
+        return () => {
+            cancelled = true;
+        };
+    }, [state.chatContainer, state.chatId, state.firstMessageId, state.lastMessageId, state.messageCount, virtualizer]);
+
+    return null;
+}
+
+function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown; bridge?: WorkspacePanelBridge }) {
     const bridgeState = asMainChatMessageListState(state);
     const messageRowMap = useMemo(() => {
         const rows = new Map<string, HTMLElement>();
@@ -1076,6 +1384,7 @@ function MainChatMessageListWorkspacePanel({ state }: { state?: unknown }) {
                 data-main-chat-message-list-controller="true"
                 data-main-chat-message-list-status={bridgeState.hasChatContainer ? 'ready' : 'missing'}
             />
+            <MainChatMessageListRestoreController key={bridgeState.chatId || 'main-chat-empty'} state={bridgeState} bridge={bridge} />
             {ownedRichBodySnapshots.map(snapshot => {
                 const messageRow = messageRowMap.get(snapshot.messageId);
                 const targets = messageRow ? getMainChatRichBodyRowTargets(messageRow) : null;
@@ -1119,14 +1428,18 @@ function syncMainChatMessageListDom(
     const orderedNodes = [];
 
     if (showMoreNode instanceof HTMLElement && showMoreNode.parentElement === chatContainer) {
+        showMoreNode.removeAttribute(MAIN_CHAT_VIRTUAL_INDEX_ATTRIBUTE);
         orderedNodes.push(showMoreNode);
     }
 
+    let nextMessageIndex = 0;
     for (const node of messageNodes) {
         if (!(node instanceof HTMLElement) || node.parentElement !== chatContainer) {
             continue;
         }
 
+        node.setAttribute(MAIN_CHAT_VIRTUAL_INDEX_ATTRIBUTE, String(nextMessageIndex));
+        nextMessageIndex += 1;
         orderedNodes.push(node);
     }
 
@@ -1148,7 +1461,7 @@ function renderPanel(kind: WorkspacePanelKind, state?: unknown, bridge?: Workspa
         case 'extensionsHost':
             return <ExtensionsHostWorkspacePanel state={state} bridge={bridge} />;
         case 'mainChatMessageList':
-            return <MainChatMessageListWorkspacePanel state={state} />;
+            return <MainChatMessageListWorkspacePanel state={state} bridge={bridge} />;
         default:
             return <WorkspacePanelPlaceholder kind={kind} />;
     }

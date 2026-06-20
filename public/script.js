@@ -591,17 +591,49 @@ function getMainChatMessageListReactBridgeState() {
         .filter(Boolean);
 
     return {
+        chatId: getCurrentChatId(),
         hasChatContainer: Boolean(chatContainer),
         messageCount: messageRows.length,
         firstMessageId: firstMessageRow?.getAttribute('mesid') ?? '',
         lastMessageId: lastMessageRow?.getAttribute('mesid') ?? '',
         showMoreVisible: Boolean(showMoreButton),
         visibleMessageIds: messageRows.map(row => row.getAttribute('mesid') ?? ''),
+        scrollTop: chatContainer?.scrollTop ?? 0,
+        scrollHeight: chatContainer?.scrollHeight ?? 0,
+        clientHeight: chatContainer?.clientHeight ?? 0,
         chatContainer,
         host,
         messageNodes: messageRows,
         richBodySnapshots: richBodySnapshots,
         showMoreNode: showMoreButton,
+    };
+}
+
+function getMainChatMessageListReactBridge() {
+    return {
+        async dispatchAction(action, payload = {}) {
+            switch (action) {
+                case 'loadMoreUntilMessage': {
+                    const anchorMessageId = String(payload?.anchorMessageId ?? '');
+                    if (!anchorMessageId) {
+                        break;
+                    }
+
+                    let anchorMessageRow = document.querySelector(`#chat > .mes[mesid="${CSS.escape(anchorMessageId)}"]`);
+                    let showMoreButton = document.getElementById('show_more_messages');
+                    while (!anchorMessageRow && showMoreButton instanceof HTMLElement) {
+                        await showMoreMessages();
+                        anchorMessageRow = document.querySelector(`#chat > .mes[mesid="${CSS.escape(anchorMessageId)}"]`);
+                        showMoreButton = document.getElementById('show_more_messages');
+                    }
+                    break;
+                }
+                default:
+                    console.warn('Unknown Main Chat React action', action);
+            }
+
+            void mountReactMainChatMessageListPanel();
+        },
     };
 }
 
@@ -615,6 +647,7 @@ async function mountReactMainChatMessageListPanel() {
         kind: 'mainChatMessageList',
         container: ensureMainChatMessageListReactHost(),
         state: getMainChatMessageListReactBridgeState(),
+        bridge: getMainChatMessageListReactBridge(),
         features: getWorkspaceReactFeatures(),
     });
 }

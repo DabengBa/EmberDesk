@@ -73,10 +73,12 @@ legacy `printMessages()` / `redisplayChat()` / `showMoreMessages()` / `messageFo
 
 Sprint 2 已把同一 `mainChatMessageList` island 扩到 finalized rich-body bridge boundary：`public/script.js` 为 visible / finalized / non-editing rows 生成 snapshot，`app/workspace-panels.tsx` 用 Zod 校验这些 payload，并仅在既有 `.mes_block` 内插入 hidden per-row owner markers。实际 `.mes_text`、reasoning、媒体、文件与 bias 的 HTML 仍来自 legacy rendering chain，而不是第二套 React rich-body renderer。
 
+Sprint 3 已继续扩展同一 island：在不改写可见 `.mes` row owner、streaming、composer 或 message actions 的前提下，React controller 现在会在当前页面会话里按 `chatId` 记录阅读位置和已展开历史窗口，并在用户切回该 chat 时先复用 legacy `showMoreMessages()` 语义重新展开到保存锚点，再恢复原阅读区域。`@tanstack/react-virtual` 在这里已真实落地，但只作为 headless measurement / snapshot / restore controller，不是可见消息列表 renderer。
+
 ### 后续阶段重点
 
 - Sprint 2：已交付 finalized rich-body snapshot / hidden owner-marker boundary，不破坏 outer `.mes` / load-more / streaming / actions 契约
-- Sprint 3：处理 scroll 恢复、定位稳定性和可能的 virtualization 引入
+- Sprint 3：已交付 per-chat 阅读位置恢复、expanded-history window restore 和 headless TanStack Virtual measurement / snapshot / restore controller
 - Sprint 4+：再逐步进入 streaming、input、message actions owner 迁移
 
 ---
@@ -90,6 +92,7 @@ Sprint 2 已把同一 `mainChatMessageList` island 扩到 finalized rich-body br
 - [x] ✅ Sprint 1: `test:compat`、`.mes` DOM 和 semantic docs 继续通过
 - [x] ✅ Sprint 2: visible finalized rows 的 rich-body snapshot / hidden owner-marker boundary 已落地
 - [x] ✅ Sprint 2: stored chat / long chat / finalized streaming proof 继续通过，legacy rich-body rendering chain 保持可见输出 owner
+- [x] ✅ Sprint 3: current-session per-chat reading-position restore、expanded-history window restore、load-more anchor stability 和 `#jump_to_latest_message` absence proof 已落地
 - [ ] Phase 3 全量完成：流式生成、输入框、斜杠命令、消息操作、整合测试 仍待后续 Sprint
 
 ---
@@ -99,9 +102,10 @@ Sprint 2 已把同一 `mainChatMessageList` island 扩到 finalized rich-body br
 - [React 现代化路线图](../../tech/react-modernization-roadmap.md)
 - [主聊天后继者范围](../../tech/main-chat-successor-scope.md)
 - [Phase 3 Sprint 2 dated spec](../260620-02-react-phase3-sprint2-main-chat-rich-message-bodies/spec.md)
+- [Phase 3 Sprint 3 dated spec](../260620-03-react-phase3-sprint3-main-chat-scroll-and-positioning/spec.md)
 
 ---
 
 ## 下一步
 
-👉 [Phase 3 Sprint 3: 消息列表 - 滚动和定位](phase3-sprint3-message-list-scroll.md)
+👉 [Phase 3 Sprint 4: 流式生成 - SSE 连接](phase3-sprint4-streaming-sse.md)

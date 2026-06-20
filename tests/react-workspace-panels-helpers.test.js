@@ -383,12 +383,19 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('function ensureMainChatMessageListReactHost()');
         expect(scriptSource).toContain('host.hidden = true;');
         expect(scriptSource).toContain('function getMainChatMessageListReactBridgeState()');
+        expect(scriptSource).toContain('chatId: getCurrentChatId()');
         expect(scriptSource).toContain('messageNodes: messageRows');
         expect(scriptSource).toContain('showMoreNode: showMoreButton');
+        expect(scriptSource).toContain('scrollTop: chatContainer?.scrollTop ?? 0');
+        expect(scriptSource).toContain('scrollHeight: chatContainer?.scrollHeight ?? 0');
+        expect(scriptSource).toContain('clientHeight: chatContainer?.clientHeight ?? 0');
+        expect(scriptSource).toContain('function getMainChatMessageListReactBridge()');
+        expect(scriptSource).toContain('case \'loadMoreUntilMessage\':');
         expect(scriptSource).toContain('async function mountReactMainChatMessageListPanel(');
         expect(scriptSource).toContain('if (!getWorkspaceReactFeatures()?.reactPanels?.mainChatMessageList)');
         expect(scriptSource).toContain('kind: \'mainChatMessageList\'');
         expect(scriptSource).toContain('state: getMainChatMessageListReactBridgeState()');
+        expect(scriptSource).toContain('bridge: getMainChatMessageListReactBridge()');
         expect(scriptSource).toContain('cleanupMainChatMessageListReactHost()');
         expect(scriptSource).toContain('document.getElementById(\'chat\')');
         expect(scriptSource).toContain('void mountReactMainChatMessageListPanel();');
@@ -397,6 +404,10 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).not.toContain('container: document.getElementById(\'chat\')');
 
         expect(workspacePanelSource).toContain('function MainChatMessageListWorkspacePanel');
+        expect(workspacePanelSource).toContain('chatId?: string;');
+        expect(workspacePanelSource).toContain('scrollTop?: number;');
+        expect(workspacePanelSource).toContain('scrollHeight?: number;');
+        expect(workspacePanelSource).toContain('clientHeight?: number;');
         expect(workspacePanelSource).toContain('function syncMainChatMessageListDom(');
         expect(workspacePanelSource).toContain('bridgeState.messageNodes ?? []');
         expect(workspacePanelSource).toContain('bridgeState.showMoreNode');
@@ -404,6 +415,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('chatContainer.insertBefore(node, insertAfter.nextSibling);');
         expect(workspacePanelSource).toContain('data-main-chat-message-list-controller="true"');
         expect(workspacePanelSource).toContain('data-main-chat-message-list-status={bridgeState.hasChatContainer ? \'ready\' : \'missing\'}');
+        expect(workspacePanelSource).toContain('return <MainChatMessageListWorkspacePanel state={state} bridge={bridge} />;');
         expect(workspacePanelSource).not.toContain('title="Main Chat Message List"');
         expect(workspacePanelSource).not.toContain('legacyBoundary="message-rendering-streaming-actions-load-more"');
     });
