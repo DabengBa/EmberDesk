@@ -142,11 +142,27 @@ interface MainChatMessageListWorkspacePanelState {
     scrollTop?: number;
     scrollHeight?: number;
     clientHeight?: number;
+    generationControl?: MainChatGenerationControlState;
     chatContainer?: HTMLElement | null;
     host?: HTMLElement | null;
     messageNodes?: HTMLElement[];
     richBodySnapshots?: MainChatRichBodySnapshot[];
     showMoreNode?: HTMLElement | null;
+}
+
+interface MainChatGenerationControlState {
+    state: 'idle' | 'streaming' | 'recovering' | 'stopped' | 'completed' | 'error';
+    phase: 'idle' | 'streaming' | 'recoveringPrimary' | 'recoveringFallback' | 'stopped' | 'completed' | 'error';
+    composerDisabled: boolean;
+    sendVisible: boolean;
+    stopVisible: boolean;
+    continueVisible: boolean;
+    continueSurface: 'hidden' | 'legacy';
+    canRecoverInput: boolean;
+    activeMessageId: number | null;
+    recoveryStatusLabel: string | null;
+    failureRetryVisible: boolean;
+    failureNoticeVisible: boolean;
 }
 
 interface MainChatRichBodySnapshot {
@@ -165,6 +181,7 @@ interface MainChatRichBodySnapshot {
 interface MainChatMessageListScrollSnapshot {
     chatId: string;
     anchorMessageId: string;
+    anchorViewportOffset?: number;
     scrollOffset: number;
     measurements: VirtualItem[];
     firstRenderedMessageId: string;
@@ -173,9 +190,21 @@ interface MainChatMessageListScrollSnapshot {
     wasNearBottom: boolean;
 }
 
+function getMainChatMessageListScrollSnapshotStore() {
+    const scope = globalThis as typeof globalThis & {
+        __emberDeskMainChatMessageListScrollSnapshots?: Map<string, MainChatMessageListScrollSnapshot>;
+    };
+
+    if (!scope.__emberDeskMainChatMessageListScrollSnapshots) {
+        scope.__emberDeskMainChatMessageListScrollSnapshots = new Map<string, MainChatMessageListScrollSnapshot>();
+    }
+
+    return scope.__emberDeskMainChatMessageListScrollSnapshots;
+}
+
 const queryClient = new QueryClient();
 const mountedPanels = new Map<WorkspacePanelKind, WorkspacePanelMount>();
-const mainChatMessageListScrollSnapshots = new Map<string, MainChatMessageListScrollSnapshot>();
+const mainChatMessageListScrollSnapshots = getMainChatMessageListScrollSnapshotStore();
 const MAIN_CHAT_VIRTUAL_INDEX_ATTRIBUTE = 'data-main-chat-virtual-index';
 const MAIN_CHAT_SCROLL_RESTORE_THRESHOLD_PX = 12;
 const MAIN_CHAT_DEFAULT_ROW_HEIGHT_PX = 160;
@@ -208,6 +237,36 @@ const mainChatRichBodySnapshotSchema = z.object({
     fileHtml: z.string(),
     biasHtml: z.string(),
 });
+
+const mainChatGenerationControlSchema = z.object({
+    state: z.enum(['idle', 'streaming', 'recovering', 'stopped', 'completed', 'error']),
+    phase: z.enum(['idle', 'streaming', 'recoveringPrimary', 'recoveringFallback', 'stopped', 'completed', 'error']),
+    composerDisabled: z.boolean(),
+    sendVisible: z.boolean(),
+    stopVisible: z.boolean(),
+    continueVisible: z.boolean(),
+    continueSurface: z.enum(['hidden', 'legacy']),
+    canRecoverInput: z.boolean(),
+    activeMessageId: z.number().int().nonnegative().nullable(),
+    recoveryStatusLabel: z.string().nullable(),
+    failureRetryVisible: z.boolean(),
+    failureNoticeVisible: z.boolean(),
+});
+
+const mainChatGenerationControlFallback: MainChatGenerationControlState = {
+    state: 'idle',
+    phase: 'idle',
+    composerDisabled: false,
+    sendVisible: true,
+    stopVisible: false,
+    continueVisible: false,
+    continueSurface: 'hidden',
+    canRecoverInput: true,
+    activeMessageId: null,
+    recoveryStatusLabel: null,
+    failureRetryVisible: false,
+    failureNoticeVisible: false,
+};
 
 const mainChatMessageListStateSchema = z.object({
     chatId: z.string().optional(),
@@ -253,6 +312,11 @@ function getMainChatMessageId(messageRow: HTMLElement | null | undefined) {
     return messageRow?.getAttribute('mesid') ?? '';
 }
 
+function getActiveMainChatId() {
+    const chatId = globalThis.SillyTavern?.getContext?.()?.chatId;
+    return typeof chatId === 'string' ? chatId.trim() : null;
+}
+
 function getMainChatDistanceFromEnd(chatContainer: HTMLElement) {
     return Math.max(chatContainer.scrollHeight - (chatContainer.scrollTop + chatContainer.clientHeight), 0);
 }
@@ -287,6 +351,11 @@ function persistMainChatMessageListScrollSnapshot(
         return;
     }
 
+    const activeChatId = getActiveMainChatId();
+    if (activeChatId !== null && activeChatId !== chatId) {
+        return;
+    }
+
     const chatContainer = state.chatContainer;
     if (!(chatContainer instanceof HTMLElement)) {
         return;
@@ -305,9 +374,15 @@ function persistMainChatMessageListScrollSnapshot(
         return;
     }
 
+    const chatRect = chatContainer.getBoundingClientRect();
+    const anchorViewportOffset = anchorRow instanceof HTMLElement
+        ? anchorRow.getBoundingClientRect().top - chatRect.top
+        : 0;
+
     mainChatMessageListScrollSnapshots.set(chatId, {
         chatId,
         anchorMessageId,
+        anchorViewportOffset,
         scrollOffset,
         measurements: virtualizer.takeSnapshot(),
         firstRenderedMessageId: getMainChatMessageId(messageNodes[0]),
@@ -347,11 +422,13 @@ function asMainChatMessageListState(state: unknown): MainChatMessageListWorkspac
     const bridgeState = state as MainChatMessageListWorkspacePanelState;
     const parsedBridgeState = mainChatMessageListStateSchema.safeParse(bridgeState);
     const richBodySnapshots = z.array(mainChatRichBodySnapshotSchema).safeParse(bridgeState.richBodySnapshots ?? []);
+    const generationControl = mainChatGenerationControlSchema.safeParse(bridgeState.generationControl);
 
     return {
         ...bridgeState,
         ...(parsedBridgeState.success ? parsedBridgeState.data : {}),
         richBodySnapshots: richBodySnapshots.success ? richBodySnapshots.data : [],
+        generationControl: generationControl.success ? generationControl.data : mainChatGenerationControlFallback,
     };
 }
 
@@ -1178,6 +1255,7 @@ function MainChatMessageListRestoreController({
     );
     const previousFirstMessageIdRef = useRef(state.firstMessageId ?? '');
     const previousMessageCountRef = useRef(state.messageCount ?? 0);
+    const expandedHistoryWindowRequestedRef = useRef(false);
     const restoreAttemptedRef = useRef(false);
     const messageIds = state.visibleMessageIds ?? [];
     const isPrependingHistoryWindow = Boolean(
@@ -1199,7 +1277,7 @@ function MainChatMessageListRestoreController({
         getItemKey: (index) => messageIds[index] ?? index,
         indexAttribute: MAIN_CHAT_VIRTUAL_INDEX_ATTRIBUTE,
         measureElement,
-        initialOffset: initialSnapshotRef.current?.scrollOffset ?? state.scrollTop ?? 0,
+        initialOffset: state.scrollTop ?? 0,
         initialMeasurementsCache: initialSnapshotRef.current?.measurements ?? [],
         anchorTo: isPrependingHistoryWindow ? 'start' : 'end',
         scrollEndThreshold: MAIN_CHAT_SCROLL_RESTORE_THRESHOLD_PX,
@@ -1213,7 +1291,7 @@ function MainChatMessageListRestoreController({
     });
     virtualizer.shouldAdjustScrollPositionOnItemSizeChange = () => false;
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         stateRef.current = state;
         chatContainerRef.current = state.chatContainer ?? null;
         bridgeRef.current = bridge;
@@ -1224,7 +1302,7 @@ function MainChatMessageListRestoreController({
         previousMessageCountRef.current = state.messageCount ?? 0;
     }, [state.firstMessageId, state.messageCount]);
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         const chatContainer = state.chatContainer;
         if (!(chatContainer instanceof HTMLElement)) {
             return;
@@ -1293,26 +1371,27 @@ function MainChatMessageListRestoreController({
                 return;
             }
 
-            restoreAttemptedRef.current = true;
-            const snapshot = mainChatMessageListScrollSnapshots.get(chatId);
+            const snapshot = initialSnapshotRef.current;
             if (!snapshot) {
                 persistMainChatMessageListScrollSnapshot(stateRef.current, virtualizer);
                 return;
             }
 
             const currentFirstMessageId = getMainChatMessageId(messageNodes[0]);
-            if (shouldRestoreExpandedMainChatWindow(snapshot, currentFirstMessageId)) {
+            if (
+                shouldRestoreExpandedMainChatWindow(snapshot, currentFirstMessageId)
+                && !expandedHistoryWindowRequestedRef.current
+            ) {
+                expandedHistoryWindowRequestedRef.current = true;
                 await bridgeRef.current?.dispatchAction?.('loadMoreUntilMessage', {
                     anchorMessageId: snapshot.firstRenderedMessageId || snapshot.anchorMessageId,
                 });
-                await waitForPaint();
-                if (cancelled || stateRef.current.chatId !== chatId) {
-                    return;
-                }
-
-                messageNodes = measureRenderedRows();
+                return;
             }
 
+            restoreAttemptedRef.current = true;
+            // Read the snapshot captured at mount so early virtualizer measurement
+            // cannot overwrite the restore target for this chat re-entry.
             const anchorRow = messageNodes.find((node) => getMainChatMessageId(node) === snapshot.anchorMessageId);
             if (!anchorRow) {
                 mainChatMessageListScrollSnapshots.delete(chatId);
@@ -1321,9 +1400,17 @@ function MainChatMessageListRestoreController({
             }
 
             if (snapshot.wasNearBottom) {
-                virtualizer.scrollToEnd({ behavior: 'auto' });
+                chatContainer.scrollTop = chatContainer.scrollHeight;
             } else {
-                virtualizer.scrollToOffset(snapshot.scrollOffset, { behavior: 'auto' });
+                const chatRect = chatContainer.getBoundingClientRect();
+                const currentAnchorViewportOffset = anchorRow.getBoundingClientRect().top - chatRect.top;
+                const anchorViewportOffset = Number.isFinite(snapshot.anchorViewportOffset)
+                    ? Number(snapshot.anchorViewportOffset)
+                    : null;
+                const targetScrollTop = anchorViewportOffset === null
+                    ? snapshot.scrollOffset
+                    : Math.max(chatContainer.scrollTop + currentAnchorViewportOffset - anchorViewportOffset, 0);
+                chatContainer.scrollTop = targetScrollTop;
             }
 
             await waitForPaint();
@@ -1383,6 +1470,8 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
                 hidden
                 data-main-chat-message-list-controller="true"
                 data-main-chat-message-list-status={bridgeState.hasChatContainer ? 'ready' : 'missing'}
+                data-main-chat-generation-control-phase={bridgeState.generationControl?.phase ?? 'idle'}
+                data-main-chat-generation-control-retry={bridgeState.generationControl?.failureRetryVisible ? 'visible' : 'hidden'}
             />
             <MainChatMessageListRestoreController key={bridgeState.chatId || 'main-chat-empty'} state={bridgeState} bridge={bridge} />
             {ownedRichBodySnapshots.map(snapshot => {

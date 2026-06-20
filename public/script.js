@@ -314,12 +314,134 @@ const WORLD_INFO_REACT_HOST_ID = 'emberdesk-react-world-info-panel-host';
 const BACKGROUND_LIBRARY_REACT_HOST_ID = 'emberdesk-react-background-library-panel-host';
 const EXTENSIONS_HOST_REACT_HOST_ID = 'emberdesk-react-extensions-host-panel-host';
 const MAIN_CHAT_MESSAGE_LIST_REACT_HOST_ID = 'emberdesk-react-main-chat-message-list-host';
+const MAIN_CHAT_SCROLL_RESTORE_THRESHOLD_PX = 12;
 const mainChatRichBodySnapshotSchema = 'mainChatRichBodySnapshotSchema';
 const REACT_CHARACTER_LIBRARY_PANEL_ASSET_PATH = '/react/login/assets/character-library-panel.js';
 const REACT_CHARACTER_LIBRARY_TOOLBAR_HOST_ID = 'emberdesk-react-character-library-toolbar';
 let reactCharacterLibraryPanelModulePromise = null;
 let reactCharacterLibraryPanelMounted = false;
 let reactCharacterLibraryToolbarMounted = false;
+
+function getMainChatMessageListScrollSnapshotStore() {
+    if (!(globalThis.__emberDeskMainChatMessageListScrollSnapshots instanceof Map)) {
+        globalThis.__emberDeskMainChatMessageListScrollSnapshots = new Map();
+    }
+
+    return globalThis.__emberDeskMainChatMessageListScrollSnapshots;
+}
+
+function deleteMainChatMessageListScrollSnapshot(chatId) {
+    const normalizedChatId = typeof chatId === 'string' ? chatId.trim() : '';
+    if (!normalizedChatId) {
+        return;
+    }
+
+    getMainChatMessageListScrollSnapshotStore().delete(normalizedChatId);
+}
+
+function getMainChatRenderableMessageRows(chatContainer) {
+    if (!(chatContainer instanceof HTMLElement)) {
+        return [];
+    }
+
+    return Array.from(chatContainer.querySelectorAll(':scope > .mes[mesid]'))
+        .filter((node) => node.parentElement === chatContainer);
+}
+
+function getMainChatDistanceFromEnd(chatContainer) {
+    return Math.max(chatContainer.scrollHeight - (chatContainer.scrollTop + chatContainer.clientHeight), 0);
+}
+
+function isMainChatGenerationControlElementVisible(element) {
+    if (!(element instanceof HTMLElement)) {
+        return false;
+    }
+
+    const style = getComputedStyle(element);
+    return style.display !== 'none' && style.visibility !== 'hidden' && element.getClientRects().length > 0;
+}
+
+function getMainChatGenerationControlMessageId(element) {
+    const messageRow = element instanceof HTMLElement ? element.closest('#chat > .mes[mesid]') : null;
+    const messageId = Number(messageRow?.getAttribute('mesid'));
+    return Number.isInteger(messageId) && messageId >= 0 ? messageId : null;
+}
+
+function getMainChatGenerationControlBridgeState() {
+    const recoveryStatus = document.querySelector('#chat > .mes .generation_auto_recovery_status');
+    const recoveryStatusText = recoveryStatus?.textContent?.trim() ?? '';
+    const failureRetry = document.querySelector('#chat > .mes .generation_failure_retry');
+    const failureNotice = document.querySelector('#chat > .mes .generation_failure_notice');
+    const activeMessageId = getMainChatGenerationControlMessageId(recoveryStatus)
+        ?? getMainChatGenerationControlMessageId(failureRetry)
+        ?? (Number.isInteger(streamingProcessor?.messageId) && streamingProcessor.messageId >= 0 ? streamingProcessor.messageId : null);
+
+    return {
+        ...getStreamingControlState({
+            isGenerating: document.body.dataset.generating === 'true',
+            hasStreamingProcessor: Boolean(streamingProcessor && !streamingProcessor.isStopped && !streamingProcessor.isFinished),
+            isStopped: Boolean(streamingProcessor?.isStopped),
+            isFinished: Boolean(streamingProcessor?.isFinished),
+            hasError: Boolean(failureNotice || failureRetry),
+            isRecovering: Boolean(recoveryStatus),
+            recoveryStage: recoveryStatusText.includes('备用') ? 'fallback' : 'primary',
+            activeMessageId,
+            recoveryStatusLabel: recoveryStatusText || null,
+            failureRetryVisible: isMainChatGenerationControlElementVisible(failureRetry),
+            failureNoticeVisible: Boolean(failureNotice),
+        }),
+        continueSurface: $('#mes_continue').css('display') === 'none' ? 'hidden' : 'legacy',
+    };
+}
+
+function getMainChatVisibleAnchorRow(chatContainer, messageRows) {
+    const chatRect = chatContainer.getBoundingClientRect();
+    const firstVisibleRow = messageRows.find((node) => {
+        const rowRect = node.getBoundingClientRect();
+        return rowRect.bottom > chatRect.top && rowRect.top < chatRect.bottom;
+    });
+
+    return firstVisibleRow ?? messageRows[0] ?? null;
+}
+
+function persistMainChatMessageListScrollSnapshotBeforeClear(chatId = getCurrentChatId()) {
+    if (!getWorkspaceReactFeatures()?.reactPanels?.mainChatMessageList) {
+        return;
+    }
+
+    const normalizedChatId = typeof chatId === 'string' ? chatId.trim() : '';
+    const chatContainer = document.getElementById('chat');
+    if (!normalizedChatId || !(chatContainer instanceof HTMLElement)) {
+        return;
+    }
+
+    const messageRows = getMainChatRenderableMessageRows(chatContainer);
+    if (messageRows.length === 0) {
+        return;
+    }
+
+    const anchorRow = getMainChatVisibleAnchorRow(chatContainer, messageRows);
+    const anchorMessageId = anchorRow?.getAttribute('mesid') ?? '';
+    const scrollOffset = chatContainer.scrollTop;
+    if (!anchorMessageId || !Number.isFinite(scrollOffset)) {
+        return;
+    }
+
+    const chatRect = chatContainer.getBoundingClientRect();
+    const anchorViewportOffset = anchorRow.getBoundingClientRect().top - chatRect.top;
+
+    getMainChatMessageListScrollSnapshotStore().set(normalizedChatId, {
+        chatId: normalizedChatId,
+        anchorMessageId,
+        anchorViewportOffset,
+        scrollOffset,
+        measurements: [],
+        firstRenderedMessageId: messageRows[0]?.getAttribute('mesid') ?? '',
+        lastRenderedMessageId: messageRows.at(-1)?.getAttribute('mesid') ?? '',
+        visibleMessageCount: messageRows.length,
+        wasNearBottom: getMainChatDistanceFromEnd(chatContainer) <= MAIN_CHAT_SCROLL_RESTORE_THRESHOLD_PX,
+    });
+}
 
 function ensureWorldInfoReactHost() {
     const editorPanel = document.getElementById('wiEditorPanel');
@@ -601,6 +723,7 @@ function getMainChatMessageListReactBridgeState() {
         scrollTop: chatContainer?.scrollTop ?? 0,
         scrollHeight: chatContainer?.scrollHeight ?? 0,
         clientHeight: chatContainer?.clientHeight ?? 0,
+        generationControl: getMainChatGenerationControlBridgeState(),
         chatContainer,
         host,
         messageNodes: messageRows,
@@ -1957,6 +2080,7 @@ export async function selectCharacterById(id, { switchMenu = true } = {}) {
     if (selected_group || String(this_chid) !== String(id)) {
         //if clicked on a different character from what was currently selected
         if (!is_send_press) {
+            persistMainChatMessageListScrollSnapshotBeforeClear();
             setCharacterId(undefined);
             setCharacterName('');
             resetSelectedGroup();
@@ -2994,6 +3118,7 @@ function clearGenerationAutoRecoveryStatus(messageId) {
     const messageElement = chatElement.find(`.mes[mesid="${messageId}"]`);
     messageElement.find('.generation_auto_recovery_status').remove();
     messageElement.find('.generation_failure_retry').toggle(true);
+    void mountReactMainChatMessageListPanel();
 }
 
 function showGenerationAutoRecoveryStatus(messageId, status) {
@@ -3010,6 +3135,7 @@ function showGenerationAutoRecoveryStatus(messageId, status) {
     statusRow.append($('<span></span>').text(status));
     messageElement.find('.mes_text').after(statusRow);
     messageElement.find('.generation_failure_retry').toggle(false);
+    void mountReactMainChatMessageListPanel();
 }
 
 function clearGenerationAttemptMessage(messageId, baseline = null) {
@@ -3062,6 +3188,7 @@ function clearGenerationAttemptMessage(messageId, baseline = null) {
     }
     messageElement.find('.generation_failure_notice').remove();
     messageElement.find('.generation_failure_retry').remove();
+    void mountReactMainChatMessageListPanel();
 }
 
 function isAssistantRecoveryMessageId(messageId) {
@@ -3216,6 +3343,7 @@ function showGenerationFailureRecovery(messageId, isRecovering = false) {
 
     if (!messageElement.length || messageElement.find('.generation_failure_retry').length) {
         messageElement.find('.generation_failure_retry').toggle(!isRecovering);
+        void mountReactMainChatMessageListPanel();
         return;
     }
 
@@ -3224,6 +3352,7 @@ function showGenerationFailureRecovery(messageId, isRecovering = false) {
     messageElement.find('.mes_text').after(notice);
     messageElement.find('.mes_buttons').append(retryButton);
     messageElement.find('.generation_failure_retry').toggle(!isRecovering);
+    void mountReactMainChatMessageListPanel();
 }
 
 export async function printMessages() {
@@ -3335,10 +3464,13 @@ export function cancelDebouncedChatSave() {
  * @param {object} [options] Options
  * @param {boolean} [options.clearData=false] Optionally clear the chat array's contents.
  */
-export async function clearChat({ clearData = false } = {}) {
+export async function clearChat({ clearData = false, preserveMainChatScrollSnapshot = true } = {}) {
     cancelDebouncedChatSave();
     cancelDebouncedMetadataSave();
     closeMessageEditor();
+    if (preserveMainChatScrollSnapshot) {
+        persistMainChatMessageListScrollSnapshotBeforeClear();
+    }
     extension_prompts = {};
     if (is_delete_mode) {
         $('#dialogue_del_mes_cancel').trigger('click');
@@ -8698,6 +8830,8 @@ function applyGenerationControlState(controlState) {
     } else {
         delete document.body.dataset.generating;
     }
+
+    void mountReactMainChatMessageListPanel();
 }
 
 export function resetChatState() {
@@ -9372,7 +9506,13 @@ function getFirstMessage() {
 
 export async function openCharacterChat(file_name) {
     await waitUntilCondition(() => !isChatSaving, debounce_timeout.extended, 10);
-    await clearChat({ clearData: true });
+    const currentChatId = getCurrentChatId();
+    const isReopeningCurrentChat = typeof currentChatId === 'string' && currentChatId === file_name;
+    if (isReopeningCurrentChat) {
+        deleteMainChatMessageListScrollSnapshot(file_name);
+    }
+
+    await clearChat({ clearData: true, preserveMainChatScrollSnapshot: !isReopeningCurrentChat });
     characters[this_chid].chat = file_name;
     chat_metadata = {};
     await getChat();

@@ -43,6 +43,8 @@ This feature lets EmberDesk recover from temporary visible-chat generation failu
 - Intermediate retry attempts clear partial assistant text before the next attempt continues.
 - Intermediate attempts do not expose the final message-rendered events that belong to the finished visible row.
 - The final failed state preserves the assistant row identity and uses the existing manual retry action.
+- When `features.react.panels.mainChatMessageList` is enabled, the guarded React controller may consume a Zod-validated `generationControl` snapshot that reports the current recovery phase. That snapshot is a hidden bridge contract only; `Generate()`, `StreamingProcessor`, provider routing, token append, user stop, retry sequencing, and final retry handlers remain legacy-owned.
+- Provider stream pause/resume is not part of this feature. Slash-command execution has its own `SlashCommandAbortController` pause/continue/abort state and is outside this auto-recovery boundary.
 
 ## ID Boundary Notes
 

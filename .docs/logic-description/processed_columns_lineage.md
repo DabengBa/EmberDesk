@@ -11,6 +11,7 @@ Current owning flow:
 - [React Character Library Sync Processing Flow](react_character_library_sync_processing_flow.md)
 - [React Settings Payload Processing Flow](react_settings_payload_processing_flow.md)
 - [React Workspace Panel Flags Processing Flow](react_workspace_panel_flags_processing_flow.md)
+- [Main Chat Generation Control Bridge Processing Flow](main_chat_generation_control_bridge_processing_flow.md)
 
 ## Per-Output Field Lineage
 
@@ -54,6 +55,11 @@ Current owning flow:
 | `extensionsHostBridgeState` | `#extensions_settings`, `#extensions_settings2`, `#regex_container`, `#extensionsMenuButton`, `#extensionsMenu`, notify checkbox, Extras API controls, `#extensions_startup_loading`, and `emberdesk:extensions-host-state-change` details | Build protected mount-point readiness, notify/manage/install state, Extras URL/key/autoconnect/status state, normalized mount-point statuses, deferred loader state, and loading placeholder presence for the guarded Extensions Host action island | Missing protected nodes become absent readiness rows; React action entries delegate to legacy controls, while extension discovery, manifest loading, wand menu, regex, and install/update/delete behavior remain legacy-owned |
 | `workspacePanelModuleCache` | dynamic import of `/react/login/assets/workspace-panels.js` | Cache one in-flight or fulfilled workspace-panel scaffold bundle promise per browser session | Import failure clears the cache so a later retry can attempt the bundle again |
 | `workspacePanelBridgeResult` | requested panel kind, feature payload, host container, bridge state/action object, and workspace-panel bundle | Return `true` only after an enabled panel with a host container loads the bundle and dispatches `mountWorkspacePanel(kind, container, { state, bridge })` | Disabled flags, missing containers, or import failures return `false` and leave the legacy panel path as fallback |
+| `mainChatGenerationControlState` | body generating marker, `streamingProcessor`, recovery status row, failure notice, failure retry, continue visibility, and active message row | Normalize legacy facts through a pure classifier with priority `recovering`, `error`, `stopped`, `completed`, `streaming`, `idle` | Missing or unsafe fields normalize to safe defaults; React schema failure uses idle fallback |
+| `mainChatGenerationControlPhase` | classified state plus recovery stage | Emit one of `idle`, `streaming`, `recoveringPrimary`, `recoveringFallback`, `stopped`, `completed`, or `error` | Unsupported phases fail React validation and become `idle` in the hidden marker |
+| `mainChatGenerationControlActiveMessageId` | nearest `#chat > .mes[mesid]` for recovery/retry elements, then `streamingProcessor.messageId` | Keep only non-negative integer message ids | Invalid or unresolved ids become `null` so row identity is not invented |
+| `mainChatGenerationControlFailureUi` | failure notice and retry DOM visibility plus active recovery status | Expose final failure notice/retry only outside active recovery; force both false while recovery is active | Stale retry or notice elements cannot leak into the recovery phase marker |
+| `mainChatGenerationControlHiddenMarker` | Zod-validated `generationControl` payload in `app/workspace-panels.tsx` | Write hidden phase and retry marker attributes for the guarded React controller | Missing, malformed, or unsupported payloads use idle/hidden fallback and leave legacy visible controls as owner |
 
 ## Maintenance Constraints
 
@@ -62,5 +68,6 @@ Current owning flow:
 - Keep React character-library sync rows aligned with `react_character_library_sync_processing_flow.md` and `react_character_library_sync_sandbox_proof.py`.
 - Keep React settings payload rows aligned with `react_settings_payload_processing_flow.md` and `react_settings_payload_sandbox_proof.py`.
 - Keep React workspace panel flag rows aligned with `react_workspace_panel_flags_processing_flow.md` and `react_workspace_panel_flags_sandbox_proof.py`.
+- Keep main-chat generation-control rows aligned with `main_chat_generation_control_bridge_processing_flow.md` and `main_chat_generation_control_bridge_sandbox_proof.py`.
 - Add a new row when a documentation proof script starts producing a new named output.
 - Do not use this file as a second implementation guide; detailed processing rules belong in the owning flow doc.

@@ -389,6 +389,11 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('scrollTop: chatContainer?.scrollTop ?? 0');
         expect(scriptSource).toContain('scrollHeight: chatContainer?.scrollHeight ?? 0');
         expect(scriptSource).toContain('clientHeight: chatContainer?.clientHeight ?? 0');
+        expect(scriptSource).toContain('function getMainChatGenerationControlBridgeState()');
+        expect(scriptSource).toContain('generationControl: getMainChatGenerationControlBridgeState()');
+        expect(scriptSource).toContain("continueSurface: $('#mes_continue').css('display') === 'none' ? 'hidden' : 'legacy'");
+        expect(scriptSource).toContain("failureRetryVisible: isMainChatGenerationControlElementVisible(failureRetry)");
+        expect(scriptSource).toContain("failureNoticeVisible: Boolean(failureNotice)");
         expect(scriptSource).toContain('function getMainChatMessageListReactBridge()');
         expect(scriptSource).toContain('case \'loadMoreUntilMessage\':');
         expect(scriptSource).toContain('async function mountReactMainChatMessageListPanel(');
@@ -405,6 +410,7 @@ describe('React workspace panels bridge helpers', () => {
 
         expect(workspacePanelSource).toContain('function MainChatMessageListWorkspacePanel');
         expect(workspacePanelSource).toContain('chatId?: string;');
+        expect(workspacePanelSource).toContain('generationControl?: MainChatGenerationControlState;');
         expect(workspacePanelSource).toContain('scrollTop?: number;');
         expect(workspacePanelSource).toContain('scrollHeight?: number;');
         expect(workspacePanelSource).toContain('clientHeight?: number;');
@@ -415,6 +421,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('chatContainer.insertBefore(node, insertAfter.nextSibling);');
         expect(workspacePanelSource).toContain('data-main-chat-message-list-controller="true"');
         expect(workspacePanelSource).toContain('data-main-chat-message-list-status={bridgeState.hasChatContainer ? \'ready\' : \'missing\'}');
+        expect(workspacePanelSource).toContain('data-main-chat-generation-control-phase={bridgeState.generationControl?.phase ?? \'idle\'}');
         expect(workspacePanelSource).toContain('return <MainChatMessageListWorkspacePanel state={state} bridge={bridge} />;');
         expect(workspacePanelSource).not.toContain('title="Main Chat Message List"');
         expect(workspacePanelSource).not.toContain('legacyBoundary="message-rendering-streaming-actions-load-more"');

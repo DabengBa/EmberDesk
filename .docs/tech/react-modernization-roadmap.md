@@ -6,7 +6,7 @@
 
 ## 状态
 
-状态：执行中；Phase 0 基础设施已落地，Phase 1 已交付，Phase 2 Sprint 1-7 已按 guarded panel island 边界交付，Phase 3 Sprint 1-3 已按 guarded main-chat island 边界交付；Character Library、World Info、Background Library、Extensions Host 和当前 main-chat controller 均保留同入口 legacy fallback，flag 关闭或 bundle 缺失时不替换原 surface
+状态：执行中；Phase 0 基础设施已落地，Phase 1 已交付，Phase 2 Sprint 1-7 已按 guarded panel island 边界交付，Phase 3 Sprint 1-3 和 Sprint 5 已按 guarded main-chat island 边界交付；Character Library、World Info、Background Library、Extensions Host 和当前 main-chat controller 均保留同入口 legacy fallback，flag 关闭或 bundle 缺失时不替换原 surface
 创建日期：2026-06-15  
 前置条件：`.docs/tech/modernization-roadmap.md` 已于 2026-06-05 冻结完成
 
@@ -139,15 +139,16 @@ bun run docs:check
 - `Sprint 1 / Main Chat Message List Basic`：已交付为受 `features.react.panels.mainChatMessageList` 控制的 guarded React controller island。flag 开启且 workspace-panels bundle 可用时，React 会在 `#chat` 内挂载隐藏 host，并根据 legacy bridge state 保持 `#show_more_messages` 与可见 `.mes[mesid]` 直接子节点的顺序稳定；flag 关闭、bundle 缺失或挂载失败时自动 fail-closed 到 legacy message rendering。
 - `Sprint 2 / Main Chat Rich Message Bodies`：已交付为同一 `mainChatMessageList` island 的 finalized rich-body contract boundary。React 通过 `public/script.js` rich-body snapshot bridge 和 `app/workspace-panels.tsx` 的 Zod schema 校验 visible / finalized / non-editing rows，并在可认领的既有 `.mes_block` 内插入 hidden per-row owner markers；flag 关闭、bundle 缺失、snapshot 缺失/不合法或 row 状态不安全时，该行继续完全由 legacy rich-body 路径拥有。
 - `Sprint 3 / Main Chat Scroll And Positioning`：已交付为同一 `mainChatMessageList` island 的 current-session scroll restore boundary。React 现在按 `chatId` 记录阅读锚点、scroll offset、已展开历史窗口和 headless virtual measurements；用户切回 long chat 时，controller 会先通过 `dispatchAction('loadMoreUntilMessage', { anchorMessageId })` 复用 legacy `showMoreMessages()` 语义把历史窗口重新展开到包含保存锚点，再恢复原阅读区域。flag 关闭、bundle 缺失、snapshot 不安全或恢复失败时，主聊天继续回退到 legacy 默认打开结果。
-- 当前交付刻意不重写 `messageFormatting()`、`updateMessageElement()`、`appendMediaToMessage()`、`StreamingProcessor`、composer、slash-command、message actions 或 load-more 算法。Sprint 2 迁移的是 finalized rich-body bridge / owner split，不是新增 Markdown、代码高亮、LaTeX、媒体或文件能力；这些可见内容仍来自现有 legacy rendering chain 和 live DOM helpers。
-- TanStack 收口状态：当前 main-chat React slice 复用共享 `app/workspace-panels.tsx` bundle 与 TanStack Query shell，在 bridge/rich-body/restore 输入边界使用 Zod schema，并通过 `@tanstack/react-virtual` 落地 headless measurement / snapshot / restore controller；本阶段仍未引入新的 MessageRow JSX owner 或 TanStack Virtual visible message-window renderer，长聊天窗口语义继续由 legacy `chat_truncation` + `#show_more_messages` 控制。
+- `Sprint 5 / Main Chat Streaming Control State`：已交付为同一 `mainChatMessageList` island 的 visible generation-control bridge。React hidden controller 现在消费 Zod 校验后的 `generationControl` payload，覆盖 `idle`、`streaming`、`recoveringPrimary`、`recoveringFallback`、`stopped`、`completed`、`error` phase；`public/script.js` 仍拥有 `Generate()`、`StreamingProcessor`、token append、stop、auto-recovery status、final retry、`#mes_continue` 和 `.generation_failure_retry` handlers。处理规则见 [Main Chat Generation Control Bridge Processing Flow](../logic-description/main_chat_generation_control_bridge_processing_flow.md)。
+- 当前交付刻意不重写 `messageFormatting()`、`updateMessageElement()`、`appendMediaToMessage()`、`StreamingProcessor`、provider transport、token append、composer、slash-command、message actions 或 load-more 算法。Sprint 2 迁移的是 finalized rich-body bridge / owner split，不是新增 Markdown、代码高亮、LaTeX、媒体或文件能力；Sprint 5 迁移的是 control-state bridge / schema boundary，不是 provider pause/resume 或 SSE/EventSource transport rewrite。
+- TanStack 收口状态：当前 main-chat React slice 复用共享 `app/workspace-panels.tsx` bundle 与 TanStack Query shell，在 bridge/rich-body/restore/generation-control 输入边界使用 Zod schema，并通过 `@tanstack/react-virtual` 落地 headless measurement / snapshot / restore controller；本阶段仍未引入新的 MessageRow JSX owner、React provider transport owner 或 TanStack Virtual visible message-window renderer，长聊天窗口语义继续由 legacy `chat_truncation` + `#show_more_messages` 控制。
 
 **Sprint 列表**：
 - ✅ [Sprint 1: 消息列表 - 基础渲染](../specs/react-phase3-main-chat/phase3-sprint1-message-list-basic.md)（3 周，已交付 guarded React message-list controller island；保持 direct-child `.mes[mesid]`、stored-chat rendering 和 long-chat load-more 语义）
 - ✅ [Sprint 2: 消息列表 - Rich Message Body](../specs/react-phase3-main-chat/phase3-sprint2-message-list-rich.md)（2 周，已交付 finalized rich-body bridge / hidden owner-marker boundary；不是新增 Markdown/媒体能力；实施与验证以 dated spec `260620-02-react-phase3-sprint2-main-chat-rich-message-bodies/spec.md` 为准）
 - ✅ [Sprint 3: 消息列表 - 滚动和定位](../specs/react-phase3-main-chat/phase3-sprint3-message-list-scroll.md)（2 周，已交付 current-session per-chat 阅读位置恢复、expanded-history window restore 和 headless TanStack Virtual controller；实施与验证以 dated spec `260620-03-react-phase3-sprint3-main-chat-scroll-and-positioning/spec.md` 为准）
 - 📋 [Sprint 4: 流式生成 - SSE 连接](../specs/react-phase3-main-chat/phase3-sprint4-streaming-sse.md)（2 周）
-- 📋 [Sprint 5: 流式生成 - 控制状态](../specs/react-phase3-main-chat/phase3-sprint5-streaming-control.md)（2 周）
+- ✅ [Sprint 5: 流式生成 - 控制状态](../specs/react-phase3-main-chat/phase3-sprint5-streaming-control.md)（2 周，已交付 generation-control bridge/state snapshot；不迁移 provider transport、token append 或 provider pause/resume）
 - 📋 [Sprint 6: 输入框 - 基础功能](../specs/react-phase3-main-chat/phase3-sprint6-input-basic.md)（2 周）
 - 📋 [Sprint 7: 输入框 - 斜杠命令](../specs/react-phase3-main-chat/phase3-sprint7-input-slash.md)（3 周）
 - 📋 [Sprint 8: 消息操作 - 菜单](../specs/react-phase3-main-chat/phase3-sprint8-message-actions.md)（2 周）
@@ -325,7 +326,7 @@ bun run test:compat
 - `src/react-login-feature.js`, `src/react-setup-feature.js`, `src/react-settings-feature.js`, `src/react-character-library-feature.js`, `src/workspace-react-features.js` (feature flag 和 workspace panel bootstrap；当前 payload 包含 `characterLibrary`、`mainChatMessageList`、`worldInfo`、`backgroundLibrary`、`extensionsHost`)
 - `public/script.js`, `public/scripts/backgrounds.js`, `public/scripts/extensions.js`, `public/scripts/character-library-react-sync.js`, `public/scripts/workspace-panels-react-bridge.js` (legacy workspace bridge、main-chat/background/extensions host state event、character-library sync、workspace-panel fail-closed bundle loader 和 fallback path)
 - `src/users.js`, `src/server-main.js`, `src/middleware/react-login-serve.js` (React route hosting、build-missing fallback 和 legacy redirect)
-- `app/workspace-panels.tsx` (workspace panel bundle；提供 TanStack Query provider shell、World Info editor/import/export controls、Background Library filter/gallery/action controls、Extensions Host notify/manage/install/Extras controls，以及 main-chat direct-child message-window controller + finalized rich-body snapshot/owner-marker boundary；不迁移 legacy formatter/streaming/input/action owners)
+- `app/workspace-panels.tsx` (workspace panel bundle；提供 TanStack Query provider shell、World Info editor/import/export controls、Background Library filter/gallery/action controls、Extensions Host notify/manage/install/Extras controls，以及 main-chat direct-child message-window controller、finalized rich-body snapshot/owner-marker boundary、current-session scroll restore 和 generation-control state snapshot；不迁移 legacy formatter/provider transport/token append/input/action owners)
 - `default/config.yaml` (当前 `features.react.pages.*` 和 `features.react.panels.*` 默认值)
 - `globalThis.SillyTavern`, `eventSource` / `event_types`, `@sillytavern/*` (兼容层保持)
 
