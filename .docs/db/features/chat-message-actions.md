@@ -56,6 +56,7 @@ This feature lets users operate on an existing chat message without leaving the 
 - The protected message surfaces include `#chat > .mes`, `.mes_text`, `.mes[mesid]`, swipe controls, reasoning wrappers, media wrappers, and file wrappers.
 - Hidden or inactive message actions can remain hidden according to existing workspace state, but when an action becomes visible it should have a stable role, accessible name, and focus affordance.
 - Stored-message rendering belongs to [Chat Message Rendering](feature.chat_message_rendering); this feature depends on those stable message rows but does not own message body formatting or storage.
+- The current Phase 3 Sprint 2 rich-body migration does not move action ownership into React. Even when `features.react.panels.mainChatMessageList` is enabled, message actions, edit buttons, swipe affordances, reasoning action buttons, retry affordances, and other message-row controls remain attached to the legacy outer row shell and its existing delegated handlers.
 - This feature does not change streaming, message formatting, slash-command parsing, event timing, or extension mount points.
 
 ## ID Boundary Notes

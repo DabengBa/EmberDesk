@@ -1,11 +1,12 @@
 import { StrictMode, useEffect, useMemo, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { useMutation } from '@tanstack/react-query';
 import { useForm } from '@tanstack/react-form';
 import { z } from 'zod';
 
-export type WorkspacePanelKind = 'worldInfo' | 'backgroundLibrary' | 'extensionsHost';
+export type WorkspacePanelKind = 'worldInfo' | 'backgroundLibrary' | 'extensionsHost' | 'mainChatMessageList';
 
 interface WorkspacePanelMount {
     root: Root;
@@ -129,6 +130,33 @@ interface ExtensionsHostReactMountPointStatus {
     ready?: boolean;
 }
 
+interface MainChatMessageListWorkspacePanelState {
+    hasChatContainer?: boolean;
+    messageCount?: number;
+    firstMessageId?: string;
+    lastMessageId?: string;
+    showMoreVisible?: boolean;
+    visibleMessageIds?: string[];
+    chatContainer?: HTMLElement | null;
+    host?: HTMLElement | null;
+    messageNodes?: HTMLElement[];
+    richBodySnapshots?: MainChatRichBodySnapshot[];
+    showMoreNode?: HTMLElement | null;
+}
+
+interface MainChatRichBodySnapshot {
+    schema: 'mainChatRichBodySnapshotSchema';
+    messageId: string;
+    state: 'finalized';
+    eligible: true;
+    messageHtml: string;
+    reasoningHtml: string;
+    reasoningOpen?: boolean;
+    mediaHtml: string;
+    fileHtml: string;
+    biasHtml: string;
+}
+
 const queryClient = new QueryClient();
 const mountedPanels = new Map<WorkspacePanelKind, WorkspacePanelMount>();
 
@@ -146,6 +174,19 @@ const backgroundLibraryPanelFormSchema = z.object({
 const extensionsHostPanelFormSchema = z.object({
     extrasApiUrl: z.string(),
     extrasApiKey: z.string(),
+});
+
+const mainChatRichBodySnapshotSchema = z.object({
+    schema: z.literal('mainChatRichBodySnapshotSchema'),
+    messageId: z.string().min(1),
+    state: z.literal('finalized'),
+    eligible: z.literal(true),
+    messageHtml: z.string(),
+    reasoningHtml: z.string(),
+    reasoningOpen: z.boolean().optional(),
+    mediaHtml: z.string(),
+    fileHtml: z.string(),
+    biasHtml: z.string(),
 });
 
 function buildWorldInfoPanelFormDefaults(state: WorldInfoWorkspacePanelState) {
@@ -168,6 +209,65 @@ function buildExtensionsHostPanelFormDefaults(state: ExtensionsHostWorkspacePane
         extrasApiUrl: state.extrasApiUrl ?? '',
         extrasApiKey: '',
     };
+}
+
+function asMainChatMessageListState(state: unknown): MainChatMessageListWorkspacePanelState {
+    if (!state || typeof state !== 'object') {
+        return {};
+    }
+
+    const bridgeState = state as MainChatMessageListWorkspacePanelState;
+    const richBodySnapshots = z.array(mainChatRichBodySnapshotSchema).safeParse(bridgeState.richBodySnapshots ?? []);
+
+    return {
+        ...bridgeState,
+        richBodySnapshots: richBodySnapshots.success ? richBodySnapshots.data : [],
+    };
+}
+
+function getMainChatRichBodyRowTargets(messageRow: HTMLElement) {
+    const messageBlock = messageRow.querySelector('.mes_block');
+    const reasoningDetails = messageRow.querySelector('.mes_reasoning_details');
+    const reasoningNode = messageRow.querySelector('.mes_reasoning');
+    const messageNode = messageRow.querySelector('.mes_text');
+    const mediaNode = messageRow.querySelector('.mes_media_wrapper');
+    const fileNode = messageRow.querySelector('.mes_file_wrapper');
+    const biasNode = messageRow.querySelector('.mes_bias');
+
+    if (
+        !(messageBlock instanceof HTMLElement)
+        || !(reasoningDetails instanceof HTMLDetailsElement)
+        || !(reasoningNode instanceof HTMLElement)
+        || !(messageNode instanceof HTMLElement)
+        || !(mediaNode instanceof HTMLElement)
+        || !(fileNode instanceof HTMLElement)
+        || !(biasNode instanceof HTMLElement)
+    ) {
+        return null;
+    }
+
+    return {
+        messageBlock,
+        reasoningDetails,
+        reasoningNode,
+        messageNode,
+        mediaNode,
+        fileNode,
+        biasNode,
+    };
+}
+
+function canReactOwnMainChatRichBody(messageRow: HTMLElement | undefined, snapshot: MainChatRichBodySnapshot) {
+    if (
+        !(messageRow instanceof HTMLElement)
+        || !messageRow.isConnected
+        || messageRow.parentElement?.id !== 'chat'
+        || messageRow.getAttribute('mesid') !== snapshot.messageId
+    ) {
+        return false;
+    }
+
+    return Boolean(getMainChatRichBodyRowTargets(messageRow));
 }
 
 function workspacePanelStateQueryKey(kind: WorkspacePanelKind) {
@@ -933,6 +1033,112 @@ function ExtensionsHostWorkspacePanel({ state, bridge }: { state?: unknown; brid
     );
 }
 
+function MainChatMessageListWorkspacePanel({ state }: { state?: unknown }) {
+    const bridgeState = asMainChatMessageListState(state);
+    const messageRowMap = useMemo(() => {
+        const rows = new Map<string, HTMLElement>();
+
+        for (const messageRow of bridgeState.messageNodes ?? []) {
+            if (!(messageRow instanceof HTMLElement)) {
+                continue;
+            }
+
+            const messageId = messageRow.getAttribute('mesid');
+            if (!messageId) {
+                continue;
+            }
+
+            rows.set(messageId, messageRow);
+        }
+
+        return rows;
+    }, [bridgeState.messageNodes]);
+    const ownedRichBodySnapshots = useMemo(() => {
+        return (bridgeState.richBodySnapshots ?? []).filter(snapshot => canReactOwnMainChatRichBody(
+            messageRowMap.get(snapshot.messageId),
+            snapshot,
+        ));
+    }, [bridgeState.richBodySnapshots, messageRowMap]);
+
+    useEffect(() => {
+        syncMainChatMessageListDom(
+            bridgeState.chatContainer ?? null,
+            bridgeState.host ?? null,
+            bridgeState.messageNodes ?? [],
+            bridgeState.showMoreNode ?? null,
+        );
+    }, [bridgeState]);
+
+    return (
+        <>
+            <div
+                hidden
+                data-main-chat-message-list-controller="true"
+                data-main-chat-message-list-status={bridgeState.hasChatContainer ? 'ready' : 'missing'}
+            />
+            {ownedRichBodySnapshots.map(snapshot => {
+                const messageRow = messageRowMap.get(snapshot.messageId);
+                const targets = messageRow ? getMainChatRichBodyRowTargets(messageRow) : null;
+                if (!targets) {
+                    return null;
+                }
+
+                return createPortal(
+                    <div
+                        hidden
+                        aria-hidden="true"
+                        data-main-chat-rich-body-owner="react"
+                        data-main-chat-rich-body-row={snapshot.messageId}
+                    />,
+                    targets.messageBlock,
+                    `main-chat-rich-body-owner-${snapshot.messageId}`,
+                );
+            })}
+        </>
+    );
+}
+
+function syncMainChatMessageListDom(
+    chatContainer: HTMLElement | null,
+    host: HTMLElement | null,
+    messageNodes: HTMLElement[],
+    showMoreNode: HTMLElement | null,
+) {
+    if (!(chatContainer instanceof HTMLElement) || !(host instanceof HTMLElement) || host.parentElement !== chatContainer) {
+        return;
+    }
+
+    host.hidden = true;
+    host.setAttribute('aria-hidden', 'true');
+
+    if (chatContainer.firstChild !== host) {
+        chatContainer.insertBefore(host, chatContainer.firstChild);
+    }
+
+    let insertAfter: ChildNode = host;
+    const orderedNodes = [];
+
+    if (showMoreNode instanceof HTMLElement && showMoreNode.parentElement === chatContainer) {
+        orderedNodes.push(showMoreNode);
+    }
+
+    for (const node of messageNodes) {
+        if (!(node instanceof HTMLElement) || node.parentElement !== chatContainer) {
+            continue;
+        }
+
+        orderedNodes.push(node);
+    }
+
+    for (const node of orderedNodes) {
+        if (insertAfter.nextSibling !== node) {
+            chatContainer.insertBefore(node, insertAfter.nextSibling);
+        }
+
+        insertAfter = node;
+    }
+}
+
 function renderPanel(kind: WorkspacePanelKind, state?: unknown, bridge?: WorkspacePanelBridge): ReactNode {
     switch (kind) {
         case 'worldInfo':
@@ -941,6 +1147,8 @@ function renderPanel(kind: WorkspacePanelKind, state?: unknown, bridge?: Workspa
             return <BackgroundLibraryWorkspacePanel state={state} bridge={bridge} />;
         case 'extensionsHost':
             return <ExtensionsHostWorkspacePanel state={state} bridge={bridge} />;
+        case 'mainChatMessageList':
+            return <MainChatMessageListWorkspacePanel state={state} />;
         default:
             return <WorkspacePanelPlaceholder kind={kind} />;
     }

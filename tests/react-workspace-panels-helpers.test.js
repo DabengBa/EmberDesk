@@ -24,6 +24,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(getDefaultWorkspaceReactFeatures()).toEqual({
             reactPanels: {
                 characterLibrary: false,
+                mainChatMessageList: false,
                 worldInfo: false,
                 backgroundLibrary: false,
                 extensionsHost: false,
@@ -31,12 +32,14 @@ describe('React workspace panels bridge helpers', () => {
         });
 
         expect(isReactWorkspacePanelEnabled('worldInfo')).toBe(false);
+        expect(isReactWorkspacePanelEnabled('mainChatMessageList')).toBe(false);
     });
 
     test('reads individual panel enablement without enabling unrelated panels', () => {
         const features = {
             reactPanels: {
                 characterLibrary: true,
+                mainChatMessageList: true,
                 worldInfo: true,
                 backgroundLibrary: false,
                 extensionsHost: false,
@@ -44,8 +47,29 @@ describe('React workspace panels bridge helpers', () => {
         };
 
         expect(isReactWorkspacePanelEnabled('worldInfo', features)).toBe(true);
+        expect(isReactWorkspacePanelEnabled('mainChatMessageList', features)).toBe(true);
         expect(isReactWorkspacePanelEnabled('backgroundLibrary', features)).toBe(false);
         expect(isReactWorkspacePanelEnabled('extensionsHost', features)).toBe(false);
+    });
+
+    test('ships a main-chat message-list panel contract through the shared workspace panel asset', () => {
+        const configSource = read('default/config.yaml');
+        const packageSource = read('package.json');
+        const seedScriptSource = read('scripts/seed-dev-environment.mjs');
+        const workspaceFeatureSource = read('src/workspace-react-features.js');
+        const bridgeSource = read('public/scripts/workspace-panels-react-bridge.js');
+        const workspacePanelSource = read('app/workspace-panels.tsx');
+        const scriptSource = read('public/script.js');
+
+        expect(configSource).toContain('mainChatMessageList: false');
+        expect(packageSource).toContain('"build:react:workspace-panels": "vite build --mode workspace-panels"');
+        expect(seedScriptSource).toContain('EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST');
+        expect(seedScriptSource).toContain("['mainChatMessageList', process.env.EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST]");
+        expect(workspaceFeatureSource).toContain('mainChatMessageList: isReactMainChatMessageListPanelEnabled()');
+        expect(workspaceFeatureSource).toContain('return isReactWorkspacePanelEnabled(\'mainChatMessageList\');');
+        expect(bridgeSource).toContain('mainChatMessageList: false');
+        expect(workspacePanelSource).toContain('type WorkspacePanelKind = \'worldInfo\' | \'backgroundLibrary\' | \'extensionsHost\' | \'mainChatMessageList\';');
+        expect(scriptSource).toContain('mainChatMessageList: false');
     });
 
     test('loads the shared workspace panels bundle once and resets the cache after failure', async () => {
@@ -349,5 +373,60 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('extensionsHostActionMutation.mutate({ action: \'openManageExtensions\' })');
         expect(workspacePanelSource).toContain('extensionsHostActionMutation.mutate({ action: \'openInstallExtension\' })');
         expect(workspacePanelSource).toContain('extensionsHostActionMutation.mutate({ action: \'connectExtrasApi\' })');
+    });
+
+    test('wires main-chat message-list to a guarded React host with fail-closed fallback hooks', () => {
+        const scriptSource = read('public/script.js');
+        const workspacePanelSource = read('app/workspace-panels.tsx');
+
+        expect(scriptSource).toContain('const MAIN_CHAT_MESSAGE_LIST_REACT_HOST_ID = \'emberdesk-react-main-chat-message-list-host\';');
+        expect(scriptSource).toContain('function ensureMainChatMessageListReactHost()');
+        expect(scriptSource).toContain('host.hidden = true;');
+        expect(scriptSource).toContain('function getMainChatMessageListReactBridgeState()');
+        expect(scriptSource).toContain('messageNodes: messageRows');
+        expect(scriptSource).toContain('showMoreNode: showMoreButton');
+        expect(scriptSource).toContain('async function mountReactMainChatMessageListPanel(');
+        expect(scriptSource).toContain('if (!getWorkspaceReactFeatures()?.reactPanels?.mainChatMessageList)');
+        expect(scriptSource).toContain('kind: \'mainChatMessageList\'');
+        expect(scriptSource).toContain('state: getMainChatMessageListReactBridgeState()');
+        expect(scriptSource).toContain('cleanupMainChatMessageListReactHost()');
+        expect(scriptSource).toContain('document.getElementById(\'chat\')');
+        expect(scriptSource).toContain('void mountReactMainChatMessageListPanel();');
+        expect(scriptSource).toContain('event_types.CHAT_LOADED');
+        expect(scriptSource).toContain('event_types.MORE_MESSAGES_LOADED');
+        expect(scriptSource).not.toContain('container: document.getElementById(\'chat\')');
+
+        expect(workspacePanelSource).toContain('function MainChatMessageListWorkspacePanel');
+        expect(workspacePanelSource).toContain('function syncMainChatMessageListDom(');
+        expect(workspacePanelSource).toContain('bridgeState.messageNodes ?? []');
+        expect(workspacePanelSource).toContain('bridgeState.showMoreNode');
+        expect(workspacePanelSource).toContain('host.hidden = true;');
+        expect(workspacePanelSource).toContain('chatContainer.insertBefore(node, insertAfter.nextSibling);');
+        expect(workspacePanelSource).toContain('data-main-chat-message-list-controller="true"');
+        expect(workspacePanelSource).toContain('data-main-chat-message-list-status={bridgeState.hasChatContainer ? \'ready\' : \'missing\'}');
+        expect(workspacePanelSource).not.toContain('title="Main Chat Message List"');
+        expect(workspacePanelSource).not.toContain('legacyBoundary="message-rendering-streaming-actions-load-more"');
+    });
+
+    test('defines a finalized rich-body snapshot contract for main-chat rows and validates row eligibility', () => {
+        const scriptSource = read('public/script.js');
+        const workspacePanelSource = read('app/workspace-panels.tsx');
+
+        expect(scriptSource).toContain('function buildMainChatRichBodySnapshot(');
+        expect(scriptSource).toContain('function isMainChatRichBodyEligible(');
+        expect(scriptSource).toContain('richBodySnapshots:');
+        expect(scriptSource).toContain('eligible:');
+        expect(scriptSource).toContain('messageHtml:');
+        expect(scriptSource).toContain('reasoningHtml:');
+        expect(scriptSource).toContain('mediaHtml:');
+        expect(scriptSource).toContain('fileHtml:');
+        expect(scriptSource).toContain('biasHtml:');
+        expect(scriptSource).toContain('schema: mainChatRichBodySnapshotSchema');
+
+        expect(workspacePanelSource).toContain('const mainChatRichBodySnapshotSchema = z.object(');
+        expect(workspacePanelSource).toContain('interface MainChatRichBodySnapshot');
+        expect(workspacePanelSource).toContain('richBodySnapshots?: MainChatRichBodySnapshot[];');
+        expect(workspacePanelSource).toContain('data-main-chat-rich-body-owner="react"');
+        expect(workspacePanelSource).toContain('data-main-chat-rich-body-row={snapshot.messageId}');
     });
 });

@@ -17,6 +17,7 @@ const chatFolder = 'dev-character-001';
 const seededChatName = 'Dev Character 001 Session 01';
 const longChatName = 'Dev Character 001 Long Rendering Proof';
 const mobileLongChatName = 'Dev Character 001 Mobile Long Rendering Proof';
+const reactMainChatMessageListEnabled = process.env.EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST === 'true';
 const seededChatPath = path.join(userRoot, 'chats', chatFolder, `${seededChatName}.jsonl`);
 const longChatPath = path.join(userRoot, 'chats', chatFolder, `${longChatName}.jsonl`);
 const mobileLongChatPath = path.join(userRoot, 'chats', chatFolder, `${mobileLongChatName}.jsonl`);
@@ -135,6 +136,51 @@ async function expectMessageTextMatches(page, messageIndex, expectedText) {
     expect(normalizeMessageText(renderedText)).toBe(normalizeMessageText(expectedText));
 }
 
+async function expectMainChatMessageListHostState(page, expectedMessageCount) {
+    const reactHost = page.locator('#chat > #emberdesk-react-main-chat-message-list-host');
+
+    if (!reactMainChatMessageListEnabled) {
+        await expect(reactHost).toHaveCount(0);
+        return;
+    }
+
+    await expect(reactHost).toHaveCount(1);
+    await expect(reactHost).toHaveAttribute('aria-hidden', 'true');
+    await expect(page.locator('#chat > [data-react-workspace-panel="mainChatMessageList"]')).toHaveCount(0);
+    await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(expectedMessageCount);
+}
+
+async function expectReactRichBodyState(page, messageId) {
+    if (!reactMainChatMessageListEnabled) {
+        await expect(page.locator(`[data-main-chat-rich-body-row="${messageId}"]`)).toHaveCount(0);
+        return;
+    }
+
+    const richBodyOwner = page.locator(`[data-main-chat-rich-body-row="${messageId}"]`);
+    const ownerCount = await richBodyOwner.count();
+    if (ownerCount !== 1) {
+        const debugState = await page.evaluate((targetMessageId) => {
+            const host = document.getElementById('emberdesk-react-main-chat-message-list-host');
+            const controller = document.querySelector('[data-main-chat-message-list-controller="true"]');
+            const row = document.querySelector(`#chat > .mes[mesid="${targetMessageId}"]`);
+
+            return {
+                featureEnabled: Boolean(window.__emberDeskWorkspaceFeatures?.reactPanels?.mainChatMessageList),
+                hostPresent: Boolean(host),
+                hostChildElementCount: host?.childElementCount ?? 0,
+                controllerDataset: controller instanceof HTMLElement ? { ...controller.dataset } : null,
+                rowPresent: Boolean(row),
+                rowBlockPresent: Boolean(row?.querySelector('.mes_block')),
+                ownerCount: document.querySelectorAll(`[data-main-chat-rich-body-row="${targetMessageId}"]`).length,
+            };
+        }, String(messageId));
+
+        throw new Error(`Missing rich body owner for row ${messageId}: ${JSON.stringify(debugState)}`);
+    }
+
+    await expect(richBodyOwner).toHaveAttribute('data-main-chat-rich-body-owner', 'react');
+}
+
 test.describe('chat message rendering', () => {
     // These flows mutate the same seeded character/chat files.
     test.describe.configure({ mode: 'serial' });
@@ -169,6 +215,7 @@ test.describe('chat message rendering', () => {
 
         const renderedMessages = page.locator('#chat > .mes[mesid]');
         await expect(renderedMessages).toHaveCount(seededMessages.length);
+        await expectMainChatMessageListHostState(page, seededMessages.length);
         await expect(renderedMessages.first().locator('.mes_text')).toBeVisible();
         await expect(page.locator('#chat > .mes.last_mes')).toHaveCount(1);
         await expect(renderedMessages.last()).toHaveClass(/last_mes/);
@@ -187,6 +234,7 @@ test.describe('chat message rendering', () => {
         await expect(sampleRow.locator('.mes_reasoning')).toHaveCount(1);
         await expect(sampleRow.locator('.mes_media_wrapper')).toHaveCount(1);
         await expect(sampleRow.locator('.mes_file_wrapper')).toHaveCount(1);
+        await expectReactRichBodyState(page, characterMessageIndex);
         await expect(sampleRow.locator('.swipe_left')).toHaveCount(1);
         await expect(sampleRow.locator('.swipe_right')).toHaveCount(1);
 
@@ -228,6 +276,8 @@ test.describe('chat message rendering', () => {
 
         await expect(page.locator('#show_more_messages')).toBeVisible();
         await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(longChatLimit);
+        await expectMainChatMessageListHostState(page, longChatLimit);
+        await expectReactRichBodyState(page, longMessages.length - 1);
 
         const firstRenderedLongMessageId = await page.locator('#chat > .mes[mesid]').first().getAttribute('mesid');
         expect(Number(firstRenderedLongMessageId)).toBe(longMessages.length - longChatLimit);
@@ -239,12 +289,14 @@ test.describe('chat message rendering', () => {
         const anchorRow = page.locator(`#chat > .mes[mesid="${firstRenderedLongMessageIndex}"]`);
         await anchorRow.scrollIntoViewIfNeeded();
         const anchorTopBeforeLoadMore = await anchorRow.evaluate(element => element.getBoundingClientRect().top);
+        const expectedFirstLoadedMessageIndex = longMessages.length - (longChatLimit * 2);
 
         await page.locator('#show_more_messages').click();
         await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(longChatLimit * 2);
+        await expectMainChatMessageListHostState(page, longChatLimit * 2);
+        await expectReactRichBodyState(page, expectedFirstLoadedMessageIndex);
         await expect(page.locator('#jump_to_latest_message')).toHaveCount(0);
 
-        const expectedFirstLoadedMessageIndex = longMessages.length - (longChatLimit * 2);
         const loadedMessageIds = await page.locator('#chat > .mes[mesid]').evaluateAll(elements => {
             return elements.map(element => Number(element.getAttribute('mesid')));
         });
@@ -293,6 +345,7 @@ test.describe('chat message rendering', () => {
 
             await page.locator('#show_more_messages').click();
             await expect(page.locator('#chat > .mes[mesid]'), `${viewport.name} rendered messages`).toHaveCount(longChatLimit * 2);
+            await expectMainChatMessageListHostState(page, longChatLimit * 2);
             await expect(page.locator('#jump_to_latest_message'), `${viewport.name} jump to latest removed`).toHaveCount(0);
             await expect(page.locator('#show_more_messages'), `${viewport.name} load more remains`).toBeVisible();
 

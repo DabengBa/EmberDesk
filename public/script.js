@@ -271,6 +271,11 @@ import {
     shouldSuppressCharacterDeleteListReprintState,
     syncCharacterListRowIdentity,
 } from './scripts/character-list-render-state.js';
+import {
+    getCharacterLibraryFetchErrorData,
+    hasCharacterLibraryPayloadChanged,
+    parseCharacterLibraryFetchResponse,
+} from './scripts/character-library-react-sync.js';
 import { mountReactWorkspacePanel } from './scripts/workspace-panels-react-bridge.js';
 import { runDeleteCharacterClosePreflight } from './scripts/delete-character-preflight.js';
 
@@ -293,6 +298,7 @@ export function getWorkspaceReactFeatures() {
     return globalThis.__emberDeskWorkspaceFeatures ?? {
         reactPanels: {
             characterLibrary: false,
+            mainChatMessageList: false,
             worldInfo: false,
             backgroundLibrary: false,
             extensionsHost: false,
@@ -307,6 +313,8 @@ export function isReactCharacterLibraryPanelEnabled() {
 const WORLD_INFO_REACT_HOST_ID = 'emberdesk-react-world-info-panel-host';
 const BACKGROUND_LIBRARY_REACT_HOST_ID = 'emberdesk-react-background-library-panel-host';
 const EXTENSIONS_HOST_REACT_HOST_ID = 'emberdesk-react-extensions-host-panel-host';
+const MAIN_CHAT_MESSAGE_LIST_REACT_HOST_ID = 'emberdesk-react-main-chat-message-list-host';
+const mainChatRichBodySnapshotSchema = 'mainChatRichBodySnapshotSchema';
 const REACT_CHARACTER_LIBRARY_PANEL_ASSET_PATH = '/react/login/assets/character-library-panel.js';
 const REACT_CHARACTER_LIBRARY_TOOLBAR_HOST_ID = 'emberdesk-react-character-library-toolbar';
 let reactCharacterLibraryPanelModulePromise = null;
@@ -483,6 +491,130 @@ async function mountReactWorldInfoPanel() {
         container: ensureWorldInfoReactHost(),
         state: getWorldInfoReactBridgeState(),
         bridge: getWorldInfoReactBridge(),
+        features: getWorkspaceReactFeatures(),
+    });
+}
+
+function ensureMainChatMessageListReactHost() {
+    const chatContainer = document.getElementById('chat');
+    if (!chatContainer) {
+        return null;
+    }
+
+    let host = document.getElementById(MAIN_CHAT_MESSAGE_LIST_REACT_HOST_ID);
+    if (host) {
+        return host;
+    }
+
+    host = document.createElement('div');
+    host.id = MAIN_CHAT_MESSAGE_LIST_REACT_HOST_ID;
+    host.className = 'emberdesk-react-main-chat-message-list-host';
+    host.hidden = true;
+    host.setAttribute('aria-hidden', 'true');
+    chatContainer.prepend(host);
+    return host;
+}
+
+function cleanupMainChatMessageListReactHost() {
+    const host = document.getElementById(MAIN_CHAT_MESSAGE_LIST_REACT_HOST_ID);
+    host?.remove();
+}
+
+function isMainChatRichBodyEligible(messageRow, messageId = Number(messageRow?.getAttribute?.('mesid'))) {
+    if (!(messageRow instanceof HTMLElement) || !Number.isInteger(messageId) || messageId < 0) {
+        return false;
+    }
+
+    if (messageRow.parentElement?.id !== 'chat' || messageRow.getAttribute('mesid') !== String(messageId)) {
+        return false;
+    }
+
+    if (!chat[messageId] || Number(this_edit_mes_id) === messageId) {
+        return false;
+    }
+
+    if (messageRow.querySelector('.edit_textarea, .reasoning_edit_textarea')) {
+        return false;
+    }
+
+    if (streamingProcessor && !streamingProcessor.isStopped && !streamingProcessor.isFinished && streamingProcessor.messageId === messageId) {
+        return false;
+    }
+
+    return Boolean(
+        messageRow.querySelector('.mes_block')
+        && messageRow.querySelector('.mes_reasoning_details')
+        && messageRow.querySelector('.mes_reasoning')
+        && messageRow.querySelector('.mes_text')
+        && messageRow.querySelector('.mes_media_wrapper')
+        && messageRow.querySelector('.mes_file_wrapper')
+        && messageRow.querySelector('.mes_bias'),
+    );
+}
+
+function buildMainChatRichBodySnapshot(messageRow, {
+    messageId = Number(messageRow?.getAttribute?.('mesid')),
+    schema = mainChatRichBodySnapshotSchema,
+} = {}) {
+    const eligible = isMainChatRichBodyEligible(messageRow, messageId);
+    if (!eligible) {
+        return null;
+    }
+
+    const reasoningDetails = messageRow.querySelector('.mes_reasoning_details');
+    return {
+        schema: schema,
+        messageId: String(messageId),
+        state: 'finalized',
+        eligible: true,
+        messageHtml: messageRow.querySelector('.mes_text')?.innerHTML ?? '',
+        reasoningHtml: messageRow.querySelector('.mes_reasoning')?.innerHTML ?? '',
+        reasoningOpen: reasoningDetails instanceof HTMLDetailsElement ? reasoningDetails.open : false,
+        mediaHtml: messageRow.querySelector('.mes_media_wrapper')?.innerHTML ?? '',
+        fileHtml: messageRow.querySelector('.mes_file_wrapper')?.innerHTML ?? '',
+        biasHtml: messageRow.querySelector('.mes_bias')?.innerHTML ?? '',
+    };
+}
+
+function getMainChatMessageListReactBridgeState() {
+    const chatContainer = document.getElementById('chat');
+    const messageRows = Array.from(chatContainer?.querySelectorAll(':scope > .mes[mesid]') ?? []);
+    const firstMessageRow = messageRows[0];
+    const lastMessageRow = messageRows.at(-1);
+    const showMoreButton = document.getElementById('show_more_messages');
+    const host = document.getElementById(MAIN_CHAT_MESSAGE_LIST_REACT_HOST_ID);
+    const richBodySnapshots = messageRows
+        .map(row => buildMainChatRichBodySnapshot(row, {
+            messageId: Number(row.getAttribute('mesid')),
+            schema: mainChatRichBodySnapshotSchema,
+        }))
+        .filter(Boolean);
+
+    return {
+        hasChatContainer: Boolean(chatContainer),
+        messageCount: messageRows.length,
+        firstMessageId: firstMessageRow?.getAttribute('mesid') ?? '',
+        lastMessageId: lastMessageRow?.getAttribute('mesid') ?? '',
+        showMoreVisible: Boolean(showMoreButton),
+        visibleMessageIds: messageRows.map(row => row.getAttribute('mesid') ?? ''),
+        chatContainer,
+        host,
+        messageNodes: messageRows,
+        richBodySnapshots: richBodySnapshots,
+        showMoreNode: showMoreButton,
+    };
+}
+
+async function mountReactMainChatMessageListPanel() {
+    if (!getWorkspaceReactFeatures()?.reactPanels?.mainChatMessageList) {
+        cleanupMainChatMessageListReactHost();
+        return false;
+    }
+
+    return mountReactWorkspacePanel({
+        kind: 'mainChatMessageList',
+        container: ensureMainChatMessageListReactHost(),
+        state: getMainChatMessageListReactBridgeState(),
         features: getWorkspaceReactFeatures(),
     });
 }
@@ -927,7 +1059,6 @@ function createCharacterLibraryToolbarStateSnapshot() {
         searchQuery: String(entitiesFilter.getFilterData(FILTER_TYPES.SEARCH) ?? ''),
         sortValue: getSelectedCharacterLibrarySortValue(),
         sortOptions: getCharacterLibrarySortOptions(),
-        selectedTagIds: [...(entitiesFilter.getFilterData(FILTER_TYPES.TAG)?.selected ?? [])],
         isGrid: Boolean(power_user.charListGrid),
         isBulkEdit: $('#rm_print_characters_block').hasClass('bulk_select'),
         bulkSelectedCount: characterGroupOverlay?.selectedCharacters?.length ?? 0,
@@ -1405,6 +1536,7 @@ function _replayWorldInfoSettings() {
     initWorldInfo();
     rehydrateWorldInfoPanel();
     void mountReactWorldInfoPanel();
+    void mountReactMainChatMessageListPanel();
 }
 
 
@@ -2625,15 +2757,6 @@ function normalizeCharacterListPayload(payload) {
     });
 }
 
-function getCharacterLibraryQueryFingerprint(characterList) {
-    return JSON.stringify(characterList.map(character => ({
-        avatar: character?.avatar ?? '',
-        name: character?.name ?? '',
-        chat: character?.chat ?? '',
-        fav: character?.fav ?? false,
-    })));
-}
-
 async function fetchAllCharactersDataOnly() {
     const response = await fetch('/api/characters/all', {
         method: 'POST',
@@ -2641,19 +2764,13 @@ async function fetchAllCharactersDataOnly() {
         body: JSON.stringify({}),
     });
 
-    if (!response.ok) {
-        throw new Error(`Failed to fetch characters: ${response.status} ${response.statusText}`);
-    }
-
-    return normalizeCharacterListPayload(await response.json());
+    return normalizeCharacterListPayload(await parseCharacterLibraryFetchResponse(response));
 }
 
 async function syncCharactersFromQuery(queryCharacters) {
     const normalizedCharacters = normalizeCharacterListPayload(queryCharacters);
-    const currentFingerprint = getCharacterLibraryQueryFingerprint(characters);
-    const nextFingerprint = getCharacterLibraryQueryFingerprint(normalizedCharacters);
 
-    if (currentFingerprint === nextFingerprint) {
+    if (!hasCharacterLibraryPayloadChanged(characters, normalizedCharacters)) {
         return false;
     }
 
@@ -2694,7 +2811,7 @@ export async function getCharacters() {
         await printCharacters(true);
     } catch (error) {
         console.error('Failed to fetch characters:', error);
-        const errorData = error instanceof Error ? null : error;
+        const errorData = getCharacterLibraryFetchErrorData(error);
         if (errorData?.overflow) {
             await Popup.show.text(t`Character data length limit reached`, t`To resolve this, set "performance.lazyLoadCharacters" to "true" in config.yaml and restart the server.`);
         }
@@ -14341,6 +14458,7 @@ jQuery(async function () {
         event.stopPropagation();
         event.preventDefault();
         await showMoreMessages();
+        void mountReactMainChatMessageListPanel();
     });
 
     $(document).on('click', '.open_characters_library', async function () {
@@ -14364,6 +14482,27 @@ jQuery(async function () {
                 .append($('<span>').text('重新生成'))
                 .on('click', () => { $('#option_regenerate').trigger('click'); }),
         );
+        void mountReactMainChatMessageListPanel();
+    });
+
+    eventSource.on(event_types.CHAT_CHANGED, () => {
+        void mountReactMainChatMessageListPanel();
+    });
+
+    eventSource.on(event_types.CHAT_LOADED, () => {
+        void mountReactMainChatMessageListPanel();
+    });
+
+    eventSource.on(event_types.MESSAGE_RECEIVED, () => {
+        void mountReactMainChatMessageListPanel();
+    });
+
+    eventSource.on(event_types.MORE_MESSAGES_LOADED, () => {
+        void mountReactMainChatMessageListPanel();
+    });
+
+    eventSource.on(event_types.USER_MESSAGE_RENDERED, () => {
+        void mountReactMainChatMessageListPanel();
     });
 
     // Added here to prevent execution before script.js is loaded and get rid of quirky timeouts
