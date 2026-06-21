@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-Phase 0 基础设施代码已进入可验证检查点，但 **React 迁移 ADR 仍待批准**。在 ADR 批准和完整 release validation 通过前，不应宣称 Phase 0 可合并关闭，也不应进入 Phase 1 页面迁移。
+Phase 0 基础设施已经从可验证检查点推进为已交付基础设施。React 迁移边界已由 [ADR-0007](../../adr/0007-react-page-islands-with-legacy-fallbacks.md) 接受，Phase 1/Phase 2 早期 slices 已基于这些基础设施继续交付；当前状态以 [React 现代化路线图](../../tech/react-modernization-roadmap.md) 为准。
 
 ## 已完成的代码面
 
@@ -15,7 +15,7 @@ Phase 0 基础设施代码已进入可验证检查点，但 **React 迁移 ADR �
 ### ✅ Sprint 2: TypeScript 配置
 - TypeScript 6 配置完成 (`tsconfig.json`)
 - 渐进式类型系统 (`allowJs: true`, `checkJs: false`, `strict: true`)
-- 示例 TypeScript 文件: `src/example-helper.ts`
+- React app、route、helper 和 panel entry 已进入 `app/`，`src/**/*` 仍可按渐进式 TypeScript 边界迁移
 - 类型检查通过: `bun run typecheck`
 
 ### ✅ Sprint 3: React 开发环境
@@ -45,9 +45,9 @@ Phase 0 基础设施代码已进入可验证检查点，但 **React 迁移 ADR �
 - ✅ `bun run test:compat` 通过（扩展兼容性保持）
 - ✅ `bun run --cwd tests test:unit -- express5-route-compatibility.test.js --runInBand` 通过（health endpoint 位于登录墙前，私有路由仍受保护）
 
-### 待关闭
-- ⏳ React 迁移 ADR 批准
-- ⏳ 释放本地 `127.0.0.1:3000` 后重新运行完整 `bun run test:unit`
+### 当前后续
+- Phase 0 无当前阻塞项。
+- 后续 React 页面和面板继续按 feature flag、legacy fallback、TanStack Form/Zod/Query 收口规则推进。
 
 ### 文件结构
 ```
@@ -66,7 +66,6 @@ D:\DEV\EmberDesk\
 ├─ src/
 │  ├─ endpoints/
 │  │  └─ health.js               # Health check endpoint
-│  ├─ example-helper.ts          # TypeScript 示例文件
 │  └─ server-main.js             # 在登录墙前注册 public health endpoint
 ├─ index.html                    # Vite 入口 HTML
 ├─ vite.config.ts                # Vite 配置
@@ -85,6 +84,5 @@ D:\DEV\EmberDesk\
 
 ## 下一步
 
-1. 批准或调整 React 迁移 ADR。
-2. 在无端口占用的环境重新运行完整 `bun run test:unit`。
-3. 两项都通过后，才进入 **Phase 1: 独立页面迁移**。
+1. 继续按 [React 现代化路线图](../../tech/react-modernization-roadmap.md) 推进 Phase 2 Sprint 4-7。
+2. 每个后续 React slice 都必须保留 feature flag、legacy fallback 和兼容性验证门。

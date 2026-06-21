@@ -33,20 +33,20 @@ def install_legacy_global(window, name, value):
 
 
 def main():
-    webpack_toggle = marker("webpack")
+    bundled_toggle = marker("bundled-output")
     default_toggle = marker("default")
     legacy_toggle = marker("legacy")
     module_exports_toggle = marker("module.exports")
 
-    assert resolve_slide_toggle({"toggle": webpack_toggle}) is webpack_toggle
+    assert resolve_slide_toggle({"toggle": bundled_toggle}) is bundled_toggle
     assert resolve_slide_toggle({"default": {"toggle": default_toggle}}) is default_toggle
     assert resolve_slide_toggle({"slidetoggle": {"toggle": legacy_toggle}}) is legacy_toggle
     assert resolve_slide_toggle({"module.exports": {"toggle": module_exports_toggle}}) is module_exports_toggle
 
     assert resolve_slide_toggle({
-        "toggle": webpack_toggle,
+        "toggle": bundled_toggle,
         "default": {"toggle": default_toggle},
-    }) is webpack_toggle
+    }) is bundled_toggle
 
     assert resolve_slide_toggle({}) is None
 

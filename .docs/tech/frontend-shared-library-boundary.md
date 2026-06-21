@@ -82,7 +82,7 @@ Use absolute `/lib.js` imports only where the existing module location already f
 3. `slidetoggle.toggle`
 4. `module.exports.toggle`
 
-Fallback containers are read with `Reflect.get()` so Webpack does not treat Node-only CommonJS fallback names as required static exports. The documented boundary is that source imports and bundled output both expose a callable `slideToggle` function.
+Fallback containers are read with `Reflect.get()` so browser bundled-output validation does not treat Node-only CommonJS fallback names as required static exports. The documented boundary is that source imports, Vite-built `/lib.js`, and the deprecated Webpack fallback all expose a callable `slideToggle` function.
 
 ## Legacy Global Shim Contract
 

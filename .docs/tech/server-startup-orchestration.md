@@ -25,11 +25,11 @@ Primary files:
 4. **Pre-listen Phase** — split into two sub-phases:
    - `collectCleanupResources()`: migrations, content checks, plugin loading. Returns cleanup handles.
    - Signal handler registration (SIGINT, SIGTERM, uncaughtException) via `createCleanupHandler()`.
-   - `initRemainingServices()`: private request filter, request proxy, webpack compile.
+   - `initRemainingServices()`: private request filter, request proxy, and legacy Webpack fallback compile for `/lib.js`.
 5. **Listen** — `errorHandlerMiddleware` + `apply404Middleware()` + `ServerStartup.start()`: global error handler, final 404 handler, then IPv4/IPv6 server creation.
 6. **Post-listen** — `postSetupTasks(result)`: browser launch, heartbeat, window title, listen log, profiler flush.
 
-The split between 4a and 4b exists so that signal handlers are registered as soon as cleanup resources are available, before the remaining initialization tasks run. This preserves the original behavior where a SIGINT during request-filter initialization or webpack compile would still trigger plugin cleanup and cache disposal.
+The split between 4a and 4b exists so that signal handlers are registered as soon as cleanup resources are available, before the remaining initialization tasks run. This preserves the original behavior where a SIGINT during request-filter initialization or the legacy Webpack fallback compile would still trigger plugin cleanup and cache disposal.
 
 Constraints:
 
@@ -63,6 +63,8 @@ main()
 ```
 
 All phase functions are `async` except `registerMiddleware` (which is `async` only because `getWhitelistMiddleware()` returns a promise). Module-level variables `app`, `startupProfiler`, `cliArgs`, and `webpackMiddleware` are shared across phases via closure.
+
+The main `/lib.js` runtime path is Vite-first: `registerMiddleware()` mounts `getViteLibServeMiddleware()` before the deprecated Webpack middleware. If `dist/lib/lib.js` is missing, the Vite middleware returns a build-missing response for `/lib.js`; the Webpack middleware remains present for fallback compatibility and still runs its compile step during startup.
 
 ### Cleanup contract
 

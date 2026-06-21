@@ -165,11 +165,7 @@ features:
 ├─ app/routes/
 │  ├─ login.tsx                   # Login 页面
 │  ├─ setup.tsx                   # Setup 页面
-│  └─ settings/
-│     ├─ index.tsx                # Settings 入口
-│     ├─ general.tsx              # 通用设置
-│     ├─ providers.tsx            # Provider 配置
-│     └─ advanced.tsx             # 高级设置
+│  └─ settings.tsx                # Settings 入口和四个 tabs
 ├─ app/components/
 │  ├─ login/
 │  │  ├─ LoginForm.tsx
@@ -178,11 +174,14 @@ features:
 │  │  └─ SetupForm.tsx
 │  └─ settings/
 │     ├─ SettingsTabs.tsx
-│     └─ SettingSection.tsx
+│     ├─ SettingsSection.tsx
+│     └─ SettingField.tsx
+├─ app/lib/
+│  └─ settings-helpers.js         # Settings 字段映射和保存整形
 └─ tests/
-   ├─ login-react.test.tsx
-   ├─ setup-react.test.tsx
-   └─ settings-react.test.tsx
+   ├─ login-react-route.test.js
+   ├─ setup-react-route.test.js
+   └─ settings-react-route.test.js
 
 保留（回退）：
 ├─ public/login.html
@@ -194,9 +193,9 @@ features:
 
 ### 文档更新
 
-- 🚧 Phase 1 所有 Sprint specs
-- 🚧 Feature flag 使用文档
-- 🚧 灰度发布流程文档
+- ✅ Phase 1 所有 Sprint specs 已按当前交付状态更新
+- ✅ Feature flag 使用状态记录在各页面语义文档和 React 现代化路线图中
+- ✅ `/login.html`、`/setup.html`、legacy `/` fallback 边界记录在页面语义文档中
 
 ---
 

@@ -12,11 +12,11 @@
 
 从 jQuery 单体应用（13,583 行 `public/script.js`）渐进式迁移到现代 React 生态，在 12-18 个月内完成以下目标：
 
-1. **前端现代化**：用 React 19 + TanStack Start 替代 jQuery，建立组件化、类型安全的前端架构
-2. **构建工具升级**：用 Vite 替代 Webpack，提升开发体验（HMR < 200ms）
+1. **前端现代化**：用 React 19 + TanStack Router 的 feature-flagged page/panel islands 逐步替代低风险 jQuery surface，建立组件化、类型安全的前端架构
+2. **构建工具升级**：用 Vite 承接 `/lib.js` 主构建、共享 React app 和 panel bundles；Webpack 只保留为 deprecated fallback / Docker precompile path
 3. **类型安全**：渐进式引入 TypeScript，前后端类型共享
-4. **状态管理**：用 Zustand 替代 `globalThis.SillyTavern` 全局对象
-5. **后端 API 现代化**：用 Hono 替代 Express，建立类型安全的 API 层
+4. **状态管理**：后续 Phase 4 再评估用 Zustand 替代 `globalThis.SillyTavern` 全局对象；当前代码仍保留 legacy globals 兼容面
+5. **后端 API 现代化**：后续 Phase 5 再评估用 Hono 替代 Express；当前代码仍以 Express 5 为 API owner
 6. **性能优化**：虚拟滚动优化长列表，启动时间和交互响应不劣化
 7. **扩展兼容性**：保持 `@sillytavern/*`、`eventSource`、`event_types` 兼容层 ≥6 个月
 
@@ -63,14 +63,14 @@
 - `.docs/tech/frontend-jquery-slice-migration.md`: 已有的 page controller 模式（login、setup）
 - `.docs/tech/third-party-extension-compatibility.md`: 扩展兼容性保护表面
 - `AGENTS.md`: 项目约束（不引入 SPA 框架需明确批准、保持文件存储）
-- TanStack Start 文档 (https://tanstack.com/start/latest): 全栈 React 框架
+- TanStack Router 文档 (https://tanstack.com/router/latest): 当前 React page islands 的路由基础
 - React 19 文档 (https://react.dev/): Server Components、Actions
 - Vite 8 文档 (https://vite.dev/): 快速构建工具
-- Hono 文档 (https://hono.dev/): 轻量 Web 框架
+- Hono 文档 (https://hono.dev/): Phase 5 未来 API 候选，不是当前已采用依赖
 
 ## 假设
 
-- 用户已批准从 jQuery 迁移到 React 生态（需 ADR-XXXX 正式确认）
+- 用户已批准从 jQuery 迁移到 React 生态；早期迁移边界已由 [ADR-0007](../../adr/0007-react-page-islands-with-legacy-fallbacks.md) 正式确认
 - 团队具备 React 19、TypeScript、TanStack 生态的技能储备（或愿意培训）
 - 12-18 个月的迁移周期可接受
 - 迁移期间 React 和 jQuery 共存的复杂性可管理
@@ -95,20 +95,29 @@
 │  └─ phase1-sprint3-settings-panel.md       # Sprint 9: Settings 面板
 ├─ react-phase2-sidebars/
 │  ├─ README.md
-│  ├─ phase2-sprint1-character-library.md    # Sprint 11: 角色库（含虚拟滚动）
-│  ├─ phase2-sprint2-world-info.md           # Sprint 14: 世界信息
-│  └─ phase2-sprint3-background-library.md   # Sprint 17: 背景库
+│  ├─ phase2-sprint1-character-library-list.md
+│  ├─ phase2-sprint2-character-library-search.md
+│  ├─ phase2-sprint3-character-library-bulk.md
+│  ├─ phase2-sprint4-world-info-editor.md
+│  ├─ phase2-sprint5-world-info-import.md
+│  ├─ phase2-sprint6-background-library.md
+│  └─ phase2-sprint7-extensions-host.md
 ├─ react-phase3-main-chat/
 │  ├─ README.md
-│  ├─ phase3-sprint1-message-list.md         # Sprint 19: 消息列表
-│  ├─ phase3-sprint2-streaming.md            # Sprint 23: 流式生成
-│  ├─ phase3-sprint3-input-slash-commands.md # Sprint 25: 输入框 + 斜杠命令
-│  └─ phase3-sprint4-message-actions.md      # Sprint 28: 消息操作
+│  ├─ phase3-sprint1-message-list-basic.md
+│  ├─ phase3-sprint2-message-list-rich.md
+│  ├─ phase3-sprint3-message-list-scroll.md
+│  ├─ phase3-sprint4-streaming-sse.md
+│  ├─ phase3-sprint5-streaming-control.md
+│  ├─ phase3-sprint6-input-basic.md
+│  ├─ phase3-sprint7-input-slash.md
+│  ├─ phase3-sprint8-message-actions.md
+│  └─ phase3-sprint9-integration.md
 ├─ react-phase4-state-management/
 │  ├─ README.md
-│  ├─ phase4-sprint1-zustand-stores.md       # Sprint 30: Zustand stores
-│  ├─ phase4-sprint2-compat-bridge.md        # Sprint 32: 兼容层
-│  └─ phase4-sprint3-extension-migration.md  # Sprint 34: 扩展迁移指南
+│  ├─ phase4-sprint1-zustand-stores.md
+│  ├─ phase4-sprint2-compat-bridge.md
+│  └─ phase4-sprint3-extension-guide.md
 ├─ react-phase5-backend-api/
 │  ├─ README.md
 │  ├─ phase5-sprint1-hono-routes.md          # Sprint 36: Hono 路由
@@ -159,19 +168,31 @@
 - ✅ 2026-06-15: 创建 Phase 0 Sprint 1-4 spec
 - ✅ 2026-06-15: **Phase 0 Sprint 1: Vite 迁移**完成交付
   - 代码路径: `vite.config.ts`, `src/middleware/vite-lib-serve.js`, `package.json`
-  - PR/Commit: 待提交到 `csp-dev-techupgrade` 分支
+  - 追踪: 已进入当前代码，稳定引用见 `.docs/PROJECT_HISTORY.md` 与 `.docs/tech/react-modernization-roadmap.md`
   - 验证: `frontend-shared-library-boundary.test.js` 通过，Vite 构建成功（33.89s）
-  - 状态: 开发完成，待集成验证
-- ⏳ 待办: Phase 0 Sprint 2-4 实施
-- ⏳ 待办: 创建 Phase 1-5 所有 Sprint specs
-- ⏳ 待办: 创建 ADR-XXXX（jQuery → React 迁移决策）
+  - 状态: 已由后续 Phase 0 当前状态补记收束
+- ✅ 已完成: Phase 0 Sprint 2-4 实施
+- ✅ 已完成: 创建 Phase 1-5 所有 Sprint specs
+- ✅ 已完成: [ADR-0007](../../adr/0007-react-page-islands-with-legacy-fallbacks.md) 记录早期 React page/panel island 与 legacy fallback 的迁移决策
+
+### 当前状态补记（2026-06-19）
+
+上面的待办来自 2026-06-15 的原始意图冻结点。按当前代码和 durable docs，后续已有部分关闭：
+
+- ✅ Phase 0 Sprint 2-4 已落地：`tsconfig.json`、`eslint.config.js`、`app/client.tsx`、`app/router.tsx`、`app/routes/*`、`app/styles/globals.css`、`vite.config.ts` 已形成 React app 基础设施。
+- ✅ Phase 1 已落地：`/login` 默认启用 React，`/setup` 和 `/settings` 已作为 feature-flagged React page islands 交付，并保留 `/login.html`、`/setup.html` 和 legacy `/` fallback。
+- ✅ Phase 2 Sprint 1-3 已落地：Character Library 已作为 `features.react.panels.characterLibrary` 控制的 workspace panel island 交付，bundle 入口为 `app/character-library-panel.tsx`，legacy tag controls 和兼容 DOM 仍保留。
+- ✅ Phase 2 Sprint 4-7 已推进到 guarded host/status bridge：`features.react.panels.worldInfo` / `backgroundLibrary` / `extensionsHost`、`public/scripts/workspace-panels-react-bridge.js`、`app/workspace-panels.tsx` 和 `build:react:workspace-panels` 已接线；World Info、Background Library、Extensions Host 现在可在 flag 开启时显示独立 readiness/status host。
+- ✅ ADR-0007 已接受，用于替代原先的 ADR 占位：早期 React 迁移采用 page/panel islands + legacy fallback，而不是一次性 SPA cutover。
+- 📋 Phase 2 Sprint 4-7 尚未完成完整 panel 行为迁移：World Info activation/import/regex/delete、Background upload/delete/rename/select/slash behavior、Extensions discovery/mount/API/install/update/delete behavior 仍由 legacy 面板拥有；当前 React host 只呈现受保护状态面。
+- 📋 TanStack Start、Hono、Zustand、Drizzle ORM、Vitest、shadcn/ui 和 Ant Design 仍是后续候选或原始推荐栈内容；当前代码事实只支持把 React 19、TanStack Router、TanStack Query、TanStack Form、Zod、TanStack Virtual、Vite 8、Tailwind v4、TypeScript 6 和 ESLint 10 写成已采用。
 
 ### 代码路径（预期）
 
 迁移完成后的目录结构：
 ```
 D:\DEV\EmberDesk\
-├─ app/                           # 新 React 应用（TanStack Start）
+├─ app/                           # 新 React 应用（TanStack Router page/panel islands）
 │  ├─ routes/                     # 文件系统路由
 │  ├─ components/                 # React 组件
 │  ├─ stores/                     # Zustand stores
@@ -212,3 +233,4 @@ D:\DEV\EmberDesk\
 - 2026-06-15: 创建 React 现代化重构意图文档，基于用户请求和参考技术栈
 - 2026-06-15: 确认 Spec 组织结构为混合方案（方案 C）和命名规范（方案 B）
 - 2026-06-15: 定义双向链接格式和验证门
+- 2026-06-19: 按当前代码补记 Phase 2 Sprint 4-7 的 guarded host/status bridge 已接线，同时明确完整 World Info / Backgrounds / Extensions 行为迁移仍未完成

@@ -17,15 +17,21 @@
 ### 主要交付物
 
 1. 创建 `app/routes/setup.tsx`
-2. 创建 `app/components/setup/SetupForm.tsx`
+2. 创建 `app/components/setup/SetupForm.tsx` 和 `SetupPasswordInput.tsx`
 3. 处理 `fresh` 和 `set-password` 两种 setup 模式
-4. Feature flag 控制新旧版本切换
+4. 用 TanStack Form + Zod 处理 setup 表单验证
+5. 用 TanStack Query 管理 CSRF、setup-mode 和 setup 提交状态
+6. Feature flag 控制新旧版本切换，`/setup.html` 保留 legacy 回退入口
 
 ### 成功标准
 
 - ✅ React Setup 页面功能与 jQuery 版本完全一致
-- ✅ `setup-page-controller.test.js` 测试通过
-- ✅ 首次设置流程端到端正常
+- ✅ `/setup` 在 `features.react.pages.setup` 开启且 React 构建存在时提供 React 页面
+- ✅ `/setup.html` 始终保留为 legacy 回退入口
+- ✅ `setup-react-route.test.js`、`setup-page-controller.test.js`、`users-public-setup.test.js` 验证通过
+- ✅ 首次设置和单用户无密码 `set-password` 流程正常
+- ✅ React Setup 表单由 TanStack Form + Zod 驱动
+- ✅ Setup 请求状态由 TanStack Query 驱动
 
 ---
 
@@ -49,19 +55,7 @@
 
 ### 表单验证
 
-```typescript
-const freshSchema = z.object({
-  handle: z.string().min(1, '请输入用户名'),
-  displayName: z.string().optional(),
-});
-
-const setPasswordSchema = z.object({
-  password: z.string().min(6, '密码至少 6 位'),
-  confirmPassword: z.string(),
-}).refine(data => data.password === data.confirmPassword, {
-  message: '两次密码不一致',
-});
-```
+React 实现用 TanStack Form 承载字段状态和提交，用 Zod 校验 `fresh` / `set-password` 两种模式。用户可见中文 copy、密码一致性校验、loading/error 状态和成功跳转保持与 legacy setup 语义一致。
 
 ### 组件结构
 
@@ -69,8 +63,7 @@ const setPasswordSchema = z.object({
 app/routes/setup.tsx
 app/components/setup/
 ├─ SetupForm.tsx              # 根据模式切换表单
-├─ FreshSetupForm.tsx         # fresh 模式表单
-└─ SetPasswordForm.tsx        # set-password 模式表单
+└─ SetupPasswordInput.tsx     # 密码输入框和可见性切换
 ```
 
 ---
@@ -88,18 +81,29 @@ app/components/setup/
 
 ## 验证清单
 
-- [ ] fresh 模式设置流程正常
-- [ ] set-password 模式设置流程正常
-- [ ] `bun run --cwd tests test:unit -- setup-page-controller.test.js --runInBand` 通过
-- [ ] Feature flag 切换正常
+- [x] fresh 模式设置流程正常
+- [x] set-password 模式设置流程正常
+- [x] `bun run --cwd tests test:unit -- setup-react-route.test.js setup-page-controller.test.js users-public-setup.test.js --runInBand` 通过
+- [x] `bun run --cwd tests test:unit -- express5-route-compatibility.test.js --runInBand` 通过
+- [x] `bun run build:react` 通过
+- [x] `bun run typecheck` 通过
+- [x] Feature flag 切换正常
+- [x] `/setup.html` legacy fallback 保持可用
 
 ---
 
 ## 交付标准（Definition of Done）
 
-- [ ] 功能验证清单 100% 完成
-- [ ] Code review 完成
-- [ ] 合并到 `csp-dev-techupgrade` 分支
+- [x] 功能验证清单 100% 完成
+- [x] Code review 完成
+- [x] Durable docs 已同步到 `.docs/db/pages/setup.md`、`.docs/db/features/first-time-setup.md`、`.docs/tech/react-modernization-roadmap.md`、`.docs/PROJECT_HISTORY.md`
+
+## 当前交付状态（2026-06-16）
+
+- [x] React Setup 页面已在 `/setup` 落地
+- [x] `features.react.pages.setup` 默认保持关闭，可用于灰度
+- [x] `/setup.html` 继续作为 rollback surface 保留
+- [x] 按 React 现代化路线图完成 TanStack Form / Zod / Query 技术栈收口
 
 ---
 

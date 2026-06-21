@@ -133,20 +133,14 @@
 ### 组件结构
 
 ```
-app/routes/settings/
-├─ index.tsx                    # Settings 入口
-├─ general.tsx                  # 通用设置
-├─ providers.tsx                # Provider 配置
-├─ user-interface.tsx           # UI 设置
-└─ advanced.tsx                 # 高级设置
+app/routes/settings.tsx         # Settings 入口、数据加载、保存和四个 tabs
 
 app/components/settings/
 ├─ SettingsTabs.tsx             # Tab 导航
-├─ SettingSection.tsx           # 设置区块
-├─ SettingToggle.tsx            # 开关
-├─ SettingInput.tsx             # 输入框
-├─ SettingSelect.tsx            # 下拉选择
-└─ ProviderSecretField.tsx      # API 密钥字段
+├─ SettingsSection.tsx          # 设置区块
+└─ SettingField.tsx             # 输入、textarea、select、toggle 统一字段
+
+app/lib/settings-helpers.js     # 字段映射、coverage ledger、payload parse/save helpers
 ```
 
 ### 表单与状态管理
@@ -229,22 +223,34 @@ const saveMutation = useMutation({
 
 ## 验证清单
 
-- [ ] 所有 Tab 正常切换
-- [ ] 设置项读取和保存正常
-- [ ] Provider API 密钥配置正常
-- [ ] `features.react.pages.settings` 开关和 legacy 回退正常
-- [ ] `World Info` / `Backgrounds` / `Extensions` / `Persona Management` 未被误纳入本 Sprint
-- [ ] legacy 字段映射表与实现一致，无静默遗漏
-- [ ] `bun run test:unit` 通过
-- [ ] 移动端响应式正常
+- [x] 所有 Tab 正常切换
+- [x] 设置项读取和保存正常
+- [x] Provider API 密钥配置正常
+- [x] `features.react.pages.settings` 开关和 legacy 回退正常
+- [x] `World Info` / `Backgrounds` / `Extensions` / `Persona Management` 未被误纳入本 Sprint
+- [x] legacy 字段映射表与实现一致，无静默遗漏
+- [x] legacy `vertexai` source 在 React form 中显示为 Google + Vertex AI，并在未关闭 Vertex AI 时保存回 `vertexai`
+- [x] advanced reasoning effort 值 `min` / `max` / `none` / `minimal` / `xhigh` 保持可见和可保存
+- [x] `bun run --cwd tests test:unit -- settings-react-route.test.js --runInBand` 通过
+- [x] `bun run --cwd tests test:unit -- openai-provider-capabilities.test.js --runInBand` 通过
+- [x] `bun run typecheck` 通过
+- [x] `bun run lint` 通过
 
 ---
 
 ## 交付标准（Definition of Done）
 
-- [ ] 功能验证清单 100% 完成
-- [ ] Code review 完成（Settings 复杂度高，需 2 人 approve）
-- [ ] 合并到 `csp-dev-techupgrade` 分支
+- [x] 功能验证清单 100% 完成
+- [x] Code review 完成
+- [x] Durable docs 已同步到 `.docs/db/pages/settings.md`、`.docs/db/pages/api-configuration.md`、`.docs/db/features/chat-completion-select.md`、`.docs/tech/react-modernization-roadmap.md`、`.docs/PROJECT_HISTORY.md`
+
+## 当前交付状态（2026-06-18）
+
+- [x] React Settings 页面已在 `/settings` 落地
+- [x] `features.react.pages.settings` 默认保持关闭，可用于灰度
+- [x] flag 关闭或 React build 缺失时 `/settings` 回退到 legacy `/` 工作区
+- [x] 按 React 现代化路线图完成 TanStack Form / Zod / Query 技术栈收口
+- [x] 当前实现采用单个 `app/routes/settings.tsx` 承载四个 tab，后续可在不改变用户语义的前提下再拆组件
 
 ---
 

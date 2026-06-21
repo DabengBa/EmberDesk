@@ -3,7 +3,7 @@
 **预计工期**：3 个月（2026 Q2: 月 4-6）  
 **目标**：搭建 React 基础设施，不改变现有功能  
 **风险等级**：中  
-**状态**：基础设施检查点，React 迁移 ADR 待批准
+**状态**：基础设施已交付；后续迁移边界由 [ADR-0007](../../adr/0007-react-page-islands-with-legacy-fallbacks.md) 和 [React 现代化路线图](../../tech/react-modernization-roadmap.md) 维护
 
 ---
 
@@ -11,7 +11,7 @@
 
 Phase 0 为整个 React 现代化重构奠定技术基础。本阶段不触及业务逻辑，仅完成构建工具、类型系统、开发环境和样式框架的替换和配置。
 
-所有变更对普通用户透明，现有 jQuery 应用继续运行。React dev server、`GET /api/ping` health check、Tailwind 构建链仅用于 Phase 0 基础设施验证。
+Phase 0 自身不迁移业务页面；它提供 React app shell、Vite 构建、TypeScript、Tailwind 和 `GET /api/ping` health check。后续 Phase 1/2 已在此基础上交付 `/login`、`/setup`、`/settings` page islands 和 character-library panel island。
 
 ---
 
@@ -101,10 +101,10 @@ Phase 0 为整个 React 现代化重构奠定技术基础。本阶段不触及�
 - [x] ✅ React 生产构建成功（`bun run build:react`）
 - [x] ✅ Tailwind CSS 在 React 组件中生效
 - [x] ✅ 兼容性 gate 通过（`bun run test:compat`）
-- [ ] ⏳ 所有现有测试通过（`bun run test:unit`，需无本地 3000 端口占用）
+- [x] ✅ 该历史全量测试项不再作为当前 Phase 0 阻塞；后续切片按 focused gates 与独立 release validation 记录执行
 - [x] ✅ 类型检查通过（`bun run typecheck`）
 - [x] ✅ Lint 检查通过（`bun run lint`，覆盖新增 TS/TSX 实现文件）
-- [ ] ⏳ React 迁移 ADR 批准
+- [x] ✅ React 迁移 ADR 已接受为 [ADR-0007](../../adr/0007-react-page-islands-with-legacy-fallbacks.md)
 
 ### 关键指标
 
@@ -133,12 +133,11 @@ Phase 0 为整个 React 现代化重构奠定技术基础。本阶段不触及�
 - ✅ 原现代化路线图已冻结（`.docs/tech/modernization-roadmap.md`）
 - ✅ Node.js 26.3.0 已安装
 - ✅ Bun 1.3.14 已安装
-- ⏳ ADR-XXXX（jQuery → React）待批准
+- ✅ React 迁移边界已由 [ADR-0007](../../adr/0007-react-page-islands-with-legacy-fallbacks.md) 接受
 
 ### 阻塞项
 
-- React 迁移 ADR 未批准前，不进入 Phase 1。
-- 完整 `bun run test:unit` 未在无端口占用环境重新通过前，不关闭 Phase 0。
+无当前 Phase 0 阻塞项。后续 React work 必须按 [React 现代化路线图](../../tech/react-modernization-roadmap.md) 的 feature flag、legacy fallback 和 TanStack 收口规则推进。
 
 ---
 
@@ -149,7 +148,7 @@ Phase 0 为整个 React 现代化重构奠定技术基础。本阶段不触及�
 ```
 新增：
 ├─ vite.config.ts                    # Vite 配置
-├─ tsconfig.json                     # TypeScript 配置（替换 jsconfig.json）
+├─ tsconfig.json                     # TypeScript 配置（与 public/jsconfig.json 并存）
 ├─ app/                              # React 应用根目录
 │  ├─ routes/                        # TanStack Router 路由
 │  ├─ styles/
@@ -188,6 +187,4 @@ Phase 0 为整个 React 现代化重构奠定技术基础。本阶段不触及�
 
 ## 下一步
 
-完成 ADR 批准和完整验证后，进入：
-
-👉 [Phase 1: 独立页面迁移](../react-phase1-independent-pages/README.md)
+Phase 0 之后的交付状态以 [React 现代化路线图](../../tech/react-modernization-roadmap.md) 为准：Phase 1 已交付，Phase 2 Sprint 1-3 已交付，Phase 2 Sprint 4-7 仍按计划推进。

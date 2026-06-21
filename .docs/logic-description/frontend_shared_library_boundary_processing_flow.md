@@ -19,15 +19,15 @@ Non-goals:
 
 - Re-document every dependency's API.
 - Replace `tests/frontend-shared-library-boundary.test.js`.
-- Describe Webpack internals beyond the observable boundary this file depends on.
+- Describe Vite or Webpack internals beyond the observable bundled-output boundary this file depends on.
 
 ## Input Discovery And Parsing Rules
 
 The boundary receives dependency values from ES module imports in `public/lib.js`.
 
-For most dependencies, the imported value is exported directly. `slidetoggle` is special because direct Node source imports and Webpack browser builds can expose different namespace shapes:
+For most dependencies, the imported value is exported directly. `slidetoggle` is special because direct Node source imports and browser bundler builds can expose different namespace shapes:
 
-1. Webpack ESM resolution can expose `toggle` at the namespace top level.
+1. Vite and Webpack ESM resolution can expose `toggle` at the namespace top level.
 2. Node CommonJS interop can expose an object under `default`.
 3. Some CommonJS namespace forms may expose `slidetoggle` or `module.exports`.
 
@@ -38,7 +38,7 @@ The current `slideToggle` resolver checks those shapes in this order:
 3. `Reflect.get(namespace, 'slidetoggle')?.toggle`
 4. `Reflect.get(namespace, 'module.exports')?.toggle`
 
-Runtime reflection is intentional for fallback keys because direct property access to non-Webpack exports can make Webpack treat them as missing static exports.
+Runtime reflection is intentional for fallback keys because direct property access to non-primary namespace shapes can make bundled-output validation treat those fallback names as required static exports.
 
 ## Outputs
 
@@ -52,7 +52,7 @@ The default export and named export must refer to the same value.
 ## Staged Processing Flow
 
 1. Import the `slidetoggle` namespace.
-2. Read the Webpack-preferred top-level `toggle` property.
+2. Read the bundled-output-preferred top-level `toggle` property.
 3. If missing, read known CommonJS fallback containers through `Reflect.get`.
 4. Select the first fallback container whose `.toggle` value exists.
 5. Export that selected value as `slideToggle`.
@@ -62,8 +62,8 @@ The default export and named export must refer to the same value.
 
 - The resolver must not return `undefined` for the installed `slidetoggle@4.x` package.
 - The resolver is first-match-wins.
-- Direct named-property reads are safe for `toggle` because it is the Webpack ESM export.
-- Fallback containers are read through `Reflect.get` to preserve Webpack module-output validation.
+- Direct named-property reads are safe for `toggle` because it is the primary browser-bundler ESM export.
+- Fallback containers are read through `Reflect.get` to preserve bundled-output validation.
 - Legacy globals are installed only by `initLibraryShims()` and only when the target global is absent.
 
 ## Output Schema
@@ -84,7 +84,7 @@ Run:
 uv run python .docs/logic-description/frontend_shared_library_boundary_sandbox_proof.py
 ```
 
-The proof script embeds fake namespace objects for Webpack, Node CommonJS default, legacy `slidetoggle`, and `module.exports` shapes. It also verifies first-match precedence and the non-clobbering legacy-global rule.
+The proof script embeds fake namespace objects for browser-bundler top-level, Node CommonJS default, legacy `slidetoggle`, and `module.exports` shapes. It also verifies first-match precedence and the non-clobbering legacy-global rule.
 
 ## Boundaries And Failure Modes
 

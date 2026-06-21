@@ -36,4 +36,11 @@ Delete or avoid adding briefs that are:
 | `260606-01-chat-message-affordance-proof.md` | Preserves the first successor-slice intent for the main chat workspace: establish message-row affordance and rendering contract proof before any message rendering or streaming refactor. |
 | `260606-02-chat-message-rendering-proof.md` | Preserves the second successor-slice intent for the main chat workspace: establish real app proof for stored non-streaming message rendering before changing rendering or streaming internals. |
 | `260607-01-main-chat-successor-spec-set.md` | Preserves the user-requested 10-spec successor sequence for main-chat workspace modernization after the roadmap freeze. |
+| `260608-01-main-chat-next-successor-spec-set.md` | Preserves the later main-chat successor batch and the decision to keep canvas/artifacts/RAG/tools/storage/framework moves outside ordinary UI cleanup. |
 | `260608-09-main-chat-auto-retry-fallback-provider.md` | Preserves the user-approved change from local manual provider-failure recovery to a bounded automatic retry chain with a fallback OpenAI-compatible provider for main-chat visible generation only. |
+| `260609-01-architecture-deepening-spec-set.md` | Preserves the architecture-deepening batch boundaries for generation lifecycle, external imports, provider secret state, and frontend structure contracts. |
+| `260609-02-character-card-write-command.md` | Preserves the delivered single-card write command boundary and the decision not to recreate process specs after durable docs captured the shipped facts. |
+| `react-modernization-intent.md` | Preserves the user-approved React modernization direction and later implementation traceability across Phase 0, Phase 1, and the first Phase 2 panel island. |
+| `react-phase1-sprint2-setup-page.md` | Preserves the React Setup rollout intent, feature-flag/fallback boundary, and TanStack Form / Query / Zod adoption requirement. |
+| `react-phase1-sprint3-settings-panel.md` | Preserves the React Settings entry intent, the explicit exclusion of World Info / Backgrounds / Extensions, and the TanStack adoption gate. |
+| `react-phase2-character-library-panel-sprints-1-3.md` | Preserves the delivered Phase 2 Character Library panel-island intent, including search/sort/tag/bulk expectations and legacy tag-control ownership. |

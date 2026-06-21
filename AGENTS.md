@@ -15,7 +15,7 @@ EmberDesk is a self-hosted browser LLM workspace forked from SillyTavern. The pr
 | Language | JavaScript ES modules |
 | Server | Express 5 |
 | Frontend | HTML / CSS / jQuery, no SPA framework |
-| Build | Vite 8 for browser shared library output (Webpack deprecated as fallback) |
+| Build | Vite 8 for `/lib.js`, React page app, and guarded React panel bundles (Webpack deprecated as fallback) |
 | Tests | Jest unit tests and Playwright E2E under `tests/` |
 | License | AGPL-3.0 |
 
@@ -46,6 +46,9 @@ EmberDesk is a self-hosted browser LLM workspace forked from SillyTavern. The pr
 bun ci
 Push-Location tests; bun ci; Pop-Location
 bun run build:lib              # Vite 构建 (主构建)
+bun run build:react            # React page app
+bun run build:react:character-library
+bun run build:react:workspace-panels
 bun run build:lib:webpack      # Webpack 构建 (deprecated 回退)
 bun run start
 bun run start:no-csrf
@@ -80,7 +83,7 @@ Use Node.js 26.3.0 for server release proof by default. Bun is the package manag
 
 ## Frontend Guardrails
 
-- Do not introduce React, Vue, TypeScript application code, or a SPA framework without explicit approval.
+- Do not broaden React, Vue, TypeScript application code, or SPA framework surfaces beyond approved feature-flagged React page/panel islands without explicit approval.
 - Preserve page-controller patterns in `public/scripts/login.js` and `public/scripts/setup.js`: pure helpers, `createXController()`, `initXPage()`, dependency injection, and cleanup.
 - Preserve character-list identity selectors: `.character_select`, `.group_select`, `.bogus_folder_select`, `data-chid`, legacy `chid`, `id="CharID${chid}"`, `.character_selected`, `.bulk_select_checkbox`, `.tags_inline`, `.ch_fav`.
 - Preserve protected extension surfaces and `@sillytavern/*` imports unless a migration plan updates code, docs, and compatibility tests together.
