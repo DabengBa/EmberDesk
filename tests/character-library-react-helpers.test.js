@@ -3,6 +3,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, test } from '@jest/globals';
+import {
+    CharacterLibraryFetchError,
+    getCharacterLibraryFetchErrorData,
+    hasCharacterLibraryPayloadChanged,
+    parseCharacterLibraryFetchResponse,
+} from '../public/scripts/character-library-react-sync.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -49,11 +55,23 @@ describe('character library React panel scaffold', () => {
         expect(helperSource).toContain('export const characterLibraryToolbarSchema = z.object(');
     });
 
+    test('keeps bogus-folder back block additive to virtualized character rows', () => {
+        const panelSource = read('app/components/character-library/CharacterLibraryPanel.tsx');
+
+        expect(panelSource).toContain('const showVirtualRows = !state.renderPlan.showEmptyBlock;');
+        expect(panelSource).not.toContain('const showVirtualRows = !state.renderPlan.includeBackBlock && !state.renderPlan.showEmptyBlock;');
+        expect(panelSource).toContain('{state.renderPlan.includeBackBlock ? <LegacyElementHost factory={backBlockFactory} /> : null}');
+        expect(panelSource).toContain('const entity = state.pageEntities[item.index];');
+    });
+
     test('bridges the legacy workspace shell into the React character-library panel bundle', () => {
         const scriptSource = read('public/script.js');
 
         expect(scriptSource).toContain('globalThis.__emberDeskCharacterLibraryPanelBridge');
         expect(scriptSource).toContain('/react/login/assets/character-library-panel.js');
+        expect(scriptSource).toContain('parseCharacterLibraryFetchResponse(response)');
+        expect(scriptSource).toContain('getCharacterLibraryFetchErrorData(error)');
+        expect(scriptSource).toContain('hasCharacterLibraryPayloadChanged(characters, normalizedCharacters)');
         expect(scriptSource).toContain('mountCharacterLibraryToolbar');
         expect(scriptSource).toContain('updateCharacterLibraryToolbar');
         expect(scriptSource).toContain('applySearchQuery(searchQuery)');
@@ -62,5 +80,45 @@ describe('character library React panel scaffold', () => {
         expect(scriptSource).toContain('mountReactCharacterLibraryPanel');
         expect(scriptSource).toContain('mountReactCharacterLibraryToolbar');
         expect(scriptSource).toContain('renderCharacterListPageReact');
+    });
+
+    test('preserves structured /api/characters/all overflow errors for the legacy popup path', async () => {
+        const response = {
+            ok: false,
+            status: 413,
+            statusText: 'Payload Too Large',
+            json: async () => ({ overflow: true }),
+        };
+
+        await expect(parseCharacterLibraryFetchResponse(response)).rejects.toMatchObject({
+            name: 'CharacterLibraryFetchError',
+            status: 413,
+            data: { overflow: true },
+        });
+
+        const error = await parseCharacterLibraryFetchResponse(response).catch(caughtError => caughtError);
+
+        expect(error).toBeInstanceOf(CharacterLibraryFetchError);
+        expect(getCharacterLibraryFetchErrorData(error)).toEqual({ overflow: true });
+    });
+
+    test('detects changed character payload fields outside the row summary fingerprint', () => {
+        const currentCharacters = [{
+            avatar: 'alpha.png',
+            name: 'Alpha',
+            chat: 'Alpha - chat',
+            fav: false,
+            tags: ['old'],
+        }];
+        const nextCharacters = [{
+            avatar: 'alpha.png',
+            name: 'Alpha',
+            chat: 'Alpha - chat',
+            fav: false,
+            tags: ['new'],
+        }];
+
+        expect(hasCharacterLibraryPayloadChanged(currentCharacters, nextCharacters)).toBe(true);
+        expect(hasCharacterLibraryPayloadChanged(nextCharacters, structuredClone(nextCharacters))).toBe(false);
     });
 });

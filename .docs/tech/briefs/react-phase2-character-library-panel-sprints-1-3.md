@@ -41,7 +41,9 @@ last_updated: 2026-06-18
 - **Change history:**
   - 2026-06-18: 用户明确追问 “那么完成这个 sprint 之后，加入用户使用搜索功能，能够正常搜索吗?”
   - 2026-06-18: 用户随后要求继续执行这组 Sprint 的交付
-- **Implementation traceability:** code paths `public/script.js`, `app/components/character-library/CharacterLibraryToolbar.tsx`, `app/components/character-library/CharacterLibraryPanel.tsx`, `app/lib/character-library-helpers.ts`; tests `tests/character-library-react-helpers.test.js`, `tests/character-list-structure.test.js`, `tests/interaction-performance-index.test.js`; owning docs `.docs/db/features/character-library-panel.md`, `.docs/db/pages/chat-workspace.md`, `.docs/tech/react-modernization-roadmap.md`; commit `572cbab75 feat(react): let the character library settle in`; delivery status `delivered`
+  - 2026-06-18: 归档后复核明确标签过滤继续由 legacy tag controls 和 `entitiesFilter` 拥有，React toolbar 只承载该控件，不额外声明 TanStack Form 接管标签状态
+  - 2026-06-18: 代码审查后补齐 React Query 同步边界：完整 character payload 变化会刷新 legacy `characters` 状态，`/api/characters/all` 的结构化 overflow 错误继续进入既有用户提示路径
+- **Implementation traceability:** code paths `public/script.js`, `public/scripts/character-library-react-sync.js`, `app/components/character-library/CharacterLibraryToolbar.tsx`, `app/components/character-library/CharacterLibraryPanel.tsx`, `app/lib/character-library-helpers.ts`; tests `tests/character-library-react-helpers.test.js`, `tests/character-list-structure.test.js`, `tests/interaction-performance-index.test.js`; owning docs `.docs/db/features/character-library-panel.md`, `.docs/db/pages/chat-workspace.md`, `.docs/tech/react-modernization-roadmap.md`, `.docs/logic-description/react_character_library_sync_processing_flow.md`; commit `572cbab75 feat(react): let the character library settle in`; delivery status `delivered`
 
 ### Domain: 批量操作与兼容 DOM 合约保持成立
 

@@ -10,7 +10,6 @@ export interface CharacterLibraryToolbarState {
     searchQuery: string;
     sortValue: string;
     sortOptions: CharacterLibraryToolbarSortOption[];
-    selectedTagIds: string[];
     isGrid: boolean;
     isBulkEdit: boolean;
     bulkSelectedCount: number;
@@ -21,7 +20,6 @@ export interface CharacterLibraryToolbarState {
 export const characterLibraryToolbarSchema = z.object({
     searchQuery: z.string(),
     sortValue: z.string(),
-    selectedTagIds: z.array(z.string()),
     isGrid: z.boolean(),
     isBulkEdit: z.boolean(),
     bulkSelectedCount: z.number().int().min(0),
@@ -31,7 +29,6 @@ export function buildCharacterLibraryToolbarDefaults(state: CharacterLibraryTool
     return {
         searchQuery: state.searchQuery,
         sortValue: state.sortValue,
-        selectedTagIds: state.selectedTagIds,
         isGrid: state.isGrid,
         isBulkEdit: state.isBulkEdit,
         bulkSelectedCount: state.bulkSelectedCount,

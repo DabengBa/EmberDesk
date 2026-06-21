@@ -50,6 +50,7 @@ This page exists so a user can configure how EmberDesk connects to an LLM API pr
 - **Fallback provider state**: the optional fallback provider lives in the same drawer, persists as ordinary settings plus a dedicated server-side secret, preserves the entered fallback key when save fails, stays independent from connection profile capture/apply behavior, and keeps its advanced fields visually collapsed until the fallback toggle is enabled.
 - **React settings overlap**: when `/settings` is available, users can edit the Sprint 3 React-owned provider slice there; this drawer still owns service-account JSON, connection-profile capture/apply behavior, deeper provider profile details, and any provider fields not listed in the React settings coverage ledger.
 - **Vertex AI boundary**: React `/settings` owns Vertex AI Express metadata and the Vertex API-key secret state; full Service Account JSON remains in this legacy drawer.
+- **Legacy provider compatibility**: users who already had Google Vertex AI selected through the legacy drawer can open React [Settings](page.settings) and see it as Google with Vertex AI enabled, then save without silently downgrading it to normal Google.
 
 ## Navigation
 

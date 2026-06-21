@@ -39,6 +39,7 @@ This feature lets a user choose which LLM provider and model to use for chat com
 - The default chat completion source for new installations is `openai` (Chat Completion).
 - Legacy API types (`kobold`, `koboldhorde`, `novel`, `poe`) are redirected to `openai` on load.
 - Google can switch into Vertex AI mode, which exposes Express API-key and full Service Account JSON credential paths.
+- In React [Settings](page.settings), an existing legacy `vertexai` source is displayed as Google with Vertex AI enabled; saving preserves that source unless the user turns Vertex AI off.
 - The model list may be empty until the user connects to the API; model inputs still allow a typed model id.
 
 ## ID Boundary Notes

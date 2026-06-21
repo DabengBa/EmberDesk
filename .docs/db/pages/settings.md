@@ -48,7 +48,8 @@ This page lets an authenticated user edit the main Sprint 3 settings slice from 
 - **Dirty state**: the save button is disabled on a freshly loaded form and becomes available only after the user changes a React-owned field.
 - **Save state**: saving submits the complete settings object but only rewrites fields listed in the React-owned coverage ledger.
 - **Secret state**: provider and fallback keys continue to use the server-side secret store; they are not written into the normal settings save payload.
-- **Vertex AI state**: Vertex AI Express uses the dedicated Vertex API key secret, while Service Account JSON remains owned by the legacy API Configuration drawer.
+- **Vertex AI state**: a legacy `vertexai` provider setting is shown as Google with Vertex AI enabled. Saving without disabling Vertex AI keeps the legacy Vertex AI source intact; disabling Vertex AI saves the source as normal Google.
+- **Reasoning effort state**: existing advanced reasoning effort values such as `minimal`, `min`, `max`, `none`, and `xhigh` remain visible and saveable instead of being coerced to the basic low/medium/high set.
 - **Legacy-owned state**: World Info, Backgrounds, Extensions, Persona Management, text-generation globals, connection-profile details, theme color tokens, tags, and other ledger-listed paths remain outside this page.
 
 ## Navigation

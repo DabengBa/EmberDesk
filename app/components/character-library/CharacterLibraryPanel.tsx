@@ -89,7 +89,7 @@ export function CharacterLibraryPanel({ bridge, state }: { bridge: CharacterLibr
 
     const virtualItems = virtualizer.getVirtualItems();
     const totalSize = virtualizer.getTotalSize();
-    const showVirtualRows = !state.renderPlan.includeBackBlock && !state.renderPlan.showEmptyBlock;
+    const showVirtualRows = !state.renderPlan.showEmptyBlock;
     const hiddenBlockFactory = useMemo(() => {
         return () => bridge.createHiddenElement?.(state.renderPlan.hiddenCount) ?? null;
     }, [bridge, state.renderPlan.hiddenCount]);

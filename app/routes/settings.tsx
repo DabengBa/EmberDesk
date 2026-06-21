@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useForm } from '@tanstack/react-form';
+import { useForm, useStore } from '@tanstack/react-form';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { z } from 'zod';
@@ -37,6 +37,8 @@ export const Route = createFileRoute('/settings')({
     component: SettingsPage,
 });
 
+const SAVE_STATUS_TIMEOUT_MS = 4000;
+
 const settingsSchema = z.object({
     general: z.object({
         presetSettings: z.string(),
@@ -51,7 +53,7 @@ const settingsSchema = z.object({
         enableWebSearch: z.boolean(),
         functionCalling: z.boolean(),
         showThoughts: z.boolean(),
-        reasoningEffort: z.enum(['auto', 'low', 'medium', 'high']),
+        reasoningEffort: z.enum(['auto', 'low', 'medium', 'high', 'min', 'max', 'none', 'minimal', 'xhigh']),
         continuePrefill: z.boolean(),
         continuePostfix: z.string(),
         squashSystemMessages: z.boolean(),
@@ -184,7 +186,8 @@ async function readJsonObject(response: Response) {
 function SettingsPage() {
     const [activeTab, setActiveTab] = useState(settingsTabDefinitions[0].id);
     const [pageError, setPageError] = useState('');
-    const [saveStatus, setSaveStatus] = useState('');
+    const [saveStatus, setSaveStatus] = useState<{ kind: 'success' | 'info'; message: string } | null>(null);
+    const [showDiagnostics, setShowDiagnostics] = useState(false);
     const [providerSecretInput, setProviderSecretInput] = useState('');
     const [fallbackSecretInput, setFallbackSecretInput] = useState('');
 
@@ -272,7 +275,7 @@ function SettingsPage() {
             onSubmit: settingsSchema,
         },
         onSubmitInvalid: ({ value }) => {
-            setSaveStatus('');
+            setSaveStatus(null);
             setPageError(getSchemaErrorMessage(settingsSchema, value));
         },
         onSubmit: async ({ value }) => {
@@ -282,16 +285,18 @@ function SettingsPage() {
             }
 
             setPageError('');
-            setSaveStatus('');
+            setSaveStatus(null);
 
             try {
                 await saveMutation.mutateAsync(value);
             } catch (error) {
-                setSaveStatus('');
+                setSaveStatus(null);
                 setPageError(error instanceof Error ? error.message : String(error));
             }
         },
     });
+
+    const settingsFormValues = useStore(settingsForm.store, state => state.values);
 
     const saveMutation = useMutation({
         mutationFn: async (values: typeof defaultSettingsFormValues) => {
@@ -315,13 +320,13 @@ function SettingsPage() {
             }
 
             await settingsQuery.refetch();
-            setSaveStatus('设置已保存。');
+            setSaveStatus({ kind: 'success', message: '设置已保存。' });
             return payload;
         },
         retry: false,
     });
 
-    const providerSource = settingsForm.state.values.providers.chatCompletionSource;
+    const providerSource = settingsFormValues.providers.chatCompletionSource;
     const providerModelField = useMemo(() => getProviderModelFieldConfig(providerSource), [providerSource]);
     const providerSettingsSnapshot = ((parsedPayload
         ? getValueAtPath(parsedPayload.settings, 'oai_settings')
@@ -329,9 +334,9 @@ function SettingsPage() {
     const providerSecretKey = providerSecretKeyBySource[providerSource as keyof typeof providerSecretKeyBySource] ?? null;
     const currentSecretKey = resolveProviderSecretKeyForSettings({
         settings: {
-            reverse_proxy: settingsForm.state.values.providers.reverseProxy,
-            use_vertexai: settingsForm.state.values.providers.useVertexAi,
-            vertexai_auth_mode: settingsForm.state.values.providers.vertexaiAuthMode,
+            reverse_proxy: settingsFormValues.providers.reverseProxy,
+            use_vertexai: settingsFormValues.providers.useVertexAi,
+            vertexai_auth_mode: settingsFormValues.providers.vertexaiAuthMode,
         },
         source: providerSource,
         secretKey: providerSecretKey,
@@ -346,10 +351,10 @@ function SettingsPage() {
     const unifiedKeyFieldState = getUnifiedKeyFieldState({
         settings: {
             ...providerSettingsSnapshot,
-            reverse_proxy: settingsForm.state.values.providers.reverseProxy,
-            proxy_password: settingsForm.state.values.providers.proxyPassword,
-            use_vertexai: settingsForm.state.values.providers.useVertexAi,
-            vertexai_auth_mode: settingsForm.state.values.providers.vertexaiAuthMode,
+            reverse_proxy: settingsFormValues.providers.reverseProxy,
+            proxy_password: settingsFormValues.providers.proxyPassword,
+            use_vertexai: settingsFormValues.providers.useVertexAi,
+            vertexai_auth_mode: settingsFormValues.providers.vertexaiAuthMode,
         },
         source: providerSource,
         secretKey: currentSecretKey,
@@ -363,17 +368,17 @@ function SettingsPage() {
 
     const directSecretMode = canUseDirectProviderSecret({
         settings: {
-            reverse_proxy: settingsForm.state.values.providers.reverseProxy,
+            reverse_proxy: settingsFormValues.providers.reverseProxy,
         },
         secretKey: currentSecretKey,
     });
     const vertexAiFullMode = providerSource === 'makersuite'
-        && settingsForm.state.values.providers.useVertexAi
-        && settingsForm.state.values.providers.vertexaiAuthMode === 'full';
+        && settingsFormValues.providers.useVertexAi
+        && settingsFormValues.providers.vertexaiAuthMode === 'full';
     const fallbackProviderReady = hasFallbackProviderSettings({
-        fallback_provider_enabled: settingsForm.state.values.providers.fallbackProviderEnabled,
-        fallback_provider_base_url: settingsForm.state.values.providers.fallbackProviderBaseUrl,
-        fallback_provider_model: settingsForm.state.values.providers.fallbackProviderModel,
+        fallback_provider_enabled: settingsFormValues.providers.fallbackProviderEnabled,
+        fallback_provider_base_url: settingsFormValues.providers.fallbackProviderBaseUrl,
+        fallback_provider_model: settingsFormValues.providers.fallbackProviderModel,
     }, secretsQuery.data, fallbackSecretKey);
 
     const providerSecretMutation = useMutation({
@@ -445,9 +450,21 @@ function SettingsPage() {
         }
 
         const nextDefaults = buildSettingsFormDefaults(parsedPayload.settings);
-        settingsForm.reset(nextDefaults);
+        settingsForm.reset(nextDefaults, { keepDefaultValues: true });
         setPageError('');
     }, [parsedPayload?.rawSettings]);
+
+    useEffect(() => {
+        if (!saveStatus) {
+            return;
+        }
+
+        const timeoutId = window.setTimeout(() => {
+            setSaveStatus(null);
+        }, SAVE_STATUS_TIMEOUT_MS);
+
+        return () => window.clearTimeout(timeoutId);
+    }, [saveStatus]);
 
     const payloadSummary = useMemo(() => {
         if (!settingsQuery.data) {
@@ -465,7 +482,7 @@ function SettingsPage() {
 
     function clearTransientState() {
         saveMutation.reset();
-        setSaveStatus('');
+        setSaveStatus(null);
         setPageError('');
     }
 
@@ -477,7 +494,7 @@ function SettingsPage() {
         clearInput: () => void;
     }) {
         setPageError('');
-        setSaveStatus('');
+        setSaveStatus(null);
 
         try {
             const result = await providerSecretMutation.mutateAsync({
@@ -490,13 +507,13 @@ function SettingsPage() {
             if (result.shouldClearInput) {
                 options.clearInput();
             }
-            setSaveStatus(options.successMessage);
+            setSaveStatus({ kind: 'info', message: options.successMessage });
         } catch (error) {
             setPageError(error instanceof Error ? error.message : String(error));
         }
     }
 
-    const activeFallbackStatus = settingsForm.state.values.providers.fallbackProviderEnabled
+    const activeFallbackStatus = settingsFormValues.providers.fallbackProviderEnabled
         ? (fallbackProviderReady ? 'Ready' : 'Needs setup')
         : 'Disabled';
 
@@ -528,8 +545,12 @@ function SettingsPage() {
                         )}
 
                         {saveStatus && (
-                            <div className="rounded-lg border border-emerald-400/30 bg-emerald-500/10 p-4 text-sm text-emerald-200">
-                                {saveStatus}
+                            <div
+                                className="rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200"
+                                role="status"
+                                aria-live="polite"
+                            >
+                                {saveStatus.message}
                             </div>
                         )}
 
@@ -860,7 +881,7 @@ function SettingsPage() {
                                         label="Fallback Base URL"
                                         description="Fallback provider endpoint。"
                                         placeholder="https://api.openai.com/v1"
-                                        disabled={isBusy || !settingsForm.state.values.providers.fallbackProviderEnabled}
+                                        disabled={isBusy || !settingsFormValues.providers.fallbackProviderEnabled}
                                         onValueChange={clearTransientState}
                                     />
                                     <SettingField
@@ -869,7 +890,7 @@ function SettingsPage() {
                                         label="Fallback Model"
                                         description="Fallback provider 使用的模型。"
                                         placeholder="gpt-4.1-mini"
-                                        disabled={isBusy || !settingsForm.state.values.providers.fallbackProviderEnabled}
+                                        disabled={isBusy || !settingsFormValues.providers.fallbackProviderEnabled}
                                         onValueChange={clearTransientState}
                                     />
                                     <div className="md:col-span-2 rounded-lg border border-zinc-800 bg-zinc-900/70 p-4">
@@ -898,7 +919,7 @@ function SettingsPage() {
                                                     disabled={providerSecretMutation.isPending}
                                                     onChange={event => {
                                                         setProviderSecretInput(event.target.value);
-                                                        setSaveStatus('');
+                                                        setSaveStatus(null);
                                                         setPageError('');
                                                     }}
                                                 />
@@ -973,17 +994,17 @@ function SettingsPage() {
                                                 className="w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-emerald-400"
                                                 placeholder="Fallback API Key"
                                                 value={fallbackSecretInput}
-                                                disabled={providerSecretMutation.isPending || !settingsForm.state.values.providers.fallbackProviderEnabled}
+                                                disabled={providerSecretMutation.isPending || !settingsFormValues.providers.fallbackProviderEnabled}
                                                 onChange={event => {
                                                     setFallbackSecretInput(event.target.value);
-                                                    setSaveStatus('');
+                                                    setSaveStatus(null);
                                                     setPageError('');
                                                 }}
                                             />
                                             <button
                                                 type="button"
                                                 className="inline-flex items-center justify-center rounded-md bg-emerald-400 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
-                                                disabled={providerSecretMutation.isPending || !settingsForm.state.values.providers.fallbackProviderEnabled}
+                                                disabled={providerSecretMutation.isPending || !settingsFormValues.providers.fallbackProviderEnabled}
                                                 onClick={() => {
                                                     void handleProviderSecretAction({
                                                         key: fallbackSecretKey,
@@ -999,7 +1020,7 @@ function SettingsPage() {
                                             <button
                                                 type="button"
                                                 className="inline-flex items-center justify-center rounded-md border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:border-zinc-600 hover:text-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-                                                disabled={providerSecretMutation.isPending || !settingsForm.state.values.providers.fallbackProviderEnabled}
+                                                disabled={providerSecretMutation.isPending || !settingsFormValues.providers.fallbackProviderEnabled}
                                                 onClick={() => {
                                                     void handleProviderSecretAction({
                                                         key: fallbackSecretKey,
@@ -1748,32 +1769,7 @@ function SettingsPage() {
 
                 <aside className="w-full max-w-xl space-y-4 lg:max-w-sm">
                     <section className="rounded-lg border border-zinc-800 bg-zinc-950/80 p-5">
-                        <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-zinc-300">Coverage</h2>
-                        <div className="mt-4 space-y-4 text-sm text-zinc-300">
-                            {Object.entries(settingsCoverage.reactOwned as Record<string, string[]>).map(([tabId, paths]) => (
-                                <div key={tabId} className="space-y-2">
-                                    <h3 className="font-medium text-zinc-100">{settingsTabDefinitions.find(tab => tab.id === tabId)?.label}</h3>
-                                    <ul className="space-y-1 text-zinc-400">
-                                        {paths.map((coveragePath: string) => (
-                                            <li key={coveragePath}>{coveragePath}</li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            ))}
-                        </div>
-                    </section>
-
-                    <section className="rounded-lg border border-zinc-800 bg-zinc-950/80 p-5">
-                        <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-zinc-300">Still Legacy-Owned</h2>
-                        <ul className="mt-4 space-y-2 text-sm text-zinc-400">
-                            {settingsCoverage.legacyOwned.map(path => (
-                                <li key={path}>{path}</li>
-                            ))}
-                        </ul>
-                    </section>
-
-                    <section className="rounded-lg border border-zinc-800 bg-zinc-950/80 p-5">
-                        <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-zinc-300">Payload Snapshot</h2>
+                        <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-zinc-300">Payload Summary</h2>
                         <div className="mt-4 grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
                             {payloadSummary.map(item => (
                                 <div key={item.label} className="rounded-md border border-zinc-800 bg-zinc-900 px-3 py-3">
@@ -1782,6 +1778,51 @@ function SettingsPage() {
                                 </div>
                             ))}
                         </div>
+                    </section>
+
+                    <section className="rounded-lg border border-zinc-800 bg-zinc-950/80 p-5">
+                        <div className="flex items-start justify-between gap-3">
+                            <div className="space-y-1">
+                                <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-zinc-300">Developer diagnostics</h2>
+                                <p className="text-sm text-zinc-400">
+                                    迁移覆盖范围和原始 payload 结构说明，默认折叠，避免干扰正常设置操作。
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                className="inline-flex items-center rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 transition hover:border-zinc-600 hover:text-zinc-50"
+                                onClick={() => setShowDiagnostics(value => !value)}
+                                aria-expanded={showDiagnostics}
+                            >
+                                {showDiagnostics ? '收起' : '展开'}
+                            </button>
+                        </div>
+
+                        {showDiagnostics && (
+                            <div className="mt-4 space-y-4">
+                                <div className="space-y-4 text-sm text-zinc-300">
+                                    {Object.entries(settingsCoverage.reactOwned as Record<string, string[]>).map(([tabId, paths]) => (
+                                        <div key={tabId} className="space-y-2">
+                                            <h3 className="font-medium text-zinc-100">{settingsTabDefinitions.find(tab => tab.id === tabId)?.label}</h3>
+                                            <ul className="space-y-1 text-zinc-400">
+                                                {paths.map((coveragePath: string) => (
+                                                    <li key={coveragePath}>{coveragePath}</li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div>
+                                    <h3 className="text-sm font-medium uppercase tracking-[0.16em] text-zinc-300">Still legacy-owned</h3>
+                                    <ul className="mt-3 space-y-2 text-sm text-zinc-400">
+                                        {settingsCoverage.legacyOwned.map(path => (
+                                            <li key={path}>{path}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            </div>
+                        )}
                     </section>
                 </aside>
             </div>

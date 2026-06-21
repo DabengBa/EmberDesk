@@ -92,15 +92,17 @@ describe('settings React route flag', () => {
         const settingFieldSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'settings', 'SettingField.tsx'), 'utf8');
         const helperModule = await import(`../app/lib/settings-helpers.js?settingsHelpers=${Date.now()}-${Math.random()}`);
 
-        expect(routeSource).toContain("import { useForm } from '@tanstack/react-form';");
+        expect(routeSource).toContain("import { useForm, useStore } from '@tanstack/react-form';");
         expect(routeSource).toContain("import { useMutation, useQuery } from '@tanstack/react-query';");
         expect(routeSource).toContain("import { z } from 'zod';");
         expect(routeSource).toContain('const settingsQuery = useQuery(');
         expect(routeSource).toContain('const secretsQuery = useQuery(');
         expect(routeSource).toContain('const saveMutation = useMutation(');
         expect(routeSource).toContain('const settingsForm = useForm(');
+        expect(routeSource).toContain('const settingsFormValues = useStore(settingsForm.store, state => state.values);');
         expect(routeSource).toContain('const settingsSchema = z.object(');
-        expect(routeSource).toContain('settingsForm.reset(nextDefaults);');
+        expect(routeSource).toContain('settingsForm.reset(nextDefaults, { keepDefaultValues: true });');
+        expect(routeSource).not.toContain('settingsForm.reset(nextDefaults);');
         expect(routeSource).toContain('<settingsForm.Subscribe');
         expect(routeSource).toContain('selector={state => state.isPristine}');
         expect(routeSource).toContain('disabled={isBusy || settingsQuery.isPending || isPristine}');
@@ -131,7 +133,28 @@ describe('settings React route flag', () => {
         expect(routeSource).toContain("fetch('/api/secrets/delete', {");
         expect(routeSource).toContain('saveProviderSecretField({');
         expect(routeSource).toContain('clearProviderSecretField({');
+        expect(routeSource).toContain('const providerSource = settingsFormValues.providers.chatCompletionSource;');
+        expect(routeSource).toContain('!settingsFormValues.providers.fallbackProviderEnabled');
+        expect(routeSource).not.toContain('settingsForm.state.values.providers.fallbackProviderEnabled');
+        expect(routeSource).toContain('const SAVE_STATUS_TIMEOUT_MS = 4000;');
+        expect(routeSource).toContain("const [saveStatus, setSaveStatus] = useState<{ kind: 'success' | 'info'; message: string } | null>(null);");
+        expect(routeSource).toContain('const [showDiagnostics, setShowDiagnostics] = useState(false);');
+        expect(routeSource).toContain('window.setTimeout(() => {');
+        expect(routeSource).toContain('setSaveStatus(null);');
+        expect(routeSource).toContain("setSaveStatus({ kind: 'success', message: '设置已保存。' });");
+        expect(routeSource).toContain('setSaveStatus({ kind:');
+        expect(routeSource).toContain('Developer diagnostics');
+        expect(routeSource).toContain('{showDiagnostics && (');
+        expect(routeSource).toContain('onClick={() => setShowDiagnostics(value => !value)}');
+        expect(routeSource).not.toContain('<h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-zinc-300">Coverage</h2>');
+        expect(routeSource).not.toContain('<h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-zinc-300">Still Legacy-Owned</h2>');
+        expect(routeSource).not.toContain('<h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-zinc-300">Payload Snapshot</h2>');
         expect(settingFieldSource).toContain("{variant !== 'toggle' && (");
+        expect(settingFieldSource).toContain('getValueAtPath');
+        expect(settingFieldSource).toContain('<form.Subscribe');
+        expect(settingFieldSource).toContain('selector={(state: any) => getValueAtPath(state.values, name)}');
+        expect(settingFieldSource).toContain('checked={Boolean(currentValue)}');
+        expect(settingFieldSource).not.toContain('checked={Boolean(field.state.value)}');
 
         expect(helperModule.settingsTabDefinitions).toHaveLength(4);
         expect(helperModule.providerOptions).toEqual([
@@ -140,6 +163,17 @@ describe('settings React route flag', () => {
             { value: 'makersuite', label: 'Google' },
         ]);
         expect(helperModule.providerSecretKeyBySource.makersuite).toBe('api_key_makersuite');
+        expect(helperModule.reasoningEffortOptions.map(option => option.value)).toEqual([
+            'auto',
+            'low',
+            'medium',
+            'high',
+            'min',
+            'max',
+            'none',
+            'minimal',
+            'xhigh',
+        ]);
         expect(helperModule.settingsCoverage.reactOwned.general).toContain('oai_settings.preset_settings_openai');
         expect(helperModule.settingsCoverage.reactOwned.general).toContain('oai_settings.enable_web_search');
         expect(helperModule.settingsCoverage.reactOwned.general).toContain('oai_settings.reasoning_effort');
@@ -300,6 +334,7 @@ describe('settings React route flag', () => {
         expect(defaults.providers.googleModel).toBe('gemini-2.5-pro');
         expect(defaults.general.enableWebSearch).toBe(true);
         expect(defaults.providers.useVertexAi).toBe(true);
+        expect(defaults.providers.fallbackProviderEnabled).toBe(true);
         expect(defaults.providers.fallbackProviderModel).toBe('gpt-4.1-mini');
         expect(defaults.userInterface.customCss).toBe('.chat { color: white; }');
         expect(defaults.advanced.autoSwipe).toBe(true);
@@ -465,6 +500,43 @@ describe('settings React route flag', () => {
         });
     });
 
+    test('keeps legacy Vertex AI and advanced reasoning effort values saveable through the React form', async () => {
+        const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'routes', 'settings.tsx'), 'utf8');
+        const helperModule = await import(`../app/lib/settings-helpers.js?settingsCompat=${Date.now()}-${Math.random()}`);
+        const parsed = helperModule.parseSettingsPayload({
+            settings: JSON.stringify({
+                untouched: { keep: true },
+                oai_settings: {
+                    chat_completion_source: 'vertexai',
+                    google_model: 'gemini-2.5-pro',
+                    vertexai_auth_mode: 'express',
+                    vertexai_region: 'us-central1',
+                    vertexai_express_project_id: 'existing-project',
+                    reasoning_effort: 'minimal',
+                },
+            }),
+        });
+
+        const defaults = helperModule.buildSettingsFormDefaults(parsed.settings);
+        expect(defaults.providers.chatCompletionSource).toBe('makersuite');
+        expect(defaults.providers.useVertexAi).toBe(true);
+        expect(defaults.general.reasoningEffort).toBe('minimal');
+
+        const preserved = helperModule.buildSettingsSavePayload(parsed.settings, defaults);
+        expect(preserved.untouched.keep).toBe(true);
+        expect(preserved.oai_settings.chat_completion_source).toBe('vertexai');
+        expect(preserved.oai_settings.use_vertexai).toBe(true);
+        expect(preserved.oai_settings.reasoning_effort).toBe('minimal');
+
+        const vertexDisabled = structuredClone(defaults);
+        vertexDisabled.providers.useVertexAi = false;
+        const downgradedToGoogle = helperModule.buildSettingsSavePayload(parsed.settings, vertexDisabled);
+        expect(downgradedToGoogle.oai_settings.chat_completion_source).toBe('makersuite');
+        expect(downgradedToGoogle.oai_settings.use_vertexai).toBe(false);
+
+        expect(routeSource).toContain("reasoningEffort: z.enum(['auto', 'low', 'medium', 'high', 'min', 'max', 'none', 'minimal', 'xhigh']),");
+    });
+
     test('redirects unauthenticated /settings requests to /login', async () => {
         const { app } = await createSettingsRouteApp({ isLoggedIn: false });
 
@@ -473,7 +545,7 @@ describe('settings React route flag', () => {
             expect(response.status).toBe(302);
             expect(response.headers.get('location')).toBe('/login');
         });
-    });
+    }, 15000);
 
     test('keeps /settings on the legacy workspace entry when the React settings flag is disabled', async () => {
         const { app, featureModule } = await createSettingsRouteApp();

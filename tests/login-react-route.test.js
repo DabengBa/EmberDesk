@@ -104,6 +104,13 @@ describe('login React route flag', () => {
         expect(loginRouteSource).toContain('const recoveryForm = useForm(');
     });
 
+    test('shows a visible recovery-code hint once the reset flow reaches code entry', () => {
+        const recoveryFormSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'login', 'RecoveryForm.tsx'), 'utf8');
+
+        expect(recoveryFormSource).toContain('{currentStep === 2 && (');
+        expect(recoveryFormSource).toContain('恢复码会输出到服务端控制台，请联系管理员获取。');
+    });
+
     test('keeps /login on the legacy page when the React flag is disabled', async () => {
         const app = await createLoginRouteApp();
 

@@ -64,6 +64,11 @@ export function RecoveryForm({
                 </div>
 
                 <div id="recoveryStep2" style={{ display: currentStep === 2 ? 'block' : 'none' }}>
+                    {currentStep === 2 && (
+                        <p className="mb-4 rounded-md border border-zinc-800 bg-zinc-950/70 px-3 py-2 text-sm text-zinc-400">
+                            恢复码会输出到服务端控制台，请联系管理员获取。
+                        </p>
+                    )}
                     <div className="login-field-stack">
                         <form.Field name="code">
                             {(field: any) => (

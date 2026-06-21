@@ -56,6 +56,11 @@ export const reasoningEffortOptions = [
     { value: 'low', label: 'Low' },
     { value: 'medium', label: 'Medium' },
     { value: 'high', label: 'High' },
+    { value: 'min', label: 'Min' },
+    { value: 'max', label: 'Max' },
+    { value: 'none', label: 'None' },
+    { value: 'minimal', label: 'Minimal' },
+    { value: 'xhigh', label: 'XHigh' },
 ];
 
 export const promptPostProcessingOptions = [
@@ -230,6 +235,29 @@ function parseBlacklistToSettingsValue(value) {
         .filter(Boolean);
 }
 
+function mapChatCompletionSourceToFormValue(value) {
+    return value === 'vertexai' ? 'makersuite' : value;
+}
+
+function mapChatCompletionSourceToSettingsValue(value, formValues, baseSettings) {
+    const baseSource = getValueAtPath(baseSettings, 'oai_settings.chat_completion_source');
+    const usesVertexAi = getValueAtPath(formValues, 'providers.useVertexAi') === true;
+
+    if (baseSource === 'vertexai' && value === 'makersuite' && usesVertexAi) {
+        return 'vertexai';
+    }
+
+    return value;
+}
+
+function mapUseVertexAiToFormValue(value, settings) {
+    if (getValueAtPath(settings, 'oai_settings.chat_completion_source') === 'vertexai') {
+        return true;
+    }
+
+    return value;
+}
+
 const fieldBindings = [
     { tab: 'general', formPath: 'general.presetSettings', settingsPath: 'oai_settings.preset_settings_openai' },
     { tab: 'general', formPath: 'general.openaiMaxContext', settingsPath: 'oai_settings.openai_max_context' },
@@ -249,7 +277,13 @@ const fieldBindings = [
     { tab: 'general', formPath: 'general.squashSystemMessages', settingsPath: 'oai_settings.squash_system_messages' },
     { tab: 'general', formPath: 'general.customPromptPostProcessing', settingsPath: 'oai_settings.custom_prompt_post_processing' },
 
-    { tab: 'providers', formPath: 'providers.chatCompletionSource', settingsPath: 'oai_settings.chat_completion_source' },
+    {
+        tab: 'providers',
+        formPath: 'providers.chatCompletionSource',
+        settingsPath: 'oai_settings.chat_completion_source',
+        toForm: mapChatCompletionSourceToFormValue,
+        toSettings: mapChatCompletionSourceToSettingsValue,
+    },
     { tab: 'providers', formPath: 'providers.openaiModel', settingsPath: 'oai_settings.openai_model' },
     { tab: 'providers', formPath: 'providers.claudeModel', settingsPath: 'oai_settings.claude_model' },
     { tab: 'providers', formPath: 'providers.googleModel', settingsPath: 'oai_settings.google_model' },
@@ -259,7 +293,13 @@ const fieldBindings = [
     { tab: 'providers', formPath: 'providers.customIncludeBody', settingsPath: 'oai_settings.custom_include_body' },
     { tab: 'providers', formPath: 'providers.customExcludeBody', settingsPath: 'oai_settings.custom_exclude_body' },
     { tab: 'providers', formPath: 'providers.customIncludeHeaders', settingsPath: 'oai_settings.custom_include_headers' },
-    { tab: 'providers', formPath: 'providers.useVertexAi', settingsPath: 'oai_settings.use_vertexai' },
+    {
+        tab: 'providers',
+        formPath: 'providers.useVertexAi',
+        settingsPath: 'oai_settings.use_vertexai',
+        toForm: mapUseVertexAiToFormValue,
+        toFormWhenMissing: true,
+    },
     { tab: 'providers', formPath: 'providers.vertexaiAuthMode', settingsPath: 'oai_settings.vertexai_auth_mode' },
     { tab: 'providers', formPath: 'providers.vertexaiRegion', settingsPath: 'oai_settings.vertexai_region' },
     { tab: 'providers', formPath: 'providers.vertexaiExpressProjectId', settingsPath: 'oai_settings.vertexai_express_project_id' },
@@ -459,7 +499,7 @@ export function buildSettingsFormDefaults(settings) {
 
     for (const binding of fieldBindings) {
         const currentValue = getValueAtPath(settings, binding.settingsPath, undefined);
-        if (currentValue === undefined) {
+        if (currentValue === undefined && binding.toFormWhenMissing !== true) {
             continue;
         }
 
