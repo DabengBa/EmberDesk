@@ -39,8 +39,7 @@
 ```powershell
 bun run --cwd tests test:e2e -- chat-message-rendering.e2e.js
 bun run --cwd tests test:e2e -- chat-message-layout.e2e.js
-bun run --cwd tests test:e2e -- chat-streaming.e2e.js
-bun run --cwd tests test:e2e -- chat-generation.e2e.js
+bun run --cwd tests test:e2e -- chat-message-streaming.e2e.js
 ```
 
 ### 兼容性测试
@@ -78,7 +77,7 @@ bun run --cwd tests test:unit -- chat-message-actions-controller.test.js --runIn
 ## Phase 3 总结
 
 ✅ Sprint 1: 消息列表基础渲染  
-✅ Sprint 2: Markdown 和媒体  
+✅ Sprint 2: Rich Message Body
 ✅ Sprint 3: 滚动和定位  
 ✅ Sprint 4: SSE 连接  
 ✅ Sprint 5: 控制状态  

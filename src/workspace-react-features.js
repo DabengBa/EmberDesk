@@ -11,6 +11,10 @@ export function isReactWorldInfoPanelEnabled() {
     return isReactWorkspacePanelEnabled('worldInfo');
 }
 
+export function isReactMainChatMessageListPanelEnabled() {
+    return isReactWorkspacePanelEnabled('mainChatMessageList');
+}
+
 export function isReactBackgroundLibraryPanelEnabled() {
     return isReactWorkspacePanelEnabled('backgroundLibrary');
 }
@@ -21,12 +25,13 @@ export function isReactExtensionsHostPanelEnabled() {
 
 /**
  * Resolve the feature payload that the legacy workspace shell can read at startup.
- * @returns {{reactPanels: {characterLibrary: boolean, worldInfo: boolean, backgroundLibrary: boolean, extensionsHost: boolean}}}
+ * @returns {{reactPanels: {characterLibrary: boolean, mainChatMessageList: boolean, worldInfo: boolean, backgroundLibrary: boolean, extensionsHost: boolean}}}
  */
 export function getWorkspaceReactFeatures() {
     return {
         reactPanels: {
             characterLibrary: isReactCharacterLibraryEnabled(),
+            mainChatMessageList: isReactMainChatMessageListPanelEnabled(),
             worldInfo: isReactWorldInfoPanelEnabled(),
             backgroundLibrary: isReactBackgroundLibraryPanelEnabled(),
             extensionsHost: isReactExtensionsHostPanelEnabled(),
@@ -36,7 +41,7 @@ export function getWorkspaceReactFeatures() {
 
 /**
  * Serialize the workspace feature payload for inline HTML bootstrapping.
- * @param {{reactPanels: {characterLibrary: boolean, worldInfo?: boolean, backgroundLibrary?: boolean, extensionsHost?: boolean}}} workspaceReactFeatures
+ * @param {{reactPanels: {characterLibrary: boolean, mainChatMessageList?: boolean, worldInfo?: boolean, backgroundLibrary?: boolean, extensionsHost?: boolean}}} workspaceReactFeatures
  * @returns {string}
  */
 export function serializeWorkspaceReactFeatures(workspaceReactFeatures) {
@@ -48,7 +53,7 @@ export function serializeWorkspaceReactFeatures(workspaceReactFeatures) {
 
 /**
  * Build an inline script that exposes workspace React features to the legacy shell.
- * @param {{reactPanels: {characterLibrary: boolean, worldInfo?: boolean, backgroundLibrary?: boolean, extensionsHost?: boolean}}} workspaceReactFeatures
+ * @param {{reactPanels: {characterLibrary: boolean, mainChatMessageList?: boolean, worldInfo?: boolean, backgroundLibrary?: boolean, extensionsHost?: boolean}}} workspaceReactFeatures
  * @returns {string}
  */
 export function buildWorkspaceReactFeaturesScript(workspaceReactFeatures) {
@@ -59,7 +64,7 @@ export function buildWorkspaceReactFeaturesScript(workspaceReactFeatures) {
 /**
  * Inject the workspace React feature payload into the workspace HTML shell.
  * @param {string} html
- * @param {{reactPanels: {characterLibrary: boolean, worldInfo?: boolean, backgroundLibrary?: boolean, extensionsHost?: boolean}}} workspaceReactFeatures
+ * @param {{reactPanels: {characterLibrary: boolean, mainChatMessageList?: boolean, worldInfo?: boolean, backgroundLibrary?: boolean, extensionsHost?: boolean}}} workspaceReactFeatures
  * @returns {string}
  */
 export function injectWorkspaceReactFeatures(html, workspaceReactFeatures = getWorkspaceReactFeatures()) {

@@ -111,6 +111,7 @@ features:
       settings: false
     panels:
       characterLibrary: false
+      mainChatMessageList: false
       worldInfo: false
       backgroundLibrary: false
       extensionsHost: false

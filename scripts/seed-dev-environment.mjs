@@ -394,6 +394,14 @@ async function seedGroups(characterRecords) {
 }
 
 async function writeDevConfig() {
+    const reactPanelFlags = [
+        ['characterLibrary', process.env.EMBERDESK_FEATURES_REACT_PANELS_CHARACTERLIBRARY],
+        ['mainChatMessageList', process.env.EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST],
+        ['worldInfo', process.env.EMBERDESK_FEATURES_REACT_PANELS_WORLDINFO],
+        ['backgroundLibrary', process.env.EMBERDESK_FEATURES_REACT_PANELS_BACKGROUNDLIBRARY],
+        ['extensionsHost', process.env.EMBERDESK_FEATURES_REACT_PANELS_EXTENSIONSHOST],
+    ].filter(([, value]) => value === 'true' || value === 'false');
+
     const config = [
         `dataRoot: ${normalizePathForYaml(dataRoot)}`,
         'listen: false',
@@ -407,6 +415,14 @@ async function writeDevConfig() {
         'skipContentCheck: true',
         'logging:',
         '  minLogLevel: 1',
+        ...(reactPanelFlags.length > 0
+            ? [
+                'features:',
+                '  react:',
+                '    panels:',
+                ...reactPanelFlags.map(([key, value]) => `      ${key}: ${value}`),
+            ]
+            : []),
     ].join('\n');
 
     await fs.promises.writeFile(configPath, `${config}\n`, 'utf8');

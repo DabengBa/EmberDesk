@@ -3,26 +3,55 @@ const FALLBACK_USER = process.env.PLAYWRIGHT_USER ?? 'playwright-e2e';
 const FALLBACK_PASSWORD = process.env.PLAYWRIGHT_PASSWORD ?? 'playwright';
 const LEGACY_TEST_PASSWORD = 'test123';
 
+async function pageFetchJson(page, url, init = {}) {
+    return page.evaluate(async ({ targetUrl, requestInit }) => {
+        const response = await fetch(targetUrl, requestInit);
+        const text = await response.text();
+        let json = null;
+
+        if (text) {
+            try {
+                json = JSON.parse(text);
+            } catch {
+                json = null;
+            }
+        }
+
+        return {
+            ok: response.ok,
+            status: response.status,
+            json,
+        };
+    }, { targetUrl: url, requestInit: init });
+}
+
 async function ensureSession(page) {
     await page.goto(BASE_URL);
 
-    const setupModeResponse = await page.request.get(`${BASE_URL}/api/users/setup-mode`);
-    const { mode } = await setupModeResponse.json();
+    const setupModeResponse = await pageFetchJson(page, '/api/users/setup-mode');
+    const mode = setupModeResponse.json?.mode;
 
-    const csrfTokenResponse = await page.request.get(`${BASE_URL}/csrf-token`);
-    const csrfPayload = await csrfTokenResponse.json();
-    const csrfToken = csrfPayload.token ?? csrfPayload?.data?.token ?? null;
-    const headers = {
-        'Content-Type': 'application/json',
-        ...(csrfToken ? { 'x-csrf-token': csrfToken } : {}),
+    const getJsonHeaders = async () => {
+        const csrfTokenResponse = await pageFetchJson(page, '/csrf-token');
+        const csrfPayload = csrfTokenResponse.json;
+        const csrfToken = csrfPayload?.token ?? csrfPayload?.data?.token ?? null;
+
+        return {
+            'Content-Type': 'application/json',
+            ...(csrfToken ? { 'x-csrf-token': csrfToken } : {}),
+        };
     };
 
     const listUsers = async () => {
-        const usersResponse = await page.request.post(`${BASE_URL}/api/users/list`, { headers });
-        if (!usersResponse.ok() || usersResponse.status() === 204) {
+        const usersResponse = await pageFetchJson(page, '/api/users/list', {
+            method: 'POST',
+            headers: await getJsonHeaders(),
+        });
+
+        if (!usersResponse.ok || usersResponse.status === 204) {
             return [];
         }
-        return usersResponse.json();
+        return usersResponse.json ?? [];
     };
 
     const loginKnownUser = async (existingUsers) => {
@@ -43,11 +72,12 @@ async function ensureSession(page) {
             }
             attempted.add(attemptKey);
 
-            const loginResponse = await page.request.post(`${BASE_URL}/api/users/login`, {
-                headers,
-                data: { handle, password },
+            const loginResponse = await pageFetchJson(page, '/api/users/login', {
+                method: 'POST',
+                headers: await getJsonHeaders(),
+                body: JSON.stringify({ handle, password }),
             });
-            if (loginResponse.ok()) {
+            if (loginResponse.ok) {
                 return true;
             }
         }
@@ -56,9 +86,10 @@ async function ensureSession(page) {
     };
 
     const setupFallbackUser = async (data = { handle: FALLBACK_USER, password: FALLBACK_PASSWORD }) => {
-        const setupResponse = await page.request.post(`${BASE_URL}/api/users/setup`, {
-            headers,
-            data,
+        const setupResponse = await pageFetchJson(page, '/api/users/setup', {
+            method: 'POST',
+            headers: await getJsonHeaders(),
+            body: JSON.stringify(data),
         });
         return setupResponse;
     };
@@ -67,36 +98,36 @@ async function ensureSession(page) {
 
     if (mode === 'set-password') {
         const setupResponse = await setupFallbackUser({ password: FALLBACK_PASSWORD });
-        if (setupResponse.ok()) {
+        if (setupResponse.ok) {
             authenticated = true;
         } else {
             authenticated = await loginKnownUser(await listUsers());
         }
 
         if (!authenticated) {
-            throw new Error(`Failed to set password for existing user: HTTP ${setupResponse.status()}`);
+            throw new Error(`Failed to set password for existing user: HTTP ${setupResponse.status}`);
         }
     } else {
         const existingUsers = await listUsers();
 
         if (existingUsers.length === 0) {
             const setupResponse = await setupFallbackUser();
-            if (setupResponse.ok()) {
+            if (setupResponse.ok) {
                 authenticated = true;
-            } else if ([403, 409].includes(setupResponse.status())) {
+            } else if ([403, 409].includes(setupResponse.status)) {
                 authenticated = await loginKnownUser(await listUsers());
             }
 
             if (!authenticated) {
-                throw new Error(`Unable to create or authenticate ${FALLBACK_USER}: HTTP ${setupResponse.status()}`);
+                throw new Error(`Unable to create or authenticate ${FALLBACK_USER}: HTTP ${setupResponse.status}`);
             }
         } else {
             authenticated = await loginKnownUser(existingUsers);
 
             if (!authenticated) {
                 const setupResponse = await setupFallbackUser();
-                if (!setupResponse.ok()) {
-                    throw new Error(`Unable to authenticate an E2E user or create ${FALLBACK_USER}: HTTP ${setupResponse.status()}`);
+                if (!setupResponse.ok) {
+                    throw new Error(`Unable to authenticate an E2E user or create ${FALLBACK_USER}: HTTP ${setupResponse.status}`);
                 }
                 authenticated = true;
             }

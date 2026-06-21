@@ -4,6 +4,7 @@ export function getDefaultWorkspaceReactFeatures() {
     return {
         reactPanels: {
             characterLibrary: false,
+            mainChatMessageList: false,
             worldInfo: false,
             backgroundLibrary: false,
             extensionsHost: false,

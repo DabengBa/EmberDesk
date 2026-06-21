@@ -12,22 +12,22 @@
 
 ## 目标
 
-用 React + 虚拟滚动实现聊天消息列表的基础渲染。
+交付一个受 feature flag 控制的 React 主聊天消息列表承载层，在不破坏现有 `.mes` DOM、事件和扩展兼容面的前提下，为后续主聊天 React 化建立 guarded island 边界。
 
 ### 主要交付物
 
-1. 创建 `app/components/chat/MessageList.tsx`
-2. 创建 `app/components/chat/MessageRow.tsx`
-3. 用 `@tanstack/react-virtual` 实现虚拟滚动
-4. 保持 `.mes` class 和 `mesid` 属性
-5. 复用 `/api/chats/get` API
+1. 新增 `features.react.panels.mainChatMessageList` flag，并接入 workspace React feature payload
+2. 复用共享 `app/workspace-panels.tsx` bundle，为 main-chat 提供 guarded React controller
+3. 在 `#chat` 内挂载隐藏 React host，并在 flag 开启时保持 `#show_more_messages` 与可见 `.mes[mesid]` 直接子节点顺序稳定
+4. 保持 `.mes` class、`mesid` 属性、`.mes_text`、reasoning/media/file wrappers 和 swipe affordance
+5. 保留 legacy `printMessages()` / `redisplayChat()` / `showMoreMessages()` / formatter / streaming / actions owner
 
 ### 成功标准
 
-- ✅ 消息列表正确渲染
-- ✅ 虚拟滚动正常工作
-- ✅ 1000 条消息首次渲染 < 300ms
-- ✅ `.mes[mesid]` DOM 结构保持（扩展兼容性）
+- ✅ flag 关闭时完全回退 legacy，flag 开启时只出现单一隐藏 React host
+- ✅ seeded stored chat / long chat 在 React flag 开启时继续正确渲染
+- ✅ `#chat > .mes[mesid]`、`.mes_text`、reasoning/media/file wrappers、`.last_mes` 和 swipe affordance 保持
+- ✅ `#show_more_messages` 和 long-chat load-more 语义保持（扩展兼容性）
 
 ---
 
@@ -38,38 +38,34 @@
 必须保持以下选择器（扩展依赖）：
 
 ```tsx
-<div className="mes" data-mesid={message.mesid}>
-  <div className="mes_text">{content}</div>
-  <div className="mes_reasoning_details">{reasoning}</div>
-</div>
+#chat > .mes[mesid]
+.mes_text
+.mes_reasoning_details
+.mes_reasoning
+.mes_media_wrapper
+.mes_file_wrapper
+.swipe_left
+.swipe_right
 ```
 
-### 虚拟滚动
+### 当前实现边界
 
-```tsx
-const virtualizer = useVirtualizer({
-  count: messages.length,
-  getScrollElement: () => parentRef.current,
-  estimateSize: (index) => {
-    // 动态估算消息高度
-    return estimateMessageHeight(messages[index]);
-  },
-  overscan: 5,
-});
-```
+- 本 Sprint 不交付新的 `MessageRow.tsx` DOM owner，也不在 React 中重写 formatter、媒体拼装或消息按钮绑定。
+- React 通过共享 workspace panel bundle 挂入一个隐藏 controller host，消费 legacy bridge state，并把真实 `.mes` 节点与 `#show_more_messages` 保持在 `#chat` 的直接子节点顺序中。
+- 长聊天窗口边界仍由 legacy `power_user.chat_truncation` 和 `showMoreMessages()` 拥有；TanStack Virtual 留给后续 Sprint，在当前 direct-child DOM 契约下另行落地。
 
 ---
 
 ## 验证清单
 
-- [ ] 消息列表渲染正确
-- [ ] 1000 条消息渲染 < 300ms
-- [ ] 滚动帧率 ≥ 55fps
-- [ ] `.mes` DOM 结构保持
-- [ ] `bun run test:compat` 通过
+- [x] 消息列表渲染正确
+- [x] flag 开启时 `#chat > .mes[mesid]` 与 `#show_more_messages` 语义保持
+- [x] `.mes` DOM 结构保持
+- [x] `bun run test:compat` 通过
+- [x] React host 失败时 fail-closed 到 legacy
 
 ---
 
 ## 下一步
 
-👉 [Phase 3 Sprint 2: 消息列表 - Markdown 和媒体](phase3-sprint2-message-list-rich.md)
+👉 [Phase 3 Sprint 2: 消息列表 - Rich Message Body](phase3-sprint2-message-list-rich.md)
