@@ -147,6 +147,7 @@ interface MainChatMessageListWorkspacePanelState {
     host?: HTMLElement | null;
     messageNodes?: HTMLElement[];
     richBodySnapshots?: MainChatRichBodySnapshot[];
+    messageActionSnapshots?: MainChatMessageActionSnapshot[];
     showMoreNode?: HTMLElement | null;
 }
 
@@ -176,6 +177,17 @@ interface MainChatRichBodySnapshot {
     mediaHtml: string;
     fileHtml: string;
     biasHtml: string;
+}
+
+interface MainChatMessageActionSnapshot {
+    schema: 'mainChatMessageActionSnapshotSchema';
+    messageId: string;
+    eligible: true;
+    expanded: boolean;
+    availableActions: string[];
+    highFrequencyActions: string[];
+    secondaryActions: string[];
+    dangerActions: string[];
 }
 
 interface MainChatMessageListScrollSnapshot {
@@ -236,6 +248,17 @@ const mainChatRichBodySnapshotSchema = z.object({
     mediaHtml: z.string(),
     fileHtml: z.string(),
     biasHtml: z.string(),
+});
+
+const mainChatMessageActionSnapshotSchema = z.object({
+    schema: z.literal('mainChatMessageActionSnapshotSchema'),
+    messageId: z.string().min(1),
+    eligible: z.literal(true),
+    expanded: z.boolean(),
+    availableActions: z.array(z.string()),
+    highFrequencyActions: z.array(z.string()),
+    secondaryActions: z.array(z.string()),
+    dangerActions: z.array(z.string()),
 });
 
 const mainChatGenerationControlSchema = z.object({
@@ -422,12 +445,14 @@ function asMainChatMessageListState(state: unknown): MainChatMessageListWorkspac
     const bridgeState = state as MainChatMessageListWorkspacePanelState;
     const parsedBridgeState = mainChatMessageListStateSchema.safeParse(bridgeState);
     const richBodySnapshots = z.array(mainChatRichBodySnapshotSchema).safeParse(bridgeState.richBodySnapshots ?? []);
+    const messageActionSnapshots = z.array(mainChatMessageActionSnapshotSchema).safeParse(bridgeState.messageActionSnapshots ?? []);
     const generationControl = mainChatGenerationControlSchema.safeParse(bridgeState.generationControl);
 
     return {
         ...bridgeState,
         ...(parsedBridgeState.success ? parsedBridgeState.data : {}),
         richBodySnapshots: richBodySnapshots.success ? richBodySnapshots.data : [],
+        messageActionSnapshots: messageActionSnapshots.success ? messageActionSnapshots.data : [],
         generationControl: generationControl.success ? generationControl.data : mainChatGenerationControlFallback,
     };
 }
@@ -475,6 +500,39 @@ function canReactOwnMainChatRichBody(messageRow: HTMLElement | undefined, snapsh
     }
 
     return Boolean(getMainChatRichBodyRowTargets(messageRow));
+}
+
+function getMainChatMessageActionsRowTargets(messageRow: HTMLElement) {
+    const messageButtons = messageRow.querySelector('.mes_buttons');
+    const extraActionsHint = messageButtons?.querySelector('.extraMesButtonsHint');
+    const extraActions = messageButtons?.querySelector('.extraMesButtons');
+
+    if (
+        !(messageButtons instanceof HTMLElement)
+        || !(extraActionsHint instanceof HTMLElement)
+        || !(extraActions instanceof HTMLElement)
+    ) {
+        return null;
+    }
+
+    return {
+        messageButtons,
+        extraActionsHint,
+        extraActions,
+    };
+}
+
+function canReactOwnMainChatMessageActions(messageRow: HTMLElement | undefined, snapshot: MainChatMessageActionSnapshot) {
+    if (
+        !(messageRow instanceof HTMLElement)
+        || !messageRow.isConnected
+        || messageRow.parentElement?.id !== 'chat'
+        || messageRow.getAttribute('mesid') !== snapshot.messageId
+    ) {
+        return false;
+    }
+
+    return Boolean(getMainChatMessageActionsRowTargets(messageRow));
 }
 
 function workspacePanelStateQueryKey(kind: WorkspacePanelKind) {
@@ -1454,6 +1512,12 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
             snapshot,
         ));
     }, [bridgeState.richBodySnapshots, messageRowMap]);
+    const ownedActionSnapshots = useMemo(() => {
+        return (bridgeState.messageActionSnapshots ?? []).filter(snapshot => canReactOwnMainChatMessageActions(
+            messageRowMap.get(snapshot.messageId),
+            snapshot,
+        ));
+    }, [bridgeState.messageActionSnapshots, messageRowMap]);
 
     useEffect(() => {
         syncMainChatMessageListDom(
@@ -1490,6 +1554,29 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
                     />,
                     targets.messageBlock,
                     `main-chat-rich-body-owner-${snapshot.messageId}`,
+                );
+            })}
+            {ownedActionSnapshots.map(snapshot => {
+                const messageRow = messageRowMap.get(snapshot.messageId);
+                const targets = messageRow ? getMainChatMessageActionsRowTargets(messageRow) : null;
+                if (!targets) {
+                    return null;
+                }
+
+                return createPortal(
+                    <div
+                        hidden
+                        aria-hidden="true"
+                        data-main-chat-message-actions-owner="react"
+                        data-main-chat-message-actions-row={snapshot.messageId}
+                        data-main-chat-message-actions-expanded={snapshot.expanded ? 'true' : 'false'}
+                        data-main-chat-message-actions-available={snapshot.availableActions.join('|')}
+                        data-main-chat-message-actions-high-frequency={snapshot.highFrequencyActions.join('|')}
+                        data-main-chat-message-actions-secondary={snapshot.secondaryActions.join('|')}
+                        data-main-chat-message-actions-danger={snapshot.dangerActions.join('|')}
+                    />,
+                    targets.messageButtons,
+                    `main-chat-message-actions-owner-${snapshot.messageId}`,
                 );
             })}
         </>

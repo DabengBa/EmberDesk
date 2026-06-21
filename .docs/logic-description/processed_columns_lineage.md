@@ -12,6 +12,7 @@ Current owning flow:
 - [React Settings Payload Processing Flow](react_settings_payload_processing_flow.md)
 - [React Workspace Panel Flags Processing Flow](react_workspace_panel_flags_processing_flow.md)
 - [Main Chat Generation Control Bridge Processing Flow](main_chat_generation_control_bridge_processing_flow.md)
+- [Main Chat Message Actions Bridge Processing Flow](main_chat_message_actions_bridge_processing_flow.md)
 
 ## Per-Output Field Lineage
 
@@ -61,6 +62,9 @@ Current owning flow:
 | `mainChatGenerationControlActiveMessageId` | nearest `#chat > .mes[mesid]` for recovery/retry elements, then `streamingProcessor.messageId` | Keep only non-negative integer message ids | Invalid or unresolved ids become `null` so row identity is not invented |
 | `mainChatGenerationControlFailureUi` | failure notice and retry DOM visibility plus active recovery status | Expose final failure notice/retry only outside active recovery; force both false while recovery is active | Stale retry or notice elements cannot leak into the recovery phase marker |
 | `mainChatGenerationControlHiddenMarker` | Zod-validated `generationControl` payload in `app/workspace-panels.tsx` | Write hidden phase and retry marker attributes for the guarded React controller | Missing, malformed, or unsupported payloads use idle/hidden fallback and leave legacy visible controls as owner |
+| `mainChatMessageActionSnapshots` | direct-child `#chat > .mes[mesid]` rows, their `[role="button"]` descendants, `.mes_buttons`, and `expand_message_actions` state | Build DOM-derived per-row action snapshots, keep only currently visible action names, and tier them through the shared `MESSAGE_ACTION_TIERS` source | Rows without `mesid` or `.mes_buttons` emit no snapshot; unknown/generic classes and duplicate buttons are ignored |
+| `mainChatMessageActionSnapshot.expanded` | `expand_message_actions`, `.extraMesButtons.visible`, and `.extraMesButtonsHint` display state | Report `true` when the legacy row is already in an expanded-actions state | Missing protected controls leave the snapshot at the safe observed value or suppress the snapshot entirely |
+| `mainChatMessageActionsHiddenMarker` | Zod-validated action snapshot plus a connected `#chat > .mes[mesid]` row that still contains `.mes_buttons`, `.extraMesButtonsHint`, and `.extraMesButtons` | Append one hidden owner marker with row, expanded, and tier metadata under `.mes_buttons` without changing visible action ownership | Validation failure, row identity mismatch, detached rows, or missing protected targets emit no marker and leave the legacy row untouched |
 
 ## Maintenance Constraints
 
@@ -70,5 +74,6 @@ Current owning flow:
 - Keep React settings payload rows aligned with `react_settings_payload_processing_flow.md` and `react_settings_payload_sandbox_proof.py`.
 - Keep React workspace panel flag rows aligned with `react_workspace_panel_flags_processing_flow.md` and `react_workspace_panel_flags_sandbox_proof.py`.
 - Keep main-chat generation-control rows aligned with `main_chat_generation_control_bridge_processing_flow.md` and `main_chat_generation_control_bridge_sandbox_proof.py`.
+- Keep main-chat message-action rows aligned with `main_chat_message_actions_bridge_processing_flow.md` and `main_chat_message_actions_bridge_sandbox_proof.py`.
 - Add a new row when a documentation proof script starts producing a new named output.
 - Do not use this file as a second implementation guide; detailed processing rules belong in the owning flow doc.

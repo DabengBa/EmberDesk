@@ -171,10 +171,11 @@ describe('chat workspace structure', () => {
         const scriptSource = readRepoFile('public/script.js');
         const styleSource = readRepoFile('public/style.css');
 
-        expect(scriptSource).toContain('function showGenerationAutoRecoveryStatus(messageId, status)');
+        expect(scriptSource).toContain("function showGenerationAutoRecoveryStatus(messageId, status, recoveryStage = 'primary')");
         expect(scriptSource).toContain('function clearGenerationAutoRecoveryStatus(messageId)');
         expect(scriptSource).toContain("const statusRow = $('<div class=\"generation_auto_recovery_status\"");
         expect(scriptSource).toContain('statusRow.attr(\'role\', \'status\');');
+        expect(scriptSource).toContain("statusRow.attr('data-recovery-stage', recoveryStage === 'fallback' ? 'fallback' : 'primary');");
         expect(scriptSource).toContain("messageElement.find('.mes_text').after(statusRow);");
         expect(scriptSource).not.toContain("messageElement.find('.mes_text').text(status");
         expect(scriptSource).toContain("messageElement.find('.generation_auto_recovery_status').remove();");

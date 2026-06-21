@@ -46,7 +46,7 @@ Phase 3 是整个现代化路线图的**核心和最高风险阶段**。主聊�
 | [Phase 3 Sprint 5: 流式生成 - 控制状态](phase3-sprint5-streaming-control.md) | 2 周 | generation-control bridge、stop / recovery / retry state snapshot、legacy visible controls 保持 | 高 |
 | [Phase 3 Sprint 6: 输入框 - 基础功能](phase3-sprint6-input-basic.md) | 2 周 | 文本输入、发送、快捷键 | 低 |
 | [Phase 3 Sprint 7: 输入框 - 斜杠命令](phase3-sprint7-input-slash.md) | 3 周 | 斜杠命令解析、自动补全 | 高 |
-| [Phase 3 Sprint 8: 消息操作 - 菜单](phase3-sprint8-message-actions.md) | 2 周 | 操作菜单、编辑、删除 | 中 |
+| [Phase 3 Sprint 8: 消息操作 - 菜单](phase3-sprint8-message-actions.md) | 2 周 | hidden message-action snapshot / owner-marker boundary、legacy visible actions 保持 | 中 |
 | [Phase 3 Sprint 9: 整合测试](phase3-sprint9-integration.md) | 2 周 | 完整流程测试、性能优化 | 高 |
 
 ---
@@ -77,11 +77,13 @@ Sprint 3 已继续扩展同一 island：在不改写可见 `.mes` row owner、st
 
 Sprint 5 已在同一 `mainChatMessageList` island 上交付 visible generation control-state bridge：`public/script.js` 继续拥有 `Generate()`、`StreamingProcessor`、token append、stop、auto-recovery status、final retry 和 `#mes_continue` / `.generation_failure_retry` handlers；React hidden controller 只消费 Zod 校验后的 `generationControl` payload，并用 hidden marker 暴露当前 `idle` / `streaming` / `recoveringPrimary` / `recoveringFallback` / `stopped` / `completed` / `error` phase。provider transport、token append、composer、slash-command pause/resume 和 message actions 仍不迁移。
 
+Sprint 8 已继续扩展同一 island 上的 message actions bridge boundary：`public/script.js` 为安全的 visible rows 输出 `messageActionSnapshots`，`app/workspace-panels.tsx` 用 Zod 校验后只在既有 `.mes_buttons` 里附加 hidden per-row action owner marker；`public/scripts/chat-message-actions-controller.js`、`.extraMesButtonsHint` / `.extraMesButtons` 以及 copy/edit/delete/retry/swipe/reasoning handlers 继续是 visible owner。final review 还补上了 legacy menu open/close 后 `expanded` snapshot 的同步触发点，避免 hidden marker 状态滞后。
+
 ### 后续阶段重点
 
 - Sprint 2：已交付 finalized rich-body snapshot / hidden owner-marker boundary，不破坏 outer `.mes` / load-more / streaming / actions 契约
 - Sprint 3：已交付 per-chat 阅读位置恢复、expanded-history window restore 和 headless TanStack Virtual measurement / snapshot / restore controller
-- Sprint 4 / 6+：后续再分别重新收敛 provider transport / token append、input、slash commands 和 message actions owner 迁移；Sprint 5 不把 provider streaming 写成 pause/resume
+- Sprint 4 / 6+：后续再分别重新收敛 provider transport / token append、input、slash commands 和更深的 visible message-actions owner 迁移；Sprint 5 不把 provider streaming 写成 pause/resume，Sprint 8 也不把 visible action buttons 改成 React owner
 
 ---
 
@@ -96,7 +98,8 @@ Sprint 5 已在同一 `mainChatMessageList` island 上交付 visible generation 
 - [x] ✅ Sprint 2: stored chat / long chat / finalized streaming proof 继续通过，legacy rich-body rendering chain 保持可见输出 owner
 - [x] ✅ Sprint 3: current-session per-chat reading-position restore、expanded-history window restore、load-more anchor stability 和 `#jump_to_latest_message` absence proof 已落地
 - [x] ✅ Sprint 5: generation-control bridge/state snapshot、Zod fail-closed schema、stop / auto-recovery / final retry / continue forward path proof 已落地；不迁移 provider pause/resume
-- [ ] Phase 3 全量完成：provider transport / token append、输入框、斜杠命令、消息操作、整合测试 仍待后续 Sprint
+- [x] ✅ Sprint 8: hidden message-action snapshot / owner-marker boundary、expanded-state sync proof、copy/edit/delete/mobile reachability proof 已落地；visible actions 继续由 legacy owner 驱动
+- [ ] Phase 3 全量完成：provider transport / token append、输入框、斜杠命令、整合测试仍待后续 Sprint
 
 ---
 

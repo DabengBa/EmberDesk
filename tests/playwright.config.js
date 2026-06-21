@@ -9,13 +9,27 @@ const dataRoot = process.env.PLAYWRIGHT_DATA_ROOT ?? '.tmp/playwright-e2e-data';
 const configPath = process.env.PLAYWRIGHT_CONFIG_PATH ?? '.tmp/playwright-e2e-config.yaml';
 const testUser = process.env.PLAYWRIGHT_USER ?? 'playwright-e2e';
 const testPassword = process.env.PLAYWRIGHT_PASSWORD ?? 'playwright';
+const workspacePanelFlagEnvKeys = [
+    'EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST',
+    'EMBERDESK_FEATURES_REACT_PANELS_WORLDINFO',
+    'EMBERDESK_FEATURES_REACT_PANELS_BACKGROUNDLIBRARY',
+    'EMBERDESK_FEATURES_REACT_PANELS_EXTENSIONSHOST',
+];
+const shouldBuildCharacterLibraryPanel = process.env.EMBERDESK_FEATURES_REACT_PANELS_CHARACTERLIBRARY === 'true';
+const shouldBuildWorkspacePanels = workspacePanelFlagEnvKeys.some((envKey) => process.env[envKey] === 'true');
+const webServerCommand = [
+    shouldBuildCharacterLibraryPanel ? 'bun run build:react:character-library' : null,
+    shouldBuildWorkspacePanels ? 'bun run build:react:workspace-panels' : null,
+    `node scripts/seed-dev-environment.mjs --data-root "${dataRoot}" --config "${configPath}" --user-handle "${testUser}" --user-password "${testPassword}"`,
+    `node server.js --configPath "${configPath}" --port ${port}`,
+].filter(Boolean).join(' && ');
 
 process.env.PLAYWRIGHT_BASE_URL = baseURL;
 
 export default defineConfig({
     testMatch: '*.e2e.js',
     webServer: {
-        command: `node scripts/seed-dev-environment.mjs --data-root "${dataRoot}" --config "${configPath}" --user-handle "${testUser}" --user-password "${testPassword}" && node server.js --configPath "${configPath}" --port ${port}`,
+        command: webServerCommand,
         cwd: repoRoot,
         url: baseURL,
         reuseExistingServer: !process.env.CI && process.env.PLAYWRIGHT_REUSE_SERVER !== '0',

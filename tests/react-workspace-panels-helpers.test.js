@@ -451,4 +451,22 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('data-main-chat-rich-body-owner="react"');
         expect(workspacePanelSource).toContain('data-main-chat-rich-body-row={snapshot.messageId}');
     });
+
+    test('defines a hidden message-action snapshot contract for safe main-chat rows', () => {
+        const scriptSource = read('public/script.js');
+        const workspacePanelSource = read('app/workspace-panels.tsx');
+
+        expect(scriptSource).toContain('buildMessageActionSnapshot');
+        expect(scriptSource).toContain('const mainChatMessageActionSnapshotSchema = \'mainChatMessageActionSnapshotSchema\';');
+        expect(scriptSource).toContain('messageActionSnapshots = messageRows');
+        expect(scriptSource).toContain('schema: mainChatMessageActionSnapshotSchema');
+        expect(scriptSource).toContain('messageActionSnapshots: messageActionSnapshots');
+
+        expect(workspacePanelSource).toContain('interface MainChatMessageActionSnapshot');
+        expect(workspacePanelSource).toContain('messageActionSnapshots?: MainChatMessageActionSnapshot[];');
+        expect(workspacePanelSource).toContain('const mainChatMessageActionSnapshotSchema = z.object(');
+        expect(workspacePanelSource).toContain('data-main-chat-message-actions-owner="react"');
+        expect(workspacePanelSource).toContain('data-main-chat-message-actions-row={snapshot.messageId}');
+        expect(workspacePanelSource).toContain('data-main-chat-message-actions-expanded={snapshot.expanded ? \'true\' : \'false\'}');
+    });
 });

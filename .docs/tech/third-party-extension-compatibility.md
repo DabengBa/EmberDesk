@@ -59,6 +59,8 @@ Message-row actions should remain discoverable by role/name when visible, while 
 
 Automatic generation recovery may add `.generation_auto_recovery_status` beside a message row, but that status must stay outside `.mes_text`. Recovery status text is a control/status surface, not part of the rendered message body that extensions and first-party actions read.
 
+When `features.react.panels.mainChatMessageList` is enabled, the guarded React bridge may append a hidden `data-main-chat-message-actions-owner="react"` marker inside `.mes_buttons` for rows that already expose the protected action shell. That marker is additive only: it must not wrap, replace, or reorder `.extraMesButtonsHint`, `.extraMesButtons`, copy/edit/delete buttons, swipe controls, reasoning controls, or retry affordances. In particular, `.extraMesButtonsHint` must remain before `.extraMesButtons`, and any hidden action-owner marker must be appended after those protected controls rather than inserted between them.
+
 ## Character List DOM Contract
 
 The character library panel is a shared DOM surface for selection, tags, keyboard navigation, bulk edit, and extension-adjacent scripts.

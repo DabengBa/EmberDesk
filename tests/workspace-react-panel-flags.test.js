@@ -111,4 +111,17 @@ describe('workspace React panel flags', () => {
         expect(viteSource).toContain('entry: path.resolve(process.cwd(), \'app/workspace-panels.tsx\')');
         expect(viteSource).toContain('fileName: () => \'assets/workspace-panels.js\'');
     });
+
+    test('prebuilds flagged React panel bundles before Playwright starts the server', () => {
+        const playwrightSource = read('tests/playwright.config.js');
+
+        expect(playwrightSource).toContain('const workspacePanelFlagEnvKeys = [');
+        expect(playwrightSource).toContain('EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST');
+        expect(playwrightSource).toContain('EMBERDESK_FEATURES_REACT_PANELS_WORLDINFO');
+        expect(playwrightSource).toContain('EMBERDESK_FEATURES_REACT_PANELS_BACKGROUNDLIBRARY');
+        expect(playwrightSource).toContain('EMBERDESK_FEATURES_REACT_PANELS_EXTENSIONSHOST');
+        expect(playwrightSource).toContain('shouldBuildCharacterLibraryPanel ? \'bun run build:react:character-library\' : null');
+        expect(playwrightSource).toContain('shouldBuildWorkspacePanels ? \'bun run build:react:workspace-panels\' : null');
+        expect(playwrightSource).toContain('command: webServerCommand');
+    });
 });

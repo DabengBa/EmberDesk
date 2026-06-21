@@ -232,7 +232,7 @@ import { initSystemPrompts } from './scripts/sysprompt.js';
 import { registerExtensionSlashCommands as initExtensionSlashCommands } from './scripts/extensions-slashcommands.js';
 import { buildChatMessageRenderDescriptor, buildChatMessageRowPopulation } from './scripts/chat-message-render-descriptor.js';
 import { getStreamingControlState } from './scripts/chat-streaming-control-state.js';
-import { createChatMessageActionsController } from './scripts/chat-message-actions-controller.js';
+import { buildMessageActionSnapshot, createChatMessageActionsController } from './scripts/chat-message-actions-controller.js';
 import { ToolManager } from './scripts/tool-calling.js';
 import { addShowdownPatch } from './scripts/util/showdown-patch.js';
 import { applyBrowserFixes } from './scripts/browser-fixes.js';
@@ -316,6 +316,7 @@ const EXTENSIONS_HOST_REACT_HOST_ID = 'emberdesk-react-extensions-host-panel-hos
 const MAIN_CHAT_MESSAGE_LIST_REACT_HOST_ID = 'emberdesk-react-main-chat-message-list-host';
 const MAIN_CHAT_SCROLL_RESTORE_THRESHOLD_PX = 12;
 const mainChatRichBodySnapshotSchema = 'mainChatRichBodySnapshotSchema';
+const mainChatMessageActionSnapshotSchema = 'mainChatMessageActionSnapshotSchema';
 const REACT_CHARACTER_LIBRARY_PANEL_ASSET_PATH = '/react/login/assets/character-library-panel.js';
 const REACT_CHARACTER_LIBRARY_TOOLBAR_HOST_ID = 'emberdesk-react-character-library-toolbar';
 let reactCharacterLibraryPanelModulePromise = null;
@@ -712,6 +713,15 @@ function getMainChatMessageListReactBridgeState() {
             schema: mainChatRichBodySnapshotSchema,
         }))
         .filter(Boolean);
+    const messageActionSnapshots = messageRows
+        .map(row => buildMessageActionSnapshot(row, {
+            getExpandMessageActions: () => power_user.expand_message_actions,
+        }))
+        .filter(Boolean)
+        .map(snapshot => ({
+            ...snapshot,
+            schema: mainChatMessageActionSnapshotSchema,
+        }));
 
     return {
         chatId: getCurrentChatId(),
@@ -729,6 +739,7 @@ function getMainChatMessageListReactBridgeState() {
         host,
         messageNodes: messageRows,
         richBodySnapshots: richBodySnapshots,
+        messageActionSnapshots: messageActionSnapshots,
         showMoreNode: showMoreButton,
     };
 }
@@ -13953,6 +13964,9 @@ jQuery(async function () {
         getExpandMessageActions: () => power_user.expand_message_actions,
         animationDuration: animation_duration,
         animationEasing: animation_easing,
+        onStateChanged: () => {
+            void mountReactMainChatMessageListPanel();
+        },
     }).init();
 
     $(document).on('click', '.mes_edit_cancel', async function () {

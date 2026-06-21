@@ -8,6 +8,108 @@ const EXTRA_ACTIONS_HINT_SELECTOR = '.extraMesButtonsHint';
 const EXTRA_ACTIONS_SELECTOR = '.extraMesButtons';
 const EXTRA_ACTIONS_OPEN_SELECTOR = '.extraMesButtons.visible';
 const EXTRA_ACTIONS_CLICK_AREA_SELECTOR = '.extraMesButtons, .extraMesButtonsHint';
+const MESSAGE_ACTION_SNAPSHOT_SCHEMA = 'mainChatMessageActionSnapshotSchema';
+const GENERIC_MESSAGE_ACTION_CLASSES = new Set([
+    'mes_button',
+    'menu_button',
+    'edit_button',
+    'right_menu_button',
+    'interactable',
+    'displayNone',
+]);
+
+function getDefaultExpandMessageActionsState() {
+    return globalThis.document?.body?.classList?.contains?.('expandMessageActions') === true;
+}
+
+function isElementLike(value) {
+    return Boolean(
+        value
+        && typeof value === 'object'
+        && typeof value.querySelectorAll === 'function'
+        && typeof value.getAttribute === 'function',
+    );
+}
+
+function getMessageActionNameFromClassList(classList) {
+    for (const className of classList ?? []) {
+        if (!className || GENERIC_MESSAGE_ACTION_CLASSES.has(className) || className.startsWith('fa-')) {
+            continue;
+        }
+
+        if (
+            className === 'extraMesButtonsHint'
+            || className === 'swipe_left'
+            || className === 'swipe_right'
+            || className === 'generation_failure_retry'
+            || className.startsWith('sd_')
+        ) {
+            return className;
+        }
+
+        if (className.startsWith('mes_')) {
+            return className;
+        }
+    }
+
+    return null;
+}
+
+function getVisibleMessageActionNames(messageRow) {
+    const availableActions = [];
+    const seenActions = new Set();
+    const actionNodes = Array.from(messageRow.querySelectorAll?.('[role="button"]') ?? []);
+
+    for (const actionNode of actionNodes) {
+        const actionName = getMessageActionNameFromClassList(actionNode.classList);
+        if (!actionName || seenActions.has(actionName)) {
+            continue;
+        }
+
+        seenActions.add(actionName);
+        availableActions.push(actionName);
+    }
+
+    return availableActions;
+}
+
+/**
+ * Builds a DOM-derived message-action snapshot without changing legacy ownership.
+ * @param {Element} messageRow Message row candidate
+ * @param {object} [dependencyOverrides] Runtime dependency overrides
+ * @param {() => boolean} [dependencyOverrides.getExpandMessageActions] Reads expanded action setting
+ * @returns {object|null}
+ */
+export function buildMessageActionSnapshot(messageRow, dependencyOverrides = {}) {
+    if (!isElementLike(messageRow)) {
+        return null;
+    }
+
+    const messageId = String(messageRow.getAttribute('mesid') ?? '').trim();
+    if (!messageId || !messageRow.querySelector?.('.mes_buttons')) {
+        return null;
+    }
+
+    const getExpandMessageActions = dependencyOverrides.getExpandMessageActions ?? getDefaultExpandMessageActionsState;
+    const availableActions = getVisibleMessageActionNames(messageRow);
+    const extraButtons = messageRow.querySelector('.extraMesButtons');
+    const expanded = Boolean(
+        getExpandMessageActions()
+        || extraButtons?.classList?.contains?.('visible')
+        || messageRow.querySelector('.extraMesButtonsHint')?.style?.display === 'none',
+    );
+
+    return {
+        schema: MESSAGE_ACTION_SNAPSHOT_SCHEMA,
+        messageId,
+        eligible: true,
+        expanded,
+        availableActions,
+        highFrequencyActions: MESSAGE_ACTION_TIERS.highFrequency.filter(actionName => availableActions.includes(actionName)),
+        secondaryActions: MESSAGE_ACTION_TIERS.secondary.filter(actionName => availableActions.includes(actionName)),
+        dangerActions: MESSAGE_ACTION_TIERS.danger.filter(actionName => availableActions.includes(actionName)),
+    };
+}
 
 function defaultTransitionElement(element, options) {
     const transition = globalThis.$?.(element)?.transition;
@@ -35,6 +137,7 @@ function findExtraButtonsForHint(hint) {
  * @param {(element: Element, options: object) => void} [dependencyOverrides.transitionElement] Transition adapter
  * @param {number} [dependencyOverrides.animationDuration] Transition duration
  * @param {string} [dependencyOverrides.animationEasing] Transition easing
+ * @param {() => void} [dependencyOverrides.onStateChanged] Bridge callback after DOM state changes
  * @returns {{init: () => void, cleanup: () => void, openExtraActions: (hint: Element) => void, closeExtraActions: () => void}}
  */
 export function createChatMessageActionsController(root = globalThis.document, dependencyOverrides = {}) {
@@ -47,6 +150,7 @@ export function createChatMessageActionsController(root = globalThis.document, d
         transitionElement: defaultTransitionElement,
         animationDuration: 0,
         animationEasing: 'linear',
+        onStateChanged: () => {},
         ...dependencyOverrides,
     };
     let abortController = null;
@@ -75,6 +179,7 @@ export function createChatMessageActionsController(root = globalThis.document, d
                 buttons.style.opacity = '0';
                 buttons.style.display = 'flex';
                 transitionElement(buttons, { opacity: 1 });
+                dependencies.onStateChanged();
             },
         });
     }
@@ -88,6 +193,7 @@ export function createChatMessageActionsController(root = globalThis.document, d
 
         const hiddenHints = Array.from(root.querySelectorAll?.(EXTRA_ACTIONS_HINT_SELECTOR) ?? [])
             .filter(hint => hint.style.display === 'none');
+        let remainingVisibleButtons = visibleButtons.length;
 
         for (const buttons of visibleButtons) {
             transitionElement(buttons, {
@@ -104,6 +210,11 @@ export function createChatMessageActionsController(root = globalThis.document, d
                                 hint.style.opacity = '';
                             },
                         });
+                    }
+
+                    remainingVisibleButtons -= 1;
+                    if (remainingVisibleButtons === 0) {
+                        dependencies.onStateChanged();
                     }
                 },
             });

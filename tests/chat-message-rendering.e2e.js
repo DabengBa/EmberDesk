@@ -9,6 +9,7 @@ import { testSetup } from './frontend/frontent-test-utils.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:8000';
 const dataRoot = path.resolve(repoRoot, process.env.PLAYWRIGHT_DATA_ROOT ?? '.tmp/playwright-e2e-data');
 const userHandle = process.env.PLAYWRIGHT_USER ?? 'playwright-e2e';
 const userRoot = path.join(dataRoot, userHandle);
@@ -150,6 +151,90 @@ async function expectMainChatMessageListHostState(page, expectedMessageCount) {
     await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(expectedMessageCount);
 }
 
+async function expectReactMessageActionState(page, messageId, expectations = {}) {
+    if (!reactMainChatMessageListEnabled) {
+        await expect(page.locator(`[data-main-chat-message-actions-row="${messageId}"]`)).toHaveCount(0);
+        return;
+    }
+
+    const actionOwner = page.locator(`[data-main-chat-message-actions-row="${messageId}"]`);
+    const ownerCount = await actionOwner.count();
+    if (ownerCount !== 1) {
+        const debugState = await page.evaluate((targetMessageId) => {
+            const host = document.getElementById('emberdesk-react-main-chat-message-list-host');
+            const controller = document.querySelector('[data-main-chat-message-list-controller="true"]');
+            const row = document.querySelector(`#chat > .mes[mesid="${targetMessageId}"]`);
+            const messageButtons = row?.querySelector('.mes_buttons');
+
+            return {
+                featureEnabled: Boolean(window.__emberDeskWorkspaceFeatures?.reactPanels?.mainChatMessageList),
+                hostPresent: Boolean(host),
+                hostChildElementCount: host?.childElementCount ?? 0,
+                controllerDataset: controller instanceof HTMLElement ? { ...controller.dataset } : null,
+                rowPresent: Boolean(row),
+                messageButtonsPresent: Boolean(messageButtons),
+                hintPresent: Boolean(messageButtons?.querySelector('.extraMesButtonsHint')),
+                extraActionsPresent: Boolean(messageButtons?.querySelector('.extraMesButtons')),
+                ownerCount: document.querySelectorAll(`[data-main-chat-message-actions-row="${targetMessageId}"]`).length,
+            };
+        }, String(messageId));
+
+        throw new Error(`Missing action owner for row ${messageId}: ${JSON.stringify(debugState)}`);
+    }
+
+    await expect(actionOwner).toHaveAttribute('data-main-chat-message-actions-owner', 'react');
+    if (expectations.expanded !== undefined) {
+        await expect(actionOwner).toHaveAttribute('data-main-chat-message-actions-expanded', expectations.expanded ? 'true' : 'false');
+    }
+
+    const attributeExpectations = [
+        ['data-main-chat-message-actions-available', expectations.availableIncludes ?? []],
+        ['data-main-chat-message-actions-high-frequency', expectations.highFrequencyIncludes ?? []],
+        ['data-main-chat-message-actions-secondary', expectations.secondaryIncludes ?? []],
+        ['data-main-chat-message-actions-danger', expectations.dangerIncludes ?? []],
+    ];
+
+    for (const [attributeName, expectedValues] of attributeExpectations) {
+        if (!expectedValues.length) {
+            continue;
+        }
+
+        const actualValue = await actionOwner.getAttribute(attributeName);
+        expect(actualValue).not.toBeNull();
+        for (const expectedValue of expectedValues) {
+            expect(actualValue).toContain(expectedValue);
+        }
+    }
+
+    const childOrder = await page.evaluate((targetMessageId) => {
+        const messageButtons = document.querySelector(`#chat > .mes[mesid="${targetMessageId}"] .mes_buttons`);
+        if (!(messageButtons instanceof HTMLElement)) {
+            return null;
+        }
+
+        return Array.from(messageButtons.children).map((child) => {
+            if (!(child instanceof HTMLElement)) {
+                return '';
+            }
+
+            if (child.dataset.mainChatMessageActionsOwner === 'react') {
+                return 'react-owner';
+            }
+
+            return child.className;
+        });
+    }, String(messageId));
+
+    expect(childOrder).not.toBeNull();
+    const hintIndex = childOrder.findIndex(value => value.split(/\s+/).includes('extraMesButtonsHint'));
+    const extraActionsIndex = childOrder.findIndex(value => value.split(/\s+/).includes('extraMesButtons'));
+    const ownerIndex = childOrder.findIndex(value => value === 'react-owner');
+
+    expect(hintIndex).toBeGreaterThanOrEqual(0);
+    expect(extraActionsIndex).toBeGreaterThan(hintIndex);
+    expect(ownerIndex).toBeGreaterThan(extraActionsIndex);
+}
+
 async function expectReactRichBodyState(page, messageId) {
     if (!reactMainChatMessageListEnabled) {
         await expect(page.locator(`[data-main-chat-rich-body-row="${messageId}"]`)).toHaveCount(0);
@@ -201,6 +286,27 @@ async function positionMessageRowNearViewportTop(page, messageId, topOffset = 12
         await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         return anchorRow.getBoundingClientRect().top;
     }, { targetMessageId: String(messageId), viewportTopOffset: topOffset });
+}
+
+async function grantClipboardPermissions(page) {
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: BASE_URL });
+}
+
+function normalizeMultilineText(value) {
+    return String(value)
+        .replace(/\r\n/g, '\n')
+        .split('\n')
+        .map(line => line.trim())
+        .filter(Boolean)
+        .join('\n')
+        .trim();
+}
+
+async function expectClipboardText(page, expectedText) {
+    await expect.poll(async () => {
+        const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
+        return normalizeMultilineText(clipboardText);
+    }).toBe(normalizeMultilineText(expectedText));
 }
 
 test.describe('chat message rendering', () => {
@@ -349,6 +455,77 @@ test.describe('chat message rendering', () => {
         expect(getUnexpectedConsoleErrors(consoleErrors)).toEqual([]);
     });
 
+    test('keeps legacy message actions visible and only adds hidden React owners when the bridge is enabled', async ({ page }) => {
+        expect(fs.existsSync(seededChatPath)).toBe(true);
+
+        const seededMessages = getChatMessages(seededChatPath);
+        const assistantMessageIndex = seededMessages.findIndex(message => !message.is_user && !message.is_system);
+
+        expect(assistantMessageIndex).toBeGreaterThanOrEqual(0);
+
+        const consoleErrors = createConsoleErrorCollector(page);
+
+        await testSetup.awaitST({ page });
+        await grantClipboardPermissions(page);
+        await selectCharacterByName(page, characterName);
+        await page.evaluate(({ truncationLimit }) => {
+            const context = window.SillyTavern.getContext();
+            context.powerUserSettings.chat_truncation = truncationLimit;
+            context.powerUserSettings.confirm_message_delete = true;
+        }, { truncationLimit: seededMessages.length });
+
+        await openChatAndMeasureFirstMessage(page, seededChatName);
+
+        const assistantRow = page.locator(`#chat > .mes[mesid="${assistantMessageIndex}"]`);
+        await expect(assistantRow).toBeVisible();
+        await expectReactMessageActionState(page, assistantMessageIndex, {
+            expanded: false,
+            availableIncludes: ['extraMesButtonsHint', 'mes_copy', 'mes_edit', 'mes_edit_delete'],
+            highFrequencyIncludes: ['extraMesButtonsHint', 'mes_copy', 'mes_edit'],
+            secondaryIncludes: ['mes_bookmark'],
+            dangerIncludes: ['mes_edit_delete'],
+        });
+
+        await assistantRow.hover();
+        const messageActionsButton = assistantRow.getByRole('button', { name: 'Message Actions' });
+        await expect(messageActionsButton).toBeVisible();
+        await messageActionsButton.click();
+        await expectReactMessageActionState(page, assistantMessageIndex, {
+            expanded: true,
+            availableIncludes: ['extraMesButtonsHint', 'mes_copy', 'mes_edit', 'mes_edit_delete'],
+            highFrequencyIncludes: ['extraMesButtonsHint', 'mes_copy', 'mes_edit'],
+            secondaryIncludes: ['mes_bookmark'],
+            dangerIncludes: ['mes_edit_delete'],
+        });
+
+        const copyButton = assistantRow.getByRole('button', { name: 'Copy' });
+        await expect(copyButton).toBeVisible();
+        await copyButton.click();
+        await expectClipboardText(page, seededMessages[assistantMessageIndex].mes);
+
+        const editButton = assistantRow.getByRole('button', { name: 'Edit' });
+        await expect(editButton).toBeVisible();
+        await editButton.click();
+
+        const editTextarea = assistantRow.locator('.edit_textarea');
+        await expect(editTextarea).toBeVisible();
+        await expect(editTextarea).toHaveValue(seededMessages[assistantMessageIndex].mes);
+
+        const renderedMessageCount = await page.locator('#chat > .mes[mesid]').count();
+        await assistantRow.getByRole('button', { name: 'Delete this message' }).click();
+        const deleteDialog = page.getByRole('dialog').filter({ hasText: 'Are you sure you want to delete this message?' });
+        await expect(deleteDialog).toBeVisible();
+        await expect(deleteDialog.getByRole('button', { name: 'Delete Message' })).toBeVisible();
+        await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(renderedMessageCount);
+        await deleteDialog.getByRole('button', { name: 'Cancel' }).click();
+        await expect(deleteDialog).toHaveCount(0);
+
+        await assistantRow.locator('.mes_edit_cancel').click();
+        await expect(editTextarea).toHaveCount(0);
+        await expect(assistantRow.locator('.mes_text')).toContainText(seededMessages[assistantMessageIndex].mes);
+        expect(getUnexpectedConsoleErrors(consoleErrors)).toEqual([]);
+    });
+
     test('restores per-chat reading position when switching back to a long chat', async ({ page }) => {
         test.skip(!reactMainChatMessageListEnabled, 'scroll restore is only required behind the React main-chat flag');
 
@@ -450,6 +627,19 @@ test.describe('chat message rendering', () => {
             await latestLongMessageRow.scrollIntoViewIfNeeded();
             await expect(latestLongMessageRow, `${viewport.name} latest row`).toBeVisible();
             await expectMessageTextMatches(page, longMessages.length - 1, longMessages.at(-1).mes);
+            const messageActions = latestLongMessageRow.getByRole('button', { name: 'Message Actions' });
+            await expect(messageActions, `${viewport.name} message actions`).toBeVisible();
+            const actionButtonBox = await messageActions.boundingBox();
+            const messageTextBox = await latestLongMessageRow.locator('.mes_text').boundingBox();
+            expect(actionButtonBox, `${viewport.name} action button box`).not.toBeNull();
+            expect(messageTextBox, `${viewport.name} message text box`).not.toBeNull();
+            const overlapsMessageText = actionButtonBox.x < messageTextBox.x + messageTextBox.width
+                && actionButtonBox.x + actionButtonBox.width > messageTextBox.x
+                && actionButtonBox.y < messageTextBox.y + messageTextBox.height
+                && actionButtonBox.y + actionButtonBox.height > messageTextBox.y;
+            expect(overlapsMessageText, `${viewport.name} action overlap`).toBe(false);
+            await messageActions.click();
+            await expect(latestLongMessageRow.getByRole('button', { name: 'Copy' }), `${viewport.name} copy action`).toBeVisible();
         }
 
         expect(getUnexpectedConsoleErrors(consoleErrors)).toEqual([]);
