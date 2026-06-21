@@ -372,6 +372,7 @@ function getMainChatGenerationControlBridgeState() {
     const recoveryStatusText = recoveryStatus?.textContent?.trim() ?? '';
     const failureRetry = document.querySelector('#chat > .mes .generation_failure_retry');
     const failureNotice = document.querySelector('#chat > .mes .generation_failure_notice');
+    const continueSurface = isMainChatGenerationControlElementVisible(document.getElementById('mes_continue')) ? 'legacy' : 'hidden';
     const activeMessageId = getMainChatGenerationControlMessageId(recoveryStatus)
         ?? getMainChatGenerationControlMessageId(failureRetry)
         ?? (Number.isInteger(streamingProcessor?.messageId) && streamingProcessor.messageId >= 0 ? streamingProcessor.messageId : null);
@@ -384,13 +385,13 @@ function getMainChatGenerationControlBridgeState() {
             isFinished: Boolean(streamingProcessor?.isFinished),
             hasError: Boolean(failureNotice || failureRetry),
             isRecovering: Boolean(recoveryStatus),
-            recoveryStage: recoveryStatusText.includes('备用') ? 'fallback' : 'primary',
+            recoveryStage: recoveryStatus?.dataset?.recoveryStage === 'fallback' ? 'fallback' : 'primary',
             activeMessageId,
             recoveryStatusLabel: recoveryStatusText || null,
             failureRetryVisible: isMainChatGenerationControlElementVisible(failureRetry),
             failureNoticeVisible: Boolean(failureNotice),
+            continueSurface,
         }),
-        continueSurface: $('#mes_continue').css('display') === 'none' ? 'hidden' : 'legacy',
     };
 }
 
@@ -3121,7 +3122,7 @@ function clearGenerationAutoRecoveryStatus(messageId) {
     void mountReactMainChatMessageListPanel();
 }
 
-function showGenerationAutoRecoveryStatus(messageId, status) {
+function showGenerationAutoRecoveryStatus(messageId, status, recoveryStage = 'primary') {
     const messageElement = chatElement.find(`.mes[mesid="${messageId}"]`);
     if (!messageElement.length) {
         return;
@@ -3131,6 +3132,7 @@ function showGenerationAutoRecoveryStatus(messageId, status) {
     const statusRow = $('<div class="generation_auto_recovery_status"></div>');
     statusRow.attr('role', 'status');
     statusRow.attr('aria-live', 'polite');
+    statusRow.attr('data-recovery-stage', recoveryStage === 'fallback' ? 'fallback' : 'primary');
     statusRow.append($('<i class="fa-solid fa-circle-notch"></i>'));
     statusRow.append($('<span></span>').text(status));
     messageElement.find('.mes_text').after(statusRow);
@@ -7274,7 +7276,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
                 const retryBaseline = getGenerationAttemptBaseline(activeRecoveryMessageId);
                 clearGenerationAttemptMessage(activeRecoveryMessageId, retryBaseline);
                 prepareGenerationRetrySwipe(activeRecoveryMessageId, retryBaseline);
-                showGenerationAutoRecoveryStatus(activeRecoveryMessageId, attempt.status);
+                showGenerationAutoRecoveryStatus(activeRecoveryMessageId, attempt.status, attempt.label === 'fallback' ? 'fallback' : 'primary');
                 deactivateSendButtons();
                 showStopButton();
             }

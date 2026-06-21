@@ -27,10 +27,10 @@ The legacy bridge reads current browser facts from `public/script.js`:
 
 1. `document.body.dataset.generating === 'true'` reports active visible generation.
 2. `streamingProcessor` reports whether a stream exists, is stopped, or is finished.
-3. `#chat > .mes .generation_auto_recovery_status` reports active automatic recovery and its visible status label.
+3. `#chat > .mes .generation_auto_recovery_status` reports active automatic recovery, its visible status label, and its structured `data-recovery-stage`.
 4. `#chat > .mes .generation_failure_retry` reports the final retry affordance.
 5. `#chat > .mes .generation_failure_notice` reports the final failure notice.
-6. `#mes_continue` display state reports whether the legacy continue surface is currently available.
+6. `#mes_continue` actual element visibility reports whether the legacy continue surface is currently available.
 7. The active message id is resolved from the nearest `#chat > .mes[mesid]` for recovery or retry elements, then falls back to `streamingProcessor.messageId` when it is a non-negative integer.
 
 The pure classifier in `public/scripts/chat-streaming-control-state.js` receives only booleans, strings, and an optional message id. It does not inspect DOM, mutate UI, send provider requests, append tokens, or dispatch actions.
@@ -71,6 +71,7 @@ The only React-visible output in this sprint is a hidden controller marker:
    - `activeMessageId` must be a non-negative integer, otherwise it becomes `null`.
    - `recoveryStatusLabel` must be a non-empty string, otherwise it becomes `null`.
    - retry and notice flags are coerced to booleans.
+   - `continueSurface` is normalized to `legacy` only when the legacy continue element is actually visible.
 4. The classifier applies priority in this order:
    - recovering
    - error
@@ -87,6 +88,7 @@ The only React-visible output in this sprint is a hidden controller marker:
 
 - Recovery wins over final failure UI while `.generation_auto_recovery_status` exists.
 - Final error state can expose `failureRetryVisible` and `failureNoticeVisible`.
+- Recoverable-state `continueVisible` must match the observed `continueSurface`; hidden legacy continue cannot be reported as visible.
 - Stopped and completed states are recoverable from the user's perspective: composer input can continue, and legacy continue may be available according to existing rules.
 - Invalid bridge payloads fail closed to idle on the React side.
 - `continueSurface` is observational. It does not redefine `#mes_continue` as provider stream resume.
@@ -100,7 +102,8 @@ The only React-visible output in this sprint is a hidden controller marker:
   "generationControl.activeMessageId": "non-negative integer or null",
   "generationControl.failureRetryVisible": "boolean",
   "hiddenMarker.phase": "generationControl.phase or idle fallback",
-  "hiddenMarker.retry": "visible when validated failureRetryVisible is true, otherwise hidden"
+  "hiddenMarker.retry": "visible when validated failureRetryVisible is true, otherwise hidden",
+  "generationControl.continueVisible": "true only when continueSurface is legacy"
 }
 ```
 
@@ -112,7 +115,7 @@ Run:
 uv run python .docs/logic-description/main_chat_generation_control_bridge_sandbox_proof.py
 ```
 
-The proof script embeds fake legacy facts and validates streaming, fallback recovery, final failure, unsafe metadata normalization, schema fallback, and hidden marker output.
+The proof script embeds fake legacy facts and validates streaming, structured fallback recovery, final failure, unsafe metadata normalization, continue-surface consistency, schema fallback, and hidden marker output.
 
 ## Boundaries And Failure Modes
 

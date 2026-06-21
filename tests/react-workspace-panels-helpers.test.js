@@ -391,9 +391,12 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('clientHeight: chatContainer?.clientHeight ?? 0');
         expect(scriptSource).toContain('function getMainChatGenerationControlBridgeState()');
         expect(scriptSource).toContain('generationControl: getMainChatGenerationControlBridgeState()');
-        expect(scriptSource).toContain("continueSurface: $('#mes_continue').css('display') === 'none' ? 'hidden' : 'legacy'");
+        expect(scriptSource).toContain('const continueSurface = isMainChatGenerationControlElementVisible(document.getElementById(\'mes_continue\')) ? \'legacy\' : \'hidden\';');
+        expect(scriptSource).toContain('continueSurface,');
         expect(scriptSource).toContain("failureRetryVisible: isMainChatGenerationControlElementVisible(failureRetry)");
         expect(scriptSource).toContain("failureNoticeVisible: Boolean(failureNotice)");
+        expect(scriptSource).toContain("recoveryStage: recoveryStatus?.dataset?.recoveryStage === 'fallback' ? 'fallback' : 'primary'");
+        expect(scriptSource).not.toContain("recoveryStatusText.includes('备用')");
         expect(scriptSource).toContain('function getMainChatMessageListReactBridge()');
         expect(scriptSource).toContain('case \'loadMoreUntilMessage\':');
         expect(scriptSource).toContain('async function mountReactMainChatMessageListPanel(');

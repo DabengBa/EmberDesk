@@ -12,6 +12,7 @@
  * @param {string|null} [input.recoveryStatusLabel=null] Visible recovery status copy
  * @param {boolean} [input.failureRetryVisible=false] Whether final retry is visible
  * @param {boolean} [input.failureNoticeVisible=false] Whether final failure notice is visible
+ * @param {'hidden'|'legacy'} [input.continueSurface='legacy'] Observed legacy continue surface
  * @returns {object} Control recovery decisions
  *
  * Priority is intentionally fail-closed for the bridge: recovery wins over
@@ -29,7 +30,9 @@ export function getStreamingControlState({
     recoveryStatusLabel = null,
     failureRetryVisible = false,
     failureNoticeVisible = false,
+    continueSurface = 'legacy',
 } = {}) {
+    const observedContinueSurface = continueSurface === 'legacy' ? 'legacy' : 'hidden';
     const metadata = {
         activeMessageId: Number.isInteger(activeMessageId) && activeMessageId >= 0 ? activeMessageId : null,
         recoveryStatusLabel: typeof recoveryStatusLabel === 'string' && recoveryStatusLabel ? recoveryStatusLabel : null,
@@ -54,15 +57,15 @@ export function getStreamingControlState({
     }
 
     if (hasError) {
-        return createRecoverableState('error', metadata);
+        return createRecoverableState('error', metadata, observedContinueSurface);
     }
 
     if (isStopped) {
-        return createRecoverableState('stopped', metadata);
+        return createRecoverableState('stopped', metadata, observedContinueSurface);
     }
 
     if (isFinished) {
-        return createRecoverableState('completed', metadata);
+        return createRecoverableState('completed', metadata, observedContinueSurface);
     }
 
     if (isGenerating || hasStreamingProcessor) {
@@ -92,15 +95,15 @@ export function getStreamingControlState({
     };
 }
 
-function createRecoverableState(state, metadata) {
+function createRecoverableState(state, metadata, continueSurface) {
     return {
         state,
         phase: state,
         composerDisabled: false,
         sendVisible: true,
         stopVisible: false,
-        continueVisible: true,
-        continueSurface: 'legacy',
+        continueVisible: continueSurface === 'legacy',
+        continueSurface,
         canRecoverInput: true,
         ...metadata,
     };

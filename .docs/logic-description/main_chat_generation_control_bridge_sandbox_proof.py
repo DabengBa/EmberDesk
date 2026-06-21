@@ -27,15 +27,15 @@ def normalize_metadata(input_data):
     }
 
 
-def recoverable_state(state, metadata):
+def recoverable_state(state, metadata, continue_surface):
     return {
         "state": state,
         "phase": state,
         "composerDisabled": False,
         "sendVisible": True,
         "stopVisible": False,
-        "continueVisible": True,
-        "continueSurface": "legacy",
+        "continueVisible": continue_surface == "legacy",
+        "continueSurface": continue_surface,
         "canRecoverInput": True,
         **metadata,
     }
@@ -43,6 +43,7 @@ def recoverable_state(state, metadata):
 
 def classify_generation_control(input_data):
     metadata = normalize_metadata(input_data)
+    continue_surface = "legacy" if input_data.get("continueSurface") == "legacy" else "hidden"
 
     if input_data.get("isRecovering", False):
         return {
@@ -60,11 +61,11 @@ def classify_generation_control(input_data):
         }
 
     if input_data.get("hasError", False):
-        return recoverable_state("error", metadata)
+        return recoverable_state("error", metadata, continue_surface)
     if input_data.get("isStopped", False):
-        return recoverable_state("stopped", metadata)
+        return recoverable_state("stopped", metadata, continue_surface)
     if input_data.get("isFinished", False):
-        return recoverable_state("completed", metadata)
+        return recoverable_state("completed", metadata, continue_surface)
     if input_data.get("isGenerating", False) or input_data.get("hasStreamingProcessor", False):
         return {
             "state": "streaming",
@@ -173,9 +174,18 @@ def main():
         "activeMessageId": 3,
         "failureRetryVisible": True,
         "failureNoticeVisible": True,
+        "continueSurface": "legacy",
     })
     assert final_failure["phase"] == "error"
+    assert final_failure["continueVisible"] is True
     assert hidden_marker(react_generation_control(final_failure))["data-main-chat-generation-control-retry"] == "visible"
+
+    final_failure_without_continue = classify_generation_control({
+        "hasError": True,
+        "continueSurface": "hidden",
+    })
+    assert final_failure_without_continue["continueVisible"] is False
+    assert final_failure_without_continue["continueSurface"] == "hidden"
 
     unsafe_metadata = classify_generation_control({
         "hasError": True,

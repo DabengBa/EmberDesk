@@ -175,4 +175,20 @@ describe('chat streaming control state', () => {
             failureNoticeVisible: true,
         });
     });
+
+    test('derives continue visibility from the observed legacy continue surface', async () => {
+        const { getStreamingControlState } = await importFreshControlStateModule();
+
+        expect(getStreamingControlState({ hasError: true, continueSurface: 'hidden' })).toMatchObject({
+            state: 'error',
+            continueVisible: false,
+            continueSurface: 'hidden',
+        });
+
+        expect(getStreamingControlState({ hasError: true, continueSurface: 'legacy' })).toMatchObject({
+            state: 'error',
+            continueVisible: true,
+            continueSurface: 'legacy',
+        });
+    });
 });
