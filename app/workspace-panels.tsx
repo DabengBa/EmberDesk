@@ -143,6 +143,9 @@ interface MainChatMessageListWorkspacePanelState {
     scrollHeight?: number;
     clientHeight?: number;
     generationControl?: MainChatGenerationControlState;
+    composer?: MainChatComposerState;
+    slashCommand?: MainChatSlashCommandState;
+    streamingTransport?: MainChatStreamingTransportState;
     chatContainer?: HTMLElement | null;
     host?: HTMLElement | null;
     messageNodes?: HTMLElement[];
@@ -164,6 +167,37 @@ interface MainChatGenerationControlState {
     recoveryStatusLabel: string | null;
     failureRetryVisible: boolean;
     failureNoticeVisible: boolean;
+}
+
+interface MainChatStreamingTransportState {
+    phase: 'idle' | 'connecting' | 'streaming' | 'finalizing' | 'stopped' | 'completed' | 'error';
+    activeMessageId: number | null;
+    hasStreamingProcessor: boolean;
+    observedTokenCount: number;
+    observedChunkCount: number;
+    fromFallbackAttempt: boolean;
+    recoverable: boolean;
+    errorLabel: string | null;
+}
+
+interface MainChatComposerState {
+    valueLength: number;
+    isEmpty: boolean;
+    canSubmit: boolean;
+    isFocused: boolean;
+    isDisabled: boolean;
+    isGenerating: boolean;
+    activeContext: 'character' | 'group' | 'assistant' | 'none';
+}
+
+interface MainChatSlashCommandState {
+    active: boolean;
+    queryLength: number;
+    autocompleteVisible: boolean;
+    executing: boolean;
+    paused: boolean;
+    aborted: boolean;
+    errorLabel: string | null;
 }
 
 interface MainChatRichBodySnapshot {
@@ -276,6 +310,37 @@ const mainChatGenerationControlSchema = z.object({
     failureNoticeVisible: z.boolean(),
 });
 
+const mainChatComposerSchema = z.object({
+    valueLength: z.number().int().nonnegative(),
+    isEmpty: z.boolean(),
+    canSubmit: z.boolean(),
+    isFocused: z.boolean(),
+    isDisabled: z.boolean(),
+    isGenerating: z.boolean(),
+    activeContext: z.enum(['character', 'group', 'assistant', 'none']),
+});
+
+const mainChatSlashCommandSchema = z.object({
+    active: z.boolean(),
+    queryLength: z.number().int().nonnegative(),
+    autocompleteVisible: z.boolean(),
+    executing: z.boolean(),
+    paused: z.boolean(),
+    aborted: z.boolean(),
+    errorLabel: z.string().nullable(),
+});
+
+const mainChatStreamingTransportSchema = z.object({
+    phase: z.enum(['idle', 'connecting', 'streaming', 'finalizing', 'stopped', 'completed', 'error']),
+    activeMessageId: z.number().int().nonnegative().nullable(),
+    hasStreamingProcessor: z.boolean(),
+    observedTokenCount: z.number().int().nonnegative(),
+    observedChunkCount: z.number().int().nonnegative(),
+    fromFallbackAttempt: z.boolean(),
+    recoverable: z.boolean(),
+    errorLabel: z.string().nullable(),
+});
+
 const mainChatGenerationControlFallback: MainChatGenerationControlState = {
     state: 'idle',
     phase: 'idle',
@@ -289,6 +354,37 @@ const mainChatGenerationControlFallback: MainChatGenerationControlState = {
     recoveryStatusLabel: null,
     failureRetryVisible: false,
     failureNoticeVisible: false,
+};
+
+const mainChatComposerFallback: MainChatComposerState = {
+    valueLength: 0,
+    isEmpty: true,
+    canSubmit: false,
+    isFocused: false,
+    isDisabled: false,
+    isGenerating: false,
+    activeContext: 'none',
+};
+
+const mainChatSlashCommandFallback: MainChatSlashCommandState = {
+    active: false,
+    queryLength: 0,
+    autocompleteVisible: false,
+    executing: false,
+    paused: false,
+    aborted: false,
+    errorLabel: null,
+};
+
+const mainChatStreamingTransportFallback: MainChatStreamingTransportState = {
+    phase: 'idle',
+    activeMessageId: null,
+    hasStreamingProcessor: false,
+    observedTokenCount: 0,
+    observedChunkCount: 0,
+    fromFallbackAttempt: false,
+    recoverable: false,
+    errorLabel: null,
 };
 
 const mainChatMessageListStateSchema = z.object({
@@ -447,6 +543,9 @@ function asMainChatMessageListState(state: unknown): MainChatMessageListWorkspac
     const richBodySnapshots = z.array(mainChatRichBodySnapshotSchema).safeParse(bridgeState.richBodySnapshots ?? []);
     const messageActionSnapshots = z.array(mainChatMessageActionSnapshotSchema).safeParse(bridgeState.messageActionSnapshots ?? []);
     const generationControl = mainChatGenerationControlSchema.safeParse(bridgeState.generationControl);
+    const composer = mainChatComposerSchema.safeParse(bridgeState.composer);
+    const slashCommand = mainChatSlashCommandSchema.safeParse(bridgeState.slashCommand);
+    const streamingTransport = mainChatStreamingTransportSchema.safeParse(bridgeState.streamingTransport);
 
     return {
         ...bridgeState,
@@ -454,6 +553,9 @@ function asMainChatMessageListState(state: unknown): MainChatMessageListWorkspac
         richBodySnapshots: richBodySnapshots.success ? richBodySnapshots.data : [],
         messageActionSnapshots: messageActionSnapshots.success ? messageActionSnapshots.data : [],
         generationControl: generationControl.success ? generationControl.data : mainChatGenerationControlFallback,
+        composer: composer.success ? composer.data : mainChatComposerFallback,
+        slashCommand: slashCommand.success ? slashCommand.data : mainChatSlashCommandFallback,
+        streamingTransport: streamingTransport.success ? streamingTransport.data : mainChatStreamingTransportFallback,
     };
 }
 
@@ -1536,6 +1638,24 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
                 data-main-chat-message-list-status={bridgeState.hasChatContainer ? 'ready' : 'missing'}
                 data-main-chat-generation-control-phase={bridgeState.generationControl?.phase ?? 'idle'}
                 data-main-chat-generation-control-retry={bridgeState.generationControl?.failureRetryVisible ? 'visible' : 'hidden'}
+                data-main-chat-composer-length={bridgeState.composer?.valueLength ?? 0}
+                data-main-chat-composer-empty={bridgeState.composer?.isEmpty ? 'true' : 'false'}
+                data-main-chat-composer-can-submit={bridgeState.composer?.canSubmit ? 'true' : 'false'}
+                data-main-chat-composer-focused={bridgeState.composer?.isFocused ? 'true' : 'false'}
+                data-main-chat-composer-disabled={bridgeState.composer?.isDisabled ? 'true' : 'false'}
+                data-main-chat-composer-generating={bridgeState.composer?.isGenerating ? 'true' : 'false'}
+                data-main-chat-composer-context={bridgeState.composer?.activeContext ?? 'none'}
+                data-main-chat-slash-command-active={bridgeState.slashCommand?.active ? 'true' : 'false'}
+                data-main-chat-slash-command-query-length={bridgeState.slashCommand?.queryLength ?? 0}
+                data-main-chat-slash-command-autocomplete={bridgeState.slashCommand?.autocompleteVisible ? 'visible' : 'hidden'}
+                data-main-chat-slash-command-executing={bridgeState.slashCommand?.executing ? 'true' : 'false'}
+                data-main-chat-slash-command-paused={bridgeState.slashCommand?.paused ? 'true' : 'false'}
+                data-main-chat-slash-command-aborted={bridgeState.slashCommand?.aborted ? 'true' : 'false'}
+                data-main-chat-slash-command-error={bridgeState.slashCommand?.errorLabel ?? ''}
+                data-main-chat-streaming-transport-phase={bridgeState.streamingTransport?.phase ?? 'idle'}
+                data-main-chat-streaming-transport-tokens={bridgeState.streamingTransport?.observedTokenCount ?? 0}
+                data-main-chat-streaming-transport-message-id={bridgeState.streamingTransport?.activeMessageId ?? ''}
+                data-main-chat-streaming-transport-fallback={bridgeState.streamingTransport?.fromFallbackAttempt ? 'true' : 'false'}
             />
             <MainChatMessageListRestoreController key={bridgeState.chatId || 'main-chat-empty'} state={bridgeState} bridge={bridge} />
             {ownedRichBodySnapshots.map(snapshot => {

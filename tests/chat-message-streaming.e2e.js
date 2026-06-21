@@ -3,6 +3,7 @@ import { test, expect } from '@playwright/test';
 import { testSetup } from './frontend/frontent-test-utils.js';
 
 const characterName = 'Dev Character 001';
+const reactMainChatMessageListEnabled = process.env.EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST === 'true';
 const mobileViewports = [
     { name: 'narrow phone', width: 390, height: 844 },
     { name: 'wide mobile', width: 768, height: 1024 },
@@ -207,6 +208,16 @@ async function waitForGeneration(page, { allowAbort = false, allowFailure = fals
     }, { acceptAbort: allowAbort, acceptFailure: allowFailure });
 }
 
+async function waitForSlashCommandExecution(page) {
+    return page.evaluate(async () => {
+        await window.__emberdeskSlashExecutionPromise;
+        return {
+            result: window.__emberdeskSlashExecutionResult ?? null,
+            error: window.__emberdeskSlashExecutionError ?? null,
+        };
+    });
+}
+
 async function installMessageEventCounters(page) {
     await page.evaluate(async () => {
         const script = await import('/script.js');
@@ -264,6 +275,130 @@ async function expectReachableControlGeometry(page, selector, label) {
     expect(geometry.height, `${label} height`).toBeGreaterThanOrEqual(24);
 }
 
+async function expectMainChatStreamingTransportState(page, expectations = {}) {
+    const controller = page.locator('[data-main-chat-message-list-controller="true"]');
+
+    if (!reactMainChatMessageListEnabled) {
+        await expect(controller).toHaveCount(0);
+        return;
+    }
+
+    await expect(controller).toHaveCount(1);
+
+    if (expectations.phase !== undefined) {
+        const phases = Array.isArray(expectations.phase) ? expectations.phase : [expectations.phase];
+        await expect.poll(async () => (
+            await controller.getAttribute('data-main-chat-streaming-transport-phase')
+        ) ?? '').toMatch(createExactValuePattern(phases));
+    }
+
+    if (expectations.tokenCountAtLeast !== undefined) {
+        await expect.poll(async () => {
+            const value = await controller.getAttribute('data-main-chat-streaming-transport-tokens');
+            return Number(value ?? '-1');
+        }).toBeGreaterThanOrEqual(expectations.tokenCountAtLeast);
+    }
+
+    if (expectations.generationPhase !== undefined) {
+        const phases = Array.isArray(expectations.generationPhase) ? expectations.generationPhase : [expectations.generationPhase];
+        await expect.poll(async () => (
+            await controller.getAttribute('data-main-chat-generation-control-phase')
+        ) ?? '').toMatch(createExactValuePattern(phases));
+    }
+
+    if (expectations.expectFallback !== undefined || expectations.messageId !== undefined) {
+        if (expectations.messageId !== undefined) {
+            await expect(controller).toHaveAttribute('data-main-chat-streaming-transport-message-id', String(expectations.messageId));
+        }
+
+        if (expectations.expectFallback !== undefined) {
+            await expect(controller).toHaveAttribute('data-main-chat-streaming-transport-fallback', expectations.expectFallback ? 'true' : 'false');
+        }
+    }
+}
+
+function createExactValuePattern(values) {
+    return new RegExp(`^(?:${values.map(value => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`);
+}
+
+async function expectMainChatComposerState(page, expectations = {}) {
+    const controller = page.locator('[data-main-chat-message-list-controller="true"]');
+
+    if (!reactMainChatMessageListEnabled) {
+        await expect(controller).toHaveCount(0);
+        return;
+    }
+
+    await expect(controller).toHaveCount(1);
+
+    if (expectations.length !== undefined) {
+        await expect(controller).toHaveAttribute('data-main-chat-composer-length', String(expectations.length));
+    }
+
+    if (expectations.empty !== undefined) {
+        await expect(controller).toHaveAttribute('data-main-chat-composer-empty', expectations.empty ? 'true' : 'false');
+    }
+
+    if (expectations.canSubmit !== undefined) {
+        await expect(controller).toHaveAttribute('data-main-chat-composer-can-submit', expectations.canSubmit ? 'true' : 'false');
+    }
+
+    if (expectations.focused !== undefined) {
+        await expect(controller).toHaveAttribute('data-main-chat-composer-focused', expectations.focused ? 'true' : 'false');
+    }
+
+    if (expectations.disabled !== undefined) {
+        await expect(controller).toHaveAttribute('data-main-chat-composer-disabled', expectations.disabled ? 'true' : 'false');
+    }
+
+    if (expectations.generating !== undefined) {
+        await expect(controller).toHaveAttribute('data-main-chat-composer-generating', expectations.generating ? 'true' : 'false');
+    }
+
+    if (expectations.context !== undefined) {
+        await expect(controller).toHaveAttribute('data-main-chat-composer-context', expectations.context);
+    }
+}
+
+async function expectMainChatSlashCommandState(page, expectations = {}) {
+    const controller = page.locator('[data-main-chat-message-list-controller="true"]');
+
+    if (!reactMainChatMessageListEnabled) {
+        await expect(controller).toHaveCount(0);
+        return;
+    }
+
+    await expect(controller).toHaveCount(1);
+
+    if (expectations.active !== undefined) {
+        await expect(controller).toHaveAttribute('data-main-chat-slash-command-active', expectations.active ? 'true' : 'false');
+    }
+
+    if (expectations.queryLength !== undefined) {
+        await expect(controller).toHaveAttribute('data-main-chat-slash-command-query-length', String(expectations.queryLength));
+    }
+
+    if (expectations.autocomplete !== undefined) {
+        await expect(controller).toHaveAttribute('data-main-chat-slash-command-autocomplete', expectations.autocomplete ? 'visible' : 'hidden');
+    }
+
+    if (expectations.executing !== undefined) {
+        await expect(controller).toHaveAttribute('data-main-chat-slash-command-executing', expectations.executing ? 'true' : 'false');
+    }
+
+    if (expectations.paused !== undefined) {
+        await expect(controller).toHaveAttribute('data-main-chat-slash-command-paused', expectations.paused ? 'true' : 'false');
+    }
+
+    if (expectations.aborted !== undefined) {
+        await expect(controller).toHaveAttribute('data-main-chat-slash-command-aborted', expectations.aborted ? 'true' : 'false');
+    }
+
+    if (expectations.error !== undefined) {
+        await expect(controller).toHaveAttribute('data-main-chat-slash-command-error', expectations.error);
+    }
+}
+
 test.describe('chat message streaming', () => {
     test.describe.configure({ mode: 'serial' });
 
@@ -273,7 +408,7 @@ test.describe('chat message streaming', () => {
         await enableOpenAiStreaming(page);
         await installStreamingFetchStub(page, {
             chunks: ['Streaming ', 'proof ', 'complete.'],
-            delayMs: 35,
+            delayMs: 120,
         });
 
         const rowCountBeforeGeneration = await page.locator('#chat > .mes[mesid]').count();
@@ -282,9 +417,21 @@ test.describe('chat message streaming', () => {
         const streamingRow = assistantRowForGeneration(page, rowCountBeforeGeneration);
         await expect(streamingRow.locator('.mes_text')).toContainText('Streaming');
         const messageId = await streamingRow.getAttribute('mesid');
+        await expectMainChatStreamingTransportState(page, {
+            tokenCountAtLeast: 1,
+            messageId: Number(messageId),
+            expectFallback: false,
+        });
 
         await expect(streamingRow.locator('.mes_text')).toContainText('Streaming proof complete.');
         await waitForGeneration(page);
+        await expectMainChatStreamingTransportState(page, {
+            phase: 'completed',
+            generationPhase: ['completed', 'idle'],
+            tokenCountAtLeast: 1,
+            messageId: Number(messageId),
+            expectFallback: false,
+        });
         await expect(page.locator(`#chat > .mes[mesid="${messageId}"]`)).toHaveCount(1);
         await expect(page.locator(`#chat > .mes[mesid="${messageId}"]`).getByRole('button', { name: 'Message Actions' })).toBeVisible();
         await expect(page.getByRole('button', { name: 'Abort request' })).not.toBeVisible();
@@ -313,15 +460,48 @@ test.describe('chat message streaming', () => {
         const messageId = await streamingRow.getAttribute('mesid');
         const textBeforeStop = await streamingRow.locator('.mes_text').textContent();
         expect(String(textBeforeStop ?? '').trim().length).toBeGreaterThan(0);
+        await expectMainChatStreamingTransportState(page, {
+            phase: 'streaming',
+            generationPhase: 'streaming',
+            tokenCountAtLeast: 1,
+            messageId: Number(messageId),
+            expectFallback: false,
+        });
 
         await expect(page.locator('#mes_stop')).toBeVisible();
-        await page.locator('#mes_stop').click();
+        await expect.poll(async () => page.evaluate(() => window.SillyTavern.getContext().streamingProcessor?.observedTokenCount ?? 0))
+            .toBeGreaterThanOrEqual(1);
+        const stopped = await page.evaluate(async () => {
+            const script = await import('/script.js');
+            return script.stopGeneration();
+        });
+        expect(stopped).toBe(true);
+        await expectMainChatStreamingTransportState(page, {
+            phase: 'stopped',
+            messageId: Number(messageId),
+            expectFallback: false,
+        });
 
         await expect(page.locator('#mes_stop')).not.toBeVisible();
         await waitForGeneration(page, { allowAbort: true });
+        await expectMainChatStreamingTransportState(page, {
+            phase: ['stopped', 'idle'],
+            generationPhase: ['stopped', 'idle'],
+            tokenCountAtLeast: 1,
+            messageId: Number(messageId),
+            expectFallback: false,
+        });
         await expect(page.locator('body')).not.toHaveAttribute('data-generating', 'true');
         await page.locator('#send_textarea').fill('Follow-up after stop.');
         await expect(page.locator('#send_textarea')).toHaveValue('Follow-up after stop.');
+        await expectMainChatComposerState(page, {
+            length: 'Follow-up after stop.'.length,
+            empty: false,
+            canSubmit: true,
+            focused: true,
+            generating: false,
+            context: 'character',
+        });
         const stoppedRow = page.locator(`#chat > .mes[mesid="${messageId}"]`);
         await expect(stoppedRow).toHaveCount(1);
         const stoppedText = await stoppedRow.locator('.mes_text').textContent();
@@ -336,6 +516,212 @@ test.describe('chat message streaming', () => {
         expect(requestCount).toBe(1);
         expect(messageEvents).toHaveLength(0);
         expect(renderedEvents).toHaveLength(0);
+    });
+
+    test('composer keeps newline, send, clear, and empty-submit behavior legacy-owned', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterByName(page, characterName);
+        await enableOpenAiStreaming(page);
+        await installStreamingFetchStub(page, {
+            chunks: ['Composer proof complete.'],
+            delayMs: 35,
+        });
+
+        const composer = page.getByRole('textbox', { name: 'Chat message' });
+        const userRowCountBeforeSend = await page.locator('#chat > .mes[is_user="true"]').count();
+
+        await composer.focus();
+        await expect(composer).toBeFocused();
+        await expectMainChatComposerState(page, {
+            length: 0,
+            empty: true,
+            canSubmit: false,
+            focused: true,
+            disabled: false,
+            generating: false,
+            context: 'character',
+        });
+
+        await composer.pressSequentially('Line one');
+        await composer.press('Shift+Enter');
+        await composer.pressSequentially('Line two');
+        await expect(composer).toHaveValue('Line one\nLine two');
+        await expectMainChatComposerState(page, {
+            length: 'Line one\nLine two'.length,
+            empty: false,
+            canSubmit: true,
+            focused: true,
+            context: 'character',
+        });
+
+        await page.locator('#send_but').click();
+        await expect(composer).toHaveValue('');
+        await expectMainChatComposerState(page, {
+            length: 0,
+            empty: true,
+            canSubmit: false,
+            generating: true,
+            context: 'character',
+        });
+
+        await waitForGeneration(page);
+        await expectMainChatComposerState(page, {
+            length: 0,
+            empty: true,
+            canSubmit: false,
+            focused: true,
+            generating: false,
+            context: 'character',
+        });
+        await expect(page.locator('#chat > .mes[is_user="true"]').filter({ hasText: 'Line one' })).toHaveCount(1);
+        await expect(page.locator('#chat > .mes[is_user="true"]').filter({ hasText: 'Line two' })).toHaveCount(1);
+        await expect(page.locator('#chat > .mes[is_user="true"]')).toHaveCount(userRowCountBeforeSend + 1);
+
+        const userRowCountBeforeEmptyClick = await page.locator('#chat > .mes[is_user="true"]').count();
+        await page.locator('#send_but').click();
+        await page.waitForTimeout(150);
+        await expect(page.locator('#chat > .mes[is_user="true"]')).toHaveCount(userRowCountBeforeEmptyClick);
+        await expectMainChatComposerState(page, {
+            length: 0,
+            empty: true,
+            canSubmit: false,
+            focused: true,
+            generating: false,
+            context: 'character',
+        });
+    });
+
+    test('slash-command bridge observes autocomplete, execution, pause, continue, and abort without owning the executor', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterByName(page, characterName);
+
+        await page.evaluate(async () => {
+            const { power_user } = await import('/scripts/power-user.js');
+            const { AUTOCOMPLETE_STATE } = await import('/scripts/autocomplete/AutoComplete.js');
+            power_user.stscript.autocomplete.state = AUTOCOMPLETE_STATE.ALWAYS;
+        });
+
+        const composer = page.getByRole('textbox', { name: 'Chat message' });
+        await composer.focus();
+        await composer.pressSequentially('/e');
+        await expectMainChatSlashCommandState(page, {
+            active: true,
+            queryLength: 1,
+            autocomplete: true,
+            executing: false,
+            paused: false,
+            aborted: false,
+            error: '',
+        });
+
+        await composer.fill('normal text');
+        await expectMainChatSlashCommandState(page, {
+            active: false,
+            queryLength: 0,
+            autocomplete: false,
+            executing: false,
+            paused: false,
+            aborted: false,
+            error: '',
+        });
+
+        const scriptText = '/delay 400 | /delay 400 | /echo ready';
+        await composer.fill(scriptText);
+        await page.evaluate(async (text) => {
+            const { executeSlashCommandsOnChatInput } = await import('/scripts/slash-commands.js');
+            window.__emberdeskSlashExecutionResult = null;
+            window.__emberdeskSlashExecutionError = null;
+            window.__emberdeskSlashExecutionPromise = executeSlashCommandsOnChatInput(text, { clearChatInput: false })
+                .then(result => {
+                    window.__emberdeskSlashExecutionResult = {
+                        isError: Boolean(result?.isError),
+                        isAborted: Boolean(result?.isAborted),
+                        errorMessage: result?.errorMessage ?? null,
+                        abortReason: result?.abortReason ?? null,
+                    };
+                    return result;
+                })
+                .catch(error => {
+                    window.__emberdeskSlashExecutionError = String(error?.message ?? error);
+                    throw error;
+                });
+        }, scriptText);
+
+        await expectMainChatSlashCommandState(page, {
+            active: true,
+            queryLength: 5,
+            executing: true,
+            paused: false,
+            aborted: false,
+            error: '',
+        });
+
+        await page.evaluate(async () => {
+            const { pauseScriptExecution } = await import('/scripts/slash-commands.js');
+            pauseScriptExecution();
+        });
+        await expectMainChatSlashCommandState(page, {
+            active: true,
+            queryLength: 5,
+            executing: true,
+            paused: true,
+            aborted: false,
+            error: '',
+        });
+
+        await page.evaluate(async () => {
+            const { pauseScriptExecution } = await import('/scripts/slash-commands.js');
+            pauseScriptExecution();
+        });
+        await expectMainChatSlashCommandState(page, {
+            active: true,
+            queryLength: 5,
+            executing: true,
+            paused: false,
+            aborted: false,
+            error: '',
+        });
+
+        await page.evaluate(async () => {
+            const { stopScriptExecution } = await import('/scripts/slash-commands.js');
+            stopScriptExecution();
+        });
+        await waitForSlashCommandExecution(page);
+        await expectMainChatSlashCommandState(page, {
+            active: true,
+            queryLength: 5,
+            executing: false,
+            paused: false,
+            aborted: true,
+            error: '',
+        });
+
+        const slashExecution = await page.evaluate(() => window.__emberdeskSlashExecutionResult);
+        expect(slashExecution).toEqual(expect.objectContaining({
+            isError: false,
+            isAborted: true,
+        }));
+
+        await composer.fill('back to normal text');
+        await expectMainChatSlashCommandState(page, {
+            active: false,
+            queryLength: 0,
+            autocomplete: false,
+            executing: false,
+            paused: false,
+            aborted: true,
+            error: '',
+        });
+        await page.waitForTimeout(1300);
+        await expectMainChatSlashCommandState(page, {
+            active: false,
+            queryLength: 0,
+            autocomplete: false,
+            executing: false,
+            paused: false,
+            aborted: false,
+            error: '',
+        });
     });
 
     test('auto retries primary failures once, switches to fallback, and keeps one assistant row', async ({ page }) => {
@@ -356,9 +742,23 @@ test.describe('chat message streaming', () => {
         const rowCountBeforeGeneration = await page.locator('#chat > .mes[mesid]').count();
         await startGeneration(page, 'Start a deterministic fallback recovery proof.');
         const assistantRow = assistantRowForGeneration(page, rowCountBeforeGeneration);
+        await expectMainChatStreamingTransportState(page, {
+            phase: ['streaming', 'completed'],
+            generationPhase: ['recoveringFallback', 'completed', 'idle'],
+            tokenCountAtLeast: 1,
+            messageId: rowCountBeforeGeneration + 1,
+            expectFallback: true,
+        });
 
         await expect(assistantRow.locator('.mes_text')).toContainText('Fallback recovery complete.');
         await waitForGeneration(page);
+        await expectMainChatStreamingTransportState(page, {
+            phase: 'completed',
+            generationPhase: ['completed', 'idle'],
+            tokenCountAtLeast: 1,
+            messageId: rowCountBeforeGeneration + 1,
+            expectFallback: true,
+        });
         const statusHistory = await page.evaluate(() => window.__emberdeskStreamingRecoveryStatuses);
         expect(statusHistory).toContain('正在重试');
         expect(statusHistory).toContain('正在使用备用服务商');
@@ -455,6 +855,12 @@ test.describe('chat message streaming', () => {
         const rowCountBeforeGeneration = await page.locator('#chat > .mes[mesid]').count();
         await startGeneration(page, 'Start a deterministic provider failure proof.');
         await waitForGeneration(page, { allowFailure: true });
+        await expectMainChatStreamingTransportState(page, {
+            phase: 'error',
+            generationPhase: 'error',
+            messageId: rowCountBeforeGeneration + 1,
+            expectFallback: false,
+        });
 
         const userRow = page.locator(`#chat > .mes[is_user="true"][mesid="${rowCountBeforeGeneration}"]`);
         await expect(userRow.locator('.mes_text')).toContainText('Start a deterministic provider failure proof.');
@@ -470,6 +876,14 @@ test.describe('chat message streaming', () => {
         await expect(page.locator('#send_textarea')).toHaveValue('Follow-up after provider failure.');
         await expect(page.locator('body')).not.toHaveAttribute('data-generating', 'true');
         await expect.poll(async () => page.evaluate(() => window.SillyTavern.getContext().streamingProcessor === null)).toBe(true);
+        await expectMainChatComposerState(page, {
+            length: 'Follow-up after provider failure.'.length,
+            empty: false,
+            canSubmit: true,
+            focused: true,
+            generating: false,
+            context: 'character',
+        });
         await expect(page.locator(`#chat > .mes[mesid="${rowCountBeforeGeneration + 1}"]`)).toHaveCount(1);
         const failedAttemptRequestCount = await page.evaluate(() => window.__emberdeskStreamingRequests.length);
         expect(failedAttemptRequestCount).toBe(2);
@@ -651,6 +1065,14 @@ test.describe('chat message streaming', () => {
         await expect(page.locator('#send_textarea')).toHaveValue('Follow-up after pre-token provider failure.');
         await expect(page.locator('body')).not.toHaveAttribute('data-generating', 'true');
         await expect.poll(async () => page.evaluate(() => window.SillyTavern.getContext().streamingProcessor === null)).toBe(true);
+        await expectMainChatComposerState(page, {
+            length: 'Follow-up after pre-token provider failure.'.length,
+            empty: false,
+            canSubmit: true,
+            focused: true,
+            generating: false,
+            context: 'character',
+        });
         const failedRequestCount = await page.evaluate(() => window.__emberdeskStreamingRequests.length);
         expect(failedRequestCount).toBe(2);
     });
@@ -664,8 +1086,17 @@ test.describe('chat message streaming', () => {
             await page.setViewportSize({ width: viewport.width, height: viewport.height });
             const composer = page.getByRole('textbox', { name: 'Chat message' });
             await expect(composer, `${viewport.name} composer`).toBeVisible();
+            await expectReachableControlGeometry(page, '#send_textarea', `${viewport.name} composer`);
             await composer.focus();
             await expect(composer, `${viewport.name} composer focus`).toBeFocused();
+            await expectMainChatComposerState(page, {
+                length: 0,
+                empty: true,
+                canSubmit: false,
+                focused: true,
+                generating: false,
+                context: 'character',
+            });
 
             await installStreamingFetchStub(page, {
                 chunks: [`${viewport.name} stop proof.`],

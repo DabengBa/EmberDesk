@@ -136,6 +136,8 @@ Do not rename, move, or narrow these exported browser modules as incidental clea
 
 Do not remove, rename, or narrow these exports as incidental cleanup. Parser, command-registration, and execution semantics require focused compatibility proof before behavior changes.
 
+When `features.react.panels.mainChatMessageList` is enabled, the guarded React main-chat island may observe slash-command state through a hidden `slashCommand` bridge marker. That marker is additive only: it can report active state, query length, autocomplete visibility, executing, paused, aborted, and error label, but it must not copy full command text or arguments, import parser internals, register commands, execute commands, replace the autocomplete DOM, or change the exports listed above. `executeSlashCommandsOnChatInput()`, `commandsFromChatInputAbortController`, `pauseScriptExecution()`, `stopScriptExecution()`, `setSlashCommandAutoComplete()`, and parser/registry semantics remain owned by `public/scripts/slash-commands.js`.
+
 ## Regex Data Contract
 
 The current regex feature is stateful across global settings, character cards, and presets:

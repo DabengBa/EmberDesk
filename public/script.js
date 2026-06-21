@@ -232,6 +232,9 @@ import { initSystemPrompts } from './scripts/sysprompt.js';
 import { registerExtensionSlashCommands as initExtensionSlashCommands } from './scripts/extensions-slashcommands.js';
 import { buildChatMessageRenderDescriptor, buildChatMessageRowPopulation } from './scripts/chat-message-render-descriptor.js';
 import { getStreamingControlState } from './scripts/chat-streaming-control-state.js';
+import { getMainChatComposerState } from './scripts/main-chat-composer-state.js';
+import { getMainChatSlashCommandState } from './scripts/main-chat-slash-command-state.js';
+import { getMainChatStreamingTransportState } from './scripts/main-chat-streaming-transport-state.js';
 import { buildMessageActionSnapshot, createChatMessageActionsController } from './scripts/chat-message-actions-controller.js';
 import { ToolManager } from './scripts/tool-calling.js';
 import { addShowdownPatch } from './scripts/util/showdown-patch.js';
@@ -317,11 +320,17 @@ const MAIN_CHAT_MESSAGE_LIST_REACT_HOST_ID = 'emberdesk-react-main-chat-message-
 const MAIN_CHAT_SCROLL_RESTORE_THRESHOLD_PX = 12;
 const mainChatRichBodySnapshotSchema = 'mainChatRichBodySnapshotSchema';
 const mainChatMessageActionSnapshotSchema = 'mainChatMessageActionSnapshotSchema';
+const STREAMING_TRANSPORT_TERMINAL_PHASES = new Set(['stopped', 'completed', 'error']);
 const REACT_CHARACTER_LIBRARY_PANEL_ASSET_PATH = '/react/login/assets/character-library-panel.js';
 const REACT_CHARACTER_LIBRARY_TOOLBAR_HOST_ID = 'emberdesk-react-character-library-toolbar';
 let reactCharacterLibraryPanelModulePromise = null;
 let reactCharacterLibraryPanelMounted = false;
 let reactCharacterLibraryToolbarMounted = false;
+let mainChatMessageListBridgeObserversBound = false;
+let mainChatMessageListBridgeRefreshFrame = 0;
+let mainChatMessageListBridgeSendFormObserver = null;
+let mainChatMessageListBridgeFormShellObserver = null;
+let mainChatMessageListBridgeBodyObserver = null;
 
 function getMainChatMessageListScrollSnapshotStore() {
     if (!(globalThis.__emberDeskMainChatMessageListScrollSnapshots instanceof Map)) {
@@ -353,6 +362,17 @@ function getMainChatDistanceFromEnd(chatContainer) {
     return Math.max(chatContainer.scrollHeight - (chatContainer.scrollTop + chatContainer.clientHeight), 0);
 }
 
+function scheduleMainChatMessageListPanelRefresh() {
+    if (mainChatMessageListBridgeRefreshFrame !== 0) {
+        return;
+    }
+
+    mainChatMessageListBridgeRefreshFrame = requestAnimationFrame(() => {
+        mainChatMessageListBridgeRefreshFrame = 0;
+        void mountReactMainChatMessageListPanel();
+    });
+}
+
 function isMainChatGenerationControlElementVisible(element) {
     if (!(element instanceof HTMLElement)) {
         return false;
@@ -366,6 +386,37 @@ function getMainChatGenerationControlMessageId(element) {
     const messageRow = element instanceof HTMLElement ? element.closest('#chat > .mes[mesid]') : null;
     const messageId = Number(messageRow?.getAttribute('mesid'));
     return Number.isInteger(messageId) && messageId >= 0 ? messageId : null;
+}
+
+function getMainChatComposerActiveContext() {
+    if (selected_group) {
+        return 'group';
+    }
+
+    if (this_chid !== undefined) {
+        return 'character';
+    }
+
+    return typeof name2 === 'string' && name2.trim() ? 'assistant' : 'none';
+}
+
+function getMainChatComposerBridgeState() {
+    const textarea = document.getElementById('send_textarea');
+    const sendButton = document.getElementById('send_but');
+    const activeContext = getMainChatComposerActiveContext();
+    const valueLength = textarea instanceof HTMLTextAreaElement ? textarea.value.length : 0;
+    const isGenerating = document.body.dataset.generating === 'true';
+    const isDisabled = textarea?.disabled === true || sendButton?.disabled === true;
+
+    return getMainChatComposerState({
+        valueLength: valueLength,
+        hasValue: valueLength > 0,
+        canSubmit: valueLength > 0 && !isDisabled && !isGenerating && activeContext !== 'none',
+        isFocused: document.activeElement === textarea,
+        isDisabled: isDisabled,
+        isGenerating: isGenerating,
+        activeContext: getMainChatComposerActiveContext(),
+    });
 }
 
 function getMainChatGenerationControlBridgeState() {
@@ -394,6 +445,174 @@ function getMainChatGenerationControlBridgeState() {
             continueSurface,
         }),
     };
+}
+
+function isMainChatSlashAutocompleteVisible() {
+    const autocompleteWrap = document.querySelector('.autoComplete-wrap');
+    const autocompleteMenu = document.querySelector('.autoComplete');
+
+    return isMainChatGenerationControlElementVisible(autocompleteWrap)
+        || isMainChatGenerationControlElementVisible(autocompleteMenu);
+}
+
+function getMainChatSlashCommandBridgeState() {
+    const textarea = document.getElementById('send_textarea');
+    const formShell = document.getElementById('form_sheld');
+    const hasError = formShell?.classList.contains('script_error') === true;
+
+    return getMainChatSlashCommandState({
+        text: textarea?.value ?? '',
+        autocompleteVisible: isMainChatSlashAutocompleteVisible(),
+        isExecuting: Boolean(isExecutingCommandsFromChatInput || formShell?.classList.contains('isExecutingCommandsFromChatInput')),
+        isPaused: formShell?.classList.contains('script_paused') === true,
+        isAborted: formShell?.classList.contains('script_aborted') === true,
+        hasError: hasError,
+        errorLabel: hasError ? 'error' : null,
+    });
+}
+
+function getMainChatStreamingTransportStore() {
+    if (!globalThis.__emberDeskMainChatStreamingTransportStore || typeof globalThis.__emberDeskMainChatStreamingTransportStore !== 'object') {
+        globalThis.__emberDeskMainChatStreamingTransportStore = {
+            latestTerminalSnapshot: null,
+        };
+    }
+
+    return globalThis.__emberDeskMainChatStreamingTransportStore;
+}
+
+function resetMainChatStreamingTransportTerminalSnapshot() {
+    getMainChatStreamingTransportStore().latestTerminalSnapshot = null;
+}
+
+function rememberMainChatStreamingTransportTerminalSnapshot(snapshot) {
+    if (!snapshot || !STREAMING_TRANSPORT_TERMINAL_PHASES.has(snapshot.phase)) {
+        return;
+    }
+
+    getMainChatStreamingTransportStore().latestTerminalSnapshot = structuredClone(snapshot);
+}
+
+function rememberMainChatStreamingTransportProcessorTerminal(processor, phase) {
+    if (!processor || !STREAMING_TRANSPORT_TERMINAL_PHASES.has(phase)) {
+        return;
+    }
+
+    rememberMainChatStreamingTransportTerminalSnapshot(getMainChatStreamingTransportState({
+        phase,
+        activeMessageId: Number.isInteger(processor.messageId) && processor.messageId >= 0 ? processor.messageId : null,
+        observedTokenCount: processor.observedTokenCount ?? 0,
+        observedChunkCount: processor.observedChunkCount ?? 0,
+        fromFallbackAttempt: Boolean(processor.fromFallbackAttempt),
+        recoverable: phase !== 'completed',
+    }));
+}
+
+function rememberMainChatStreamingTransportVisibleTerminal(phase) {
+    if (!STREAMING_TRANSPORT_TERMINAL_PHASES.has(phase)) {
+        return;
+    }
+
+    const assistantRow = Array.from(document.querySelectorAll('#chat > .mes[is_user="false"][is_system="false"][mesid]')).at(-1);
+    const messageId = Number(assistantRow?.getAttribute('mesid'));
+    const messageText = assistantRow?.querySelector('.mes_text')?.textContent?.trim() ?? '';
+
+    rememberMainChatStreamingTransportTerminalSnapshot(getMainChatStreamingTransportState({
+        phase,
+        activeMessageId: Number.isInteger(messageId) && messageId >= 0 ? messageId : null,
+        observedTokenCount: messageText && messageText !== '...' ? 1 : 0,
+        observedChunkCount: messageText && messageText !== '...' ? 1 : 0,
+        recoverable: phase !== 'completed',
+    }));
+}
+
+function getMainChatStreamingTransportBridgeState() {
+    const recoveryStatus = document.querySelector('#chat > .mes .generation_auto_recovery_status');
+    const failureRetry = document.querySelector('#chat > .mes .generation_failure_retry');
+    const failureNotice = document.querySelector('#chat > .mes .generation_failure_notice');
+    const activeMessageId = getMainChatGenerationControlMessageId(recoveryStatus)
+        ?? getMainChatGenerationControlMessageId(failureRetry)
+        ?? getMainChatGenerationControlMessageId(failureNotice)
+        ?? (Number.isInteger(streamingProcessor?.messageId) && streamingProcessor.messageId >= 0 ? streamingProcessor.messageId : null);
+    const hasActiveStreamingProcessor = Boolean(streamingProcessor && !streamingProcessor.isStopped && !streamingProcessor.isFinished);
+    const snapshot = getMainChatStreamingTransportState({
+        isGenerating: document.body.dataset.generating === 'true',
+        hasStreamingProcessor: hasActiveStreamingProcessor,
+        isFinalizing: Boolean(streamingProcessor?.isFinalizing),
+        isStopped: Boolean(streamingProcessor?.isStopped),
+        isFinished: Boolean(streamingProcessor?.isFinished),
+        hasError: Boolean(failureNotice || failureRetry),
+        activeMessageId,
+        observedTokenCount: streamingProcessor?.observedTokenCount ?? 0,
+        observedChunkCount: streamingProcessor?.observedChunkCount ?? 0,
+        fromFallbackAttempt: Boolean(streamingProcessor?.fromFallbackAttempt || recoveryStatus?.dataset?.recoveryStage === 'fallback'),
+        recoverable: Boolean(recoveryStatus || failureRetry),
+        errorLabel: failureNotice?.textContent?.trim() || null,
+    });
+
+    if (STREAMING_TRANSPORT_TERMINAL_PHASES.has(snapshot.phase)) {
+        rememberMainChatStreamingTransportTerminalSnapshot(snapshot);
+        return snapshot;
+    }
+
+    if (snapshot.phase === 'idle' || (snapshot.phase === 'connecting' && !hasActiveStreamingProcessor)) {
+        return getMainChatStreamingTransportStore().latestTerminalSnapshot ?? snapshot;
+    }
+
+    resetMainChatStreamingTransportTerminalSnapshot();
+    return snapshot;
+}
+
+function bindMainChatMessageListBridgeObservers() {
+    if (mainChatMessageListBridgeObserversBound) {
+        return;
+    }
+
+    const sendTextarea = document.getElementById('send_textarea');
+    const sendForm = document.getElementById('send_form');
+    const formShell = document.getElementById('form_sheld');
+
+    if (sendTextarea instanceof HTMLTextAreaElement) {
+        sendTextarea.addEventListener('input', scheduleMainChatMessageListPanelRefresh);
+        sendTextarea.addEventListener('focus', scheduleMainChatMessageListPanelRefresh);
+        sendTextarea.addEventListener('blur', scheduleMainChatMessageListPanelRefresh);
+        sendTextarea.addEventListener('click', scheduleMainChatMessageListPanelRefresh);
+    }
+
+    if (sendForm instanceof HTMLElement) {
+        mainChatMessageListBridgeSendFormObserver = new MutationObserver(() => {
+            scheduleMainChatMessageListPanelRefresh();
+        });
+        mainChatMessageListBridgeSendFormObserver.observe(sendForm, {
+            attributes: true,
+            childList: true,
+            subtree: true,
+            attributeFilter: ['class', 'style', 'hidden', 'aria-hidden'],
+        });
+    }
+
+    if (formShell instanceof HTMLElement) {
+        mainChatMessageListBridgeFormShellObserver = new MutationObserver(() => {
+            scheduleMainChatMessageListPanelRefresh();
+        });
+        mainChatMessageListBridgeFormShellObserver.observe(formShell, {
+            attributes: true,
+            attributeFilter: ['class', 'style', 'hidden', 'aria-hidden'],
+        });
+    }
+
+    if (document.body instanceof HTMLBodyElement) {
+        mainChatMessageListBridgeBodyObserver = new MutationObserver(() => {
+            scheduleMainChatMessageListPanelRefresh();
+        });
+        mainChatMessageListBridgeBodyObserver.observe(document.body, {
+            attributes: true,
+            attributeFilter: ['data-generating'],
+        });
+    }
+
+    mainChatMessageListBridgeObserversBound = true;
+    scheduleMainChatMessageListPanelRefresh();
 }
 
 function getMainChatVisibleAnchorRow(chatContainer, messageRows) {
@@ -735,6 +954,9 @@ function getMainChatMessageListReactBridgeState() {
         scrollHeight: chatContainer?.scrollHeight ?? 0,
         clientHeight: chatContainer?.clientHeight ?? 0,
         generationControl: getMainChatGenerationControlBridgeState(),
+        composer: getMainChatComposerBridgeState(),
+        slashCommand: getMainChatSlashCommandBridgeState(),
+        streamingTransport: getMainChatStreamingTransportBridgeState(),
         chatContainer,
         host,
         messageNodes: messageRows,
@@ -1959,6 +2181,7 @@ async function firstLoadInit() {
         initAuthorsNote();
         await initPersonas();
         await initSlashCommandAutoComplete();
+        bindMainChatMessageListBridgeObservers();
         initMacroAutoComplete();
         // Register deferred panel hooks before initWorldInfo so they capture any needed state
         registerPanelHook('world-info-body', _replayWorldInfoSettings);
@@ -5417,6 +5640,10 @@ class StreamingProcessor {
         /** @type {string?} */
         this.reasoningSignature = null;
         this.suppressErrorRecovery = false;
+        this.isFinalizing = false;
+        this.observedTokenCount = 0;
+        this.observedChunkCount = 0;
+        this.fromFallbackAttempt = false;
     }
 
     /**
@@ -5587,6 +5814,8 @@ class StreamingProcessor {
      * @param {boolean} options.unlockUI - Whether to unlock the generation UI.
      */
     async finalizeIntermediaryMessage(messageId, text, { unlockUI = true }) {
+        this.isFinalizing = true;
+        void mountReactMainChatMessageListPanel();
         await this.onProgressStreaming(messageId, text, true);
         const messageElement = chatElement.find(`.mes[mesid="${messageId}"]`);
         const message = chat[messageId];
@@ -5637,6 +5866,8 @@ class StreamingProcessor {
         }
 
         updateSwipeCounter(messageId, { message, messageElement });
+        this.isFinalizing = false;
+        void mountReactMainChatMessageListPanel();
     }
 
     async onFinishStreaming(messageId, text) {
@@ -5653,6 +5884,7 @@ class StreamingProcessor {
 
     async onErrorStreaming({ suppressRecovery = false } = {}) {
         this.isStopped = true;
+        this.isFinalizing = false;
 
         if (this.messageId !== -1 && this.result) {
             await this.onProgressStreaming(this.messageId, this.continueMessage + this.result, true);
@@ -5688,7 +5920,11 @@ class StreamingProcessor {
 
     onStopStreaming() {
         this.abortController.abort();
+        this.isStopped = true;
+        this.isFinalizing = false;
         this.isFinished = true;
+        rememberMainChatStreamingTransportProcessorTerminal(this, 'stopped');
+        void mountReactMainChatMessageListPanel();
     }
 
     /**
@@ -5727,6 +5963,8 @@ class StreamingProcessor {
                 this.toolCalls = toolCalls;
                 this.result = text;
                 this.swipes = Array.from(swipes ?? []);
+                this.observedTokenCount += 1;
+                this.observedChunkCount += 1;
                 if (logprobs) {
                     this.messageLogprobs.push(...(Array.isArray(logprobs) ? logprobs : [logprobs]));
                 }
@@ -5749,6 +5987,7 @@ class StreamingProcessor {
         }
 
         this.isFinished = true;
+        void mountReactMainChatMessageListPanel();
         return this.result;
     }
 }
@@ -7500,13 +7739,20 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
 export function stopGeneration() {
     let stopped = false;
     if (streamingProcessor) {
+        rememberMainChatStreamingTransportProcessorTerminal(streamingProcessor, 'stopped');
         streamingProcessor.onStopStreaming();
         stopped = true;
     }
     if (abortController) {
         abortController.abort('Clicked stop button');
         hideStopButton();
+        if (!stopped) {
+            rememberMainChatStreamingTransportVisibleTerminal('stopped');
+        }
         stopped = true;
+    }
+    if (stopped) {
+        void mountReactMainChatMessageListPanel();
     }
     eventSource.emit(event_types.GENERATION_STOPPED);
     return stopped;

@@ -192,3 +192,115 @@ describe('chat streaming control state', () => {
         });
     });
 });
+
+async function importFreshTransportStateModule() {
+    return import(`../public/scripts/main-chat-streaming-transport-state.js?cacheBust=${Date.now()}-${Math.random()}`);
+}
+
+describe('main chat streaming transport bridge state', () => {
+    test.each([
+        ['idle', {}, {
+            phase: 'idle',
+            activeMessageId: null,
+            hasStreamingProcessor: false,
+            observedTokenCount: 0,
+            observedChunkCount: 0,
+            fromFallbackAttempt: false,
+            recoverable: false,
+            errorLabel: null,
+        }],
+        ['connecting', { isGenerating: true, hasStreamingProcessor: true, activeMessageId: 2 }, {
+            phase: 'connecting',
+            activeMessageId: 2,
+            hasStreamingProcessor: true,
+            observedTokenCount: 0,
+            observedChunkCount: 0,
+            fromFallbackAttempt: false,
+            recoverable: false,
+            errorLabel: null,
+        }],
+        ['streaming', { hasStreamingProcessor: true, activeMessageId: 3, observedTokenCount: 12, observedChunkCount: 4 }, {
+            phase: 'streaming',
+            activeMessageId: 3,
+            hasStreamingProcessor: true,
+            observedTokenCount: 12,
+            observedChunkCount: 4,
+            fromFallbackAttempt: false,
+            recoverable: false,
+            errorLabel: null,
+        }],
+        ['finalizing', { isFinalizing: true, activeMessageId: 4, observedTokenCount: 3 }, {
+            phase: 'finalizing',
+            activeMessageId: 4,
+            hasStreamingProcessor: false,
+            observedTokenCount: 3,
+            observedChunkCount: 0,
+            fromFallbackAttempt: false,
+            recoverable: false,
+            errorLabel: null,
+        }],
+        ['stopped', { isStopped: true, activeMessageId: 5, observedTokenCount: 2, recoverable: true }, {
+            phase: 'stopped',
+            activeMessageId: 5,
+            hasStreamingProcessor: false,
+            observedTokenCount: 2,
+            observedChunkCount: 0,
+            fromFallbackAttempt: false,
+            recoverable: true,
+            errorLabel: null,
+        }],
+        ['completed', { isFinished: true, activeMessageId: 6, observedTokenCount: 9 }, {
+            phase: 'completed',
+            activeMessageId: 6,
+            hasStreamingProcessor: false,
+            observedTokenCount: 9,
+            observedChunkCount: 0,
+            fromFallbackAttempt: false,
+            recoverable: false,
+            errorLabel: null,
+        }],
+        ['error', { hasError: true, activeMessageId: 7, fromFallbackAttempt: true, recoverable: true, errorLabel: 'empty reply' }, {
+            phase: 'error',
+            activeMessageId: 7,
+            hasStreamingProcessor: false,
+            observedTokenCount: 0,
+            observedChunkCount: 0,
+            fromFallbackAttempt: true,
+            recoverable: true,
+            errorLabel: 'empty reply',
+        }],
+    ])('classifies %s streaming transport state', async (_name, input, expected) => {
+        const { getMainChatStreamingTransportState } = await importFreshTransportStateModule();
+
+        expect(getMainChatStreamingTransportState(input)).toEqual(expected);
+    });
+
+    test('normalizes unsafe bridge metadata without exposing provider or token owner state', async () => {
+        const { getMainChatStreamingTransportState } = await importFreshTransportStateModule();
+
+        const transportState = getMainChatStreamingTransportState({
+            isGenerating: true,
+            activeMessageId: '4',
+            observedTokenCount: -3,
+            observedChunkCount: 1.5,
+            fromFallbackAttempt: 'yes',
+            recoverable: 1,
+            errorLabel: '',
+            providerRequest: { url: '/api/generate' },
+            tokenBuffer: 'secret prompt text',
+        });
+
+        expect(transportState).toEqual({
+            phase: 'connecting',
+            activeMessageId: null,
+            hasStreamingProcessor: false,
+            observedTokenCount: 0,
+            observedChunkCount: 0,
+            fromFallbackAttempt: true,
+            recoverable: true,
+            errorLabel: null,
+        });
+        expect(transportState).not.toHaveProperty('providerRequest');
+        expect(transportState).not.toHaveProperty('tokenBuffer');
+    });
+});
