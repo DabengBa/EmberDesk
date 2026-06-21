@@ -29,7 +29,7 @@ Phase 3 当前采用 guarded `features.react.panels.mainChatMessageList` hidden 
   - 2026-06-21: 确认当前 Sprint 4 不能按旧 EventSource 示例直接 delivery。
   - 2026-06-21: 重新收敛为 legacy `Generate()` / `StreamingProcessor` owner 保持不变、React hidden island 只消费 `streamingTransport` / token append 快照的边界。
   - 2026-06-21: 已交付 `public/scripts/main-chat-streaming-transport-state.js` hidden snapshot bridge、terminal replay 和 fail-closed marker schema。
-- **Implementation traceability:** code paths `public/scripts/main-chat-streaming-transport-state.js`, `public/script.js`, `app/workspace-panels.tsx`; tests `tests/chat-streaming-control-state.test.js`, `tests/chat-message-streaming.e2e.js`, `tests/react-workspace-panels-helpers.test.js`; logic doc `.docs/logic-description/main_chat_streaming_transport_bridge_processing_flow.md`; archival commit `pending final wrap-up commit`; delivery status `delivered`
+- **Implementation traceability:** code paths `public/scripts/main-chat-streaming-transport-state.js`, `public/script.js`, `app/workspace-panels.tsx`; tests `tests/chat-streaming-control-state.test.js`, `tests/chat-message-streaming.e2e.js`, `tests/react-workspace-panels-helpers.test.js`; logic doc `.docs/logic-description/main_chat_streaming_transport_bridge_processing_flow.md`; commit `564ef790e feat(react): let main chat bridges bow out quietly`; delivery status `delivered`
 
 ### Domain: Sprint 6 basic composer bridge
 
@@ -38,7 +38,7 @@ Phase 3 当前采用 guarded `features.react.panels.mainChatMessageList` hidden 
 - **Change history:**
   - 2026-06-21: 明确 Sprint 6 先做 composer state/action bridge 和 React host marker，不直接替换 visible composer DOM。
   - 2026-06-21: 已交付 `public/scripts/main-chat-composer-state.js` hidden composer snapshot、sendability/focus markers 和 textarea/form scoped refresh observers。
-- **Implementation traceability:** code paths `public/scripts/main-chat-composer-state.js`, `public/script.js`, `app/workspace-panels.tsx`; tests `tests/main-chat-composer-state.test.js`, `tests/chat-message-streaming.e2e.js`, `tests/chat-message-layout.e2e.js`; logic doc `.docs/logic-description/main_chat_composer_bridge_processing_flow.md`; archival commit `pending final wrap-up commit`; delivery status `delivered`
+- **Implementation traceability:** code paths `public/scripts/main-chat-composer-state.js`, `public/script.js`, `app/workspace-panels.tsx`; tests `tests/main-chat-composer-state.test.js`, `tests/chat-message-streaming.e2e.js`, `tests/chat-message-layout.e2e.js`; logic doc `.docs/logic-description/main_chat_composer_bridge_processing_flow.md`; commit `564ef790e feat(react): let main chat bridges bow out quietly`; delivery status `delivered`
 
 ### Domain: Sprint 7 slash-command bridge
 
@@ -47,7 +47,7 @@ Phase 3 当前采用 guarded `features.react.panels.mainChatMessageList` hidden 
 - **Change history:**
   - 2026-06-21: 明确 Sprint 7 只在 React island 中观察/呈现 slash-command autocomplete and execution state，不重写 parser 或 command registry。
   - 2026-06-21: 已交付 `public/scripts/main-chat-slash-command-state.js` hidden slash snapshot、autocomplete visibility/execution state markers 和 compat-safe bridge state。
-- **Implementation traceability:** code paths `public/scripts/main-chat-slash-command-state.js`, `public/scripts/slash-commands.js`, `public/script.js`, `app/workspace-panels.tsx`; tests `tests/main-chat-slash-command-state.test.js`, `tests/react-workspace-panels-helpers.test.js`, `tests/third-party-extension-compatibility.test.js`; logic doc `.docs/logic-description/main_chat_slash_command_bridge_processing_flow.md`; archival commit `pending final wrap-up commit`; delivery status `delivered`
+- **Implementation traceability:** code paths `public/scripts/main-chat-slash-command-state.js`, `public/scripts/slash-commands.js`, `public/script.js`, `app/workspace-panels.tsx`; tests `tests/main-chat-slash-command-state.test.js`, `tests/react-workspace-panels-helpers.test.js`, `tests/third-party-extension-compatibility.test.js`; logic doc `.docs/logic-description/main_chat_slash_command_bridge_processing_flow.md`; commit `564ef790e feat(react): let main chat bridges bow out quietly`; delivery status `delivered`
 
 ### Domain: Sprint 9 integration closure
 
@@ -56,7 +56,7 @@ Phase 3 当前采用 guarded `features.react.panels.mainChatMessageList` hidden 
 - **Change history:**
   - 2026-06-21: 旧 Sprint 9 文档中的全量完成清单被视为过期路线图模板，新的 Sprint 9 只在 Sprint 4/6/7 交付且 Sprint 8 保持当前已交付边界后关闭 Phase 3。
   - 2026-06-21: 已补齐 flag-on / flag-off E2E、compat gate、docs sync 和本地 interaction perf smoke，按当前批准的 guarded hidden-island scope 关闭 Phase 3。
-- **Implementation traceability:** test paths `tests/chat-message-rendering.e2e.js`, `tests/chat-message-streaming.e2e.js`, `tests/chat-message-layout.e2e.js`, `tests/chat-message-list-walkthrough.e2e.js`, `tests/third-party-extension-compatibility.test.js`; docs `.docs/specs/react-phase3-main-chat/README.md`, `.docs/tech/react-modernization-roadmap.md`, `.docs/PROJECT_HISTORY.md`; perf artifact `artifacts/interaction-perf/2026-06-21T09-39-58-706Z/report.md`; archival commit `pending final wrap-up commit`; delivery status `delivered`
+- **Implementation traceability:** test paths `tests/chat-message-rendering.e2e.js`, `tests/chat-message-streaming.e2e.js`, `tests/chat-message-layout.e2e.js`, `tests/chat-message-list-walkthrough.e2e.js`, `tests/third-party-extension-compatibility.test.js`; docs `.docs/specs/react-phase3-main-chat/README.md`, `.docs/tech/react-modernization-roadmap.md`, `.docs/PROJECT_HISTORY.md`; perf artifact `artifacts/interaction-perf/2026-06-21T09-39-58-706Z/report.md`; commit `564ef790e feat(react): let main chat bridges bow out quietly`; delivery status `delivered`
 
 ## Non-Goals
 

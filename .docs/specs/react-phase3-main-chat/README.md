@@ -124,7 +124,7 @@ Sprint 9 已按当前批准的 guarded hidden-island scope 做整合关闭：Pha
 - `bcfdbce29`：World Info / Background Library / Extensions Host 的 Phase 2 action-island 完成交付，不是 main-chat Sprint 1 主交付
 - `d15d9f8de`：当前可见历史里第一个直接暴露 `mainChatMessageList` 的 Phase 3 main-chat 交付提交；它同时带出了 Sprint 1 guarded controller contract 和 Sprint 2 rich-body owner-marker boundary
 - `721ec3f2c`：在同一 `mainChatMessageList` island 上继续交付 Sprint 3 的 per-chat scroll / expanded-history restore boundary
-- 2026-06-21 的 Sprint 4 / Sprint 6 / Sprint 7 / Sprint 9 closure 继续沿用同一 `mainChatMessageList` island；durable traceability 以 `.docs/tech/briefs/react-phase3-remaining-main-chat-sprints.md`、本 README、[React 现代化路线图](../../tech/react-modernization-roadmap.md) 和 [PROJECT_HISTORY](../../PROJECT_HISTORY.md) 为准
+- `564ef790e`：2026-06-21 的 Sprint 4 / Sprint 6 / Sprint 7 / Sprint 9 closure 交付提交；继续沿用同一 `mainChatMessageList` island，durable traceability 以 `.docs/tech/briefs/react-phase3-remaining-main-chat-sprints.md`、本 README、[React 现代化路线图](../../tech/react-modernization-roadmap.md) 和 [PROJECT_HISTORY](../../PROJECT_HISTORY.md) 为准
 - `89da9b217`、`1f8600ed4`：main-chat successor proof / baseline groundwork，不是 Phase 3 Sprint 交付提交
 
 这意味着：durable 文档明确认为 Sprint 1 已完成，但当前分支历史里并没有一个在 `d15d9f8de` 之前、又能单独清晰承载 Sprint 1 feature contract 的可见 main-chat feature commit。
