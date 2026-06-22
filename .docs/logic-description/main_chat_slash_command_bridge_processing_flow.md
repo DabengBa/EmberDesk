@@ -11,19 +11,19 @@
 
 Goals:
 
-- Document how legacy slash-command facts become the hidden React `slashCommand` bridge payload.
-- Preserve parser, registry, autocomplete, execution, pause/continue, and abort ownership in legacy code.
+- Document how legacy slash-command facts become the hidden React `slashCommand` bridge payload while the visible autocomplete/status UI now lives in React.
+- Preserve parser, registry, executor, pause/continue, abort ownership, and public compatibility exports in legacy code.
 - Avoid exposing full command text or arguments through hidden React markers.
 
 Non-goals:
 
 - Rewrite `public/scripts/slash-commands.js`.
 - Change `executeSlashCommandsOnChatInput()`, `parser`, `registerSlashCommand`, regex placement, or Tavern Helper imports.
-- Add React-owned visible slash autocomplete.
+- Replace legacy execution logic with a new React-only slash protocol.
 
 ## Input Discovery And Parsing Rules
 
-`public/script.js` derives slash-command metadata from public legacy facts:
+`public/script.js` still derives slash-command metadata from public legacy facts and forwards them to the React-owned visible surface:
 
 1. `#send_textarea.value` is read only long enough to classify whether the trimmed input starts with `/` and to compute query length.
 2. Autocomplete visibility is read from existing autocomplete wrapper/menu visibility.
@@ -49,7 +49,7 @@ The bridge output is `slashCommand` inside `mainChatMessageList` state:
 }
 ```
 
-React validates the payload with Zod. Invalid or missing payloads fall back to inactive slash state.
+React validates the payload with Zod. Invalid or missing payloads fall back to inactive slash state, and the visible slash surface fails closed to the legacy path instead of rendering a second incomplete autocomplete owner.
 
 Hidden marker attributes include:
 
@@ -63,12 +63,13 @@ Hidden marker attributes include:
 
 ## Key Rules
 
-- Parser, command registry, execution, pause/continue, abort controller, and visible autocomplete remain legacy-owned.
+- Parser, command registry, execution, pause/continue, abort controller, and public slash exports remain legacy-owned.
 - Query length is observational and must not affect parser behavior.
 - Full command text and arguments must not appear in React marker attributes.
 - `/` input can report active/autocomplete state; ordinary text must report inactive.
+- The visible autocomplete list, selection/highlight state, and paused/aborted/error status UI now come from the React-owned slash surface, while command execution still routes through the legacy compatibility adapter.
 - Protected slash-command exports stay stable for compatible extensions.
-- Future visible composer/autocomplete migration must use TanStack Form + Zod for input state and must preserve public slash-command compatibility through a separate spec/ADR.
+- Legacy autocomplete/details DOM must stay hidden when the React-owned visible slash surface is active so the user never sees two competing slash UIs.
 
 ## Verification
 

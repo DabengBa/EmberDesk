@@ -141,7 +141,8 @@ import {
 import { debounce_timeout, GENERATION_TYPE_TRIGGERS, IGNORE_SYMBOL, inject_ids, MEDIA_DISPLAY, MEDIA_SOURCE, MEDIA_TYPE, OVERSWIPE_BEHAVIOR, SCROLL_BEHAVIOR, SWIPE_DIRECTION, SWIPE_SOURCE, SWIPE_STATE } from './scripts/constants.js';
 
 import { cancelDebouncedMetadataSave, doDailyExtensionUpdatesCheck, extension_settings, initExtensions, loadExtensionSettings, runGenerationInterceptors, setDeferredExtensionLoader } from './scripts/extensions.js';
-import { COMMENT_NAME_DEFAULT, CONNECT_API_MAP, executeSlashCommandsOnChatInput, initDefaultSlashCommands, initSlashCommandAutoComplete, isExecutingCommandsFromChatInput, pauseScriptExecution, stopScriptExecution, UNIQUE_APIS } from './scripts/slash-commands.js';
+import { COMMENT_NAME_DEFAULT, CONNECT_API_MAP, executeSlashCommandsOnChatInput, getMainChatSlashCommandAutoCompleteState, initDefaultSlashCommands, initSlashCommandAutoComplete, isExecutingCommandsFromChatInput, pauseScriptExecution, selectMainChatSlashCommandOption, setMainChatSlashCommandReactOwnerEnabled, stopScriptExecution, UNIQUE_APIS } from './scripts/slash-commands.js';
+import { classifyMainChatVisibleTransportOwner } from './scripts/main-chat-visible-transport-owner.js';
 import { initMacroAutoComplete } from './scripts/autocomplete/MacroAutoComplete.js';
 import {
     tag_map,
@@ -332,6 +333,9 @@ let mainChatMessageListBridgeRefreshFrame = 0;
 let mainChatMessageListBridgeSendFormObserver = null;
 let mainChatMessageListBridgeFormShellObserver = null;
 let mainChatMessageListBridgeBodyObserver = null;
+let mainChatMessageActionsController = null;
+let mainChatMessageListPendingRestoreChatId = null;
+let mainChatMessageRenderGeneration = 0;
 
 function getMainChatMessageListScrollSnapshotStore() {
     if (!(globalThis.__emberDeskMainChatMessageListScrollSnapshots instanceof Map)) {
@@ -348,6 +352,30 @@ function deleteMainChatMessageListScrollSnapshot(chatId) {
     }
 
     getMainChatMessageListScrollSnapshotStore().delete(normalizedChatId);
+}
+
+function queueMainChatMessageListScrollRestore(chatId) {
+    const normalizedChatId = typeof chatId === 'string' ? chatId.trim() : '';
+
+    if (!getWorkspaceReactFeatures()?.reactPanels?.mainChatMessageList || !normalizedChatId) {
+        mainChatMessageListPendingRestoreChatId = null;
+        return;
+    }
+
+    mainChatMessageListPendingRestoreChatId = getMainChatMessageListScrollSnapshotStore().has(normalizedChatId)
+        ? normalizedChatId
+        : null;
+}
+
+function consumeMainChatMessageListScrollRestore(chatId = getCurrentChatId()) {
+    const normalizedChatId = typeof chatId === 'string' ? chatId.trim() : '';
+    const shouldRestore = normalizedChatId !== '' && mainChatMessageListPendingRestoreChatId === normalizedChatId;
+
+    if (shouldRestore) {
+        mainChatMessageListPendingRestoreChatId = null;
+    }
+
+    return shouldRestore;
 }
 
 function getMainChatRenderableMessageRows(chatContainer) {
@@ -406,13 +434,14 @@ function getMainChatComposerBridgeState() {
     const sendButton = document.getElementById('send_but');
     const activeContext = getMainChatComposerActiveContext();
     const valueLength = textarea instanceof HTMLTextAreaElement ? textarea.value.length : 0;
+    const hasBackendConnection = online_status !== 'no_connection';
     const isGenerating = document.body.dataset.generating === 'true';
-    const isDisabled = textarea?.disabled === true || sendButton?.disabled === true;
+    const isDisabled = textarea?.disabled === true || sendButton?.disabled === true || !hasBackendConnection;
 
     return getMainChatComposerState({
         valueLength: valueLength,
         hasValue: valueLength > 0,
-        canSubmit: valueLength > 0 && !isDisabled && !isGenerating && activeContext !== 'none',
+        canSubmit: valueLength > 0 && hasBackendConnection && !isDisabled && !isGenerating && activeContext !== 'none',
         isFocused: document.activeElement === textarea,
         isDisabled: isDisabled,
         isGenerating: isGenerating,
@@ -426,6 +455,9 @@ function getMainChatGenerationControlBridgeState() {
     const failureRetry = document.querySelector('#chat > .mes .generation_failure_retry');
     const failureNotice = document.querySelector('#chat > .mes .generation_failure_notice');
     const continueSurface = isMainChatGenerationControlElementVisible(document.getElementById('mes_continue')) ? 'legacy' : 'hidden';
+    const shouldPreferStoppedTerminal = shouldPreferStoppedMainChatTerminalSnapshot(
+        failureNotice || failureRetry ? 'error' : streamingProcessor?.isStopped ? 'stopped' : null,
+    );
     const activeMessageId = getMainChatGenerationControlMessageId(recoveryStatus)
         ?? getMainChatGenerationControlMessageId(failureRetry)
         ?? (Number.isInteger(streamingProcessor?.messageId) && streamingProcessor.messageId >= 0 ? streamingProcessor.messageId : null);
@@ -434,9 +466,9 @@ function getMainChatGenerationControlBridgeState() {
         ...getStreamingControlState({
             isGenerating: document.body.dataset.generating === 'true',
             hasStreamingProcessor: Boolean(streamingProcessor && !streamingProcessor.isStopped && !streamingProcessor.isFinished),
-            isStopped: Boolean(streamingProcessor?.isStopped),
+            isStopped: shouldPreferStoppedTerminal || Boolean(streamingProcessor?.isStopped),
             isFinished: Boolean(streamingProcessor?.isFinished),
-            hasError: Boolean(failureNotice || failureRetry),
+            hasError: !shouldPreferStoppedTerminal && Boolean(failureNotice || failureRetry),
             isRecovering: Boolean(recoveryStatus),
             recoveryStage: recoveryStatus?.dataset?.recoveryStage === 'fallback' ? 'fallback' : 'primary',
             activeMessageId,
@@ -472,10 +504,33 @@ function getMainChatSlashCommandBridgeState() {
     });
 }
 
+function getMainChatSlashUiBridgeState() {
+    const autoCompleteState = getMainChatSlashCommandAutoCompleteState();
+
+    return {
+        active: Boolean(autoCompleteState.active),
+        visible: Boolean(autoCompleteState.visible),
+        replaceable: Boolean(autoCompleteState.replaceable),
+        detailsVisible: Boolean(autoCompleteState.detailsVisible),
+        selectedIndex: Number.isInteger(autoCompleteState.selectedIndex) ? autoCompleteState.selectedIndex : -1,
+        detailsHtml: typeof autoCompleteState.detailsHtml === 'string' ? autoCompleteState.detailsHtml : '',
+        options: Array.isArray(autoCompleteState.options)
+            ? autoCompleteState.options.map(option => ({
+                name: String(option?.name ?? ''),
+                type: String(option?.type ?? ''),
+                typeIcon: String(option?.typeIcon ?? ''),
+                selectable: option?.selectable !== false,
+                selected: option?.selected === true,
+            }))
+            : [],
+    };
+}
+
 function getMainChatStreamingTransportStore() {
     if (!globalThis.__emberDeskMainChatStreamingTransportStore || typeof globalThis.__emberDeskMainChatStreamingTransportStore !== 'object') {
         globalThis.__emberDeskMainChatStreamingTransportStore = {
             latestTerminalSnapshot: null,
+            preferStoppedTerminal: false,
         };
     }
 
@@ -483,7 +538,9 @@ function getMainChatStreamingTransportStore() {
 }
 
 function resetMainChatStreamingTransportTerminalSnapshot() {
-    getMainChatStreamingTransportStore().latestTerminalSnapshot = null;
+    const store = getMainChatStreamingTransportStore();
+    store.latestTerminalSnapshot = null;
+    store.preferStoppedTerminal = false;
 }
 
 function rememberMainChatStreamingTransportTerminalSnapshot(snapshot) {
@@ -491,7 +548,9 @@ function rememberMainChatStreamingTransportTerminalSnapshot(snapshot) {
         return;
     }
 
-    getMainChatStreamingTransportStore().latestTerminalSnapshot = structuredClone(snapshot);
+    const store = getMainChatStreamingTransportStore();
+    store.latestTerminalSnapshot = structuredClone(snapshot);
+    store.preferStoppedTerminal = snapshot.phase === 'stopped';
 }
 
 function rememberMainChatStreamingTransportProcessorTerminal(processor, phase) {
@@ -509,7 +568,11 @@ function rememberMainChatStreamingTransportProcessorTerminal(processor, phase) {
     }));
 }
 
-function rememberMainChatStreamingTransportVisibleTerminal(phase) {
+function rememberMainChatStreamingTransportVisibleTerminal(phase, {
+    activeMessageId,
+    observedTokenCount,
+    observedChunkCount,
+} = {}) {
     if (!STREAMING_TRANSPORT_TERMINAL_PHASES.has(phase)) {
         return;
     }
@@ -517,14 +580,42 @@ function rememberMainChatStreamingTransportVisibleTerminal(phase) {
     const assistantRow = Array.from(document.querySelectorAll('#chat > .mes[is_user="false"][is_system="false"][mesid]')).at(-1);
     const messageId = Number(assistantRow?.getAttribute('mesid'));
     const messageText = assistantRow?.querySelector('.mes_text')?.textContent?.trim() ?? '';
+    const normalizedMessageId = activeMessageId === null
+        ? null
+        : Number.isInteger(activeMessageId) && activeMessageId >= 0
+            ? activeMessageId
+            : Number.isInteger(messageId) && messageId >= 0
+                ? messageId
+                : null;
+    const normalizedObservedTokenCount = Number.isInteger(observedTokenCount) && observedTokenCount >= 0
+        ? observedTokenCount
+        : messageText && messageText !== '...' ? 1 : 0;
+    const normalizedObservedChunkCount = Number.isInteger(observedChunkCount) && observedChunkCount >= 0
+        ? observedChunkCount
+        : messageText && messageText !== '...' ? 1 : 0;
 
     rememberMainChatStreamingTransportTerminalSnapshot(getMainChatStreamingTransportState({
         phase,
-        activeMessageId: Number.isInteger(messageId) && messageId >= 0 ? messageId : null,
-        observedTokenCount: messageText && messageText !== '...' ? 1 : 0,
-        observedChunkCount: messageText && messageText !== '...' ? 1 : 0,
+        activeMessageId: normalizedMessageId,
+        observedTokenCount: normalizedObservedTokenCount,
+        observedChunkCount: normalizedObservedChunkCount,
         recoverable: phase !== 'completed',
     }));
+}
+
+function shouldPreferStoppedMainChatTerminalSnapshot(currentPhase = null) {
+    const store = getMainChatStreamingTransportStore();
+    const latestTerminalSnapshot = store.latestTerminalSnapshot;
+
+    if (store.preferStoppedTerminal !== true || latestTerminalSnapshot?.phase !== 'stopped') {
+        return false;
+    }
+
+    if (streamingProcessor && !streamingProcessor.isStopped && !streamingProcessor.isFinished) {
+        return false;
+    }
+
+    return currentPhase === 'error' || currentPhase === 'stopped' || currentPhase === null;
 }
 
 function getMainChatStreamingTransportBridgeState() {
@@ -550,6 +641,16 @@ function getMainChatStreamingTransportBridgeState() {
         recoverable: Boolean(recoveryStatus || failureRetry),
         errorLabel: failureNotice?.textContent?.trim() || null,
     });
+    const store = getMainChatStreamingTransportStore();
+    const shouldPreferStoppedTerminal = shouldPreferStoppedMainChatTerminalSnapshot(snapshot.phase);
+
+    if (shouldPreferStoppedTerminal) {
+        return store.latestTerminalSnapshot ?? snapshot;
+    }
+
+    if (snapshot.phase === 'stopped' && store.preferStoppedTerminal !== true) {
+        return snapshot;
+    }
 
     if (STREAMING_TRANSPORT_TERMINAL_PHASES.has(snapshot.phase)) {
         rememberMainChatStreamingTransportTerminalSnapshot(snapshot);
@@ -557,7 +658,7 @@ function getMainChatStreamingTransportBridgeState() {
     }
 
     if (snapshot.phase === 'idle' || (snapshot.phase === 'connecting' && !hasActiveStreamingProcessor)) {
-        return getMainChatStreamingTransportStore().latestTerminalSnapshot ?? snapshot;
+        return store.latestTerminalSnapshot ?? snapshot;
     }
 
     resetMainChatStreamingTransportTerminalSnapshot();
@@ -576,8 +677,12 @@ function bindMainChatMessageListBridgeObservers() {
     if (sendTextarea instanceof HTMLTextAreaElement) {
         sendTextarea.addEventListener('input', scheduleMainChatMessageListPanelRefresh);
         sendTextarea.addEventListener('focus', scheduleMainChatMessageListPanelRefresh);
+        sendTextarea.addEventListener('focusin', scheduleMainChatMessageListPanelRefresh);
         sendTextarea.addEventListener('blur', scheduleMainChatMessageListPanelRefresh);
+        sendTextarea.addEventListener('focusout', scheduleMainChatMessageListPanelRefresh);
         sendTextarea.addEventListener('click', scheduleMainChatMessageListPanelRefresh);
+        sendTextarea.addEventListener('keydown', scheduleMainChatMessageListPanelRefresh);
+        sendTextarea.addEventListener('keyup', scheduleMainChatMessageListPanelRefresh);
     }
 
     if (sendForm instanceof HTMLElement) {
@@ -860,6 +965,7 @@ function ensureMainChatMessageListReactHost() {
 }
 
 function cleanupMainChatMessageListReactHost() {
+    setMainChatSlashCommandReactOwnerEnabled(false);
     const host = document.getElementById(MAIN_CHAT_MESSAGE_LIST_REACT_HOST_ID);
     host?.remove();
 }
@@ -1036,6 +1142,99 @@ function buildMainChatMessageRowSnapshot(messageRow, {
     };
 }
 
+async function runMainChatVisibleGenerationAction({ kind, messageId } = {}) {
+    switch (kind) {
+        case 'submitComposer':
+            await sendTextareaMessage();
+            break;
+        case 'continueLast':
+            document.getElementById('option_continue')?.click();
+            break;
+        case 'retryGeneration':
+            document.getElementById('option_regenerate')?.click();
+            break;
+        case 'swipeLeft':
+            if (Number.isInteger(messageId) && messageId >= 0) {
+                await swipe(null, SWIPE_DIRECTION.LEFT, { repeated: false, forceMesId: messageId });
+            }
+            break;
+        case 'swipeRight':
+            if (Number.isInteger(messageId) && messageId >= 0) {
+                await swipe(null, SWIPE_DIRECTION.RIGHT, { repeated: false, forceMesId: messageId });
+            }
+            break;
+        default:
+            console.warn('Unknown main-chat visible generation action', kind);
+    }
+}
+
+function isPreparedReactOwnedMainChatVisibleTransportRequest(value) {
+    return Boolean(value && typeof value === 'object' && value.owner === 'react');
+}
+
+async function prepareMainChatVisibleGenerationAction({ kind, messageId } = {}) {
+    const ownership = classifyMainChatVisibleTransportOwner({
+        kind,
+        mainApi: main_api,
+        selectedGroup: Boolean(selected_group),
+        dryRun: false,
+        depth: 0,
+    });
+
+    if (ownership.owner !== 'react') {
+        await runMainChatVisibleGenerationAction({ kind, messageId });
+        return {
+            owner: 'legacy',
+            kind,
+            reason: ownership.reason,
+        };
+    }
+
+    switch (kind) {
+        case 'submitComposer': {
+            const prepared = await sendTextareaMessage({ visibleTransportHandoff: true });
+            return isPreparedReactOwnedMainChatVisibleTransportRequest(prepared)
+                ? prepared
+                : { owner: 'legacy', kind, reason: 'legacy-executed' };
+        }
+        case 'continueLast': {
+            const prepared = await Generate('continue', { visibleTransportHandoff: true });
+            return isPreparedReactOwnedMainChatVisibleTransportRequest(prepared)
+                ? prepared
+                : { owner: 'legacy', kind, reason: 'legacy-executed' };
+        }
+        default:
+            await runMainChatVisibleGenerationAction({ kind, messageId });
+            return {
+                owner: 'legacy',
+                kind,
+                reason: 'unsupported-kind',
+            };
+    }
+}
+
+function runMainChatVisibleMessageActionsShellAction({ kind, messageId } = {}) {
+    switch (kind) {
+        case 'open': {
+            if (!Number.isInteger(messageId) || messageId < 0) {
+                return;
+            }
+
+            const actionOwner = document.querySelector(`#chat > .mes[mesid="${messageId}"] .mes_buttons`);
+            const hint = actionOwner?.querySelector('.extraMesButtonsHint');
+            if (hint instanceof HTMLElement) {
+                mainChatMessageActionsController?.openExtraActions?.(hint);
+            }
+            break;
+        }
+        case 'close':
+            mainChatMessageActionsController?.closeExtraActions?.();
+            break;
+        default:
+            console.warn('Unknown main-chat visible message actions shell action', kind);
+    }
+}
+
 function getMainChatMessageListReactBridgeState() {
     const chatContainer = document.getElementById('chat');
     const messageRows = Array.from(chatContainer?.querySelectorAll(':scope > .mes[mesid]') ?? []);
@@ -1043,6 +1242,14 @@ function getMainChatMessageListReactBridgeState() {
     const lastMessageRow = messageRows.at(-1);
     const showMoreButton = document.getElementById('show_more_messages');
     const host = document.getElementById(MAIN_CHAT_MESSAGE_LIST_REACT_HOST_ID);
+    const formShell = document.getElementById('form_sheld');
+    const sendForm = document.getElementById('send_form');
+    const nonQrFormItems = document.getElementById('nonQRFormItems');
+    const leftSendForm = document.getElementById('leftSendForm');
+    const rightSendForm = document.getElementById('rightSendForm');
+    const sendTextarea = document.getElementById('send_textarea');
+    const sendButton = document.getElementById('send_but');
+    const continueButton = document.getElementById('mes_continue');
     const messageRowSnapshots = messageRows
         .map(row => buildMainChatMessageRowSnapshot(row, {
             messageId: Number(row.getAttribute('mesid')),
@@ -1079,6 +1286,7 @@ function getMainChatMessageListReactBridgeState() {
         generationControl: getMainChatGenerationControlBridgeState(),
         composer: getMainChatComposerBridgeState(),
         slashCommand: getMainChatSlashCommandBridgeState(),
+        slashUi: getMainChatSlashUiBridgeState(),
         streamingTransport: getMainChatStreamingTransportBridgeState(),
         chatContainer,
         host,
@@ -1086,6 +1294,15 @@ function getMainChatMessageListReactBridgeState() {
         messageRowSnapshots: messageRowSnapshots,
         richBodySnapshots: richBodySnapshots,
         messageActionSnapshots: messageActionSnapshots,
+        formShell,
+        sendForm,
+        nonQrFormItems,
+        leftSendForm,
+        rightSendForm,
+        sendTextarea,
+        sendButton,
+        continueButton,
+        composerValue: sendTextarea instanceof HTMLTextAreaElement ? sendTextarea.value : '',
         showMoreNode: showMoreButton,
     };
 }
@@ -1093,6 +1310,9 @@ function getMainChatMessageListReactBridgeState() {
 function getMainChatMessageListReactBridge() {
     return {
         async dispatchAction(action, payload = {}) {
+            let shouldRefreshPanel = true;
+            const messageId = Number(payload?.messageId);
+            const normalizedMessageId = Number.isInteger(messageId) && messageId >= 0 ? messageId : undefined;
             switch (action) {
                 case 'loadMoreUntilMessage': {
                     const anchorMessageId = String(payload?.anchorMessageId ?? '');
@@ -1109,11 +1329,37 @@ function getMainChatMessageListReactBridge() {
                     }
                     break;
                 }
+                case 'setSlashVisibleOwner':
+                    setMainChatSlashCommandReactOwnerEnabled(Boolean(payload?.enabled));
+                    break;
+                case 'selectSlashAutocompleteOption':
+                    selectMainChatSlashCommandOption(Number(payload?.index));
+                    break;
+                case 'prepareVisibleGeneration':
+                    return await prepareMainChatVisibleGenerationAction({
+                        kind: String(payload?.kind ?? ''),
+                        messageId: normalizedMessageId,
+                    });
+                case 'triggerVisibleGeneration':
+                    await runMainChatVisibleGenerationAction({
+                        kind: String(payload?.kind ?? ''),
+                        messageId: normalizedMessageId,
+                    });
+                    break;
+                case 'toggleMessageActionsShell':
+                    runMainChatVisibleMessageActionsShellAction({
+                        kind: String(payload?.kind ?? ''),
+                        messageId: normalizedMessageId,
+                    });
+                    shouldRefreshPanel = false;
+                    break;
                 default:
                     console.warn('Unknown Main Chat React action', action);
             }
 
-            void mountReactMainChatMessageListPanel();
+            if (shouldRefreshPanel) {
+                void mountReactMainChatMessageListPanel();
+            }
         },
     };
 }
@@ -1123,6 +1369,8 @@ async function mountReactMainChatMessageListPanel() {
         cleanupMainChatMessageListReactHost();
         return false;
     }
+
+    setMainChatSlashCommandReactOwnerEnabled(true);
 
     return mountReactWorkspacePanel({
         kind: 'mainChatMessageList',
@@ -3431,6 +3679,7 @@ export async function replaceCurrentChat() {
 
 export async function showMoreMessages(messagesToLoad = null) {
     const firstDisplayedMesId = chatElement.children('.mes').first().attr('mesid');
+    const firstDisplayedMessage = chatElement.children('.mes').first();
     let messageId = Number(firstDisplayedMesId);
     let count = messagesToLoad || power_user.chat_truncation || Number.MAX_SAFE_INTEGER;
 
@@ -3450,14 +3699,19 @@ export async function showMoreMessages(messagesToLoad = null) {
     chat.slice(firstId, messageId).forEach((message, id) => {
         messageElements.push(updateMessageElement(message, { messageId: firstId + id }));
     });
-    // This could be faster: https://developer.mozilla.org/en-US/docs/Web/API/Element/insertAdjacentElement
-    // Fallback to chatElement if the button isn't where it's expected to be.
-    if (showMoreButton[0]) {
-        showMoreButton.after(messageElements);
-    } else {
-        chatElement.prepend(messageElements);
-    }
+    const messageNodes = messageElements
+        .map(messageElement => messageElement?.[0] instanceof HTMLElement ? messageElement[0] : null)
+        .filter(Boolean);
 
+    // Insert older rows ahead of the current first message so legacy load-more
+    // keeps chronological DOM order and its scroll compensation remains stable.
+    if (firstDisplayedMessage[0] instanceof HTMLElement && messageNodes.length > 0) {
+        firstDisplayedMessage[0].before(...messageNodes);
+    } else if (showMoreButton[0]) {
+        showMoreButton[0].after(...messageNodes);
+    } else {
+        chatElement.prepend(messageNodes);
+    }
     refreshSwipeButtons();
 
     if (firstId === 0) {
@@ -3725,9 +3979,12 @@ export async function printMessages() {
     }
 
     await redisplayChat({ startIndex, fade: false });
+    const renderGeneration = ++mainChatMessageRenderGeneration;
 
-    scrollChatToBottom({ waitForFrame: true });
-    delay(debounce_timeout.short).then(() => scrollOnMediaLoad());
+    if (!consumeMainChatMessageListScrollRestore()) {
+        scrollChatToBottom({ waitForFrame: true });
+        delay(debounce_timeout.short).then(() => scrollOnMediaLoad(renderGeneration));
+    }
 }
 
 /**
@@ -3772,7 +4029,11 @@ export async function redisplayChat({ targetChat = chat, startIndex = 0, fade = 
     console.info(`Rendered ${targetChat.length - startIndex} messages in ${((performance.now() - t1) / 1000).toFixed(3)} seconds.`);
 }
 
-export function scrollOnMediaLoad() {
+export function scrollOnMediaLoad(renderGeneration = mainChatMessageRenderGeneration) {
+    if (renderGeneration !== mainChatMessageRenderGeneration) {
+        return;
+    }
+
     const started = Date.now();
     const media = chatElement.find('.mes_block img, .mes_block video, .mes_block audio').toArray();
     let mediaLoaded = 0;
@@ -3799,6 +4060,9 @@ export function scrollOnMediaLoad() {
     function incrementAndCheck() {
         const MAX_DELAY = 1000; // 1 second
         if ((Date.now() - started) > MAX_DELAY) {
+            return;
+        }
+        if (renderGeneration !== mainChatMessageRenderGeneration) {
             return;
         }
         mediaLoaded++;
@@ -3948,7 +4212,7 @@ export async function reloadCurrentChatUnsafe() {
 /**
  * Send the message currently typed into the chat box.
  */
-export async function sendTextareaMessage() {
+export async function sendTextareaMessage({ visibleTransportHandoff = false } = {}) {
     // don't proceed during swipeGenerate()
     if (swipeState == SWIPE_STATE.EDITING) {
         toastr.warning(t`Confirm the edit to start a generation.`, t`You cannot send a message during a swipe-edit.`);
@@ -3980,7 +4244,7 @@ export async function sendTextareaMessage() {
         await newAssistantChat({ temporary: false });
     }
 
-    let generation = await Generate(generateType);
+    let generation = await Generate(generateType, { visibleTransportHandoff });
     showSwipeButtons();
     return generation;
 }
@@ -4968,7 +5232,6 @@ export function scrollChatToBottom({ waitForFrame } = {}) {
                 position = chatElement.scrollTop() + lastMessagePosition;
             }
         }
-
         chatElement.scrollTop(position);
         requestId = null;
     };
@@ -5768,6 +6031,8 @@ class StreamingProcessor {
         this.observedTokenCount = 0;
         this.observedChunkCount = 0;
         this.fromFallbackAttempt = false;
+        this.reactVisibleTransportOwned = false;
+        this.reactVisibleTransportHooks = null;
     }
 
     /**
@@ -5803,6 +6068,23 @@ class StreamingProcessor {
         unblockGeneration();
     }
 
+    emitReactVisibleTransportState(phase, overrides = {}) {
+        if (!this.reactVisibleTransportOwned || !this.reactVisibleTransportHooks?.onTransportState) {
+            return;
+        }
+
+        this.reactVisibleTransportHooks.onTransportState({
+            phase,
+            activeMessageId: Number.isInteger(this.messageId) && this.messageId >= 0 ? this.messageId : null,
+            observedTokenCount: this.observedTokenCount ?? 0,
+            observedChunkCount: this.observedChunkCount ?? 0,
+            fromFallbackAttempt: Boolean(this.fromFallbackAttempt),
+            recoverable: phase === 'error' || phase === 'stopped',
+            errorLabel: null,
+            ...overrides,
+        });
+    }
+
     async onStartStreaming(text) {
         const continueOnReasoning = !!(this.type === 'continue' && this.promptReasoning.prefixReasoning);
         if (continueOnReasoning) {
@@ -5819,9 +6101,13 @@ class StreamingProcessor {
             messageId = chat.length - 1;
             await this.#checkDomElements(messageId, continueOnReasoning);
             this.markUIGenStarted();
+            if (this.reactVisibleTransportOwned) {
+                void mountReactMainChatMessageListPanel();
+            }
         }
         hideSwipeButtons({ hideCounters: true });
         scrollChatToBottom({ waitForFrame: true });
+        this.emitReactVisibleTransportState('connecting');
         return messageId;
     }
 
@@ -5906,7 +6192,12 @@ class StreamingProcessor {
                 {},
                 false,
             );
-            if (this.messageTextDom instanceof HTMLElement) {
+            if (this.reactVisibleTransportOwned && this.reactVisibleTransportHooks?.onMessageHtml) {
+                this.reactVisibleTransportHooks.onMessageHtml({
+                    messageId,
+                    formattedMessageHtml: formattedText,
+                });
+            } else if (this.messageTextDom instanceof HTMLElement) {
                 if (power_user.stream_fade_in) {
                     applyStreamFadeIn(this.messageTextDom, formattedText);
                 } else {
@@ -5922,6 +6213,8 @@ class StreamingProcessor {
 
             this.setFirstSwipe(messageId);
         }
+
+        this.emitReactVisibleTransportState(isFinal ? 'finalizing' : 'streaming');
 
         if (!scrollLock) {
             scrollChatToBottom({ waitForFrame: true });
@@ -5939,6 +6232,7 @@ class StreamingProcessor {
      */
     async finalizeIntermediaryMessage(messageId, text, { unlockUI = true }) {
         this.isFinalizing = true;
+        this.emitReactVisibleTransportState('finalizing');
         void mountReactMainChatMessageListPanel();
         await this.onProgressStreaming(messageId, text, true);
         const messageElement = chatElement.find(`.mes[mesid="${messageId}"]`);
@@ -5991,6 +6285,7 @@ class StreamingProcessor {
 
         updateSwipeCounter(messageId, { message, messageElement });
         this.isFinalizing = false;
+        this.emitReactVisibleTransportState('completed', { recoverable: false });
         void mountReactMainChatMessageListPanel();
     }
 
@@ -6015,7 +6310,15 @@ class StreamingProcessor {
         }
 
         this.markUIGenStopped();
+        this.emitReactVisibleTransportState('error', {
+            recoverable: !suppressRecovery,
+            errorLabel: 'stream connection closed before completion',
+        });
         if (suppressRecovery) {
+            return;
+        }
+
+        if (this.reactVisibleTransportOwned) {
             return;
         }
 
@@ -6047,6 +6350,7 @@ class StreamingProcessor {
         this.isStopped = true;
         this.isFinalizing = false;
         this.isFinished = true;
+        this.emitReactVisibleTransportState('stopped', { recoverable: true });
         rememberMainChatStreamingTransportProcessorTerminal(this, 'stopped');
         void mountReactMainChatMessageListPanel();
     }
@@ -6449,7 +6753,7 @@ function removeLastMessage() {
  * @param {boolean} dryRun Whether to actually generate a message or just assemble the prompt
  * @returns {Promise<any>} Returns a promise that resolves when the text is done generating.
  */
-export async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, force_chid, signal, quietImage, quietName, jsonSchema = null, depth = 0 } = {}, dryRun = false) {
+export async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, force_chid, signal, quietImage, quietName, jsonSchema = null, depth = 0, visibleTransportHandoff = false } = {}, dryRun = false) {
     console.log('Generate entered');
     setGenerationProgress(0);
     generation_started = new Date();
@@ -7486,6 +7790,19 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
 
         console.debug(`pushed prompt bits to itemizedPrompts array. Length is now: ${itemizedPrompts.length}`);
 
+        const lifecyclePlan = createGenerationLifecyclePlan({
+            type,
+            mainApi: main_api,
+            dryRun,
+            depth,
+            fallbackReady: hasFallbackProviderForGeneration({
+                settings: oai_settings,
+                secretState: secret_state,
+                fallbackSecretKey: SECRET_KEYS.OPENAI_FALLBACK,
+            }),
+            statusLabels: getGenerationLifecycleStatusLabels(),
+        });
+        const { shouldAutoRecover, attempts } = lifecyclePlan;
         const createEmptyReplyFailure = (messageId = null) => {
             const error = new Error('empty reply');
             error.emptyReply = true;
@@ -7526,16 +7843,32 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
             return activeRecoveryMessageId;
         };
 
-        const runGenerationAttempt = async (attempt, isIntermediateAttempt) => {
+        const runGenerationAttempt = async (attempt, attemptIndex, visibleTransportHooks = null) => {
+            const isIntermediateAttempt = attemptIndex < attempts.length - 1;
             const requestOptions = {
                 jsonSchema,
                 fallbackProvider: attempt.fallbackProvider,
             };
 
+            if (visibleTransportHooks?.onTransportState) {
+                visibleTransportHooks.onTransportState({
+                    phase: 'connecting',
+                    activeMessageId: activeRecoveryMessageId,
+                    observedTokenCount: 0,
+                    observedChunkCount: 0,
+                    fromFallbackAttempt: Boolean(attempt.fallbackProvider),
+                    recoverable: isIntermediateAttempt,
+                    errorLabel: null,
+                });
+            }
+
             if (isStreamingEnabled() && type !== 'quiet') {
                 const attemptContinueMessage = promptReasoning.removePrefix(continue_mag);
                 streamingProcessor = new StreamingProcessor(type, force_name2, generation_started, attemptContinueMessage, promptReasoning);
                 streamingProcessor.suppressErrorRecovery = isIntermediateAttempt;
+                streamingProcessor.reactVisibleTransportOwned = Boolean(visibleTransportHooks);
+                streamingProcessor.reactVisibleTransportHooks = visibleTransportHooks;
+                streamingProcessor.fromFallbackAttempt = Boolean(attempt.fallbackProvider);
                 if (activeRecoveryMessageId !== null && activeRecoveryMessageId >= 0) {
                     streamingProcessor.messageId = activeRecoveryMessageId;
                 }
@@ -7624,74 +7957,119 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
             return result;
         };
 
-        const lifecyclePlan = createGenerationLifecyclePlan({
-            type,
-            mainApi: main_api,
-            dryRun,
-            depth,
-            fallbackReady: hasFallbackProviderForGeneration({
-                settings: oai_settings,
-                secretState: secret_state,
-                fallbackSecretKey: SECRET_KEYS.OPENAI_FALLBACK,
-            }),
-            statusLabels: getGenerationLifecycleStatusLabels(),
-        });
-        const { shouldAutoRecover, attempts } = lifecyclePlan;
-        let lastException = null;
+        const prepareRetryAttempt = async (attempt, attemptIndex) => {
+            if (attemptIndex <= 0) {
+                return;
+            }
 
-        for (let attemptIndex = 0; attemptIndex < attempts.length; attemptIndex++) {
-            const attempt = attempts[attemptIndex];
-            const isRetryAttempt = attemptIndex > 0;
+            await ensureRecoveryMessage(activeRecoveryMessageId);
+
+            const retryBaseline = getGenerationAttemptBaseline(activeRecoveryMessageId);
+            clearGenerationAttemptMessage(activeRecoveryMessageId, retryBaseline);
+            prepareGenerationRetrySwipe(activeRecoveryMessageId, retryBaseline);
+            showGenerationAutoRecoveryStatus(activeRecoveryMessageId, attempt.status, attempt.label === 'fallback' ? 'fallback' : 'primary');
+            deactivateSendButtons();
+            showStopButton();
+        };
+
+        const handleAttemptFailure = async (exception, attempt, attemptIndex) => {
             const isIntermediateAttempt = attemptIndex < attempts.length - 1;
+            const candidateRecoveryMessageId = exception?.messageId ?? streamingProcessor?.messageId ?? activeRecoveryMessageId;
+            const failureDecision = getGenerationFailureDecision({
+                shouldAutoRecover,
+                failure: exception,
+                isIntermediateAttempt,
+            });
+            streamingProcessor = null;
 
-            if (isRetryAttempt) {
-                await ensureRecoveryMessage(activeRecoveryMessageId);
-
-                const retryBaseline = getGenerationAttemptBaseline(activeRecoveryMessageId);
-                clearGenerationAttemptMessage(activeRecoveryMessageId, retryBaseline);
-                prepareGenerationRetrySwipe(activeRecoveryMessageId, retryBaseline);
-                showGenerationAutoRecoveryStatus(activeRecoveryMessageId, attempt.status, attempt.label === 'fallback' ? 'fallback' : 'primary');
-                deactivateSendButtons();
-                showStopButton();
-            }
-
-            try {
-                const result = await runGenerationAttempt(attempt, isIntermediateAttempt);
-                clearGenerationAutoRecoveryStatus(activeRecoveryMessageId ?? chat.length - 1);
-                return result;
-            } catch (exception) {
-                lastException = exception;
-                const candidateRecoveryMessageId = exception?.messageId ?? streamingProcessor?.messageId ?? activeRecoveryMessageId;
-                const failureDecision = getGenerationFailureDecision({
-                    shouldAutoRecover,
-                    failure: exception,
-                    isIntermediateAttempt,
-                });
-                streamingProcessor = null;
-
-                if (failureDecision.action !== 'retry') {
-                    if (failureDecision.shouldRestoreAttemptMessage) {
-                        await ensureRecoveryMessage(candidateRecoveryMessageId);
-                        clearGenerationAttemptMessage(activeRecoveryMessageId, getGenerationAttemptBaseline(activeRecoveryMessageId));
-                    } else if (isAssistantRecoveryMessageId(candidateRecoveryMessageId)) {
-                        activeRecoveryMessageId = candidateRecoveryMessageId;
-                    }
-                    clearGenerationAutoRecoveryStatus(activeRecoveryMessageId);
-                    if (failureDecision.shouldShowFailureRecovery && isAssistantRecoveryMessageId(activeRecoveryMessageId)) {
-                        showGenerationFailureRecovery(activeRecoveryMessageId);
-                    }
-                    throw exception;
+            if (failureDecision.action !== 'retry') {
+                if (failureDecision.shouldRestoreAttemptMessage) {
+                    await ensureRecoveryMessage(candidateRecoveryMessageId);
+                    clearGenerationAttemptMessage(activeRecoveryMessageId, getGenerationAttemptBaseline(activeRecoveryMessageId));
+                } else if (isAssistantRecoveryMessageId(candidateRecoveryMessageId)) {
+                    activeRecoveryMessageId = candidateRecoveryMessageId;
                 }
-
-                await ensureRecoveryMessage(candidateRecoveryMessageId);
-                clearGenerationAttemptMessage(activeRecoveryMessageId, getGenerationAttemptBaseline(activeRecoveryMessageId));
+                clearGenerationAutoRecoveryStatus(activeRecoveryMessageId);
+                if (failureDecision.shouldShowFailureRecovery && isAssistantRecoveryMessageId(activeRecoveryMessageId)) {
+                    showGenerationFailureRecovery(activeRecoveryMessageId);
+                }
+                return {
+                    action: 'throw',
+                    exception,
+                    attempt,
+                };
             }
+
+            await ensureRecoveryMessage(candidateRecoveryMessageId);
+            clearGenerationAttemptMessage(activeRecoveryMessageId, getGenerationAttemptBaseline(activeRecoveryMessageId));
+            return {
+                action: 'retry',
+                exception,
+                attempt,
+            };
+        };
+
+        async function executeVisibleAttempts() {
+            let lastException = null;
+
+            for (let attemptIndex = 0; attemptIndex < attempts.length; attemptIndex++) {
+                const attempt = attempts[attemptIndex];
+
+                await prepareRetryAttempt(attempt, attemptIndex);
+
+                try {
+                    const result = await runGenerationAttempt(attempt, attemptIndex);
+                    clearGenerationAutoRecoveryStatus(activeRecoveryMessageId ?? chat.length - 1);
+                    return result;
+                } catch (exception) {
+                    lastException = exception;
+                    const failure = await handleAttemptFailure(exception, attempt, attemptIndex);
+                    if (failure.action !== 'retry') {
+                        throw failure.exception;
+                    }
+                }
+            }
+
+            throw lastException;
         }
 
-        throw lastException;
+        const handoffOwnership = visibleTransportHandoff
+            ? classifyMainChatVisibleTransportOwner({
+                kind: type === 'continue' ? 'continueLast' : 'submitComposer',
+                mainApi: main_api,
+                selectedGroup: Boolean(selected_group),
+                dryRun,
+                depth,
+            })
+            : { owner: 'legacy', reason: 'legacy-executed' };
+
+        if (handoffOwnership.owner === 'react') {
+            return {
+                owner: 'react',
+                kind: type === 'continue' ? 'continueLast' : 'submitComposer',
+                reason: handoffOwnership.reason,
+                attempts,
+                prepareRetryAttempt,
+                runAttempt: (attempt, attemptIndex, visibleTransportHooks = null) => runGenerationAttempt(attempt, attemptIndex, visibleTransportHooks),
+                handleFailure: (exception, attempt, attemptIndex) => handleAttemptFailure(exception, attempt, attemptIndex),
+                finalizeSuccess: onSuccess,
+                finalizeError: onError,
+            };
+        }
+
+        return executeVisibleAttempts();
     }
 
-    return finishGenerating().then(onSuccess, onError);
+    try {
+        const generationResult = await finishGenerating();
+        if (isPreparedReactOwnedMainChatVisibleTransportRequest(generationResult)) {
+            return generationResult;
+        }
+
+        return await onSuccess(generationResult);
+    } catch (exception) {
+        return onError(exception);
+    }
 
     /**
      * Handles the successful response from the generation API.
@@ -7871,7 +8249,11 @@ export function stopGeneration() {
         abortController.abort('Clicked stop button');
         hideStopButton();
         if (!stopped) {
-            rememberMainChatStreamingTransportVisibleTerminal('stopped');
+            rememberMainChatStreamingTransportVisibleTerminal('stopped', {
+                activeMessageId: null,
+                observedTokenCount: 0,
+                observedChunkCount: 0,
+            });
         }
         stopped = true;
     }
@@ -9203,6 +9585,9 @@ export function deactivateSendButtons() {
 
 function applyGenerationControlState(controlState) {
     if (controlState.stopVisible) {
+        if (document.body.dataset.generating !== 'true') {
+            resetMainChatStreamingTransportTerminalSnapshot();
+        }
         showStopButton();
     } else {
         hideStopButton();
@@ -9298,6 +9683,7 @@ export function setOnlineStatus(value) {
     const previousStatus = online_status;
     online_status = value;
     displayOnlineStatus();
+    void mountReactMainChatMessageListPanel();
     if (previousStatus !== online_status) {
         eventSource.emitAndWait(event_types.ONLINE_STATUS_CHANGED, online_status);
     }
@@ -9811,6 +10197,7 @@ export async function getChat() {
         if (!chat_metadata.integrity) {
             chat_metadata.integrity = uuidv4();
         }
+        queueMainChatMessageListScrollRestore(characters[this_chid].chat);
         await getChatResult();
         eventSource.emit(event_types.CHAT_LOADED, { detail: { id: this_chid, character: characters[this_chid] } });
 
@@ -10314,8 +10701,10 @@ function openMessageDelete(fromSlashCommand) {
         $('#dialogue_del_mes').css('display', 'block');
         $('#send_form').css('display', 'none');
         $('.del_checkbox').each(function () {
-            $(this).css('display', 'grid');
-            $(this).parent().children('.for_checkbox').css('display', 'none');
+            const checkbox = $(this);
+            const row = checkbox.closest('.mes');
+            checkbox.css('display', 'grid');
+            row.find('.for_checkbox').first().css('display', 'none');
         });
     } else {
         console.debug(`
@@ -10456,6 +10845,7 @@ async function messageEditCancel(messageId = this_edit_mes_id) {
     }
 
     showSwipeButtons();
+    void mountReactMainChatMessageListPanel();
 }
 
 /**
@@ -10546,6 +10936,7 @@ async function messageEditDone(div) {
     this_edit_mes_id = undefined;
     await saveChatConditional();
     showSwipeButtons();
+    void mountReactMainChatMessageListPanel();
 }
 
 /**
@@ -13658,21 +14049,26 @@ jQuery(async function () {
     $(document).on('click', '.mes', function () {
         //when a 'delete message' parent div is clicked
         // and we are in delete mode and del_checkbox is visible
-        if (!is_delete_mode || !$(this).children('.del_checkbox').is(':visible')) {
+        const row = $(this);
+        const deleteCheckbox = row.find('.del_checkbox').first();
+
+        if (!is_delete_mode || !deleteCheckbox.is(':visible')) {
             return;
         }
-        $('.mes').children('.del_checkbox').each(function () {
-            $(this).prop('checked', false);
-            $(this).parent().removeClass('selected');
+        $('.mes').each(function () {
+            const candidateRow = $(this);
+            candidateRow.find('.del_checkbox').first().prop('checked', false);
+            candidateRow.removeClass('selected');
         });
-        $(this).addClass('selected'); //sets the bg of the mes selected for deletion
+        row.addClass('selected'); //sets the bg of the mes selected for deletion
         var i = Number($(this).attr('mesid')); //checks the message ID in the chat
         this_del_mes = i;
         //as long as the current message ID is less than the total chat length
         while (i < chat.length) {
             //sets the bg of the all msgs BELOW the selected .mes
-            $(`.mes[mesid="${i}"]`).addClass('selected');
-            $(`.mes[mesid="${i}"]`).children('.del_checkbox').prop('checked', true);
+            const selectedRow = $(`.mes[mesid="${i}"]`);
+            selectedRow.addClass('selected');
+            selectedRow.find('.del_checkbox').first().prop('checked', true);
             i++;
         }
     });
@@ -14172,10 +14568,12 @@ jQuery(async function () {
         $('#dialogue_del_mes').css('display', 'none');
         $('#send_form').css('display', css_send_form_display);
         $('.del_checkbox').each(function () {
-            $(this).css('display', 'none');
-            $(this).parent().children('.for_checkbox').css('display', 'block');
-            $(this).parent().removeClass('selected');
-            $(this).prop('checked', false);
+            const checkbox = $(this);
+            const row = checkbox.closest('.mes');
+            checkbox.css('display', 'none');
+            row.find('.for_checkbox').first().css('display', 'block');
+            row.removeClass('selected');
+            checkbox.prop('checked', false);
         });
         showSwipeButtons();
         this_del_mes = -1;
@@ -14187,10 +14585,12 @@ jQuery(async function () {
         $('#dialogue_del_mes').css('display', 'none');
         $('#send_form').css('display', css_send_form_display);
         $('.del_checkbox').each(function () {
-            $(this).css('display', 'none');
-            $(this).parent().children('.for_checkbox').css('display', 'block');
-            $(this).parent().removeClass('selected');
-            $(this).prop('checked', false);
+            const checkbox = $(this);
+            const row = checkbox.closest('.mes');
+            checkbox.css('display', 'none');
+            row.find('.for_checkbox').first().css('display', 'block');
+            row.removeClass('selected');
+            checkbox.prop('checked', false);
         });
 
         if (this_del_mes >= 0) {
@@ -14330,14 +14730,15 @@ jQuery(async function () {
         }
     });
 
-    createChatMessageActionsController(document, {
+    mainChatMessageActionsController = createChatMessageActionsController(document, {
         getExpandMessageActions: () => power_user.expand_message_actions,
         animationDuration: animation_duration,
         animationEasing: animation_easing,
         onStateChanged: () => {
             void mountReactMainChatMessageListPanel();
         },
-    }).init();
+    });
+    mainChatMessageActionsController.init();
 
     $(document).on('click', '.mes_edit_cancel', async function () {
         await messageEditCancel.call(this, this_edit_mes_id);
@@ -15017,7 +15418,6 @@ jQuery(async function () {
         event.stopPropagation();
         event.preventDefault();
         await showMoreMessages();
-        void mountReactMainChatMessageListPanel();
     });
 
     $(document).on('click', '.open_characters_library', async function () {

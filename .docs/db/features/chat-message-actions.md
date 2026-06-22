@@ -56,7 +56,7 @@ This feature lets users operate on an existing chat message without leaving the 
 - The protected message surfaces include `#chat > .mes`, `.mes_text`, `.mes[mesid]`, swipe controls, reasoning wrappers, media wrappers, and file wrappers.
 - Hidden or inactive message actions can remain hidden according to existing workspace state, but when an action becomes visible it should have a stable role, accessible name, and focus affordance.
 - Stored-message rendering belongs to [Chat Message Rendering](feature.chat_message_rendering); this feature depends on those stable message rows but does not own message body formatting or storage.
-- Even after the current Phase 3B Sprint 1 visible-row cutover, action ownership still does not move into React. When `features.react.panels.mainChatMessageList` is enabled, safe stored or finalized rows may carry a visible React row-owner marker, and React may also observe a hidden message-action snapshot for rows that already expose the protected action shell. Message actions, edit buttons, swipe affordances, reasoning action buttons, failure retry affordances, and other message-row controls still remain attached to the legacy action shell and its existing delegated handlers. React does not add visible buttons, replace handlers, reorder the existing expanded-actions controls, or replace `.generation_failure_retry`.
+- In the current Phase 3B boundary, safe stored or finalized rows can hand the visible message-action shell to React while keeping the same protected selectors, role/name surface, and per-row fallback rules. React renders the visible action shell for safe rows, but the actual business handlers still route through the existing legacy action bridge so copy/edit/delete/retry/swipe/reasoning behavior, mobile reachability, and compatibility hooks remain stable. If a row becomes unsafe, enters edit mode, loses the protected action shell, or otherwise fails validation, that row hands ownership back to the legacy action surface instead of leaving a mixed menu behind.
 - This feature does not change streaming, message formatting, slash-command parsing, event timing, or extension mount points.
 
 ## ID Boundary Notes
@@ -65,7 +65,7 @@ This feature is separate from [Chat Workspace](page.chat_workspace) because mess
 
 ## Outcomes
 
-- **Success**: the user can discover and use the available actions on a rendered message row.
+- **Success**: the user can discover and use the available actions on a rendered message row, whether that safe row is currently showing the React-owned visible action shell or the ordinary legacy fallback.
 - **Priority state**: common actions remain quicker to reach than secondary or destructive actions, including on touch/mobile viewports.
 - **Failure retry state**: a failed generation row can expose a retry action and short recovery copy after automatic recovery has exhausted its bounded attempts, while preserving the message row and composer usability.
 - **Hidden state**: actions that are not valid for the current message remain hidden or inactive according to the existing UI rules.

@@ -107,6 +107,101 @@ export const parser = new SlashCommandParser();
  */
 const registerSlashCommand = SlashCommandParser.addCommand.bind(SlashCommandParser);
 const getSlashCommandsHelp = parser.getHelpString.bind(parser);
+let mainChatSlashCommandAutoComplete = null;
+let mainChatSlashCommandReactOwnerEnabled = false;
+
+function applyMainChatSlashCommandAutoCompleteVisibility() {
+    const autoComplete = mainChatSlashCommandAutoComplete;
+    if (!autoComplete) {
+        return;
+    }
+
+    const displayValue = mainChatSlashCommandReactOwnerEnabled ? 'none' : '';
+    const ariaHidden = mainChatSlashCommandReactOwnerEnabled ? 'true' : 'false';
+
+    if (autoComplete.domWrap instanceof HTMLElement) {
+        autoComplete.domWrap.style.display = displayValue;
+        autoComplete.domWrap.setAttribute('aria-hidden', ariaHidden);
+    }
+
+    if (autoComplete.detailsWrap instanceof HTMLElement) {
+        autoComplete.detailsWrap.style.display = displayValue;
+        autoComplete.detailsWrap.setAttribute('aria-hidden', ariaHidden);
+    }
+}
+
+function renderMainChatSlashCommandDetailsHtml(option) {
+    if (!option || typeof option.renderDetails !== 'function') {
+        return '';
+    }
+
+    const detailsContainer = document.createElement('div');
+    detailsContainer.append(option.renderDetails());
+    return detailsContainer.innerHTML;
+}
+
+export function setMainChatSlashCommandReactOwnerEnabled(enabled) {
+    mainChatSlashCommandReactOwnerEnabled = Boolean(enabled);
+    applyMainChatSlashCommandAutoCompleteVisibility();
+}
+
+export function getMainChatSlashCommandAutoCompleteState() {
+    const autoComplete = mainChatSlashCommandAutoComplete;
+    if (!autoComplete) {
+        return {
+            active: false,
+            visible: false,
+            replaceable: false,
+            detailsVisible: false,
+            selectedIndex: -1,
+            detailsHtml: '',
+            options: [],
+        };
+    }
+
+    applyMainChatSlashCommandAutoCompleteVisibility();
+    const options = Array.isArray(autoComplete.result)
+        ? autoComplete.result.map((option, index) => ({
+            name: option?.name ?? '',
+            type: option?.type ?? '',
+            typeIcon: option?.typeIcon ?? '',
+            selectable: option?.isSelectable !== false,
+            selected: option === autoComplete.selectedItem,
+            index,
+        }))
+        : [];
+
+    return {
+        active: autoComplete.isActive === true,
+        visible: autoComplete.isActive === true && autoComplete.isReplaceable === true,
+        replaceable: autoComplete.isReplaceable === true,
+        detailsVisible: autoComplete.isShowingDetails === true || (autoComplete.isActive === true && autoComplete.isReplaceable !== true),
+        selectedIndex: options.findIndex(option => option.selected),
+        detailsHtml: renderMainChatSlashCommandDetailsHtml(autoComplete.selectedItem),
+        options,
+    };
+}
+
+export function selectMainChatSlashCommandOption(index) {
+    const autoComplete = mainChatSlashCommandAutoComplete;
+    if (!autoComplete || !Array.isArray(autoComplete.result) || autoComplete.result.length === 0) {
+        return false;
+    }
+
+    if (!Number.isInteger(index) || index < 0 || index >= autoComplete.result.length) {
+        return false;
+    }
+
+    const option = autoComplete.result[index];
+    autoComplete.selectedItem = option;
+    if (option?.isSelectable !== false) {
+        void autoComplete.select();
+    } else {
+        autoComplete.renderDebounced?.();
+    }
+    applyMainChatSlashCommandAutoCompleteVisibility();
+    return true;
+}
 
 /**
  * Converts a SlashCommandClosure to a filter function that returns a boolean.
@@ -6935,6 +7030,12 @@ export async function setSlashCommandAutoComplete(textarea, isFloating = false) 
         async (text, index) => await parser.getNameAt(text, index),
         isFloating,
     );
+
+    if (textarea?.id === 'send_textarea') {
+        mainChatSlashCommandAutoComplete = ac;
+        applyMainChatSlashCommandAutoCompleteVisibility();
+    }
+
     return ac;
 }
 

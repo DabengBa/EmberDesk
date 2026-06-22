@@ -5178,6 +5178,11 @@ input[type="range"]::-webkit-slider-thumb {
     opacity: 0.68;
 }
 
+.mes_buttons .extraMesButtonsHint {
+    position: relative;
+    z-index: 1;
+}
+
 .extraMesButtons>div {
     opacity: 0.55;
 }

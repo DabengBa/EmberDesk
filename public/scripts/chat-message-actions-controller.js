@@ -92,11 +92,12 @@ export function buildMessageActionSnapshot(messageRow, dependencyOverrides = {})
 
     const getExpandMessageActions = dependencyOverrides.getExpandMessageActions ?? getDefaultExpandMessageActionsState;
     const availableActions = getVisibleMessageActionNames(messageRow);
-    const extraButtons = messageRow.querySelector('.extraMesButtons');
+    const extraButtons = Array.from(messageRow.querySelectorAll('.extraMesButtons'));
+    const hiddenHints = Array.from(messageRow.querySelectorAll('.extraMesButtonsHint'));
     const expanded = Boolean(
         getExpandMessageActions()
-        || extraButtons?.classList?.contains?.('visible')
-        || messageRow.querySelector('.extraMesButtonsHint')?.style?.display === 'none',
+        || extraButtons.some(button => button.classList?.contains?.('visible') || button.style?.display === 'flex')
+        || hiddenHints.some(hint => hint.style?.display === 'none'),
     );
 
     return {
@@ -126,7 +127,9 @@ function defaultTransitionElement(element, options) {
 }
 
 function findExtraButtonsForHint(hint) {
-    return hint.parentElement?.querySelector?.(EXTRA_ACTIONS_SELECTOR) ?? null;
+    return hint.closest?.('.mes_buttons')?.querySelector?.(EXTRA_ACTIONS_SELECTOR)
+        ?? hint.parentElement?.querySelector?.(EXTRA_ACTIONS_SELECTOR)
+        ?? null;
 }
 
 /**

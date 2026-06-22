@@ -143,15 +143,17 @@ Current path:
 
 1. `Generate()` asks `public/scripts/chat-generation-lifecycle.js` whether the visible request should use the bounded automatic recovery plan.
 2. `Generate()` captures an existing-row recovery baseline for `continue` and `swipe` before attempts mutate the current assistant row.
-3. `StreamingProcessor` in `public/script.js` owns streaming state and DOM updates for each active attempt.
-4. Streaming receives token chunks and emits `STREAM_TOKEN_RECEIVED`.
-5. Completion paths emit `MESSAGE_RECEIVED` and `CHARACTER_MESSAGE_RENDERED`.
-6. Stop and abort paths restore generation controls according to current send/stop state rules and do not enter automatic recovery.
-7. Recoverable failures clear or restore the active attempt row through the lifecycle decision, then either retry, fall back once, or expose the existing manual retry CTA.
+3. For supported visible `submitComposer` / `continueLast` requests, `public/script.js` prepares a React-owned visible transport request and `app/workspace-panels.tsx` runs the active transport mutation for streaming state, token append, and final row completion on that same assistant row.
+4. Unsupported visible kinds and excluded paths still fall back to `StreamingProcessor` in `public/script.js`, which owns streaming state and DOM updates for those attempts.
+5. Streaming receives token chunks and emits `STREAM_TOKEN_RECEIVED`.
+6. Completion paths emit `MESSAGE_RECEIVED` and `CHARACTER_MESSAGE_RENDERED`.
+7. Stop and abort paths restore generation controls according to current send/stop state rules and do not enter automatic recovery.
+8. Recoverable failures clear or restore the active attempt row through the lifecycle decision, then either retry, fall back once, or expose the existing manual retry CTA.
 
 Current proof:
 
 - `tests/chat-message-streaming.e2e.js` records deterministic local browser proof for successful streaming and user stop recovery with a Playwright-only fetch stub.
+- `tests/chat-message-streaming.e2e.js` also proves the current supported React-owned visible transport slice for send/continue and legacy fallback for unsupported direct generation.
 - `tests/chat-generation-lifecycle.test.js` records unit proof for visible-generation attempt planning, fallback readiness, finalization, baseline decisions, and quiet/background exclusions.
 - `scripts/interaction-performance-runner.mjs` records `main_chat_stream_first_token` and `main_chat_stream_stop_to_usable` scenarios for user-perceived timing evidence.
 

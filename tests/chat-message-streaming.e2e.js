@@ -3,13 +3,14 @@ import { test, expect } from '@playwright/test';
 import { testSetup } from './frontend/frontent-test-utils.js';
 
 const characterName = 'Dev Character 001';
+const seededChatName = 'Dev Character 001 Session 01';
 const reactMainChatMessageListEnabled = process.env.EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST === 'true';
 const mobileViewports = [
     { name: 'narrow phone', width: 390, height: 844 },
     { name: 'wide mobile', width: 768, height: 1024 },
 ];
 
-async function selectCharacterByName(page, name) {
+async function selectCharacterByName(page, name, chatName = seededChatName) {
     const selectedName = await page.evaluate(async (characterNameToSelect) => {
         const context = window.SillyTavern.getContext();
         const characterId = context.characters.findIndex(character => character?.name === characterNameToSelect);
@@ -23,6 +24,12 @@ async function selectCharacterByName(page, name) {
     }, name);
 
     expect(selectedName).toBe(name);
+    if (chatName) {
+        await page.evaluate(async (nextChatName) => {
+            const context = window.SillyTavern.getContext();
+            await context.openCharacterChat(nextChatName);
+        }, chatName);
+    }
 }
 
 async function installStreamingFetchStub(page, { chunks, delayMs = 40, keepOpenAfterChunks = false, failAfterChunks = false }) {
@@ -110,18 +117,65 @@ async function installStreamingFetchSequenceStub(page, { responses }) {
     }, { streamResponses: responses });
 }
 
-async function enableOpenAiStreaming(page, { chatCompletionSource = 'openai' } = {}) {
-    await page.evaluate(({ source }) => {
+async function installNonStreamingFetchStub(page, { content, delayMs = 200 }) {
+    await page.evaluate(({ responseContent, responseDelayMs }) => {
+        window.__emberdeskStreamingRequests = [];
+        window.__emberdeskStreamingAbortCount = 0;
+        window.__emberdeskStreamingOriginalFetch ??= window.fetch.bind(window);
+
+        window.fetch = async (input, init = {}) => {
+            const url = typeof input === 'string' ? input : input.url;
+            if (!String(url).endsWith('/api/backends/chat-completions/generate')) {
+                return window.__emberdeskStreamingOriginalFetch(input, init);
+            }
+
+            window.__emberdeskStreamingRequests.push(JSON.parse(String(init.body ?? '{}')));
+
+            return await new Promise((resolve, reject) => {
+                let settled = false;
+                const finish = (callback) => {
+                    if (settled) {
+                        return;
+                    }
+                    settled = true;
+                    init.signal?.removeEventListener('abort', abort);
+                    callback();
+                };
+                const abort = () => finish(() => {
+                    window.__emberdeskStreamingAbortCount += 1;
+                    reject(new DOMException('Aborted', 'AbortError'));
+                });
+                const timer = window.setTimeout(() => finish(() => {
+                    resolve(new Response(JSON.stringify({
+                        choices: [{ message: { content: responseContent } }],
+                    }), {
+                        status: 200,
+                        headers: { 'Content-Type': 'application/json' },
+                    }));
+                }), responseDelayMs);
+
+                init.signal?.addEventListener('abort', abort, { once: true });
+                if (init.signal?.aborted) {
+                    window.clearTimeout(timer);
+                    abort();
+                }
+            });
+        };
+    }, { responseContent: content, responseDelayMs: delayMs });
+}
+
+async function enableOpenAiStreaming(page, { chatCompletionSource = 'openai', streamOpenAi = true } = {}) {
+    await page.evaluate(({ source, streamEnabled }) => {
         const context = window.SillyTavern.getContext();
         context.powerUserSettings.stream_fade_in = false;
         context.powerUserSettings.streaming_fps = 60;
         context.chatCompletionSettings.chat_completion_source = source;
         context.chatCompletionSettings.openai_model = 'gpt-4o-mini';
         context.chatCompletionSettings.claude_model = 'claude-sonnet-4-5';
-        context.chatCompletionSettings.stream_openai = true;
+        context.chatCompletionSettings.stream_openai = streamEnabled;
         context.chatCompletionSettings.n = 1;
         context.chatCompletionSettings.send_if_empty = '';
-    }, { source: chatCompletionSource });
+    }, { source: chatCompletionSource, streamEnabled: streamOpenAi });
     await page.evaluate(async () => {
         const script = await import('/script.js');
         script.changeMainAPI('openai');
@@ -190,6 +244,24 @@ async function startRightSwipeGeneration(page, messageId) {
     }, messageId);
 }
 
+async function triggerStopGeneration(page, { throughDom = false } = {}) {
+    if (throughDom) {
+        return page.evaluate(() => {
+            const stopButton = document.getElementById('mes_stop');
+            if (!(stopButton instanceof HTMLElement)) {
+                return false;
+            }
+            stopButton.click();
+            return true;
+        });
+    }
+
+    return page.evaluate(async () => {
+        const script = await import('/script.js');
+        return script.stopGeneration();
+    });
+}
+
 async function waitForGeneration(page, { allowAbort = false, allowFailure = false } = {}) {
     await page.evaluate(async ({ acceptAbort, acceptFailure }) => {
         try {
@@ -206,6 +278,30 @@ async function waitForGeneration(page, { allowAbort = false, allowFailure = fals
             }
         }
     }, { acceptAbort: allowAbort, acceptFailure: allowFailure });
+}
+
+async function waitForVisibleSendButtonGeneration(page) {
+    await expect(page.locator('body')).toHaveAttribute('data-generating', 'true');
+    await expect(page.locator('body')).not.toHaveAttribute('data-generating', 'true');
+}
+
+async function getLastVisibleMessageId(page) {
+    const lastMessageId = await page.locator('#chat > .mes[mesid]').last().getAttribute('mesid');
+    return Number(lastMessageId ?? '-1');
+}
+
+function userMessageIdForGeneration(lastVisibleMessageIdBeforeGeneration) {
+    return lastVisibleMessageIdBeforeGeneration + 1;
+}
+
+function assistantMessageIdForGeneration(lastVisibleMessageIdBeforeGeneration) {
+    return lastVisibleMessageIdBeforeGeneration + 2;
+}
+
+function userRowForGeneration(page, lastVisibleMessageIdBeforeGeneration) {
+    return page.locator(
+        `#chat > .mes[is_user="true"][mesid="${userMessageIdForGeneration(lastVisibleMessageIdBeforeGeneration)}"]`,
+    );
 }
 
 async function waitForSlashCommandExecution(page) {
@@ -255,8 +351,10 @@ async function installRecoveryStatusRecorder(page) {
     });
 }
 
-function assistantRowForGeneration(page, rowCountBeforeGeneration) {
-    return page.locator(`#chat > .mes[is_user="false"][is_system="false"][mesid="${rowCountBeforeGeneration + 1}"]`);
+function assistantRowForGeneration(page, lastVisibleMessageIdBeforeGeneration) {
+    return page.locator(
+        `#chat > .mes[is_user="false"][is_system="false"][mesid="${assistantMessageIdForGeneration(lastVisibleMessageIdBeforeGeneration)}"]`,
+    );
 }
 
 async function expectReachableControlGeometry(page, selector, label) {
@@ -308,12 +406,34 @@ async function expectMainChatStreamingTransportState(page, expectations = {}) {
 
     if (expectations.expectFallback !== undefined || expectations.messageId !== undefined) {
         if (expectations.messageId !== undefined) {
-            await expect(controller).toHaveAttribute('data-main-chat-streaming-transport-message-id', String(expectations.messageId));
+            await expect(controller).toHaveAttribute(
+                'data-main-chat-streaming-transport-message-id',
+                expectations.messageId === null ? '' : String(expectations.messageId),
+            );
         }
 
         if (expectations.expectFallback !== undefined) {
             await expect(controller).toHaveAttribute('data-main-chat-streaming-transport-fallback', expectations.expectFallback ? 'true' : 'false');
         }
+    }
+}
+
+async function expectMainChatVisibleTransportOwner(page, expectations = {}) {
+    const controller = page.locator('[data-main-chat-message-list-controller="true"]');
+
+    if (!reactMainChatMessageListEnabled) {
+        await expect(controller).toHaveCount(0);
+        return;
+    }
+
+    await expect(controller).toHaveCount(1);
+
+    if (expectations.owner !== undefined) {
+        await expect(controller).toHaveAttribute('data-main-chat-visible-transport-owner', expectations.owner);
+    }
+
+    if (expectations.kind !== undefined) {
+        await expect(controller).toHaveAttribute('data-main-chat-visible-transport-kind', expectations.kind);
     }
 }
 
@@ -373,6 +493,25 @@ async function expectMainChatComposerState(page, expectations = {}) {
     }
 }
 
+async function expectMainChatComposerVisibleOwner(page, expectedOwned) {
+    const sendForm = page.locator('#send_form');
+    const nonQrFormItems = page.locator('#nonQRFormItems');
+
+    await expect(sendForm).toHaveCount(1);
+    await expect(nonQrFormItems).toHaveCount(1);
+
+    if (!reactMainChatMessageListEnabled || !expectedOwned) {
+        await expect(sendForm).not.toHaveAttribute('data-main-chat-composer-owner', 'react');
+        await expect(nonQrFormItems).not.toHaveAttribute('data-main-chat-composer-owner', 'react');
+        return;
+    }
+
+    await expect(sendForm).toHaveAttribute('data-main-chat-composer-owner', 'react');
+    await expect(nonQrFormItems).toHaveAttribute('data-main-chat-composer-owner', 'react');
+    await expect(page.locator('#send_textarea')).toHaveCount(1);
+    await expect(page.locator('#send_but')).toHaveCount(1);
+}
+
 async function expectMainChatSlashCommandState(page, expectations = {}) {
     const controller = page.locator('[data-main-chat-message-list-controller="true"]');
 
@@ -412,6 +551,47 @@ async function expectMainChatSlashCommandState(page, expectations = {}) {
     }
 }
 
+async function expectMainChatSlashUiOwner(page, expectations = {}) {
+    const reactAutocomplete = page.locator('.autoComplete-wrap[data-main-chat-slash-ui-owner="react"]');
+    const reactDetails = page.locator('[data-main-chat-slash-ui-details="react"]');
+    const legacyAutocomplete = page.locator('.autoComplete-wrap:not([data-main-chat-slash-ui-owner="react"])');
+    const legacyDetails = page.locator('.autoComplete-detailsWrap:not([data-main-chat-slash-ui-details="react"])');
+
+    if (!reactMainChatMessageListEnabled) {
+        await expect(reactAutocomplete).toHaveCount(0);
+        await expect(reactDetails).toHaveCount(0);
+        return;
+    }
+
+    if (expectations.visible !== undefined) {
+        if (expectations.visible) {
+            await expect(reactAutocomplete).toHaveCount(1);
+            await expect(reactAutocomplete).toBeVisible();
+
+            if (expectations.legacyHidden !== false) {
+                await expect(legacyAutocomplete).toHaveCount(1);
+                await expect(legacyAutocomplete).toHaveAttribute('aria-hidden', 'true');
+            }
+        } else {
+            await expect(reactAutocomplete).toHaveCount(0);
+        }
+    }
+
+    if (expectations.statusText !== undefined) {
+        if (expectations.statusText) {
+            await expect(reactDetails).toHaveCount(1);
+            await expect(reactDetails).toContainText(expectations.statusText);
+
+            if (expectations.legacyHidden !== false) {
+                await expect(legacyDetails).toHaveCount(1);
+                await expect(legacyDetails).toHaveAttribute('aria-hidden', 'true');
+            }
+        } else {
+            await expect(reactDetails).toHaveCount(0);
+        }
+    }
+}
+
 test.describe('chat message streaming', () => {
     test.describe.configure({ mode: 'serial' });
 
@@ -424,17 +604,21 @@ test.describe('chat message streaming', () => {
             delayMs: 120,
         });
 
-        const rowCountBeforeGeneration = await page.locator('#chat > .mes[mesid]').count();
+        const lastVisibleMessageIdBeforeGeneration = await getLastVisibleMessageId(page);
         await startGeneration(page, 'Start a deterministic streaming proof.');
 
-        const streamingRow = assistantRowForGeneration(page, rowCountBeforeGeneration);
+        const streamingRow = assistantRowForGeneration(page, lastVisibleMessageIdBeforeGeneration);
         await expect(streamingRow.locator('.mes_text')).toContainText('Streaming');
         const messageId = await streamingRow.getAttribute('mesid');
-        await expectReactMessageRowState(page, Number(messageId), false);
+        await expectReactMessageRowState(page, Number(messageId), true);
         await expectMainChatStreamingTransportState(page, {
             tokenCountAtLeast: 1,
             messageId: Number(messageId),
             expectFallback: false,
+        });
+        await expectMainChatVisibleTransportOwner(page, {
+            owner: 'legacy',
+            kind: '',
         });
 
         await expect(streamingRow.locator('.mes_text')).toContainText('Streaming proof complete.');
@@ -450,6 +634,10 @@ test.describe('chat message streaming', () => {
         await expectReactMessageRowState(page, Number(messageId), true);
         await expect(page.locator(`#chat > .mes[mesid="${messageId}"]`).getByRole('button', { name: 'Message Actions' })).toBeVisible();
         await expect(page.getByRole('button', { name: 'Abort request' })).not.toBeVisible();
+        await expectMainChatVisibleTransportOwner(page, {
+            owner: 'legacy',
+            kind: '',
+        });
 
         const request = await page.evaluate(() => window.__emberdeskStreamingRequests.at(-1));
         expect(request.stream).toBe(true);
@@ -467,10 +655,10 @@ test.describe('chat message streaming', () => {
             keepOpenAfterChunks: true,
         });
 
-        const rowCountBeforeGeneration = await page.locator('#chat > .mes[mesid]').count();
+        const lastVisibleMessageIdBeforeGeneration = await getLastVisibleMessageId(page);
         await startGeneration(page, 'Start a deterministic streaming stop proof.');
 
-        const streamingRow = assistantRowForGeneration(page, rowCountBeforeGeneration);
+        const streamingRow = assistantRowForGeneration(page, lastVisibleMessageIdBeforeGeneration);
         await expect(streamingRow.locator('.mes_text')).toBeVisible();
         const messageId = await streamingRow.getAttribute('mesid');
         const textBeforeStop = await streamingRow.locator('.mes_text').textContent();
@@ -486,10 +674,7 @@ test.describe('chat message streaming', () => {
         await expect(page.locator('#mes_stop')).toBeVisible();
         await expect.poll(async () => page.evaluate(() => window.SillyTavern.getContext().streamingProcessor?.observedTokenCount ?? 0))
             .toBeGreaterThanOrEqual(1);
-        const stopped = await page.evaluate(async () => {
-            const script = await import('/script.js');
-            return script.stopGeneration();
-        });
+        const stopped = await triggerStopGeneration(page);
         expect(stopped).toBe(true);
         await expectMainChatStreamingTransportState(page, {
             phase: 'stopped',
@@ -533,7 +718,7 @@ test.describe('chat message streaming', () => {
         expect(renderedEvents).toHaveLength(0);
     });
 
-    test('composer keeps newline, send, clear, and empty-submit behavior legacy-owned', async ({ page }) => {
+    test('visible composer owner keeps newline, send, clear, and empty-submit behavior', async ({ page }) => {
         await testSetup.awaitST({ page });
         await selectCharacterByName(page, characterName);
         await enableOpenAiStreaming(page);
@@ -545,7 +730,7 @@ test.describe('chat message streaming', () => {
         const composer = page.getByRole('textbox', { name: 'Chat message' });
         const userRowCountBeforeSend = await page.locator('#chat > .mes[is_user="true"]').count();
 
-        await composer.focus();
+        await composer.click();
         await expect(composer).toBeFocused();
         await expectMainChatComposerState(page, {
             length: 0,
@@ -556,6 +741,7 @@ test.describe('chat message streaming', () => {
             generating: false,
             context: 'character',
         });
+        await expectMainChatComposerVisibleOwner(page, true);
 
         await composer.pressSequentially('Line one');
         await composer.press('Shift+Enter');
@@ -571,15 +757,17 @@ test.describe('chat message streaming', () => {
 
         await page.locator('#send_but').click();
         await expect(composer).toHaveValue('');
+        await expectMainChatComposerVisibleOwner(page, true);
         await expectMainChatComposerState(page, {
             length: 0,
             empty: true,
             canSubmit: false,
-            generating: true,
             context: 'character',
         });
 
-        await waitForGeneration(page);
+        await waitForVisibleSendButtonGeneration(page);
+        await expectMainChatComposerVisibleOwner(page, true);
+        await expect(composer).toBeFocused();
         await expectMainChatComposerState(page, {
             length: 0,
             empty: true,
@@ -596,6 +784,7 @@ test.describe('chat message streaming', () => {
         await page.locator('#send_but').click();
         await page.waitForTimeout(150);
         await expect(page.locator('#chat > .mes[is_user="true"]')).toHaveCount(userRowCountBeforeEmptyClick);
+        await expectMainChatComposerVisibleOwner(page, true);
         await expectMainChatComposerState(page, {
             length: 0,
             empty: true,
@@ -606,7 +795,233 @@ test.describe('chat message streaming', () => {
         });
     });
 
-    test('slash-command bridge observes autocomplete, execution, pause, continue, and abort without owning the executor', async ({ page }) => {
+    test('visible composer owner serializes rapid submit clicks into one request', async ({ page }) => {
+        test.skip(!reactMainChatMessageListEnabled, 'rapid submit regression only exists on React-owned visible composer');
+
+        await testSetup.awaitST({ page });
+        await selectCharacterByName(page, characterName);
+        await enableOpenAiStreaming(page, { streamOpenAi: false });
+        await installNonStreamingFetchStub(page, {
+            content: 'Serialized submit proof complete.',
+            delayMs: 350,
+        });
+
+        const lastVisibleMessageIdBeforeGeneration = await getLastVisibleMessageId(page);
+        const composer = page.getByRole('textbox', { name: 'Chat message' });
+        await composer.focus();
+        await composer.pressSequentially('Serialized submit proof.');
+        await expectMainChatComposerVisibleOwner(page, true);
+        await expectMainChatComposerState(page, {
+            length: 'Serialized submit proof.'.length,
+            empty: false,
+            canSubmit: true,
+            focused: true,
+            generating: false,
+            context: 'character',
+        });
+
+        await page.evaluate(() => {
+            const sendButton = document.querySelector('#send_but');
+            if (!(sendButton instanceof HTMLElement)) {
+                throw new Error('Visible composer send button not found');
+            }
+
+            sendButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+            sendButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        });
+
+        await expect(composer).toHaveValue('');
+        await expect.poll(async () => page.evaluate(() => window.__emberdeskStreamingRequests.length)).toBe(1);
+        await expect(assistantRowForGeneration(page, lastVisibleMessageIdBeforeGeneration).locator('.mes_text')).toContainText('Serialized submit proof complete.');
+        await expectMainChatComposerVisibleOwner(page, true);
+        await expect(page.locator('#chat > .mes[is_user="true"]').filter({ hasText: 'Serialized submit proof.' })).toHaveCount(1);
+    });
+
+    test('visible composer send hands supported transport to the React owner', async ({ page }) => {
+        test.skip(!reactMainChatMessageListEnabled, 'React-owned visible transport requires the main-chat message-list panel flag');
+
+        await testSetup.awaitST({ page });
+        await selectCharacterByName(page, characterName);
+        await enableOpenAiStreaming(page);
+        await installStreamingFetchStub(page, {
+            chunks: ['React-owned ', 'composer transport.'],
+            delayMs: 120,
+            keepOpenAfterChunks: true,
+        });
+
+        const lastVisibleMessageIdBeforeGeneration = await getLastVisibleMessageId(page);
+        const composer = page.getByRole('textbox', { name: 'Chat message' });
+        await composer.focus();
+        await composer.pressSequentially('React-owned composer transport proof.');
+        await page.locator('#send_but').click();
+
+        const assistantMessageId = assistantMessageIdForGeneration(lastVisibleMessageIdBeforeGeneration);
+        const streamingRow = assistantRowForGeneration(page, lastVisibleMessageIdBeforeGeneration);
+        await expectMainChatVisibleTransportOwner(page, {
+            owner: 'react',
+            kind: 'submitComposer',
+        });
+        await expectMainChatStreamingTransportState(page, {
+            phase: 'streaming',
+            generationPhase: 'streaming',
+            tokenCountAtLeast: 1,
+            messageId: assistantMessageId,
+            expectFallback: false,
+        });
+        await expectReactMessageRowState(page, assistantMessageId, true);
+        await expect(streamingRow.locator('.mes_text')).toContainText('React-owned composer transport.');
+
+        const stopped = await triggerStopGeneration(page, { throughDom: true });
+        expect(stopped).toBe(true);
+        await expect(page.locator('body')).not.toHaveAttribute('data-generating', 'true');
+        await expectMainChatVisibleTransportOwner(page, {
+            owner: 'legacy',
+            kind: '',
+        });
+    });
+
+    test('composer bridge follows legacy disconnect sendability', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterByName(page, characterName);
+        await enableOpenAiStreaming(page);
+
+        const composer = page.getByRole('textbox', { name: 'Chat message' });
+        await composer.focus();
+        await composer.pressSequentially('Disconnect sendability proof.');
+        await expectMainChatComposerState(page, {
+            length: 'Disconnect sendability proof.'.length,
+            empty: false,
+            canSubmit: true,
+            focused: true,
+            generating: false,
+            context: 'character',
+        });
+        await expectMainChatComposerVisibleOwner(page, true);
+
+        await page.evaluate(async () => {
+            const script = await import('/script.js');
+            script.setOnlineStatus('no_connection');
+        });
+
+        await expect(page.locator('#send_but')).not.toBeVisible();
+        await expectMainChatComposerState(page, {
+            length: 'Disconnect sendability proof.'.length,
+            empty: false,
+            canSubmit: false,
+            focused: true,
+            generating: false,
+            context: 'character',
+        });
+        await expectMainChatComposerVisibleOwner(page, true);
+    });
+
+    test('visible continue button hands supported transport to the React owner', async ({ page }) => {
+        test.skip(!reactMainChatMessageListEnabled, 'React-owned visible transport requires the main-chat message-list panel flag');
+
+        await testSetup.awaitST({ page });
+        await selectCharacterByName(page, characterName);
+        await enableOpenAiStreaming(page);
+        await installStreamingFetchStub(page, {
+            chunks: ['Continue baseline.'],
+            delayMs: 35,
+        });
+
+        const lastVisibleMessageIdBeforeSeedGeneration = await getLastVisibleMessageId(page);
+        await startGeneration(page, 'Create an assistant row for visible continue transport.');
+        await waitForGeneration(page);
+        await page.evaluate(async () => {
+            const { power_user } = await import('/scripts/power-user.js');
+            power_user.quick_continue = true;
+            const continueButton = document.getElementById('mes_continue');
+            if (continueButton instanceof HTMLElement) {
+                continueButton.classList.remove('displayNone');
+                continueButton.style.display = '';
+            }
+        });
+
+        const continuedMessageId = assistantMessageIdForGeneration(lastVisibleMessageIdBeforeSeedGeneration);
+        await installStreamingFetchStub(page, {
+            chunks: [' Continued ', 'via React owner.'],
+            delayMs: 120,
+            keepOpenAfterChunks: true,
+        });
+
+        await expect(page.locator('#mes_continue')).toBeVisible();
+        await page.locator('#mes_continue').click();
+
+        const continuedRow = page.locator(`#chat > .mes[mesid="${continuedMessageId}"]`);
+        await expectMainChatVisibleTransportOwner(page, {
+            owner: 'react',
+            kind: 'continueLast',
+        });
+        await expectMainChatStreamingTransportState(page, {
+            phase: 'streaming',
+            generationPhase: 'streaming',
+            tokenCountAtLeast: 1,
+            messageId: continuedMessageId,
+            expectFallback: false,
+        });
+        await expectReactMessageRowState(page, continuedMessageId, true);
+        await expect(continuedRow.locator('.mes_text')).toContainText('Continued via React owner.');
+
+        const stopped = await triggerStopGeneration(page, { throughDom: true });
+        expect(stopped).toBe(true);
+        await expect(page.locator('body')).not.toHaveAttribute('data-generating', 'true');
+        await expectMainChatVisibleTransportOwner(page, {
+            owner: 'legacy',
+            kind: '',
+        });
+    });
+
+    test('non-streaming stop does not reuse the previous assistant message id in transport state', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterByName(page, characterName);
+        await enableOpenAiStreaming(page);
+        await installStreamingFetchStub(page, {
+            chunks: ['Previous assistant response.'],
+            delayMs: 35,
+        });
+
+        const lastVisibleMessageIdBeforeSeedGeneration = await getLastVisibleMessageId(page);
+        await startGeneration(page, 'Create an assistant row before the stop proof.');
+        await waitForGeneration(page);
+
+        const seededAssistantRow = assistantRowForGeneration(page, lastVisibleMessageIdBeforeSeedGeneration);
+        const previousAssistantMessageId = Number(await seededAssistantRow.getAttribute('mesid'));
+        expect(previousAssistantMessageId).toBeGreaterThanOrEqual(0);
+
+        await enableOpenAiStreaming(page, { streamOpenAi: false });
+        await installNonStreamingFetchStub(page, {
+            content: 'This reply should never land because the request is aborted.',
+            delayMs: 1500,
+        });
+
+        await startGeneration(page, 'Abort a non-streaming request before any assistant row is created.');
+        await expect(page.locator('#mes_stop')).toBeVisible();
+        const stopped = await triggerStopGeneration(page);
+        expect(stopped).toBe(true);
+
+        await expectMainChatStreamingTransportState(page, {
+            phase: 'stopped',
+            generationPhase: 'stopped',
+            messageId: null,
+            expectFallback: false,
+        });
+
+        const abortedMessage = await page.evaluate(async () => {
+            try {
+                await window.__emberdeskStreamingGeneration;
+                return window.__emberdeskStreamingGenerationResult ?? null;
+            } catch (error) {
+                return String(error?.message ?? error);
+            }
+        });
+        expect(String(abortedMessage ?? '')).toMatch(/Aborted|Generation was aborted/i);
+        await expect(page.locator('body')).not.toHaveAttribute('data-generating', 'true');
+        await expect(page.getByRole('button', { name: 'Retry generation' })).toHaveCount(1);
+    });
+
+    test('visible slash owner observes autocomplete, execution, pause, continue, and abort through the legacy executor', async ({ page }) => {
         await testSetup.awaitST({ page });
         await selectCharacterByName(page, characterName);
 
@@ -628,6 +1043,7 @@ test.describe('chat message streaming', () => {
             aborted: false,
             error: '',
         });
+        await expectMainChatSlashUiOwner(page, { visible: true });
 
         await composer.fill('normal text');
         await expectMainChatSlashCommandState(page, {
@@ -639,8 +1055,9 @@ test.describe('chat message streaming', () => {
             aborted: false,
             error: '',
         });
+        await expectMainChatSlashUiOwner(page, { visible: false, statusText: '' });
 
-        const scriptText = '/delay 400 | /delay 400 | /echo ready';
+        const scriptText = '/delay 1500 | /delay 1500 | /echo ready';
         await composer.fill(scriptText);
         await page.evaluate(async (text) => {
             const { executeSlashCommandsOnChatInput } = await import('/scripts/slash-commands.js');
@@ -683,6 +1100,7 @@ test.describe('chat message streaming', () => {
             aborted: false,
             error: '',
         });
+        await expectMainChatSlashUiOwner(page, { statusText: 'Paused' });
 
         await page.evaluate(async () => {
             const { pauseScriptExecution } = await import('/scripts/slash-commands.js');
@@ -710,6 +1128,7 @@ test.describe('chat message streaming', () => {
             aborted: true,
             error: '',
         });
+        await expectMainChatSlashUiOwner(page, { statusText: 'Aborted' });
 
         const slashExecution = await page.evaluate(() => window.__emberdeskSlashExecutionResult);
         expect(slashExecution).toEqual(expect.objectContaining({
@@ -724,7 +1143,6 @@ test.describe('chat message streaming', () => {
             autocomplete: false,
             executing: false,
             paused: false,
-            aborted: true,
             error: '',
         });
         await page.waitForTimeout(1300);
@@ -754,14 +1172,14 @@ test.describe('chat message streaming', () => {
             ],
         });
 
-        const rowCountBeforeGeneration = await page.locator('#chat > .mes[mesid]').count();
+        const lastVisibleMessageIdBeforeGeneration = await getLastVisibleMessageId(page);
         await startGeneration(page, 'Start a deterministic fallback recovery proof.');
-        const assistantRow = assistantRowForGeneration(page, rowCountBeforeGeneration);
+        const assistantRow = assistantRowForGeneration(page, lastVisibleMessageIdBeforeGeneration);
         await expectMainChatStreamingTransportState(page, {
             phase: ['streaming', 'completed'],
             generationPhase: ['recoveringFallback', 'completed', 'idle'],
             tokenCountAtLeast: 1,
-            messageId: rowCountBeforeGeneration + 1,
+            messageId: assistantMessageIdForGeneration(lastVisibleMessageIdBeforeGeneration),
             expectFallback: true,
         });
 
@@ -771,7 +1189,7 @@ test.describe('chat message streaming', () => {
             phase: 'completed',
             generationPhase: ['completed', 'idle'],
             tokenCountAtLeast: 1,
-            messageId: rowCountBeforeGeneration + 1,
+            messageId: assistantMessageIdForGeneration(lastVisibleMessageIdBeforeGeneration),
             expectFallback: true,
         });
         const statusHistory = await page.evaluate(() => window.__emberdeskStreamingRecoveryStatuses);
@@ -800,8 +1218,14 @@ test.describe('chat message streaming', () => {
             message: window.__emberdeskStreamingMessageEvents,
             rendered: window.__emberdeskStreamingRenderedEvents,
         }));
-        expect(finalEvents.message).toEqual([{ messageId: rowCountBeforeGeneration + 1, type: 'normal' }]);
-        expect(finalEvents.rendered).toEqual([{ messageId: rowCountBeforeGeneration + 1, type: 'normal' }]);
+        expect(finalEvents.message).toEqual([{
+            messageId: assistantMessageIdForGeneration(lastVisibleMessageIdBeforeGeneration),
+            type: 'normal',
+        }]);
+        expect(finalEvents.rendered).toEqual([{
+            messageId: assistantMessageIdForGeneration(lastVisibleMessageIdBeforeGeneration),
+            type: 'normal',
+        }]);
     });
 
     test('parses fallback stream with fallback source when primary source has a different stream shape', async ({ page }) => {
@@ -817,9 +1241,9 @@ test.describe('chat message streaming', () => {
             ],
         });
 
-        const rowCountBeforeGeneration = await page.locator('#chat > .mes[mesid]').count();
+        const lastVisibleMessageIdBeforeGeneration = await getLastVisibleMessageId(page);
         await startGeneration(page, 'Start a fallback parser proof.');
-        const assistantRow = assistantRowForGeneration(page, rowCountBeforeGeneration);
+        const assistantRow = assistantRowForGeneration(page, lastVisibleMessageIdBeforeGeneration);
 
         await expect(assistantRow.locator('.mes_text')).toContainText('Fallback OpenAI stream parsed.');
         await waitForGeneration(page);
@@ -848,7 +1272,8 @@ test.describe('chat message streaming', () => {
         await expect(page.locator('#mes_stop')).toBeVisible();
         await expect.poll(async () => page.evaluate(() => window.__emberdeskStreamingRequests.length)).toBe(1);
 
-        await page.locator('#mes_stop').click();
+        const stopped = await triggerStopGeneration(page, { throughDom: true });
+        expect(stopped).toBe(true);
         await waitForGeneration(page, { allowAbort: true });
         await expect(page.locator('#chat > .mes[is_user="false"][is_system="false"][mesid]').filter({ hasText: 'Unexpected retry.' })).toHaveCount(0);
         await expect(page.locator('.generation_auto_recovery_status')).toHaveCount(0);
@@ -867,20 +1292,20 @@ test.describe('chat message streaming', () => {
             failAfterChunks: true,
         });
 
-        const rowCountBeforeGeneration = await page.locator('#chat > .mes[mesid]').count();
+        const lastVisibleMessageIdBeforeGeneration = await getLastVisibleMessageId(page);
         await startGeneration(page, 'Start a deterministic provider failure proof.');
         await waitForGeneration(page, { allowFailure: true });
         await expectMainChatStreamingTransportState(page, {
             phase: 'error',
             generationPhase: 'error',
-            messageId: rowCountBeforeGeneration + 1,
+            messageId: assistantMessageIdForGeneration(lastVisibleMessageIdBeforeGeneration),
             expectFallback: false,
         });
 
-        const userRow = page.locator(`#chat > .mes[is_user="true"][mesid="${rowCountBeforeGeneration}"]`);
+        const userRow = userRowForGeneration(page, lastVisibleMessageIdBeforeGeneration);
         await expect(userRow.locator('.mes_text')).toContainText('Start a deterministic provider failure proof.');
 
-        const assistantRowsAfterFailure = page.locator(`#chat > .mes[is_user="false"][is_system="false"][mesid="${rowCountBeforeGeneration + 1}"]`);
+        const assistantRowsAfterFailure = assistantRowForGeneration(page, lastVisibleMessageIdBeforeGeneration);
         await expect(assistantRowsAfterFailure).toHaveCount(1);
         await expect(assistantRowsAfterFailure.locator('.mes_text')).not.toContainText('Failure path partial text.');
 
@@ -899,7 +1324,9 @@ test.describe('chat message streaming', () => {
             generating: false,
             context: 'character',
         });
-        await expect(page.locator(`#chat > .mes[mesid="${rowCountBeforeGeneration + 1}"]`)).toHaveCount(1);
+        await expect(page.locator(
+            `#chat > .mes[mesid="${assistantMessageIdForGeneration(lastVisibleMessageIdBeforeGeneration)}"]`,
+        )).toHaveCount(1);
         const failedAttemptRequestCount = await page.evaluate(() => window.__emberdeskStreamingRequests.length);
         expect(failedAttemptRequestCount).toBe(2);
 
@@ -932,13 +1359,15 @@ test.describe('chat message streaming', () => {
             ],
         });
 
-        const rowCountBeforeGeneration = await page.locator('#chat > .mes[mesid]').count();
+        const lastVisibleMessageIdBeforeGeneration = await getLastVisibleMessageId(page);
         await startGeneration(page, 'Start a deterministic fallback recovery proof.');
         await waitForGeneration(page);
 
-        const userRow = page.locator(`#chat > .mes[is_user="true"][mesid="${rowCountBeforeGeneration}"]`);
-        const assistantRow = assistantRowForGeneration(page, rowCountBeforeGeneration);
-        const duplicateAssistantRow = page.locator(`#chat > .mes[is_user="false"][is_system="false"][mesid="${rowCountBeforeGeneration + 2}"]`);
+        const userRow = userRowForGeneration(page, lastVisibleMessageIdBeforeGeneration);
+        const assistantRow = assistantRowForGeneration(page, lastVisibleMessageIdBeforeGeneration);
+        const duplicateAssistantRow = page.locator(
+            `#chat > .mes[is_user="false"][is_system="false"][mesid="${assistantMessageIdForGeneration(lastVisibleMessageIdBeforeGeneration) + 1}"]`,
+        );
 
         await expect(userRow.locator('.mes_text')).toContainText('Start a deterministic fallback recovery proof.');
         await expect(assistantRow).toHaveCount(1);
@@ -961,8 +1390,8 @@ test.describe('chat message streaming', () => {
         const renderedEvents = await page.evaluate(() => window.__emberdeskStreamingRenderedEvents);
         expect(messageEvents).toHaveLength(1);
         expect(renderedEvents).toHaveLength(1);
-        expect(messageEvents[0].messageId).toBe(rowCountBeforeGeneration + 1);
-        expect(renderedEvents[0].messageId).toBe(rowCountBeforeGeneration + 1);
+        expect(messageEvents[0].messageId).toBe(assistantMessageIdForGeneration(lastVisibleMessageIdBeforeGeneration));
+        expect(renderedEvents[0].messageId).toBe(assistantMessageIdForGeneration(lastVisibleMessageIdBeforeGeneration));
     });
 
     test('recovered overswipe appends a new swipe without replacing the existing swipe', async ({ page }) => {
@@ -979,10 +1408,10 @@ test.describe('chat message streaming', () => {
             ],
         });
 
-        const rowCountBeforeGeneration = await page.locator('#chat > .mes[mesid]').count();
+        const lastVisibleMessageIdBeforeGeneration = await getLastVisibleMessageId(page);
         await startGeneration(page, 'Create an assistant row for overswipe recovery.');
         await waitForGeneration(page);
-        const messageId = rowCountBeforeGeneration + 1;
+        const messageId = assistantMessageIdForGeneration(lastVisibleMessageIdBeforeGeneration);
 
         const beforeSwipe = await page.evaluate((targetMessageId) => {
             const message = window.SillyTavern.getContext().chat[targetMessageId];
@@ -1065,14 +1494,14 @@ test.describe('chat message streaming', () => {
             failAfterChunks: true,
         });
 
-        const rowCountBeforeGeneration = await page.locator('#chat > .mes[mesid]').count();
+        const lastVisibleMessageIdBeforeGeneration = await getLastVisibleMessageId(page);
         await startGeneration(page, 'Start a deterministic pre-token provider failure proof.');
         await waitForGeneration(page, { allowFailure: true });
 
-        const userRow = page.locator(`#chat > .mes[is_user="true"][mesid="${rowCountBeforeGeneration}"]`);
+        const userRow = userRowForGeneration(page, lastVisibleMessageIdBeforeGeneration);
         await expect(userRow.locator('.mes_text')).toContainText('Start a deterministic pre-token provider failure proof.');
 
-        const failedRow = assistantRowForGeneration(page, rowCountBeforeGeneration);
+        const failedRow = assistantRowForGeneration(page, lastVisibleMessageIdBeforeGeneration);
         await expect(failedRow).toHaveCount(1);
         await expect(failedRow.locator('.generation_failure_notice')).toContainText('Generation failed.');
         await expect(failedRow.getByRole('button', { name: 'Retry generation' })).toBeVisible();
@@ -1118,13 +1547,14 @@ test.describe('chat message streaming', () => {
                 delayMs: 120,
                 keepOpenAfterChunks: true,
             });
-            let rowCountBeforeGeneration = await page.locator('#chat > .mes[mesid]').count();
+            let lastVisibleMessageIdBeforeGeneration = await getLastVisibleMessageId(page);
             await startGeneration(page, `Start ${viewport.name} mobile stop proof.`);
-            const streamingRow = assistantRowForGeneration(page, rowCountBeforeGeneration);
+            const streamingRow = assistantRowForGeneration(page, lastVisibleMessageIdBeforeGeneration);
             await expect(streamingRow.locator('.mes_text'), `${viewport.name} streaming row`).toBeVisible();
             await expect(page.locator('#mes_stop'), `${viewport.name} stop`).toBeVisible();
             await expectReachableControlGeometry(page, '#mes_stop', `${viewport.name} stop`);
-            await page.locator('#mes_stop').click();
+            const stopped = await triggerStopGeneration(page, { throughDom: true });
+            expect(stopped, `${viewport.name} stop trigger`).toBe(true);
             await waitForGeneration(page, { allowAbort: true });
             await expect(page.locator('body')).not.toHaveAttribute('data-generating', 'true');
             await expect(streamingRow, `${viewport.name} stopped row identity`).toHaveCount(1);
@@ -1134,17 +1564,21 @@ test.describe('chat message streaming', () => {
                 delayMs: 35,
                 failAfterChunks: true,
             });
-            rowCountBeforeGeneration = await page.locator('#chat > .mes[mesid]').count();
+            lastVisibleMessageIdBeforeGeneration = await getLastVisibleMessageId(page);
             await startGeneration(page, `Start ${viewport.name} mobile provider failure proof.`);
             await waitForGeneration(page, { allowFailure: true });
 
-            const failedRow = assistantRowForGeneration(page, rowCountBeforeGeneration);
+            const failedRow = assistantRowForGeneration(page, lastVisibleMessageIdBeforeGeneration);
             await expect(failedRow.locator('.mes_text')).not.toContainText(`${viewport.name} failure recovery text.`);
             const retry = failedRow.getByRole('button', { name: 'Retry generation' });
             await expect(retry, `${viewport.name} retry`).toBeVisible();
             await retry.focus();
             await expect(retry, `${viewport.name} retry focus`).toBeFocused();
-            await expectReachableControlGeometry(page, `#chat > .mes[mesid="${rowCountBeforeGeneration + 1}"] .generation_failure_retry`, `${viewport.name} retry`);
+            await expectReachableControlGeometry(
+                page,
+                `#chat > .mes[mesid="${assistantMessageIdForGeneration(lastVisibleMessageIdBeforeGeneration)}"] .generation_failure_retry`,
+                `${viewport.name} retry`,
+            );
             const failedRequestCount = await page.evaluate(() => window.__emberdeskStreamingRequests.length);
             expect(failedRequestCount).toBe(2);
         }

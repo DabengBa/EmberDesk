@@ -22,14 +22,14 @@
 
 Goals:
 
-- Document the current rules that turn legacy message-row action DOM into hidden React `messageActionSnapshots`.
-- Make the action-name parsing, shared tier mapping, expanded-state detection, target validation, and hidden marker output reproducible without importing production code.
-- Record the ownership boundary between observing message-action state and owning visible copy, edit, delete, swipe, reasoning, or retry behavior.
+- Document the current rules that turn legacy message-row action DOM into `messageActionSnapshots` and the React-owned visible action shell for safe rows.
+- Make the action-name parsing, shared tier mapping, expanded-state detection, target validation, and owner handoff reproducible without importing production code.
+- Record the ownership boundary between the React-owned visible action shell and the legacy business handlers it still calls.
 
 Non-goals:
 
 - Re-document the visible click handlers, delegated expand/collapse controller, delete confirmation flow, or edit-mode lifecycle.
-- Introduce React-rendered visible action buttons or move message-action ownership out of the legacy row shell.
+- Replace the existing copy/edit/delete/swipe/reasoning/retry business handlers with new React-only logic.
 - Replace the browser E2E proofs for copy, edit, delete, mobile reachability, or long-chat rendering.
 
 ## Input Discovery And Parsing Rules
@@ -80,7 +80,12 @@ The bridge output is `messageActionSnapshots` inside the existing `mainChatMessa
 
 React validates the payload with a Zod schema in `app/workspace-panels.tsx`. Invalid or missing snapshots are dropped, and legacy visible action ownership remains unchanged.
 
-The React-visible output is a hidden owner marker appended inside `.mes_buttons`:
+The React-visible output now has two layers for safe rows:
+
+1. a hidden owner marker appended inside `.mes_buttons`
+2. the visible React action shell that reuses the protected roles, names, order, and legacy bridge callbacks for the same row
+
+The marker payload still looks like:
 
 ```json
 {
@@ -97,24 +102,26 @@ The React-visible output is a hidden owner marker appended inside `.mes_buttons`
 ## Staged Processing Flow
 
 1. Legacy rendering produces `.mes_buttons`, `.extraMesButtonsHint`, `.extraMesButtons`, and the existing copy/edit/delete/swipe/reasoning/retry controls.
-2. The delegated controller created by `createChatMessageActionsController()` remains the visible owner for low-risk menu open/close behavior.
+2. The delegated controller created by `createChatMessageActionsController()` remains the business-behavior owner for menu open/close, edit, retry, swipe, reasoning, and related actions.
 3. `getMainChatMessageListReactBridgeState()` enumerates direct-child `#chat > .mes[mesid]` rows and calls `buildMessageActionSnapshot()` for each row.
 4. `buildMessageActionSnapshot()` derives `availableActions`, `expanded`, and tier arrays from the current DOM only; it never reads message text or invents missing action names.
 5. `public/script.js` normalizes each snapshot to the shared `mainChatMessageActionSnapshotSchema` string and forwards the array as `messageActionSnapshots`.
 6. `app/workspace-panels.tsx` validates the array with `mainChatMessageActionSnapshotSchema`. Invalid entries are dropped before React decides whether to mount anything for that row.
 7. For each validated snapshot, `canReactOwnMainChatMessageActions()` confirms the row still matches the snapshot and still exposes the protected action shell.
 8. React appends one hidden marker into `.mes_buttons` through a portal. The marker carries row id, expanded state, and tier metadata for observation only.
-9. Visible actions, outside-click behavior, delete confirmation, edit-mode buttons, retry affordances, and mobile reachability remain driven by the legacy row and its handlers.
+9. For rows that still pass the stricter target validation, React also renders the visible action shell through the existing `.mes_buttons` slot, preserving protected roles/names and the same tier order.
+10. Clicking a visible React-owned action routes back through the legacy action bridge. If the row enters edit mode or otherwise becomes unsafe, that row drops the React visible shell and hands ownership back to legacy before the user sees a mixed action surface.
 
 ## Key Rules
 
-- The bridge is DOM-derived and observational. It must not persist message-action data into chat storage or derive actions from message text.
+- The snapshot bridge is DOM-derived and observational. It must not persist message-action data into chat storage or derive actions from message text.
 - `MESSAGE_ACTION_TIERS` is the single tier source. React must not maintain a second tier table with different names or ordering.
 - Snapshot discovery is broader than React ownership: a row can produce a snapshot yet still fail the stricter target check and receive no hidden marker.
 - The hidden owner marker is additive only. It must not wrap, replace, or reorder `.extraMesButtonsHint`, `.extraMesButtons`, copy/edit/delete controls, swipe controls, reasoning controls, or retry controls.
+- The visible React action shell must preserve the protected action names, order, overflow semantics, and mobile reachability while still calling the legacy handlers.
 - In the current protected ordering, `.extraMesButtonsHint` stays before `.extraMesButtons`, and the hidden action marker is appended after those protected controls.
 - Expanded state is descriptive, not authoritative. React can report that a row is expanded, but legacy code still decides whether outside click closes the overflow surface.
-- Validation fails closed. Unsupported payload shapes, detached rows, or missing protected targets result in no marker instead of a partial React takeover.
+- Validation fails closed. Unsupported payload shapes, detached rows, missing protected targets, or edit-mode transition result in legacy visible ownership for that row instead of a partial React takeover.
 
 ## Output Schema
 
@@ -141,7 +148,7 @@ Run:
 uv run python .docs/logic-description/main_chat_message_actions_bridge_sandbox_proof.py
 ```
 
-The proof script embeds fake message rows and validates tier-aware snapshot output, duplicate/generic class filtering, expanded-state detection, fail-closed snapshot suppression when `.mes_buttons` is missing, strict target validation for hidden-marker ownership, and additive marker output appended after the protected legacy controls.
+The proof script embeds fake message rows and validates tier-aware snapshot output, duplicate/generic class filtering, expanded-state detection, fail-closed snapshot suppression when `.mes_buttons` is missing, strict target validation for hidden-marker ownership, and additive marker output appended after the protected legacy controls. Visible action-shell behavior and edit-mode fallback stay covered by the browser/unit proofs listed in the metadata.
 
 ## Boundaries And Failure Modes
 
@@ -149,4 +156,4 @@ The proof script embeds fake message rows and validates tier-aware snapshot outp
 - If a row loses `.extraMesButtonsHint` or `.extraMesButtons` after snapshot capture, React emits no hidden marker for that row.
 - If the snapshot payload is malformed or unsupported on the React side, Zod validation drops it and the row stays legacy-owned.
 - If the guarded workspace-panels bundle is disabled, missing, or fails to mount, users still see the normal legacy message actions without a degraded visible surface.
-- This flow does not claim ownership of visible copy, edit, delete, swipe, reasoning, retry, or menu-open behavior. Those behaviors remain covered by focused unit and browser proofs.
+- This flow gives React the visible shell for safe rows, but copy, edit, delete, swipe, reasoning, retry, and menu-open behavior still route through the proven legacy handlers.

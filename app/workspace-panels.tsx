@@ -1,4 +1,4 @@
-import { StrictMode, useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from 'react';
+import { StrictMode, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
@@ -6,6 +6,8 @@ import { useMutation } from '@tanstack/react-query';
 import { useForm } from '@tanstack/react-form';
 import { measureElement, useVirtualizer, type ReactVirtualizer, type VirtualItem } from '@tanstack/react-virtual';
 import { z } from 'zod';
+
+import { deriveReactVisibleTransportBridgeState } from '../public/scripts/main-chat-visible-transport-owner.js';
 
 export type WorkspacePanelKind = 'worldInfo' | 'backgroundLibrary' | 'extensionsHost' | 'mainChatMessageList';
 
@@ -25,7 +27,7 @@ interface WorkspacePanelMountOptions {
 type WorkspacePanelStatus = 'idle' | 'loading' | 'empty' | 'success' | 'error';
 
 interface WorkspacePanelBridge {
-    dispatchAction?: (action: string, payload?: Record<string, unknown>) => Promise<void> | void;
+    dispatchAction?: (action: string, payload?: Record<string, unknown>) => Promise<unknown> | unknown;
 }
 
 interface WorkspacePanelLegacySlot {
@@ -152,6 +154,16 @@ interface MainChatMessageListWorkspacePanelState {
     messageRowSnapshots?: MainChatMessageRowSnapshot[];
     richBodySnapshots?: MainChatRichBodySnapshot[];
     messageActionSnapshots?: MainChatMessageActionSnapshot[];
+    slashUi?: MainChatSlashUiState;
+    formShell?: HTMLElement | null;
+    sendForm?: HTMLElement | null;
+    nonQrFormItems?: HTMLElement | null;
+    leftSendForm?: HTMLElement | null;
+    rightSendForm?: HTMLElement | null;
+    sendTextarea?: HTMLTextAreaElement | null;
+    sendButton?: HTMLElement | null;
+    continueButton?: HTMLElement | null;
+    composerValue?: string;
     showMoreNode?: HTMLElement | null;
 }
 
@@ -199,6 +211,71 @@ interface MainChatSlashCommandState {
     paused: boolean;
     aborted: boolean;
     errorLabel: string | null;
+}
+
+interface MainChatSlashUiOptionState {
+    name: string;
+    type: string;
+    typeIcon: string;
+    selectable: boolean;
+    selected: boolean;
+}
+
+interface MainChatSlashUiState {
+    active: boolean;
+    visible: boolean;
+    replaceable: boolean;
+    detailsVisible: boolean;
+    selectedIndex: number;
+    detailsHtml: string;
+    options: MainChatSlashUiOptionState[];
+}
+
+interface MainChatVisibleTransportAttempt {
+    label: string;
+    status: string;
+    fallbackProvider: boolean;
+}
+
+interface MainChatVisibleTransportRuntimeState {
+    owner: 'react';
+    kind: string;
+    phase: MainChatGenerationControlState['phase'] | MainChatStreamingTransportState['phase'];
+    activeMessageId: number | null;
+    observedTokenCount: number;
+    observedChunkCount: number;
+    fromFallbackAttempt: boolean;
+    recoverable: boolean;
+    failureRetryVisible: boolean;
+    failureNoticeVisible: boolean;
+    recoveryStatusLabel: string | null;
+    errorLabel: string | null;
+    formattedMessageHtml: string;
+}
+
+interface MainChatVisibleTransportHooks {
+    onMessageHtml?: (payload: { messageId: number; formattedMessageHtml: string }) => void;
+    onTransportState?: (payload: Partial<MainChatVisibleTransportRuntimeState>) => void;
+}
+
+interface MainChatPreparedVisibleTransportRequest {
+    owner: 'react' | 'legacy';
+    kind?: string;
+    reason?: string;
+    attempts?: MainChatVisibleTransportAttempt[];
+    prepareRetryAttempt?: (attempt: MainChatVisibleTransportAttempt, attemptIndex: number) => Promise<void>;
+    runAttempt?: (
+        attempt: MainChatVisibleTransportAttempt,
+        attemptIndex: number,
+        hooks?: MainChatVisibleTransportHooks,
+    ) => Promise<unknown>;
+    handleFailure?: (
+        exception: unknown,
+        attempt: MainChatVisibleTransportAttempt,
+        attemptIndex: number,
+    ) => Promise<{ action: 'retry' | 'throw'; exception: unknown }>;
+    finalizeSuccess?: (result: unknown) => Promise<unknown>;
+    finalizeError?: (exception: unknown) => Promise<unknown> | unknown;
 }
 
 interface MainChatRichBodySnapshot {
@@ -371,6 +448,24 @@ const mainChatSlashCommandSchema = z.object({
     errorLabel: z.string().nullable(),
 });
 
+const mainChatSlashUiOptionSchema = z.object({
+    name: z.string(),
+    type: z.string(),
+    typeIcon: z.string(),
+    selectable: z.boolean(),
+    selected: z.boolean(),
+});
+
+const mainChatSlashUiSchema = z.object({
+    active: z.boolean(),
+    visible: z.boolean(),
+    replaceable: z.boolean(),
+    detailsVisible: z.boolean(),
+    selectedIndex: z.number().int(),
+    detailsHtml: z.string(),
+    options: z.array(mainChatSlashUiOptionSchema),
+});
+
 const mainChatStreamingTransportSchema = z.object({
     phase: z.enum(['idle', 'connecting', 'streaming', 'finalizing', 'stopped', 'completed', 'error']),
     activeMessageId: z.number().int().nonnegative().nullable(),
@@ -415,6 +510,16 @@ const mainChatSlashCommandFallback: MainChatSlashCommandState = {
     paused: false,
     aborted: false,
     errorLabel: null,
+};
+
+const mainChatSlashUiFallback: MainChatSlashUiState = {
+    active: false,
+    visible: false,
+    replaceable: false,
+    detailsVisible: false,
+    selectedIndex: -1,
+    detailsHtml: '',
+    options: [],
 };
 
 const mainChatStreamingTransportFallback: MainChatStreamingTransportState = {
@@ -587,6 +692,7 @@ function asMainChatMessageListState(state: unknown): MainChatMessageListWorkspac
     const generationControl = mainChatGenerationControlSchema.safeParse(bridgeState.generationControl);
     const composer = mainChatComposerSchema.safeParse(bridgeState.composer);
     const slashCommand = mainChatSlashCommandSchema.safeParse(bridgeState.slashCommand);
+    const slashUi = mainChatSlashUiSchema.safeParse(bridgeState.slashUi);
     const streamingTransport = mainChatStreamingTransportSchema.safeParse(bridgeState.streamingTransport);
 
     return {
@@ -598,6 +704,7 @@ function asMainChatMessageListState(state: unknown): MainChatMessageListWorkspac
         generationControl: generationControl.success ? generationControl.data : mainChatGenerationControlFallback,
         composer: composer.success ? composer.data : mainChatComposerFallback,
         slashCommand: slashCommand.success ? slashCommand.data : mainChatSlashCommandFallback,
+        slashUi: slashUi.success ? slashUi.data : mainChatSlashUiFallback,
         streamingTransport: streamingTransport.success ? streamingTransport.data : mainChatStreamingTransportFallback,
     };
 }
@@ -649,8 +756,11 @@ function canReactOwnMainChatRichBody(messageRow: HTMLElement | undefined, snapsh
 
 function getMainChatMessageActionsRowTargets(messageRow: HTMLElement) {
     const messageButtons = messageRow.querySelector('.mes_buttons');
-    const extraActionsHint = messageButtons?.querySelector('.extraMesButtonsHint');
-    const extraActions = messageButtons?.querySelector('.extraMesButtons');
+    const extraActionsHint = getMainChatMessageActionChild(messageButtons, 'extraMesButtonsHint');
+    const extraActions = getMainChatMessageActionChild(messageButtons, 'extraMesButtons');
+    const bookmarkButton = getMainChatMessageActionChild(messageButtons, 'mes_bookmark');
+    const editButton = getMainChatMessageActionChild(messageButtons, 'mes_edit');
+    const retryButton = getMainChatMessageActionChild(messageButtons, 'generation_failure_retry');
 
     if (
         !(messageButtons instanceof HTMLElement)
@@ -664,7 +774,29 @@ function getMainChatMessageActionsRowTargets(messageRow: HTMLElement) {
         messageButtons,
         extraActionsHint,
         extraActions,
+        bookmarkButton,
+        editButton,
+        retryButton,
     };
+}
+
+function getMainChatMessageActionChild(messageButtons: Element | null | undefined, className: string) {
+    if (!(messageButtons instanceof HTMLElement)) {
+        return null;
+    }
+
+    const directChild = messageButtons.querySelector(`:scope > .${className}`);
+    if (directChild instanceof HTMLElement) {
+        return directChild;
+    }
+
+    const slotChild = messageButtons.querySelector(`:scope > [data-existing-dom-slot="${className}"] > .${className}`);
+    if (slotChild instanceof HTMLElement) {
+        return slotChild;
+    }
+
+    const descendant = messageButtons.querySelector(`.${className}`);
+    return descendant instanceof HTMLElement ? descendant : null;
 }
 
 function canReactOwnMainChatMessageActions(messageRow: HTMLElement | undefined, snapshot: MainChatMessageActionSnapshot) {
@@ -781,6 +913,208 @@ function MainChatMessageRowSlot({
     return <div ref={hostRef} data-main-chat-message-row-slot={slot} style={{ display: 'contents' }} />;
 }
 
+function ExistingDomNodeSlot({
+    node,
+    slot,
+    displayContents = true,
+}: {
+    node: HTMLElement | HTMLInputElement;
+    slot: string;
+    displayContents?: boolean;
+}) {
+    const hostRef = useRef<HTMLDivElement | null>(null);
+    const previousParentRef = useRef<ParentNode | null>(null);
+    const previousSiblingRef = useRef<ChildNode | null>(null);
+
+    useLayoutEffect(() => {
+        const host = hostRef.current;
+        if (!(host instanceof HTMLElement)) {
+            return;
+        }
+
+        if (node.parentElement !== host) {
+            previousParentRef.current = node.parentNode;
+            previousSiblingRef.current = node.nextSibling;
+            host.appendChild(node);
+        }
+
+        return () => {
+            if (node.parentElement !== host) {
+                return;
+            }
+
+            const previousParent = previousParentRef.current;
+            const previousSibling = previousSiblingRef.current;
+            if (previousParent && 'insertBefore' in previousParent) {
+                previousParent.insertBefore(node, previousSibling);
+            }
+        };
+    }, [node]);
+
+    return (
+        <div
+            ref={hostRef}
+            data-existing-dom-slot={slot}
+            style={displayContents
+                ? { display: 'contents' }
+                : { display: 'inline-flex', alignItems: 'center', flex: '0 0 auto' }}
+        />
+    );
+}
+
+function createMainChatVisibleTransportRuntime(kind: string): MainChatVisibleTransportRuntimeState {
+    return {
+        owner: 'react',
+        kind,
+        phase: 'connecting',
+        activeMessageId: null,
+        observedTokenCount: 0,
+        observedChunkCount: 0,
+        fromFallbackAttempt: false,
+        recoverable: false,
+        failureRetryVisible: false,
+        failureNoticeVisible: false,
+        recoveryStatusLabel: null,
+        errorLabel: null,
+        formattedMessageHtml: '',
+    };
+}
+
+function shouldClearReactVisibleTransportRuntimeAfterSettle(
+    runtime: MainChatVisibleTransportRuntimeState | null,
+): boolean {
+    if (!runtime || runtime.owner !== 'react') {
+        return false;
+    }
+
+    return runtime.phase === 'completed' || runtime.phase === 'stopped' || runtime.phase === 'error';
+}
+
+function isReactVisibleTransportStopException(exception: unknown): boolean {
+    const errorName = String((exception as { name?: unknown })?.name ?? '');
+    const errorMessage = String((exception as { message?: unknown })?.message ?? exception ?? '');
+    return errorName === 'AbortError' || /generation was aborted/i.test(errorMessage);
+}
+
+function buildReactOwnedMainChatGenerationControl(
+    runtime: MainChatVisibleTransportRuntimeState | null,
+    fallback: MainChatGenerationControlState,
+): MainChatGenerationControlState {
+    if (!runtime || runtime.owner !== 'react') {
+        return fallback;
+    }
+
+    const isRecovering = runtime.phase === 'recoveringPrimary' || runtime.phase === 'recoveringFallback';
+    const isStreaming = runtime.phase === 'connecting' || runtime.phase === 'streaming' || runtime.phase === 'finalizing';
+    const isError = runtime.phase === 'error';
+    const isStopped = runtime.phase === 'stopped';
+    const isCompleted = runtime.phase === 'completed';
+
+    return {
+        state: isRecovering
+            ? 'recovering'
+            : isStreaming
+                ? 'streaming'
+                : isError
+                    ? 'error'
+                    : isStopped
+                        ? 'stopped'
+                        : isCompleted
+                            ? 'completed'
+                            : 'idle',
+        phase: runtime.phase === 'connecting' || runtime.phase === 'finalizing'
+            ? 'streaming'
+            : runtime.phase === 'idle'
+                ? 'idle'
+                : runtime.phase,
+        composerDisabled: isStreaming || isRecovering,
+        sendVisible: !isStreaming && !isRecovering,
+        stopVisible: isStreaming || isRecovering,
+        continueVisible: isError || isStopped || isCompleted,
+        continueSurface: isError || isStopped || isCompleted ? 'legacy' : 'hidden',
+        canRecoverInput: !isStreaming && !isRecovering,
+        activeMessageId: runtime.activeMessageId,
+        recoveryStatusLabel: runtime.recoveryStatusLabel,
+        failureRetryVisible: runtime.failureRetryVisible,
+        failureNoticeVisible: runtime.failureNoticeVisible,
+    };
+}
+
+function buildReactOwnedMainChatStreamingTransport(
+    runtime: MainChatVisibleTransportRuntimeState | null,
+    fallback: MainChatStreamingTransportState,
+): MainChatStreamingTransportState {
+    if (!runtime || runtime.owner !== 'react') {
+        return fallback;
+    }
+
+    return {
+        phase: runtime.phase === 'recoveringPrimary' || runtime.phase === 'recoveringFallback'
+            ? 'connecting'
+            : runtime.phase,
+        activeMessageId: runtime.activeMessageId,
+        hasStreamingProcessor: runtime.phase === 'connecting' || runtime.phase === 'streaming' || runtime.phase === 'finalizing',
+        observedTokenCount: runtime.observedTokenCount,
+        observedChunkCount: runtime.observedChunkCount,
+        fromFallbackAttempt: runtime.fromFallbackAttempt,
+        recoverable: runtime.recoverable,
+        errorLabel: runtime.errorLabel,
+    };
+}
+
+function getMainChatActiveRuntimeMessageRow(
+    messageRowMap: Map<string, HTMLElement>,
+    activeMessageId: number | null | undefined,
+): HTMLElement | null {
+    if (activeMessageId === null || activeMessageId === undefined) {
+        return null;
+    }
+
+    const mappedRow = messageRowMap.get(String(activeMessageId));
+    if (mappedRow instanceof HTMLElement) {
+        return mappedRow;
+    }
+
+    const liveRow = document.querySelector(`#chat > .mes[mesid="${activeMessageId}"]`);
+    return liveRow instanceof HTMLElement ? liveRow : null;
+}
+
+function MainChatActiveTransportRowOwnerPortal({
+    runtime,
+    messageRow,
+    finalizedRowOwned,
+}: {
+    runtime: MainChatVisibleTransportRuntimeState;
+    messageRow: HTMLElement;
+    finalizedRowOwned: boolean;
+}) {
+    useLayoutEffect(() => {
+        if (!(messageRow instanceof HTMLElement)) {
+            return;
+        }
+
+        const messageText = messageRow.querySelector('.mes_text');
+        if (!(messageText instanceof HTMLElement)) {
+            return;
+        }
+
+        messageRow.dataset.mainChatActiveTransportOwner = 'react';
+        messageRow.dataset.mainChatMessageRowOwner = 'react';
+        messageRow.dataset.mainChatMessageRow = String(runtime.activeMessageId ?? '');
+        messageText.innerHTML = runtime.formattedMessageHtml ?? '';
+
+        return () => {
+            delete messageRow.dataset.mainChatActiveTransportOwner;
+            if (!finalizedRowOwned) {
+                delete messageRow.dataset.mainChatMessageRowOwner;
+                delete messageRow.dataset.mainChatMessageRow;
+            }
+        };
+    }, [finalizedRowOwned, messageRow, runtime.activeMessageId, runtime.formattedMessageHtml]);
+
+    return null;
+}
+
 function MainChatMessageRowOwnerPortal({
     messageRow,
     snapshot,
@@ -813,6 +1147,364 @@ function MainChatMessageRowOwnerPortal({
             <MainChatMessageRowSlot row={messageRow} node={targets.messageBlock} slot="mes_block" />
             <MainChatMessageRowSlot row={messageRow} node={targets.swipeRightBlock} slot="swipeRightBlock" />
         </>
+    );
+}
+
+function MainChatMessageActionsOwnerPortal({
+    messageRow,
+    snapshot,
+    bridge,
+}: {
+    messageRow: HTMLElement;
+    snapshot: MainChatMessageActionSnapshot;
+    bridge?: WorkspacePanelBridge;
+}) {
+    const targets = getMainChatMessageActionsRowTargets(messageRow);
+
+    useLayoutEffect(() => {
+        if (!targets) {
+            return;
+        }
+
+        const openMessageActions = () => {
+            void bridge?.dispatchAction?.('toggleMessageActionsShell', {
+                kind: 'open',
+                messageId: Number(snapshot.messageId),
+            });
+        };
+        const handleHintClick = (event: MouseEvent) => {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            event.stopPropagation();
+            openMessageActions();
+        };
+        const handleHintKeyDown = (event: KeyboardEvent) => {
+            if (event.key !== 'Enter' && event.key !== ' ') {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            event.stopPropagation();
+            openMessageActions();
+        };
+
+        const { messageButtons } = targets;
+        messageButtons.dataset.mainChatMessageActionsOwner = 'react';
+        messageButtons.dataset.mainChatMessageActionsRow = snapshot.messageId;
+        targets.extraActionsHint.addEventListener('click', handleHintClick, true);
+        targets.extraActionsHint.addEventListener('keydown', handleHintKeyDown, true);
+
+        return () => {
+            targets.extraActionsHint.removeEventListener('click', handleHintClick, true);
+            targets.extraActionsHint.removeEventListener('keydown', handleHintKeyDown, true);
+            delete messageButtons.dataset.mainChatMessageActionsOwner;
+            delete messageButtons.dataset.mainChatMessageActionsRow;
+        };
+    }, [bridge, snapshot.messageId, targets]);
+
+    useLayoutEffect(() => {
+        if (!targets) {
+            return;
+        }
+
+        const { messageButtons } = targets;
+        messageButtons.dataset.mainChatMessageActionsExpanded = snapshot.expanded ? 'true' : 'false';
+        messageButtons.dataset.mainChatMessageActionsAvailable = snapshot.availableActions.join('|');
+        messageButtons.dataset.mainChatMessageActionsHighFrequency = snapshot.highFrequencyActions.join('|');
+        messageButtons.dataset.mainChatMessageActionsSecondary = snapshot.secondaryActions.join('|');
+        messageButtons.dataset.mainChatMessageActionsDanger = snapshot.dangerActions.join('|');
+    }, [
+        snapshot.expanded,
+        snapshot.availableActions,
+        snapshot.highFrequencyActions,
+        snapshot.secondaryActions,
+        snapshot.dangerActions,
+        targets,
+    ]);
+
+    if (!targets) {
+        return null;
+    }
+
+    return (
+        <>
+            <ExistingDomNodeSlot node={targets.extraActionsHint} slot="extraMesButtonsHint" displayContents={false} />
+            <ExistingDomNodeSlot node={targets.extraActions} slot="extraMesButtons" displayContents={false} />
+            {targets.bookmarkButton instanceof HTMLElement ? (
+                <ExistingDomNodeSlot node={targets.bookmarkButton} slot="mes_bookmark" displayContents={false} />
+            ) : null}
+            {targets.editButton instanceof HTMLElement ? (
+                <ExistingDomNodeSlot node={targets.editButton} slot="mes_edit" displayContents={false} />
+            ) : null}
+            {targets.retryButton instanceof HTMLElement ? (
+                <ExistingDomNodeSlot node={targets.retryButton} slot="generation_failure_retry" displayContents={false} />
+            ) : null}
+        </>
+    );
+}
+
+function getMainChatComposerTargets(state: MainChatMessageListWorkspacePanelState) {
+    const nonQrFormItems = state.nonQrFormItems;
+    const leftSendForm = state.leftSendForm;
+    const sendTextarea = state.sendTextarea;
+    const rightSendForm = state.rightSendForm;
+    const sendForm = state.sendForm;
+    const sendButton = state.sendButton;
+
+    if (
+        !(nonQrFormItems instanceof HTMLElement)
+        || !(leftSendForm instanceof HTMLElement)
+        || !(sendTextarea instanceof HTMLTextAreaElement)
+        || !(rightSendForm instanceof HTMLElement)
+        || !(sendForm instanceof HTMLElement)
+        || !(sendButton instanceof HTMLElement)
+    ) {
+        return null;
+    }
+
+    const continueButton = state.continueButton instanceof HTMLElement ? state.continueButton : null;
+
+    return {
+        nonQrFormItems,
+        leftSendForm,
+        sendTextarea,
+        rightSendForm,
+        sendForm,
+        sendButton,
+        continueButton,
+    };
+}
+
+function MainChatComposerOwnerPortal({
+    state,
+    bridge,
+    onVisibleGeneration,
+}: {
+    state: MainChatMessageListWorkspacePanelState;
+    bridge?: WorkspacePanelBridge;
+    onVisibleGeneration?: (payload: Record<string, unknown>) => Promise<void>;
+}) {
+    const targets = getMainChatComposerTargets(state);
+    const formDefaults = useMemo(() => ({ value: state.composerValue ?? '' }), [state.composerValue]);
+    const composerActionInFlightRef = useRef(false);
+    const composerForm = useForm({
+        defaultValues: formDefaults,
+        validators: {
+            onChange: z.object({
+                value: z.string(),
+            }),
+        },
+    });
+
+    useEffect(() => {
+        composerForm.reset(formDefaults);
+    }, [composerForm, formDefaults]);
+
+    const runSerializedComposerAction = async (payload: Record<string, unknown>) => {
+        if (composerActionInFlightRef.current) {
+            return;
+        }
+
+        composerActionInFlightRef.current = true;
+        try {
+            if (onVisibleGeneration) {
+                await onVisibleGeneration(payload);
+                return;
+            }
+
+            await bridge?.dispatchAction?.('triggerVisibleGeneration', payload);
+        } finally {
+            composerActionInFlightRef.current = false;
+        }
+    };
+
+    useLayoutEffect(() => {
+        if (!targets) {
+            return;
+        }
+
+        targets.sendForm.dataset.mainChatComposerOwner = 'react';
+        targets.nonQrFormItems.dataset.mainChatComposerOwner = 'react';
+
+        return () => {
+            delete targets.sendForm.dataset.mainChatComposerOwner;
+            delete targets.nonQrFormItems.dataset.mainChatComposerOwner;
+        };
+    }, [targets]);
+
+    useEffect(() => {
+        void bridge?.dispatchAction?.('setSlashVisibleOwner', { enabled: Boolean(targets) });
+
+        return () => {
+            void bridge?.dispatchAction?.('setSlashVisibleOwner', { enabled: false });
+        };
+    }, [bridge, targets]);
+
+    useLayoutEffect(() => {
+        if (!targets) {
+            return;
+        }
+
+        const restoreComposerFocus = () => {
+            if (!state.composer?.isFocused) {
+                return;
+            }
+
+            targets.sendTextarea.focus();
+        };
+        const syncComposerField = () => {
+            composerForm.setFieldValue('value', targets.sendTextarea.value);
+        };
+        const handleTextareaKeyDown = (event: KeyboardEvent) => {
+            if (
+                event.defaultPrevented
+                || event.isComposing
+                || event.key !== 'Enter'
+                || event.shiftKey
+                || event.ctrlKey
+                || event.altKey
+                || event.metaKey
+            ) {
+                return;
+            }
+
+            if (state.slashUi?.visible || state.slashCommand?.autocompleteVisible) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            event.stopPropagation();
+            void runSerializedComposerAction({ kind: 'submitComposer' });
+        };
+        const handleSendButtonClick = (event: MouseEvent) => {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            event.stopPropagation();
+            restoreComposerFocus();
+            void runSerializedComposerAction({ kind: 'submitComposer' });
+        };
+        const handleContinueButtonClick = (event: MouseEvent) => {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            event.stopPropagation();
+            restoreComposerFocus();
+            void runSerializedComposerAction({ kind: 'continueLast' });
+        };
+
+        syncComposerField();
+        targets.sendTextarea.addEventListener('input', syncComposerField);
+        targets.sendTextarea.addEventListener('keydown', handleTextareaKeyDown, true);
+        targets.sendButton.addEventListener('click', handleSendButtonClick, true);
+        targets.continueButton?.addEventListener('click', handleContinueButtonClick, true);
+
+        return () => {
+            targets.sendTextarea.removeEventListener('input', syncComposerField);
+            targets.sendTextarea.removeEventListener('keydown', handleTextareaKeyDown, true);
+            targets.sendButton.removeEventListener('click', handleSendButtonClick, true);
+            targets.continueButton?.removeEventListener('click', handleContinueButtonClick, true);
+        };
+    }, [composerForm, runSerializedComposerAction, state.slashCommand?.autocompleteVisible, state.slashUi?.visible, targets]);
+
+    if (!targets) {
+        return null;
+    }
+
+    return createPortal(
+        <>
+            <ExistingDomNodeSlot node={targets.leftSendForm} slot="leftSendForm" />
+            <ExistingDomNodeSlot node={targets.sendTextarea} slot="send_textarea" />
+            <ExistingDomNodeSlot node={targets.rightSendForm} slot="rightSendForm" />
+        </>,
+        targets.nonQrFormItems,
+        'main-chat-composer-owner',
+    );
+}
+
+function MainChatSlashUiPortal({
+    state,
+    bridge,
+}: {
+    state: MainChatMessageListWorkspacePanelState;
+    bridge?: WorkspacePanelBridge;
+}) {
+    const targets = getMainChatComposerTargets(state);
+    const slashUi = state.slashUi ?? mainChatSlashUiFallback;
+    const slashStatus = state.slashCommand ?? mainChatSlashCommandFallback;
+    const slashSelectionMutation = useMutation({
+        mutationFn: async ({ index }: { index: number }) => {
+            await bridge?.dispatchAction?.('selectSlashAutocompleteOption', { index });
+        },
+        retry: false,
+    });
+    const shouldShowStatus = Boolean(slashStatus.paused || slashStatus.aborted || slashStatus.errorLabel);
+    const shouldShowDetails = Boolean(slashUi.detailsVisible && slashUi.detailsHtml);
+    const shouldShowVisibleUi = Boolean(slashUi.visible && slashUi.options.length > 0);
+
+    if (!targets || (!shouldShowVisibleUi && !shouldShowStatus && !shouldShowDetails)) {
+        return null;
+    }
+
+    return createPortal(
+        <>
+            {shouldShowVisibleUi ? (
+                <div
+                    className="autoComplete-wrap"
+                    data-main-chat-slash-ui-owner="react"
+                    style={{ left: '0', right: '0', bottom: '100%' }}
+                >
+                    <ul className="autoComplete">
+                        {slashUi.options.map((option, index) => (
+                            <li
+                                key={`${option.name}-${index}`}
+                                className={`item${option.selected ? ' selected' : ''}${option.selectable ? '' : ' not-selectable'}`}
+                                data-option-type={option.type}
+                                data-main-chat-slash-option={option.name}
+                                onPointerDown={(event) => {
+                                    event.preventDefault();
+                                    if (!option.selectable) {
+                                        return;
+                                    }
+                                    slashSelectionMutation.mutate({ index });
+                                }}
+                            >
+                                <span className="type monospace">{option.typeIcon || ' '}</span>
+                                <span className="specs">
+                                    <span className="name monospace">/{option.name}</span>
+                                </span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            ) : null}
+            {shouldShowStatus || shouldShowDetails ? (
+                <div
+                    className="autoComplete-detailsWrap full"
+                    data-main-chat-slash-ui-details="react"
+                    style={{ left: '0', right: '0', bottom: '100%' }}
+                >
+                    <div className="autoComplete-details">
+                        {shouldShowStatus ? (
+                            <div role="status">
+                                {slashStatus.errorLabel
+                                    ? `Error: ${slashStatus.errorLabel}`
+                                    : slashStatus.aborted
+                                        ? 'Aborted'
+                                        : slashStatus.paused
+                                            ? 'Paused'
+                                            : ''}
+                            </div>
+                        ) : null}
+                        {shouldShowDetails ? (
+                            <div dangerouslySetInnerHTML={{ __html: slashUi.detailsHtml }} />
+                        ) : null}
+                    </div>
+                </div>
+            ) : null}
+        </>,
+        targets.nonQrFormItems,
+        'main-chat-slash-ui-owner',
     );
 }
 
@@ -1603,6 +2295,7 @@ function MainChatMessageListRestoreController({
         && previousFirstMessageIdRef.current !== state.firstMessageId
         && (state.messageCount ?? 0) > previousMessageCountRef.current,
     );
+    const shouldAnchorPrependedHistoryWindow = expandedHistoryWindowRequestedRef.current && isPrependingHistoryWindow;
 
     useLayoutEffect(() => {
         syncMainChatVirtualIndexes(state.messageNodes ?? []);
@@ -1618,7 +2311,7 @@ function MainChatMessageListRestoreController({
         measureElement,
         initialOffset: state.scrollTop ?? 0,
         initialMeasurementsCache: initialSnapshotRef.current?.measurements ?? [],
-        anchorTo: isPrependingHistoryWindow ? 'start' : 'end',
+        anchorTo: shouldAnchorPrependedHistoryWindow ? 'start' : 'end',
         scrollEndThreshold: MAIN_CHAT_SCROLL_RESTORE_THRESHOLD_PX,
         overscan: 0,
         useFlushSync: false,
@@ -1769,6 +2462,7 @@ function MainChatMessageListRestoreController({
 
 function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown; bridge?: WorkspacePanelBridge }) {
     const bridgeState = asMainChatMessageListState(state);
+    const [reactVisibleTransportRuntime, setReactVisibleTransportRuntime] = useState<MainChatVisibleTransportRuntimeState | null>(null);
     const messageRowMap = useMemo(() => {
         const rows = new Map<string, HTMLElement>();
 
@@ -1793,6 +2487,9 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
             snapshot,
         ));
     }, [bridgeState.messageRowSnapshots, messageRowMap]);
+    const ownedMessageRowIds = useMemo(() => {
+        return new Set(ownedMessageRowSnapshots.map(snapshot => snapshot.messageId));
+    }, [ownedMessageRowSnapshots]);
     const ownedRichBodySnapshots = useMemo(() => {
         return (bridgeState.richBodySnapshots ?? []).filter(snapshot => canReactOwnMainChatRichBody(
             messageRowMap.get(snapshot.messageId),
@@ -1800,11 +2497,152 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
         ));
     }, [bridgeState.richBodySnapshots, messageRowMap]);
     const ownedActionSnapshots = useMemo(() => {
-        return (bridgeState.messageActionSnapshots ?? []).filter(snapshot => canReactOwnMainChatMessageActions(
-            messageRowMap.get(snapshot.messageId),
-            snapshot,
+        return (bridgeState.messageActionSnapshots ?? []).filter(snapshot => (
+            canReactOwnMainChatMessageActions(
+                messageRowMap.get(snapshot.messageId),
+                snapshot,
+            )
         ));
     }, [bridgeState.messageActionSnapshots, messageRowMap]);
+    const visibleTransportMutation = useMutation({
+        mutationFn: async (payload: { kind: string; messageId?: number }) => {
+            const kind = String(payload.kind ?? '');
+            const prepared = await bridge?.dispatchAction?.('prepareVisibleGeneration', payload) as MainChatPreparedVisibleTransportRequest | undefined;
+            if (!prepared || prepared.owner !== 'react' || !prepared.runAttempt || !prepared.handleFailure || !prepared.finalizeSuccess) {
+                setReactVisibleTransportRuntime(null);
+                return prepared;
+            }
+
+            const attempts = Array.isArray(prepared.attempts) ? prepared.attempts : [];
+            setReactVisibleTransportRuntime(createMainChatVisibleTransportRuntime(kind));
+
+            for (let attemptIndex = 0; attemptIndex < attempts.length; attemptIndex += 1) {
+                const attempt = attempts[attemptIndex];
+                const recoveryPhase = attempt.label === 'fallback' ? 'recoveringFallback' : 'recoveringPrimary';
+
+                if (attemptIndex > 0) {
+                    await prepared.prepareRetryAttempt?.(attempt, attemptIndex);
+                    setReactVisibleTransportRuntime((current) => ({
+                        ...(current ?? createMainChatVisibleTransportRuntime(kind)),
+                        kind,
+                        phase: recoveryPhase,
+                        fromFallbackAttempt: attempt.fallbackProvider === true,
+                        recoverable: true,
+                        failureRetryVisible: false,
+                        failureNoticeVisible: false,
+                        recoveryStatusLabel: attempt.status || null,
+                        errorLabel: null,
+                        formattedMessageHtml: '',
+                    }));
+                }
+
+                try {
+                    const result = await prepared.runAttempt(attempt, attemptIndex, {
+                        onMessageHtml: ({ messageId, formattedMessageHtml }) => {
+                            setReactVisibleTransportRuntime((current) => ({
+                                ...(current ?? createMainChatVisibleTransportRuntime(kind)),
+                                kind,
+                                phase: 'streaming',
+                                activeMessageId: messageId,
+                                formattedMessageHtml,
+                            }));
+                        },
+                        onTransportState: (partial) => {
+                            setReactVisibleTransportRuntime((current) => ({
+                                ...(current ?? createMainChatVisibleTransportRuntime(kind)),
+                                ...partial,
+                                kind,
+                                owner: 'react',
+                            }));
+                        },
+                    });
+                    setReactVisibleTransportRuntime((current) => current
+                        ? {
+                            ...current,
+                            phase: 'completed',
+                            recoveryStatusLabel: null,
+                            errorLabel: null,
+                            failureRetryVisible: false,
+                            failureNoticeVisible: false,
+                        }
+                        : current);
+                    return await prepared.finalizeSuccess(result);
+                } catch (exception) {
+                    const failure = await prepared.handleFailure(exception, attempt, attemptIndex);
+                    if (failure.action === 'retry') {
+                        continue;
+                    }
+
+                    const errorMessage = String((failure.exception as { message?: unknown })?.message ?? failure.exception ?? '');
+                    const stopped = isReactVisibleTransportStopException(failure.exception);
+                    setReactVisibleTransportRuntime((current) => current
+                        ? {
+                            ...current,
+                            phase: stopped ? 'stopped' : 'error',
+                            recoverable: !stopped,
+                            recoveryStatusLabel: null,
+                            errorLabel: stopped ? null : errorMessage,
+                            failureRetryVisible: !stopped,
+                            failureNoticeVisible: !stopped,
+                            formattedMessageHtml: stopped ? current.formattedMessageHtml : '',
+                        }
+                        : current);
+                    await prepared.finalizeError?.(failure.exception);
+                    return failure.exception;
+                }
+            }
+
+            return undefined;
+        },
+        retry: false,
+        onSettled: () => {
+            window.setTimeout(() => {
+                setReactVisibleTransportRuntime((current) => (
+                    shouldClearReactVisibleTransportRuntimeAfterSettle(current) ? null : current
+                ));
+            }, 0);
+        },
+    });
+    const effectiveGenerationControl = buildReactOwnedMainChatGenerationControl(
+        reactVisibleTransportRuntime,
+        bridgeState.generationControl ?? mainChatGenerationControlFallback,
+    );
+    const effectiveStreamingTransport = buildReactOwnedMainChatStreamingTransport(
+        reactVisibleTransportRuntime,
+        bridgeState.streamingTransport ?? mainChatStreamingTransportFallback,
+    );
+    const visibleTransportBridgeState = deriveReactVisibleTransportBridgeState({
+        runtime: reactVisibleTransportRuntime,
+        generationControl: effectiveGenerationControl,
+        streamingTransport: effectiveStreamingTransport,
+    });
+    const activeRuntimeMessageRow = getMainChatActiveRuntimeMessageRow(
+        messageRowMap,
+        reactVisibleTransportRuntime?.activeMessageId,
+    );
+
+    useEffect(() => {
+        if (
+            reactVisibleTransportRuntime?.activeMessageId === null
+            || reactVisibleTransportRuntime?.activeMessageId === undefined
+        ) {
+            return;
+        }
+
+        if ([
+            'connecting',
+            'streaming',
+            'finalizing',
+            'recoveringPrimary',
+            'recoveringFallback',
+        ].includes(String(reactVisibleTransportRuntime.phase ?? ''))) {
+            return;
+        }
+
+        if (!(activeRuntimeMessageRow instanceof HTMLElement)) {
+            setReactVisibleTransportRuntime(null);
+        }
+    }, [activeRuntimeMessageRow, reactVisibleTransportRuntime]);
 
     useEffect(() => {
         syncMainChatMessageListDom(
@@ -1821,8 +2659,8 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
                 hidden
                 data-main-chat-message-list-controller="true"
                 data-main-chat-message-list-status={bridgeState.hasChatContainer ? 'ready' : 'missing'}
-                data-main-chat-generation-control-phase={bridgeState.generationControl?.phase ?? 'idle'}
-                data-main-chat-generation-control-retry={bridgeState.generationControl?.failureRetryVisible ? 'visible' : 'hidden'}
+                data-main-chat-generation-control-phase={effectiveGenerationControl.phase ?? 'idle'}
+                data-main-chat-generation-control-retry={effectiveGenerationControl.failureRetryVisible ? 'visible' : 'hidden'}
                 data-main-chat-composer-length={bridgeState.composer?.valueLength ?? 0}
                 data-main-chat-composer-empty={bridgeState.composer?.isEmpty ? 'true' : 'false'}
                 data-main-chat-composer-can-submit={bridgeState.composer?.canSubmit ? 'true' : 'false'}
@@ -1837,12 +2675,37 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
                 data-main-chat-slash-command-paused={bridgeState.slashCommand?.paused ? 'true' : 'false'}
                 data-main-chat-slash-command-aborted={bridgeState.slashCommand?.aborted ? 'true' : 'false'}
                 data-main-chat-slash-command-error={bridgeState.slashCommand?.errorLabel ?? ''}
-                data-main-chat-streaming-transport-phase={bridgeState.streamingTransport?.phase ?? 'idle'}
-                data-main-chat-streaming-transport-tokens={bridgeState.streamingTransport?.observedTokenCount ?? 0}
-                data-main-chat-streaming-transport-message-id={bridgeState.streamingTransport?.activeMessageId ?? ''}
-                data-main-chat-streaming-transport-fallback={bridgeState.streamingTransport?.fromFallbackAttempt ? 'true' : 'false'}
+                data-main-chat-streaming-transport-phase={effectiveStreamingTransport.phase ?? 'idle'}
+                data-main-chat-streaming-transport-tokens={effectiveStreamingTransport.observedTokenCount ?? 0}
+                data-main-chat-streaming-transport-message-id={effectiveStreamingTransport.activeMessageId ?? ''}
+                data-main-chat-streaming-transport-fallback={effectiveStreamingTransport.fromFallbackAttempt ? 'true' : 'false'}
+                data-main-chat-visible-transport-owner={visibleTransportBridgeState.visibleTransportOwner}
+                data-main-chat-visible-transport-kind={reactVisibleTransportRuntime?.kind ?? ''}
             />
             <MainChatMessageListRestoreController key={bridgeState.chatId || 'main-chat-empty'} state={bridgeState} bridge={bridge} />
+            <MainChatComposerOwnerPortal
+                state={bridgeState}
+                bridge={bridge}
+                onVisibleGeneration={async (payload) => {
+                    if (visibleTransportMutation.isPending) {
+                        return;
+                    }
+
+                    const messageId = Number(payload.messageId);
+                    await visibleTransportMutation.mutateAsync({
+                        kind: String(payload.kind ?? ''),
+                        messageId: Number.isInteger(messageId) && messageId >= 0 ? messageId : undefined,
+                    });
+                }}
+            />
+            <MainChatSlashUiPortal state={bridgeState} bridge={bridge} />
+            {reactVisibleTransportRuntime && activeRuntimeMessageRow instanceof HTMLElement ? (
+                <MainChatActiveTransportRowOwnerPortal
+                    runtime={reactVisibleTransportRuntime}
+                    messageRow={activeRuntimeMessageRow}
+                    finalizedRowOwned={ownedMessageRowIds.has(String(reactVisibleTransportRuntime.activeMessageId ?? ''))}
+                />
+            ) : null}
             {ownedMessageRowSnapshots.map(snapshot => {
                 const messageRow = messageRowMap.get(snapshot.messageId);
                 if (!(messageRow instanceof HTMLElement)) {
@@ -1875,23 +2738,13 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
             })}
             {ownedActionSnapshots.map(snapshot => {
                 const messageRow = messageRowMap.get(snapshot.messageId);
-                const targets = messageRow ? getMainChatMessageActionsRowTargets(messageRow) : null;
-                if (!targets) {
+                const targets = messageRow instanceof HTMLElement ? getMainChatMessageActionsRowTargets(messageRow) : null;
+                if (!(messageRow instanceof HTMLElement) || !targets) {
                     return null;
                 }
 
                 return createPortal(
-                    <div
-                        hidden
-                        aria-hidden="true"
-                        data-main-chat-message-actions-owner="react"
-                        data-main-chat-message-actions-row={snapshot.messageId}
-                        data-main-chat-message-actions-expanded={snapshot.expanded ? 'true' : 'false'}
-                        data-main-chat-message-actions-available={snapshot.availableActions.join('|')}
-                        data-main-chat-message-actions-high-frequency={snapshot.highFrequencyActions.join('|')}
-                        data-main-chat-message-actions-secondary={snapshot.secondaryActions.join('|')}
-                        data-main-chat-message-actions-danger={snapshot.dangerActions.join('|')}
-                    />,
+                    <MainChatMessageActionsOwnerPortal messageRow={messageRow} snapshot={snapshot} bridge={bridge} />,
                     targets.messageButtons,
                     `main-chat-message-actions-owner-${snapshot.messageId}`,
                 );
@@ -1903,8 +2756,8 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
 function syncMainChatMessageListDom(
     chatContainer: HTMLElement | null,
     host: HTMLElement | null,
-    messageNodes: HTMLElement[],
-    showMoreNode: HTMLElement | null,
+    _messageNodes: HTMLElement[],
+    _showMoreNode: HTMLElement | null,
 ) {
     if (!(chatContainer instanceof HTMLElement) || !(host instanceof HTMLElement) || host.parentElement !== chatContainer) {
         return;
@@ -1915,33 +2768,6 @@ function syncMainChatMessageListDom(
 
     if (chatContainer.firstChild !== host) {
         chatContainer.insertBefore(host, chatContainer.firstChild);
-    }
-
-    let insertAfter: ChildNode = host;
-    const orderedNodes = [];
-
-    if (showMoreNode instanceof HTMLElement && showMoreNode.parentElement === chatContainer) {
-        showMoreNode.removeAttribute(MAIN_CHAT_VIRTUAL_INDEX_ATTRIBUTE);
-        orderedNodes.push(showMoreNode);
-    }
-
-    let nextMessageIndex = 0;
-    for (const node of messageNodes) {
-        if (!(node instanceof HTMLElement) || node.parentElement !== chatContainer) {
-            continue;
-        }
-
-        node.setAttribute(MAIN_CHAT_VIRTUAL_INDEX_ATTRIBUTE, String(nextMessageIndex));
-        nextMessageIndex += 1;
-        orderedNodes.push(node);
-    }
-
-    for (const node of orderedNodes) {
-        if (insertAfter.nextSibling !== node) {
-            chatContainer.insertBefore(node, insertAfter.nextSibling);
-        }
-
-        insertAfter = node;
     }
 }
 

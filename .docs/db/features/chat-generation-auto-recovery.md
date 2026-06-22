@@ -43,7 +43,8 @@ This feature lets EmberDesk recover from temporary visible-chat generation failu
 - Intermediate retry attempts clear partial assistant text before the next attempt continues.
 - Intermediate attempts do not expose the final message-rendered events that belong to the finished visible row.
 - The final failed state preserves the assistant row identity and uses the existing manual retry action.
-- When `features.react.panels.mainChatMessageList` is enabled, the guarded React controller may consume Zod-validated `generationControl` and `streamingTransport` snapshots that report the current recovery phase, terminal transport state, active message id, fallback-attempt metadata, and observed token/chunk counts. These snapshots are hidden bridge contracts only; `Generate()`, `StreamingProcessor`, provider routing, token append, user stop, retry sequencing, recovery status DOM, and final retry handlers remain legacy-owned.
+- When `features.react.panels.mainChatMessageList` is enabled, supported visible `submitComposer` and `continueLast` requests may hand request classification, visible token append, stop/error/completed transport state, and bounded retry sequencing to a React-owned transport mutation that still reuses the existing legacy generation lifecycle helpers. Unsupported visible kinds such as `retry/regenerate/swipe`, along with non-OpenAI, group, dry-run, and nested-visible paths, stay on the ordinary legacy `Generate()` / `StreamingProcessor` path.
+- Hidden `generationControl` and `streamingTransport` snapshots still exist as bridge contracts for tests and diagnostics, but they now describe either the live React-owned supported transport slice or the legacy fallback slice without changing the user-visible recovery semantics.
 - Provider stream pause/resume is not part of this feature. Slash-command execution has its own `SlashCommandAbortController` pause/continue/abort state and is outside this auto-recovery boundary.
 
 ## ID Boundary Notes
@@ -55,4 +56,4 @@ This feature is separate from [Fallback Provider](feature.fallback_provider) bec
 - **Success state**: the visible assistant row contains the final generated text after at most one primary retry and one fallback retry.
 - **Final failure state**: the visible assistant row keeps its identity and exposes the ordinary retry CTA only after automatic recovery has been exhausted.
 - **Stop state**: user stop leaves the generation in the existing stop-to-usable state without triggering a new automatic retry.
-- **Bridge observation state**: hidden React markers can report `stopped`, `error`, `completed`, or fallback-attempt transport metadata, but they do not alter bounded retry decisions or provider selection.
+- **Bridge observation state**: hidden React markers can report `stopped`, `error`, `completed`, or fallback-attempt transport metadata, and they reflect the current owner split without changing the user-visible bounded retry rules or provider-selection semantics.

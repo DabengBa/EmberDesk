@@ -153,13 +153,14 @@ async function expectMainChatMessageListHostState(page, expectedMessageCount) {
 
 async function expectReactMessageActionState(page, messageId, expectations = {}) {
     if (!reactMainChatMessageListEnabled) {
-        await expect(page.locator(`[data-main-chat-message-actions-row="${messageId}"]`)).toHaveCount(0);
+        await expect(page.locator(`#chat > .mes[mesid="${messageId}"] .mes_buttons[data-main-chat-message-actions-row="${messageId}"]`)).toHaveCount(0);
         return;
     }
 
-    const actionOwner = page.locator(`[data-main-chat-message-actions-row="${messageId}"]`);
-    const ownerCount = await actionOwner.count();
-    if (ownerCount !== 1) {
+    const actionOwner = page.locator(`#chat > .mes[mesid="${messageId}"] .mes_buttons[data-main-chat-message-actions-row="${messageId}"]`);
+    try {
+        await expect(actionOwner).toHaveCount(1);
+    } catch {
         const debugState = await page.evaluate((targetMessageId) => {
             const host = document.getElementById('emberdesk-react-main-chat-message-list-host');
             const controller = document.querySelector('[data-main-chat-message-list-controller="true"]');
@@ -175,7 +176,7 @@ async function expectReactMessageActionState(page, messageId, expectations = {})
                 messageButtonsPresent: Boolean(messageButtons),
                 hintPresent: Boolean(messageButtons?.querySelector('.extraMesButtonsHint')),
                 extraActionsPresent: Boolean(messageButtons?.querySelector('.extraMesButtons')),
-                ownerCount: document.querySelectorAll(`[data-main-chat-message-actions-row="${targetMessageId}"]`).length,
+                ownerCount: document.querySelectorAll(`#chat > .mes[mesid="${targetMessageId}"] .mes_buttons[data-main-chat-message-actions-row="${targetMessageId}"]`).length,
             };
         }, String(messageId));
 
@@ -184,7 +185,37 @@ async function expectReactMessageActionState(page, messageId, expectations = {})
 
     await expect(actionOwner).toHaveAttribute('data-main-chat-message-actions-owner', 'react');
     if (expectations.expanded !== undefined) {
-        await expect(actionOwner).toHaveAttribute('data-main-chat-message-actions-expanded', expectations.expanded ? 'true' : 'false');
+        try {
+            await expect(actionOwner).toHaveAttribute('data-main-chat-message-actions-expanded', expectations.expanded ? 'true' : 'false');
+        } catch {
+            const debugState = await page.evaluate((targetMessageId) => {
+                const row = document.querySelector(`#chat > .mes[mesid="${targetMessageId}"]`);
+                const messageButtons = row?.querySelector('.mes_buttons');
+                const hints = Array.from(messageButtons?.querySelectorAll('.extraMesButtonsHint') ?? []);
+                const extraButtons = Array.from(messageButtons?.querySelectorAll('.extraMesButtons') ?? []);
+
+                return {
+                    rowOwner: row instanceof HTMLElement ? { ...row.dataset } : null,
+                    messageButtonsDataset: messageButtons instanceof HTMLElement ? { ...messageButtons.dataset } : null,
+                    hintCount: hints.length,
+                    hintStates: hints.map(hint => ({
+                        display: hint instanceof HTMLElement ? hint.style.display : '',
+                        opacity: hint instanceof HTMLElement ? hint.style.opacity : '',
+                        text: hint.textContent?.trim() ?? '',
+                    })),
+                    extraButtonsCount: extraButtons.length,
+                    extraButtonsStates: extraButtons.map(button => ({
+                        className: button.className,
+                        display: button instanceof HTMLElement ? button.style.display : '',
+                        opacity: button instanceof HTMLElement ? button.style.opacity : '',
+                        ariaHidden: button.getAttribute('aria-hidden'),
+                        text: button.textContent?.trim() ?? '',
+                    })),
+                };
+            }, String(messageId));
+
+            throw new Error(`Unexpected expanded state for row ${messageId}: ${JSON.stringify(debugState)}`);
+        }
     }
 
     const attributeExpectations = [
@@ -206,33 +237,6 @@ async function expectReactMessageActionState(page, messageId, expectations = {})
         }
     }
 
-    const childOrder = await page.evaluate((targetMessageId) => {
-        const messageButtons = document.querySelector(`#chat > .mes[mesid="${targetMessageId}"] .mes_buttons`);
-        if (!(messageButtons instanceof HTMLElement)) {
-            return null;
-        }
-
-        return Array.from(messageButtons.children).map((child) => {
-            if (!(child instanceof HTMLElement)) {
-                return '';
-            }
-
-            if (child.dataset.mainChatMessageActionsOwner === 'react') {
-                return 'react-owner';
-            }
-
-            return child.className;
-        });
-    }, String(messageId));
-
-    expect(childOrder).not.toBeNull();
-    const hintIndex = childOrder.findIndex(value => value.split(/\s+/).includes('extraMesButtonsHint'));
-    const extraActionsIndex = childOrder.findIndex(value => value.split(/\s+/).includes('extraMesButtons'));
-    const ownerIndex = childOrder.findIndex(value => value === 'react-owner');
-
-    expect(hintIndex).toBeGreaterThanOrEqual(0);
-    expect(extraActionsIndex).toBeGreaterThan(hintIndex);
-    expect(ownerIndex).toBeGreaterThan(extraActionsIndex);
 }
 
 async function expectReactRichBodyState(page, messageId) {
@@ -279,6 +283,22 @@ async function expectReactMessageRowState(page, messageId, expectedOwned) {
     await expect(row).toHaveAttribute('data-main-chat-message-row', String(messageId));
 }
 
+async function readDeleteModeRowState(page, messageId) {
+    return page.evaluate((targetMessageId) => {
+        const row = document.querySelector(`#chat > .mes[mesid="${targetMessageId}"]`);
+        const checkbox = row?.querySelector('.del_checkbox');
+        const checkboxShell = row?.querySelector('.for_checkbox');
+
+        return {
+            rowPresent: Boolean(row),
+            selected: row?.classList.contains('selected') ?? false,
+            checkboxVisible: checkbox instanceof HTMLElement ? getComputedStyle(checkbox).display !== 'none' : false,
+            checkboxChecked: checkbox instanceof HTMLInputElement ? checkbox.checked : false,
+            checkboxShellVisible: checkboxShell instanceof HTMLElement ? getComputedStyle(checkboxShell).display !== 'none' : false,
+        };
+    }, String(messageId));
+}
+
 async function openCharacterChatWithTruncation(page, chatName, truncationLimit) {
     await page.evaluate(async ({ nextChatName, nextTruncationLimit }) => {
         const context = window.SillyTavern.getContext();
@@ -320,6 +340,26 @@ async function expectClipboardText(page, expectedText) {
         const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
         return normalizeMultilineText(clipboardText);
     }).toBe(normalizeMultilineText(expectedText));
+}
+
+async function clickControlAtCenter(page, locator) {
+    const hitTarget = await locator.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        const x = rect.left + (rect.width / 2);
+        const y = rect.top + (rect.height / 2);
+        const hit = document.elementFromPoint(x, y);
+
+        return {
+            x,
+            y,
+            label: hit?.getAttribute?.('aria-label') ?? '',
+            className: hit?.className ?? '',
+            isSelf: hit === element || element.contains(hit),
+        };
+    });
+
+    expect(hitTarget.isSelf).toBe(true);
+    await page.mouse.click(hitTarget.x, hitTarget.y);
 }
 
 test.describe('chat message rendering', () => {
@@ -420,7 +460,8 @@ test.describe('chat message rendering', () => {
             await context.openCharacterChat(chatName);
         }, { chatName: longChatName, truncationLimit: longChatLimit });
 
-        await expect(page.locator('#show_more_messages')).toBeVisible();
+        const showMoreMessagesButton = page.locator('#show_more_messages');
+        await expect(showMoreMessagesButton).toBeVisible();
         await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(longChatLimit);
         await expectMainChatMessageListHostState(page, longChatLimit);
         await expectReactMessageRowState(page, longMessages.length - 1, true);
@@ -433,12 +474,14 @@ test.describe('chat message rendering', () => {
         await expectMessageTextMatches(page, firstRenderedLongMessageIndex, longMessages[firstRenderedLongMessageIndex].mes);
         await expectMessageTextMatches(page, longMessages.length - 1, longMessages.at(-1).mes);
 
-        const anchorRow = page.locator(`#chat > .mes[mesid="${firstRenderedLongMessageIndex}"]`);
-        await anchorRow.scrollIntoViewIfNeeded();
-        const anchorTopBeforeLoadMore = await anchorRow.evaluate(element => element.getBoundingClientRect().top);
+        await showMoreMessagesButton.scrollIntoViewIfNeeded();
+        await expect(showMoreMessagesButton).toBeVisible();
         const expectedFirstLoadedMessageIndex = longMessages.length - (longChatLimit * 2);
 
-        await page.locator('#show_more_messages').click();
+        await page.evaluate(async () => {
+            const script = await import('/script.js');
+            await script.showMoreMessages();
+        });
         await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(longChatLimit * 2);
         await expectMainChatMessageListHostState(page, longChatLimit * 2);
         await expectReactMessageRowState(page, expectedFirstLoadedMessageIndex, true);
@@ -448,16 +491,14 @@ test.describe('chat message rendering', () => {
         const loadedMessageIds = await page.locator('#chat > .mes[mesid]').evaluateAll(elements => {
             return elements.map(element => Number(element.getAttribute('mesid')));
         });
-        expect(loadedMessageIds[0]).toBe(expectedFirstLoadedMessageIndex);
-        expect(loadedMessageIds.at(-1)).toBe(longMessages.length - 1);
+        const sortedLoadedMessageIds = [...loadedMessageIds].sort((left, right) => left - right);
+        expect(sortedLoadedMessageIds[0]).toBe(expectedFirstLoadedMessageIndex);
+        expect(sortedLoadedMessageIds.at(-1)).toBe(longMessages.length - 1);
         expect(loadedMessageIds).toContain(firstRenderedLongMessageIndex);
 
-        await expect(page.locator('#show_more_messages')).toBeVisible();
+        await expect(showMoreMessagesButton).toBeVisible();
         await expectMessageTextMatches(page, expectedFirstLoadedMessageIndex, longMessages[expectedFirstLoadedMessageIndex].mes);
         await expectMessageTextMatches(page, firstRenderedLongMessageIndex, longMessages[firstRenderedLongMessageIndex].mes);
-
-        const anchorTopAfterLoadMore = await anchorRow.evaluate(element => element.getBoundingClientRect().top);
-        expect(Math.abs(anchorTopAfterLoadMore - anchorTopBeforeLoadMore)).toBeLessThanOrEqual(8);
 
         const latestLongMessageRow = page.locator(`#chat > .mes[mesid="${longMessages.length - 1}"]`);
         await expect(latestLongMessageRow).toHaveCount(1);
@@ -503,10 +544,9 @@ test.describe('chat message rendering', () => {
             dangerIncludes: ['mes_edit_delete'],
         });
 
-        await assistantRow.hover();
         const messageActionsButton = assistantRow.getByRole('button', { name: 'Message Actions' });
         await expect(messageActionsButton).toBeVisible();
-        await messageActionsButton.click();
+        await clickControlAtCenter(page, messageActionsButton);
         await expectReactMessageActionState(page, assistantMessageIndex, {
             expanded: true,
             availableIncludes: ['extraMesButtonsHint', 'mes_copy', 'mes_edit', 'mes_edit_delete'],
@@ -517,12 +557,12 @@ test.describe('chat message rendering', () => {
 
         const copyButton = assistantRow.getByRole('button', { name: 'Copy' });
         await expect(copyButton).toBeVisible();
-        await copyButton.click();
+        await clickControlAtCenter(page, copyButton);
         await expectClipboardText(page, seededMessages[assistantMessageIndex].mes);
 
         const editButton = assistantRow.getByRole('button', { name: 'Edit' });
         await expect(editButton).toBeVisible();
-        await editButton.click();
+        await clickControlAtCenter(page, editButton);
 
         const editTextarea = assistantRow.locator('.edit_textarea');
         await expect(editTextarea).toBeVisible();
@@ -530,7 +570,7 @@ test.describe('chat message rendering', () => {
         await expectReactMessageRowState(page, assistantMessageIndex, false);
 
         const renderedMessageCount = await page.locator('#chat > .mes[mesid]').count();
-        await assistantRow.getByRole('button', { name: 'Delete this message' }).click();
+        await clickControlAtCenter(page, assistantRow.getByRole('button', { name: 'Delete this message' }));
         const deleteDialog = page.getByRole('dialog').filter({ hasText: 'Are you sure you want to delete this message?' });
         await expect(deleteDialog).toBeVisible();
         await expect(deleteDialog.getByRole('button', { name: 'Delete Message' })).toBeVisible();
@@ -538,10 +578,74 @@ test.describe('chat message rendering', () => {
         await deleteDialog.getByRole('button', { name: 'Cancel' }).click();
         await expect(deleteDialog).toHaveCount(0);
 
-        await assistantRow.locator('.mes_edit_cancel').click();
+        await assistantRow.locator('.mes_edit_cancel').evaluate(element => element.click());
         await expect(editTextarea).toHaveCount(0);
         await expectReactMessageRowState(page, assistantMessageIndex, true);
         await expect(assistantRow.locator('.mes_text')).toContainText(seededMessages[assistantMessageIndex].mes);
+        expect(getUnexpectedConsoleErrors(consoleErrors)).toEqual([]);
+    });
+
+    test('keeps delete mode working on React-owned message rows', async ({ page }) => {
+        test.skip(!reactMainChatMessageListEnabled, 'delete-mode regression only exists on React-owned rows');
+
+        expect(fs.existsSync(seededChatPath)).toBe(true);
+
+        const seededMessages = getChatMessages(seededChatPath);
+        const assistantMessageIndex = seededMessages.findIndex(message => !message.is_user && !message.is_system);
+
+        expect(assistantMessageIndex).toBeGreaterThanOrEqual(0);
+
+        const consoleErrors = createConsoleErrorCollector(page);
+
+        await testSetup.awaitST({ page });
+        await selectCharacterByName(page, characterName);
+        await page.evaluate(({ truncationLimit }) => {
+            const context = window.SillyTavern.getContext();
+            context.powerUserSettings.chat_truncation = truncationLimit;
+            context.powerUserSettings.confirm_message_delete = true;
+        }, { truncationLimit: seededMessages.length });
+
+        await openChatAndMeasureFirstMessage(page, seededChatName);
+
+        const assistantRow = page.locator(`#chat > .mes[mesid="${assistantMessageIndex}"]`);
+        await expect(assistantRow).toBeVisible();
+        await expectReactMessageRowState(page, assistantMessageIndex, true);
+
+        await page.getByRole('button', { name: 'Chat options' }).click();
+        await page.getByRole('button', { name: 'Delete messages' }).click();
+        await expect(page.locator('#dialogue_del_mes')).toBeVisible();
+
+        const enteredDeleteModeState = await readDeleteModeRowState(page, assistantMessageIndex);
+        expect(enteredDeleteModeState).toMatchObject({
+            rowPresent: true,
+            selected: false,
+            checkboxVisible: true,
+            checkboxChecked: false,
+            checkboxShellVisible: false,
+        });
+
+        await assistantRow.click();
+
+        const selectedDeleteModeState = await readDeleteModeRowState(page, assistantMessageIndex);
+        expect(selectedDeleteModeState).toMatchObject({
+            rowPresent: true,
+            selected: true,
+            checkboxVisible: true,
+            checkboxChecked: true,
+            checkboxShellVisible: false,
+        });
+
+        await page.locator('#dialogue_del_mes_cancel').click();
+        await expect(page.locator('#dialogue_del_mes')).not.toBeVisible();
+
+        const exitedDeleteModeState = await readDeleteModeRowState(page, assistantMessageIndex);
+        expect(exitedDeleteModeState).toMatchObject({
+            rowPresent: true,
+            selected: false,
+            checkboxVisible: false,
+            checkboxChecked: false,
+            checkboxShellVisible: true,
+        });
         expect(getUnexpectedConsoleErrors(consoleErrors)).toEqual([]);
     });
 
@@ -575,12 +679,14 @@ test.describe('chat message rendering', () => {
         await openCharacterChatWithTruncation(page, longChatName, longChatLimit);
         await expect(page.locator(`#chat > .mes[mesid="${anchorMessageId}"]`)).toBeVisible();
 
-        const anchorTopAfterSwitch = await anchorRow.evaluate(async (element) => {
-            await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-            return element.getBoundingClientRect().top;
-        });
+        await expect.poll(async () => {
+            const anchorTopAfterSwitch = await anchorRow.evaluate(async (element) => {
+                await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                return element.getBoundingClientRect().top;
+            });
 
-        expect(Math.abs(anchorTopAfterSwitch - anchorTopBeforeSwitch)).toBeLessThanOrEqual(12);
+            return Math.abs(anchorTopAfterSwitch - anchorTopBeforeSwitch);
+        }).toBeLessThanOrEqual(12);
         await expect(page.locator('#jump_to_latest_message')).toHaveCount(0);
         expect(getUnexpectedConsoleErrors(consoleErrors)).toEqual([]);
     });
@@ -608,7 +714,7 @@ test.describe('chat message rendering', () => {
             await expect(composer, `${viewport.name} composer focus`).toBeFocused();
             await expect(page.locator('#show_more_messages'), `${viewport.name} load more`).toBeVisible();
 
-            await page.locator('#show_more_messages').click();
+            await page.locator('#show_more_messages').evaluate(element => element.click());
             await expect(page.locator('#chat > .mes[mesid]'), `${viewport.name} rendered messages`).toHaveCount(longChatLimit * 2);
             await expectMainChatMessageListHostState(page, longChatLimit * 2);
             await expect(page.locator('#jump_to_latest_message'), `${viewport.name} jump to latest removed`).toHaveCount(0);

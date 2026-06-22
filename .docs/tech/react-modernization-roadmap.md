@@ -6,7 +6,7 @@
 
 ## 状态
 
-状态：执行中；Phase 0 基础设施已落地，Phase 1 已交付，Phase 2 Sprint 1-7 已按 guarded panel island 边界交付，Phase 3 已按当前批准的 guarded hidden main-chat island scope 交付，Phase 3B Sprint 1 已交付并开始进入 visible-owner cutover；Character Library、World Info、Background Library、Extensions Host 和当前 main-chat controller 均保留同入口 legacy fallback，flag 关闭或 bundle 缺失时不替换原 surface
+状态：执行中；Phase 0 基础设施已落地，Phase 1 已交付，Phase 2 Sprint 1-7 已按 guarded panel island 边界交付，Phase 3 已按当前批准的 guarded hidden main-chat island scope 交付，Phase 3B Sprint 1-4 已完成 visible row / actions / composer / slash owner cutover，Sprint 5 已交付第一个 visible transport slice（`submitComposer` / `continueLast`）；Character Library、World Info、Background Library、Extensions Host 和当前 main-chat surface 仍保留同入口 legacy fallback，flag 关闭或 bundle 缺失时不替换原 surface
 创建日期：2026-06-15  
 前置条件：`.docs/tech/modernization-roadmap.md` 已于 2026-06-05 冻结完成
 
@@ -170,16 +170,20 @@ bun run docs:check
 
 **当前执行状态**：
 - `Sprint 1 / Visible MessageRow Renderer` 已交付：`public/script.js` 现在为 safe stored / finalized / non-editing rows 输出 Zod 校验的 `messageRowSnapshots`，`app/workspace-panels.tsx` 在现有 `.mes[mesid]` root 上附加 visible React owner marker，并在同一 chat window 内允许 safe rows React-owned、editing/streaming/unsafe rows fail-closed 回退到 legacy。当前切口仍复用 legacy formatter / rich-body DOM / action shell / load-more 算法，而不是引入第二套 Markdown 或 provider renderer。
-- `Phase 3B` 已正式启动；它继续以当前 Phase 3 的 hidden-island 完成态为前置基线，不回写既有 Phase 3 已完成结论。
+- `Sprint 2 / Visible Message Actions Owner` 已交付：safe visible rows 的 Copy / Edit / Delete / Retry / Swipe / Reasoning 等 action shell 现在由 React 可见 surface 承载，但它继续通过 legacy bridge 调用既有 handlers，并在编辑态或 unsafe row 上逐行 fail-closed 回退。
+- `Sprint 3 / Visible Composer` 已交付：`#send_textarea` / `#send_but` 现在由 React visible composer owner 承载，并按 TanStack Form + Zod 维持 Enter、Shift+Enter、empty-submit、single-submit 和 mobile reachability 语义；provider transport 仍在后续 Sprint 5 切换。
+- `Sprint 4 / Visible Slash Autocomplete And Parser UI` 已交付：主聊天 slash autocomplete、selection、paused / error status UI 现在由 React visible owner 承载；legacy parser / registry / executor / public exports 继续通过 compatibility adapter 保持稳定。
+- `Sprint 5 / Provider Transport And Token Append Owner` 当前按批准后的第一个可交付切片收口：`submitComposer` 与 `continueLast` 的 visible request classification、provider attempt sequencing、token append、stop/fallback sequencing 与 assistant row finalization 由 React visible transport mutation 承载；`retry/regenerate/swipe` 以及 non-OpenAI / group / dry-run / nested-visible path 仍按 request 级别 fail-closed 回退 legacy，因此 Phase 3B 总体闭环还不能提前宣称完成。
+- `Phase 3B` 继续以当前 Phase 3 hidden-island 完成态为前置基线，不回写既有 Phase 3 已完成结论。
 - 本阶段所有 React-owned 表单和输入面必须严格采用 TanStack Form + Zod；所有 provider-backed 查询或提交路径必须优先采用 TanStack Query；任何仍保留 legacy compatibility adapter 的 sprint 都必须写清 owner split 和退出计划。
 - 本阶段不允许把这 5 个剩余 gap 合并成单个“大主聊天重写”任务；必须逐 sprint 切 visible owner，并在每步保留 guarded rollout / rollback 能力。
 
 **Sprint 列表**：
 - ✅ [`Sprint 1 / Visible MessageRow Renderer`](briefs/react-phase3b-visible-message-row-renderer.md)（3 周，已交付 safe stored / finalized / non-editing rows 的 visible owner marker / row-shell cutover；editing rows、unsafe rows、streaming in-flight rows 和结构不安全行继续 fallback）
-- 📋 `Sprint 2 / Visible Message Actions Owner`（2 周，把 copy / edit / delete / retry / swipe / reasoning 等 visible action buttons / menu owner 迁移到 React；保持 mobile reachability、protected hooks 和 per-row fallback）
-- 📋 `Sprint 3 / Visible Composer`（2 周，使用 TanStack Form + Zod 接管 visible textarea / send / clear / Enter / Shift+Enter / empty-submit 语义；在 provider transport cutover 前，submit 可暂经 compatibility mutation bridge）
-- 📋 `Sprint 4 / Visible Slash Autocomplete And Parser UI`（3 周，把 slash query parsing、autocomplete list、selection / hint UX 和 paused / error surfaces 收口到 React；registry / executor 可暂经 compatibility adapter，但 visible UI owner 不再回落给 legacy）
-- 📋 `Sprint 5 / Provider Transport And Token Append Owner`（4 周，使用 TanStack Query mutation + Zod transport schema 接管 generate/send lifecycle、provider fallback、stop / retry / continue、token append 和 assistant row finalization，并完成 Phase 3B closure）
+- ✅ `Sprint 2 / Visible Message Actions Owner`（2 周，已交付 React-owned visible action shell；保留 protected selectors / hooks、legacy handlers 和 per-row fallback）
+- ✅ `Sprint 3 / Visible Composer`（2 周，已交付 TanStack Form + Zod visible composer owner；保留 compatibility submit bridge，并在 rapid submit 上维持 legacy single-submit 语义）
+- ✅ `Sprint 4 / Visible Slash Autocomplete And Parser UI`（3 周，已交付 React-owned visible slash autocomplete / status UI；legacy parser / registry / executor / public exports 保持稳定）
+- ✅ `Sprint 5 / Provider Transport And Token Append Owner`（4 周，当前按 spec amendment 交付第一个可见 transport 切片：React-owned visible transport 支持 `submitComposer` / `continueLast`；`retry/regenerate/swipe` 及其他 unsupported visible path 继续 legacy fallback，因此 Phase 3B 总体 closure 仍待后续补齐）
 
 **Phase 3B 验证门**：
 ```powershell
@@ -392,7 +396,7 @@ bun run test:compat
 
 ## 下一步行动
 
-1. **进入 Phase 3B Sprint 2 规划**：以当前 Sprint 1 的 visible row owner / fallback 证据为前提，为 visible message actions owner 明确 protected hooks、mobile reachability 和 per-row rollback 边界。
-2. **保持 Phase 3 基线不回退**：Phase 3B 每个 sprint 都必须建立在当前 hidden bridge / marker / observation 证据之上，先验证新 visible owner，再决定是否删除对应 legacy owner。
-3. **保持 TanStack 约束**：Phase 3B 的 visible composer、slash UI 和 provider transport 默认继续用 TanStack Form + Zod + TanStack Query；任何偏离都要在 spec/ADR 中说明原因和退出计划。
-4. **Phase 4 之后顺延**：在主聊天 visible-owner 迁移没有明确收口前，不把这些缺口混入 Zustand / Hono / extension-ops phase，避免后续阶段职责漂移。
+1. **补齐 Sprint 5 剩余 unsupported visible path**：在不破坏当前 `submitComposer` / `continueLast` React-owned slice 的前提下，决定 `retry/regenerate/swipe` 是否继续拆独立收口，还是在新的明确 spec 中完成余下 provider transport cutover。
+2. **保持 Phase 3 基线不回退**：Phase 3B 每个补口都必须建立在当前 hidden bridge / marker / observation 证据之上，先验证新 visible owner，再决定是否删除对应 legacy owner。
+3. **保持 TanStack 约束**：主聊天后续任何 visible provider transport / fallback / retry cutover 默认继续用 TanStack Query + Zod；visible input 面继续保持 TanStack Form + Zod owner。
+4. **Phase 4 之后顺延**：在主聊天 visible transport 剩余缺口没有明确收口前，不把这些未完成边界混入 Zustand / Hono / extension-ops phase，避免后续阶段职责漂移。
