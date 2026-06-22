@@ -229,19 +229,7 @@ async function startContinueGeneration(page) {
 }
 
 async function startRightSwipeGeneration(page, messageId) {
-    await page.evaluate(async (targetMessageId) => {
-        const script = await import('/script.js');
-        const { SWIPE_DIRECTION } = await import('/scripts/constants.js');
-        window.__emberdeskStreamingGeneration = script.swipe(null, SWIPE_DIRECTION.RIGHT, { forceMesId: targetMessageId })
-            .then(result => {
-                window.__emberdeskStreamingGenerationResult = String(result ?? '');
-                return result;
-            })
-            .catch(error => {
-                window.__emberdeskStreamingGenerationError = String(error?.message ?? error);
-                throw error;
-            });
-    }, messageId);
+    await page.locator(`#chat > .mes[mesid="${messageId}"] .swipe_right`).click();
 }
 
 async function triggerStopGeneration(page, { throughDom = false } = {}) {
@@ -973,6 +961,57 @@ test.describe('chat message streaming', () => {
         });
     });
 
+    test('visible regenerate button hands supported transport to the React owner and reuses the same assistant row', async ({ page }) => {
+        test.skip(!reactMainChatMessageListEnabled, 'React-owned visible transport requires the main-chat message-list panel flag');
+
+        await testSetup.awaitST({ page });
+        await selectCharacterByName(page, characterName);
+        await enableOpenAiStreaming(page);
+        await installStreamingFetchStub(page, {
+            chunks: ['Seed assistant row.'],
+            delayMs: 35,
+        });
+
+        const lastVisibleMessageIdBeforeSeedGeneration = await getLastVisibleMessageId(page);
+        await startGeneration(page, 'Create an assistant row for visible regenerate transport.');
+        await waitForGeneration(page);
+
+        const regeneratedMessageId = assistantMessageIdForGeneration(lastVisibleMessageIdBeforeSeedGeneration);
+        await installStreamingFetchStub(page, {
+            chunks: ['React-owned regenerate result.'],
+            delayMs: 120,
+        });
+
+        await page.evaluate(() => {
+            const regenerateButton = document.getElementById('option_regenerate');
+            if (regenerateButton instanceof HTMLElement) {
+                regenerateButton.classList.remove('displayNone');
+                regenerateButton.style.display = '';
+                regenerateButton.click();
+            }
+        });
+
+        const regeneratedRow = page.locator(`#chat > .mes[mesid="${regeneratedMessageId}"]`);
+        await expectMainChatVisibleTransportOwner(page, {
+            owner: 'react',
+            kind: 'retryGeneration',
+        });
+        await expectMainChatStreamingTransportState(page, {
+            phase: ['streaming', 'completed'],
+            generationPhase: ['streaming', 'completed', 'idle'],
+            tokenCountAtLeast: 1,
+            messageId: regeneratedMessageId,
+            expectFallback: false,
+        });
+        await expect(regeneratedRow.locator('.mes_text')).toContainText('React-owned regenerate result.');
+        await waitForGeneration(page);
+        await expect(regeneratedRow).toHaveCount(1);
+        await expectMainChatVisibleTransportOwner(page, {
+            owner: 'legacy',
+            kind: '',
+        });
+    });
+
     test('non-streaming stop does not reuse the previous assistant message id in transport state', async ({ page }) => {
         await testSetup.awaitST({ page });
         await selectCharacterByName(page, characterName);
@@ -1335,6 +1374,10 @@ test.describe('chat message streaming', () => {
             delayMs: 35,
         });
         await recovery.click();
+        await expectMainChatVisibleTransportOwner(page, {
+            owner: 'react',
+            kind: 'retryGeneration',
+        });
         await expect(assistantRowsAfterFailure.locator('.mes_text')).toContainText('Recovered retry text.');
         await expect(page.locator('body')).not.toHaveAttribute('data-generating', 'true');
         await expect.poll(async () => page.evaluate(() => window.SillyTavern.getContext().streamingProcessor === null)).toBe(true);
@@ -1424,6 +1467,17 @@ test.describe('chat message streaming', () => {
         expect(beforeSwipe.swipes).toEqual(['Original swipe baseline.']);
 
         await startRightSwipeGeneration(page, messageId);
+        await expectMainChatVisibleTransportOwner(page, {
+            owner: 'react',
+            kind: 'swipeRight',
+        });
+        await expectMainChatStreamingTransportState(page, {
+            phase: ['streaming', 'recoveringPrimary', 'recoveringFallback', 'completed'],
+            generationPhase: ['streaming', 'recoveringPrimary', 'recoveringFallback', 'completed', 'idle'],
+            tokenCountAtLeast: 1,
+            messageId,
+            expectFallback: true,
+        });
         await waitForGeneration(page);
 
         const afterSwipe = await page.evaluate((targetMessageId) => {

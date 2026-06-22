@@ -9,9 +9,9 @@ describe('main chat visible transport owner', () => {
     test.each([
         ['submit composer', { kind: 'submitComposer', mainApi: 'openai' }, { owner: 'react', reason: 'supported-kind' }],
         ['continue last', { kind: 'continueLast', mainApi: 'openai' }, { owner: 'react', reason: 'supported-kind' }],
-        ['retry generation', { kind: 'retryGeneration', mainApi: 'openai' }, { owner: 'legacy', reason: 'unsupported-kind' }],
-        ['swipe left', { kind: 'swipeLeft', mainApi: 'openai' }, { owner: 'legacy', reason: 'unsupported-kind' }],
-        ['swipe right', { kind: 'swipeRight', mainApi: 'openai' }, { owner: 'legacy', reason: 'unsupported-kind' }],
+        ['retry generation', { kind: 'retryGeneration', mainApi: 'openai' }, { owner: 'react', reason: 'supported-kind' }],
+        ['swipe left', { kind: 'swipeLeft', mainApi: 'openai' }, { owner: 'react', reason: 'supported-kind' }],
+        ['swipe right', { kind: 'swipeRight', mainApi: 'openai' }, { owner: 'react', reason: 'supported-kind' }],
         ['non-openai api', { kind: 'submitComposer', mainApi: 'kobold' }, { owner: 'legacy', reason: 'unsupported-api' }],
         ['group chat', { kind: 'submitComposer', mainApi: 'openai', selectedGroup: true }, { owner: 'legacy', reason: 'group-chat' }],
         ['dry run', { kind: 'submitComposer', mainApi: 'openai', dryRun: true }, { owner: 'legacy', reason: 'dry-run' }],

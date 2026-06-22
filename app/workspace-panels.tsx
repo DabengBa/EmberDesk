@@ -1,4 +1,4 @@
-import { StrictMode, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { StrictMode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
@@ -163,6 +163,7 @@ interface MainChatMessageListWorkspacePanelState {
     sendTextarea?: HTMLTextAreaElement | null;
     sendButton?: HTMLElement | null;
     continueButton?: HTMLElement | null;
+    regenerateButton?: HTMLElement | null;
     composerValue?: string;
     showMoreNode?: HTMLElement | null;
 }
@@ -990,6 +991,16 @@ function shouldClearReactVisibleTransportRuntimeAfterSettle(
     return runtime.phase === 'completed' || runtime.phase === 'stopped' || runtime.phase === 'error';
 }
 
+function scheduleMainChatVisibleTransportRuntimeSettle(
+    setRuntime: React.Dispatch<React.SetStateAction<MainChatVisibleTransportRuntimeState | null>>,
+) {
+    window.setTimeout(() => {
+        setRuntime((current) => (
+            shouldClearReactVisibleTransportRuntimeAfterSettle(current) ? null : current
+        ));
+    }, 0);
+}
+
 function isReactVisibleTransportStopException(exception: unknown): boolean {
     const errorName = String((exception as { name?: unknown })?.name ?? '');
     const errorMessage = String((exception as { message?: unknown })?.message ?? exception ?? '');
@@ -1118,9 +1129,11 @@ function MainChatActiveTransportRowOwnerPortal({
 function MainChatMessageRowOwnerPortal({
     messageRow,
     snapshot,
+    bridge,
 }: {
     messageRow: HTMLElement;
     snapshot: MainChatMessageRowSnapshot;
+    bridge?: WorkspacePanelBridge;
 }) {
     const targets = getMainChatMessageRowTargets(messageRow);
 
@@ -1133,6 +1146,32 @@ function MainChatMessageRowOwnerPortal({
             delete messageRow.dataset.mainChatMessageRow;
         };
     }, [messageRow, snapshot.messageId]);
+
+    useLayoutEffect(() => {
+        if (!targets || !snapshot.swipeShellEligible) {
+            return;
+        }
+
+        const triggerSwipe = (kind: 'swipeLeft' | 'swipeRight') => (event: MouseEvent) => {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            event.stopPropagation();
+            void bridge?.dispatchAction?.('triggerVisibleGeneration', {
+                kind,
+                messageId: Number(snapshot.messageId),
+            });
+        };
+
+        const handleSwipeLeftClick = triggerSwipe('swipeLeft');
+        const handleSwipeRightClick = triggerSwipe('swipeRight');
+        targets.swipeLeft.addEventListener('click', handleSwipeLeftClick, true);
+        targets.swipeRight.addEventListener('click', handleSwipeRightClick, true);
+
+        return () => {
+            targets.swipeLeft.removeEventListener('click', handleSwipeLeftClick, true);
+            targets.swipeRight.removeEventListener('click', handleSwipeRightClick, true);
+        };
+    }, [bridge, snapshot.messageId, snapshot.swipeShellEligible, targets]);
 
     if (!targets) {
         return null;
@@ -1188,16 +1227,42 @@ function MainChatMessageActionsOwnerPortal({
             event.stopPropagation();
             openMessageActions();
         };
+        const handleRetryClick = (event: MouseEvent) => {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            event.stopPropagation();
+            void bridge?.dispatchAction?.('triggerVisibleGeneration', {
+                kind: 'retryGeneration',
+                messageId: Number(snapshot.messageId),
+            });
+        };
+        const handleRetryKeyDown = (event: KeyboardEvent) => {
+            if (event.key !== 'Enter' && event.key !== ' ') {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            event.stopPropagation();
+            void bridge?.dispatchAction?.('triggerVisibleGeneration', {
+                kind: 'retryGeneration',
+                messageId: Number(snapshot.messageId),
+            });
+        };
 
         const { messageButtons } = targets;
         messageButtons.dataset.mainChatMessageActionsOwner = 'react';
         messageButtons.dataset.mainChatMessageActionsRow = snapshot.messageId;
         targets.extraActionsHint.addEventListener('click', handleHintClick, true);
         targets.extraActionsHint.addEventListener('keydown', handleHintKeyDown, true);
+        targets.retryButton?.addEventListener('click', handleRetryClick, true);
+        targets.retryButton?.addEventListener('keydown', handleRetryKeyDown, true);
 
         return () => {
             targets.extraActionsHint.removeEventListener('click', handleHintClick, true);
             targets.extraActionsHint.removeEventListener('keydown', handleHintKeyDown, true);
+            targets.retryButton?.removeEventListener('click', handleRetryClick, true);
+            targets.retryButton?.removeEventListener('keydown', handleRetryKeyDown, true);
             delete messageButtons.dataset.mainChatMessageActionsOwner;
             delete messageButtons.dataset.mainChatMessageActionsRow;
         };
@@ -1264,6 +1329,7 @@ function getMainChatComposerTargets(state: MainChatMessageListWorkspacePanelStat
     }
 
     const continueButton = state.continueButton instanceof HTMLElement ? state.continueButton : null;
+    const regenerateButton = state.regenerateButton instanceof HTMLElement ? state.regenerateButton : null;
 
     return {
         nonQrFormItems,
@@ -1273,6 +1339,7 @@ function getMainChatComposerTargets(state: MainChatMessageListWorkspacePanelStat
         sendForm,
         sendButton,
         continueButton,
+        regenerateButton,
     };
 }
 
@@ -1392,20 +1459,29 @@ function MainChatComposerOwnerPortal({
             restoreComposerFocus();
             void runSerializedComposerAction({ kind: 'continueLast' });
         };
+        const handleRegenerateButtonClick = (event: MouseEvent) => {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            event.stopPropagation();
+            restoreComposerFocus();
+            void bridge?.dispatchAction?.('triggerVisibleGeneration', { kind: 'retryGeneration' });
+        };
 
         syncComposerField();
         targets.sendTextarea.addEventListener('input', syncComposerField);
         targets.sendTextarea.addEventListener('keydown', handleTextareaKeyDown, true);
         targets.sendButton.addEventListener('click', handleSendButtonClick, true);
         targets.continueButton?.addEventListener('click', handleContinueButtonClick, true);
+        targets.regenerateButton?.addEventListener('click', handleRegenerateButtonClick, true);
 
         return () => {
             targets.sendTextarea.removeEventListener('input', syncComposerField);
             targets.sendTextarea.removeEventListener('keydown', handleTextareaKeyDown, true);
             targets.sendButton.removeEventListener('click', handleSendButtonClick, true);
             targets.continueButton?.removeEventListener('click', handleContinueButtonClick, true);
+            targets.regenerateButton?.removeEventListener('click', handleRegenerateButtonClick, true);
         };
-    }, [composerForm, runSerializedComposerAction, state.slashCommand?.autocompleteVisible, state.slashUi?.visible, targets]);
+    }, [bridge, composerForm, runSerializedComposerAction, state.slashCommand?.autocompleteVisible, state.slashUi?.visible, targets]);
 
     if (!targets) {
         return null;
@@ -2504,10 +2580,12 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
             )
         ));
     }, [bridgeState.messageActionSnapshots, messageRowMap]);
-    const visibleTransportMutation = useMutation({
-        mutationFn: async (payload: { kind: string; messageId?: number }) => {
+    const executePreparedVisibleTransportRequest = useCallback(async (
+        prepared: MainChatPreparedVisibleTransportRequest | undefined,
+        payload: { kind: string; messageId?: number },
+    ) => {
+        try {
             const kind = String(payload.kind ?? '');
-            const prepared = await bridge?.dispatchAction?.('prepareVisibleGeneration', payload) as MainChatPreparedVisibleTransportRequest | undefined;
             if (!prepared || prepared.owner !== 'react' || !prepared.runAttempt || !prepared.handleFailure || !prepared.finalizeSuccess) {
                 setReactVisibleTransportRuntime(null);
                 return prepared;
@@ -2593,16 +2671,39 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
             }
 
             return undefined;
+        } finally {
+            scheduleMainChatVisibleTransportRuntimeSettle(setReactVisibleTransportRuntime);
+        }
+    }, []);
+    const visibleTransportMutation = useMutation({
+        mutationFn: async (payload: { kind: string; messageId?: number }) => {
+            const prepared = await bridge?.dispatchAction?.('prepareVisibleGeneration', payload) as MainChatPreparedVisibleTransportRequest | undefined;
+            return await executePreparedVisibleTransportRequest(prepared, payload);
         },
         retry: false,
         onSettled: () => {
-            window.setTimeout(() => {
-                setReactVisibleTransportRuntime((current) => (
-                    shouldClearReactVisibleTransportRuntimeAfterSettle(current) ? null : current
-                ));
-            }, 0);
+            scheduleMainChatVisibleTransportRuntimeSettle(setReactVisibleTransportRuntime);
         },
     });
+
+    useEffect(() => {
+        const scope = globalThis as typeof globalThis & {
+            __emberDeskExecuteMainChatVisibleTransportRequest?: (
+                prepared: MainChatPreparedVisibleTransportRequest,
+            ) => Promise<unknown>;
+        };
+
+        scope.__emberDeskExecuteMainChatVisibleTransportRequest = async (prepared) => {
+            return await executePreparedVisibleTransportRequest(prepared, {
+                kind: String(prepared.kind ?? ''),
+            });
+        };
+
+        return () => {
+            delete scope.__emberDeskExecuteMainChatVisibleTransportRequest;
+        };
+    }, [executePreparedVisibleTransportRequest]);
+
     const effectiveGenerationControl = buildReactOwnedMainChatGenerationControl(
         reactVisibleTransportRuntime,
         bridgeState.generationControl ?? mainChatGenerationControlFallback,
@@ -2713,7 +2814,7 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
                 }
 
                 return createPortal(
-                    <MainChatMessageRowOwnerPortal messageRow={messageRow} snapshot={snapshot} />,
+                    <MainChatMessageRowOwnerPortal messageRow={messageRow} snapshot={snapshot} bridge={bridge} />,
                     messageRow,
                     `main-chat-message-row-owner-${snapshot.messageId}`,
                 );

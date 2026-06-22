@@ -1,6 +1,9 @@
 const SUPPORTED_REACT_VISIBLE_GENERATION_KINDS = new Set([
     'submitComposer',
     'continueLast',
+    'retryGeneration',
+    'swipeLeft',
+    'swipeRight',
 ]);
 
 export function classifyMainChatVisibleTransportOwner({

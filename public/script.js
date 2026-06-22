@@ -1172,6 +1172,58 @@ function isPreparedReactOwnedMainChatVisibleTransportRequest(value) {
     return Boolean(value && typeof value === 'object' && value.owner === 'react');
 }
 
+function getMainChatVisibleTransportExecutor() {
+    return typeof globalThis.__emberDeskExecuteMainChatVisibleTransportRequest === 'function'
+        ? globalThis.__emberDeskExecuteMainChatVisibleTransportRequest
+        : null;
+}
+
+async function executePreparedMainChatVisibleTransportRequest(prepared) {
+    const executor = getMainChatVisibleTransportExecutor();
+    if (!executor || !isPreparedReactOwnedMainChatVisibleTransportRequest(prepared)) {
+        return prepared;
+    }
+
+    return await executor(prepared);
+}
+
+async function executeMainChatVisibleGenerationAction({ kind, messageId } = {}) {
+    switch (kind) {
+        case 'retryGeneration': {
+            const executor = getMainChatVisibleTransportExecutor();
+            const result = await Generate('regenerate', {
+                visibleTransportHandoff: Boolean(executor),
+                visibleTransportKind: 'retryGeneration',
+            });
+            return isPreparedReactOwnedMainChatVisibleTransportRequest(result)
+                ? await executePreparedMainChatVisibleTransportRequest(result)
+                : result;
+        }
+        case 'swipeLeft':
+            if (Number.isInteger(messageId) && messageId >= 0) {
+                return await swipe(null, SWIPE_DIRECTION.LEFT, {
+                    repeated: false,
+                    forceMesId: messageId,
+                    visibleTransportHandoff: true,
+                    visibleTransportKind: 'swipeLeft',
+                });
+            }
+            return undefined;
+        case 'swipeRight':
+            if (Number.isInteger(messageId) && messageId >= 0) {
+                return await swipe(null, SWIPE_DIRECTION.RIGHT, {
+                    repeated: false,
+                    forceMesId: messageId,
+                    visibleTransportHandoff: true,
+                    visibleTransportKind: 'swipeRight',
+                });
+            }
+            return undefined;
+        default:
+            return await runMainChatVisibleGenerationAction({ kind, messageId });
+    }
+}
+
 async function prepareMainChatVisibleGenerationAction({ kind, messageId } = {}) {
     const ownership = classifyMainChatVisibleTransportOwner({
         kind,
@@ -1250,6 +1302,7 @@ function getMainChatMessageListReactBridgeState() {
     const sendTextarea = document.getElementById('send_textarea');
     const sendButton = document.getElementById('send_but');
     const continueButton = document.getElementById('mes_continue');
+    const regenerateButton = document.getElementById('option_regenerate');
     const messageRowSnapshots = messageRows
         .map(row => buildMainChatMessageRowSnapshot(row, {
             messageId: Number(row.getAttribute('mesid')),
@@ -1302,6 +1355,7 @@ function getMainChatMessageListReactBridgeState() {
         sendTextarea,
         sendButton,
         continueButton,
+        regenerateButton,
         composerValue: sendTextarea instanceof HTMLTextAreaElement ? sendTextarea.value : '',
         showMoreNode: showMoreButton,
     };
@@ -1341,7 +1395,7 @@ function getMainChatMessageListReactBridge() {
                         messageId: normalizedMessageId,
                     });
                 case 'triggerVisibleGeneration':
-                    await runMainChatVisibleGenerationAction({
+                    await executeMainChatVisibleGenerationAction({
                         kind: String(payload?.kind ?? ''),
                         messageId: normalizedMessageId,
                     });
@@ -6753,7 +6807,7 @@ function removeLastMessage() {
  * @param {boolean} dryRun Whether to actually generate a message or just assemble the prompt
  * @returns {Promise<any>} Returns a promise that resolves when the text is done generating.
  */
-export async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, force_chid, signal, quietImage, quietName, jsonSchema = null, depth = 0, visibleTransportHandoff = false } = {}, dryRun = false) {
+export async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, force_chid, signal, quietImage, quietName, jsonSchema = null, depth = 0, visibleTransportHandoff = false, visibleTransportKind = null } = {}, dryRun = false) {
     console.log('Generate entered');
     setGenerationProgress(0);
     generation_started = new Date();
@@ -8035,7 +8089,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
 
         const handoffOwnership = visibleTransportHandoff
             ? classifyMainChatVisibleTransportOwner({
-                kind: type === 'continue' ? 'continueLast' : 'submitComposer',
+                kind: visibleTransportKind ?? (type === 'continue' ? 'continueLast' : 'submitComposer'),
                 mainApi: main_api,
                 selectedGroup: Boolean(selected_group),
                 dryRun,
@@ -8046,7 +8100,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
         if (handoffOwnership.owner === 'react') {
             return {
                 owner: 'react',
-                kind: type === 'continue' ? 'continueLast' : 'submitComposer',
+                kind: visibleTransportKind ?? (type === 'continue' ? 'continueLast' : 'submitComposer'),
                 reason: handoffOwnership.reason,
                 attempts,
                 prepareRetryAttempt,
@@ -12492,7 +12546,16 @@ function formatSwipeCounter(current, total) {
  * @param {number} [params.forceSwipeId] The target swipe_id. When out of range, it will be looped or clamped.
  * @param {number} [params.forceDuration] Overwrites the default swipe duration.
  */
-export async function swipe(event, direction, { source, repeated, message = chat[chat.length - 1], forceMesId, forceSwipeId, forceDuration } = {}) {
+export async function swipe(event, direction, {
+    source,
+    repeated,
+    message = chat[chat.length - 1],
+    forceMesId,
+    forceSwipeId,
+    forceDuration,
+    visibleTransportHandoff = false,
+    visibleTransportKind = '',
+} = {}) {
     if (chat.length === 0) {
         console.warn('Swipe was called on an empty chat.');
         return;
@@ -12857,7 +12920,16 @@ export async function swipe(event, direction, { source, repeated, message = chat
 
         if (run_generate && !is_send_press) {
             is_send_press = true;
-            generation = Generate('swipe');
+            generation = (async () => {
+                const executor = getMainChatVisibleTransportExecutor();
+                const result = await Generate('swipe', {
+                    visibleTransportHandoff: Boolean(visibleTransportHandoff && executor),
+                    visibleTransportKind,
+                });
+                return isPreparedReactOwnedMainChatVisibleTransportRequest(result)
+                    ? await executePreparedMainChatVisibleTransportRequest(result)
+                    : result;
+            })();
         }
 
         //Swipe in from the opposite side.

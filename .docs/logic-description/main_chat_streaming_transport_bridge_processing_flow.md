@@ -12,13 +12,13 @@
 Goals:
 
 - Document the current split between the hidden `streamingTransport` bridge payload and the supported React-owned visible transport slice.
-- Preserve the boundary between supported React-owned `submitComposer` / `continueLast` transport and the remaining legacy fallback transport paths.
+- Preserve the boundary between supported React-owned standard visible direct-chat transport and the remaining legacy fallback transport paths.
 - Record terminal snapshot replay for fast stop/completion/error cleanup on legacy-owned requests.
 
 Non-goals:
 
 - Replace `sendStreamingRequest()`, provider routing, or the entire `Generate()` compatibility entry point.
-- Move unsupported visible `retry/regenerate/swipe` requests, quiet/background generation, or non-OpenAI/group/dry-run/nested paths into the React-owned transport slice.
+- Move quiet/background generation or non-OpenAI/group/dry-run/nested paths into the React-owned transport slice.
 - Define provider pause/resume.
 
 ## Input Discovery And Parsing Rules
@@ -39,10 +39,10 @@ The pure legacy classifier in `public/scripts/main-chat-streaming-transport-stat
 
 `public/scripts/main-chat-visible-transport-owner.js` owns the supported-request classifier for the visible React transport slice:
 
-- only `submitComposer` and `continueLast` are currently eligible
+- `submitComposer`, `continueLast`, `retryGeneration`, `swipeLeft`, and `swipeRight` are currently eligible
 - `mainApi` must be `openai`
 - selected group, dry-run, and nested-visible generation fail closed to legacy
-- unsupported visible kinds such as `retry/regenerate/swipe` fail closed per request instead of locking the whole chat surface
+- quiet/background and other excluded compatibility requests fail closed per request instead of locking the whole chat surface
 
 ## Outputs
 
@@ -66,7 +66,7 @@ React validates the payload with Zod in `app/workspace-panels.tsx`. Invalid or m
 During a supported React-owned visible request, the hidden controller also reports:
 
 - `data-main-chat-visible-transport-owner="react"`
-- `data-main-chat-visible-transport-kind="submitComposer|continueLast"`
+- `data-main-chat-visible-transport-kind="submitComposer|continueLast|retryGeneration|swipeLeft|swipeRight"`
 
 After the supported request settles, the controller returns to `legacy` observation mode for future idle or unsupported requests.
 
@@ -79,10 +79,10 @@ Hidden marker attributes include:
 
 ## Staged Processing Flow
 
-1. A visible generation intent starts from the React-owned composer or continue button.
+1. A visible generation intent starts from the React-owned composer, continue button, regenerate button, failed-row retry CTA, or swipe controls.
 2. `public/script.js` calls `prepareVisibleGeneration` and uses `classifyMainChatVisibleTransportOwner()` to decide whether the request is supported by the current React-owned transport slice.
-3. Supported `submitComposer` / `continueLast` requests enter the React mutation in `app/workspace-panels.tsx`, which owns request sequencing, visible token append, stop/error/completed transport state, bounded retry/fallback state, and assistant-row finalization for that request.
-4. Unsupported visible kinds and all non-visible exclusions fail closed back to legacy `Generate()` / `StreamingProcessor`.
+3. Supported visible direct-chat requests enter the React mutation in `app/workspace-panels.tsx`, which owns request sequencing, visible token append, stop/error/completed transport state, bounded retry/fallback state, and assistant-row finalization for that request.
+4. Excluded visible or non-visible compatibility paths fail closed back to legacy `Generate()` / `StreamingProcessor`.
 5. For legacy-owned requests, `getMainChatStreamingTransportBridgeState()` still reads processor and recovery DOM facts and normalizes them through `getMainChatStreamingTransportState()`.
 6. Legacy terminal phases `stopped`, `completed`, and `error` are cached in `globalThis.__emberDeskMainChatStreamingTransportStore.latestTerminalSnapshot`.
 7. If a legacy tail refresh sees `idle`, or a transient `connecting` state without an active processor, the bridge replays the latest terminal snapshot instead of losing stop/error/completion evidence.
@@ -92,8 +92,8 @@ Hidden marker attributes include:
 ## Key Rules
 
 - Visible assistant rows stay `#chat > .mes[mesid]`.
-- For supported React-owned `submitComposer` / `continueLast` requests, token text may append through the React-owned visible transport runtime, but it must still stay on the same assistant row and preserve the same final row identity.
-- Unsupported visible kinds and excluded paths keep token text in the ordinary legacy `.mes_text` path.
+- For supported React-owned `submitComposer`, `continueLast`, `retryGeneration`, `swipeLeft`, and `swipeRight` requests, token text may append through the React-owned visible transport runtime, but it must still stay on the same assistant row and preserve the same final row identity. `retryGeneration` covers both the top-level regenerate button and the failed-row retry entry.
+- Excluded compatibility paths keep token text in the ordinary legacy `.mes_text` path.
 - User stop still records `stopped` and never starts automatic recovery.
 - Fallback attempts can set `fromFallbackAttempt=true`; fallback status text stays outside `.mes_text`.
 - Terminal replay is observational only. It does not keep generation active or affect provider cleanup.
@@ -109,4 +109,4 @@ bun run --cwd tests test:unit -- main-chat-visible-transport-owner.test.js react
 $env:EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST='true'; bun run --cwd tests test:e2e -- chat-message-streaming.e2e.js --workers=1
 ```
 
-The browser proof covers supported React-owned send/continue transport, legacy fallback for unsupported direct generation, stop, fallback recovery, final failure retry, pre-token failure, and mobile stop/retry reachability without real provider keys.
+The browser proof covers supported React-owned send/continue/regenerate/retry/swipe transport, excluded-path legacy fallback, stop, fallback recovery, final failure retry, pre-token failure, and mobile stop/retry reachability without real provider keys.

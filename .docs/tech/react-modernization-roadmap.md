@@ -6,7 +6,7 @@
 
 ## 状态
 
-状态：执行中；Phase 0 基础设施已落地，Phase 1 已交付，Phase 2 Sprint 1-7 已按 guarded panel island 边界交付，Phase 3 已按当前批准的 guarded hidden main-chat island scope 交付，Phase 3B Sprint 1-4 已完成 visible row / actions / composer / slash owner cutover，Sprint 5 已交付第一个 visible transport slice（`submitComposer` / `continueLast`）；Character Library、World Info、Background Library、Extensions Host 和当前 main-chat surface 仍保留同入口 legacy fallback，flag 关闭或 bundle 缺失时不替换原 surface
+状态：执行中；Phase 0 基础设施已落地，Phase 1 已交付，Phase 2 Sprint 1-7 已按 guarded panel island 边界交付，Phase 3 已按当前批准的 guarded hidden main-chat island scope 交付，Phase 3B Sprint 1-5 已完成 visible row / actions / composer / slash / standard direct-chat transport owner cutover；Character Library、World Info、Background Library、Extensions Host 和当前 main-chat surface 仍保留同入口 legacy fallback，flag 关闭或 bundle 缺失时不替换原 surface
 创建日期：2026-06-15  
 前置条件：`.docs/tech/modernization-roadmap.md` 已于 2026-06-05 冻结完成
 
@@ -173,7 +173,8 @@ bun run docs:check
 - `Sprint 2 / Visible Message Actions Owner` 已交付：safe visible rows 的 Copy / Edit / Delete / Retry / Swipe / Reasoning 等 action shell 现在由 React 可见 surface 承载，但它继续通过 legacy bridge 调用既有 handlers，并在编辑态或 unsafe row 上逐行 fail-closed 回退。
 - `Sprint 3 / Visible Composer` 已交付：`#send_textarea` / `#send_but` 现在由 React visible composer owner 承载，并按 TanStack Form + Zod 维持 Enter、Shift+Enter、empty-submit、single-submit 和 mobile reachability 语义；provider transport 仍在后续 Sprint 5 切换。
 - `Sprint 4 / Visible Slash Autocomplete And Parser UI` 已交付：主聊天 slash autocomplete、selection、paused / error status UI 现在由 React visible owner 承载；legacy parser / registry / executor / public exports 继续通过 compatibility adapter 保持稳定。
-- `Sprint 5 / Provider Transport And Token Append Owner` 当前按批准后的第一个可交付切片收口：`submitComposer` 与 `continueLast` 的 visible request classification、provider attempt sequencing、token append、stop/fallback sequencing 与 assistant row finalization 由 React visible transport mutation 承载；`retry/regenerate/swipe` 以及 non-OpenAI / group / dry-run / nested-visible path 仍按 request 级别 fail-closed 回退 legacy，因此 Phase 3B 总体闭环还不能提前宣称完成。
+- `Sprint 5 / Provider Transport And Token Append Owner` 已按当前 closure spec 收口：标准 visible OpenAI direct-chat 的 `submitComposer`、`continueLast`、regenerate/retry 和 swipe request classification、provider attempt sequencing、token append、stop/fallback sequencing 与 assistant row finalization 由 React visible transport mutation 承载；non-OpenAI / group / dry-run / nested-visible 以及 quiet/background 兼容路径继续按 request 级别 fail-closed 回退 legacy，但它们不再阻止 Phase 3B 闭环宣称。
+- `Phase 3B` 现在可以按“标准 visible OpenAI direct-chat transport 全部 React-owned”这个完成定义宣称已交付；这不等于要求 quiet/background 或其他兼容路径在同一阶段一并 React 化。
 - `Phase 3B` 继续以当前 Phase 3 hidden-island 完成态为前置基线，不回写既有 Phase 3 已完成结论。
 - 本阶段所有 React-owned 表单和输入面必须严格采用 TanStack Form + Zod；所有 provider-backed 查询或提交路径必须优先采用 TanStack Query；任何仍保留 legacy compatibility adapter 的 sprint 都必须写清 owner split 和退出计划。
 - 本阶段不允许把这 5 个剩余 gap 合并成单个“大主聊天重写”任务；必须逐 sprint 切 visible owner，并在每步保留 guarded rollout / rollback 能力。
@@ -183,7 +184,7 @@ bun run docs:check
 - ✅ `Sprint 2 / Visible Message Actions Owner`（2 周，已交付 React-owned visible action shell；保留 protected selectors / hooks、legacy handlers 和 per-row fallback）
 - ✅ `Sprint 3 / Visible Composer`（2 周，已交付 TanStack Form + Zod visible composer owner；保留 compatibility submit bridge，并在 rapid submit 上维持 legacy single-submit 语义）
 - ✅ `Sprint 4 / Visible Slash Autocomplete And Parser UI`（3 周，已交付 React-owned visible slash autocomplete / status UI；legacy parser / registry / executor / public exports 保持稳定）
-- ✅ `Sprint 5 / Provider Transport And Token Append Owner`（4 周，当前按 spec amendment 交付第一个可见 transport 切片：React-owned visible transport 支持 `submitComposer` / `continueLast`；`retry/regenerate/swipe` 及其他 unsupported visible path 继续 legacy fallback，因此 Phase 3B 总体 closure 仍待后续补齐）
+- ✅ `Sprint 5 / Provider Transport And Token Append Owner`（4 周，已完成标准 visible OpenAI direct-chat transport closure：React-owned visible transport 支持 `submitComposer` / `continueLast` / regenerate / retry / swipe；excluded compatibility path 继续 legacy fallback）
 
 **Phase 3B 验证门**：
 ```powershell
@@ -371,7 +372,7 @@ bun run test:compat
 - `src/react-login-feature.js`, `src/react-setup-feature.js`, `src/react-settings-feature.js`, `src/react-character-library-feature.js`, `src/workspace-react-features.js` (feature flag 和 workspace panel bootstrap；当前 payload 包含 `characterLibrary`、`mainChatMessageList`、`worldInfo`、`backgroundLibrary`、`extensionsHost`)
 - `public/script.js`, `public/scripts/backgrounds.js`, `public/scripts/extensions.js`, `public/scripts/character-library-react-sync.js`, `public/scripts/workspace-panels-react-bridge.js` (legacy workspace bridge、main-chat/background/extensions host state event、character-library sync、workspace-panel fail-closed bundle loader 和 fallback path)
 - `src/users.js`, `src/server-main.js`, `src/middleware/react-login-serve.js` (React route hosting、build-missing fallback 和 legacy redirect)
-- `app/workspace-panels.tsx` (workspace panel bundle；提供 TanStack Query provider shell、World Info editor/import/export controls、Background Library filter/gallery/action controls、Extensions Host notify/manage/install/Extras controls，以及 main-chat direct-child message-window controller、finalized rich-body snapshot/owner-marker boundary、current-session scroll restore 和 generation-control state snapshot；不迁移 legacy formatter/provider transport/token append/input/action owners)
+- `app/workspace-panels.tsx` (workspace panel bundle；提供 TanStack Query provider shell、World Info editor/import/export controls、Background Library filter/gallery/action controls、Extensions Host notify/manage/install/Extras controls，以及 main-chat direct-child message-window controller、finalized rich-body snapshot/owner-marker boundary、current-session scroll restore、visible row/actions/composer/slash owners 与标准 direct-chat visible transport mutation；legacy formatter、quiet/background generation、excluded compatibility transport paths 和 slash registry/executor 仍留在原 owner)
 - `default/config.yaml` (当前 `features.react.pages.*` 和 `features.react.panels.*` 默认值)
 - `globalThis.SillyTavern`, `eventSource` / `event_types`, `@sillytavern/*` (兼容层保持)
 
@@ -396,7 +397,6 @@ bun run test:compat
 
 ## 下一步行动
 
-1. **补齐 Sprint 5 剩余 unsupported visible path**：在不破坏当前 `submitComposer` / `continueLast` React-owned slice 的前提下，决定 `retry/regenerate/swipe` 是否继续拆独立收口，还是在新的明确 spec 中完成余下 provider transport cutover。
-2. **保持 Phase 3 基线不回退**：Phase 3B 每个补口都必须建立在当前 hidden bridge / marker / observation 证据之上，先验证新 visible owner，再决定是否删除对应 legacy owner。
-3. **保持 TanStack 约束**：主聊天后续任何 visible provider transport / fallback / retry cutover 默认继续用 TanStack Query + Zod；visible input 面继续保持 TanStack Form + Zod owner。
-4. **Phase 4 之后顺延**：在主聊天 visible transport 剩余缺口没有明确收口前，不把这些未完成边界混入 Zustand / Hono / extension-ops phase，避免后续阶段职责漂移。
+1. **保持 Phase 3 / 3B 回归门常跑**：后续 Phase 4+ 变更继续以 `chat-message-rendering.e2e.js`、`chat-message-layout.e2e.js`、`chat-message-streaming.e2e.js` 和 `bun run test:compat` 保护当前 hidden/visible owner split，不回退已完成的 main-chat closure。
+2. **继续执行 TanStack 约束**：后续任何 React-owned main-chat 查询、mutation 或表单输入仍默认使用 TanStack Query + TanStack Form + Zod，除非新的 spec/ADR 明确记录例外和退出计划。
+3. **把额外兼容路径扩展视为新任务**：如果未来要把 quiet/background 或 non-OpenAI/group/nested transport 继续迁入 React owner，必须单独立 spec，而不是重写已完成的 Phase 3B 结论。
