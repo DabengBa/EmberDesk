@@ -318,6 +318,7 @@ const BACKGROUND_LIBRARY_REACT_HOST_ID = 'emberdesk-react-background-library-pan
 const EXTENSIONS_HOST_REACT_HOST_ID = 'emberdesk-react-extensions-host-panel-host';
 const MAIN_CHAT_MESSAGE_LIST_REACT_HOST_ID = 'emberdesk-react-main-chat-message-list-host';
 const MAIN_CHAT_SCROLL_RESTORE_THRESHOLD_PX = 12;
+const mainChatMessageRowSnapshotSchema = 'mainChatMessageRowSnapshotSchema';
 const mainChatRichBodySnapshotSchema = 'mainChatRichBodySnapshotSchema';
 const mainChatMessageActionSnapshotSchema = 'mainChatMessageActionSnapshotSchema';
 const STREAMING_TRANSPORT_TERMINAL_PHASES = new Set(['stopped', 'completed', 'error']);
@@ -863,6 +864,66 @@ function cleanupMainChatMessageListReactHost() {
     host?.remove();
 }
 
+function getMainChatMessageRowStructureNode(messageRow, className) {
+    if (!(messageRow instanceof HTMLElement) || !className) {
+        return null;
+    }
+
+    const directChild = messageRow.querySelector(`:scope > .${className}`);
+    if (directChild instanceof HTMLElement || directChild instanceof HTMLInputElement) {
+        return directChild;
+    }
+
+    const slotChild = messageRow.querySelector(`[data-main-chat-message-row-slot="${className}"] > .${className}`);
+    if (slotChild instanceof HTMLElement || slotChild instanceof HTMLInputElement) {
+        return slotChild;
+    }
+
+    const descendant = messageRow.querySelector(`.${className}`);
+    return descendant instanceof HTMLElement || descendant instanceof HTMLInputElement ? descendant : null;
+}
+
+function getMainChatMessageRowStructureTargets(messageRow) {
+    const checkboxShell = getMainChatMessageRowStructureNode(messageRow, 'for_checkbox');
+    const deleteCheckbox = messageRow.querySelector(':scope > input.del_checkbox, input.del_checkbox');
+    const avatarWrapper = getMainChatMessageRowStructureNode(messageRow, 'mesAvatarWrapper');
+    const swipeLeft = getMainChatMessageRowStructureNode(messageRow, 'swipe_left');
+    const messageBlock = messageRow.querySelector(':scope > .mes_block') ?? messageRow.querySelector('.mes_block');
+    const swipeRightBlock = messageRow.querySelector(':scope > .swipeRightBlock') ?? getMainChatMessageRowStructureNode(messageRow, 'swipeRightBlock');
+    const swipeRight = swipeRightBlock?.querySelector('.swipe_right');
+    const swipeCounter = swipeRightBlock?.querySelector('.swipes-counter');
+    const messageButtons = messageBlock?.querySelector('.mes_buttons');
+    const messageEditButtons = messageBlock?.querySelector('.mes_edit_buttons');
+
+    if (
+        !(checkboxShell instanceof HTMLElement)
+        || !(deleteCheckbox instanceof HTMLInputElement)
+        || !(avatarWrapper instanceof HTMLElement)
+        || !(swipeLeft instanceof HTMLElement)
+        || !(messageBlock instanceof HTMLElement)
+        || !(swipeRightBlock instanceof HTMLElement)
+        || !(swipeRight instanceof HTMLElement)
+        || !(swipeCounter instanceof HTMLElement)
+        || !(messageButtons instanceof HTMLElement)
+        || !(messageEditButtons instanceof HTMLElement)
+    ) {
+        return null;
+    }
+
+    return {
+        checkboxShell,
+        deleteCheckbox,
+        avatarWrapper,
+        swipeLeft,
+        messageBlock,
+        swipeRightBlock,
+        swipeRight,
+        swipeCounter,
+        messageButtons,
+        messageEditButtons,
+    };
+}
+
 function isMainChatRichBodyEligible(messageRow, messageId = Number(messageRow?.getAttribute?.('mesid'))) {
     if (!(messageRow instanceof HTMLElement) || !Number.isInteger(messageId) || messageId < 0) {
         return false;
@@ -919,6 +980,62 @@ function buildMainChatRichBodySnapshot(messageRow, {
     };
 }
 
+function isMainChatMessageRowEligible(messageRow, messageId = Number(messageRow?.getAttribute?.('mesid'))) {
+    if (!isMainChatRichBodyEligible(messageRow, messageId)) {
+        return false;
+    }
+
+    if (!getMainChatMessageRowStructureTargets(messageRow)) {
+        return false;
+    }
+
+    return Boolean(buildMessageActionSnapshot(messageRow, {
+        getExpandMessageActions: () => power_user.expand_message_actions,
+    }));
+}
+
+function buildMainChatMessageRowSnapshot(messageRow, {
+    messageId = Number(messageRow?.getAttribute?.('mesid')),
+    schema = mainChatMessageRowSnapshotSchema,
+} = {}) {
+    const eligible = isMainChatMessageRowEligible(messageRow, messageId);
+    if (!eligible) {
+        return null;
+    }
+
+    const richBodySnapshot = buildMainChatRichBodySnapshot(messageRow, {
+        messageId,
+        schema: mainChatRichBodySnapshotSchema,
+    });
+    if (!richBodySnapshot) {
+        return null;
+    }
+
+    return {
+        schema: schema,
+        messageId: String(messageId),
+        state: 'finalized',
+        eligible: true,
+        role: messageRow.getAttribute('is_user') === 'true'
+            ? 'user'
+            : messageRow.getAttribute('is_system') === 'true'
+                ? 'system'
+                : 'character',
+        rootClassNames: Array.from(messageRow.classList),
+        displayName: messageRow.querySelector('.name_text')?.textContent?.trim() ?? '',
+        timestampText: messageRow.querySelector('.timestamp')?.textContent?.trim() ?? '',
+        timestampTitle: messageRow.querySelector('.timestamp')?.getAttribute('title') ?? '',
+        messageHtml: richBodySnapshot.messageHtml,
+        reasoningHtml: richBodySnapshot.reasoningHtml,
+        reasoningOpen: richBodySnapshot.reasoningOpen ?? false,
+        mediaHtml: richBodySnapshot.mediaHtml,
+        fileHtml: richBodySnapshot.fileHtml,
+        biasHtml: richBodySnapshot.biasHtml,
+        actionShellEligible: true,
+        swipeShellEligible: true,
+    };
+}
+
 function getMainChatMessageListReactBridgeState() {
     const chatContainer = document.getElementById('chat');
     const messageRows = Array.from(chatContainer?.querySelectorAll(':scope > .mes[mesid]') ?? []);
@@ -926,6 +1043,12 @@ function getMainChatMessageListReactBridgeState() {
     const lastMessageRow = messageRows.at(-1);
     const showMoreButton = document.getElementById('show_more_messages');
     const host = document.getElementById(MAIN_CHAT_MESSAGE_LIST_REACT_HOST_ID);
+    const messageRowSnapshots = messageRows
+        .map(row => buildMainChatMessageRowSnapshot(row, {
+            messageId: Number(row.getAttribute('mesid')),
+            schema: mainChatMessageRowSnapshotSchema,
+        }))
+        .filter(Boolean);
     const richBodySnapshots = messageRows
         .map(row => buildMainChatRichBodySnapshot(row, {
             messageId: Number(row.getAttribute('mesid')),
@@ -960,6 +1083,7 @@ function getMainChatMessageListReactBridgeState() {
         chatContainer,
         host,
         messageNodes: messageRows,
+        messageRowSnapshots: messageRowSnapshots,
         richBodySnapshots: richBodySnapshots,
         messageActionSnapshots: messageActionSnapshots,
         showMoreNode: showMoreButton,

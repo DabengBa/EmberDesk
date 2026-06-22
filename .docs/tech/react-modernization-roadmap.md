@@ -2,11 +2,11 @@
 
 ## 模块职责
 
-本文档定义 EmberDesk 从 jQuery 单体应用迁移到现代 React 生态的完整路线图。这是一个 12-18 个月的渐进式重构计划，在保持产品可用性和扩展兼容性的前提下，逐步替换技术栈核心组件。
+本文档定义 EmberDesk 从 jQuery 单体应用迁移到现代 React 生态的完整路线图。这是一个 18-24 个月的渐进式重构计划，在保持产品可用性和扩展兼容性的前提下，逐步替换技术栈核心组件。
 
 ## 状态
 
-状态：执行中；Phase 0 基础设施已落地，Phase 1 已交付，Phase 2 Sprint 1-7 已按 guarded panel island 边界交付，Phase 3 已按当前批准的 guarded hidden main-chat island scope 交付；Character Library、World Info、Background Library、Extensions Host 和当前 main-chat controller 均保留同入口 legacy fallback，flag 关闭或 bundle 缺失时不替换原 surface
+状态：执行中；Phase 0 基础设施已落地，Phase 1 已交付，Phase 2 Sprint 1-7 已按 guarded panel island 边界交付，Phase 3 已按当前批准的 guarded hidden main-chat island scope 交付，Phase 3B Sprint 1 已交付并开始进入 visible-owner cutover；Character Library、World Info、Background Library、Extensions Host 和当前 main-chat controller 均保留同入口 legacy fallback，flag 关闭或 bundle 缺失时不替换原 surface
 创建日期：2026-06-15  
 前置条件：`.docs/tech/modernization-roadmap.md` 已于 2026-06-05 冻结完成
 
@@ -144,9 +144,10 @@ bun run docs:check
 - `Sprint 6 / Main Chat Composer Basic Bridge`：已交付 hidden composer snapshot boundary。React 观察 textarea length、empty、focus、disabled/generating、sendability 和 active context；`#send_textarea`、`#send_but`、Enter/Shift+Enter、textarea clear、user-row append 和 submit/generation path 仍由 legacy owner 驱动，不把 prompt 原文放进 React marker。处理规则见 [Main Chat Composer Bridge Processing Flow](../logic-description/main_chat_composer_bridge_processing_flow.md)。
 - `Sprint 7 / Main Chat Slash Command Bridge`：已交付 hidden slash-command snapshot boundary。React 观察 slash active/query length、autocomplete visibility、executing、paused、aborted 和 error label；`public/scripts/slash-commands.js` 继续拥有 parser、registry、execution、pause/continue/abort controller、autocomplete DOM 和 public exports。处理规则见 [Main Chat Slash Command Bridge Processing Flow](../logic-description/main_chat_slash_command_bridge_processing_flow.md)。
 - `Sprint 8 / Main Chat Message Actions Bridge`：已交付为同一 `mainChatMessageList` island 的 hidden message-action snapshot boundary。`public/script.js` 现在为安全的 visible rows 输出 `messageActionSnapshots`，`app/workspace-panels.tsx` 用 Zod 校验后只在既有 `.mes_buttons` 里附加 hidden action owner marker；`public/scripts/chat-message-actions-controller.js`、copy/edit/delete/retry/swipe/reasoning handlers 和 visible `.extraMesButtonsHint` / `.extraMesButtons` 仍由 legacy 路径拥有，review 还补上了 open/close 后 `expanded` snapshot 的同步触发点。处理规则见 [Main Chat Message Actions Bridge Processing Flow](../logic-description/main_chat_message_actions_bridge_processing_flow.md)。
-- `Sprint 9 / Main Chat Integration Closure`：当前完成定义为 approved guarded hidden-island scope complete，不等于 full SPA main chat rewrite。integration proof 覆盖 stored/long/mobile/streaming stop/retry/fallback/composer/slash/actions 的核心路径，文档记录 remaining visible-owner work。
+- `Sprint 9 / Main Chat Integration Closure`：当前完成定义为 approved guarded hidden-island scope complete，不等于 full SPA main chat rewrite。integration proof 覆盖 stored/long/mobile/streaming stop/retry/fallback/composer/slash/actions 的核心路径，文档记录 remaining visible-owner work，并把 provider transport / token append owner、visible composer、visible slash autocomplete/parser UI、visible MessageRow renderer 和 visible action menu owner 正式转入新增 Phase 3B。
 - 当前交付刻意不重写 `messageFormatting()`、`updateMessageElement()`、`appendMediaToMessage()`、provider transport、token append、visible composer DOM、slash parser/autocomplete UI、visible message-action buttons 或 load-more 算法。Sprint 2 迁移的是 finalized rich-body bridge / owner split，不是新增 Markdown、代码高亮、LaTeX、媒体或文件能力；Sprint 4/5 迁移的是 streaming/generation observation schema boundary，不是 provider transport rewrite 或 provider pause/resume；Sprint 6/7 迁移的是 composer/slash hidden state observation，不是 visible input/autocomplete ownership cutover；Sprint 8 迁移的是 hidden action snapshot / owner-marker boundary，不是 visible action menu ownership cutover。
 - TanStack 收口状态：当前 main-chat React slice 复用共享 `app/workspace-panels.tsx` bundle 与 TanStack Query shell，在 rich-body、scroll-restore、streaming transport、generation-control、composer、slash-command 和 message-action bridge 输入边界使用 Zod schema，并通过 `@tanstack/react-virtual` 落地 headless measurement / snapshot / restore controller；本阶段仍未引入新的 MessageRow JSX owner、React provider transport owner、TanStack Form-owned visible main-chat composer、TanStack Query-owned provider mutation, 或 TanStack Virtual visible message-window renderer，长聊天窗口语义继续由 legacy `chat_truncation` + `#show_more_messages` 控制。
+- Phase 3 / Phase 3B 边界：Phase 3 已完成 hidden owner / observation / marker / fail-closed island 闭环；后续任何 visible-owner cutover 都应计入 Phase 3B，而不是回写 Phase 3 完成定义。
 
 **Sprint 列表**：
 - ✅ [Sprint 1: 消息列表 - 基础渲染](../specs/react-phase3-main-chat/phase3-sprint1-message-list-basic.md)（3 周，已交付 guarded React message-list controller island；保持 direct-child `.mes[mesid]`、stored-chat rendering 和 long-chat load-more 语义）
@@ -157,7 +158,36 @@ bun run docs:check
 - ✅ [Sprint 6: 输入框 - 基础功能](briefs/react-phase3-remaining-main-chat-sprints.md#domain-sprint-6-basic-composer-bridge)（2 周，已交付 hidden composer snapshot；不迁移 visible textarea/send owner，不暴露 prompt 原文）
 - ✅ [Sprint 7: 输入框 - 斜杠命令](briefs/react-phase3-remaining-main-chat-sprints.md#domain-sprint-7-slash-command-bridge)（3 周，已交付 hidden slash-command snapshot；不迁移 parser/registry/executor/autocomplete owner，不暴露 command text/args）
 - ✅ [Sprint 8: 消息操作 - 菜单](../specs/react-phase3-main-chat/phase3-sprint8-message-actions.md)（2 周，已交付 hidden message-action snapshot / owner-marker boundary；不迁移 visible action buttons 或 handlers owner）
-- ✅ [Sprint 9: 整合测试](briefs/react-phase3-remaining-main-chat-sprints.md#domain-sprint-9-integration-closure)（2 周，当前 guarded hidden-island scope 已闭环；full visible React main-chat rewrite 仍属后续独立迁移）
+- ✅ [Sprint 9: 整合测试](briefs/react-phase3-remaining-main-chat-sprints.md#domain-sprint-9-integration-closure)（2 周，当前 guarded hidden-island scope 已闭环；remaining visible-owner work 已正式转入 Phase 3B）
+
+---
+
+### Phase 3B: 主聊天可见 Owner 迁移（4 个月，最高风险）
+
+**目标**：在当前 Phase 3 hidden-island 基线上，把主聊天剩余的 visible owner 逐项迁移到 React / TanStack surface，而不是把所有缺口合并成一次性 rewrite
+
+📋 **详细规范**：Sprint 1 的归档 traceability 见 [react-phase3b-visible-message-row-renderer](briefs/react-phase3b-visible-message-row-renderer.md)；后续 sprint 进入实现前按各自边界单独创建 spec / brief，保持可回滚边界
+
+**当前执行状态**：
+- `Sprint 1 / Visible MessageRow Renderer` 已交付：`public/script.js` 现在为 safe stored / finalized / non-editing rows 输出 Zod 校验的 `messageRowSnapshots`，`app/workspace-panels.tsx` 在现有 `.mes[mesid]` root 上附加 visible React owner marker，并在同一 chat window 内允许 safe rows React-owned、editing/streaming/unsafe rows fail-closed 回退到 legacy。当前切口仍复用 legacy formatter / rich-body DOM / action shell / load-more 算法，而不是引入第二套 Markdown 或 provider renderer。
+- `Phase 3B` 已正式启动；它继续以当前 Phase 3 的 hidden-island 完成态为前置基线，不回写既有 Phase 3 已完成结论。
+- 本阶段所有 React-owned 表单和输入面必须严格采用 TanStack Form + Zod；所有 provider-backed 查询或提交路径必须优先采用 TanStack Query；任何仍保留 legacy compatibility adapter 的 sprint 都必须写清 owner split 和退出计划。
+- 本阶段不允许把这 5 个剩余 gap 合并成单个“大主聊天重写”任务；必须逐 sprint 切 visible owner，并在每步保留 guarded rollout / rollback 能力。
+
+**Sprint 列表**：
+- ✅ [`Sprint 1 / Visible MessageRow Renderer`](briefs/react-phase3b-visible-message-row-renderer.md)（3 周，已交付 safe stored / finalized / non-editing rows 的 visible owner marker / row-shell cutover；editing rows、unsafe rows、streaming in-flight rows 和结构不安全行继续 fallback）
+- 📋 `Sprint 2 / Visible Message Actions Owner`（2 周，把 copy / edit / delete / retry / swipe / reasoning 等 visible action buttons / menu owner 迁移到 React；保持 mobile reachability、protected hooks 和 per-row fallback）
+- 📋 `Sprint 3 / Visible Composer`（2 周，使用 TanStack Form + Zod 接管 visible textarea / send / clear / Enter / Shift+Enter / empty-submit 语义；在 provider transport cutover 前，submit 可暂经 compatibility mutation bridge）
+- 📋 `Sprint 4 / Visible Slash Autocomplete And Parser UI`（3 周，把 slash query parsing、autocomplete list、selection / hint UX 和 paused / error surfaces 收口到 React；registry / executor 可暂经 compatibility adapter，但 visible UI owner 不再回落给 legacy）
+- 📋 `Sprint 5 / Provider Transport And Token Append Owner`（4 周，使用 TanStack Query mutation + Zod transport schema 接管 generate/send lifecycle、provider fallback、stop / retry / continue、token append 和 assistant row finalization，并完成 Phase 3B closure）
+
+**Phase 3B 验证门**：
+```powershell
+bun run --cwd tests test:e2e -- chat-message-rendering.e2e.js chat-message-layout.e2e.js chat-message-streaming.e2e.js
+bun run test:compat
+bun run perf:interaction
+bun run docs:check
+```
 
 ---
 
@@ -215,7 +245,7 @@ bun run test:compat
 | TypeScript 配置 | `bun run lint` + `bun run test:unit` |
 | React 页面迁移 | 对应页面的 E2E 测试通过 |
 | 角色库迁移 | `character-list-*.test.js` + `bun run test:compat` |
-| 主聊天迁移 | `chat-*.e2e.js` + `bun run perf:interaction` |
+| 主聊天迁移 | `chat-*.e2e.js` + `bun run test:compat` + `bun run perf:interaction` |
 | API 路由迁移 | 对应 endpoint 单元测试 + Postman/curl 手动验证 |
 | 扩展兼容性 | `bun run test:compat` + 手动测试 3-5 个常用扩展 |
 | 性能回归 | `bun run perf:startup` + `bun run perf:interaction` |
@@ -268,24 +298,30 @@ bun run test:compat
   ├─ 月 12: 背景库面板 React 重写
   └─ 月 2: Extensions 面板宿主 React 重写
 
-2027 Q1-Q2 (月 1-6)：Phase 3 主聊天工作区迁移
-  ├─ 月 1-2: 聊天消息列表 React 重写（含虚拟滚动）
-  ├─ 月 3: 聊天流式生成 React 重写
-  ├─ 月 4: 聊天输入框和斜杠命令 React 重写
-  ├─ 月 5: 消息操作菜单 React 重写
-  └─ 月 6: 主聊天整合测试 + 性能优化
+2027 Q1-Q2 (月 1-6)：Phase 3 主聊天 hidden-island 迁移
+  ├─ 月 1-2: 消息列表承载层、rich-body bridge 和 scroll restore
+  ├─ 月 3: streaming transport / generation-control observation
+  ├─ 月 4: composer / slash hidden-state observation
+  ├─ 月 5: message-action snapshot boundary
+  └─ 月 6: hidden-island integration closure
 
-2027 Q3 (月 7-9)：Phase 4 状态管理迁移
-  ├─ 月 7: Zustand stores 搭建
-  ├─ 月 8: 全局兼容层建立
-  └─ 月 9: 扩展迁移指南 + 兼容性验证
+2027 Q3-Q4 (月 7-10)：Phase 3B 主聊天 visible-owner 迁移
+  ├─ 月 7: visible MessageRow renderer
+  ├─ 月 8: visible message actions owner
+  ├─ 月 9: visible composer + slash autocomplete/parser UI
+  └─ 月 10: provider transport / token append owner + Phase 3B closure
 
-2027 Q4 (月 10-12)：Phase 5 后端 API 现代化
-  ├─ 月 10: Hono API 路由搭建
-  ├─ 月 11: Drizzle ORM 集成
-  └─ 月 12: Express → Hono 完全切换
+2027 Q4 - 2028 Q1 (月 11-1)：Phase 4 状态管理迁移
+  ├─ 月 11: Zustand stores 搭建
+  ├─ 月 12: 全局兼容层建立
+  └─ 月 1: 扩展迁移指南 + 兼容性验证
 
-2028 Q1+：Phase 6 扩展兼容性演进（持续）
+2028 Q1-Q2 (月 2-4)：Phase 5 后端 API 现代化
+  ├─ 月 2: Hono API 路由搭建
+  ├─ 月 3: Drizzle ORM 集成
+  └─ 月 4: Express → Hono 完全切换
+
+2028 Q2+：Phase 6 扩展兼容性演进（持续）
 ```
 
 ## 成功标准
@@ -336,6 +372,7 @@ bun run test:compat
 - `globalThis.SillyTavern`, `eventSource` / `event_types`, `@sillytavern/*` (兼容层保持)
 
 未来规划绑定点：
+- future React-owned main-chat modules under `app/components/main-chat/*`, `app/lib/main-chat/*` and the matching TanStack Form / Query integration layer（Phase 3B 的 visible MessageRow / composer / slash / actions / transport owners；exact file map to be fixed per-sprint spec）
 - `app/stores/*` (Phase 4 Zustand stores)
 - `app/server/routes/*` (Phase 5 Hono API)
 - `app/compat/globalBridge.ts` (Phase 4 全局兼容层)
@@ -355,7 +392,7 @@ bun run test:compat
 
 ## 下一步行动
 
-1. **进入 Phase 3 准备**：以当前 page/panel islands 和 legacy fallback 规则为前提，推进主聊天工作区迁移前的 rendering、streaming、input 和 message-action proof。
-2. **收敛 workspace bridge**：把 page/panel island 的共享挂载、feature flag、asset fallback、action bridge 和 rollback 规则沉淀成稳定约束，避免每个新面板各自复制一套桥接。
-3. **保持 TanStack 约束**：后续 React 页面/面板默认继续用 TanStack Form + Zod + TanStack Query；任何偏离都要在 spec/ADR 中说明原因和退出计划。
-4. **等待清理时机**：只有在更多 workspace 面板完成迁移且兼容证据充足后，才讨论移除 legacy panel fallback 或把主工作区推进到更重的 SPA shell。
+1. **进入 Phase 3B Sprint 2 规划**：以当前 Sprint 1 的 visible row owner / fallback 证据为前提，为 visible message actions owner 明确 protected hooks、mobile reachability 和 per-row rollback 边界。
+2. **保持 Phase 3 基线不回退**：Phase 3B 每个 sprint 都必须建立在当前 hidden bridge / marker / observation 证据之上，先验证新 visible owner，再决定是否删除对应 legacy owner。
+3. **保持 TanStack 约束**：Phase 3B 的 visible composer、slash UI 和 provider transport 默认继续用 TanStack Form + Zod + TanStack Query；任何偏离都要在 spec/ADR 中说明原因和退出计划。
+4. **Phase 4 之后顺延**：在主聊天 visible-owner 迁移没有明确收口前，不把这些缺口混入 Zustand / Hono / extension-ops phase，避免后续阶段职责漂移。

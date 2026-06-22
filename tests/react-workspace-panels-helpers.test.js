@@ -509,4 +509,30 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('data-main-chat-message-actions-row={snapshot.messageId}');
         expect(workspacePanelSource).toContain('data-main-chat-message-actions-expanded={snapshot.expanded ? \'true\' : \'false\'}');
     });
+
+    test('defines a visible message-row snapshot contract and React owner boundary for safe main-chat rows', () => {
+        const scriptSource = read('public/script.js');
+        const workspacePanelSource = read('app/workspace-panels.tsx');
+
+        expect(scriptSource).toContain('function buildMainChatMessageRowSnapshot(');
+        expect(scriptSource).toContain('function isMainChatMessageRowEligible(');
+        expect(scriptSource).toContain('messageRowSnapshots:');
+        expect(scriptSource).toContain('messageRowSnapshots = messageRows');
+        expect(scriptSource).toContain('schema: mainChatMessageRowSnapshotSchema');
+        expect(scriptSource).toContain('messageHtml:');
+        expect(scriptSource).toContain('reasoningHtml:');
+        expect(scriptSource).toContain('mediaHtml:');
+        expect(scriptSource).toContain('fileHtml:');
+        expect(scriptSource).toContain('biasHtml:');
+        expect(scriptSource).toContain('messageRow.querySelector(\':scope > .mes_block\')');
+        expect(scriptSource).toContain('messageRow.querySelector(\':scope > .swipeRightBlock\')');
+
+        expect(workspacePanelSource).toContain('interface MainChatMessageRowSnapshot');
+        expect(workspacePanelSource).toContain('messageRowSnapshots?: MainChatMessageRowSnapshot[];');
+        expect(workspacePanelSource).toContain('const mainChatMessageRowSnapshotSchema = z.object(');
+        expect(workspacePanelSource).toContain('function getMainChatMessageRowTargets(');
+        expect(workspacePanelSource).toContain('function canReactOwnMainChatMessageRow(');
+        expect(workspacePanelSource).toContain('messageRow.dataset.mainChatMessageRowOwner = \'react\';');
+        expect(workspacePanelSource).toContain('messageRow.dataset.mainChatMessageRow = snapshot.messageId;');
+    });
 });

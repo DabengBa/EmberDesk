@@ -149,6 +149,7 @@ interface MainChatMessageListWorkspacePanelState {
     chatContainer?: HTMLElement | null;
     host?: HTMLElement | null;
     messageNodes?: HTMLElement[];
+    messageRowSnapshots?: MainChatMessageRowSnapshot[];
     richBodySnapshots?: MainChatRichBodySnapshot[];
     messageActionSnapshots?: MainChatMessageActionSnapshot[];
     showMoreNode?: HTMLElement | null;
@@ -211,6 +212,26 @@ interface MainChatRichBodySnapshot {
     mediaHtml: string;
     fileHtml: string;
     biasHtml: string;
+}
+
+interface MainChatMessageRowSnapshot {
+    schema: 'mainChatMessageRowSnapshotSchema';
+    messageId: string;
+    state: 'finalized';
+    eligible: true;
+    role: 'user' | 'character' | 'system';
+    rootClassNames: string[];
+    displayName: string;
+    timestampText: string;
+    timestampTitle: string;
+    messageHtml: string;
+    reasoningHtml: string;
+    reasoningOpen?: boolean;
+    mediaHtml: string;
+    fileHtml: string;
+    biasHtml: string;
+    actionShellEligible: boolean;
+    swipeShellEligible: boolean;
 }
 
 interface MainChatMessageActionSnapshot {
@@ -282,6 +303,26 @@ const mainChatRichBodySnapshotSchema = z.object({
     mediaHtml: z.string(),
     fileHtml: z.string(),
     biasHtml: z.string(),
+});
+
+const mainChatMessageRowSnapshotSchema = z.object({
+    schema: z.literal('mainChatMessageRowSnapshotSchema'),
+    messageId: z.string().min(1),
+    state: z.literal('finalized'),
+    eligible: z.literal(true),
+    role: z.enum(['user', 'character', 'system']),
+    rootClassNames: z.array(z.string()),
+    displayName: z.string(),
+    timestampText: z.string(),
+    timestampTitle: z.string(),
+    messageHtml: z.string(),
+    reasoningHtml: z.string(),
+    reasoningOpen: z.boolean().optional(),
+    mediaHtml: z.string(),
+    fileHtml: z.string(),
+    biasHtml: z.string(),
+    actionShellEligible: z.boolean(),
+    swipeShellEligible: z.boolean(),
 });
 
 const mainChatMessageActionSnapshotSchema = z.object({
@@ -540,6 +581,7 @@ function asMainChatMessageListState(state: unknown): MainChatMessageListWorkspac
 
     const bridgeState = state as MainChatMessageListWorkspacePanelState;
     const parsedBridgeState = mainChatMessageListStateSchema.safeParse(bridgeState);
+    const messageRowSnapshots = z.array(mainChatMessageRowSnapshotSchema).safeParse(bridgeState.messageRowSnapshots ?? []);
     const richBodySnapshots = z.array(mainChatRichBodySnapshotSchema).safeParse(bridgeState.richBodySnapshots ?? []);
     const messageActionSnapshots = z.array(mainChatMessageActionSnapshotSchema).safeParse(bridgeState.messageActionSnapshots ?? []);
     const generationControl = mainChatGenerationControlSchema.safeParse(bridgeState.generationControl);
@@ -550,6 +592,7 @@ function asMainChatMessageListState(state: unknown): MainChatMessageListWorkspac
     return {
         ...bridgeState,
         ...(parsedBridgeState.success ? parsedBridgeState.data : {}),
+        messageRowSnapshots: messageRowSnapshots.success ? messageRowSnapshots.data : [],
         richBodySnapshots: richBodySnapshots.success ? richBodySnapshots.data : [],
         messageActionSnapshots: messageActionSnapshots.success ? messageActionSnapshots.data : [],
         generationControl: generationControl.success ? generationControl.data : mainChatGenerationControlFallback,
@@ -635,6 +678,142 @@ function canReactOwnMainChatMessageActions(messageRow: HTMLElement | undefined, 
     }
 
     return Boolean(getMainChatMessageActionsRowTargets(messageRow));
+}
+
+function getMainChatMessageRowStructureTarget(messageRow: HTMLElement, className: string) {
+    const directChild = messageRow.querySelector(`:scope > .${className}`);
+    if (directChild instanceof HTMLElement) {
+        return directChild;
+    }
+
+    const slotChild = messageRow.querySelector(`[data-main-chat-message-row-slot="${className}"] > .${className}`);
+    if (slotChild instanceof HTMLElement) {
+        return slotChild;
+    }
+
+    const descendant = messageRow.querySelector(`.${className}`);
+    return descendant instanceof HTMLElement ? descendant : null;
+}
+
+function getMainChatMessageRowTargets(messageRow: HTMLElement) {
+    const checkboxShell = getMainChatMessageRowStructureTarget(messageRow, 'for_checkbox');
+    const deleteCheckbox = messageRow.querySelector(':scope > .del_checkbox, .del_checkbox');
+    const avatarWrapper = getMainChatMessageRowStructureTarget(messageRow, 'mesAvatarWrapper');
+    const swipeLeft = getMainChatMessageRowStructureTarget(messageRow, 'swipe_left');
+    const messageBlock = messageRow.querySelector(':scope > .mes_block') ?? messageRow.querySelector('.mes_block');
+    const swipeRightBlock = getMainChatMessageRowStructureTarget(messageRow, 'swipeRightBlock');
+    const swipeRight = swipeRightBlock?.querySelector('.swipe_right');
+    const swipeCounter = swipeRightBlock?.querySelector('.swipes-counter');
+    const messageEditButtons = messageBlock?.querySelector('.mes_edit_buttons');
+    const richBodyTargets = getMainChatRichBodyRowTargets(messageRow);
+    const actionTargets = getMainChatMessageActionsRowTargets(messageRow);
+
+    if (
+        !(checkboxShell instanceof HTMLElement)
+        || !(deleteCheckbox instanceof HTMLInputElement)
+        || !(avatarWrapper instanceof HTMLElement)
+        || !(swipeLeft instanceof HTMLElement)
+        || !(messageBlock instanceof HTMLElement)
+        || !(swipeRightBlock instanceof HTMLElement)
+        || !(swipeRight instanceof HTMLElement)
+        || !(swipeCounter instanceof HTMLElement)
+        || !(messageEditButtons instanceof HTMLElement)
+        || !richBodyTargets
+        || !actionTargets
+    ) {
+        return null;
+    }
+
+    return {
+        checkboxShell,
+        deleteCheckbox,
+        avatarWrapper,
+        swipeLeft,
+        messageBlock,
+        swipeRightBlock,
+        swipeRight,
+        swipeCounter,
+        messageEditButtons,
+    };
+}
+
+function canReactOwnMainChatMessageRow(messageRow: HTMLElement | undefined, snapshot: MainChatMessageRowSnapshot) {
+    if (
+        !(messageRow instanceof HTMLElement)
+        || !messageRow.isConnected
+        || messageRow.parentElement?.id !== 'chat'
+        || messageRow.getAttribute('mesid') !== snapshot.messageId
+    ) {
+        return false;
+    }
+
+    return Boolean(getMainChatMessageRowTargets(messageRow));
+}
+
+function MainChatMessageRowSlot({
+    row,
+    node,
+    slot,
+}: {
+    row: HTMLElement;
+    node: HTMLElement;
+    slot: string;
+}) {
+    const hostRef = useRef<HTMLDivElement | null>(null);
+
+    useLayoutEffect(() => {
+        const host = hostRef.current;
+        if (!(host instanceof HTMLElement) || !(node instanceof HTMLElement)) {
+            return;
+        }
+
+        if (node.parentElement !== host) {
+            host.appendChild(node);
+        }
+
+        return () => {
+            if (node.parentElement === host && row.isConnected) {
+                row.insertBefore(node, host);
+            }
+        };
+    }, [node, row]);
+
+    return <div ref={hostRef} data-main-chat-message-row-slot={slot} style={{ display: 'contents' }} />;
+}
+
+function MainChatMessageRowOwnerPortal({
+    messageRow,
+    snapshot,
+}: {
+    messageRow: HTMLElement;
+    snapshot: MainChatMessageRowSnapshot;
+}) {
+    const targets = getMainChatMessageRowTargets(messageRow);
+
+    useLayoutEffect(() => {
+        messageRow.dataset.mainChatMessageRowOwner = 'react';
+        messageRow.dataset.mainChatMessageRow = snapshot.messageId;
+
+        return () => {
+            delete messageRow.dataset.mainChatMessageRowOwner;
+            delete messageRow.dataset.mainChatMessageRow;
+        };
+    }, [messageRow, snapshot.messageId]);
+
+    if (!targets) {
+        return null;
+    }
+
+    return (
+        <>
+            <MainChatMessageRowSlot row={messageRow} node={targets.checkboxShell} slot="for_checkbox" />
+            <MainChatMessageRowSlot row={messageRow} node={targets.deleteCheckbox} slot="del_checkbox" />
+            <MainChatMessageRowSlot row={messageRow} node={targets.avatarWrapper} slot="mesAvatarWrapper" />
+            <MainChatMessageRowSlot row={messageRow} node={targets.swipeLeft} slot="swipe_left" />
+            <MainChatMessageRowSlot row={messageRow} node={targets.messageBlock} slot="mes_block" />
+            <MainChatMessageRowSlot row={messageRow} node={targets.swipeRightBlock} slot="swipeRightBlock" />
+        </>
+    );
 }
 
 function workspacePanelStateQueryKey(kind: WorkspacePanelKind) {
@@ -1608,6 +1787,12 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
 
         return rows;
     }, [bridgeState.messageNodes]);
+    const ownedMessageRowSnapshots = useMemo(() => {
+        return (bridgeState.messageRowSnapshots ?? []).filter(snapshot => canReactOwnMainChatMessageRow(
+            messageRowMap.get(snapshot.messageId),
+            snapshot,
+        ));
+    }, [bridgeState.messageRowSnapshots, messageRowMap]);
     const ownedRichBodySnapshots = useMemo(() => {
         return (bridgeState.richBodySnapshots ?? []).filter(snapshot => canReactOwnMainChatRichBody(
             messageRowMap.get(snapshot.messageId),
@@ -1658,6 +1843,18 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
                 data-main-chat-streaming-transport-fallback={bridgeState.streamingTransport?.fromFallbackAttempt ? 'true' : 'false'}
             />
             <MainChatMessageListRestoreController key={bridgeState.chatId || 'main-chat-empty'} state={bridgeState} bridge={bridge} />
+            {ownedMessageRowSnapshots.map(snapshot => {
+                const messageRow = messageRowMap.get(snapshot.messageId);
+                if (!(messageRow instanceof HTMLElement)) {
+                    return null;
+                }
+
+                return createPortal(
+                    <MainChatMessageRowOwnerPortal messageRow={messageRow} snapshot={snapshot} />,
+                    messageRow,
+                    `main-chat-message-row-owner-${snapshot.messageId}`,
+                );
+            })}
             {ownedRichBodySnapshots.map(snapshot => {
                 const messageRow = messageRowMap.get(snapshot.messageId);
                 const targets = messageRow ? getMainChatRichBodyRowTargets(messageRow) : null;

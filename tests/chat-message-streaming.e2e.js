@@ -321,6 +321,19 @@ function createExactValuePattern(values) {
     return new RegExp(`^(?:${values.map(value => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`);
 }
 
+async function expectReactMessageRowState(page, messageId, expectedOwned) {
+    const row = page.locator(`#chat > .mes[mesid="${messageId}"]`);
+    await expect(row).toHaveCount(1);
+
+    if (!reactMainChatMessageListEnabled || !expectedOwned) {
+        await expect(row).not.toHaveAttribute('data-main-chat-message-row-owner', 'react');
+        return;
+    }
+
+    await expect(row).toHaveAttribute('data-main-chat-message-row-owner', 'react');
+    await expect(row).toHaveAttribute('data-main-chat-message-row', String(messageId));
+}
+
 async function expectMainChatComposerState(page, expectations = {}) {
     const controller = page.locator('[data-main-chat-message-list-controller="true"]');
 
@@ -417,6 +430,7 @@ test.describe('chat message streaming', () => {
         const streamingRow = assistantRowForGeneration(page, rowCountBeforeGeneration);
         await expect(streamingRow.locator('.mes_text')).toContainText('Streaming');
         const messageId = await streamingRow.getAttribute('mesid');
+        await expectReactMessageRowState(page, Number(messageId), false);
         await expectMainChatStreamingTransportState(page, {
             tokenCountAtLeast: 1,
             messageId: Number(messageId),
@@ -433,6 +447,7 @@ test.describe('chat message streaming', () => {
             expectFallback: false,
         });
         await expect(page.locator(`#chat > .mes[mesid="${messageId}"]`)).toHaveCount(1);
+        await expectReactMessageRowState(page, Number(messageId), true);
         await expect(page.locator(`#chat > .mes[mesid="${messageId}"]`).getByRole('button', { name: 'Message Actions' })).toBeVisible();
         await expect(page.getByRole('button', { name: 'Abort request' })).not.toBeVisible();
 

@@ -266,6 +266,19 @@ async function expectReactRichBodyState(page, messageId) {
     await expect(richBodyOwner).toHaveAttribute('data-main-chat-rich-body-owner', 'react');
 }
 
+async function expectReactMessageRowState(page, messageId, expectedOwned) {
+    const row = page.locator(`#chat > .mes[mesid="${messageId}"]`);
+    await expect(row).toHaveCount(1);
+
+    if (!reactMainChatMessageListEnabled || !expectedOwned) {
+        await expect(row).not.toHaveAttribute('data-main-chat-message-row-owner', 'react');
+        return;
+    }
+
+    await expect(row).toHaveAttribute('data-main-chat-message-row-owner', 'react');
+    await expect(row).toHaveAttribute('data-main-chat-message-row', String(messageId));
+}
+
 async function openCharacterChatWithTruncation(page, chatName, truncationLimit) {
     await page.evaluate(async ({ nextChatName, nextTruncationLimit }) => {
         const context = window.SillyTavern.getContext();
@@ -366,6 +379,7 @@ test.describe('chat message rendering', () => {
         await expect(sampleRow.locator('.mes_reasoning')).toHaveCount(1);
         await expect(sampleRow.locator('.mes_media_wrapper')).toHaveCount(1);
         await expect(sampleRow.locator('.mes_file_wrapper')).toHaveCount(1);
+        await expectReactMessageRowState(page, characterMessageIndex, true);
         await expectReactRichBodyState(page, characterMessageIndex);
         await expect(sampleRow.locator('.swipe_left')).toHaveCount(1);
         await expect(sampleRow.locator('.swipe_right')).toHaveCount(1);
@@ -409,6 +423,7 @@ test.describe('chat message rendering', () => {
         await expect(page.locator('#show_more_messages')).toBeVisible();
         await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(longChatLimit);
         await expectMainChatMessageListHostState(page, longChatLimit);
+        await expectReactMessageRowState(page, longMessages.length - 1, true);
         await expectReactRichBodyState(page, longMessages.length - 1);
 
         const firstRenderedLongMessageId = await page.locator('#chat > .mes[mesid]').first().getAttribute('mesid');
@@ -426,6 +441,7 @@ test.describe('chat message rendering', () => {
         await page.locator('#show_more_messages').click();
         await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(longChatLimit * 2);
         await expectMainChatMessageListHostState(page, longChatLimit * 2);
+        await expectReactMessageRowState(page, expectedFirstLoadedMessageIndex, true);
         await expectReactRichBodyState(page, expectedFirstLoadedMessageIndex);
         await expect(page.locator('#jump_to_latest_message')).toHaveCount(0);
 
@@ -478,6 +494,7 @@ test.describe('chat message rendering', () => {
 
         const assistantRow = page.locator(`#chat > .mes[mesid="${assistantMessageIndex}"]`);
         await expect(assistantRow).toBeVisible();
+        await expectReactMessageRowState(page, assistantMessageIndex, true);
         await expectReactMessageActionState(page, assistantMessageIndex, {
             expanded: false,
             availableIncludes: ['extraMesButtonsHint', 'mes_copy', 'mes_edit', 'mes_edit_delete'],
@@ -510,6 +527,7 @@ test.describe('chat message rendering', () => {
         const editTextarea = assistantRow.locator('.edit_textarea');
         await expect(editTextarea).toBeVisible();
         await expect(editTextarea).toHaveValue(seededMessages[assistantMessageIndex].mes);
+        await expectReactMessageRowState(page, assistantMessageIndex, false);
 
         const renderedMessageCount = await page.locator('#chat > .mes[mesid]').count();
         await assistantRow.getByRole('button', { name: 'Delete this message' }).click();
@@ -522,6 +540,7 @@ test.describe('chat message rendering', () => {
 
         await assistantRow.locator('.mes_edit_cancel').click();
         await expect(editTextarea).toHaveCount(0);
+        await expectReactMessageRowState(page, assistantMessageIndex, true);
         await expect(assistantRow.locator('.mes_text')).toContainText(seededMessages[assistantMessageIndex].mes);
         expect(getUnexpectedConsoleErrors(consoleErrors)).toEqual([]);
     });
