@@ -9,7 +9,7 @@ last_updated: 2026-06-23
 
 ## User Original Request
 
-用户先要求针对 `.docs/specs/react-phase5-backend-api` 进行一次带联网检索的压力测试和文档收敛，不要直接沿用“Express 被 Hono 替换”的宽泛叙述，而是结合项目真实代码、约束和长期路线提出更严格的改进建议。
+用户先要求针对 React Phase 5 backend API 方向进行一次带联网检索的压力测试和文档收敛，不要直接沿用“Express 被 Hono 替换”的宽泛叙述，而是结合项目真实代码、约束和长期路线提出更严格的改进建议。
 
 在此基础上，用户继续触发 `$delivery-workflow`，但当前 Phase 5 只有 phase-level 规划文档，没有可直接实施的 delivery-ready `spec.md`。随后用户显式触发 `$brainstorming`，要求把已批准方向收敛成一个真正可交付的首个 Sprint 规格。
 
@@ -26,7 +26,7 @@ Phase 5 已经被重新定义为 “Typed API 与 backend boundary evaluation”
 - **User expectation:** 先做一个真正最小、可验证、可回滚的 Hono route island 试点，证明 typed API 边界是否值得继续推进，而不是把整个 Express runtime owner 提前替换掉
 - **Current status:** delivered
 - **Change history:**
-  - 2026-06-23: 用户要求对 `.docs/specs/react-phase5-backend-api` 做基于真实代码和联网资料的压力测试，并更新文档
+  - 2026-06-23: 用户要求对 React Phase 5 backend API 方向做基于真实代码和联网资料的压力测试，并更新文档
   - 2026-06-23: Phase 5 规划文档被收敛为 “Express-hosted Hono route island / Drizzle decision gate / Express retention gate”
   - 2026-06-23: 用户继续触发 `$brainstorming`，要求补出 delivery-ready 的首个 Sprint spec
   - 2026-06-23: 默认首切被收敛为 `POST /api/moving-ui/save`，因为它只涉及单一 JSON body、单一目录写入和单一 cache invalidation side effect

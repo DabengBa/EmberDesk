@@ -41,7 +41,6 @@ last_updated: 2026-06-22
 ## Source Evidence
 
 - `.docs/tech/react-modernization-roadmap.md`
-- `.docs/specs/react-phase3-main-chat/README.md`
 - `.docs/tech/main-chat-successor-scope.md`
 - `.docs/tech/main-chat-rendering-call-chain.md`
 - `.docs/db/pages/chat-workspace.md`

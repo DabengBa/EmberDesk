@@ -9,13 +9,13 @@ last_updated: 2026-06-20
 
 ## User Original Request
 
-用户先通过 `.docs\specs\react-phase3-main-chat $brainstorming` 要求把 Phase 3 从现有路线图素材收敛成可执行规格，随后又明确给出连续目标：“写一个 specs 然后 delivery，然后下一个，直到完成 phase3”。
+用户先要求把 React Phase 3 main-chat 路线图素材收敛成可执行规格，随后又明确给出连续目标：“写一个 specs 然后 delivery，然后下一个，直到完成 phase3”。
 
 这说明本轮不是继续讨论路线图，也不是只验证现状，而是要把 Phase 3 拆成可连续交付的 Sprint 级规格，并从第一个可交付切片开始推进。
 
 ## Background & Motivation
 
-当前仓库已经完成 React page islands 与一批 guarded workspace panel islands，但主聊天工作区仍由 `public/script.js`、`public/index.html`、`eventSource` / `event_types`、消息模板 DOM、`messageFormatting()`、`getMessageTextHTML()`、`updateMessageElement()`、`StreamingProcessor` 和大量扩展监听共同拥有。`.docs/specs/react-phase3-main-chat/README.md` 与 9 个 Sprint 文档只提供高层路线图描述，尚不足以直接交给 `delivery-workflow`。
+当前仓库已经完成 React page islands 与一批 guarded workspace panel islands，但主聊天工作区仍由 `public/script.js`、`public/index.html`、`eventSource` / `event_types`、消息模板 DOM、`messageFormatting()`、`getMessageTextHTML()`、`updateMessageElement()`、`StreamingProcessor` 和大量扩展监听共同拥有。Phase 3 路线图材料只提供高层描述，尚不足以直接交给 `delivery-workflow`。
 
 用户的真实目标不是写一个覆盖全部 9 个 Sprint 的大而空总 spec，而是建立一条能持续 delivery 的 Phase 3 交付链。因此第一个规格必须收敛成最小、可验证、可回退、可继续向后衔接的主聊天 React island 切片。
 
@@ -26,10 +26,10 @@ last_updated: 2026-06-20
 - **User expectation:** Phase 3 从“基础消息列表”开始，先把主聊天工作区里最小的一块 React 化，而不是一口气把 streaming、输入框、slash commands、message actions 一起迁移。
 - **Current status:** delivered
 - **Change history:**
-  - 2026-06-20: 用户要求将 `.docs/specs/react-phase3-main-chat` 通过 `brainstorming` 收敛为可执行规格
+  - 2026-06-20: 用户要求将 React Phase 3 main-chat 路线图材料通过 `brainstorming` 收敛为可执行规格
   - 2026-06-20: 用户进一步明确连续目标为“写一个 specs 然后 delivery，然后下一个，直到完成 phase3”
   - 2026-06-20: 交付落地为 guarded React main-chat controller；flag 开启时在 `#chat` 内挂载隐藏 host，并保留 direct-child `.mes[mesid]` 与 `#show_more_messages` 语义
-- **Implementation traceability:** code paths `default/config.yaml`, `src/workspace-react-features.js`, `public/scripts/workspace-panels-react-bridge.js`, `public/script.js`, `app/workspace-panels.tsx`, `scripts/seed-dev-environment.mjs`; tests `tests/react-workspace-panels-helpers.test.js`, `tests/workspace-react-panel-flags.test.js`, `tests/chat-workspace-structure.test.js`, `tests/chat-message-rendering.e2e.js`, `tests/third-party-extension-compatibility.test.js`; owning docs `.docs/db/pages/chat-workspace.md`, `.docs/db/features/chat-message-rendering.md`, `.docs/tech/react-modernization-roadmap.md`, `.docs/specs/react-phase3-main-chat/phase3-sprint1-message-list-basic.md`; commit `this wrap-up commit`; delivery status `delivered guarded React controller island with legacy rendering owners retained`
+- **Implementation traceability:** code paths `default/config.yaml`, `src/workspace-react-features.js`, `public/scripts/workspace-panels-react-bridge.js`, `public/script.js`, `app/workspace-panels.tsx`, `scripts/seed-dev-environment.mjs`; tests `tests/react-workspace-panels-helpers.test.js`, `tests/workspace-react-panel-flags.test.js`, `tests/chat-workspace-structure.test.js`, `tests/chat-message-rendering.e2e.js`, `tests/third-party-extension-compatibility.test.js`; owning docs `.docs/db/pages/chat-workspace.md`, `.docs/db/features/chat-message-rendering.md`, `.docs/tech/react-modernization-roadmap.md`; commit `this wrap-up commit`; delivery status `delivered guarded React controller island with legacy rendering owners retained`
 
 ### Domain: 继续遵守 guarded island + legacy fallback 迁移模式
 
@@ -71,8 +71,6 @@ last_updated: 2026-06-20
 
 ## Source Evidence
 
-- `.docs/specs/react-phase3-main-chat/README.md`
-- `.docs/specs/react-phase3-main-chat/phase3-sprint1-message-list-basic.md`
 - `.docs/PROJECT_HISTORY.md`
 - `.docs/tech/react-modernization-roadmap.md`
 - `.docs/tech/main-chat-successor-scope.md`

@@ -9,7 +9,7 @@ last_updated: 2026-06-20
 
 ## User Original Request
 
-用户继续通过 `.docs\specs\react-phase3-main-chat $brainstorming` 要求把 Phase 3 下一个未完成 Sprint 收敛成可审批、可 delivery 的实现规格。此前用户已经明确连续目标是“写一个 specs 然后 delivery，然后下一个，直到完成 phase3”。
+用户继续要求把 React Phase 3 下一个未完成 Sprint 收敛成可审批、可 delivery 的实现规格。此前用户已经明确连续目标是“写一个 specs 然后 delivery，然后下一个，直到完成 phase3”。
 
 这说明本轮不是补路线图占位稿，也不是泛泛讨论主聊天未来方向，而是要把下一个可交付切片写成能直接交给 `delivery-workflow` 的规格。
 
@@ -17,7 +17,7 @@ last_updated: 2026-06-20
 
 `Phase 3 Sprint 1` 和 `Sprint 2` 已经把 `features.react.panels.mainChatMessageList` 建成 guarded hidden controller，并在 visible / finalized / non-editing rows 上落地了 rich-body owner-marker boundary；但 `printMessages()`、`showMoreMessages()`、`scrollChatToBottom()`、`scrollLock`、streaming token append、message actions 和输入框仍由 `public/script.js` 的 legacy 主链拥有。
 
-当前 `.docs/specs/react-phase3-main-chat/phase3-sprint3-message-list-scroll.md` 还是路线图级 stub。它把 Sprint 3 写成泛化的 “`virtualizer.scrollToIndex(...)` + `autoScroll` state” 示例，但这与当前仓库事实不符：自动滚动到底、用户上滚后暂停自动滚动、load-more 后锚点稳定，这些行为已经存在于 legacy 路径。真正还没被主聊天 React island 处理的是：
+当时 Phase 3 Sprint 3 路线图 stub 把任务写成泛化的 “`virtualizer.scrollToIndex(...)` + `autoScroll` state” 示例，但这与当前仓库事实不符：自动滚动到底、用户上滚后暂停自动滚动、load-more 后锚点稳定，这些行为已经存在于 legacy 路径。真正还没被主聊天 React island 处理的是：
 
 1. 每个 chat 的阅读位置在切换后不会恢复；
 2. long chat 通过 `#show_more_messages` 展开的历史窗口在切换后会丢失；
@@ -32,10 +32,10 @@ last_updated: 2026-06-20
 - **User expectation:** 下一个未完成 Sprint 需要一份可直接交给 `delivery-workflow` 的实施规格。
 - **Current status:** delivered
 - **Change history:**
-  - 2026-06-20: 用户要求继续对 `.docs/specs/react-phase3-main-chat` 执行 `brainstorming`
+  - 2026-06-20: 用户要求继续对 React Phase 3 main-chat 路线图材料执行 `brainstorming`
   - 2026-06-20: 用户此前已确认 Phase 3 采用“spec -> delivery -> 下一个”的连续推进方式
   - 2026-06-20: 结合代码与文档核对，当前 Sprint 3 路线图 stub 被判定为过于泛化，需收敛为真实可交付切片
-- **Implementation traceability:** implemented paths `public/script.js`, `app/workspace-panels.tsx`; proof `tests/chat-message-rendering.e2e.js`, `tests/chat-message-layout.e2e.js`, `tests/chat-message-streaming.e2e.js`, `tests/react-workspace-panels-helpers.test.js`; owning docs `.docs/specs/react-phase3-main-chat/phase3-sprint3-message-list-scroll.md`, `.docs/specs/react-phase3-main-chat/README.md`, `.docs/tech/react-modernization-roadmap.md`, `.docs/db/pages/chat-workspace.md`, `.docs/db/features/chat-message-rendering.md`; delivery status `implemented and reviewed`
+- **Implementation traceability:** implemented paths `public/script.js`, `app/workspace-panels.tsx`; proof `tests/chat-message-rendering.e2e.js`, `tests/chat-message-layout.e2e.js`, `tests/chat-message-streaming.e2e.js`, `tests/react-workspace-panels-helpers.test.js`; owning docs `.docs/tech/react-modernization-roadmap.md`, `.docs/db/pages/chat-workspace.md`, `.docs/db/features/chat-message-rendering.md`; delivery status `implemented and reviewed`
 
 ### Domain: 用户可感知的增量应该是“每个 chat 的阅读位置和历史窗口恢复”
 
@@ -85,8 +85,6 @@ last_updated: 2026-06-20
 
 ## Source Evidence
 
-- `.docs/specs/react-phase3-main-chat/README.md`
-- `.docs/specs/react-phase3-main-chat/phase3-sprint3-message-list-scroll.md`
 - `.docs/PROJECT_HISTORY.md`
 - `.docs/tech/react-modernization-roadmap.md`
 - `.docs/tech/main-chat-successor-scope.md`

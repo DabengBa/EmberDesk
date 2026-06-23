@@ -9,7 +9,7 @@ last_updated: 2026-06-18
 
 ## User Original Request
 
-用户要求继续执行 `.docs/specs/react-phase1-independent-pages/phase1-sprint2-setup-page.md` 对应的交付，并通过 `delivery-workflow` 将 Setup 页面 React 化落到可验证状态。
+用户要求继续执行 React Phase 1 Sprint 2 Setup 页面交付，并通过 `delivery-workflow` 将 Setup 页面 React 化落到可验证状态。
 
 用户此前已明确要求 React 现代化路线图严格推动 TanStack Form / TanStack Query / Zod 的采用。
 
@@ -56,9 +56,8 @@ last_updated: 2026-06-18
 
 ## Source Evidence
 
-- `.docs/specs/react-phase1-independent-pages/phase1-sprint2-setup-page.md`
-- `.docs/specs/react-phase1-independent-pages/README.md`
 - `.docs/db/pages/setup.md`
+- `.docs/db/features/first-time-setup.md`
 - `.docs/tech/react-modernization-roadmap.md`
 - `public/setup.html`
 - `public/scripts/setup.js`

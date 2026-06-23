@@ -38,16 +38,20 @@ closure checkpoint 仍留下几个用户体验缺口：provider error/retry、�
 - Paper Tiger: 不引入 Canvas/Artifacts 会显得落后。短期这是可控风险，因为当前仓库仍处在 jQuery shell 与兼容表面保护阶段；只有当用户明确要求旁侧创作工作区时才升级为 ADR Tiger。
 - Elephant: “提升用户体验”容易被理解成视觉重做，但当前最大风险是生成失败、长聊天迷路、移动端不可达和大迁移越界。规格应优先让失败和恢复路径可观察。
 
-## Recommended Spec Set
+## Archived Delivery Set
 
-1. `.docs/specs/260608-01-provider-error-retry-ux/spec.md`
-2. `.docs/specs/260608-02-long-chat-navigation-recovery/spec.md`
-3. `.docs/specs/260608-03-main-chat-mobile-walkthrough-hardening/spec.md`
-4. `.docs/specs/260608-04-message-action-priority-touch-ux/spec.md`
-5. `.docs/specs/260608-05-non-streaming-row-population-helper/spec.md`
-6. `.docs/specs/260608-06-streaming-state-controller-boundary/spec.md`
-7. `.docs/specs/260608-07-main-chat-performance-optimization-candidate/spec.md`
-8. `.docs/specs/260608-08-successor-adr-gate-compat-matrix/spec.md`
+The approved process specs for this batch were temporary delivery-workflow artifacts and were deleted during wrap-up. Durable traceability remains in this brief, `.docs/tech/main-chat-successor-scope.md`, `.docs/tech/main-chat-ux-trend-recommendations.md`, the semantic docs listed below, and `.docs/PROJECT_HISTORY.md`.
+
+The delivered slices were:
+
+1. provider error retry UX
+2. long-chat navigation recovery
+3. main-chat mobile walkthrough hardening
+4. message action priority and touch UX
+5. non-streaming row population helper
+6. streaming state-controller boundary
+7. main-chat performance optimization candidate
+8. successor ADR gate compatibility matrix
 
 ## Constraints
 

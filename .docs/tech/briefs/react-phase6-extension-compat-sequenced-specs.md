@@ -15,6 +15,8 @@ last_updated: 2026-06-23
 
 Phase 6 当前只有 `.docs/specs/react-phase6-extension-compat/README.md` 级别的 phase 说明，还没有拆成可审批、可交付、可被 Phase 7 直接消费的实现规格。路线图已经把 Phase 6 定义为证据和维护阶段，要求在进入 Phase 7 Sprint 4 与 Sprint 7 之前补齐 common-extension validation、迁移说明、弃用窗口、回滚方案和 breaking-change review，但现有材料还停留在总述层，缺少逐项完成定义。用户随后进一步明确：Phase 6 的首要目标不是泛化地“照顾所有扩展”，而是优先确保 `JS-Slash-Runner` 的兼容；其他扩展只作为次级证据面。
 
+按 2026-06-24 当前代码与文档状态，这组 dated delivery specs 已全部完成交付；本 brief 现在是 Phase 6 的主持久入口，phase README 仅保留为旧链接兼容的最小 archive redirect。
+
 ## Intent Domains
 
 ### Domain 1: Compatibility contract ledger baseline
@@ -67,6 +69,7 @@ Phase 6 当前只有 `.docs/specs/react-phase6-extension-compat/README.md` 级�
 ## Source Evidence
 
 - `.docs/specs/react-phase6-extension-compat/README.md`
+- `.docs/tech/briefs/README.md`
 - `.docs/tech/third-party-extension-compatibility.md`
 - `.docs/tech/react-modernization-roadmap.md`
 - `.docs/project-overview.md`

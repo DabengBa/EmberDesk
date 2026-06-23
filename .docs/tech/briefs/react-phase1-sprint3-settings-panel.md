@@ -9,7 +9,7 @@ last_updated: 2026-06-18
 
 ## User Original Request
 
-用户要求继续推进 `.docs/specs/react-phase1-independent-pages/phase1-sprint3-settings-panel.md` 的交付，并明确这个 Sprint 讨论的不是把 `World Info`、`Backgrounds`、`Extensions` 混进来，而是把当前分散的设置相关能力收口成可迁移的 React 设置入口。
+用户要求继续推进 React Phase 1 Sprint 3 Settings 入口交付，并明确这个 Sprint 讨论的不是把 `World Info`、`Backgrounds`、`Extensions` 混进来，而是把当前分散的设置相关能力收口成可迁移的 React 设置入口。
 
 用户随后明确要求路线图和该 Sprint 都要严格推动 `TanStack Form`、`TanStack Query`、`Zod` 的采用。
 

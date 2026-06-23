@@ -294,13 +294,15 @@ bun run docs:check
 
 **目标**：维护第三方扩展兼容性，提供迁移指南
 
-📋 **详细规范**：[Phase 6 README](../specs/react-phase6-extension-compat/README.md)
+📋 **持久入口**：[Phase 6 archive brief](briefs/react-phase6-extension-compat-sequenced-specs.md)
 
 **持续工作**（非 Sprint 结构）：
 - `JS-Slash-Runner` 作为 primary compatibility gate；任何会破坏其 import、mount、event、slash-command、regex 或必需 global/export surface 的 candidate，都必须先被证明可迁移且可回滚
 - 兼容层维护期（至少 6 个月）
 - 废弃警告和迁移文档
 - 扩展市场审核和社区支持
+
+归档说明：Phase 6 dated delivery specs 已完成并清理；当前持久追溯由 archive brief、third-party compatibility owner doc、project history 和 project overview 承接。保留的 `specs/react-phase6-extension-compat/README.md` 仅作为旧链接兼容的最小 archive redirect。
 
 说明：`Extensions` 作为用户可见 drawer 宿主的 React UI 迁移属于 Phase 2；第三方扩展 API、挂载兼容、迁移指南和社区支持仍由 Phase 4 / Phase 6 负责。
 

@@ -11,9 +11,9 @@ It does not change product semantics and does not update `.docs/db/`.
 - Date: 2026-06-08
 - Workspace: `D:\DEV\EmberDesk`
 - Scope: main-chat structure, stored message rendering, layout, action affordance, and third-party compatibility gates.
-- Source specs:
-  - `.docs/specs/260607-02-main-chat-baseline-validation/spec.md`
-  - `.docs/specs/260607-01-main-chat-successor-scope-lock/spec.md`
+- Durable sources:
+  - `.docs/tech/briefs/260607-01-main-chat-successor-spec-set.md`
+  - `.docs/tech/main-chat-successor-scope.md`
 
 ## Required Commands
 

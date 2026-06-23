@@ -76,59 +76,40 @@
 - 迁移期间 React 和 jQuery 共存的复杂性可管理
 - 第三方扩展开发者愿意配合兼容性迁移（6 个月窗口期）
 
-## Spec 文档组织结构
+## Durable Documentation Organization
 
-采用**混合方案**：Phase 作为目录，Sprint 作为独立 spec。下面保留原始组织思路，但按 2026-06-23 当前代码状态补记 active/archive 分流：已完成的 Phase 0-5 实现 spec 已从 `.docs/specs/` 清理，Phase 4 的 durable archive 入口改为 [react-phase4-state-management-sequenced-specs](react-phase4-state-management-sequenced-specs.md)。
+原始意图曾采用“Phase 目录 + Sprint spec”的混合方案。按 2026-06-24 当前代码和 wrap-up 规则，dated `spec.md` / `plan.md` 只作为 delivery-workflow 的临时过程文件；完成后不再作为长期入口。已完成 Phase 的稳定追溯改由 roadmap、project history、brief、ADR、semantic docs 和必要的 phase archive README 承接。
 
 ```
 .docs/specs/
-├─ completed phase specs removed after durable archive handoff
+├─ README.md                                  # active/archive entry index
 ├─ react-phase6-extension-compat/
-│  └─ README.md                               # 持续维护，无独立 Sprint
+│  └─ README.md                               # Phase 6 compatibility archive entry
 └─ react-phase7-full-owner-cutover/
-   ├─ README.md
-   ├─ phase7-sprint1-character-library-full-owner-cutover.md
-   ├─ phase7-sprint2-world-info-full-owner-cutover.md
-   ├─ phase7-sprint3-background-library-full-owner-cutover.md
-   ├─ phase7-sprint4-extensions-host-full-owner-cutover.md
-   ├─ phase7-sprint5-main-chat-transport-full-owner-cutover.md
-   ├─ phase7-sprint6-main-chat-renderer-windowing-full-owner-cutover.md
-   └─ phase7-sprint7-workspace-shell-global-compatibility-decision.md
+   └─ README.md                               # Phase 7 roadmap-closeout archive entry
 
 .docs/tech/briefs/
-└─ react-phase4-state-management-sequenced-specs.md   # Phase 4 / 4A / 4B durable archive entry
+├─ react-phase4-state-management-sequenced-specs.md
+├─ react-phase6-extension-compat-sequenced-specs.md
+└─ react-phase7-full-owner-cutover-sequenced-specs.md
 ```
 
-### 命名规范
+### Naming Rule
 
-- **Phase 目录**：`react-phase{N}-{phase-slug}/`
-- **Phase README**：`README.md`（Phase 概览、目标、验证门）
-- **Sprint Spec**：`phase{N}-sprint{M}-{feature-slug}.md`
-  - `N`: Phase 编号（0-7）
-  - `M`: Phase 内 Sprint 序号（1, 2, 3...）
-  - `feature-slug`: 功能描述（kebab-case）
+New stable links should point to durable docs, not process specs. Use a phase README only when that phase folder intentionally remains as a durable archive entry; otherwise link to `.docs/tech/briefs/*.md`, `.docs/tech/*.md`, `.docs/PROJECT_HISTORY.md`, `.docs/adr/*.md`, or `.docs/db/*`.
 
-### 双向链接
+### Stable Link Pattern
 
-**主路线图 → Sprint Spec**：
+**Roadmap -> Durable Entry**:
 ```markdown
-<!-- .docs/tech/react-modernization-roadmap.md -->
-
-#### Sprint 1-2: Vite + TypeScript
-- 📋 [Sprint 1: Vite 迁移](../specs/react-phase0-infrastructure/phase0-sprint1-vite-migration.md)
-- 📋 [Sprint 2: TypeScript 配置](../specs/react-phase0-infrastructure/phase0-sprint2-typescript-config.md)
+- [Phase 4 archive brief](briefs/react-phase4-state-management-sequenced-specs.md)
+- [Phase 6 archive entry](../specs/react-phase6-extension-compat/README.md)
 ```
 
-**Sprint Spec → 主路线图**：
+**Brief -> Owning Docs**:
 ```markdown
-<!-- phase0-sprint1-vite-migration.md -->
-
-## 所属阶段
-
-- **路线图**：[React 现代化路线图](../../tech/react-modernization-roadmap.md#phase-0-基础设施准备3-个月)
-- **Phase**：Phase 0 - 基础设施准备
-- **Sprint**：Phase 0 Sprint 1（全局 Sprint 1/40）
-- **预计工期**：2 周
+- Roadmap: [.docs/tech/react-modernization-roadmap.md](../react-modernization-roadmap.md)
+- Project history: [.docs/PROJECT_HISTORY.md](../../PROJECT_HISTORY.md)
 ```
 
 ## 实施可追溯性

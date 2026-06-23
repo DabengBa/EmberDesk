@@ -9,13 +9,7 @@ last_updated: 2026-06-21
 
 ## User Original Request
 
-用户先通过 `.docs\specs\react-phase3-main-chat $brainstorming` 要求把 Phase 3 后续未完成 Sprint 收敛成可审批、可 delivery 的实施规格，覆盖：
-
-- `.docs\specs\react-phase3-main-chat\phase3-sprint5-streaming-control.md`
-- `.docs\specs\react-phase3-main-chat\phase3-sprint6-input-basic.md`
-- `.docs\specs\react-phase3-main-chat\phase3-sprint7-input-slash.md`
-- `.docs\specs\react-phase3-main-chat\phase3-sprint8-message-actions.md`
-- `.docs\specs\react-phase3-main-chat\phase3-sprint9-integration.md`
+用户先要求把 Phase 3 后续未完成 Sprint 收敛成可审批、可 delivery 的实施规格，覆盖 streaming control、input basic、input slash、message actions 和 integration。
 
 在后续交付节奏上，用户又明确接受“写一个 specs 然后 delivery，然后下一个，直到完成 phase3”的连续推进方式。因此，Sprint 8 的目标不是解释 message actions 现状，而是把这块路线图 stub 收敛成一个可以真实落地、可验证、可 wrap-up 的 main-chat bridge 切片。
 
@@ -39,7 +33,7 @@ last_updated: 2026-06-21
 - **Change history:**
   - 2026-06-21: 用户要求把 Phase 3 后续 Sprint 收敛成可 delivery 的规格，并继续推进实际交付
   - 2026-06-21: Sprint 8 被落地为 `messageActionSnapshots` bridge 和 hidden owner-marker boundary，而不是新的 visible `MessageActions.tsx`
-- **Implementation traceability:** spec `.docs/specs/260621-05-react-phase3-sprint8-main-chat-message-actions-bridge/spec.md`; code `public/script.js`, `app/workspace-panels.tsx`; tests `tests/react-workspace-panels-helpers.test.js`, `tests/chat-message-rendering.e2e.js`; owning docs `.docs/db/features/chat-message-actions.md`, `.docs/db/pages/chat-workspace.md`, `.docs/specs/react-phase3-main-chat/README.md`, `.docs/tech/react-modernization-roadmap.md`; commit `this wrap-up commit`; delivery status `delivered hidden bridge and marker boundary without visible React action buttons`
+- **Implementation traceability:** code `public/script.js`, `app/workspace-panels.tsx`; tests `tests/react-workspace-panels-helpers.test.js`, `tests/chat-message-rendering.e2e.js`; owning docs `.docs/db/features/chat-message-actions.md`, `.docs/db/pages/chat-workspace.md`, `.docs/tech/react-modernization-roadmap.md`; commit `this wrap-up commit`; delivery status `delivered hidden bridge and marker boundary without visible React action buttons`
 
 ### Domain: Legacy message-action affordances and handlers remain the visible interaction owner
 
@@ -78,10 +72,6 @@ last_updated: 2026-06-21
 
 ## Source Evidence
 
-- `.docs/specs/260621-05-react-phase3-sprint8-main-chat-message-actions-bridge/spec.md`
-- `.docs/specs/260621-05-react-phase3-sprint8-main-chat-message-actions-bridge/plan.md`
-- `.docs/specs/react-phase3-main-chat/README.md`
-- `.docs/specs/react-phase3-main-chat/phase3-sprint8-message-actions.md`
 - `.docs/PROJECT_HISTORY.md`
 - `.docs/tech/react-modernization-roadmap.md`
 - `.docs/db/features/chat-message-actions.md`

@@ -4,9 +4,9 @@ Date: 2026-06-05
 
 ## Original Request
 
-用户要求把 modernization roadmap 的“大梦”拆成 10 个可交付步骤，并为每一步分别创建独立 `.docs/specs/.../design.md`。
+用户要求把 modernization roadmap 的“大梦”拆成 10 个可交付步骤，并为每一步分别创建独立临时交付设计文件；wrap-up 后持久入口改为本 brief、roadmap 和 project history。
 
-2026-06-05 后续请求：在第 1 步 `character-read-service.js` 已交付并补齐 edge-case tests 后，用户要求对 `.docs/specs/260605-03-character-route-performance-proof/design.md` 重新进入 `$brainstorming`，使该 design 能按当前源码事实交付。
+2026-06-05 后续请求：在第 1 步 `character-read-service.js` 已交付并补齐 edge-case tests 后，用户要求对第 3 步交付设计重新进入 `$brainstorming`，使该设计能按当前源码事实交付。
 
 ## Intent
 

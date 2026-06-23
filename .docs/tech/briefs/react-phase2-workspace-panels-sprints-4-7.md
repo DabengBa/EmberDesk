@@ -9,14 +9,9 @@ last_updated: 2026-06-19
 
 ## User Original Request
 
-用户通过持久目标继续要求运行 `$delivery-workflow`，目标文件为：
+用户通过持久目标继续要求运行 `$delivery-workflow`，目标为 Phase 2 Workspace Panels 后半段：World Info editor/import、Background Library、Extensions Host。
 
-- `.docs/specs/react-phase2-sidebars/phase2-sprint4-world-info-editor.md`
-- `.docs/specs/react-phase2-sidebars/phase2-sprint5-world-info-import.md`
-- `.docs/specs/react-phase2-sidebars/phase2-sprint6-background-library.md`
-- `.docs/specs/react-phase2-sidebars/phase2-sprint7-extensions-host.md`
-
-当前 `delivery-workflow` 对 `.docs/specs/react-phase2-sidebars` 的 stage 检测只因 process files 已删除而返回 `complete`；但该目录没有 approved `spec.md`、`plan.md` 或 `design.md`，因此本轮必须先把 roadmap sprint notes 转成可审批、可执行的 `spec.md`，再回到交付流程。
+当时相关 process files 已删除且旧 phase stub 目录不能作为持久入口，因此本轮先把 roadmap sprint notes 转成可审批、可执行的临时交付材料；wrap-up 后持久入口改为本 brief、roadmap、semantic docs 和 project history。
 
 ## Background & Motivation
 
@@ -84,10 +79,6 @@ Phase 2 Sprint 1-3 已经把 Character Library 交付为 `features.react.panels.
 
 ## Source Evidence
 
-- `.docs/specs/react-phase2-sidebars/phase2-sprint4-world-info-editor.md`
-- `.docs/specs/react-phase2-sidebars/phase2-sprint5-world-info-import.md`
-- `.docs/specs/react-phase2-sidebars/phase2-sprint6-background-library.md`
-- `.docs/specs/react-phase2-sidebars/phase2-sprint7-extensions-host.md`
 - `.docs/tech/react-modernization-roadmap.md`
 - `.docs/adr/0007-react-page-islands-with-legacy-fallbacks.md`
 - `.docs/tech/third-party-extension-compatibility.md`

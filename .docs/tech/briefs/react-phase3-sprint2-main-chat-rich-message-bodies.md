@@ -9,7 +9,7 @@ last_updated: 2026-06-20
 
 ## User Original Request
 
-用户通过 `.docs\specs\react-phase3-main-chat $brainstorming` 要求把 Phase 3 主聊天工作区继续收敛为可审批、可 delivery 的下一份实现规格。此前用户已经明确了连续目标：“写一个 specs 然后 delivery，然后下一个，直到完成 phase3”。
+用户要求把 React Phase 3 主聊天工作区继续收敛为可审批、可 delivery 的下一份实现规格。此前用户已经明确了连续目标：“写一个 specs 然后 delivery，然后下一个，直到完成 phase3”。
 
 这说明本轮不是继续补路线图占位稿，也不是只做现状说明，而是要把下一个未完成 Sprint 写成可以直接交给 `delivery-workflow` 的规格。
 
@@ -17,7 +17,7 @@ last_updated: 2026-06-20
 
 `Phase 3 Sprint 1` 已经落地为 guarded React hidden controller：它在 `#chat` 内维持 direct-child `.mes[mesid]` 与 `#show_more_messages` 的顺序，但没有接管可见消息内容 owner。
 
-当前 `.docs/specs/react-phase3-main-chat/phase3-sprint2-message-list-rich.md` 仍是路线图级 stub。它把 Sprint 2 写成“为消息列表添加 Markdown 渲染、代码高亮、LaTeX 和媒体嵌入支持”，但这些能力在当前仓库里已经由 legacy `messageFormatting()`、`getMessageTextHTML()`、reasoning/media/file wrappers 和相关工具链拥有。
+当时 Phase 3 Sprint 2 路线图 stub 把任务写成“为消息列表添加 Markdown 渲染、代码高亮、LaTeX 和媒体嵌入支持”，但这些能力在当前仓库里已经由 legacy `messageFormatting()`、`getMessageTextHTML()`、reasoning/media/file wrappers 和相关工具链拥有。
 
 因此，真正需要设计的不是“新增这些用户能力”，而是：在 guarded React 路径下，下一步到底把哪一层 rich message body owner 从 legacy 迁到 React，同时不破坏 outer `.mes` shell、streaming、message actions、load-more 和扩展兼容面。
 
@@ -28,10 +28,10 @@ last_updated: 2026-06-20
 - **User expectation:** 下一个未完成 Sprint 需要一个可直接进入 `delivery-workflow` 的实施规格。
 - **Current status:** delivered
 - **Change history:**
-  - 2026-06-20: 用户要求对 `.docs/specs/react-phase3-main-chat` 执行 `brainstorming`
+  - 2026-06-20: 用户要求对 React Phase 3 main-chat 路线图材料执行 `brainstorming`
   - 2026-06-20: 用户此前已确认 Phase 3 采用“spec -> delivery -> 下一个”的连续推进方式
   - 2026-06-20: dated spec `260620-02-react-phase3-sprint2-main-chat-rich-message-bodies` 已完成 delivery、review 和文档同步
-- **Implementation traceability:** process artifacts `.docs/specs/260620-02-react-phase3-sprint2-main-chat-rich-message-bodies/spec.md`, `.docs/specs/260620-02-react-phase3-sprint2-main-chat-rich-message-bodies/plan.md`; durable docs `.docs/specs/react-phase3-main-chat/phase3-sprint2-message-list-rich.md`, `.docs/specs/react-phase3-main-chat/README.md`, `.docs/tech/react-modernization-roadmap.md`; commit `this wrap-up commit`; delivery status `delivered`
+- **Implementation traceability:** durable docs `.docs/tech/react-modernization-roadmap.md`, `.docs/db/pages/chat-workspace.md`, `.docs/db/features/chat-message-rendering.md`; commit `this wrap-up commit`; delivery status `delivered`
 
 ### Domain: Sprint 2 的真实任务是迁移 rich message body owner，而不是发明已存在的 Markdown/媒体能力
 
@@ -41,7 +41,7 @@ last_updated: 2026-06-20
   - 2026-06-20: 在仓库核对后确认，Markdown、代码高亮、LaTeX、reasoning、媒体和文件嵌入已经存在于 legacy 渲染链
   - 2026-06-20: 因此 Sprint 2 规格应改写为 rich message body owner 迁移，而不是能力新增
   - 2026-06-20: 实际交付收口为 rich-body snapshot + hidden owner-marker boundary，继续复用 legacy `messageFormatting()` / `appendMediaToMessage()` / live DOM output
-- **Implementation traceability:** code `public/script.js`, `app/workspace-panels.tsx`; tests `tests/chat-message-rendering.e2e.js`, `tests/chat-message-streaming.e2e.js`, `tests/react-workspace-panels-helpers.test.js`; owning docs `.docs/db/pages/chat-workspace.md`, `.docs/db/features/chat-message-rendering.md`, `.docs/specs/react-phase3-main-chat/phase3-sprint2-message-list-rich.md`; commit `this wrap-up commit`; delivery status `delivered hidden owner-marker boundary without a second React renderer`
+- **Implementation traceability:** code `public/script.js`, `app/workspace-panels.tsx`; tests `tests/chat-message-rendering.e2e.js`, `tests/chat-message-streaming.e2e.js`, `tests/react-workspace-panels-helpers.test.js`; owning docs `.docs/db/pages/chat-workspace.md`, `.docs/db/features/chat-message-rendering.md`, `.docs/tech/react-modernization-roadmap.md`; commit `this wrap-up commit`; delivery status `delivered hidden owner-marker boundary without a second React renderer`
 
 ### Domain: 继续保护 direct-child `.mes` outer shell，并把高风险行为留在 legacy
 
@@ -72,9 +72,6 @@ last_updated: 2026-06-20
 
 ## Source Evidence
 
-- `.docs/specs/react-phase3-main-chat/README.md`
-- `.docs/specs/react-phase3-main-chat/phase3-sprint1-message-list-basic.md`
-- `.docs/specs/react-phase3-main-chat/phase3-sprint2-message-list-rich.md`
 - `.docs/tech/react-modernization-roadmap.md`
 - `.docs/tech/main-chat-successor-scope.md`
 - `.docs/tech/main-chat-rendering-call-chain.md`

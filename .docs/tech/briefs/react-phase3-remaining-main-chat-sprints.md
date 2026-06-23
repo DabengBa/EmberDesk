@@ -56,7 +56,7 @@ Phase 3 当前采用 guarded `features.react.panels.mainChatMessageList` hidden 
 - **Change history:**
   - 2026-06-21: 旧 Sprint 9 文档中的全量完成清单被视为过期路线图模板，新的 Sprint 9 只在 Sprint 4/6/7 交付且 Sprint 8 保持当前已交付边界后关闭 Phase 3。
   - 2026-06-21: 已补齐 flag-on / flag-off E2E、compat gate、docs sync 和本地 interaction perf smoke，按当前批准的 guarded hidden-island scope 关闭 Phase 3。
-- **Implementation traceability:** test paths `tests/chat-message-rendering.e2e.js`, `tests/chat-message-streaming.e2e.js`, `tests/chat-message-layout.e2e.js`, `tests/chat-message-list-walkthrough.e2e.js`, `tests/third-party-extension-compatibility.test.js`; docs `.docs/specs/react-phase3-main-chat/README.md`, `.docs/tech/react-modernization-roadmap.md`, `.docs/PROJECT_HISTORY.md`; perf artifact `artifacts/interaction-perf/2026-06-21T09-39-58-706Z/report.md`; commit `564ef790e feat(react): let main chat bridges bow out quietly`; delivery status `delivered`
+- **Implementation traceability:** test paths `tests/chat-message-rendering.e2e.js`, `tests/chat-message-streaming.e2e.js`, `tests/chat-message-layout.e2e.js`, `tests/chat-message-list-walkthrough.e2e.js`, `tests/third-party-extension-compatibility.test.js`; docs `.docs/tech/react-modernization-roadmap.md`, `.docs/PROJECT_HISTORY.md`; perf artifact `artifacts/interaction-perf/2026-06-21T09-39-58-706Z/report.md`; commit `564ef790e feat(react): let main chat bridges bow out quietly`; delivery status `delivered`
 
 ## Non-Goals
 
@@ -67,12 +67,11 @@ Phase 3 当前采用 guarded `features.react.panels.mainChatMessageList` hidden 
 
 ## Resolved Scope Decisions
 
-- 2026-06-21: 按 `.docs/specs/react-phase3-main-chat/README.md`、`.docs/tech/react-modernization-roadmap.md` 和 `.docs/PROJECT_HISTORY.md` 的当前一致事实，Sprint 8 已交付，不属于本轮“剩余 sprint” spec 集。
+- 2026-06-21: 按 `.docs/tech/react-modernization-roadmap.md` 和 `.docs/PROJECT_HISTORY.md` 的当前一致事实，Sprint 8 已交付，不属于本轮“剩余 sprint” spec 集。
 - 2026-06-21: 本 brief 只为 Sprint 4 / 6 / 7 / 9 提供上游意图；Sprint 8 继续以既有交付文档和 dated spec 为准。
 
 ## Source Evidence
 
-- `.docs/specs/react-phase3-main-chat/README.md`
 - `.docs/tech/react-modernization-roadmap.md`
 - `.docs/PROJECT_HISTORY.md`
 - `.docs/tech/main-chat-successor-scope.md`

@@ -13,7 +13,7 @@ last_updated: 2026-06-24
 
 ## Background & Motivation
 
-当前 Phase 7 只有 `.docs/specs/react-phase7-full-owner-cutover/README.md` 和 7 个占位级 sprint 文件，已经能说明 surface 顺序，但还不足以直接交给 `delivery-workflow` 做端到端交付。与此同时，Phase 4、Phase 5 和 Phase 6 的输入已经固定：Phase 4 提供 state / transport / renderer current-behavior proof，Phase 5 已关闭 backend runtime / Drizzle 方向的不确定性，Phase 6 已把 `JS-Slash-Runner` 定成 extension compatibility hard gate。用户当时要的是一个完整、可执行、不会把已归档阶段重新拉回 active 的 Phase 7 spec set。按 2026-06-24 当前代码与文档状态，这组 Phase 7 dated specs 已全部完成交付；原 active process specs 现在只作为归档前的流程材料，durable 入口由本 brief、Phase 7 phase README、roadmap、project history、ADR-0007 和 owning docs 持有。
+当时 Phase 7 只有 phase-level archive/stub material，已经能说明 surface 顺序，但还不足以直接交给 `delivery-workflow` 做端到端交付。与此同时，Phase 4、Phase 5 和 Phase 6 的输入已经固定：Phase 4 提供 state / transport / renderer current-behavior proof，Phase 5 已关闭 backend runtime / Drizzle 方向的不确定性，Phase 6 已把 `JS-Slash-Runner` 定成 extension compatibility hard gate。用户当时要的是一个完整、可执行、不会把已归档阶段重新拉回 active 的 Phase 7 delivery set。按 2026-06-24 当前代码与文档状态，这组 Phase 7 dated delivery specs 已全部完成交付；原 active process specs 现在只作为归档前的流程材料，durable 入口由本 brief、Phase 7 phase README、roadmap、project history、ADR-0007 和 owning docs 持有。
 
 ## Archive Entry Points
 
@@ -34,7 +34,7 @@ last_updated: 2026-06-24
 - **Change history:**
   - 2026-06-23: 创建本 brief，并把“完成这些 specs 即完成 roadmap”固定为本次 spec set 的最高约束。
   - 2026-06-24: `260623-05` through `260623-14` 全部完成 delivery、review、文档同步与 roadmap closeout，进入归档入口收口。
-- **Implementation traceability:** delivered via `.docs/specs/260623-05-phase7-character-library-full-owner-cutover/` through `.docs/specs/260623-14-phase7-workspace-shell-final-owner-decision/`; durable closure in `.docs/tech/react-modernization-roadmap.md`, `.docs/PROJECT_HISTORY.md`, `.docs/specs/react-phase7-full-owner-cutover/README.md`, `.docs/adr/0007-react-page-islands-with-legacy-fallbacks.md`; delivery status `delivered roadmap-closing Phase 7 spec set`.
+- **Implementation traceability:** delivered through the 2026-06-23 Phase 7 dated delivery set; durable closure in `.docs/tech/react-modernization-roadmap.md`, `.docs/PROJECT_HISTORY.md`, `.docs/specs/react-phase7-full-owner-cutover/README.md`, `.docs/adr/0007-react-page-islands-with-legacy-fallbacks.md`; delivery status `delivered roadmap-closing Phase 7 spec set`.
 
 ### Domain 2: Prior completed phases are fixed inputs, not redesign targets
 

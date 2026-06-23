@@ -9,11 +9,11 @@ last_updated: 2026-06-18
 
 ## User Original Request
 
-用户通过 `$delivery-workflow` 明确要求继续推进以下 3 个 Phase 2 规格的真实交付，而不是只做讨论或路线图说明：
+用户通过 `$delivery-workflow` 明确要求继续推进 Phase 2 Character Library 前 3 个 Sprint 的真实交付，而不是只做讨论或路线图说明：
 
-- `.docs/specs/react-phase2-sidebars/phase2-sprint1-character-library-list.md`
-- `.docs/specs/react-phase2-sidebars/phase2-sprint2-character-library-search.md`
-- `.docs/specs/react-phase2-sidebars/phase2-sprint3-character-library-bulk.md`
+- character library list island
+- character library search/sort/tag filtering
+- character library bulk selection/delete/tag management
 
 用户随后进一步确认了这 3 个 Sprint 的用户感知边界：Sprint 2 是搜索/标签过滤/排序，Sprint 3 是批量选择、删除和标签管理；并要求继续把这组工作推进到可执行、可验证的交付状态。
 
@@ -72,9 +72,6 @@ last_updated: 2026-06-18
 
 ## Source Evidence
 
-- `.docs/specs/react-phase2-sidebars/phase2-sprint1-character-library-list.md`
-- `.docs/specs/react-phase2-sidebars/phase2-sprint2-character-library-search.md`
-- `.docs/specs/react-phase2-sidebars/phase2-sprint3-character-library-bulk.md`
 - `.docs/db/features/character-library-panel.md`
 - `.docs/db/features/character-delete.md`
 - `.docs/db/pages/chat-workspace.md`

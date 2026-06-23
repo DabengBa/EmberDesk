@@ -62,20 +62,22 @@ Date: 2026-06-07
 - Open WebUI tools: https://docs.openwebui.com/features/extensibility/plugin/tools/
 - Msty Knowledge Stacks: https://docs.msty.ai/studio/knowledge-stacks/overview
 
-## Recommended File Set
+## Archived Delivery Set
 
-正式规格文件位于：
+The approved process specs for this batch were temporary delivery-workflow artifacts and were deleted during wrap-up. Durable traceability remains in this brief, `.docs/tech/main-chat-successor-scope.md`, `.docs/tech/main-chat-baseline-validation.md`, `.docs/tech/main-chat-rendering-call-chain.md`, `.docs/tech/main-chat-performance-evidence.md`, and `.docs/PROJECT_HISTORY.md`.
 
-1. `.docs/specs/260607-01-main-chat-successor-scope-lock/spec.md`
-2. `.docs/specs/260607-02-main-chat-baseline-validation/spec.md`
-3. `.docs/specs/260607-03-main-chat-rendering-call-chain-map/spec.md`
-4. `.docs/specs/260607-04-stored-message-render-descriptor-helper/spec.md`
-5. `.docs/specs/260607-05-message-dom-identity-contract-hardening/spec.md`
-6. `.docs/specs/260607-06-long-chat-render-window-proof/spec.md`
-7. `.docs/specs/260607-07-streaming-browser-proof/spec.md`
-8. `.docs/specs/260607-08-message-actions-controller-boundary/spec.md`
-9. `.docs/specs/260607-09-main-chat-interaction-performance-evidence/spec.md`
-10. `.docs/specs/260607-10-main-chat-successor-closure-gate/spec.md`
+The delivered slices were:
+
+1. successor scope lock
+2. main-chat baseline validation
+3. rendering call-chain map
+4. stored-message render descriptor helper
+5. message DOM identity contract hardening
+6. long-chat render-window proof
+7. streaming browser proof
+8. message-actions controller boundary
+9. main-chat interaction-performance evidence
+10. successor closure gate
 
 ## Implementation Traceability
 
@@ -104,7 +106,7 @@ Implemented code and proof surfaces:
 
 Validation status:
 
-- Focused unit, E2E, compatibility, docs, and interaction-performance runner evidence is recorded in the spec-local plans before archival.
+- Focused unit, E2E, compatibility, docs, and interaction-performance runner evidence was recorded during delivery and preserved through the durable owner docs listed above.
 - Current delivered behavior does not include Canvas/Artifacts side workspace, database-first storage, provider-error retry UX, long-chat search/jump/range indicators, or a SPA/TypeScript migration.
 
 ## Change History

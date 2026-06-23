@@ -35,13 +35,17 @@ Date: 2026-06-09
 - 不把 route response shape、secret storage shape、character card file shape 或 public browser module exports 当作普通 cleanup 变更。
 - 每个 spec 只覆盖第一个可交付切片；后续更大拆分需要新的 spec 或 ADR。
 
-## Recommended Spec Set
+## Archived Delivery Set
 
-1. `.docs/specs/260609-01-chat-generation-lifecycle-coordinator/spec.md`
-2. `.docs/specs/260609-02-character-card-write-command/spec.md`（当前 HEAD `f337e5ffe` 已交付；过程 spec/plan 不在当前树中，durable source 改用 `.docs/tech/briefs/260609-02-character-card-write-command.md` 与 `.docs/PROJECT_HISTORY.md`）
-3. `.docs/specs/260609-03-external-content-import-pipeline/spec.md`
-4. `.docs/specs/260609-04-provider-secret-field-state/spec.md`
-5. `.docs/specs/260609-05-frontend-structure-contract-tests/spec.md`
+The approved process specs for this batch were temporary delivery-workflow artifacts and were deleted during wrap-up. Durable traceability remains in this brief, `.docs/tech/briefs/260609-02-character-card-write-command.md`, `.docs/PROJECT_HISTORY.md`, and the focused tech docs listed in the delivery addendum.
+
+The delivered slices were:
+
+1. chat generation lifecycle coordinator
+2. character card write command
+3. external content import pipeline
+4. provider secret field state
+5. frontend structure contract tests
 
 ## Evidence Trail
 

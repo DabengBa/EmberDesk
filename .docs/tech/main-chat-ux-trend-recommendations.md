@@ -53,9 +53,9 @@ Correction: prioritize provider-error/retry UX before visual redesign.
 
 Reason: current closure proof covers user stop-to-usable, but not provider failure recovery. Competitors increasingly expose explicit recovery actions: Claude Artifacts has a direct error-fix CTA, and Gemini Deep Research treats long-running work as resumable after waiting.
 
-Spec impact:
+Successor impact:
 
-- `.docs/specs/260608-01-provider-error-retry-ux/spec.md` should require a visible recovery CTA or an explicitly reused Send/Continue recovery entry.
+- Provider-error recovery work should require a visible recovery CTA or an explicitly reused Send/Continue recovery entry.
 - Error copy must be short and operational: what failed, what remains safe, what the next action does.
 - The proof must verify no duplicate empty assistant row and no lost user message.
 - User stop and provider failure must remain visually distinct. Stopping is user intent; provider failure is a recoverable error.
@@ -66,7 +66,7 @@ Correction: keep the shipped long-chat surface at bounded rendering plus load-mo
 
 Reason: ChatGPT Projects, Perplexity Spaces, and Open WebUI emphasize organizing persistent context, while EmberDesk already has bounded long-chat rendering. The first gap is user orientation after loading older messages, not a full information-retrieval surface.
 
-Spec impact:
+Successor impact:
 
 - Long-chat follow-up work must not change `chat` order, `mesid`, `power_user.chat_truncation`, or `#show_more_messages` behavior.
 - The separate jump-to-latest control was removed on 2026-06-09; reintroducing a return-to-newest control requires a fresh spec and proof.
@@ -79,9 +79,9 @@ Correction: harden mobile walkthrough proof for composer, actions, load-more, an
 
 Reason: artifact and side-workspace products often degrade on mobile when the secondary workspace is too heavy. EmberDesk should avoid that by proving core chat work remains reachable on narrow viewports before introducing new adjacent surfaces.
 
-Spec impact:
+Successor impact:
 
-- `.docs/specs/260608-03-main-chat-mobile-walkthrough-hardening/spec.md` should test at least one narrow phone viewport and one wider mobile/tablet viewport.
+- Mobile walkthrough hardening should test at least one narrow phone viewport and one wider mobile/tablet viewport.
 - New controls should expand hit area before adding visible text.
 - No state should require hover-only discovery.
 
@@ -91,9 +91,9 @@ Correction: organize actions by use frequency and risk, not by inherited DOM ord
 
 Reason: artifact/workspace competitors make direct manipulation central, but EmberDesk cannot sacrifice dense reading. Copy/Edit/Message Actions should remain fast; destructive actions should not visually compete. Touch and keyboard access matter because modern AI workspaces now expect the same surface to survive desktop, tablet, and mobile use.
 
-Spec impact:
+Successor impact:
 
-- `.docs/specs/260608-04-message-action-priority-touch-ux/spec.md` should keep `Copy`, `Edit`, and `Message Actions` as first-tier actions.
+- Message action priority work should keep `Copy`, `Edit`, and `Message Actions` as first-tier actions.
 - Checkpoint, swipe, reasoning, and media/gallery are secondary.
 - Delete/remove actions are danger tier and require clear accessible names.
 - Secondary actions should remain discoverable through a consistent overflow/action menu instead of permanently expanding the row height.
@@ -104,10 +104,10 @@ Correction: next helper/controller work should reduce main-chat complexity witho
 
 Reason: Open WebUI/Msty trends point toward extensibility, but EmberDesk already has high extension compatibility risk. A refactor that breaks selectors or event timing is a UX regression even if the code is cleaner.
 
-Spec impact:
+Successor impact:
 
-- `.docs/specs/260608-05-non-streaming-row-population-helper/spec.md` should begin with row identity and metadata, not message body formatting.
-- `.docs/specs/260608-06-streaming-state-controller-boundary/spec.md` should extract control-state decisions only, not token append or provider retry.
+- Non-streaming row helper work should begin with row identity and metadata, not message body formatting.
+- Streaming state-controller work should extract control-state decisions only, not token append or provider retry.
 
 ### 6. Require Evidence Before Performance Claims
 
@@ -115,9 +115,9 @@ Correction: performance work should be allowed to close as evidence-only if no s
 
 Reason: current AI workspace tools compete on perceived continuity and speed. False performance claims undermine trust more than a no-op evidence closure.
 
-Spec impact:
+Successor impact:
 
-- `.docs/specs/260608-07-main-chat-performance-optimization-candidate/spec.md` should declare primary and guardrail metrics before code changes.
+- Performance optimization candidates should declare primary and guardrail metrics before code changes.
 - A first-token optimization cannot regress local echo or stop-to-usable.
 - Runner warnings must block "performance improved" wording.
 
@@ -127,9 +127,9 @@ Correction: classify project memory, artifact/canvas side workspace, deep resear
 
 Reason: these features affect storage, permissions, provider protocol, extension contracts, security, and user data boundaries. They are not ordinary main-chat UI slices.
 
-Spec impact:
+Successor impact:
 
-- `.docs/specs/260608-08-successor-adr-gate-compat-matrix/spec.md` should explicitly map these trend categories to ADR-backed design gates.
+- Successor ADR-gate work should explicitly map these trend categories to ADR-backed design gates.
 - ADR gate must include data ownership, migration/recovery, extension compatibility, validation, and security boundaries.
 - The ADR must name the user-visible recovery model: how work is resumed after reload, provider error, tool error, partial export, missing source, or deleted local file.
 
@@ -139,7 +139,7 @@ Correction: any proposal that lets the model use files, memory, project context,
 
 Reason: the strongest competitive pattern is not just more capability. It is visible context control. ChatGPT Projects, Claude Projects, Open WebUI, Msty, and Perplexity Spaces all make the active work container or source set part of the workflow. EmberDesk's self-hosted advantage becomes weaker if retrieval, memory, or tool use happens without an inspectable local boundary.
 
-Spec impact:
+Successor impact:
 
 - Future project/context specs must show which chats, files, memories, world info, sources, and tools are in scope before a prompt is sent.
 - Future tool/RAG/research specs must show which tools or sources were actually used after a response, including failures and skipped sources.

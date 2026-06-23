@@ -9,7 +9,7 @@ last_updated: 2026-06-23
 
 ## User Original Request
 
-用户要求针对 `.docs\specs\react-phase4-state-management` 使用 `$brainstorming`，分步骤编写 spec 开发设计文档。
+用户要求针对 React Phase 4 state management 方向使用 `$brainstorming`，分步骤编写 spec 开发设计文档。
 
 ## Background & Motivation
 

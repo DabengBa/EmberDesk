@@ -53,7 +53,6 @@ last_updated: 2026-06-22
 - `.docs/tech/react-modernization-roadmap.md`
 - `.docs/PROJECT_HISTORY.md`
 - `.docs/tech/briefs/react-phase3b-provider-transport-and-token-append-owner.md`
-- `.docs/specs/react-phase3-main-chat/README.md`
 - `.docs/logic-description/main_chat_streaming_transport_bridge_processing_flow.md`
 - `.docs/tech/main-chat-generation-lifecycle.md`
 - `.docs/db/pages/chat-workspace.md`

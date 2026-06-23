@@ -15,7 +15,7 @@ It does not redefine user-facing product semantics. User-visible behavior remain
 
 Status: active successor scope, created after `.docs/tech/modernization-roadmap.md` was frozen on 2026-06-05.
 
-The frozen roadmap must not receive new implementation slices. Main-chat follow-up work now proceeds through `.docs/specs/260607-*` specs or a separate ADR-backed design when the change affects framework, storage, extension contracts, or other hard-to-reverse architecture.
+The frozen roadmap must not receive new implementation slices. Main-chat follow-up work now starts from durable briefs or a separate ADR-backed design when the change affects framework, storage, extension contracts, or other hard-to-reverse architecture. Dated `spec.md` / `plan.md` process files are not durable entrypoints after wrap-up.
 
 ## UX North Star
 
@@ -32,28 +32,20 @@ This scope treats competitive trends as UX pressure, not as automatic feature co
 
 Current UX correction advice is recorded in `.docs/tech/main-chat-ux-trend-recommendations.md`. Treat that note as the next design pressure map for main-chat successor proposals: recovery, orientation, touch reachability, action clarity, context/tool scope disclosure, and source/tool usage evidence first; project memory, side workspaces, rich work blocks, knowledge/RAG, source-aware research, tools, MCP, code execution, and automations only through ADR-backed design.
 
-## Current Successor Sequence
+## Archived Successor Sequence
 
-1. `.docs/specs/260607-01-main-chat-successor-scope-lock/spec.md`
-   - Create this durable scope, validation matrix, and protected boundary summary.
-2. `.docs/specs/260607-02-main-chat-baseline-validation/spec.md`
-   - Record current structure, browser, rendering, layout, and compatibility baseline.
-3. `.docs/specs/260607-03-main-chat-rendering-call-chain-map/spec.md`
-   - Map user journeys and code call chains before extraction work.
-4. `.docs/specs/260607-04-stored-message-render-descriptor-helper/spec.md`
-   - Extract a pure stored-message descriptor helper without changing rendered output.
-5. `.docs/specs/260607-05-message-dom-identity-contract-hardening/spec.md`
-   - Strengthen DOM, accessibility, focus, and touch proof around message rows.
-6. `.docs/specs/260607-06-long-chat-render-window-proof/spec.md`
-   - Prove long-chat bounded rendering, load-more, and position stability.
-7. `.docs/specs/260607-07-streaming-browser-proof/spec.md`
-   - Prove streaming token append, stop recovery, and final row identity before refactoring.
-8. `.docs/specs/260607-08-message-actions-controller-boundary/spec.md`
-   - Extract a low-risk action controller boundary while preserving action behavior.
-9. `.docs/specs/260607-09-main-chat-interaction-performance-evidence/spec.md`
-   - Add user-perceived interaction timing evidence for main-chat flows.
-10. `.docs/specs/260607-10-main-chat-successor-closure-gate/spec.md`
-   - Close delivered work with durable docs, UX checklist, validation, and process cleanup.
+Durable traceability for the delivered 10-slice successor sequence lives in `.docs/tech/briefs/260607-01-main-chat-successor-spec-set.md`. The sequence delivered:
+
+1. scope lock and protected boundary summary
+2. baseline validation evidence
+3. rendering call-chain map
+4. stored-message render descriptor helper
+5. message DOM identity hardening
+6. long-chat render-window proof
+7. streaming browser proof
+8. message-actions controller boundary
+9. interaction-performance evidence
+10. closure gate and durable docs
 
 ## Protected Surfaces
 
@@ -97,8 +89,8 @@ Use this gate before turning a main-chat follow-up idea into implementation work
 
 | Proposal Class | Route | Examples | Minimum Proof |
 |---|---|---|---|
-| Small spec | `.docs/specs/.../spec.md` with focused delivery | provider-error retry copy, long-chat load-more proof, mobile reachability proof, message action priority, pure helper extraction | Focused unit or E2E for the touched behavior, plus the validation row for the touched surface. |
-| Compatibility-hardening spec | `.docs/specs/.../spec.md` with explicit protected-surface proof | selector role/name hardening, extension import compatibility, message-row identity proof, `/lib.js` behavior proof | `bun run test:compat` plus focused structure/shared-library tests and semantic docs only when user-visible behavior changes. |
+| Small successor brief | Durable brief plus focused delivery plan while active | provider-error retry copy, long-chat load-more proof, mobile reachability proof, message action priority, pure helper extraction | Focused unit or E2E for the touched behavior, plus the validation row for the touched surface. |
+| Compatibility-hardening brief | Durable brief plus explicit protected-surface proof while active | selector role/name hardening, extension import compatibility, message-row identity proof, `/lib.js` behavior proof | `bun run test:compat` plus focused structure/shared-library tests and semantic docs only when user-visible behavior changes. |
 | ADR-required | numbered `.docs/adr/` decision before implementation, or a successor proposal that explicitly leads to ADR | project memory, artifact/canvas side workspace, rich in-chat work block, RAG/knowledge stack, source-aware research mode, tool execution, MCP, code execution, scheduled automations, provider protocol rewrite, framework migration, `/lib.js` replacement, database-first canonical storage | ADR must cover data ownership, migration/recovery, extension compatibility, validation gates, security boundaries, pre-send scope disclosure, post-response usage evidence, and user-visible recovery behavior. |
 | Out of scope for main-chat successor | Do not implement in this workstream without a separate roadmap or product decision | SPA migration, TypeScript application migration, multi-user permissions, scheduled automations, canonical storage replacement, broad endpoint splits unrelated to main chat | No implementation. Preserve the frozen roadmap and open a separate design only after explicit approval. |
 

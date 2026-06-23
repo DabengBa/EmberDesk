@@ -42,7 +42,6 @@ Phase 3 已按当前批准的 guarded hidden main-chat island scope 完成：Rea
 ## Source Evidence
 
 - `.docs/tech/react-modernization-roadmap.md`
-- `.docs/specs/react-phase3-main-chat/README.md`
 - `.docs/PROJECT_HISTORY.md`
 - `.docs/tech/main-chat-rendering-call-chain.md`
 - `.docs/tech/main-chat-successor-scope.md`
