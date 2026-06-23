@@ -508,6 +508,9 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('data-main-chat-visible-transport-owner={visibleTransportBridgeState.visibleTransportOwner}');
         expect(workspacePanelSource).toContain('data-main-chat-visible-transport-kind={reactVisibleTransportRuntime?.kind ?? \'\'}');
         expect(workspacePanelSource).toContain('const prepared = await bridge?.dispatchAction?.(\'prepareVisibleGeneration\', payload)');
+        expect(workspacePanelSource).toContain('const visibleTransportGlobalExecutionInFlightRef = useRef(false);');
+        expect(workspacePanelSource).toContain('if (visibleTransportGlobalExecutionInFlightRef.current) {');
+        expect(workspacePanelSource).toContain('visibleTransportGlobalExecutionInFlightRef.current = true;');
         expect(workspacePanelSource).toContain('onVisibleGeneration={async (payload) => {');
         expect(workspacePanelSource).toContain('await visibleTransportMutation.mutateAsync({');
         expect(workspacePanelSource).toContain('<MainChatSlashUiPortal state={bridgeState} bridge={bridge} />');

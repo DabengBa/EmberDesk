@@ -32,7 +32,7 @@
 | 数据获取 | TanStack Query | 已采用 | React login/setup/settings、character-library panel、workspace panel shell，以及 World Info / Background Library / Extensions Host 的 guarded React state/action surfaces 已使用 TanStack Query。 |
 | 表单 | TanStack Form + Zod | 已采用 | React login/setup/settings、character-library toolbar、World Info controls、Background Library filter/sort controls 和 Extensions Host Extras controls 的 React-owned 表单/呈现态使用 TanStack Form + Zod；legacy-owned 控件可通过 host 边界保留。 |
 | 列表性能 | TanStack Virtual | 已采用 | Character Library panel 在大页尺寸下用 `@tanstack/react-virtual` 限制同时挂载行数；main-chat `mainChatMessageList` island 现在也用它做 headless measurement / snapshot / restore controller，但仍不渲染第二套可见消息列表。 |
-| 状态 | legacy globals / jQuery state | 当前保留 | Zustand 属于 Phase 4 未来候选，尚未进入当前依赖；`globalThis.SillyTavern`、`eventSource`、`event_types` 仍是兼容 owner。 |
+| 状态 | Zustand + legacy compatibility globals | 已采用 / 兼容保留 | Zustand 已用于 workspace panel mount/update/unmount store 和 main-chat observation store；`globalThis.SillyTavern`、`eventSource`、`event_types` 仍是兼容 owner，最终删除/冻结归 Phase 7。 |
 | 数据层 | file-backed user data + derived SQLite cache | 当前保留 | Drizzle ORM 尚未采用；SQLite 仍只作为 derived cache，不是用户数据正本。 |
 | 测试 | Jest + Playwright | 当前保留 | Vitest 尚未采用；现有验证仍以 Jest unit、Playwright E2E、docs compiler 和 focused compatibility tests 为主。 |
 | 工具 | ESLint / typecheck / focused proof scripts | 当前保留 | React Doctor 尚未采用；性能与逻辑证明依赖现有 runner 和 `.docs/logic-description/*_sandbox_proof.py`。 |
@@ -55,7 +55,7 @@
 
 **目标**：搭建 React 基础设施，不改变现有功能
 
-📋 **详细规范**：[Phase 0 README](../specs/react-phase0-infrastructure/README.md)
+归档说明：Phase 0 已完成，旧开发 specs 已从 `.docs/specs` 清理；持久记录保留在本路线图、[PROJECT_HISTORY](../PROJECT_HISTORY.md) 和相关技术文档中。
 
 **当前执行状态**：
 - Phase 0 基础设施已落地到当前代码：`vite.config.ts` 同时承载 `/lib.js` 构建、共享 React app 构建、character-library panel bundle 和 workspace panel action-island bundle；`tsconfig.json` 覆盖 `app/**/*`、`src/**/*` 与 `public/**/*`；`eslint.config.js` 已把 `app/**/*.{ts,tsx}` 纳入 TS/TSX lint 边界。
@@ -63,10 +63,10 @@
 - Webpack 只保留为 `/lib.js` deprecated fallback；当前主构建入口是 Vite。
 
 **Sprint 列表**：
-- ✅ [Sprint 1: Vite 迁移](../specs/react-phase0-infrastructure/phase0-sprint1-vite-migration.md)（2 周，Vite 8 已作为 `/lib.js` 主构建，Webpack 保留 deprecated fallback）
-- ✅ [Sprint 2: TypeScript 配置](../specs/react-phase0-infrastructure/phase0-sprint2-typescript-config.md)（2 周，`tsconfig.json` 与 ESLint TS/TSX 边界已覆盖 React app）
-- ✅ [Sprint 3: React 开发环境](../specs/react-phase0-infrastructure/phase0-sprint3-react-dev-env.md)（2 周，React 19 + TanStack Router app shell 已承载 `/login`、`/setup`、`/settings`）
-- ✅ [Sprint 4: Tailwind CSS 集成](../specs/react-phase0-infrastructure/phase0-sprint4-tailwind-integration.md)（2 周，Tailwind v4 / PostCSS 已接入 `app/styles/globals.css` 和 React route/component classes）
+- ✅ Sprint 1: Vite 迁移（2 周，Vite 8 已作为 `/lib.js` 主构建，Webpack 保留 deprecated fallback）
+- ✅ Sprint 2: TypeScript 配置（2 周，`tsconfig.json` 与 ESLint TS/TSX 边界已覆盖 React app）
+- ✅ Sprint 3: React 开发环境（2 周，React 19 + TanStack Router app shell 已承载 `/login`、`/setup`、`/settings`）
+- ✅ Sprint 4: Tailwind CSS 集成（2 周，Tailwind v4 / PostCSS 已接入 `app/styles/globals.css` 和 React route/component classes）
 
 ---
 
@@ -74,7 +74,7 @@
 
 **目标**：迁移登录、Setup、Settings 等独立页面到 React
 
-📋 **详细规范**：[Phase 1 README](../specs/react-phase1-independent-pages/README.md)
+归档说明：Phase 1 已完成，旧开发 specs 已从 `.docs/specs` 清理；用户意图和交付记录保留在 [react-phase1-sprint2-setup-page](briefs/react-phase1-sprint2-setup-page.md)、[react-phase1-sprint3-settings-panel](briefs/react-phase1-sprint3-settings-panel.md)、[PROJECT_HISTORY](../PROJECT_HISTORY.md) 和本路线图中。
 
 **当前执行状态**：
 - `Sprint 1 / Login`：React 页面已上线并默认开启，`/login.html` 保留 legacy 回退入口；React 登录流程已按路线图完成 TanStack Form / Zod / TanStack Query 收口。
@@ -82,9 +82,9 @@
 - `Sprint 3 / Settings`：React `/settings` 已交付并由 `features.react.pages.settings` 控制；flag 开启且 React build 存在时进入独立 Settings 页面，关闭或缺 build 时回退到 legacy `/` 工作区；本 Sprint 已严格采用 TanStack Form / Zod / TanStack Query，覆盖更广的 General 控制、fallback / Vertex AI / prompt post-processing、更多 UI 设置，以及 Advanced 中的大部分 power-user 设置面。legacy `vertexai` source 会显示为 Google + Vertex AI 并在未关闭 Vertex AI 时保存回 `vertexai`；高级 reasoning effort 值 `min` / `max` / `none` / `minimal` / `xhigh` 保持可见和可保存。用户可见语义见 [`page.settings`](../db/pages/settings.md)，当前 payload 规则见 [React settings payload processing flow](../logic-description/react_settings_payload_processing_flow.md)。
 
 **Sprint 列表**：
-- ✅ [Sprint 1: Login 页面 React 重写](../specs/react-phase1-independent-pages/phase1-sprint1-login-page.md)（2 周，React 实现已上线并默认开启 feature flag；TanStack Form / Zod / Query 已完成收口）
-- ✅ [Sprint 2: Setup 页面 React 重写](../specs/react-phase1-independent-pages/phase1-sprint2-setup-page.md)（2 周，React 实现已交付并挂在 `features.react.pages.setup` 下；`/setup.html` 保留 legacy 回退入口；TanStack Form / Zod / Query 已完成收口）
-- ✅ [Sprint 3: Settings 面板 React 重写](../specs/react-phase1-independent-pages/phase1-sprint3-settings-panel.md)（4 周，React `/settings` 已交付并挂在 `features.react.pages.settings` 下；覆盖 General / Providers / User Interface / Advanced 的 Sprint 3 设置切片；TanStack Form / Zod / Query 已完成收口）
+- ✅ Sprint 1: Login 页面 React 重写（2 周，React 实现已上线并默认开启 feature flag；TanStack Form / Zod / Query 已完成收口）
+- ✅ Sprint 2: Setup 页面 React 重写（2 周，React 实现已交付并挂在 `features.react.pages.setup` 下；`/setup.html` 保留 legacy 回退入口；TanStack Form / Zod / Query 已完成收口）
+- ✅ Sprint 3: Settings 面板 React 重写（4 周，React `/settings` 已交付并挂在 `features.react.pages.settings` 下；覆盖 General / Providers / User Interface / Advanced 的 Sprint 3 设置切片；TanStack Form / Zod / Query 已完成收口）
 
 ---
 
@@ -92,7 +92,7 @@
 
 **目标**：迁移角色库、世界信息、背景库、扩展宿主面板等主工作区侧边栏/面板到 React
 
-📋 **详细规范**：[Phase 2 README](../specs/react-phase2-sidebars/README.md)
+归档说明：Phase 2 已完成，旧开发 specs 已从 `.docs/specs` 清理；用户意图和交付记录保留在 [react-phase2-character-library-panel-sprints-1-3](briefs/react-phase2-character-library-panel-sprints-1-3.md)、[PROJECT_HISTORY](../PROJECT_HISTORY.md) 和本路线图中。
 
 **当前执行状态**：
 - `Sprint 1-3 / Character Library`：已作为同一条交付路径收束为受 `features.react.panels.characterLibrary` 控制的 React character-library panel island。flag 开启且 bundle 可用时，用户仍从原工作区入口打开角色库，但 toolbar/list surface 改为 React island；flag 关闭或 build 缺失时继续走 legacy panel fallback。
@@ -103,13 +103,13 @@
 - `Sprint 7 / Extensions Host`：已交付为 `features.react.panels.extensionsHost` 控制的 guarded React workspace panel island。React host 显示 notify updates、Manage、Install、Extras API URL/API key/autoconnect/connect controls、loader state 和 protected mount-point readiness；这些 controls 通过 bridge 调用 `public/scripts/extensions.js` 的既有 DOM actions，`#extensions_settings`、`#extensions_settings2`、`#regex_container`、`#extensionsMenuButton`、`#extensionsMenu`、Tavern Helper、regex extension、install/update/delete protocol 和 `@sillytavern/*` 兼容面保持 legacy owner。
 
 **Sprint 列表**：
-- ✅ [Sprint 1: 角色库面板 - 列表基础](../specs/react-phase2-sidebars/phase2-sprint1-character-library-list.md)（3 周，已交付为 guarded React panel island；保留 row DOM 合约，并在 `1000 / 页` 下验证虚拟滚动窗口挂载）
-- ✅ [Sprint 2: 角色库面板 - 搜索过滤](../specs/react-phase2-sidebars/phase2-sprint2-character-library-search.md)（2 周，已交付；搜索、排序、标签过滤在同一工作区入口可用，并继续复用现有 folder / bogus-folder / group 混排语义）
-- ✅ [Sprint 3: 角色库面板 - 批量操作](../specs/react-phase2-sidebars/phase2-sprint3-character-library-bulk.md)（2 周，已交付；bulk 选择/删除/标签流程继续复用现有确认对话框和 overlay 链路，`Del` 在无选中项时保持 disabled）
-- ✅ [Sprint 4: 世界信息面板 - 编辑器](../specs/react-phase2-sidebars/phase2-sprint4-world-info-editor.md)（3 周，已交付 guarded React host/editor controls；legacy prompt/regex/delete 语义保留）
-- ✅ [Sprint 5: 世界信息面板 - 导入导出](../specs/react-phase2-sidebars/phase2-sprint5-world-info-import.md)（2 周，已交付 React import/export/create/refresh entry points；legacy converter/import 结果链路保留）
-- ✅ [Sprint 6: 背景库面板](../specs/react-phase2-sidebars/phase2-sprint6-background-library.md)（2 周，已交付 React status/filter/gallery/action island；legacy background file/API/slash 行为保留）
-- ✅ [Sprint 7: Extensions 面板宿主](../specs/react-phase2-sidebars/phase2-sprint7-extensions-host.md)（3 周，已交付 Extensions drawer 宿主 controls；保留 `#extensions_settings` / `#extensions_settings2` / `#regex_container` / wand menu 等受保护挂载点）
+- ✅ Sprint 1: 角色库面板 - 列表基础（3 周，已交付为 guarded React panel island；保留 row DOM 合约，并在 `1000 / 页` 下验证虚拟滚动窗口挂载）
+- ✅ Sprint 2: 角色库面板 - 搜索过滤（2 周，已交付；搜索、排序、标签过滤在同一工作区入口可用，并继续复用现有 folder / bogus-folder / group 混排语义）
+- ✅ Sprint 3: 角色库面板 - 批量操作（2 周，已交付；bulk 选择/删除/标签流程继续复用现有确认对话框和 overlay 链路，`Del` 在无选中项时保持 disabled）
+- ✅ Sprint 4: 世界信息面板 - 编辑器（3 周，已交付 guarded React host/editor controls；legacy prompt/regex/delete 语义保留）
+- ✅ Sprint 5: 世界信息面板 - 导入导出（2 周，已交付 React import/export/create/refresh entry points；legacy converter/import 结果链路保留）
+- ✅ Sprint 6: 背景库面板（2 周，已交付 React status/filter/gallery/action island；legacy background file/API/slash 行为保留）
+- ✅ Sprint 7: Extensions 面板宿主（3 周，已交付 Extensions drawer 宿主 controls；保留 `#extensions_settings` / `#extensions_settings2` / `#regex_container` / wand menu 等受保护挂载点）
 
 **Phase 1 Sprint 3 后续边界**：`World Info`、`Backgrounds`、`Extensions` 没有混入 React `/settings`。它们按路线图进入 Phase 2：World Info 在 Sprint 4-5，Backgrounds 在 Sprint 6，Extensions drawer 宿主在 Sprint 7；第三方扩展 API、挂载兼容和迁移指南仍由 Phase 4 / Phase 6 负责。
 
@@ -144,7 +144,7 @@ bun run docs:check
 
 **目标**：迁移核心聊天界面到 React，这是整个迁移最复杂的部分
 
-📋 **详细规范**：[Phase 3 README](../specs/react-phase3-main-chat/README.md)
+归档说明：Phase 3 / 3B 已完成，旧开发 specs 已从 `.docs/specs` 清理；持久 traceability 保留在 Phase 3/3B briefs、[PROJECT_HISTORY](../PROJECT_HISTORY.md)、logic-description docs 和本路线图中。
 
 **当前执行状态**：
 - `Sprint 1 / Main Chat Message List Basic`：已交付为受 `features.react.panels.mainChatMessageList` 控制的 guarded React controller island。flag 开启且 workspace-panels bundle 可用时，React 会在 `#chat` 内挂载隐藏 host，并根据 legacy bridge state 保持 `#show_more_messages` 与可见 `.mes[mesid]` 直接子节点的顺序稳定；flag 关闭、bundle 缺失或挂载失败时自动 fail-closed 到 legacy message rendering。
@@ -161,14 +161,14 @@ bun run docs:check
 - Phase 3 / Phase 3B 边界：Phase 3 已完成 hidden owner / observation / marker / fail-closed island 闭环；后续任何 visible-owner cutover 都应计入 Phase 3B，而不是回写 Phase 3 完成定义。
 
 **Sprint 列表**：
-- ✅ [Sprint 1: 消息列表 - 基础渲染](../specs/react-phase3-main-chat/phase3-sprint1-message-list-basic.md)（3 周，已交付 guarded React message-list controller island；保持 direct-child `.mes[mesid]`、stored-chat rendering 和 long-chat load-more 语义）
-- ✅ [Sprint 2: 消息列表 - Rich Message Body](../specs/react-phase3-main-chat/phase3-sprint2-message-list-rich.md)（2 周，已交付 finalized rich-body bridge / hidden owner-marker boundary；不是新增 Markdown/媒体能力；实施与验证以 dated spec `260620-02-react-phase3-sprint2-main-chat-rich-message-bodies/spec.md` 为准）
-- ✅ [Sprint 3: 消息列表 - 滚动和定位](../specs/react-phase3-main-chat/phase3-sprint3-message-list-scroll.md)（2 周，已交付 current-session per-chat 阅读位置恢复、expanded-history window restore 和 headless TanStack Virtual controller；实施与验证以 dated spec `260620-03-react-phase3-sprint3-main-chat-scroll-and-positioning/spec.md` 为准）
+- ✅ Sprint 1: 消息列表 - 基础渲染（3 周，已交付 guarded React message-list controller island；保持 direct-child `.mes[mesid]`、stored-chat rendering 和 long-chat load-more 语义）
+- ✅ Sprint 2: 消息列表 - Rich Message Body（2 周，已交付 finalized rich-body bridge / hidden owner-marker boundary；不是新增 Markdown/媒体能力；归档 traceability 保留在 briefs / PROJECT_HISTORY）
+- ✅ Sprint 3: 消息列表 - 滚动和定位（2 周，已交付 current-session per-chat 阅读位置恢复、expanded-history window restore 和 headless TanStack Virtual controller；归档 traceability 保留在 briefs / PROJECT_HISTORY）
 - ✅ [Sprint 4: 流式生成 - Transport Boundary](briefs/react-phase3-remaining-main-chat-sprints.md#domain-sprint-4-streaming-transport-boundary)（2 周，已收敛并交付 hidden `streamingTransport` snapshot；不迁移 provider transport、SSE/EventSource owner 或 `.mes_text` token append）
-- ✅ [Sprint 5: 流式生成 - 控制状态](../specs/react-phase3-main-chat/phase3-sprint5-streaming-control.md)（2 周，已交付 generation-control bridge/state snapshot；不迁移 provider transport、token append 或 provider pause/resume）
+- ✅ Sprint 5: 流式生成 - 控制状态（2 周，已交付 generation-control bridge/state snapshot；不迁移 provider transport、token append 或 provider pause/resume）
 - ✅ [Sprint 6: 输入框 - 基础功能](briefs/react-phase3-remaining-main-chat-sprints.md#domain-sprint-6-basic-composer-bridge)（2 周，已交付 hidden composer snapshot；不迁移 visible textarea/send owner，不暴露 prompt 原文）
 - ✅ [Sprint 7: 输入框 - 斜杠命令](briefs/react-phase3-remaining-main-chat-sprints.md#domain-sprint-7-slash-command-bridge)（3 周，已交付 hidden slash-command snapshot；不迁移 parser/registry/executor/autocomplete owner，不暴露 command text/args）
-- ✅ [Sprint 8: 消息操作 - 菜单](../specs/react-phase3-main-chat/phase3-sprint8-message-actions.md)（2 周，已交付 hidden message-action snapshot / owner-marker boundary；不迁移 visible action buttons 或 handlers owner）
+- ✅ Sprint 8: 消息操作 - 菜单（2 周，已交付 hidden message-action snapshot / owner-marker boundary；不迁移 visible action buttons 或 handlers owner）
 - ✅ [Sprint 9: 整合测试](briefs/react-phase3-remaining-main-chat-sprints.md#domain-sprint-9-integration-closure)（2 周，当前 guarded hidden-island scope 已闭环；remaining visible-owner work 已正式转入 Phase 3B）
 
 ---
@@ -227,15 +227,15 @@ bun run docs:check
 📋 **详细规范**：[Phase 4 README](../specs/react-phase4-state-management/README.md)
 
 **Main-chat backlog 子阶段**：
-- `Phase 4A / Main-chat compatibility transport expansion`：把 `non-OpenAI`、group、dry-run、nested-visible、quiet/background generation 等 excluded transport path 分批评估并单独立 spec；默认继续 legacy fallback，只有 proof 足够时才切 React owner；所有已证明 path 必须登记到 Phase 7 Sprint 5 的 cutover checklist。
-- `Phase 4B / Main-chat renderer extraction`：抽取 legacy formatter、media/file/code/LaTeX/rich body、long-chat load-more/windowing contract；默认先做 contract extraction 和 compatibility proof，再考虑 visible renderer ownership；所有已抽取 contract 必须登记到 Phase 7 Sprint 6 的 cutover checklist。
+- `Phase 4A / Main-chat compatibility transport expansion`：已建立 visible transport support classifier，标准 OpenAI direct-chat request 可归入 React-owned path；non-OpenAI、group、dry-run、nested visible、quiet/background generation 继续登记为 legacy fallback 或 unsupported-with-reason，最终退出归 Phase 7 Sprint 5。
+- `Phase 4B / Main-chat renderer extraction`：已抽取 renderer/windowing current-behavior contract。safe finalized rows 是 Phase 7 renderer candidate；editing、streaming、extension-mutated、unsafe 和 missing `.mes_text` rows 继续 legacy fallback；long-chat windowing owner 仍是 legacy `chat_truncation` + `#show_more_messages`，最终退出归 Phase 7 Sprint 6。
 
 **Sprint 列表**：
-- 📋 [Sprint 1: Zustand stores 创建](../specs/react-phase4-state-management/phase4-sprint1-zustand-stores.md)（3 周）
-- 📋 [Sprint 2: 兼容层建立](../specs/react-phase4-state-management/phase4-sprint2-compat-bridge.md)（3 周）
-- 📋 [Sprint 3: 扩展迁移指南](../specs/react-phase4-state-management/phase4-sprint3-extension-guide.md)（2 周）
-- 📋 `Phase 4A: Main-chat compatibility transport expansion`（按独立 spec 分批执行；不阻塞 Phase 3B 完成状态）
-- 📋 `Phase 4B: Main-chat renderer extraction`（按独立 spec 分批执行；需要 formatter / extension / long-chat proof）
+- ✅ [Sprint 1: Zustand stores 创建](../specs/react-phase4-state-management/phase4-sprint1-zustand-stores.md)（3 周，已交付 workspace panel store 和 main-chat observation store）
+- ✅ [Sprint 2: 兼容层建立](../specs/react-phase4-state-management/phase4-sprint2-compat-bridge.md)（3 周，已交付 global compatibility bridge；legacy globals 不被替换）
+- ✅ [Sprint 3: 扩展迁移指南](../specs/react-phase4-state-management/phase4-sprint3-extension-guide.md)（2 周，已更新第三方扩展兼容矩阵）
+- ✅ [Phase 4A: Main-chat compatibility transport expansion](../specs/react-phase4-state-management/phase4a-main-chat-transport-expansion.md)（已建立 transport support/fallback classifier；不等于 Phase 7 full owner cutover）
+- ✅ [Phase 4B: Main-chat renderer extraction](../specs/react-phase4-state-management/phase4b-main-chat-renderer-extraction.md)（已建立 renderer/windowing contract 和 long-chat/extension proof；不等于 Phase 7 full owner cutover）
 
 **验证门**：
 ```powershell
@@ -245,10 +245,10 @@ bun run --cwd tests test:e2e -- chat-message-rendering.e2e.js chat-message-layou
 bun run perf:interaction
 ```
 
-**进入条件**：
-- 每个 `Phase 4A` transport path 必须先有独立 spec，列出 owner split、legacy fallback、provider/API scope、row identity proof、stop/retry/fallback proof 和 excluded paths。
-- 每个 `Phase 4B` renderer extraction 必须先有 formatter / extension compatibility contract，列出 semantic Doc IDs、DOM selector compatibility、long-chat performance proof 和 rollback plan。
-- Zustand/global bridge sprints 不得顺手迁移 provider transport 或 renderer owner；这些内容只能通过 `Phase 4A` / `Phase 4B` spec 进入。
+**Phase 7 handoff 条件**：
+- `Phase 4A` 已登记 transport support/fallback 分类；Phase 7 Sprint 5 必须在删除 request-level fallback 前补齐 provider matrix、stop/retry/fallback、token append/finalization 和 rollback ADR。
+- `Phase 4B` 已登记 renderer/windowing contract；Phase 7 Sprint 6 必须在删除 formatter/windowing fallback 前补齐 `.mes_text` / extension mutation / editing / streaming / long-chat performance 和 rollback ADR。
+- Zustand/global bridge sprints 不得顺手迁移 provider transport 或 renderer owner；删除或冻结这些 owner 只能通过 Phase 7 cutover specs 完成。
 
 ---
 
@@ -260,8 +260,8 @@ bun run perf:interaction
 
 **Sprint 列表**：
 - 📋 [Sprint 1: Hono 路由搭建](../specs/react-phase5-backend-api/phase5-sprint1-hono-routes.md)（3 周）
-- 📋 [Sprint 2: Drizzle ORM 集成](../specs/react-phase5-backend-api/phase5-sprint2-drizzle-orm.md)（3 周）
-- 📋 [Sprint 3: Express 完全切换](../specs/react-phase5-backend-api/phase5-sprint3-express-sunset.md)（2 周）
+- 📋 [Sprint 2: Drizzle derived cache](../specs/react-phase5-backend-api/phase5-sprint2-drizzle-derived-cache.md)（3 周）
+- 📋 [Sprint 3: Express sunset gate](../specs/react-phase5-backend-api/phase5-sprint3-express-sunset-gate.md)（2 周）
 
 **进入条件与边界**：
 - Hono 接管前必须先有 ADR，证明 Express middleware order、sessions、CSRF、auth wall、static/public routes、private endpoints、uploads、error/404 handlers 的兼容策略。
@@ -302,6 +302,8 @@ bun run docs:check
 
 **目标**：在 Phase 1-6 的 React islands、visible owners、Zustand/global bridge、typed API、extension compatibility 证据齐备后，逐面完成 full owner cutover，移除或冻结 legacy owner / guarded fallback / build-missing fallback，而不是继续保留双 owner。
 
+📋 **详细规范**：[Phase 7 README](../specs/react-phase7-full-owner-cutover/README.md)
+
 **进入条件**：
 - Phase 1-3B 对应 surface 的 guarded island / visible owner 已开启并通过回归门。
 - Phase 4A / 4B 对 main-chat transport、formatter、windowing 的 excluded paths 已完成独立 spec 和 proof。
@@ -310,19 +312,19 @@ bun run docs:check
 - 每个 sprint 必须有 ADR 或 ADR update，说明本次移除 fallback 的范围、回滚策略、用户数据风险、扩展兼容风险和性能证据。
 
 **Sprint 列表**：
-- 📋 `Sprint 1: Character Library full owner cutover`（2-3 周）
+- 📋 [Sprint 1: Character Library full owner cutover](../specs/react-phase7-full-owner-cutover/phase7-sprint1-character-library-full-owner-cutover.md)（2-3 周）
   React 接管 tag filtering、bulk side effects、delete confirmation integration、legacy `characters` global sync replacement 和 list lifecycle；移除 character-library panel 的 legacy fallback 前必须保留 protected selectors 或提供兼容 shim。
-- 📋 `Sprint 2: World Info full owner cutover`（3-4 周）
+- 📋 [Sprint 2: World Info full owner cutover](../specs/react-phase7-full-owner-cutover/phase7-sprint2-world-info-full-owner-cutover.md)（3-4 周）
   React 接管 World Info prompt activation、regex placement UI handoff、converter/import result handling、delete cascade 和 entry lifecycle；legacy `public/scripts/world-info.js` 只保留兼容出口或被明确废弃。
-- 📋 `Sprint 3: Background Library full owner cutover`（3 周）
+- 📋 [Sprint 3: Background Library full owner cutover](../specs/react-phase7-full-owner-cutover/phase7-sprint3-background-library-full-owner-cutover.md)（3 周）
   React 接管 background file actions、thumbnail/lazy-load lifecycle、folder state、selection/lock side effects 和 background slash command handoff；legacy background controller fallback 退出。
-- 📋 `Sprint 4: Extensions Host full owner cutover`（4-6 周）
+- 📋 [Sprint 4: Extensions Host full owner cutover](../specs/react-phase7-full-owner-cutover/phase7-sprint4-extensions-host-full-owner-cutover.md)（4-6 周）
   React 接管 extension discovery/status presentation、manifest lifecycle orchestration、install/update/delete UI protocol 和 mount readiness owner；第三方 extension execution、Tavern Helper、regex extension 和 `@sillytavern/*` alias 的删除/冻结必须由 Phase 6 证据决定，不能直接移除。
-- 📋 `Sprint 5: Main-chat transport full owner cutover`（4-6 周）
+- 📋 [Sprint 5: Main-chat transport full owner cutover](../specs/react-phase7-full-owner-cutover/phase7-sprint5-main-chat-transport-full-owner-cutover.md)（4-6 周）
   React transport owner 覆盖 OpenAI、non-OpenAI、group、dry-run、nested visible、quiet/background generation、stop/retry/fallback/token append/finalization；移除 request-level legacy fallback 前必须通过 provider matrix proof。
-- 📋 `Sprint 6: Main-chat renderer and windowing full owner cutover`（4-6 周）
+- 📋 [Sprint 6: Main-chat renderer and windowing full owner cutover](../specs/react-phase7-full-owner-cutover/phase7-sprint6-main-chat-renderer-windowing-full-owner-cutover.md)（4-6 周）
   React renderer owner 覆盖 formatter、rich media/file/LaTeX/code blocks、long-chat load-more/windowing、editing/unsafe/streaming row transitions；移除 `.mes_text` legacy formatter owner 前必须通过 extension compatibility 和 long-chat performance proof。
-- 📋 `Sprint 7: Workspace shell and global compatibility retirement decision`（3-4 周）
+- 📋 [Sprint 7: Workspace shell and global compatibility retirement decision](../specs/react-phase7-full-owner-cutover/phase7-sprint7-workspace-shell-global-compatibility-decision.md)（3-4 周）
   决定 full SPA workspace shell、legacy jQuery shell、`globalThis.SillyTavern`、`eventSource`、`event_types`、`@sillytavern/*` 的最终形态：删除、冻结为 compatibility facade，或进入长期支持。该 sprint 不能在 Phase 6 维护期证据不足时强行删除兼容面。
 
 **Full owner cutover 验证门**：

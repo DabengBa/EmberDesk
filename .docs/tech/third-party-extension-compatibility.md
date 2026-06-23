@@ -18,6 +18,23 @@ The boundary covers:
 
 This is a compatibility contract, not a request to refactor the extension or regex engine.
 
+## Phase 4 Bridge Migration Guide
+
+Phase 4 adds internal React/Zustand observation through `app/stores/*` and `app/compat/global-compatibility-bridge.js`. This bridge is an EmberDesk runtime adapter, not a new third-party extension API. Extension authors should continue to treat the protected legacy surfaces below as the supported public compatibility contract until Phase 7 makes an ADR-gated deletion, freeze, or long-term support decision.
+
+| Surface | Current status | Future access path | Fallback / rollback |
+|---|---|---|---|
+| `globalThis.SillyTavern` | Stable compatibility surface | Phase 7 Sprint 7 decides whether this remains a long-term facade or is narrowed behind a documented adapter. | Keep the existing object owner; React bridge failure must not replace it with a stub. |
+| `eventSource` / `event_types` | Stable compatibility surface | Phase 6 gathers common-extension evidence; Phase 7 Sprint 7 decides deletion, freeze, or long-term support. | Keep event names and emitter methods stable; failed React bridge attach leaves existing exports untouched. |
+| `@sillytavern/*` browser aliases | Stable compatibility surface | Phase 6 validates alias consumers such as Tavern Helper; Phase 7 Sprint 7 decides final compatibility policy. | Preserve alias resolution and export shapes; rollback is the existing browser module mapping. |
+| Extension mount points (`#extensions_settings`, `#extensions_settings2`, `#regex_container`, wand menu) | Stable compatibility surface | Extensions Host full owner cutover belongs to Phase 7 Sprint 4 after Phase 6 evidence. | React hosts may show readiness/status only; protected legacy nodes remain behavior owners. |
+| Regex engine exports and `regex_placement` values | Stable compatibility surface | Phase 6 validates regex extension and Tavern Helper behavior before any Phase 7 decision. | Do not rename exports or change numeric placement values; rollback is the current regex module owner. |
+| Slash parser / registry / executor exports | Stable compatibility surface | React slash UI can observe state, but parser/registry/executor migration needs a separate Phase 7 decision if ever attempted. | Keep `public/scripts/slash-commands.js` as owner; React failures fall back to legacy autocomplete and command execution. |
+| Phase 4 React/Zustand bridge snapshots | Migration candidate for first-party internals only | First-party React islands may observe sanitized workspace/main-chat state through the bridge while legacy APIs remain public. | Bridge detach removes only `__emberDeskReactCompatibilityBridge`; no third-party extension should depend on it. |
+| Full extension API retirement or facade freeze | Phase 7 decision required | Phase 7 Sprint 4 covers Extensions Host owner cutover; Phase 7 Sprint 7 covers workspace shell/global compatibility exports. | If Phase 6 evidence is incomplete, keep the current compatibility surface and document it as a frozen facade with tests. |
+
+Phase 6 evidence collection must cover Tavern Helper / JS-Slash-Runner, Regex Manager behavior, Quick Reply-style event usage, Extensions Manager install/update/delete flows, alias resolution, event contracts, and protected mount-point lifecycle. Any migration candidate needs a rollback story that returns to the current legacy owner without data loss or extension API shrinkage.
+
 ## Protected Mount Points
 
 Keep these DOM surfaces stable unless a migration plan updates both first-party code and third-party compatibility proof:

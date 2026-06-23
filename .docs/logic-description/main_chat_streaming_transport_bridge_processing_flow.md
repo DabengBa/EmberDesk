@@ -44,6 +44,21 @@ The pure legacy classifier in `public/scripts/main-chat-streaming-transport-stat
 - selected group, dry-run, and nested-visible generation fail closed to legacy
 - quiet/background and other excluded compatibility requests fail closed per request instead of locking the whole chat surface
 
+The Phase 4A support matrix is explicit:
+
+| Path | Support classification | Current owner |
+|---|---|---|
+| Standard OpenAI visible direct-chat `submitComposer` / `continueLast` / `retryGeneration` / `swipeLeft` / `swipeRight` | `react-owned` | React visible transport mutation |
+| Non-OpenAI provider | `legacy-fallback` | Legacy `Generate()` / provider transport |
+| Group chat | `legacy-fallback` | Legacy group generation flow |
+| Dry run | `legacy-fallback` | Legacy prompt assembly / no visible assistant-row owner |
+| Nested visible generation | `legacy-fallback` | Legacy recursive generation guard |
+| Quiet generation | `legacy-fallback` | Legacy quiet/background-compatible path |
+| Background generation | `legacy-fallback` | Legacy background-compatible path |
+| Unknown visible generation kind | `unsupported-with-reason` | No React owner; request must not partially enter React transport |
+
+`classifyMainChatVisibleTransportSupport()` returns the matrix status, path, and reason. `classifyMainChatVisibleTransportOwner()` remains a backward-compatible adapter that maps `react-owned` to `owner: "react"` and all other statuses to `owner: "legacy"`.
+
 ## Outputs
 
 The bridge output is `streamingTransport` inside `mainChatMessageList` state:

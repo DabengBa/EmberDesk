@@ -7,6 +7,19 @@ import { useForm } from '@tanstack/react-form';
 import { measureElement, useVirtualizer, type ReactVirtualizer, type VirtualItem } from '@tanstack/react-virtual';
 import { z } from 'zod';
 
+import {
+    attachGlobalCompatibilityBridge,
+    detachGlobalCompatibilityBridge,
+} from './compat/global-compatibility-bridge.js';
+import {
+    recordWorkspacePanelMount,
+    recordWorkspacePanelUnmount,
+    recordWorkspacePanelUpdate,
+} from './stores/workspace-panel-store.js';
+import {
+    resetMainChatObservationStore,
+    updateMainChatObservation,
+} from './stores/main-chat-observation-store.js';
 import { deriveReactVisibleTransportBridgeState } from '../public/scripts/main-chat-visible-transport-owner.js';
 
 export type WorkspacePanelKind = 'worldInfo' | 'backgroundLibrary' | 'extensionsHost' | 'mainChatMessageList';
@@ -2539,6 +2552,7 @@ function MainChatMessageListRestoreController({
 function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown; bridge?: WorkspacePanelBridge }) {
     const bridgeState = asMainChatMessageListState(state);
     const [reactVisibleTransportRuntime, setReactVisibleTransportRuntime] = useState<MainChatVisibleTransportRuntimeState | null>(null);
+    const visibleTransportGlobalExecutionInFlightRef = useRef(false);
     const messageRowMap = useMemo(() => {
         const rows = new Map<string, HTMLElement>();
 
@@ -2694,9 +2708,18 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
         };
 
         scope.__emberDeskExecuteMainChatVisibleTransportRequest = async (prepared) => {
-            return await executePreparedVisibleTransportRequest(prepared, {
-                kind: String(prepared.kind ?? ''),
-            });
+            if (visibleTransportGlobalExecutionInFlightRef.current) {
+                return undefined;
+            }
+
+            visibleTransportGlobalExecutionInFlightRef.current = true;
+            try {
+                return await executePreparedVisibleTransportRequest(prepared, {
+                    kind: String(prepared.kind ?? ''),
+                });
+            } finally {
+                visibleTransportGlobalExecutionInFlightRef.current = false;
+            }
         };
 
         return () => {
@@ -2899,6 +2922,10 @@ function WorkspacePanelRoot({ kind, bridge }: { kind: WorkspacePanelKind; bridge
 }
 
 function renderIntoPanel(mount: WorkspacePanelMount) {
+    recordWorkspacePanelUpdate(mount.kind, mount.state ?? null, mount.bridge);
+    if (mount.kind === 'mainChatMessageList') {
+        updateMainChatObservation(mount.state ?? {});
+    }
     queryClient.setQueryData(workspacePanelStateQueryKey(mount.kind), mount.state ?? null);
     mount.root.render(
         <StrictMode>
@@ -2910,6 +2937,7 @@ function renderIntoPanel(mount: WorkspacePanelMount) {
 }
 
 export function mountWorkspacePanel(kind: WorkspacePanelKind, container: HTMLElement, options: WorkspacePanelMountOptions = {}) {
+    attachGlobalCompatibilityBridge();
     const existingPanel = mountedPanels.get(kind);
     if (existingPanel) {
         if (existingPanel.container !== container) {
@@ -2931,6 +2959,7 @@ export function mountWorkspacePanel(kind: WorkspacePanelKind, container: HTMLEle
         bridge: options.bridge,
     };
     mountedPanels.set(kind, mount);
+    recordWorkspacePanelMount(kind, options.state ?? null, options.bridge);
     renderIntoPanel(mount);
 }
 
@@ -2954,4 +2983,11 @@ export function unmountWorkspacePanel(kind: WorkspacePanelKind) {
 
     mount.root.unmount();
     mountedPanels.delete(kind);
+    recordWorkspacePanelUnmount(kind);
+    if (kind === 'mainChatMessageList') {
+        resetMainChatObservationStore();
+    }
+    if (mountedPanels.size === 0) {
+        detachGlobalCompatibilityBridge();
+    }
 }

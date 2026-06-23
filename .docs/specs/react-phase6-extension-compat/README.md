@@ -1,97 +1,39 @@
-# Phase 6: 扩展兼容性演进
+# React Phase 6: Extension Compatibility Evidence
 
-**预计工期**：持续维护（2028 Q1+）  
-**目标**：维护第三方扩展兼容性，提供迁移指南  
-**风险等级**：低
+Status: planned
+Owner doc: [React modernization roadmap](../../tech/react-modernization-roadmap.md)
 
----
+## Purpose
 
-## 概览
+Phase 6 is an evidence and maintenance phase. It does not delete compatibility surfaces. It prepares the proof Phase 7 needs before deleting, freezing, or long-term supporting extension-facing APIs.
 
-Phase 6 是持续维护阶段，不是独立的 Sprint 集合。主要工作是维护兼容层、更新文档、协助扩展开发者迁移。
+## Scope
 
----
+- Maintain compatibility exports for at least one deprecation window.
+- Validate high-risk extensions and protected surfaces.
+- Publish migration guidance and deprecation warnings where needed.
+- Feed Phase 7 Sprint 4 and Sprint 7 with evidence.
 
-## 目标
+## Protected Surfaces
 
-### 主要目标
+- `globalThis.SillyTavern`
+- `eventSource` and `event_types`
+- `@sillytavern/*` aliases
+- Tavern Helper, JS-Slash-Runner, Regex Manager, Quick Reply, Extensions Manager
+- Protected extension mount points inside the workspace and extensions drawer
 
-1. **兼容层维护**：至少 6 个月保持旧 API 可用
-2. **扩展迁移指南**：文档化新 API
-3. **社区支持**：协助扩展开发者迁移
-4. **破坏性变更评审**：任何 `globalThis.SillyTavern`、`eventSource` / `event_types` 或 `@sillytavern/*` alias 的删除、重命名或行为变更都必须经过 Phase 6 兼容评审
+## Exit Evidence Required Before Phase 7
 
----
+- Common extension validation checklist.
+- Migration guide and API change log.
+- Deprecation warning period.
+- User rollback plan.
+- `bun run test:compat` passing record.
+- ADR or compatibility review for each breaking change candidate.
 
-## 持续工作
+## Validation
 
-### 1. 兼容层维护期（6 个月）
-
-从 Phase 4 完成开始，至少维护 6 个月：
-
+```powershell
+bun run test:compat
+bun run docs:check
 ```
-2027-09 (Phase 4 完成) → 2028-03（兼容层结束）
-```
-
-在此期间：
-- 保持 `globalThis.SillyTavern` 可用
-- 保持 `eventSource` / `event_types` 可用
-- 保持 `@sillytavern/*` 别名可用
-- 保持 `bun run test:compat` 作为兼容层最低 gate
-
-### 兼容层退出条件
-
-废弃或删除兼容层前必须同时满足：
-
-- 常用扩展验证清单完成，并覆盖 Tavern Helper、JS-Slash-Runner、Regex Manager、Quick Reply 和 Extensions Manager 等高风险扩展
-- 迁移指南和 API change log 已发布
-- 废弃警告周期已完成，且有用户可回滚方案
-- `bun run test:compat` 通过
-- 对应破坏性变更已有 ADR 或 Phase 6 兼容评审记录
-
-### 2. 废弃警告
-
-在兼容层中添加废弃警告：
-
-```typescript
-// app/compat/globalBridge.ts
-globalThis.SillyTavern = new Proxy({}, {
-  get(target, prop) {
-    console.warn(
-      `[DEPRECATED] globalThis.SillyTavern.${String(prop)} is deprecated. ` +
-      `Please use useCharacterStore() from '@/stores/characterStore'. ` +
-      `See migration guide: https://docs.emberdesk.dev/migration`
-    );
-    return useCharacterStore.getState()[prop];
-  },
-});
-```
-
-### 3. 扩展市场审核
-
-与常用扩展作者合作：
-
-| 扩展名称 | 优先级 | 迁移状态 |
-|---|---|---|
-| Tavern Helper | P0 | 🚧 进行中 |
-| JS-Slash-Runner | P0 | ⏳ 待开始 |
-| Extensions Manager | P1 | ⏳ 待开始 |
-| Quick Reply | P1 | ⏳ 待开始 |
-| Regex Manager | P2 | ⏳ 待开始 |
-
----
-
-## 交付物
-
-### 文档
-
-- `.docs/extension-migration-guide.md` - 扩展迁移指南
-- `.docs/api-changes.md` - API 变更日志
-- `.docs/extension-examples/` - 迁移代码示例
-
----
-
-## 参考资料
-
-- [React 现代化路线图](../../tech/react-modernization-roadmap.md)
-- [第三方扩展兼容性](../../tech/third-party-extension-compatibility.md)

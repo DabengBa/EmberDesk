@@ -204,4 +204,98 @@ describe('chat message render descriptor', () => {
         expect(JSON.stringify(population)).not.toContain('mes_text');
         expect(JSON.stringify(population)).not.toContain('<p>');
     });
+
+    test('classifies renderer ownership for safe, editing, streaming, unsafe, and extension-mutated rows', async () => {
+        const {
+            buildChatMessageRenderDescriptor,
+            classifyChatMessageRendererContract,
+        } = await importFreshDescriptorModule();
+
+        buildChatMessageRenderDescriptor(createMessage(), { messageId: 9 });
+        expect(classifyChatMessageRendererContract({
+            rowState: 'finalized',
+            hasMesText: true,
+            hasProtectedReasoning: true,
+            extensionMutated: false,
+        })).toEqual(expect.objectContaining({
+            rendererOwner: 'legacy',
+            phase7Candidate: 'react-renderer-candidate',
+            fallback: 'legacy-messageFormatting',
+            reason: 'safe-finalized-row',
+            protectedSurfaces: {
+                mesText: true,
+                reasoning: true,
+            },
+        }));
+
+        expect(classifyChatMessageRendererContract({
+            rowState: 'editing',
+            hasMesText: true,
+        })).toEqual(expect.objectContaining({
+            rendererOwner: 'legacy',
+            phase7Candidate: 'legacy-fallback-required',
+            reason: 'editing-row',
+        }));
+
+        expect(classifyChatMessageRendererContract({
+            rowState: 'streaming',
+            hasMesText: true,
+        })).toEqual(expect.objectContaining({
+            rendererOwner: 'legacy',
+            phase7Candidate: 'legacy-fallback-required',
+            reason: 'streaming-row',
+        }));
+
+        expect(classifyChatMessageRendererContract({
+            rowState: 'finalized',
+            hasMesText: false,
+        })).toEqual(expect.objectContaining({
+            rendererOwner: 'legacy',
+            phase7Candidate: 'unsupported-with-reason',
+            reason: 'missing-mes-text',
+        }));
+
+        expect(classifyChatMessageRendererContract({
+            rowState: 'finalized',
+            hasMesText: true,
+            extensionMutated: true,
+        })).toEqual(expect.objectContaining({
+            rendererOwner: 'legacy',
+            phase7Candidate: 'legacy-fallback-required',
+            reason: 'extension-mutated-row',
+        }));
+    });
+
+    test('describes long-chat windowing contract without replacing chat truncation owner', async () => {
+        const { buildMainChatWindowingContract } = await importFreshDescriptorModule();
+
+        expect(buildMainChatWindowingContract({
+            renderedMessageIds: ['20', '21', '22'],
+            totalMessageCount: 120,
+            showMoreVisible: true,
+            anchorMessageId: '21',
+            scrollTop: 240,
+        })).toEqual({
+            windowingOwner: 'legacy-chat-truncation',
+            phase7Candidate: 'react-windowing-candidate',
+            fallback: 'legacy-show-more-messages',
+            renderedMessageIds: ['20', '21', '22'],
+            totalMessageCount: 120,
+            showMoreVisible: true,
+            anchorMessageId: '21',
+            scrollTop: 240,
+            preservesDirectChildOrder: true,
+            reason: 'long-chat-window',
+        });
+
+        expect(buildMainChatWindowingContract({
+            renderedMessageIds: ['1', '2'],
+            totalMessageCount: 2,
+            showMoreVisible: false,
+        })).toEqual(expect.objectContaining({
+            windowingOwner: 'legacy-full-chat',
+            phase7Candidate: 'react-windowing-candidate',
+            reason: 'full-chat-window',
+        }));
+    });
 });

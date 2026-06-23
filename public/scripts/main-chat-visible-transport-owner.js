@@ -6,34 +6,52 @@ const SUPPORTED_REACT_VISIBLE_GENERATION_KINDS = new Set([
     'swipeRight',
 ]);
 
-export function classifyMainChatVisibleTransportOwner({
+export function classifyMainChatVisibleTransportSupport({
     kind = '',
     mainApi = '',
     selectedGroup = false,
     dryRun = false,
     depth = 0,
+    quietPrompt = false,
+    backgroundGeneration = false,
 } = {}) {
     if (mainApi !== 'openai') {
-        return { owner: 'legacy', reason: 'unsupported-api' };
+        return { status: 'legacy-fallback', path: 'non-openai-provider', reason: 'unsupported-api' };
     }
 
     if (selectedGroup) {
-        return { owner: 'legacy', reason: 'group-chat' };
+        return { status: 'legacy-fallback', path: 'group-chat', reason: 'group-chat' };
     }
 
     if (dryRun) {
-        return { owner: 'legacy', reason: 'dry-run' };
+        return { status: 'legacy-fallback', path: 'dry-run', reason: 'dry-run' };
     }
 
     if (Number(depth) > 0) {
-        return { owner: 'legacy', reason: 'nested-generation' };
+        return { status: 'legacy-fallback', path: 'nested-visible-generation', reason: 'nested-generation' };
+    }
+
+    if (quietPrompt) {
+        return { status: 'legacy-fallback', path: 'quiet-generation', reason: 'quiet-generation' };
+    }
+
+    if (backgroundGeneration) {
+        return { status: 'legacy-fallback', path: 'background-generation', reason: 'background-generation' };
     }
 
     if (!SUPPORTED_REACT_VISIBLE_GENERATION_KINDS.has(String(kind))) {
-        return { owner: 'legacy', reason: 'unsupported-kind' };
+        return { status: 'unsupported-with-reason', path: 'unknown-visible-generation-kind', reason: 'unsupported-kind' };
     }
 
-    return { owner: 'react', reason: 'supported-kind' };
+    return { status: 'react-owned', path: 'standard-openai-visible-direct-chat', reason: 'supported-kind' };
+}
+
+export function classifyMainChatVisibleTransportOwner(input = {}) {
+    const support = classifyMainChatVisibleTransportSupport(input);
+    return {
+        owner: support.status === 'react-owned' ? 'react' : 'legacy',
+        reason: support.reason,
+    };
 }
 
 export function deriveReactVisibleTransportBridgeState({

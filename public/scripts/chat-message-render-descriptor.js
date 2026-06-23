@@ -103,6 +103,101 @@ export function buildChatMessageRowPopulation(descriptor, {
     };
 }
 
+/**
+ * Classifies the current renderer ownership contract for a message row.
+ * This is descriptive only: message body formatting remains owned by legacy renderers.
+ *
+ * @param {object} options DOM-derived row safety facts
+ * @param {'finalized'|'editing'|'streaming'|'unsafe'} [options.rowState='finalized'] Current row lifecycle state
+ * @param {boolean} [options.hasMesText=false] Whether the row exposes the protected .mes_text body
+ * @param {boolean} [options.hasProtectedReasoning=false] Whether protected reasoning wrappers are present
+ * @param {boolean} [options.extensionMutated=false] Whether extension-owned mutation was detected
+ * @returns {object} Current renderer ownership classification
+ */
+export function classifyChatMessageRendererContract({
+    rowState = 'finalized',
+    hasMesText = false,
+    hasProtectedReasoning = false,
+    extensionMutated = false,
+} = {}) {
+    if (!hasMesText) {
+        return createRendererContract('unsupported-with-reason', 'missing-mes-text');
+    }
+
+    if (extensionMutated) {
+        return createRendererContract('legacy-fallback-required', 'extension-mutated-row');
+    }
+
+    if (rowState === 'editing') {
+        return createRendererContract('legacy-fallback-required', 'editing-row');
+    }
+
+    if (rowState === 'streaming') {
+        return createRendererContract('legacy-fallback-required', 'streaming-row');
+    }
+
+    if (rowState === 'unsafe') {
+        return createRendererContract('unsupported-with-reason', 'unsafe-row');
+    }
+
+    return {
+        ...createRendererContract('react-renderer-candidate', 'safe-finalized-row'),
+        protectedSurfaces: {
+            mesText: true,
+            reasoning: Boolean(hasProtectedReasoning),
+        },
+    };
+}
+
+/**
+ * Describes the current long-chat windowing contract without changing ownership.
+ *
+ * @param {object} options Windowing facts from the legacy chat DOM
+ * @param {string[]} [options.renderedMessageIds=[]] Direct-child .mes ids currently rendered
+ * @param {number} [options.totalMessageCount=0] Total chat message count
+ * @param {boolean} [options.showMoreVisible=false] Whether #show_more_messages is available
+ * @param {string|null} [options.anchorMessageId=null] Current reading anchor
+ * @param {number} [options.scrollTop=0] Current scroll offset
+ * @returns {object} Windowing ownership classification
+ */
+export function buildMainChatWindowingContract({
+    renderedMessageIds = [],
+    totalMessageCount = 0,
+    showMoreVisible = false,
+    anchorMessageId = null,
+    scrollTop = 0,
+} = {}) {
+    const normalizedRenderedIds = Array.isArray(renderedMessageIds)
+        ? renderedMessageIds.map(id => String(id))
+        : [];
+    const normalizedTotal = Number.isInteger(totalMessageCount) && totalMessageCount >= 0
+        ? totalMessageCount
+        : normalizedRenderedIds.length;
+    const isLongChatWindow = Boolean(showMoreVisible) || normalizedTotal > normalizedRenderedIds.length;
+
+    return {
+        windowingOwner: isLongChatWindow ? 'legacy-chat-truncation' : 'legacy-full-chat',
+        phase7Candidate: 'react-windowing-candidate',
+        fallback: 'legacy-show-more-messages',
+        renderedMessageIds: normalizedRenderedIds,
+        totalMessageCount: normalizedTotal,
+        showMoreVisible: Boolean(showMoreVisible),
+        anchorMessageId: anchorMessageId === null || anchorMessageId === undefined ? null : String(anchorMessageId),
+        scrollTop: Number.isFinite(scrollTop) && scrollTop >= 0 ? scrollTop : 0,
+        preservesDirectChildOrder: isStrictlyOrderedIds(normalizedRenderedIds),
+        reason: isLongChatWindow ? 'long-chat-window' : 'full-chat-window',
+    };
+}
+
+function createRendererContract(phase7Candidate, reason) {
+    return {
+        rendererOwner: 'legacy',
+        phase7Candidate,
+        fallback: 'legacy-messageFormatting',
+        reason,
+    };
+}
+
 function getMessageRole({ isUser, isSystem }) {
     if (isUser) {
         return 'user';
@@ -113,6 +208,18 @@ function getMessageRole({ isUser, isSystem }) {
     }
 
     return 'character';
+}
+
+function isStrictlyOrderedIds(ids) {
+    let previous = -1;
+    for (const id of ids) {
+        const next = Number(id);
+        if (!Number.isInteger(next) || next <= previous) {
+            return false;
+        }
+        previous = next;
+    }
+    return true;
 }
 
 function getMessageState(flags) {

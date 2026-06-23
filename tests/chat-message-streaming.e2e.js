@@ -32,6 +32,29 @@ async function selectCharacterByName(page, name, chatName = seededChatName) {
     }
 }
 
+async function selectCharacterInFreshChat(page, name) {
+    await selectCharacterByName(page, name);
+    await page.evaluate(async () => {
+        const script = await import('/script.js');
+        await script.doNewChat({ deleteCurrentChat: false });
+        await script.eventSource.emit(script.event_types.CHAT_LOADED, { detail: { source: 'e2e-fresh-chat' } });
+    });
+    await resetStreamingTestGlobals(page);
+}
+
+async function resetStreamingTestGlobals(page) {
+    await page.evaluate(() => {
+        window.__emberdeskStreamingGeneration = null;
+        window.__emberdeskStreamingGenerationResult = null;
+        window.__emberdeskStreamingGenerationError = null;
+        window.__emberdeskStreamingRequests = [];
+        window.__emberdeskStreamingAbortCount = 0;
+        window.__emberdeskStreamingMessageEvents = [];
+        window.__emberdeskStreamingRenderedEvents = [];
+        window.__emberdeskStreamingRecoveryStatuses = [];
+    });
+}
+
 async function installStreamingFetchStub(page, { chunks, delayMs = 40, keepOpenAfterChunks = false, failAfterChunks = false }) {
     const responses = [{ chunks, delayMs, keepOpenAfterChunks, failAfterChunks }];
     await installStreamingFetchSequenceStub(page, { responses });
@@ -39,6 +62,9 @@ async function installStreamingFetchStub(page, { chunks, delayMs = 40, keepOpenA
 
 async function installStreamingFetchSequenceStub(page, { responses }) {
     await page.evaluate(({ streamResponses }) => {
+        window.__emberdeskStreamingGeneration = null;
+        window.__emberdeskStreamingGenerationResult = null;
+        window.__emberdeskStreamingGenerationError = null;
         window.__emberdeskStreamingRequests = [];
         window.__emberdeskStreamingAbortCount = 0;
         window.__emberdeskStreamingOriginalFetch ??= window.fetch.bind(window);
@@ -119,6 +145,9 @@ async function installStreamingFetchSequenceStub(page, { responses }) {
 
 async function installNonStreamingFetchStub(page, { content, delayMs = 200 }) {
     await page.evaluate(({ responseContent, responseDelayMs }) => {
+        window.__emberdeskStreamingGeneration = null;
+        window.__emberdeskStreamingGenerationResult = null;
+        window.__emberdeskStreamingGenerationError = null;
         window.__emberdeskStreamingRequests = [];
         window.__emberdeskStreamingAbortCount = 0;
         window.__emberdeskStreamingOriginalFetch ??= window.fetch.bind(window);
@@ -585,7 +614,7 @@ test.describe('chat message streaming', () => {
 
     test('streams partial content into a stable message row and finalizes it', async ({ page }) => {
         await testSetup.awaitST({ page });
-        await selectCharacterByName(page, characterName);
+        await selectCharacterInFreshChat(page, characterName);
         await enableOpenAiStreaming(page);
         await installStreamingFetchStub(page, {
             chunks: ['Streaming ', 'proof ', 'complete.'],
@@ -634,7 +663,7 @@ test.describe('chat message streaming', () => {
 
     test('stop restores controls without duplicating the streaming row', async ({ page }) => {
         await testSetup.awaitST({ page });
-        await selectCharacterByName(page, characterName);
+        await selectCharacterInFreshChat(page, characterName);
         await enableOpenAiStreaming(page);
         await installMessageEventCounters(page);
         await installStreamingFetchStub(page, {
@@ -708,7 +737,7 @@ test.describe('chat message streaming', () => {
 
     test('visible composer owner keeps newline, send, clear, and empty-submit behavior', async ({ page }) => {
         await testSetup.awaitST({ page });
-        await selectCharacterByName(page, characterName);
+        await selectCharacterInFreshChat(page, characterName);
         await enableOpenAiStreaming(page);
         await installStreamingFetchStub(page, {
             chunks: ['Composer proof complete.'],
@@ -787,7 +816,7 @@ test.describe('chat message streaming', () => {
         test.skip(!reactMainChatMessageListEnabled, 'rapid submit regression only exists on React-owned visible composer');
 
         await testSetup.awaitST({ page });
-        await selectCharacterByName(page, characterName);
+        await selectCharacterInFreshChat(page, characterName);
         await enableOpenAiStreaming(page, { streamOpenAi: false });
         await installNonStreamingFetchStub(page, {
             content: 'Serialized submit proof complete.',
@@ -829,7 +858,7 @@ test.describe('chat message streaming', () => {
         test.skip(!reactMainChatMessageListEnabled, 'React-owned visible transport requires the main-chat message-list panel flag');
 
         await testSetup.awaitST({ page });
-        await selectCharacterByName(page, characterName);
+        await selectCharacterInFreshChat(page, characterName);
         await enableOpenAiStreaming(page);
         await installStreamingFetchStub(page, {
             chunks: ['React-owned ', 'composer transport.'],
@@ -870,7 +899,7 @@ test.describe('chat message streaming', () => {
 
     test('composer bridge follows legacy disconnect sendability', async ({ page }) => {
         await testSetup.awaitST({ page });
-        await selectCharacterByName(page, characterName);
+        await selectCharacterInFreshChat(page, characterName);
         await enableOpenAiStreaming(page);
 
         const composer = page.getByRole('textbox', { name: 'Chat message' });
@@ -907,7 +936,7 @@ test.describe('chat message streaming', () => {
         test.skip(!reactMainChatMessageListEnabled, 'React-owned visible transport requires the main-chat message-list panel flag');
 
         await testSetup.awaitST({ page });
-        await selectCharacterByName(page, characterName);
+        await selectCharacterInFreshChat(page, characterName);
         await enableOpenAiStreaming(page);
         await installStreamingFetchStub(page, {
             chunks: ['Continue baseline.'],
@@ -965,7 +994,7 @@ test.describe('chat message streaming', () => {
         test.skip(!reactMainChatMessageListEnabled, 'React-owned visible transport requires the main-chat message-list panel flag');
 
         await testSetup.awaitST({ page });
-        await selectCharacterByName(page, characterName);
+        await selectCharacterInFreshChat(page, characterName);
         await enableOpenAiStreaming(page);
         await installStreamingFetchStub(page, {
             chunks: ['Seed assistant row.'],
@@ -1014,7 +1043,7 @@ test.describe('chat message streaming', () => {
 
     test('non-streaming stop does not reuse the previous assistant message id in transport state', async ({ page }) => {
         await testSetup.awaitST({ page });
-        await selectCharacterByName(page, characterName);
+        await selectCharacterInFreshChat(page, characterName);
         await enableOpenAiStreaming(page);
         await installStreamingFetchStub(page, {
             chunks: ['Previous assistant response.'],
@@ -1062,7 +1091,7 @@ test.describe('chat message streaming', () => {
 
     test('visible slash owner observes autocomplete, execution, pause, continue, and abort through the legacy executor', async ({ page }) => {
         await testSetup.awaitST({ page });
-        await selectCharacterByName(page, characterName);
+        await selectCharacterInFreshChat(page, characterName);
 
         await page.evaluate(async () => {
             const { power_user } = await import('/scripts/power-user.js');
@@ -1198,7 +1227,7 @@ test.describe('chat message streaming', () => {
 
     test('auto retries primary failures once, switches to fallback, and keeps one assistant row', async ({ page }) => {
         await testSetup.awaitST({ page });
-        await selectCharacterByName(page, characterName);
+        await selectCharacterInFreshChat(page, characterName);
         await enableOpenAiStreaming(page);
         await enableFallbackProvider(page);
         await installMessageEventCounters(page);
@@ -1269,7 +1298,7 @@ test.describe('chat message streaming', () => {
 
     test('parses fallback stream with fallback source when primary source has a different stream shape', async ({ page }) => {
         await testSetup.awaitST({ page });
-        await selectCharacterByName(page, characterName);
+        await selectCharacterInFreshChat(page, characterName);
         await enableOpenAiStreaming(page, { chatCompletionSource: 'claude' });
         await enableFallbackProvider(page);
         await installStreamingFetchSequenceStub(page, {
@@ -1297,7 +1326,7 @@ test.describe('chat message streaming', () => {
 
     test('stop does not enter the auto recovery chain', async ({ page }) => {
         await testSetup.awaitST({ page });
-        await selectCharacterByName(page, characterName);
+        await selectCharacterInFreshChat(page, characterName);
         await enableOpenAiStreaming(page);
         await enableFallbackProvider(page);
         await installStreamingFetchSequenceStub(page, {
@@ -1323,7 +1352,7 @@ test.describe('chat message streaming', () => {
 
     test('provider failure leaves a readable recovery path without duplicating rows', async ({ page }) => {
         await testSetup.awaitST({ page });
-        await selectCharacterByName(page, characterName);
+        await selectCharacterInFreshChat(page, characterName);
         await enableOpenAiStreaming(page);
         await installStreamingFetchStub(page, {
             chunks: ['Failure path partial text.'],
@@ -1390,7 +1419,7 @@ test.describe('chat message streaming', () => {
 
     test('primary failure retries then fallback success reuses the same assistant row and clears partial text', async ({ page }) => {
         await testSetup.awaitST({ page });
-        await selectCharacterByName(page, characterName);
+        await selectCharacterInFreshChat(page, characterName);
         await enableOpenAiStreaming(page);
         await enableFallbackProvider(page);
         await installMessageEventCounters(page);
@@ -1439,7 +1468,7 @@ test.describe('chat message streaming', () => {
 
     test('recovered overswipe appends a new swipe without replacing the existing swipe', async ({ page }) => {
         await testSetup.awaitST({ page });
-        await selectCharacterByName(page, characterName);
+        await selectCharacterInFreshChat(page, characterName);
         await enableOpenAiStreaming(page);
         await enableFallbackProvider(page);
         await installStreamingFetchSequenceStub(page, {
@@ -1500,7 +1529,7 @@ test.describe('chat message streaming', () => {
 
     test('continue auto recovery final failure preserves the original assistant message', async ({ page }) => {
         await testSetup.awaitST({ page });
-        await selectCharacterByName(page, characterName);
+        await selectCharacterInFreshChat(page, characterName);
         await enableOpenAiStreaming(page);
         await enableFallbackProvider(page);
         await installStreamingFetchSequenceStub(page, {
@@ -1540,7 +1569,7 @@ test.describe('chat message streaming', () => {
 
     test('provider failure before first token still restores retry recovery', async ({ page }) => {
         await testSetup.awaitST({ page });
-        await selectCharacterByName(page, characterName);
+        await selectCharacterInFreshChat(page, characterName);
         await enableOpenAiStreaming(page);
         await installStreamingFetchStub(page, {
             chunks: [],
@@ -1577,7 +1606,7 @@ test.describe('chat message streaming', () => {
 
     test('keeps streaming stop and failure recovery reachable on mobile viewports', async ({ page }) => {
         await testSetup.awaitST({ page });
-        await selectCharacterByName(page, characterName);
+        await selectCharacterInFreshChat(page, characterName);
         await enableOpenAiStreaming(page);
 
         for (const viewport of mobileViewports) {

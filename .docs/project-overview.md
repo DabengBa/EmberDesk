@@ -34,6 +34,8 @@ It is not optimized for users who want a managed cloud product or a minimal one-
 - Entry point: `server.js` -> `src/server-main.js`
 - React migration: feature-flagged page islands for `/login`, `/setup`, and `/settings`, plus guarded workspace panel islands for Character Library, World Info, Background Library, and Extensions Host, with legacy fallbacks preserved (see [ADR-0007](adr/0007-react-page-islands-with-legacy-fallbacks.md))
 - Workspace panel islands: the server bootstrap payload and browser bridge helper carry independent flags for workspace panels; Vite builds the shared workspace-panel bundle; World Info, Background Library, and Extensions Host now expose guarded React host/action surfaces behind their panel flags. Flag-off paths do not insert empty migration hosts, and legacy owners still perform World Info prompt/regex/delete semantics, Background file/API/slash behavior, and extension discovery/mount/protocol behavior.
+- React state migration: Phase 4 introduces Zustand-backed workspace-panel and main-chat observation stores plus an allowlisted global compatibility bridge. `globalThis.SillyTavern`, `eventSource`, `event_types`, jQuery globals, and extension-facing exports remain compatibility surfaces until Phase 6/7 evidence allows deprecation, freezing, or removal.
+- Main-chat React boundary: the guarded main-chat island can own supported visible OpenAI direct-chat transport slices and record renderer/windowing candidate contracts, but provider compatibility fallback, quiet/background generation, legacy formatter HTML, extension-mutated rows, and long-chat load-more/windowing remain protected legacy owners until Phase 7 full owner cutover.
 
 Current architectural boundaries:
 
@@ -71,6 +73,7 @@ EmberDesk currently provides:
 - background and extension surfaces inside the main shell
 - a documented shared browser library for common frontend utilities and extension compatibility
 - feature-flagged React page islands for login, setup, and the migrated Settings slice, plus guarded workspace panel islands for the character library, World Info, Background Library, and Extensions Host; TanStack Form, Zod, TanStack Query, and TanStack Virtual are used where React owns the migrated slice, while legacy rollback surfaces and legacy-owned behavior owners stay in place until later cleanup specs retire them
+- Zustand-backed React state stores and an allowlisted compatibility bridge that let React-owned slices observe workspace/main-chat state without exposing broad panel internals or breaking legacy extension globals
 - Docker-friendly deployment and browser access across devices
 - focused startup and interaction performance work for daily-use paths
 - client-side character-list incremental reconcile and consistency guards so ordinary browsing and delete flows keep visible rows, pagination, selected-character navigation, temporary-chat status, and bulk-selection hooks aligned without always redrawing the whole list, while delayed edit/save responses still cannot undo confirmed deletion actions

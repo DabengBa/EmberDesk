@@ -70,11 +70,22 @@ Current proof:
 - `tests/chat-workspace-structure.test.js`
 - `tests/chat-message-rendering.e2e.js`
 - `tests/chat-message-layout.e2e.js`
+- `tests/chat-message-render-descriptor.test.js`
 
 Failure modes:
 
 - Moving formatter logic can affect markdown, regex, comments, system messages, reasoning, and extension-visible HTML.
 - Row identity changes can break first-party actions and extension-adjacent scripts.
+
+### Phase 4B Renderer Contract
+
+`public/scripts/chat-message-render-descriptor.js` now records the current renderer ownership contract without moving the formatter owner. `buildChatMessageRenderDescriptor()` and `buildChatMessageRowPopulation()` describe stable row metadata. `classifyChatMessageRendererContract()` classifies the current Phase 7 cutover candidate state:
+
+- safe finalized rows with `.mes_text` are `react-renderer-candidate`
+- extension-mutated rows, editing rows, and streaming rows are `legacy-fallback-required`
+- missing `.mes_text` or unsafe rows are `unsupported-with-reason`
+
+This is a proof contract, not a renderer rewrite. `messageFormatting()`, `getMessageTextHTML()`, media/file wrappers, code/LaTeX output, and extension-visible `.mes_text` HTML remain legacy-owned until Phase 7 Sprint 6 has an ADR-backed cutover plan.
 
 ### Long Chat Show More
 
@@ -90,10 +101,21 @@ Current path:
 Current proof:
 
 - `tests/chat-message-rendering.e2e.js` creates a long-chat fixture, sets `chat_truncation`, opens the long chat, verifies `#show_more_messages`, verifies bounded row count, verifies the first rendered `mesid`, clicks load-more, verifies older seeded rows appear, verifies the previous anchor row remains within an 8px position tolerance, and verifies the latest row remains reachable.
+- `buildMainChatWindowingContract()` records the current windowing owner as `legacy-chat-truncation` for long-chat windows and keeps `legacy-show-more-messages` as the fallback until Phase 7 Sprint 6.
 
 UX gap:
 
 - Search, jump-to-message, range indicators, and context summaries remain future UX candidates. The current proof covers bounded rendering, load-more position stability, and latest-row reachability without a separate return-to-newest control.
+
+### Phase 7 Sprint 6 Cutover Checklist
+
+Phase 7 Sprint 6 may start a full renderer/windowing owner cutover only after these Phase 4B facts remain green:
+
+- safe finalized rows are the only React renderer candidate class at the start of cutover
+- editing rows, streaming rows, extension-mutated rows, unsafe rows, and rows missing `.mes_text` keep legacy fallback or receive an explicit ADR decision
+- `.mes_text`, `.mes[mesid]`, `.mes_reasoning_details`, `.mes_media_wrapper`, `.mes_file_wrapper`, swipe controls, and visible action shell reachability keep compatibility proof
+- long-chat windows preserve direct-child `.mes[mesid]` order, `#show_more_messages` reachability, reading-position restore, and mobile load-more access
+- `bun run test:compat` and the React-flagged `chat-message-rendering.e2e.js` / `chat-message-layout.e2e.js` gate pass before removing any legacy formatter or windowing fallback
 
 ### User Message Append
 
@@ -209,5 +231,6 @@ Candidate 4: interaction performance evidence.
 - `tests/chat-workspace-structure.test.js`
 - `tests/chat-message-layout.e2e.js`
 - `tests/chat-message-rendering.e2e.js`
+- `tests/chat-message-render-descriptor.test.js`
 - `.docs/tech/main-chat-successor-scope.md`
 - `.docs/tech/third-party-extension-compatibility.md`

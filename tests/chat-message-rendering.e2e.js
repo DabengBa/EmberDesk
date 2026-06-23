@@ -110,7 +110,7 @@ async function selectCharacterByName(page, name) {
     }, name);
 }
 
-async function openChatAndMeasureFirstMessage(page, chatName) {
+async function openChatAndMeasureFirstMessage(page, chatName, expectedFirstMessageText) {
     const startedAt = await page.evaluate(() => performance.now());
 
     await page.evaluate(async (chatToOpen) => {
@@ -118,10 +118,16 @@ async function openChatAndMeasureFirstMessage(page, chatName) {
         await context.openCharacterChat(chatToOpen);
     }, chatName);
 
-    await page.waitForFunction(() => {
-        return Array.from(document.querySelectorAll('#chat > .mes[mesid] .mes_text'))
-            .some(element => element.textContent.trim().length > 0);
-    }, undefined, { timeout: 30_000 });
+    await page.waitForFunction(({ expectedChatName, expectedText }) => {
+        const normalize = value => String(value ?? '').replace(/\s+/g, ' ').trim();
+        const context = window.SillyTavern.getContext();
+        const selectedChatName = context.characters[context.characterId]?.chat;
+        const firstMessageText = document.querySelector('#chat > .mes[mesid="0"] .mes_text')?.textContent ?? '';
+
+        return selectedChatName === expectedChatName
+            && firstMessageText.trim().length > 0
+            && normalize(firstMessageText) === normalize(expectedText);
+    }, { expectedChatName: chatName, expectedText: expectedFirstMessageText }, { timeout: 30_000 });
 
     return page.evaluate(start => performance.now() - start, startedAt);
 }
@@ -343,6 +349,9 @@ async function expectClipboardText(page, expectedText) {
 }
 
 async function clickControlAtCenter(page, locator) {
+    await locator.scrollIntoViewIfNeeded();
+    await expect(locator).toBeVisible();
+
     const hitTarget = await locator.evaluate((element) => {
         const rect = element.getBoundingClientRect();
         const x = rect.left + (rect.width / 2);
@@ -354,11 +363,13 @@ async function clickControlAtCenter(page, locator) {
             y,
             label: hit?.getAttribute?.('aria-label') ?? '',
             className: hit?.className ?? '',
+            tagName: hit?.tagName ?? '',
+            text: hit?.textContent?.trim?.() ?? '',
             isSelf: hit === element || element.contains(hit),
         };
     });
 
-    expect(hitTarget.isSelf).toBe(true);
+    expect(hitTarget.isSelf, `Control center was covered: ${JSON.stringify(hitTarget)}`).toBe(true);
     await page.mouse.click(hitTarget.x, hitTarget.y);
 }
 
@@ -386,7 +397,7 @@ test.describe('chat message rendering', () => {
             context.powerUserSettings.chat_truncation = truncationLimit;
         }, seededMessages.length);
 
-        const firstMessageVisibleMs = await openChatAndMeasureFirstMessage(page, seededChatName);
+        const firstMessageVisibleMs = await openChatAndMeasureFirstMessage(page, seededChatName, seededMessages[0].mes);
         testInfo.annotations.push({
             type: 'first-message-visible-ms',
             description: firstMessageVisibleMs.toFixed(1),
@@ -531,7 +542,7 @@ test.describe('chat message rendering', () => {
             context.powerUserSettings.confirm_message_delete = true;
         }, { truncationLimit: seededMessages.length });
 
-        await openChatAndMeasureFirstMessage(page, seededChatName);
+        await openChatAndMeasureFirstMessage(page, seededChatName, seededMessages[0].mes);
 
         const assistantRow = page.locator(`#chat > .mes[mesid="${assistantMessageIndex}"]`);
         await expect(assistantRow).toBeVisible();
@@ -605,7 +616,7 @@ test.describe('chat message rendering', () => {
             context.powerUserSettings.confirm_message_delete = true;
         }, { truncationLimit: seededMessages.length });
 
-        await openChatAndMeasureFirstMessage(page, seededChatName);
+        await openChatAndMeasureFirstMessage(page, seededChatName, seededMessages[0].mes);
 
         const assistantRow = page.locator(`#chat > .mes[mesid="${assistantMessageIndex}"]`);
         await expect(assistantRow).toBeVisible();
