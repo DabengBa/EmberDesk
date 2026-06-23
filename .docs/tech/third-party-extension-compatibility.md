@@ -68,6 +68,8 @@ Use the following `JS-Slash-Runner criticality` values when reviewing or extendi
 
 `JS-Slash-Runner` is the only mandatory primary sample for Phase 6 runtime compatibility work. Phase 6 proof is considered incomplete if the repo can only show static export stability but cannot explain how the plugin still mounts, consumes events, and reuses the protected slash/regex surfaces.
 
+External dependency paths in this section were checked on 2026-06-23 against `JS-Slash-Runner` commit `b65f48a4856da9f0947224404d4c08910a8f350f` (`https://gitlab.com/novi028/JS-Slash-Runner/-/tree/b65f48a4856da9f0947224404d4c08910a8f350f`).
+
 ### Mandatory primary evidence surfaces
 
 | Surface | Current plugin dependency path | Baseline proof | Remaining runtime evidence note | Phase 7 blocker when broken |

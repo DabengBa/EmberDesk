@@ -25,7 +25,7 @@ Phase 6 当前只有 `.docs/specs/react-phase6-extension-compat/README.md` 级�
   - 2026-06-23: 创建本 brief，作为 Phase 6 多 spec 收敛的上游意图。
   - 2026-06-23: 用户明确 `JS-Slash-Runner` 是 Phase 6 的 primary compatibility gate，合同台账必须先标出哪些 surface 是它的直接依赖。
   - 2026-06-23: dated spec `260623-01-phase6-contract-ledger` 已完成 delivery、review 和文档同步。
-- **Implementation traceability:** process artifacts `.docs/specs/260623-01-phase6-contract-ledger/spec.md`, `.docs/specs/260623-01-phase6-contract-ledger/plan.md`; durable docs `.docs/tech/third-party-extension-compatibility.md`, `.docs/specs/react-phase6-extension-compat/README.md`, `.docs/tech/react-modernization-roadmap.md`; proof `bun run test:compat`, `bun run docs:check`; commit `this wrap-up commit`; delivery status `delivered JS-Slash-Runner-prioritized Phase 6 contract ledger`
+- **Implementation traceability:** durable docs `.docs/tech/third-party-extension-compatibility.md`, `.docs/specs/react-phase6-extension-compat/README.md`, `.docs/tech/react-modernization-roadmap.md`; proof `bun run test:compat`, `bun run docs:check`; archival commit `8219a0ce0a437258ce2584677a305b6e4eeaad12` (`docs(phase6): crown JS-Slash-Runner the compatibility gatekeeper`); delivery status `delivered JS-Slash-Runner-prioritized Phase 6 contract ledger`
 
 ### Domain 2: Extension runtime compatibility evidence
 
@@ -35,7 +35,7 @@ Phase 6 当前只有 `.docs/specs/react-phase6-extension-compat/README.md` 级�
   - 2026-06-23: 创建本 brief，作为 Phase 6 扩展运行时兼容证据 spec 的上游意图。
   - 2026-06-23: 用户明确次级扩展只作为补充证据，不能与 `JS-Slash-Runner` 并列为主目标。
   - 2026-06-23: dated spec `260623-02-phase6-extension-runtime-compatibility-evidence` 已完成 delivery、review 和文档同步。
-- **Implementation traceability:** process artifacts `.docs/specs/260623-02-phase6-extension-runtime-compatibility-evidence/spec.md`, `.docs/specs/260623-02-phase6-extension-runtime-compatibility-evidence/plan.md`; durable docs `.docs/tech/third-party-extension-compatibility.md`, `.docs/specs/react-phase6-extension-compat/README.md`; external validation `https://gitlab.com/novi028/JS-Slash-Runner` checked on 2026-06-23 with current dependency evidence at `src/index.ts` (`#tavern_helper` -> `#extensions_settings`), `src/function/slash.ts` (`executeSlashCommandsWithOptions`), `src/function/generate/utils.ts`, and `src/function/tavern_regex.ts` (`getRegexedString` / `regex_placement`), plus current `@sillytavern/*` and `eventSource` / `event_types` consumers across `src/`; proof `bun run test:compat`, `bun run docs:check`; commit `this wrap-up commit`; delivery status `delivered JS-Slash-Runner-first runtime evidence and blocker rules`
+- **Implementation traceability:** durable docs `.docs/tech/third-party-extension-compatibility.md`, `.docs/specs/react-phase6-extension-compat/README.md`; external validation pinned to `JS-Slash-Runner` commit `b65f48a4856da9f0947224404d4c08910a8f350f` (`https://gitlab.com/novi028/JS-Slash-Runner/-/tree/b65f48a4856da9f0947224404d4c08910a8f350f`) checked on 2026-06-23 with dependency evidence at `src/index.ts` (`#tavern_helper` -> `#extensions_settings`), `src/function/slash.ts` (`executeSlashCommandsWithOptions`), `src/function/generate/utils.ts`, and `src/function/tavern_regex.ts` (`getRegexedString` / `regex_placement`), plus `@sillytavern/*` and `eventSource` / `event_types` consumers across `src/`; proof `bun run test:compat`, `bun run docs:check`; archival commit `8219a0ce0a437258ce2584677a305b6e4eeaad12` (`docs(phase6): crown JS-Slash-Runner the compatibility gatekeeper`); delivery status `delivered JS-Slash-Runner-first runtime evidence and blocker rules`
 
 ### Domain 3: Global export and bridge evidence
 
@@ -45,7 +45,7 @@ Phase 6 当前只有 `.docs/specs/react-phase6-extension-compat/README.md` 级�
   - 2026-06-23: 创建本 brief，作为 Phase 6 全局导出与 bridge 证据 spec 的上游意图。
   - 2026-06-23: 用户确认 globals/bridge 证据的优先级由 `JS-Slash-Runner` 的直接消费关系决定，而不是先抽象成通用 React bridge API。
   - 2026-06-23: dated spec `260623-03-phase6-global-compatibility-evidence` 已完成 delivery、review 和文档同步。
-- **Implementation traceability:** process artifacts `.docs/specs/260623-03-phase6-global-compatibility-evidence/spec.md`, `.docs/specs/260623-03-phase6-global-compatibility-evidence/plan.md`; code `app/compat/global-compatibility-bridge.js`; durable docs `.docs/tech/third-party-extension-compatibility.md`, `.docs/specs/react-phase6-extension-compat/README.md`, `.docs/project-overview.md`; proof `bun run test:compat`, `bun run --cwd tests test:unit -- global-compatibility-bridge.test.js --runInBand`, `bun run docs:check`; commit `this wrap-up commit`; delivery status `delivered public-global versus internal-bridge evidence with JS-Slash-Runner priority`
+- **Implementation traceability:** code `app/compat/global-compatibility-bridge.js`; durable docs `.docs/tech/third-party-extension-compatibility.md`, `.docs/specs/react-phase6-extension-compat/README.md`, `.docs/project-overview.md`; proof `bun run test:compat`, `bun run --cwd tests test:unit -- global-compatibility-bridge.test.js --runInBand`, `bun run docs:check`; archival commit `8219a0ce0a437258ce2584677a305b6e4eeaad12` (`docs(phase6): crown JS-Slash-Runner the compatibility gatekeeper`); delivery status `delivered public-global versus internal-bridge evidence with JS-Slash-Runner priority`
 
 ### Domain 4: Migration, deprecation, and rollback package
 
@@ -55,7 +55,7 @@ Phase 6 当前只有 `.docs/specs/react-phase6-extension-compat/README.md` 级�
   - 2026-06-23: 创建本 brief，作为 Phase 6 迁移/弃用/回滚包 spec 的上游意图。
   - 2026-06-23: 用户确认任何会破坏 `JS-Slash-Runner` 且没有替代路径、迁移说明和回滚方案的 candidate，都不得进入 Phase 7 删除路径。
   - 2026-06-23: dated spec `260623-04-phase6-migration-deprecation-rollback-package` 已完成 delivery、review 和文档同步。
-- **Implementation traceability:** process artifacts `.docs/specs/260623-04-phase6-migration-deprecation-rollback-package/spec.md`, `.docs/specs/260623-04-phase6-migration-deprecation-rollback-package/plan.md`; durable docs `.docs/tech/third-party-extension-compatibility.md`, `.docs/specs/react-phase6-extension-compat/README.md`, `.docs/tech/react-modernization-roadmap.md`, `.docs/PROJECT_HISTORY.md`; proof `bun run docs:check`; commit `this wrap-up commit`; delivery status `delivered Phase 7 input package with JS-Slash-Runner hard gate`
+- **Implementation traceability:** durable docs `.docs/tech/third-party-extension-compatibility.md`, `.docs/specs/react-phase6-extension-compat/README.md`, `.docs/tech/react-modernization-roadmap.md`, `.docs/PROJECT_HISTORY.md`; proof `bun run docs:check`; archival commit `8219a0ce0a437258ce2584677a305b6e4eeaad12` (`docs(phase6): crown JS-Slash-Runner the compatibility gatekeeper`); delivery status `delivered Phase 7 input package with JS-Slash-Runner hard gate`
 
 ## Non-Goals
 
@@ -67,14 +67,6 @@ Phase 6 当前只有 `.docs/specs/react-phase6-extension-compat/README.md` 级�
 ## Source Evidence
 
 - `.docs/specs/react-phase6-extension-compat/README.md`
-- `.docs/specs/260623-01-phase6-contract-ledger/spec.md`
-- `.docs/specs/260623-01-phase6-contract-ledger/plan.md`
-- `.docs/specs/260623-02-phase6-extension-runtime-compatibility-evidence/spec.md`
-- `.docs/specs/260623-02-phase6-extension-runtime-compatibility-evidence/plan.md`
-- `.docs/specs/260623-03-phase6-global-compatibility-evidence/spec.md`
-- `.docs/specs/260623-03-phase6-global-compatibility-evidence/plan.md`
-- `.docs/specs/260623-04-phase6-migration-deprecation-rollback-package/spec.md`
-- `.docs/specs/260623-04-phase6-migration-deprecation-rollback-package/plan.md`
 - `.docs/tech/third-party-extension-compatibility.md`
 - `.docs/tech/react-modernization-roadmap.md`
 - `.docs/project-overview.md`
@@ -82,3 +74,4 @@ Phase 6 当前只有 `.docs/specs/react-phase6-extension-compat/README.md` 级�
 - `tests/global-compatibility-bridge.test.js`
 - `tests/third-party-extension-compatibility.test.js`
 - `https://gitlab.com/novi028/JS-Slash-Runner`
+- `https://gitlab.com/novi028/JS-Slash-Runner/-/tree/b65f48a4856da9f0947224404d4c08910a8f350f`
