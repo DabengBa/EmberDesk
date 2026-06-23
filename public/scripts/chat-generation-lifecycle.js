@@ -68,6 +68,24 @@ export function createGenerationLifecyclePlan({
     };
 }
 
+export function createQuietGenerationLifecycleContract({
+    quietToLoud = false,
+    backgroundGeneration = false,
+} = {}) {
+    return {
+        requestFamily: backgroundGeneration
+            ? 'backgroundGeneration'
+            : quietToLoud
+                ? 'quietToLoud'
+                : 'quietPrompt',
+        autoRecover: false,
+        usesStreamingTransport: false,
+        bindsVisibleMessageRow: false,
+        finalizationStrategy: 'return-generated-text',
+        rollbackStrategy: 'caller-owned',
+    };
+}
+
 export function getGenerationAttemptBaseline(messageId, baseline) {
     return baseline?.messageId === messageId ? baseline : null;
 }

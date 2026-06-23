@@ -8,6 +8,7 @@ import {
     getCharacterLibraryFetchErrorData,
     hasCharacterLibraryPayloadChanged,
     parseCharacterLibraryFetchResponse,
+    projectCharacterLibraryQueryAgainstDeletedAvatars,
 } from '../public/scripts/character-library-react-sync.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -69,6 +70,10 @@ describe('character library React panel scaffold', () => {
 
         expect(scriptSource).toContain('globalThis.__emberDeskCharacterLibraryPanelBridge');
         expect(scriptSource).toContain('/react/login/assets/character-library-panel.js');
+        expect(scriptSource).toContain('const characterLibraryToolbarState = {');
+        expect(scriptSource).toContain('updateCharacterLibraryToolbarOwnerState({ searchQuery });');
+        expect(scriptSource).toContain('updateCharacterLibraryToolbarOwnerState({ sortValue: getSelectedCharacterLibrarySortValue() });');
+        expect(scriptSource).toContain('void syncReactCharacterLibraryToolbarState();');
         expect(scriptSource).toContain('parseCharacterLibraryFetchResponse(response)');
         expect(scriptSource).toContain('getCharacterLibraryFetchErrorData(error)');
         expect(scriptSource).toContain('hasCharacterLibraryPayloadChanged(characters, normalizedCharacters)');
@@ -120,5 +125,24 @@ describe('character library React panel scaffold', () => {
 
         expect(hasCharacterLibraryPayloadChanged(currentCharacters, nextCharacters)).toBe(true);
         expect(hasCharacterLibraryPayloadChanged(nextCharacters, structuredClone(nextCharacters))).toBe(false);
+    });
+
+    test('suppresses deleted avatars from stale query payloads until the server snapshot catches up', () => {
+        const staleQueryPayload = [
+            { avatar: 'alpha.png', name: 'Alpha' },
+            { avatar: 'beta.png', name: 'Beta' },
+        ];
+
+        expect(projectCharacterLibraryQueryAgainstDeletedAvatars(staleQueryPayload, ['beta.png'])).toEqual({
+            characters: [{ avatar: 'alpha.png', name: 'Alpha' }],
+            pendingDeletedAvatars: ['beta.png'],
+        });
+
+        expect(projectCharacterLibraryQueryAgainstDeletedAvatars([
+            { avatar: 'alpha.png', name: 'Alpha' },
+        ], ['beta.png'])).toEqual({
+            characters: [{ avatar: 'alpha.png', name: 'Alpha' }],
+            pendingDeletedAvatars: [],
+        });
     });
 });

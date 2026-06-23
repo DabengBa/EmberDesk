@@ -72,6 +72,28 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('mainChatMessageList: false');
     });
 
+    test('bridges an explicit quiet/background legacy owner contract through the main-chat controller shell', () => {
+        const scriptSource = read('public/script.js');
+        const workspacePanelSource = read('app/workspace-panels.tsx');
+
+        expect(scriptSource).toContain('createMainChatQuietTransportDecision');
+        expect(scriptSource).toContain('createQuietGenerationLifecycleContract');
+        expect(scriptSource).toContain('function getMainChatQuietTransportStore()');
+        expect(scriptSource).toContain('function getMainChatQuietTransportBridgeState()');
+        expect(scriptSource).toContain('rememberMainChatQuietTransportSnapshot({');
+        expect(scriptSource).toContain('phase: \'running\'');
+        expect(scriptSource).toContain('phase: \'completed\'');
+        expect(scriptSource).toContain('phase: isMainChatQuietTransportStopException(error) ? \'stopped\' : \'error\'');
+        expect(scriptSource).toContain('quietTransport: getMainChatQuietTransportBridgeState()');
+
+        expect(workspacePanelSource).toContain('interface MainChatQuietTransportState');
+        expect(workspacePanelSource).toContain('const mainChatQuietTransportSchema = z.object({');
+        expect(workspacePanelSource).toContain('data-main-chat-quiet-transport-owner={quietTransportBridgeState.quietTransportOwner}');
+        expect(workspacePanelSource).toContain('data-main-chat-quiet-transport-phase={quietTransportBridgeState.quietTransportPhase}');
+        expect(workspacePanelSource).toContain('data-main-chat-quiet-transport-finalization={quietTransportBridgeState.quietTransportFinalization}');
+        expect(workspacePanelSource).toContain('data-main-chat-quiet-transport-rollback={quietTransportBridgeState.quietTransportRollback}');
+    });
+
     test('loads the shared workspace panels bundle once and resets the cache after failure', async () => {
         const importedModule = { mountWorkspacePanel: jest.fn() };
         const importModule = jest.fn()
@@ -181,10 +203,11 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain("{ id: 'legacy-editor', label: 'Legacy editor', ready: bridgeState.dropTargetPresent }");
     });
 
-    test('renders a World Info editor/import/export workflow through React-owned controls and legacy actions', () => {
+    test('renders a World Info editor/import/export workflow through React-owned controls and explicit world-info helpers', () => {
         const scriptSource = read('public/script.js');
         const bridgeSource = read('public/scripts/workspace-panels-react-bridge.js');
         const workspacePanelSource = read('app/workspace-panels.tsx');
+        const worldInfoSource = read('public/scripts/world-info.js');
 
         expect(scriptSource).toContain('function getWorldInfoReactBridge()');
         expect(scriptSource).toContain('worldNames: getWorldInfoReactWorldNames(editorSelector)');
@@ -192,16 +215,46 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('entrySummaries: getWorldInfoReactEntrySummaries()');
         expect(scriptSource).toContain('searchQuery: worldInfoSearch?.value ?? \'\'');
         expect(scriptSource).toContain('sortOptions: getWorldInfoReactSortOptions(worldInfoSortOrder)');
+        expect(scriptSource).toContain('applyWorldInfoSearchQuery');
+        expect(scriptSource).toContain('applyWorldInfoSortOption');
+        expect(scriptSource).toContain('selectWorldInfoEditorIndex');
+        expect(scriptSource).toContain('requestWorldInfoImportSelection');
+        expect(scriptSource).toContain('exportCurrentWorldInfo');
+        expect(scriptSource).toContain('refreshCurrentWorldInfoEditor');
+        expect(scriptSource).toContain('openWorldInfoEntryByUid');
+        expect(scriptSource).toContain('renameCurrentWorldInfo');
+        expect(scriptSource).toContain('duplicateCurrentWorldInfo');
+        expect(scriptSource).toContain('deleteCurrentWorldInfo');
         expect(scriptSource).toContain('case \'applySearchQuery\':');
-        expect(scriptSource).toContain('$(\'#world_info_search\').val(String(payload?.searchQuery ?? \'\')).trigger(\'input\');');
         expect(scriptSource).toContain('case \'importWorld\':');
-        expect(scriptSource).toContain('document.getElementById(\'world_import_menu_item\')?.click();');
         expect(scriptSource).toContain('case \'exportWorld\':');
-        expect(scriptSource).toContain('document.getElementById(\'world_export_menu_item\')?.click();');
         expect(scriptSource).toContain('bridge: getWorldInfoReactBridge()');
+        expect(scriptSource).not.toContain('$(\'#world_info_search\').val(String(payload?.searchQuery ?? \'\')).trigger(\'input\');');
+        expect(scriptSource).not.toContain('$(\'#world_info_sort_order\').val(String(payload?.sortValue ?? \'\')).trigger(\'change\');');
+        expect(scriptSource).not.toContain('$(\'#world_editor_select\').val(String(payload?.worldIndex ?? \'\')).trigger(\'change\');');
+        expect(scriptSource).not.toContain('document.getElementById(\'world_import_menu_item\')?.click();');
+        expect(scriptSource).not.toContain('document.getElementById(\'world_export_menu_item\')?.click();');
+        expect(scriptSource).not.toContain('document.getElementById(\'world_refresh\')?.click();');
+        expect(scriptSource).not.toContain('entry?.querySelector(\'.wi-card-expand-button\')?.click();');
+        expect(scriptSource).not.toContain('document.getElementById(\'world_rename_menu_item\')?.click();');
+        expect(scriptSource).not.toContain('document.getElementById(\'world_duplicate_menu_item\')?.click();');
+        expect(scriptSource).not.toContain('document.getElementById(\'world_delete_menu_item\')?.click();');
 
         expect(bridgeSource).toContain('bridge,');
         expect(bridgeSource).toContain('panelModule.mountWorkspacePanel(kind, container, { state, bridge });');
+
+        expect(worldInfoSource).toContain('export async function selectWorldInfoEditorIndex(worldIndex)');
+        expect(worldInfoSource).toContain('export function applyWorldInfoSearchQuery(searchQuery)');
+        expect(worldInfoSource).toContain('export function applyWorldInfoSortOption(sortValue)');
+        expect(worldInfoSource).toContain('export async function createWorldInfoEntryFromEditor()');
+        expect(worldInfoSource).toContain('export async function promptToCreateWorldInfo()');
+        expect(worldInfoSource).toContain('export function requestWorldInfoImportSelection()');
+        expect(worldInfoSource).toContain('export async function exportCurrentWorldInfo()');
+        expect(worldInfoSource).toContain('export function refreshCurrentWorldInfoEditor()');
+        expect(worldInfoSource).toContain('export async function openWorldInfoEntryByUid(uid)');
+        expect(worldInfoSource).toContain('export async function renameCurrentWorldInfo()');
+        expect(worldInfoSource).toContain('export async function duplicateCurrentWorldInfo()');
+        expect(worldInfoSource).toContain('export async function deleteCurrentWorldInfo()');
 
         expect(workspacePanelSource).toContain('import { useForm } from \'@tanstack/react-form\';');
         expect(workspacePanelSource).toContain('import { z } from \'zod\';');
@@ -252,8 +305,9 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain("{ id: 'background-actions', label: 'Background actions', ready: bridgeState.systemContainerPresent || bridgeState.chatContainerPresent }");
     });
 
-    test('renders a Background Library gallery workflow through React-owned filters and legacy actions', () => {
+    test('renders a Background Library gallery workflow through React-owned filters and explicit background helpers', () => {
         const scriptSource = read('public/script.js');
+        const backgroundsSource = read('public/scripts/backgrounds.js');
         const workspacePanelSource = read('app/workspace-panels.tsx');
 
         expect(scriptSource).toContain('function getBackgroundLibraryReactBridge()');
@@ -261,16 +315,48 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('chatBackgrounds: getBackgroundLibraryReactGalleryItems(chatContainer)');
         expect(scriptSource).toContain('sortValue: backgroundSort?.value ?? \'\'');
         expect(scriptSource).toContain('folderViewActive: document.getElementById(\'Backgrounds\')?.classList.contains(\'in-folder-view\') === true');
+        expect(scriptSource).toContain('applyBackgroundLibraryFilter');
+        expect(scriptSource).toContain('applyBackgroundLibrarySort');
+        expect(scriptSource).toContain('requestBackgroundUploadSelection');
+        expect(scriptSource).toContain('selectBackgroundLibraryItem');
+        expect(scriptSource).toContain('lockCurrentBackground');
+        expect(scriptSource).toContain('unlockCurrentBackground');
+        expect(scriptSource).toContain('runAutoBackgroundSelection');
+        expect(scriptSource).toContain('refreshBackgroundLibrary');
         expect(scriptSource).toContain('case \'applyBackgroundFilter\':');
         expect(scriptSource).toContain('case \'applyBackgroundSort\':');
-        expect(scriptSource).toContain('$(\'#bg-sort\').val(String(payload?.sortValue ?? \'\')).trigger(\'change\');');
         expect(scriptSource).toContain('case \'uploadBackground\':');
-        expect(scriptSource).toContain('document.getElementById(\'add_bg_button\')?.click();');
         expect(scriptSource).toContain('case \'selectBackground\':');
-        expect(scriptSource).toContain('backgroundElement?.click();');
-        expect(scriptSource).toContain('const lockControl = document.querySelector(\'.bg_example.selected-background .jg-lock\') ?? document.querySelector(\'.bg_example .jg-lock\');');
-        expect(scriptSource).toContain('const unlockControl = document.querySelector(\'.bg_example.locked-background .jg-unlock\') ?? document.querySelector(\'.bg_example .jg-unlock\');');
+        expect(scriptSource).toContain('const actionResult = (() => {');
+        expect(scriptSource).toContain('return Promise.resolve(actionResult).finally(() => {');
+        expect(scriptSource).toContain('void mountReactBackgroundLibraryPanel({ refreshQueued: false });');
         expect(scriptSource).toContain('bridge: getBackgroundLibraryReactBridge()');
+        expect(scriptSource).not.toContain('$(\'#bg-filter\').val(String(payload?.filterQuery ?? \'\')).trigger(\'input\');');
+        expect(scriptSource).not.toContain('$(\'#bg-sort\').val(String(payload?.sortValue ?? \'\')).trigger(\'change\');');
+        expect(scriptSource).not.toContain('document.getElementById(\'add_bg_button\')?.click();');
+        expect(scriptSource).not.toContain('backgroundElement?.click();');
+        expect(scriptSource).not.toContain('const lockControl = document.querySelector(\'.bg_example.selected-background .jg-lock\') ?? document.querySelector(\'.bg_example .jg-lock\');');
+        expect(scriptSource).not.toContain('const unlockControl = document.querySelector(\'.bg_example.locked-background .jg-unlock\') ?? document.querySelector(\'.bg_example .jg-unlock\');');
+
+        expect(backgroundsSource).toContain('function syncBackgroundLibraryReactState(detail = {})');
+        expect(backgroundsSource).toContain('function applyBackgroundSelection(target, { respectGroupSelectionMode = true, shiftKey = false } = {})');
+        expect(backgroundsSource).toContain('if (respectGroupSelectionMode && isBackgroundSelectionMode && !isCustom) {');
+        expect(backgroundsSource).toContain('syncBackgroundLibraryReactState();');
+        expect(backgroundsSource).toContain('export function applyBackgroundLibraryFilter(filterQuery)');
+        expect(backgroundsSource).toContain('export function applyBackgroundLibrarySort(sortValue)');
+        expect(backgroundsSource).toContain('export function requestBackgroundUploadSelection()');
+        expect(backgroundsSource).toContain('export function selectBackgroundLibraryItem(backgroundId, source)');
+        expect(backgroundsSource).toContain('export function lockCurrentBackground()');
+        expect(backgroundsSource).toContain('export function unlockCurrentBackground()');
+        expect(backgroundsSource).toContain('export async function runAutoBackgroundSelection()');
+        expect(backgroundsSource).toContain('export async function refreshBackgroundLibrary()');
+        expect(backgroundsSource).toContain('return applyBackgroundSelection(backgroundElement, { respectGroupSelectionMode: false });');
+        expect(backgroundsSource).toContain('onLockBackgroundClick();');
+        expect(backgroundsSource).toContain('onUnlockBackgroundClick();');
+        expect(backgroundsSource).toContain('return applyBackgroundSelection(option.element, { respectGroupSelectionMode: false })');
+        expect(backgroundsSource).toContain('return applyBackgroundSelection(bestMatch[0].item.element, { respectGroupSelectionMode: false })');
+        expect(backgroundsSource).not.toContain('option.element.click();');
+        expect(backgroundsSource).not.toContain('bestMatch[0].item.element.click();');
 
         expect(workspacePanelSource).toContain('const backgroundLibraryPanelFormSchema = z.object(');
         expect(workspacePanelSource).toContain('function buildBackgroundLibraryPanelFormDefaults');
@@ -331,8 +417,9 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain("{ id: 'extensions-menu', label: 'Wand menu', ready: bridgeState.extensionsMenuPresent }");
     });
 
-    test('renders an Extensions Host workflow through React-owned controls and protected legacy actions', () => {
+    test('renders an Extensions Host workflow through React-owned controls and explicit extensions helpers', () => {
         const scriptSource = read('public/script.js');
+        const extensionsSource = read('public/scripts/extensions.js');
         const workspacePanelSource = read('app/workspace-panels.tsx');
 
         expect(scriptSource).toContain('function getExtensionsHostReactBridge()');
@@ -342,21 +429,41 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('autoconnectEnabled: extensionsAutoconnect?.checked === true');
         expect(scriptSource).toContain('extrasStatusText: extensionsStatus?.textContent?.trim() ?? \'\'');
         expect(scriptSource).toContain('mountPointStatuses: getExtensionsHostReactMountPointStatuses()');
+        expect(scriptSource).toContain('toggleExtensionsHostNotifyUpdates');
+        expect(scriptSource).toContain('openExtensionsHostManager');
+        expect(scriptSource).toContain('openExtensionsHostInstaller');
+        expect(scriptSource).toContain('updateExtensionsHostApiUrl');
+        expect(scriptSource).toContain('updateExtensionsHostApiKey');
+        expect(scriptSource).toContain('connectExtensionsHostApi');
+        expect(scriptSource).toContain('setExtensionsHostAutoconnectEnabled');
         expect(scriptSource).toContain('case \'toggleNotifyUpdates\':');
-        expect(scriptSource).toContain('document.getElementById(\'extensions_notify_updates\')?.click();');
         expect(scriptSource).toContain('case \'openManageExtensions\':');
-        expect(scriptSource).toContain('document.getElementById(\'extensions_details\')?.click();');
         expect(scriptSource).toContain('case \'openInstallExtension\':');
-        expect(scriptSource).toContain('document.getElementById(\'third_party_extension_button\')?.click();');
         expect(scriptSource).toContain('case \'updateExtrasApiUrl\':');
-        expect(scriptSource).toContain('$(\'#extensions_url\').val(String(payload?.url ?? \'\')).trigger(\'input\');');
         expect(scriptSource).toContain('case \'updateExtrasApiKey\':');
-        expect(scriptSource).toContain('$(\'#extensions_api_key\').val(String(payload?.apiKey ?? \'\')).trigger(\'input\');');
         expect(scriptSource).toContain('case \'connectExtrasApi\':');
-        expect(scriptSource).toContain('document.getElementById(\'extensions_connect\')?.click();');
         expect(scriptSource).toContain('case \'toggleAutoconnect\':');
-        expect(scriptSource).toContain('document.getElementById(\'extensions_autoconnect\')?.click();');
+        expect(scriptSource).toContain('const actionResult = (() => {');
+        expect(scriptSource).toContain('return Promise.resolve(actionResult).finally(() => {');
         expect(scriptSource).toContain('bridge: getExtensionsHostReactBridge()');
+        expect(scriptSource).not.toContain('document.getElementById(\'extensions_notify_updates\')?.click();');
+        expect(scriptSource).not.toContain('document.getElementById(\'extensions_details\')?.click();');
+        expect(scriptSource).not.toContain('document.getElementById(\'third_party_extension_button\')?.click();');
+        expect(scriptSource).not.toContain('$(\'#extensions_url\').val(String(payload?.url ?? \'\')).trigger(\'input\');');
+        expect(scriptSource).not.toContain('$(\'#extensions_api_key\').val(String(payload?.apiKey ?? \'\')).trigger(\'input\');');
+        expect(scriptSource).not.toContain('document.getElementById(\'extensions_connect\')?.click();');
+        expect(scriptSource).not.toContain('document.getElementById(\'extensions_autoconnect\')?.click();');
+
+        expect(extensionsSource).toContain('function syncExtensionsHostReactState(detail = {})');
+        expect(extensionsSource).toContain('export function toggleExtensionsHostNotifyUpdates()');
+        expect(extensionsSource).toContain('export async function openExtensionsHostManager()');
+        expect(extensionsSource).toContain('export async function openExtensionsHostInstaller()');
+        expect(extensionsSource).toContain('export function updateExtensionsHostApiUrl(url)');
+        expect(extensionsSource).toContain('export function updateExtensionsHostApiKey(apiKey)');
+        expect(extensionsSource).toContain('export async function connectExtensionsHostApi()');
+        expect(extensionsSource).toContain('export function setExtensionsHostAutoconnectEnabled(enabled)');
+        expect(extensionsSource).toContain('void connectExtensionsHostApi();');
+        expect(extensionsSource).toContain('syncExtensionsHostReactState();');
 
         expect(workspacePanelSource).toContain('const extensionsHostPanelFormSchema = z.object(');
         expect(workspacePanelSource).toContain('function buildExtensionsHostPanelFormDefaults');
@@ -506,8 +613,23 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('data-main-chat-streaming-transport-message-id={effectiveStreamingTransport.activeMessageId ?? \'\'}');
         expect(workspacePanelSource).toContain('data-main-chat-streaming-transport-fallback={effectiveStreamingTransport.fromFallbackAttempt ? \'true\' : \'false\'}');
         expect(workspacePanelSource).toContain('data-main-chat-visible-transport-owner={visibleTransportBridgeState.visibleTransportOwner}');
-        expect(workspacePanelSource).toContain('data-main-chat-visible-transport-kind={reactVisibleTransportRuntime?.kind ?? \'\'}');
+        expect(workspacePanelSource).toContain('data-main-chat-visible-transport-kind={visibleTransportBridgeState.visibleTransportKind}');
+        expect(workspacePanelSource).toContain('data-main-chat-visible-transport-status={visibleTransportBridgeState.visibleTransportStatus}');
+        expect(workspacePanelSource).toContain('data-main-chat-visible-transport-path={visibleTransportBridgeState.visibleTransportPath}');
+        expect(workspacePanelSource).toContain('data-main-chat-visible-transport-reason={visibleTransportBridgeState.visibleTransportReason}');
+        expect(workspacePanelSource).toContain('data-main-chat-windowing-owner={bridgeState.windowingContract?.windowingOwner ?? \'legacy\'}');
+        expect(workspacePanelSource).toContain('data-main-chat-windowing-load-more-owner={bridgeState.windowingContract?.loadMoreOwner ?? \'legacy\'}');
+        expect(workspacePanelSource).toContain('data-main-chat-windowing-restore-owner={bridgeState.windowingContract?.restoreOwner ?? \'legacy\'}');
+        expect(workspacePanelSource).toContain('data-main-chat-windowing-fallback={bridgeState.windowingContract?.fallback ?? \'legacy\'}');
+        expect(workspacePanelSource).toContain('data-main-chat-windowing-reason={bridgeState.windowingContract?.reason ?? \'unknown\'}');
+        expect(workspacePanelSource).toContain('data-main-chat-row-lifecycle-owner={bridgeState.rowLifecycleContract?.lifecycleOwner ?? \'legacy\'}');
+        expect(workspacePanelSource).toContain('data-main-chat-row-lifecycle-editing-owner={bridgeState.rowLifecycleContract?.editingOwner ?? \'legacy\'}');
+        expect(workspacePanelSource).toContain('data-main-chat-row-lifecycle-streaming-owner={bridgeState.rowLifecycleContract?.streamingOwner ?? \'legacy\'}');
+        expect(workspacePanelSource).toContain('data-main-chat-row-lifecycle-unsafe-owner={bridgeState.rowLifecycleContract?.unsafeOwner ?? \'legacy\'}');
+        expect(workspacePanelSource).toContain('data-main-chat-row-lifecycle-extension-owner={bridgeState.rowLifecycleContract?.extensionMutatedOwner ?? \'legacy\'}');
         expect(workspacePanelSource).toContain('const prepared = await bridge?.dispatchAction?.(\'prepareVisibleGeneration\', payload)');
+        expect(workspacePanelSource).toContain('const [visibleTransportDecision, setVisibleTransportDecision] = useState<MainChatVisibleTransportDecisionState | null>(null);');
+        expect(workspacePanelSource).toContain('setVisibleTransportDecision(extractMainChatVisibleTransportDecision(prepared, String(payload.kind ?? \'\')));');
         expect(workspacePanelSource).toContain('const visibleTransportGlobalExecutionInFlightRef = useRef(false);');
         expect(workspacePanelSource).toContain('if (visibleTransportGlobalExecutionInFlightRef.current) {');
         expect(workspacePanelSource).toContain('visibleTransportGlobalExecutionInFlightRef.current = true;');
@@ -540,10 +662,21 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('fileHtml:');
         expect(scriptSource).toContain('biasHtml:');
         expect(scriptSource).toContain('schema: mainChatRichBodySnapshotSchema');
+        expect(scriptSource).toContain('function hasMainChatRichBodyExtensionMutation(');
+        expect(scriptSource).toContain("messageRow.querySelector('.mes_streaming')");
+        expect(scriptSource).toContain("messageRow.querySelector('.TH-streaming')");
+        expect(scriptSource).toContain("messageText.querySelector('.TH-render')");
 
         expect(workspacePanelSource).toContain('const mainChatRichBodySnapshotSchema = z.object(');
         expect(workspacePanelSource).toContain('interface MainChatRichBodySnapshot');
         expect(workspacePanelSource).toContain('richBodySnapshots?: MainChatRichBodySnapshot[];');
+        expect(workspacePanelSource).toContain('function MainChatRichBodyOwnerPortal(');
+        expect(workspacePanelSource).toContain('targets.messageNode.innerHTML = snapshot.messageHtml;');
+        expect(workspacePanelSource).toContain('targets.reasoningNode.innerHTML = snapshot.reasoningHtml;');
+        expect(workspacePanelSource).toContain('targets.mediaNode.innerHTML = snapshot.mediaHtml;');
+        expect(workspacePanelSource).toContain('targets.fileNode.innerHTML = snapshot.fileHtml;');
+        expect(workspacePanelSource).toContain('targets.biasNode.innerHTML = snapshot.biasHtml;');
+        expect(workspacePanelSource).toContain('targets.reasoningDetails.open = snapshot.reasoningOpen ?? false;');
         expect(workspacePanelSource).toContain('data-main-chat-rich-body-owner="react"');
         expect(workspacePanelSource).toContain('data-main-chat-rich-body-row={snapshot.messageId}');
     });
@@ -572,6 +705,8 @@ describe('React workspace panels bridge helpers', () => {
         const workspacePanelSource = read('app/workspace-panels.tsx');
 
         expect(scriptSource).toContain('function buildMainChatMessageRowSnapshot(');
+        expect(scriptSource).toContain('windowingContract: buildMainChatWindowingContract({');
+        expect(scriptSource).toContain('rowLifecycleContract: buildMainChatRowLifecycleContract({');
         expect(scriptSource).toContain('function isMainChatMessageRowEligible(');
         expect(scriptSource).toContain('messageRowSnapshots:');
         expect(scriptSource).toContain('messageRowSnapshots = messageRows');
@@ -590,8 +725,12 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain("showSwipeButtons();\n    void mountReactMainChatMessageListPanel();");
 
         expect(workspacePanelSource).toContain('interface MainChatMessageRowSnapshot');
+        expect(workspacePanelSource).toContain('interface MainChatWindowingContractState');
+        expect(workspacePanelSource).toContain('interface MainChatRowLifecycleContractState');
         expect(workspacePanelSource).toContain('messageRowSnapshots?: MainChatMessageRowSnapshot[];');
         expect(workspacePanelSource).toContain('const mainChatMessageRowSnapshotSchema = z.object(');
+        expect(workspacePanelSource).toContain('const mainChatWindowingContractSchema = z.object(');
+        expect(workspacePanelSource).toContain('const mainChatRowLifecycleContractSchema = z.object(');
         expect(workspacePanelSource).toContain('function getMainChatMessageRowTargets(');
         expect(workspacePanelSource).toContain('function canReactOwnMainChatMessageRow(');
         expect(workspacePanelSource).toContain('messageRow.dataset.mainChatMessageRowOwner = \'react\';');

@@ -1,6 +1,10 @@
 import { describe, expect, test } from '@jest/globals';
 
 import {
+    createMainChatQuietTransportDecision,
+    createMainChatVisibleTransportDecision,
+    createMainChatVisibleTransportFallbackDecision,
+    deriveReactQuietTransportBridgeState,
     classifyMainChatVisibleTransportOwner,
     classifyMainChatVisibleTransportSupport,
     deriveReactVisibleTransportBridgeState,
@@ -66,11 +70,56 @@ describe('main chat visible transport owner', () => {
         expect(classifyMainChatVisibleTransportSupport(input)).toMatchObject(expected);
     });
 
+    test.each([
+        [
+            'standard openai direct-chat submit',
+            { kind: 'submitComposer', mainApi: 'openai' },
+            { owner: 'react', kind: 'submitComposer', status: 'react-owned', path: 'standard-openai-visible-direct-chat', reason: 'supported-kind' },
+        ],
+        [
+            'non-openai provider',
+            { kind: 'submitComposer', mainApi: 'kobold' },
+            { owner: 'legacy', kind: 'submitComposer', status: 'legacy-fallback', path: 'non-openai-provider', reason: 'unsupported-api' },
+        ],
+        [
+            'group chat',
+            { kind: 'submitComposer', mainApi: 'openai', selectedGroup: true },
+            { owner: 'legacy', kind: 'submitComposer', status: 'legacy-fallback', path: 'group-chat', reason: 'group-chat' },
+        ],
+        [
+            'dry run',
+            { kind: 'submitComposer', mainApi: 'openai', dryRun: true },
+            { owner: 'legacy', kind: 'submitComposer', status: 'legacy-fallback', path: 'dry-run', reason: 'dry-run' },
+        ],
+        [
+            'nested visible generation',
+            { kind: 'submitComposer', mainApi: 'openai', depth: 1 },
+            { owner: 'legacy', kind: 'submitComposer', status: 'legacy-fallback', path: 'nested-visible-generation', reason: 'nested-generation' },
+        ],
+    ])('creates a full visible transport decision for %s', (_name, input, expected) => {
+        expect(createMainChatVisibleTransportDecision(input)).toEqual(expected);
+    });
+
+    test('normalizes a supported decision into an explicit legacy fallback when React transport cannot execute it', () => {
+        expect(createMainChatVisibleTransportFallbackDecision(
+            createMainChatVisibleTransportDecision({ kind: 'submitComposer', mainApi: 'openai' }),
+        )).toEqual({
+            owner: 'legacy',
+            kind: 'submitComposer',
+            status: 'legacy-fallback',
+            path: 'standard-openai-visible-direct-chat',
+            reason: 'legacy-executed',
+        });
+    });
+
     test('derives React-owned controller bridge state while a visible request is active', () => {
         expect(deriveReactVisibleTransportBridgeState({
             runtime: {
                 owner: 'react',
                 kind: 'submitComposer',
+                supportStatus: 'react-owned',
+                supportPath: 'standard-openai-visible-direct-chat',
+                supportReason: 'supported-kind',
                 phase: 'streaming',
                 activeMessageId: 12,
                 observedTokenCount: 7,
@@ -81,6 +130,10 @@ describe('main chat visible transport owner', () => {
             },
         })).toEqual({
             visibleTransportOwner: 'react',
+            visibleTransportKind: 'submitComposer',
+            visibleTransportStatus: 'react-owned',
+            visibleTransportPath: 'standard-openai-visible-direct-chat',
+            visibleTransportReason: 'supported-kind',
             generationControlPhase: 'streaming',
             failureRetryVisible: false,
             streamingPhase: 'streaming',
@@ -93,6 +146,13 @@ describe('main chat visible transport owner', () => {
     test('falls back to legacy bridge state when no React-owned visible request is active', () => {
         expect(deriveReactVisibleTransportBridgeState({
             runtime: null,
+            decision: {
+                owner: 'legacy',
+                kind: 'submitComposer',
+                status: 'legacy-fallback',
+                path: 'non-openai-provider',
+                reason: 'unsupported-api',
+            },
             generationControl: {
                 phase: 'error',
                 failureRetryVisible: true,
@@ -105,12 +165,63 @@ describe('main chat visible transport owner', () => {
             },
         })).toEqual({
             visibleTransportOwner: 'legacy',
+            visibleTransportKind: 'submitComposer',
+            visibleTransportStatus: 'legacy-fallback',
+            visibleTransportPath: 'non-openai-provider',
+            visibleTransportReason: 'unsupported-api',
             generationControlPhase: 'error',
             failureRetryVisible: true,
             streamingPhase: 'error',
             activeMessageId: 9,
             observedTokenCount: 0,
             fromFallbackAttempt: true,
+        });
+    });
+
+    test.each([
+        [
+            'quiet helper prompt',
+            {},
+            { owner: 'legacy', kind: 'quietPrompt', status: 'legacy-owned', path: 'quiet-non-visible-helper', reason: 'quiet-generation' },
+        ],
+        [
+            'quiet to loud helper prompt',
+            { quietToLoud: true },
+            { owner: 'legacy', kind: 'quietToLoud', status: 'legacy-owned', path: 'quiet-to-loud-non-visible-helper', reason: 'quiet-to-loud' },
+        ],
+        [
+            'background helper prompt',
+            { backgroundGeneration: true },
+            { owner: 'legacy', kind: 'backgroundGeneration', status: 'legacy-owned', path: 'background-non-visible-helper', reason: 'background-generation' },
+        ],
+    ])('creates an explicit quiet/background decision for %s', (_name, input, expected) => {
+        expect(createMainChatQuietTransportDecision(input)).toEqual(expected);
+    });
+
+    test('derives a quiet/background bridge state from the explicit legacy owner contract', () => {
+        expect(deriveReactQuietTransportBridgeState({
+            runtime: null,
+            decision: createMainChatQuietTransportDecision({ backgroundGeneration: true }),
+            contract: {
+                autoRecover: false,
+                usesStreamingTransport: false,
+                bindsVisibleMessageRow: false,
+                finalizationStrategy: 'return-generated-text',
+                rollbackStrategy: 'caller-owned',
+            },
+        })).toEqual({
+            quietTransportOwner: 'legacy',
+            quietTransportKind: 'backgroundGeneration',
+            quietTransportStatus: 'legacy-owned',
+            quietTransportPath: 'background-non-visible-helper',
+            quietTransportReason: 'background-generation',
+            quietTransportPhase: 'idle',
+            quietTransportError: '',
+            quietTransportAutoRecover: false,
+            quietTransportUsesStreaming: false,
+            quietTransportBindsVisibleRow: false,
+            quietTransportFinalization: 'return-generated-text',
+            quietTransportRollback: 'caller-owned',
         });
     });
 });

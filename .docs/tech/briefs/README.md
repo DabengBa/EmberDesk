@@ -40,6 +40,7 @@ Delete or avoid adding briefs that are:
 | `260608-09-main-chat-auto-retry-fallback-provider.md` | Preserves the user-approved change from local manual provider-failure recovery to a bounded automatic retry chain with a fallback OpenAI-compatible provider for main-chat visible generation only. |
 | `260609-01-architecture-deepening-spec-set.md` | Preserves the architecture-deepening batch boundaries for generation lifecycle, external imports, provider secret state, and frontend structure contracts. |
 | `260609-02-character-card-write-command.md` | Preserves the delivered single-card write command boundary and the decision not to recreate process specs after durable docs captured the shipped facts. |
+| `react-phase7-full-owner-cutover-sequenced-specs.md` | Preserves the roadmap-closing Phase 7 spec-set intent, the JS-Slash-Runner compatibility gate inheritance, and the delivered archive entrypoints for the final owner-cutover closure. |
 | `react-modernization-intent.md` | Preserves the user-approved React modernization direction and later implementation traceability across Phase 0, Phase 1, and the first Phase 2 panel island. |
 | `react-phase1-sprint2-setup-page.md` | Preserves the React Setup rollout intent, feature-flag/fallback boundary, and TanStack Form / Query / Zod adoption requirement. |
 | `react-phase1-sprint3-settings-panel.md` | Preserves the React Settings entry intent, the explicit exclusion of World Info / Backgrounds / Extensions, and the TanStack adoption gate. |

@@ -117,6 +117,10 @@ function dispatchBackgroundLibraryStateChange(detail = {}) {
     document.dispatchEvent(new CustomEvent('emberdesk:background-library-state-change', { detail }));
 }
 
+function syncBackgroundLibraryReactState(detail = {}) {
+    dispatchBackgroundLibraryStateChange(detail);
+}
+
 export let background_settings = {
     name: '__transparent.png',
     url: generateUrlParameter('__transparent.png', false),
@@ -251,7 +255,7 @@ export function loadBackgroundSettings(settings) {
     $('#background_fitting').val(backgroundSettings.fitting);
     $('#background_thumbnails_animation').prop('checked', background_settings.animation);
     $('#bg-sort').val(background_settings.sortOrder);
-    highlightSelectedBackground();
+    syncBackgroundSelectionUi();
 }
 
 /**
@@ -269,7 +273,7 @@ async function forceSetBackground(backgroundInfo) {
     saveMetadataDebounced();
     renderChatBackgrounds();
     highlightNewBackground(bg);
-    highlightLockedBackground();
+    syncBackgroundSelectionUi();
 }
 
 async function onChatChanged() {
@@ -278,8 +282,7 @@ async function onChatChanged() {
     $('#bg1').css('background-image', lockedUrl || background_settings.url);
 
     renderChatBackgrounds();
-    highlightLockedBackground();
-    highlightSelectedBackground();
+    syncBackgroundSelectionUi();
 }
 
 /**
@@ -324,6 +327,12 @@ function highlightLockedBackground() {
     }
 }
 
+function syncBackgroundSelectionUi() {
+    highlightLockedBackground();
+    highlightSelectedBackground();
+    syncBackgroundLibraryReactState();
+}
+
 /**
  * Locks the background for the current chat
  * @param {Event|null} event
@@ -340,8 +349,7 @@ function onLockBackgroundClick(event = null) {
     $('#bg1').css('background-image', urlToLock);
 
     // Update UI states to reflect the new lock.
-    highlightLockedBackground();
-    highlightSelectedBackground();
+    syncBackgroundSelectionUi();
 }
 
 /**
@@ -356,8 +364,7 @@ function onUnlockBackgroundClick(_event = null) {
     $('#bg1').css('background-image', background_settings.url);
 
     // Update UI states to reflect the removal of the lock.
-    highlightLockedBackground();
-    highlightSelectedBackground();
+    syncBackgroundSelectionUi();
 }
 
 function isChatBackgroundLocked() {
@@ -374,33 +381,39 @@ function removeBackgroundMetadata() {
     saveMetadataDebounced();
 }
 
+function applyBackgroundSelection(target, { respectGroupSelectionMode = true, shiftKey = false } = {}) {
+    const backgroundElement = $(target).closest('.bg_example');
+    if (!backgroundElement.length) {
+        return false;
+    }
+
+    const bgFile = String(backgroundElement.attr('bgfile') || '');
+    const isCustom = backgroundElement.attr('custom') === 'true';
+    if (respectGroupSelectionMode && isBackgroundSelectionMode && !isCustom) {
+        toggleBackgroundGroupSelection(bgFile);
+        return true;
+    }
+
+    const backgroundCssUrl = getUrlParameter(backgroundElement.get(0));
+    const bypassGlobalLock = !isCustom && shiftKey;
+
+    if ((isChatBackgroundLocked() || isCustom) && !bypassGlobalLock) {
+        saveBackgroundMetadata(backgroundCssUrl);
+        $('#bg1').css('background-image', backgroundCssUrl);
+    } else {
+        setBackground(bgFile, backgroundCssUrl);
+    }
+
+    syncBackgroundSelectionUi();
+    return true;
+}
+
 /**
  * Handles the click event for selecting a background.
  * @param {JQuery.Event} e Event
  */
 function onSelectBackgroundClick(e) {
-    const bgFile = $(this).attr('bgfile');
-    const isCustom = $(this).attr('custom') === 'true';
-    if (isBackgroundSelectionMode && !isCustom) {
-        toggleBackgroundGroupSelection(bgFile);
-        return;
-    }
-
-    const backgroundCssUrl = getUrlParameter(this);
-    const bypassGlobalLock = !isCustom && e.shiftKey;
-
-    if ((isChatBackgroundLocked() || isCustom) && !bypassGlobalLock) {
-        // If a background is locked, update the locked background directly
-        saveBackgroundMetadata(backgroundCssUrl);
-        $('#bg1').css('background-image', backgroundCssUrl);
-    } else {
-        // Otherwise, update the global background setting
-        setBackground(bgFile, backgroundCssUrl);
-    }
-
-    // Update UI highlights to reflect the changes.
-    highlightLockedBackground();
-    highlightSelectedBackground();
+    applyBackgroundSelection(this, { shiftKey: Boolean(e?.shiftKey) });
 }
 
 async function onCopyToSystemBackgroundClick(e) {
@@ -625,8 +638,7 @@ async function onDeleteBackgroundClick(e) {
             await saveMetadata();
         }
 
-        highlightLockedBackground();
-        highlightSelectedBackground();
+        syncBackgroundSelectionUi();
         syncGroupSelectionUi();
     }
 }
@@ -644,7 +656,7 @@ async function autoBackgroundCommand() {
 
     const list = options.map(option => `- ${option.text}`).join('\n');
     const prompt = stringFormat(autoBgPrompt, list);
-    const reply = await generateQuietPrompt({ quietPrompt: prompt });
+    const reply = await generateQuietPrompt({ quietPrompt: prompt, backgroundGeneration: true });
     const fuse = new Fuse(options, { keys: ['text'] });
     const bestMatch = fuse.search(reply, { limit: 1 });
 
@@ -652,8 +664,7 @@ async function autoBackgroundCommand() {
         for (const option of options) {
             if (String(reply).toLowerCase().includes(option.text.toLowerCase())) {
                 console.debug('Fallback choosing background:', option);
-                option.element.click();
-                return '';
+                return applyBackgroundSelection(option.element, { respectGroupSelectionMode: false }) ? '' : '';
             }
         }
 
@@ -662,8 +673,7 @@ async function autoBackgroundCommand() {
     }
 
     console.debug('Automatically choosing background:', bestMatch);
-    bestMatch[0].item.element.click();
-    return '';
+    return applyBackgroundSelection(bestMatch[0].item.element, { respectGroupSelectionMode: false }) ? '' : '';
 }
 
 /**
@@ -703,7 +713,10 @@ function renderChatBackgrounds(backgrounds) {
     container.empty();
     $('#bg_chat_hint').toggle(!sourceList.length);
 
-    if (sourceList.length === 0) return;
+    if (sourceList.length === 0) {
+        syncBackgroundLibraryReactState();
+        return;
+    }
 
     const sortedList = sortBackgrounds(sourceList, true);
     sortedList.forEach(bg => {
@@ -715,6 +728,7 @@ function renderChatBackgrounds(backgrounds) {
     });
 
     activateLazyLoader();
+    syncBackgroundLibraryReactState();
 }
 
 export async function getBackgrounds({ force = false } = {}) {
@@ -748,7 +762,7 @@ async function loadBackgroundCatalog() {
 
             // Render only filtered images if inside a folder, otherwise all
             renderSystemBackgrounds(getFilteredImages());
-            highlightSelectedBackground();
+            syncBackgroundSelectionUi();
         }
     } finally {
         setBackgroundCatalogLoading(false);
@@ -853,6 +867,7 @@ function renderFolderGrid() {
     container.empty();
 
     if (folderList.length === 0 && !activeFolderId) {
+        syncBackgroundLibraryReactState();
         return;
     }
 
@@ -860,6 +875,8 @@ function renderFolderGrid() {
         const tile = createFolderTileElement(folder);
         container.append(tile);
     }
+
+    syncBackgroundLibraryReactState();
 }
 
 /**
@@ -932,7 +949,7 @@ function onFolderDrillIn(folderId) {
 
     // Render only this folder's images
     renderSystemBackgrounds(getFilteredImages());
-    highlightSelectedBackground();
+    syncBackgroundSelectionUi();
 }
 
 /**
@@ -950,7 +967,7 @@ function onBackToFolders() {
 
     // Show all images
     renderSystemBackgrounds(getFilteredImages());
-    highlightSelectedBackground();
+    syncBackgroundSelectionUi();
 }
 
 /**
@@ -973,6 +990,8 @@ function syncGroupSelectionUi() {
         const bgFile = String($(this).attr('bgfile') || '');
         $(this).toggleClass('folder-group-selected', selectedSystemBackgroundFiles.has(bgFile));
     });
+
+    syncBackgroundLibraryReactState();
 }
 
 /**
@@ -1144,7 +1163,7 @@ async function onAddSelectedToFolder() {
 
         if (activeFolderId) {
             renderSystemBackgrounds(getFilteredImages());
-            highlightSelectedBackground();
+            syncBackgroundSelectionUi();
         }
 
         setBackgroundSelectionMode(false);
@@ -1183,7 +1202,7 @@ async function onRemoveSelectedFromCurrentFolder() {
         await updateFolderAssignments(bgFiles, activeFolderId, true);
         renderFolderGrid();
         renderSystemBackgrounds(getFilteredImages());
-        highlightSelectedBackground();
+        syncBackgroundSelectionUi();
         setBackgroundSelectionMode(false);
         toastr.success(t`Removed ${bgFiles.length} background(s) from folder`);
     } catch (error) {
@@ -1353,7 +1372,7 @@ async function onAssignToFolder(bgFile) {
         // Re-render filtered image list if currently inside a folder view
         if (activeFolderId) {
             renderSystemBackgrounds(getFilteredImages());
-            highlightSelectedBackground();
+            syncBackgroundSelectionUi();
         }
 
         toastr.success(t`Folder assignment updated`);
@@ -1649,8 +1668,7 @@ async function uploadChatBackground(formData) {
         await saveMetadata();
         renderChatBackgrounds();
         highlightNewBackground(imagePath);
-        highlightLockedBackground();
-        highlightSelectedBackground();
+        syncBackgroundSelectionUi();
     } catch (error) {
         console.error('Error uploading chat background:', error);
     }
@@ -1715,9 +1733,69 @@ function onBackgroundFilterInput() {
             $tile.toggle(folderName.includes(filterValue));
         });
     }
+
+    syncBackgroundLibraryReactState();
 }
 
 const debouncedOnBackgroundFilterInput = debounce(onBackgroundFilterInput, debounce_timeout.standard);
+
+export function applyBackgroundLibraryFilter(filterQuery) {
+    const normalizedQuery = String(filterQuery ?? '');
+    $('#bg-filter').val(normalizedQuery);
+    onBackgroundFilterInput();
+}
+
+export function applyBackgroundLibrarySort(sortValue) {
+    const normalizedSortValue = String(sortValue ?? '');
+    $('#bg-sort').val(normalizedSortValue);
+    background_settings.sortOrder = normalizedSortValue;
+    saveSettingsDebounced();
+    renderSystemBackgrounds(getFilteredImages());
+    renderChatBackgrounds();
+    syncBackgroundSelectionUi();
+    onBackgroundFilterInput();
+}
+
+export function requestBackgroundUploadSelection() {
+    document.getElementById('add_bg_button')?.click();
+    return true;
+}
+
+export function selectBackgroundLibraryItem(backgroundId, source) {
+    const normalizedBackgroundId = String(backgroundId ?? '');
+    const normalizedSource = String(source ?? '');
+    const candidates = normalizedSource === 'chat'
+        ? document.querySelectorAll('#bg_custom_content .bg_example')
+        : document.querySelectorAll('#bg_menu_content .bg_example');
+    const backgroundElement = Array.from(candidates)
+        .find(element => element.getAttribute('bgfile') === normalizedBackgroundId);
+    return applyBackgroundSelection(backgroundElement, { respectGroupSelectionMode: false });
+}
+
+export function lockCurrentBackground() {
+    if (!getCurrentChatId()) {
+        onLockBackgroundClick();
+        return false;
+    }
+
+    onLockBackgroundClick();
+    return true;
+}
+
+export function unlockCurrentBackground() {
+    onUnlockBackgroundClick();
+    return true;
+}
+
+export async function runAutoBackgroundSelection() {
+    await autoBackgroundCommand();
+    return true;
+}
+
+export async function refreshBackgroundLibrary() {
+    await getBackgrounds({ force: true });
+    return true;
+}
 
 /**
  * Gets the active background tab source.
@@ -1846,8 +1924,7 @@ export function initBackgrounds() {
         // Re-render both galleries with new sort order (respecting active folder filter)
         renderSystemBackgrounds(getFilteredImages());
         renderChatBackgrounds();
-        highlightSelectedBackground();
-        highlightLockedBackground();
+        syncBackgroundSelectionUi();
         // Re-apply any active search filter
         onBackgroundFilterInput();
     });

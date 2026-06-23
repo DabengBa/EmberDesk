@@ -31,7 +31,8 @@ Goals:
 - Document the current workspace React feature payload exposed to the legacy workspace shell.
 - Make the HTML bootstrap serialization and injection rules reproducible without importing production code.
 - Document the current browser-side workspace panel bridge helper that loads the shared scaffold bundle and falls back to legacy panels when disabled, missing, or failed.
-- Record that World Info, Background Library, and Extensions Host have guarded independent React host/action islands. These islands own visible React controls and bridge actions while preserving legacy behavior owners for prompt/regex/background file/extension protocol work.
+- Record the current split between the delivered workspace feature payload, the dedicated Character Library bundle, and the shared workspace-panel bundle that now also mounts the guarded main-chat message-list island.
+- Record that World Info, Background Library, and Extensions Host have guarded independent React hosts. These hosts own visible React controls and bridge actions while preserving compatibility-facade owners for prompt/regex/background file/extension protocol work.
 
 Non-goals:
 
@@ -44,11 +45,12 @@ Non-goals:
 Inputs:
 
 - `features.react.panels.characterLibrary`: controls the delivered guarded character-library panel island.
+- `features.react.panels.mainChatMessageList`: controls the guarded main-chat message-list island mounted through the shared workspace-panel bundle.
 - `features.react.panels.worldInfo`: controls the current World Info independent React readiness host.
 - `features.react.panels.backgroundLibrary`: controls the current Background Library independent React status host.
-- `features.react.panels.extensionsHost`: controls the current Extensions Host independent React protected-mount-point status host.
+- `features.react.panels.extensionsHost`: controls the current Extensions Host independent React host.
 - `workspaceIndexHtml`: the legacy workspace HTML string read before response send.
-- `panelKind`: the requested workspace panel kind, currently one of `worldInfo`, `backgroundLibrary`, or `extensionsHost` for the shared scaffold bundle.
+- `panelKind`: the requested shared-bundle panel kind, currently one of `mainChatMessageList`, `worldInfo`, `backgroundLibrary`, or `extensionsHost`.
 - `panelContainer`: the independent host element passed to the shared React workspace-panel bridge.
 - `worldInfoReactHost`: the DOM element created inside `#wiEditorPanel` before `#world_popup` when the World Info flag is enabled.
 - `worldInfoBridgeState`: the global selector, editor selector, import busy, drop-target readiness, selected world, entry summary, search, sort, create/import/export/refresh readiness discovered from the legacy World Info DOM.
@@ -61,7 +63,7 @@ Inputs:
 - `extensionsHostBridgeActions`: React-owned action names that delegate to existing Extensions DOM controls: toggle notify, open Manage, open Install, update Extras URL/API key, connect Extras, and toggle autoconnect.
 - `workspacePanelBundle`: the dynamic import result for `/react/login/assets/workspace-panels.js`.
 
-Missing or non-boolean panel flags resolve to `false`. The default config keeps all workspace panel flags off except where a local config or environment override explicitly enables one. The browser mount wrappers check the matching flag before creating an independent host or reading bridge state, so a disabled flag does not leave an empty React host in the legacy panel.
+Missing or non-boolean panel flags resolve to `false`. The default config keeps all workspace panel flags off except where a local config or environment override explicitly enables one. The browser mount wrappers check the matching flag before creating an independent host or reading bridge state, so a disabled flag does not leave an empty React host in the legacy panel. `characterLibrary` is part of the same bootstrap payload but mounts through its dedicated bundle rather than through the shared `workspace-panels.js` helper.
 
 ## Outputs
 
@@ -70,6 +72,8 @@ The processing outputs are:
 - `workspaceReactFeatures`: the object exposed to the browser as `window.__emberDeskWorkspaceFeatures`.
 - `workspaceReactFeaturesScript`: the escaped inline bootstrap script.
 - `workspaceReactFeaturesHtml`: the workspace HTML with the bootstrap script inserted once.
+- `mainChatMessageListReactHost`: an idempotent host inside `#chat` for the guarded React main-chat island, or cleanup/fallback when the main-chat flag is disabled.
+- `mainChatMessageListBridgeState`: a payload passed to the shared workspace-panel bundle for safe visible row, composer, slash, streaming, transport, and reading-position restoration state.
 - `worldInfoReactHost`: an idempotent `#emberdesk-react-world-info-panel-host` element placed inside the legacy World Info editor panel, or `null` when the World Info flag is disabled or the editor panel is not present.
 - `worldInfoBridgeState`: a payload passed to the React workspace-panel bundle for readiness rows and visible World Info editor/import/export controls.
 - `backgroundLibraryReactHost`: an idempotent `#emberdesk-react-background-library-panel-host` element placed inside the legacy Backgrounds panel before `#bg_tabs`, or `null` when the Background Library flag is disabled or the panel is not present.
@@ -84,7 +88,7 @@ The processing outputs are:
 ### Build workspace feature payload
 
 1. Resolve each supported workspace panel flag from configuration.
-2. Return one `reactPanels` object containing `characterLibrary`, `worldInfo`, `backgroundLibrary`, and `extensionsHost`.
+2. Return one `reactPanels` object containing `characterLibrary`, `mainChatMessageList`, `worldInfo`, `backgroundLibrary`, and `extensionsHost`.
 3. Treat each flag independently; enabling one panel must not imply another panel is enabled.
 
 ### Serialize bootstrap script
@@ -103,10 +107,25 @@ The processing outputs are:
 ### Guard individual panel mount calls
 
 1. Read the current workspace feature payload before touching panel DOM.
-2. If `reactPanels.worldInfo` is false, return `false` before calling `ensureWorldInfoReactHost()` or building World Info bridge state.
-3. If `reactPanels.backgroundLibrary` is false, return `false` before calling `ensureBackgroundLibraryReactHost()` or building Background Library bridge state.
-4. If `reactPanels.extensionsHost` is false, return `false` before calling `ensureExtensionsHostReactHost()` or building Extensions Host bridge state.
-5. Continue to host creation only for the panel whose flag is enabled.
+2. If `reactPanels.mainChatMessageList` is false, clean up the guarded main-chat React host and return `false` before reading its bridge state.
+3. If `reactPanels.worldInfo` is false, return `false` before calling `ensureWorldInfoReactHost()` or building World Info bridge state.
+4. If `reactPanels.backgroundLibrary` is false, return `false` before calling `ensureBackgroundLibraryReactHost()` or building Background Library bridge state.
+5. If `reactPanels.extensionsHost` is false, return `false` before calling `ensureExtensionsHostReactHost()` or building Extensions Host bridge state.
+6. Continue to host creation only for the panel whose flag is enabled.
+
+### Create the guarded main-chat React host
+
+1. This stage is reached only after the `mainChatMessageList` flag guard passes.
+2. Reuse the existing dedicated React host inside `#chat` when it is already mounted.
+3. Otherwise create the host through the main-chat bridge helper without replacing the existing `#chat > .mes[mesid]` direct-child structure or `#show_more_messages` ordering.
+4. The host is for guarded React ownership markers, visible rows/actions/composer/slash UI, and supported direct-chat transport slices. It must fail closed to the existing legacy chat owner whenever the bridge payload is unsafe, the bundle cannot mount, or the request/row is excluded.
+
+### Build the main-chat bridge state
+
+1. Read the current visible main-chat bridge payload from the legacy shell, including safe row snapshots, visible action snapshots, composer state, slash state, transport state, reading-position snapshots, and the current session chat identifier.
+2. Keep full slash-command text, unsafe row structures, legacy formatter DOM internals, and excluded transport request shapes out of the bridge payload.
+3. Preserve per-chat scroll snapshot state separately so React can attempt same-session reading-position restore without becoming the owner of the long-chat load-more algorithm itself.
+4. If the bridge payload is absent or unsafe, the later mount step must fail closed back to the legacy chat owner.
 
 ### Create the World Info independent React host
 
@@ -131,12 +150,11 @@ The processing outputs are:
 
 ### Dispatch World Info bridge actions
 
-1. `selectWorld` sets `#world_editor_select` and triggers the legacy `change` handler.
-2. `applySearchQuery` sets `#world_info_search` and triggers the legacy `input` handler.
-3. `applySortOption` sets `#world_info_sort_order` and triggers the legacy `change` handler.
-4. `createEntry`, `createWorld`, `importWorld`, `exportWorld`, `renameWorld`, `duplicateWorld`, `deleteWorld`, and `refreshWorld` click the existing legacy controls.
-5. `openEntry` finds the matching legacy world-entry card by `uid` and clicks its expand button.
-6. After action dispatch, the World Info React host refreshes bridge state; the underlying behavior remains owned by the legacy World Info modules.
+1. `selectWorld` routes through `selectWorldInfoEditorIndex()` in `public/scripts/world-info.js`.
+2. `applySearchQuery` routes through `applyWorldInfoSearchQuery()` and `applySortOption` routes through `applyWorldInfoSortOption()`.
+3. `createEntry`, `createWorld`, `importWorld`, `exportWorld`, `renameWorld`, `duplicateWorld`, `deleteWorld`, and `refreshWorld` route through explicit World Info helper functions rather than directly triggering legacy DOM controls from `public/script.js`.
+4. `openEntry` routes through `openWorldInfoEntryByUid()`; the World Info module may still use the existing card affordance internally after it has resolved the requested entry.
+5. After action dispatch, the World Info React host refreshes bridge state; the underlying semantics remain owned by `public/scripts/world-info.js` as a compatibility facade rather than by a raw DOM-click bridge.
 
 ### Create the Background Library independent React host
 
@@ -152,22 +170,22 @@ The processing outputs are:
 
 1. Read `#bg_menu_content`, `#bg_custom_content`, and `#bg_startup_loading`.
 2. Count visible legacy background cards through `.bg_example` inside the global and chat gallery containers.
-3. Merge optional state-change details such as `isLoading`; `error` and `refreshQueued` are accepted bridge inputs for future callers, but current production background events dispatch only loading state.
+3. Merge optional state-change details such as `isLoading`; `error` and `refreshQueued` are accepted bridge inputs for future callers, and current production background events now cover catalog loading plus visible gallery, folder, filter, and selection-state changes.
 4. Pass the merged values through the background panel state helper so loading, empty, success, and any explicitly supplied error state stay aligned with the legacy loading controller.
 5. Add container presence booleans and global/chat item counts to the state passed to the React workspace-panel bundle.
 6. Normalize visible global/chat background rows from `.bg_example`, including `bgfile`, title, URL, custom/animated flags, selected state, and locked state.
 7. Read `#bg-filter`, `#bg-sort`, folder view, locked count, and selected count for the React host.
-8. `public/scripts/backgrounds.js` dispatches `emberdesk:background-library-state-change` when catalog loading changes; `public/script.js` listens and remounts or updates the Background Library host state.
+8. `public/scripts/backgrounds.js` dispatches `emberdesk:background-library-state-change` when catalog loading or visible background-library state changes; `public/script.js` listens and remounts or updates the Background Library host state.
 
 ### Dispatch Background Library bridge actions
 
-1. `applyBackgroundFilter` sets `#bg-filter` and triggers the legacy `input` handler.
-2. `applyBackgroundSort` sets `#bg-sort` and triggers the legacy `change` handler.
+1. `applyBackgroundFilter` routes through `applyBackgroundLibraryFilter()` in `public/scripts/backgrounds.js`, which updates the legacy field value and reuses the existing filtering path.
+2. `applyBackgroundSort` routes through `applyBackgroundLibrarySort()` in `public/scripts/backgrounds.js`, which reuses the existing sort, gallery refresh, and selection-highlight path.
 3. `uploadBackground` clicks `#add_bg_button`.
-4. `selectBackground` finds the requested visible `.bg_example` in the global or chat gallery and clicks it.
-5. `lockBackground`, `unlockBackground`, and `autoBackground` click the existing lock/unlock/auto controls.
-6. `refreshBackgrounds` calls the existing `getBackgrounds({ force: true })` refresh path, then refreshes the React host state.
-7. The React host owns the visible action entry points; background file operations and slash-command effects stay legacy-owned.
+4. `selectBackground` finds the requested visible `.bg_example` in the global or chat gallery, then routes through `applyBackgroundSelection(..., { respectGroupSelectionMode: false })` so React selection is not hijacked by legacy folder-group selection mode.
+5. `lockBackground`, `unlockBackground`, and `autoBackground` route through explicit `public/scripts/backgrounds.js` helpers instead of clicking the existing controls; slash-command behavior still stays owned by that module and by the protected slash-command exports.
+6. `refreshBackgrounds` calls the existing `getBackgrounds({ force: true })` refresh path, and `public/script.js` remounts the React host again after the action settles.
+7. The React host owns the visible action entry points; background file operations, thumbnail generation, folder persistence, and slash-command parser/export surfaces stay on their existing compatibility owners.
 
 ### Create the Extensions Host independent React host
 
@@ -188,19 +206,19 @@ The processing outputs are:
 5. Read notify update checkbox state, Extras URL value, whether an Extras API key is set, autoconnect state, and visible Extras status text.
 6. Normalize protected mount-point statuses into a list so the React host can display readiness without cloning protected DOM IDs.
 7. Merge optional state-change details such as `deferredState`.
-8. `public/scripts/extensions.js` dispatches `emberdesk:extensions-host-state-change` when deferred extension loader state changes; `public/script.js` listens and remounts or updates the Extensions Host state.
+8. `public/scripts/extensions.js` dispatches `emberdesk:extensions-host-state-change` when deferred extension loader state or visible host control state changes; `public/script.js` listens and remounts or updates the Extensions Host state.
 
 ### Dispatch Extensions Host bridge actions
 
-1. `toggleNotifyUpdates` clicks `#extensions_notify_updates`.
-2. `openManageExtensions` clicks `#extensions_details`.
-3. `openInstallExtension` clicks `#third_party_extension_button`.
-4. `updateExtrasApiUrl` sets `#extensions_url` and triggers the legacy `input` event.
-5. `updateExtrasApiKey` sets `#extensions_api_key` and triggers the legacy `input` event.
-6. `connectExtrasApi` clicks `#extensions_connect`.
-7. `toggleAutoconnect` clicks `#extensions_autoconnect`.
-8. Text-field updates do not force an immediate React remount, so a user can type into the React Extras fields without the draft being cleared. Other actions refresh the React host state after dispatch.
-9. Protected extension mount points and third-party extension protocol behavior stay legacy-owned.
+1. `toggleNotifyUpdates` routes through `toggleExtensionsHostNotifyUpdates()` in `public/scripts/extensions.js`.
+2. `openManageExtensions` routes through `openExtensionsHostManager()` in `public/scripts/extensions.js`, which reuses deferred-loader readiness and the existing details flow.
+3. `openInstallExtension` routes through `openExtensionsHostInstaller()` in `public/scripts/extensions.js`, which reuses the established install popup and API flow.
+4. `updateExtrasApiUrl` routes through `updateExtensionsHostApiUrl()` in `public/scripts/extensions.js`; text-field updates still avoid a forced React remount from the bridge itself so the visible draft is not cleared.
+5. `updateExtrasApiKey` routes through `updateExtensionsHostApiKey()` in `public/scripts/extensions.js` with the same draft-preservation rule.
+6. `connectExtrasApi` routes through `connectExtensionsHostApi()` in `public/scripts/extensions.js`.
+7. `toggleAutoconnect` routes through `setExtensionsHostAutoconnectEnabled()` in `public/scripts/extensions.js`.
+8. `public/script.js` remounts the React host after action settlement for non-draft actions, while `public/scripts/extensions.js` remains the compatibility facade for deferred loader, install/manage orchestration, Extras connect/autoconnect, and host-state reporting.
+9. Protected extension mount points and third-party extension protocol behavior stay on their existing compatibility owners.
 
 ### Load and mount the shared workspace panel scaffold
 
@@ -210,19 +228,22 @@ The processing outputs are:
 4. Load `/react/login/assets/workspace-panels.js` through one cached dynamic import promise.
 5. If the dynamic import fails, clear the cached promise, report the error through the bridge callback, and return `false`.
 6. If the import succeeds, call `workspacePanelBundle.mountWorkspacePanel(panelKind, panelContainer, { state, bridge })` and return `true`.
-7. Current production code calls this helper for World Info after the legacy World Info panel initializes and rehydrates; the mounted React content is a host/action island that delegates World Info behavior to the legacy action chain.
-8. Current production code calls this helper for Background Library after `initBackgrounds()`, on background drawer click, and after `emberdesk:background-library-state-change`; the mounted React content is a host/action island that delegates background behavior to existing controls.
-9. Current production code calls this helper for Extensions Host after `initExtensions()`, on extension drawer click, and after `emberdesk:extensions-host-state-change`; the mounted React content is a host/action island that delegates extension host controls to existing extension actions while preserving protected mount points.
+7. Current production code calls this helper for the guarded main-chat island when `features.react.panels.mainChatMessageList` is enabled; the mounted React content may own safe visible rows/actions/composer/slash UI and supported direct-chat transport slices, while excluded transport and renderer/windowing ownership still fail closed to legacy.
+8. Current production code calls this helper for World Info after the legacy World Info panel initializes and rehydrates; the mounted React content is a host/action island that delegates World Info behavior to the legacy action chain.
+9. Current production code calls this helper for Background Library after `initBackgrounds()`, on background drawer click, after `emberdesk:background-library-state-change`, and after each React-dispatched action settles; the mounted React content is the normal visible owner path while `public/scripts/backgrounds.js` stays the compatibility facade for the underlying background behavior.
+10. Current production code calls this helper for Extensions Host after `initExtensions()`, on extension drawer click, after `emberdesk:extensions-host-state-change`, and after each settled non-draft React-dispatched action; the mounted React content is the normal visible owner path while `public/scripts/extensions.js` preserves protected mount points and compatibility-sensitive host behavior.
 
 ## Key Rules
 
 - The feature payload is a bootstrap contract from the server to the legacy browser shell; it is not a product-facing settings surface.
-- The delivered character-library island may use this payload in the current 2026-06-19 code. The World Info flag may mount an independent React host/action island inside the legacy World Info editor panel, but World Info activation, import result semantics, regex placement, prompt activation, and world-book deletion remain legacy-owned.
-- The Background Library flag may mount an independent React host/action island inside the legacy Backgrounds panel, but upload/delete/rename file operations, folder assignment, background selection effects, lock behavior, thumbnail generation, and slash-command behavior remain legacy-owned.
-- The Extensions Host flag may mount an independent React host/action island inside the legacy Extensions drawer, but extension discovery, manifest loading, script/style injection, Tavern Helper, regex extension, wand menu templates, install/update/delete protocols, and `@sillytavern/*` aliases remain legacy-owned.
+- The delivered workspace bootstrap payload now covers both dedicated-bundle and shared-bundle React slices. `characterLibrary` uses its own character-library bundle; `mainChatMessageList`, `worldInfo`, `backgroundLibrary`, and `extensionsHost` use the shared `workspace-panels.js` bundle.
+- The `mainChatMessageList` flag may mount a guarded React island inside the existing `#chat` surface, but excluded non-OpenAI/group/dry-run/nested/quiet/background transport paths, legacy formatter/rich-body HTML, and long-chat load-more ownership remain legacy-owned.
+- The World Info flag may mount an independent React host/action island inside the legacy World Info editor panel, but World Info activation, import result semantics, regex placement, prompt activation, and world-book deletion still remain owned by `public/scripts/world-info.js`; React now reaches that owner through explicit helper functions instead of directly poking the legacy DOM controls.
+- The Background Library flag may mount an independent React host inside the legacy Backgrounds panel, and the visible React filter/gallery/action path is now the normal owner for that surface. Underlying selection, lock, folder, thumbnail, and slash-compatible behavior still executes through the `public/scripts/backgrounds.js` compatibility facade; file APIs and protected slash-command exports are not reimplemented in React.
+- The Extensions Host flag may mount an independent React host inside the legacy Extensions drawer, and the visible React notify/manage/install/Extras path is now the normal owner for that surface. Protected mount points remain frozen compatibility nodes, while extension discovery, manifest loading, script/style injection, Tavern Helper, regex extension, wand menu templates, install/update/delete protocols, and `@sillytavern/*` aliases continue to execute through `public/scripts/extensions.js` and the existing protected surfaces rather than being reimplemented in React.
 - Inline payload escaping is required because config-derived values are embedded in an HTML response.
 - Bootstrap injection is idempotent so repeated middleware or test passes do not duplicate the script.
-- Disabled World Info, Background Library, and Extensions Host flags must return before host creation so a flag-off workspace has no empty migration host added to those legacy panels.
+- Disabled main-chat, World Info, Background Library, and Extensions Host flags must return before host creation so a flag-off workspace has no empty migration host added to those legacy surfaces.
 - The bridge helper is fail-closed: disabled flags, missing containers, and missing bundles all return `false` and leave the legacy panel path available.
 - The shared workspace-panel bundle renders panel-specific rows and React-owned controls under a TanStack Query provider for World Info, Background Library, and Extensions Host. TanStack Form + Zod owns the React-visible field/control state; legacy-owned controls remain outside these schemas by design.
 

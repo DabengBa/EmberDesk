@@ -1483,6 +1483,313 @@ export function reloadEditor(file, loadIfNotSelected = false) {
     }
 }
 
+function getSelectedWorldInfoEditorName() {
+    const selectedIndex = Number($('#world_editor_select').val());
+    return Number.isInteger(selectedIndex) && selectedIndex >= 0
+        ? world_names?.[selectedIndex] ?? ''
+        : '';
+}
+
+function syncWorldInfoEditorSelectorUi(selectedValue) {
+    const editorSelector = $('#world_editor_select');
+    editorSelector.val(selectedValue);
+    if (editorSelector.data('select2')) {
+        editorSelector.trigger('change.select2');
+    }
+}
+
+export async function selectWorldInfoEditorIndex(worldIndex) {
+    const selectedValue = String(worldIndex ?? '');
+    syncWorldInfoEditorSelectorUi(selectedValue);
+
+    $('#world_info_search').val('');
+    worldInfoFilter.setFilterData(FILTER_TYPES.WORLD_INFO_SEARCH, '', true);
+
+    if (selectedValue === '') {
+        await hideWorldEditor();
+        return;
+    }
+
+    const selectedIndex = Number(selectedValue);
+    const worldName = Number.isInteger(selectedIndex) && selectedIndex >= 0
+        ? world_names?.[selectedIndex]
+        : null;
+
+    if (!worldName) {
+        await hideWorldEditor();
+        return;
+    }
+
+    await showWorldEditor(worldName);
+}
+
+export function applyWorldInfoSearchQuery(searchQuery) {
+    const normalizedQuery = String(searchQuery ?? '');
+    $('#world_info_search').val(normalizedQuery);
+    worldInfoFilter.setFilterData(FILTER_TYPES.WORLD_INFO_SEARCH, normalizedQuery);
+}
+
+export function applyWorldInfoSortOption(sortValue) {
+    const normalizedSortValue = String(sortValue ?? '');
+    $('#world_info_sort_order').val(normalizedSortValue);
+    if (normalizedSortValue !== 'search') {
+        accountStorage.setItem(SORT_ORDER_KEY, normalizedSortValue);
+    }
+    updateEditor(navigation_option.none);
+}
+
+export async function createWorldInfoEntryFromEditor() {
+    const worldName = getSelectedWorldInfoEditorName();
+    if (!worldName) {
+        return null;
+    }
+
+    const data = await loadWorldInfo(worldName);
+    if (!data?.entries) {
+        return null;
+    }
+
+    const entry = createWorldInfoEntry(worldName, data);
+    if (entry) {
+        updateEditor(entry.uid);
+    }
+
+    return entry ?? null;
+}
+
+export async function promptToCreateWorldInfo() {
+    const tempName = getFreeWorldName();
+    const finalName = await Popup.show.input(t`Create a new World Info`, t`Enter a name for the new file:`, tempName);
+
+    if (!finalName) {
+        return false;
+    }
+
+    return await createNewWorldInfo(finalName, { interactive: true });
+}
+
+export function requestWorldInfoImportSelection() {
+    if (worldInfoImportBusy) {
+        return false;
+    }
+
+    document.getElementById('world_import_file')?.click();
+    return true;
+}
+
+export async function exportCurrentWorldInfo() {
+    const worldName = getSelectedWorldInfoEditorName();
+    if (!worldName) {
+        return false;
+    }
+
+    const data = await loadWorldInfo(worldName);
+    if (!data) {
+        return false;
+    }
+
+    download(JSON.stringify(data), `${worldName}.json`, 'application/json');
+    return true;
+}
+
+async function getCurrentWorldInfoEditorState() {
+    const worldName = getSelectedWorldInfoEditorName();
+    if (!worldName) {
+        return { worldName: '', data: null };
+    }
+
+    return {
+        worldName,
+        data: await loadWorldInfo(worldName),
+    };
+}
+
+export async function renameCurrentWorldInfo() {
+    const { worldName, data } = await getCurrentWorldInfoEditorState();
+    if (!worldName || !data) {
+        return false;
+    }
+
+    await renameWorldInfo(worldName, data);
+    return true;
+}
+
+export async function duplicateCurrentWorldInfo() {
+    const { worldName, data } = await getCurrentWorldInfoEditorState();
+    if (!worldName || !data) {
+        return false;
+    }
+
+    const tempName = getFreeWorldName(worldName);
+    const finalName = await Popup.show.input('Create a new World Info?', 'Enter a name for the new file:', tempName);
+
+    if (!finalName) {
+        return false;
+    }
+
+    await saveWorldInfo(finalName, data, true);
+    await updateWorldInfoList();
+
+    const selectedIndex = world_names.indexOf(finalName);
+    if (selectedIndex !== -1) {
+        await selectWorldInfoEditorIndex(selectedIndex);
+    } else {
+        await hideWorldEditor();
+    }
+
+    return true;
+}
+
+function removeDeletedWorldInfoAuxiliaryReferences(worldName) {
+    if (!world_info.charLore) {
+        return false;
+    }
+
+    let changed = false;
+    for (let index = world_info.charLore.length - 1; index >= 0; index -= 1) {
+        const charLore = world_info.charLore[index];
+        if (!charLore.extraBooks?.includes(worldName)) {
+            continue;
+        }
+
+        const nextBooks = charLore.extraBooks.filter((entry) => entry !== worldName);
+        if (nextBooks.length === 0) {
+            world_info.charLore.splice(index, 1);
+        } else {
+            charLore.extraBooks = nextBooks;
+        }
+        changed = true;
+    }
+
+    return changed;
+}
+
+async function deleteWorldInfoWithCascade(worldName) {
+    let worldInfos = [];
+    try {
+        const preflight = await fetch('/api/worldinfo/delete-preflight', {
+            method: 'POST',
+            headers: getRequestHeaders(),
+            body: JSON.stringify({ name: worldName }),
+        });
+        if (preflight.ok) {
+            const data = await preflight.json();
+            worldInfos = data.worldInfos ?? [];
+        }
+    } catch {
+        // If preflight fails, fall through to simple confirmation.
+    }
+
+    const hasBoundCharacters = worldInfos.some(world => world.boundCharacters.length > 0);
+
+    if (hasBoundCharacters) {
+        const cascadeHtml = buildCascadeSectionHtml(worldInfos);
+        const refId = `world-clear-refs-${Date.now()}`;
+        const refCheckboxHtml = `<div class="delete-dialog-option" style="margin-top:10px;">
+            <input type="checkbox" id="${refId}"><label for="${refId}">${t`Also clear world info references in bound characters`}</label>
+        </div>`;
+        const fullHtml = `<h3>${t`Delete the World/Lorebook: "${worldName}"?`}</h3>${cascadeHtml}${refCheckboxHtml}`;
+
+        let capturedCascade = { deleteWorlds: [], clearWorldReferences: false };
+        const popup = new Popup(fullHtml, POPUP_TYPE.CONFIRM, '', {
+            okButton: t`Delete`,
+            wider: true,
+            leftAlign: true,
+            customButtons: [{
+                text: t`Delete All`,
+                result: POPUP_RESULT.CUSTOM1,
+                classes: ['popup-button-ok'],
+            }],
+            onClosing: () => {
+                capturedCascade = captureCascadeChoices();
+                capturedCascade.clearWorldReferences = !!document.getElementById(refId)?.checked;
+                return true;
+            },
+            onOpen: (popupInstance) => {
+                document.querySelectorAll('.world-cascade-checkbox').forEach((checkbox) => { checkbox.checked = true; });
+                const deleteAllButton = popupInstance.dlg.querySelector(`[data-result="${POPUP_RESULT.CUSTOM1}"]`);
+                if (deleteAllButton) {
+                    deleteAllButton.addEventListener('click', () => {
+                        document.querySelectorAll('.world-cascade-checkbox').forEach((checkbox) => { checkbox.checked = true; });
+                        popupInstance.complete(POPUP_RESULT.AFFIRMATIVE);
+                    });
+                }
+            },
+        });
+        const result = await popup.show();
+        if (!result || capturedCascade.deleteWorlds.length === 0) {
+            return false;
+        }
+
+        if (capturedCascade.clearWorldReferences) {
+            await fetch('/api/worldinfo/delete-cascade', {
+                method: 'POST',
+                headers: getRequestHeaders(),
+                body: JSON.stringify({ worlds: capturedCascade.deleteWorlds, clear_references: true }),
+            });
+            await flushDeletedWorldsFromUI(capturedCascade.deleteWorlds);
+            return true;
+        }
+    } else {
+        const confirmed = await Popup.show.confirm(`Delete the World/Lorebook: "${worldName}"?`, 'This action is irreversible!');
+        if (!confirmed) {
+            return false;
+        }
+    }
+
+    if (removeDeletedWorldInfoAuxiliaryReferences(worldName)) {
+        saveSettingsDebounced();
+    }
+
+    await deleteWorldInfo(worldName);
+    return true;
+}
+
+export async function deleteCurrentWorldInfo() {
+    const worldName = getSelectedWorldInfoEditorName();
+    if (!worldName) {
+        return false;
+    }
+
+    return await deleteWorldInfoWithCascade(worldName);
+}
+
+export function refreshCurrentWorldInfoEditor() {
+    updateEditor(navigation_option.previous);
+}
+
+function getWorldInfoEntryExpandButton(uid) {
+    const normalizedUid = String(uid ?? '');
+    if (!normalizedUid) {
+        return null;
+    }
+
+    const entry = Array.from(document.querySelectorAll('#world_popup_entries_list .world_entry'))
+        .find(element => element.getAttribute('uid') === normalizedUid);
+    return entry?.querySelector('.wi-card-expand-button') ?? null;
+}
+
+export async function openWorldInfoEntryByUid(uid) {
+    const normalizedUid = String(uid ?? '');
+    const numericUid = Number(normalizedUid);
+
+    if (!normalizedUid || !Number.isInteger(numericUid) || numericUid < 0) {
+        return false;
+    }
+
+    const existingButton = getWorldInfoEntryExpandButton(normalizedUid);
+    if (existingButton instanceof HTMLElement) {
+        existingButton.click();
+        return true;
+    }
+
+    await updateEditor(numericUid, false);
+    await waitUntilCondition(() => getWorldInfoEntryExpandButton(normalizedUid) instanceof HTMLElement);
+    const button = getWorldInfoEntryExpandButton(normalizedUid);
+    button?.click();
+    return button instanceof HTMLElement;
+}
+
 //MARK: regWISlashCommands
 function registerWorldInfoSlashCommands() {
     /**
@@ -2847,101 +3154,7 @@ async function displayWorldEntries(name, data, navigation = navigation_option.no
     // Regardless of whether success is displayed or not. Make sure the delete button is available.
     // Do not put this code behind.
     $('#world_delete_menu_item').off('click').on('click', async () => {
-        // Call preflight to check for bound characters
-        let worldInfos = [];
-        try {
-            const pf = await fetch('/api/worldinfo/delete-preflight', {
-                method: 'POST',
-                headers: getRequestHeaders(),
-                body: JSON.stringify({ name }),
-            });
-            if (pf.ok) {
-                const data = await pf.json();
-                worldInfos = data.worldInfos ?? [];
-            }
-        } catch {
-            // If preflight fails, fall through to simple confirmation
-        }
-
-        const hasBoundCharacters = worldInfos.some(w => w.boundCharacters.length > 0);
-
-        if (hasBoundCharacters) {
-            // Show cascade dialog with bound character warning
-            const cascadeHtml = buildCascadeSectionHtml(worldInfos);
-            const refId = `world-clear-refs-${Date.now()}`;
-            const refCheckboxHtml = `<div class="delete-dialog-option" style="margin-top:10px;">
-                <input type="checkbox" id="${refId}"><label for="${refId}">${t`Also clear world info references in bound characters`}</label>
-            </div>`;
-            const fullHtml = `<h3>${t`Delete the World/Lorebook: "${name}"?`}</h3>${cascadeHtml}${refCheckboxHtml}`;
-
-            let capturedCascade = { deleteWorlds: [], clearWorldReferences: false };
-            const popup = new Popup(fullHtml, POPUP_TYPE.CONFIRM, '', {
-                okButton: t`Delete`,
-                wider: true,
-                leftAlign: true,
-                customButtons: [{
-                    text: t`Delete All`,
-                    result: POPUP_RESULT.CUSTOM1,
-                    classes: ['popup-button-ok'],
-                }],
-                onClosing: () => {
-                    capturedCascade = captureCascadeChoices();
-                    capturedCascade.clearWorldReferences = !!document.getElementById(refId)?.checked;
-                    return true;
-                },
-                onOpen: (p) => {
-                    // Auto-check the single world since the user explicitly clicked Delete
-                    document.querySelectorAll('.world-cascade-checkbox').forEach((cb) => { cb.checked = true; });
-                    const btn = p.dlg.querySelector('[data-result="' + POPUP_RESULT.CUSTOM1 + '"]');
-                    if (btn) {
-                        btn.addEventListener('click', () => {
-                            document.querySelectorAll('.world-cascade-checkbox').forEach((cb) => { cb.checked = true; });
-                            p.complete(POPUP_RESULT.AFFIRMATIVE);
-                        });
-                    }
-                },
-            });
-            const result = await popup.show();
-            if (!result) return;
-
-            // User unchecked the world checkbox — treat as cancel
-            if (capturedCascade.deleteWorlds.length === 0) return;
-
-            if (capturedCascade.clearWorldReferences) {
-                // Use delete-cascade to also clear character references
-                await fetch('/api/worldinfo/delete-cascade', {
-                    method: 'POST',
-                    headers: getRequestHeaders(),
-                    body: JSON.stringify({ worlds: capturedCascade.deleteWorlds, clear_references: true }),
-                });
-                await flushDeletedWorldsFromUI(capturedCascade.deleteWorlds);
-                // Skip regular deleteWorldInfo since cascade already handled it
-                return;
-            }
-            // fall through to regular delete below
-        } else {
-            // No bound characters — simple confirmation
-            const confirmed = await Popup.show.confirm(`Delete the World/Lorebook: "${name}"?`, 'This action is irreversible!');
-            if (!confirmed) return;
-        }
-
-        if (world_info.charLore) {
-            world_info.charLore.forEach((charLore, index) => {
-                if (charLore.extraBooks?.includes(name)) {
-                    const tempCharLore = charLore.extraBooks.filter((e) => e !== name);
-                    if (tempCharLore.length === 0) {
-                        world_info.charLore.splice(index, 1);
-                    } else {
-                        charLore.extraBooks = tempCharLore;
-                    }
-                }
-            });
-
-            saveSettingsDebounced();
-        }
-
-        // Selected world_info automatically refreshes
-        await deleteWorldInfo(name);
+        await deleteCurrentWorldInfo();
     });
 
     // Before printing the WI, we check if we should enable/disable search sorting
@@ -3104,7 +3317,7 @@ async function displayWorldEntries(name, data, navigation = navigation_option.no
 
     // More menu: rename
     $('#world_rename_menu_item').off('click').on('click', async () => {
-        await renameWorldInfo(name, data);
+        await renameCurrentWorldInfo();
         closeMoreMenu();
     });
 
@@ -3170,36 +3383,14 @@ async function displayWorldEntries(name, data, navigation = navigation_option.no
     });
 
     // More menu: export
-    $('#world_export_menu_item').off('click').on('click', () => {
-        if (name && data) {
-            const jsonValue = JSON.stringify(data);
-            const fileName = `${name}.json`;
-            download(jsonValue, fileName, 'application/json');
-        }
+    $('#world_export_menu_item').off('click').on('click', async () => {
+        await exportCurrentWorldInfo();
         closeMoreMenu();
     });
 
     // More menu: duplicate
     $('#world_duplicate_menu_item').off('click').on('click', async () => {
-        // Find current name for the world selected
-        const selectedIndex = String($('#world_editor_select').find(':selected').val());
-        const worldName = world_names[selectedIndex] || null;
-
-        // Use the current name as default input, then ask user for the name
-        const tempName = getFreeWorldName(worldName);
-        const finalName = await Popup.show.input('Create a new World Info?', 'Enter a name for the new file:', tempName);
-
-        if (finalName) {
-            await saveWorldInfo(finalName, data, true);
-            await updateWorldInfoList();
-
-            const selectedIndex = world_names.indexOf(finalName);
-            if (selectedIndex !== -1) {
-                $('#world_editor_select').val(selectedIndex).trigger('change');
-            } else {
-                await hideWorldEditor();
-            }
-        }
+        await duplicateCurrentWorldInfo();
     });
 
     // Remove sortable (no drag-and-drop in new design)

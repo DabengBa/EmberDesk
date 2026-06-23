@@ -37,6 +37,7 @@ This feature gets the user to a usable workspace as quickly as possible while al
 - The main shell must become usable before every secondary surface has finished loading.
 - Deferred panel work must not leave the workspace looking permanently blocked.
 - Failures in secondary deferred work should surface locally in the affected panel instead of forcing the whole workspace back into a global loading state.
+- The root workspace bootstrap remains the long-term runtime facade for `/`; feature-flagged React routes and guarded panel islands may enhance surrounding surfaces, but a disabled flag or missing bundle must not replace or invalidate the same root shell.
 
 ## ID Boundary Notes
 

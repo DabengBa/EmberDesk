@@ -89,6 +89,10 @@ function dispatchExtensionsHostStateChange(detail = {}) {
     document.dispatchEvent(new CustomEvent('emberdesk:extensions-host-state-change', { detail }));
 }
 
+function syncExtensionsHostReactState(detail = {}) {
+    dispatchExtensionsHostStateChange(detail);
+}
+
 export function setDeferredExtensionLoader(loader = null, { state } = {}) {
     deferredExtensionLoader = typeof loader === 'function' ? loader : null;
     deferredExtensionLoaderState = deferredExtensionLoader
@@ -738,6 +742,7 @@ async function connectClickHandler() {
     extension_settings.apiKey = String(testApiKey);
     saveSettingsDebounced();
     await connectToApi(baseUrl);
+    syncExtensionsHostReactState();
 }
 
 function autoConnectInputHandler() {
@@ -745,10 +750,11 @@ function autoConnectInputHandler() {
     extension_settings.autoConnect = !!value;
 
     if (value && !connectedToApi) {
-        $('#extensions_connect').trigger('click');
+        void connectExtensionsHostApi();
     }
 
     saveSettingsDebounced();
+    syncExtensionsHostReactState();
 }
 
 async function addExtensionsButtonAndMenu() {
@@ -795,6 +801,8 @@ function notifyUpdatesInputHandler() {
     if (extension_settings.notifyUpdates) {
         checkForExtensionUpdates(true);
     }
+
+    syncExtensionsHostReactState();
 }
 
 /**
@@ -836,6 +844,7 @@ function updateStatus(success) {
     const _class = success ? 'success' : 'failure';
     $('#extensions_status').text(_text);
     $('#extensions_status').attr('class', _class);
+    syncExtensionsHostReactState();
 }
 
 /**
@@ -1855,6 +1864,7 @@ export async function loadExtensionSettings(settings, versionChanged, enableAuto
     $('#extensions_api_key').val(extension_settings.apiKey);
     $('#extensions_autoconnect').prop('checked', extension_settings.autoConnect);
     $('#extensions_notify_updates').prop('checked', extension_settings.notifyUpdates);
+    syncExtensionsHostReactState();
 
     // Activate offline extensions
     await eventSource.emit(event_types.EXTENSIONS_FIRST_LOAD);
@@ -1873,6 +1883,72 @@ export async function loadExtensionSettings(settings, versionChanged, enableAuto
     }
 
     setDeferredExtensionLoader(null);
+}
+
+export function toggleExtensionsHostNotifyUpdates() {
+    const checkbox = document.getElementById('extensions_notify_updates');
+    if (!(checkbox instanceof HTMLInputElement)) {
+        return false;
+    }
+
+    checkbox.checked = !checkbox.checked;
+    notifyUpdatesInputHandler.call(checkbox);
+    return true;
+}
+
+export async function openExtensionsHostManager() {
+    try {
+        await ensureDeferredExtensionsReady();
+        await showExtensionsDetails();
+        return true;
+    } catch (error) {
+        console.error('Failed to open extensions details.', error);
+        if (!error?.__emberDeskDeferredExtensionToastShown) {
+            toastr.error(t`Extensions could not be loaded right now.`);
+        }
+        return false;
+    }
+}
+
+export async function openExtensionsHostInstaller() {
+    await openThirdPartyExtensionMenu();
+    return true;
+}
+
+export function updateExtensionsHostApiUrl(url) {
+    const input = document.getElementById('extensions_url');
+    if (!(input instanceof HTMLInputElement)) {
+        return false;
+    }
+
+    input.value = String(url ?? '');
+    return true;
+}
+
+export function updateExtensionsHostApiKey(apiKey) {
+    const input = document.getElementById('extensions_api_key');
+    if (!(input instanceof HTMLInputElement)) {
+        return false;
+    }
+
+    input.value = String(apiKey ?? '');
+    return true;
+}
+
+export async function connectExtensionsHostApi() {
+    await connectClickHandler();
+    return true;
+}
+
+export function setExtensionsHostAutoconnectEnabled(enabled) {
+    const checkbox = document.getElementById('extensions_autoconnect');
+    if (!(checkbox instanceof HTMLInputElement)) {
+        return false;
+    }
+
+    checkbox.checked = Boolean(enabled);
+    autoConnectInputHandler.call(checkbox);
+    return true;
 }
 
 export function doDailyExtensionUpdatesCheck() {
@@ -2364,17 +2440,11 @@ export async function initExtensions() {
     renderDeferredExtensionPlaceholder();
 
     $('#extensions_connect').on('click', connectClickHandler);
+    $('#extensions_url').on('input', () => syncExtensionsHostReactState());
+    $('#extensions_api_key').on('input', () => syncExtensionsHostReactState());
     $('#extensions_autoconnect').on('input', autoConnectInputHandler);
-    $('#extensions_details').on('click', async () => {
-        try {
-            await ensureDeferredExtensionsReady();
-            await showExtensionsDetails();
-        } catch (error) {
-            console.error('Failed to open extensions details.', error);
-            if (!error?.__emberDeskDeferredExtensionToastShown) {
-                toastr.error(t`Extensions could not be loaded right now.`);
-            }
-        }
+    $('#extensions_details').on('click', () => {
+        void openExtensionsHostManager();
     });
     $('#extensions_notify_updates').on('input', notifyUpdatesInputHandler);
     $(document).on('click', '.extensions_info .extension_block .toggle_disable', onDisableExtensionClick);
@@ -2390,5 +2460,7 @@ export async function initExtensions() {
      *
      * @listens #third_party_extension_button#click - The click event of the '#third_party_extension_button' element.
      */
-    $('#third_party_extension_button').on('click', () => openThirdPartyExtensionMenu());
+    $('#third_party_extension_button').on('click', () => {
+        void openExtensionsHostInstaller();
+    });
 }

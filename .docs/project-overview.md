@@ -29,12 +29,12 @@ It is not optimized for users who want a managed cloud product or a minimal one-
 - Runtime: Node.js 26.3.0 Current (`>=26.3.0 <27`)
 - Package manager and task runner: Bun 1.3.14
 - Server: Express-based API and startup pipeline
-- Frontend: HTML/CSS/jQuery main shell with progressive performance refactors
+- Frontend: HTML/CSS/jQuery main shell frozen as the long-term workspace facade, with progressive React page/panel islands and performance refactors around it
 - Build: Bun-managed scripts plus Vite for shared browser library output, the shared React app, and guarded React panel bundles; Webpack remains a deprecated `/lib.js` fallback
 - Entry point: `server.js` -> `src/server-main.js`
 - React migration: feature-flagged page islands for `/login`, `/setup`, and `/settings`, plus guarded workspace panel islands for Character Library, World Info, Background Library, and Extensions Host, with legacy fallbacks preserved (see [ADR-0007](adr/0007-react-page-islands-with-legacy-fallbacks.md))
-- Workspace panel islands: the server bootstrap payload and browser bridge helper carry independent flags for workspace panels; Vite builds the shared workspace-panel bundle; World Info, Background Library, and Extensions Host now expose guarded React host/action surfaces behind their panel flags. Flag-off paths do not insert empty migration hosts, and legacy owners still perform World Info prompt/regex/delete semantics, Background file/API/slash behavior, and extension discovery/mount/protocol behavior.
-- React state migration: Phase 4 introduces Zustand-backed workspace-panel and main-chat observation stores plus an allowlisted global compatibility bridge. `globalThis.SillyTavern`, `eventSource`, `event_types`, jQuery globals, and extension-facing exports remain compatibility surfaces until Phase 6/7 evidence allows deprecation, freezing, or removal. During Phase 6, `JS-Slash-Runner` is the primary compatibility gate for any proposal that would narrow those surfaces.
+- Workspace panel islands: the server bootstrap payload now publishes independent `characterLibrary`, `mainChatMessageList`, `worldInfo`, `backgroundLibrary`, and `extensionsHost` flags. Character Library keeps its dedicated bundle; the shared workspace-panel bundle mounts the guarded main-chat, World Info, Background Library, and Extensions Host slices fail-closed behind the same payload. Flag-off or build-failure paths do not insert empty migration hosts, and legacy owners still perform World Info prompt/regex/delete semantics, Background file/API/slash behavior, extension discovery/mount/protocol behavior, and the remaining excluded main-chat transport/renderer behavior.
+- React state migration: Phase 4 has already landed the Zustand-backed workspace-panel and main-chat observation stores plus an allowlisted global compatibility bridge. The current roadmap now closes with `globalThis.SillyTavern` and `@sillytavern/*` frozen as documented public facades, `eventSource` / `event_types` kept as long-term supported public runtime contracts, jQuery globals limited to their documented compatibility surfaces, and `__emberDeskReactCompatibilityBridge` kept internal-only. `JS-Slash-Runner` remains the primary blocker sample for any future proposal that would narrow those surfaces.
 - Main-chat React boundary: the guarded main-chat island can own supported visible OpenAI direct-chat transport slices and record renderer/windowing candidate contracts, but provider compatibility fallback, quiet/background generation, legacy formatter HTML, extension-mutated rows, and long-chat load-more/windowing remain protected legacy owners until Phase 7 full owner cutover.
 
 Current architectural boundaries:
@@ -91,7 +91,7 @@ Current derived-cache scope is intentionally narrow:
 
 EmberDesk does not currently aim to:
 
-- replace the jQuery workspace shell with a full SPA in one step
+- replace the current jQuery workspace shell with a full SPA; the current roadmap closes with that shell frozen as the long-term facade around React islands
 - replace canonical character/chat files with a database-first product model
 - provide a hosted SaaS control plane
 - treat every upstream SillyTavern feature as mandatory to preserve forever

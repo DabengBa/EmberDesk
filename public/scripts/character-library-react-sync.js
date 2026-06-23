@@ -24,3 +24,27 @@ export function getCharacterLibraryFetchErrorData(error) {
 export function hasCharacterLibraryPayloadChanged(currentCharacters, nextCharacters) {
     return JSON.stringify(currentCharacters) !== JSON.stringify(nextCharacters);
 }
+
+export function projectCharacterLibraryQueryAgainstDeletedAvatars(queryCharacters, pendingDeletedAvatars = []) {
+    const pendingAvatarSet = new Set(
+        Array.isArray(pendingDeletedAvatars)
+            ? pendingDeletedAvatars.filter(avatar => typeof avatar === 'string' && avatar.length > 0)
+            : [],
+    );
+    const queryAvatarSet = new Set(
+        Array.isArray(queryCharacters)
+            ? queryCharacters.map(character => character?.avatar).filter(avatar => typeof avatar === 'string' && avatar.length > 0)
+            : [],
+    );
+
+    const characters = Array.isArray(queryCharacters)
+        ? queryCharacters.filter(character => !pendingAvatarSet.has(character?.avatar))
+        : [];
+
+    const nextPendingDeletedAvatars = Array.from(pendingAvatarSet).filter(avatar => queryAvatarSet.has(avatar));
+
+    return {
+        characters,
+        pendingDeletedAvatars: nextPendingDeletedAvatars,
+    };
+}

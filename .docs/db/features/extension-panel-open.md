@@ -34,14 +34,16 @@ This feature allows users to access extension controls without forcing the whole
 3. If the deferred load succeeds, the panel fills with the extension content.
 4. If the deferred load fails, EmberDesk replaces the indefinite loading placeholder with an explicit retry state.
 5. Extension-specific settings and menu entries continue to appear in the established extension areas rather than moving to a separate route.
-6. In builds where the guarded React migration flag is enabled, the panel can also show a React host above the existing extensions surface. The host reports protected settings columns, regex container, wand menu, Extras API controls, and deferred loader state, and exposes notify updates, Manage, Install, Extras API URL/API key, autoconnect, and connect controls that dispatch to the existing extensions action chain.
+6. In builds where the guarded React migration flag is enabled, the panel shows a React owner host above the existing extensions surface. That host reports protected settings columns, regex container, wand menu, Extras API controls, and deferred loader state, and exposes notify updates, Manage, Install, Extras API URL/API key, autoconnect, and connect controls that route through explicit helpers in `public/scripts/extensions.js` instead of clicking legacy DOM controls.
 
 ## Business Rules And Boundaries
 
 - Extension loading should not keep the entire workspace blocked.
 - A loading failure must not leave the user with a permanent spinner and no next action.
 - The visible extensions surface must keep installed extension settings, regex settings, and wand-menu entries reachable from their existing workspace locations.
-- The guarded React host is additive. If the migration flag is off, no extra Extensions Host is inserted; if the bundle cannot mount, the established extension surface remains the behavior owner. The React host owns its visible notify/manage/install/Extras controls, but it must not clone, rename, or replace the established extension settings columns, regex container, wand menu button, wand menu, extension content, or extension install/update/delete behavior owners.
+- The guarded React host is the normal visible owner for extension-surface status, notify/manage/install controls, and Extras API controls. If the migration flag is off or the bundle cannot mount, EmberDesk falls back to the same drawer entry as a documented emergency compatibility facade rather than a second long-term competing owner.
+- Protected mount points `#extensions_settings`, `#extensions_settings2`, `#regex_container`, `#extensionsMenuButton`, and `#extensionsMenu` stay frozen compatibility nodes. React may observe and report their readiness, but it must not clone, rename, clear, or replace them.
+- Extension discovery, deferred loader retries, install/manage entry orchestration, and Extras connect/autoconnect state now route through `public/scripts/extensions.js` as the compatibility facade for high-risk extension-host behavior rather than through raw DOM click/trigger bridging.
 - ES-module extensions should treat [Shared Browser Library](term.shared_browser_library) as the stable source for documented common browser utilities.
 - This feature describes the visible panel behavior, not extension activation internals.
 
@@ -53,4 +55,4 @@ This semantic feature covers the panel-open contract and local recovery state on
 
 - **Success**: the panel opens and eventually resolves into usable extension content.
 - **Failure with recovery**: the panel exposes a retry path instead of remaining in an endless loading state.
-- **Migration host/action island shown**: when the guarded host is enabled, it reports protected mount-point readiness and loader state, exposes notify/manage/install/Extras API entry points, and keeps extension content mounting in the established locations.
+- **React owner host shown**: when the guarded host is enabled, it reports protected mount-point readiness and loader state, exposes notify/manage/install/Extras API entry points, and routes those actions through the `public/scripts/extensions.js` compatibility facade while keeping extension content mounting in the established locations.

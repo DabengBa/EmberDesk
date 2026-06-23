@@ -78,46 +78,11 @@
 
 ## Spec 文档组织结构
 
-采用**混合方案**：Phase 作为目录，Sprint 作为独立 spec。
+采用**混合方案**：Phase 作为目录，Sprint 作为独立 spec。下面保留原始组织思路，但按 2026-06-23 当前代码状态补记 active/archive 分流：已完成的 Phase 0-5 实现 spec 已从 `.docs/specs/` 清理，Phase 4 的 durable archive 入口改为 [react-phase4-state-management-sequenced-specs](react-phase4-state-management-sequenced-specs.md)。
 
 ```
 .docs/specs/
-├─ react-phase0-infrastructure/
-│  ├─ README.md                              # Phase 0 概览
-│  ├─ phase0-sprint1-vite-migration.md       # Sprint 1: Vite 替换 Webpack
-│  ├─ phase0-sprint2-typescript-config.md    # Sprint 2: TypeScript 配置
-│  ├─ phase0-sprint3-react-dev-env.md        # Sprint 3: React 开发环境
-│  └─ phase0-sprint4-tailwind-integration.md # Sprint 4: Tailwind CSS 集成
-├─ react-phase1-independent-pages/
-│  ├─ README.md
-│  ├─ phase1-sprint1-login-page.md           # Sprint 5: Login 页面
-│  ├─ phase1-sprint2-setup-page.md           # Sprint 7: Setup 页面
-│  └─ phase1-sprint3-settings-panel.md       # Sprint 9: Settings 面板
-├─ react-phase2-sidebars/
-│  ├─ README.md
-│  ├─ phase2-sprint1-character-library-list.md
-│  ├─ phase2-sprint2-character-library-search.md
-│  ├─ phase2-sprint3-character-library-bulk.md
-│  ├─ phase2-sprint4-world-info-editor.md
-│  ├─ phase2-sprint5-world-info-import.md
-│  ├─ phase2-sprint6-background-library.md
-│  └─ phase2-sprint7-extensions-host.md
-├─ react-phase3-main-chat/
-│  ├─ README.md
-│  ├─ phase3-sprint1-message-list-basic.md
-│  ├─ phase3-sprint2-message-list-rich.md
-│  ├─ phase3-sprint3-message-list-scroll.md
-│  ├─ phase3-sprint4-streaming-sse.md
-│  ├─ phase3-sprint5-streaming-control.md
-│  ├─ phase3-sprint6-input-basic.md
-│  ├─ phase3-sprint7-input-slash.md
-│  ├─ phase3-sprint8-message-actions.md
-│  └─ phase3-sprint9-integration.md
-├─ react-phase4-state-management/
-│  ├─ README.md
-│  ├─ phase4-sprint1-zustand-stores.md
-│  ├─ phase4-sprint2-compat-bridge.md
-│  └─ phase4-sprint3-extension-guide.md
+├─ completed phase specs removed after durable archive handoff
 ├─ react-phase6-extension-compat/
 │  └─ README.md                               # 持续维护，无独立 Sprint
 └─ react-phase7-full-owner-cutover/
@@ -129,6 +94,9 @@
    ├─ phase7-sprint5-main-chat-transport-full-owner-cutover.md
    ├─ phase7-sprint6-main-chat-renderer-windowing-full-owner-cutover.md
    └─ phase7-sprint7-workspace-shell-global-compatibility-decision.md
+
+.docs/tech/briefs/
+└─ react-phase4-state-management-sequenced-specs.md   # Phase 4 / 4A / 4B durable archive entry
 ```
 
 ### 命名规范
@@ -187,6 +155,7 @@
 - ✅ Phase 1 已落地：`/login` 默认启用 React，`/setup` 和 `/settings` 已作为 feature-flagged React page islands 交付，并保留 `/login.html`、`/setup.html` 和 legacy `/` fallback。
 - ✅ Phase 2 Sprint 1-3 已落地：Character Library 已作为 `features.react.panels.characterLibrary` 控制的 workspace panel island 交付，bundle 入口为 `app/character-library-panel.tsx`，legacy tag controls 和兼容 DOM 仍保留。
 - ✅ Phase 2 Sprint 4-7 已推进到 guarded host/status bridge：`features.react.panels.worldInfo` / `backgroundLibrary` / `extensionsHost`、`public/scripts/workspace-panels-react-bridge.js`、`app/workspace-panels.tsx` 和 `build:react:workspace-panels` 已接线；World Info、Background Library、Extensions Host 现在可在 flag 开启时显示独立 readiness/status host。
+- ✅ Phase 4 已落地并从 active specs 归档：`app/stores/workspace-panel-store.js`、`app/stores/main-chat-observation-store.js`、`app/compat/global-compatibility-bridge.js`、`public/scripts/main-chat-visible-transport-owner.js` 和 `public/scripts/chat-message-render-descriptor.js` 已把 state foundation、compat bridge、transport classifier 与 renderer/windowing contract 固化到当前代码；持久入口改为 `.docs/tech/briefs/react-phase4-state-management-sequenced-specs.md`、`.docs/tech/react-modernization-roadmap.md` 和 owning docs。
 - ✅ ADR-0007 已接受，用于替代原先的 ADR 占位：早期 React 迁移采用 page/panel islands + legacy fallback，而不是一次性 SPA cutover。
 - 📋 Phase 2 Sprint 4-7 尚未完成完整 panel 行为迁移：World Info activation/import/regex/delete、Background upload/delete/rename/select/slash behavior、Extensions discovery/mount/API/install/update/delete behavior 仍由 legacy 面板拥有；当前 React host 只呈现受保护状态面。
 - 📋 TanStack Start、Hono、Drizzle ORM、Vitest、shadcn/ui 和 Ant Design 仍是后续候选或原始推荐栈内容；当前代码事实只支持把 React 19、TanStack Router、TanStack Query、TanStack Form、Zod、TanStack Virtual、Vite 8、Tailwind v4、TypeScript 6、ESLint 10，以及在 Phase 4 已引入的 Zustand 写成已采用。
@@ -202,7 +171,7 @@ D:\DEV\EmberDesk\
 │  ├─ stores/                     # Zustand stores
 │  ├─ lib/                        # 工具函数
 │  ├─ compat/                     # 兼容层
-│  │  └─ globalBridge.ts          # globalThis.SillyTavern 桥接
+│  │  └─ global-compatibility-bridge.js
 │  └─ server/                     # typed API / route boundary experiments（若 Phase 5 证明值得引入）
 ├─ src/                           # 现有 Express 后端（保持）
 ├─ public/                        # 现有 jQuery 前端（逐步淘汰）
@@ -210,13 +179,9 @@ D:\DEV\EmberDesk\
    ├─ tech/
    │  ├─ react-modernization-roadmap.md
    │  └─ briefs/
-   │     └─ react-modernization-intent.md
+   │     ├─ react-modernization-intent.md
+   │     └─ react-phase4-state-management-sequenced-specs.md
    └─ specs/
-      ├─ react-phase0-infrastructure/
-      ├─ react-phase1-independent-pages/
-      ├─ react-phase2-sidebars/
-      ├─ react-phase3-main-chat/
-      ├─ react-phase4-state-management/
       ├─ react-phase6-extension-compat/
       └─ react-phase7-full-owner-cutover/
 ```
@@ -239,3 +204,4 @@ D:\DEV\EmberDesk\
 - 2026-06-15: 确认 Spec 组织结构为混合方案（方案 C）和命名规范（方案 B）
 - 2026-06-15: 定义双向链接格式和验证门
 - 2026-06-19: 按当前代码补记 Phase 2 Sprint 4-7 的 guarded host/status bridge 已接线，同时明确完整 World Info / Backgrounds / Extensions 行为迁移仍未完成
+- 2026-06-23: 按当前代码补记 Phase 4 已完成并从 active specs 归档，Phase 4 durable traceability 由 archive brief、路线图、PROJECT_HISTORY 和 owning docs 继续承接

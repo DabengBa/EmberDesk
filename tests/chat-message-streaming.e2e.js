@@ -257,6 +257,21 @@ async function startContinueGeneration(page) {
     });
 }
 
+async function startQuietPromptGeneration(page, options = {}) {
+    await page.evaluate((payload) => {
+        const context = window.SillyTavern.getContext();
+        window.__emberdeskStreamingGeneration = context.generateQuietPrompt(payload)
+            .then(result => {
+                window.__emberdeskStreamingGenerationResult = String(result ?? '');
+                return result;
+            })
+            .catch(error => {
+                window.__emberdeskStreamingGenerationError = String(error?.message ?? error);
+                throw error;
+            });
+    }, options);
+}
+
 async function startRightSwipeGeneration(page, messageId) {
     await page.locator(`#chat > .mes[mesid="${messageId}"] .swipe_right`).click();
 }
@@ -295,6 +310,8 @@ async function waitForGeneration(page, { allowAbort = false, allowFailure = fals
             }
         }
     }, { acceptAbort: allowAbort, acceptFailure: allowFailure });
+
+    await expect.poll(async () => page.evaluate(() => window.SillyTavern.getContext().streamingProcessor === null)).toBe(true);
 }
 
 async function waitForVisibleSendButtonGeneration(page) {
@@ -451,6 +468,77 @@ async function expectMainChatVisibleTransportOwner(page, expectations = {}) {
 
     if (expectations.kind !== undefined) {
         await expect(controller).toHaveAttribute('data-main-chat-visible-transport-kind', expectations.kind);
+    }
+
+    if (expectations.status !== undefined) {
+        await expect(controller).toHaveAttribute('data-main-chat-visible-transport-status', expectations.status);
+    }
+
+    if (expectations.path !== undefined) {
+        await expect(controller).toHaveAttribute('data-main-chat-visible-transport-path', expectations.path);
+    }
+
+    if (expectations.reason !== undefined) {
+        await expect(controller).toHaveAttribute('data-main-chat-visible-transport-reason', expectations.reason);
+    }
+}
+
+async function expectMainChatQuietTransportState(page, expectations = {}) {
+    const controller = page.locator('[data-main-chat-message-list-controller="true"]');
+
+    if (!reactMainChatMessageListEnabled) {
+        await expect(controller).toHaveCount(0);
+        return;
+    }
+
+    await expect(controller).toHaveCount(1);
+
+    if (expectations.owner !== undefined) {
+        await expect(controller).toHaveAttribute('data-main-chat-quiet-transport-owner', expectations.owner);
+    }
+
+    if (expectations.kind !== undefined) {
+        await expect(controller).toHaveAttribute('data-main-chat-quiet-transport-kind', expectations.kind);
+    }
+
+    if (expectations.status !== undefined) {
+        await expect(controller).toHaveAttribute('data-main-chat-quiet-transport-status', expectations.status);
+    }
+
+    if (expectations.path !== undefined) {
+        await expect(controller).toHaveAttribute('data-main-chat-quiet-transport-path', expectations.path);
+    }
+
+    if (expectations.reason !== undefined) {
+        await expect(controller).toHaveAttribute('data-main-chat-quiet-transport-reason', expectations.reason);
+    }
+
+    if (expectations.phase !== undefined) {
+        await expect(controller).toHaveAttribute('data-main-chat-quiet-transport-phase', expectations.phase);
+    }
+
+    if (expectations.error !== undefined) {
+        await expect(controller).toHaveAttribute('data-main-chat-quiet-transport-error', expectations.error);
+    }
+
+    if (expectations.autoRecover !== undefined) {
+        await expect(controller).toHaveAttribute('data-main-chat-quiet-transport-auto-recover', expectations.autoRecover ? 'true' : 'false');
+    }
+
+    if (expectations.streaming !== undefined) {
+        await expect(controller).toHaveAttribute('data-main-chat-quiet-transport-streaming', expectations.streaming ? 'true' : 'false');
+    }
+
+    if (expectations.visibleRow !== undefined) {
+        await expect(controller).toHaveAttribute('data-main-chat-quiet-transport-visible-row', expectations.visibleRow ? 'true' : 'false');
+    }
+
+    if (expectations.finalization !== undefined) {
+        await expect(controller).toHaveAttribute('data-main-chat-quiet-transport-finalization', expectations.finalization);
+    }
+
+    if (expectations.rollback !== undefined) {
+        await expect(controller).toHaveAttribute('data-main-chat-quiet-transport-rollback', expectations.rollback);
     }
 }
 
@@ -1024,6 +1112,9 @@ test.describe('chat message streaming', () => {
         await expectMainChatVisibleTransportOwner(page, {
             owner: 'react',
             kind: 'retryGeneration',
+            status: 'react-owned',
+            path: 'standard-openai-visible-direct-chat',
+            reason: 'supported-kind',
         });
         await expectMainChatStreamingTransportState(page, {
             phase: ['streaming', 'completed'],
@@ -1087,6 +1178,107 @@ test.describe('chat message streaming', () => {
         expect(String(abortedMessage ?? '')).toMatch(/Aborted|Generation was aborted/i);
         await expect(page.locator('body')).not.toHaveAttribute('data-generating', 'true');
         await expect(page.getByRole('button', { name: 'Retry generation' })).toHaveCount(1);
+    });
+
+    test('quiet helper generation exposes an explicit non-visible legacy owner contract without mutating visible rows', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterInFreshChat(page, characterName);
+        await enableOpenAiStreaming(page, { streamOpenAi: false });
+        await installNonStreamingFetchStub(page, {
+            content: 'Quiet helper reply.',
+            delayMs: 200,
+        });
+
+        const messageCountBefore = await page.locator('#chat > .mes[mesid]').count();
+        await startQuietPromptGeneration(page, {
+            quietPrompt: 'Return only a deterministic helper sentence.',
+        });
+
+        await expectMainChatQuietTransportState(page, {
+            owner: 'legacy',
+            kind: 'quietPrompt',
+            status: 'legacy-owned',
+            path: 'quiet-non-visible-helper',
+            reason: 'quiet-generation',
+            phase: 'running',
+            error: '',
+            autoRecover: false,
+            streaming: false,
+            visibleRow: false,
+            finalization: 'return-generated-text',
+            rollback: 'caller-owned',
+        });
+
+        await waitForGeneration(page);
+        await expectMainChatQuietTransportState(page, {
+            owner: 'legacy',
+            kind: 'quietPrompt',
+            status: 'legacy-owned',
+            path: 'quiet-non-visible-helper',
+            reason: 'quiet-generation',
+            phase: 'completed',
+            error: '',
+            autoRecover: false,
+            streaming: false,
+            visibleRow: false,
+            finalization: 'return-generated-text',
+            rollback: 'caller-owned',
+        });
+        await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(messageCountBefore);
+
+        const quietReply = await page.evaluate(() => window.__emberdeskStreamingGenerationResult);
+        expect(quietReply).toBe('Quiet helper reply.');
+    });
+
+    test('background helper generation keeps the same non-visible contract while exposing its own request family', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterInFreshChat(page, characterName);
+        await enableOpenAiStreaming(page, { streamOpenAi: false });
+        await installNonStreamingFetchStub(page, {
+            content: 'Beach sunset',
+            delayMs: 200,
+        });
+
+        const messageCountBefore = await page.locator('#chat > .mes[mesid]').count();
+        await startQuietPromptGeneration(page, {
+            quietPrompt: 'Choose one background title only.',
+            backgroundGeneration: true,
+        });
+
+        await expectMainChatQuietTransportState(page, {
+            owner: 'legacy',
+            kind: 'backgroundGeneration',
+            status: 'legacy-owned',
+            path: 'background-non-visible-helper',
+            reason: 'background-generation',
+            phase: 'running',
+            error: '',
+            autoRecover: false,
+            streaming: false,
+            visibleRow: false,
+            finalization: 'return-generated-text',
+            rollback: 'caller-owned',
+        });
+
+        await waitForGeneration(page);
+        await expectMainChatQuietTransportState(page, {
+            owner: 'legacy',
+            kind: 'backgroundGeneration',
+            status: 'legacy-owned',
+            path: 'background-non-visible-helper',
+            reason: 'background-generation',
+            phase: 'completed',
+            error: '',
+            autoRecover: false,
+            streaming: false,
+            visibleRow: false,
+            finalization: 'return-generated-text',
+            rollback: 'caller-owned',
+        });
+        await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(messageCountBefore);
+
+        const quietReply = await page.evaluate(() => window.__emberdeskStreamingGenerationResult);
+        expect(quietReply).toBe('Beach sunset');
     });
 
     test('visible slash owner observes autocomplete, execution, pause, continue, and abort through the legacy executor', async ({ page }) => {
@@ -1406,6 +1598,9 @@ test.describe('chat message streaming', () => {
         await expectMainChatVisibleTransportOwner(page, {
             owner: 'react',
             kind: 'retryGeneration',
+            status: 'react-owned',
+            path: 'standard-openai-visible-direct-chat',
+            reason: 'supported-kind',
         });
         await expect(assistantRowsAfterFailure.locator('.mes_text')).toContainText('Recovered retry text.');
         await expect(page.locator('body')).not.toHaveAttribute('data-generating', 'true');
@@ -1507,7 +1702,24 @@ test.describe('chat message streaming', () => {
             messageId,
             expectFallback: true,
         });
-        await waitForGeneration(page);
+        await expectMainChatStreamingTransportState(page, {
+            phase: ['completed', 'idle'],
+            generationPhase: ['completed', 'idle'],
+            messageId,
+            expectFallback: true,
+        });
+        await expect.poll(async () => page.evaluate((targetMessageId) => {
+            const message = window.SillyTavern.getContext().chat[targetMessageId];
+            return {
+                text: String(message?.mes ?? ''),
+                swipeId: message?.swipe_id ?? null,
+                swipes: Array.isArray(message?.swipes) ? [...message.swipes] : [],
+            };
+        }, messageId)).toEqual({
+            text: 'Recovered overswipe text.',
+            swipeId: 1,
+            swipes: ['Original swipe baseline.', 'Recovered overswipe text.'],
+        });
 
         const afterSwipe = await page.evaluate((targetMessageId) => {
             const message = window.SillyTavern.getContext().chat[targetMessageId];

@@ -209,6 +209,7 @@ describe('chat message render descriptor', () => {
         const {
             buildChatMessageRenderDescriptor,
             classifyChatMessageRendererContract,
+            buildMainChatRowLifecycleContract,
         } = await importFreshDescriptorModule();
 
         buildChatMessageRenderDescriptor(createMessage(), { messageId: 9 });
@@ -218,9 +219,9 @@ describe('chat message render descriptor', () => {
             hasProtectedReasoning: true,
             extensionMutated: false,
         })).toEqual(expect.objectContaining({
-            rendererOwner: 'legacy',
-            phase7Candidate: 'react-renderer-candidate',
-            fallback: 'legacy-messageFormatting',
+            rendererOwner: 'react',
+            phase7Candidate: 'react-rich-body-owner',
+            fallback: 'legacy-rich-body-compatibility',
             reason: 'safe-finalized-row',
             protectedSurfaces: {
                 mesText: true,
@@ -264,9 +265,29 @@ describe('chat message render descriptor', () => {
             phase7Candidate: 'legacy-fallback-required',
             reason: 'extension-mutated-row',
         }));
+
+        expect(buildMainChatRowLifecycleContract({
+            hasEditingRows: true,
+            hasStreamingRows: true,
+            hasUnsafeRows: true,
+            hasExtensionMutatedRows: true,
+        })).toEqual({
+            lifecycleOwner: 'react-message-list-controller',
+            phase7Candidate: 'react-row-lifecycle-owner',
+            fallback: 'legacy-row-lifecycle-facade',
+            editingOwner: 'legacy',
+            streamingOwner: 'legacy',
+            unsafeOwner: 'legacy',
+            extensionMutatedOwner: 'legacy',
+            hasEditingRows: true,
+            hasStreamingRows: true,
+            hasUnsafeRows: true,
+            hasExtensionMutatedRows: true,
+            reason: 'fail-closed-row-lifecycle-policy',
+        });
     });
 
-    test('describes long-chat windowing contract without replacing chat truncation owner', async () => {
+    test('describes long-chat windowing contract with a React policy owner and a legacy load-more facade', async () => {
         const { buildMainChatWindowingContract } = await importFreshDescriptorModule();
 
         expect(buildMainChatWindowingContract({
@@ -276,9 +297,11 @@ describe('chat message render descriptor', () => {
             anchorMessageId: '21',
             scrollTop: 240,
         })).toEqual({
-            windowingOwner: 'legacy-chat-truncation',
-            phase7Candidate: 'react-windowing-candidate',
-            fallback: 'legacy-show-more-messages',
+            windowingOwner: 'react-message-list-controller',
+            phase7Candidate: 'react-windowing-owner',
+            fallback: 'legacy-show-more-messages-facade',
+            loadMoreOwner: 'legacy',
+            restoreOwner: 'react',
             renderedMessageIds: ['20', '21', '22'],
             totalMessageCount: 120,
             showMoreVisible: true,
@@ -293,8 +316,10 @@ describe('chat message render descriptor', () => {
             totalMessageCount: 2,
             showMoreVisible: false,
         })).toEqual(expect.objectContaining({
-            windowingOwner: 'legacy-full-chat',
-            phase7Candidate: 'react-windowing-candidate',
+            windowingOwner: 'react-message-list-controller',
+            phase7Candidate: 'react-windowing-owner',
+            loadMoreOwner: 'not-needed',
+            restoreOwner: 'react',
             reason: 'full-chat-window',
         }));
     });

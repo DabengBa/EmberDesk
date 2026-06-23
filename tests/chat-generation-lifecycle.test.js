@@ -1,6 +1,7 @@
 import { describe, expect, test } from '@jest/globals';
 
 import {
+    createQuietGenerationLifecycleContract,
     createGenerationLifecyclePlan,
     getGenerationAttemptBaseline,
     getGenerationFailureDecision,
@@ -268,5 +269,46 @@ describe('chat generation lifecycle coordinator', () => {
             action: 'save_reply',
             type: 'normal',
         });
+    });
+
+    test.each([
+        [
+            'quiet helper prompt',
+            {},
+            {
+                requestFamily: 'quietPrompt',
+                autoRecover: false,
+                usesStreamingTransport: false,
+                bindsVisibleMessageRow: false,
+                finalizationStrategy: 'return-generated-text',
+                rollbackStrategy: 'caller-owned',
+            },
+        ],
+        [
+            'quiet to loud helper prompt',
+            { quietToLoud: true },
+            {
+                requestFamily: 'quietToLoud',
+                autoRecover: false,
+                usesStreamingTransport: false,
+                bindsVisibleMessageRow: false,
+                finalizationStrategy: 'return-generated-text',
+                rollbackStrategy: 'caller-owned',
+            },
+        ],
+        [
+            'background helper prompt',
+            { backgroundGeneration: true },
+            {
+                requestFamily: 'backgroundGeneration',
+                autoRecover: false,
+                usesStreamingTransport: false,
+                bindsVisibleMessageRow: false,
+                finalizationStrategy: 'return-generated-text',
+                rollbackStrategy: 'caller-owned',
+            },
+        ],
+    ])('describes explicit quiet/background lifecycle semantics for %s', (_name, input, expected) => {
+        expect(createQuietGenerationLifecycleContract(input)).toEqual(expected);
     });
 });

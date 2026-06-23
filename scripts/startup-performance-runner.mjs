@@ -100,6 +100,7 @@ async function writeConfig(targetPath) {
         'browserLaunch:',
         '  enabled: false',
         'whitelistMode: false',
+        'enableUserAccounts: false',
         'extensions:',
         '  enabled: true',
         '  autoUpdate: false',

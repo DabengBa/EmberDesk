@@ -20,7 +20,10 @@ import {
     resetMainChatObservationStore,
     updateMainChatObservation,
 } from './stores/main-chat-observation-store.js';
-import { deriveReactVisibleTransportBridgeState } from '../public/scripts/main-chat-visible-transport-owner.js';
+import {
+    deriveReactQuietTransportBridgeState,
+    deriveReactVisibleTransportBridgeState,
+} from '../public/scripts/main-chat-visible-transport-owner.js';
 
 export type WorkspacePanelKind = 'worldInfo' | 'backgroundLibrary' | 'extensionsHost' | 'mainChatMessageList';
 
@@ -161,6 +164,9 @@ interface MainChatMessageListWorkspacePanelState {
     composer?: MainChatComposerState;
     slashCommand?: MainChatSlashCommandState;
     streamingTransport?: MainChatStreamingTransportState;
+    quietTransport?: MainChatQuietTransportState;
+    windowingContract?: MainChatWindowingContractState;
+    rowLifecycleContract?: MainChatRowLifecycleContractState;
     chatContainer?: HTMLElement | null;
     host?: HTMLElement | null;
     messageNodes?: HTMLElement[];
@@ -205,6 +211,51 @@ interface MainChatStreamingTransportState {
     fromFallbackAttempt: boolean;
     recoverable: boolean;
     errorLabel: string | null;
+}
+
+interface MainChatQuietTransportState {
+    owner: 'legacy';
+    kind: string;
+    status: string;
+    path: string;
+    reason: string;
+    phase: 'idle' | 'running' | 'stopped' | 'completed' | 'error';
+    error: string;
+    autoRecover: boolean;
+    usesStreamingTransport: boolean;
+    bindsVisibleMessageRow: boolean;
+    finalizationStrategy: string;
+    rollbackStrategy: string;
+}
+
+interface MainChatWindowingContractState {
+    windowingOwner: string;
+    phase7Candidate: string;
+    fallback: string;
+    loadMoreOwner: string;
+    restoreOwner: string;
+    renderedMessageIds: string[];
+    totalMessageCount: number;
+    showMoreVisible: boolean;
+    anchorMessageId: string | null;
+    scrollTop: number;
+    preservesDirectChildOrder: boolean;
+    reason: string;
+}
+
+interface MainChatRowLifecycleContractState {
+    lifecycleOwner: string;
+    phase7Candidate: string;
+    fallback: string;
+    editingOwner: string;
+    streamingOwner: string;
+    unsafeOwner: string;
+    extensionMutatedOwner: string;
+    hasEditingRows: boolean;
+    hasStreamingRows: boolean;
+    hasUnsafeRows: boolean;
+    hasExtensionMutatedRows: boolean;
+    reason: string;
 }
 
 interface MainChatComposerState {
@@ -254,6 +305,9 @@ interface MainChatVisibleTransportAttempt {
 interface MainChatVisibleTransportRuntimeState {
     owner: 'react';
     kind: string;
+    supportStatus: string;
+    supportPath: string;
+    supportReason: string;
     phase: MainChatGenerationControlState['phase'] | MainChatStreamingTransportState['phase'];
     activeMessageId: number | null;
     observedTokenCount: number;
@@ -267,6 +321,14 @@ interface MainChatVisibleTransportRuntimeState {
     formattedMessageHtml: string;
 }
 
+interface MainChatVisibleTransportDecisionState {
+    owner: 'react' | 'legacy';
+    kind: string;
+    status: string;
+    path: string;
+    reason: string;
+}
+
 interface MainChatVisibleTransportHooks {
     onMessageHtml?: (payload: { messageId: number; formattedMessageHtml: string }) => void;
     onTransportState?: (payload: Partial<MainChatVisibleTransportRuntimeState>) => void;
@@ -275,6 +337,8 @@ interface MainChatVisibleTransportHooks {
 interface MainChatPreparedVisibleTransportRequest {
     owner: 'react' | 'legacy';
     kind?: string;
+    status?: string;
+    path?: string;
     reason?: string;
     attempts?: MainChatVisibleTransportAttempt[];
     prepareRetryAttempt?: (attempt: MainChatVisibleTransportAttempt, attemptIndex: number) => Promise<void>;
@@ -491,6 +555,51 @@ const mainChatStreamingTransportSchema = z.object({
     errorLabel: z.string().nullable(),
 });
 
+const mainChatQuietTransportSchema = z.object({
+    owner: z.literal('legacy'),
+    kind: z.string(),
+    status: z.string(),
+    path: z.string(),
+    reason: z.string(),
+    phase: z.enum(['idle', 'running', 'stopped', 'completed', 'error']),
+    error: z.string(),
+    autoRecover: z.boolean(),
+    usesStreamingTransport: z.boolean(),
+    bindsVisibleMessageRow: z.boolean(),
+    finalizationStrategy: z.string(),
+    rollbackStrategy: z.string(),
+});
+
+const mainChatWindowingContractSchema = z.object({
+    windowingOwner: z.string(),
+    phase7Candidate: z.string(),
+    fallback: z.string(),
+    loadMoreOwner: z.string(),
+    restoreOwner: z.string(),
+    renderedMessageIds: z.array(z.string()),
+    totalMessageCount: z.number().int().nonnegative(),
+    showMoreVisible: z.boolean(),
+    anchorMessageId: z.string().nullable(),
+    scrollTop: z.number().nonnegative(),
+    preservesDirectChildOrder: z.boolean(),
+    reason: z.string(),
+});
+
+const mainChatRowLifecycleContractSchema = z.object({
+    lifecycleOwner: z.string(),
+    phase7Candidate: z.string(),
+    fallback: z.string(),
+    editingOwner: z.string(),
+    streamingOwner: z.string(),
+    unsafeOwner: z.string(),
+    extensionMutatedOwner: z.string(),
+    hasEditingRows: z.boolean(),
+    hasStreamingRows: z.boolean(),
+    hasUnsafeRows: z.boolean(),
+    hasExtensionMutatedRows: z.boolean(),
+    reason: z.string(),
+});
+
 const mainChatGenerationControlFallback: MainChatGenerationControlState = {
     state: 'idle',
     phase: 'idle',
@@ -545,6 +654,51 @@ const mainChatStreamingTransportFallback: MainChatStreamingTransportState = {
     fromFallbackAttempt: false,
     recoverable: false,
     errorLabel: null,
+};
+
+const mainChatQuietTransportFallback: MainChatQuietTransportState = {
+    owner: 'legacy',
+    kind: '',
+    status: '',
+    path: '',
+    reason: '',
+    phase: 'idle',
+    error: '',
+    autoRecover: false,
+    usesStreamingTransport: false,
+    bindsVisibleMessageRow: false,
+    finalizationStrategy: '',
+    rollbackStrategy: '',
+};
+
+const mainChatWindowingContractFallback: MainChatWindowingContractState = {
+    windowingOwner: 'legacy',
+    phase7Candidate: '',
+    fallback: 'legacy',
+    loadMoreOwner: 'legacy',
+    restoreOwner: 'legacy',
+    renderedMessageIds: [],
+    totalMessageCount: 0,
+    showMoreVisible: false,
+    anchorMessageId: null,
+    scrollTop: 0,
+    preservesDirectChildOrder: true,
+    reason: 'unknown',
+};
+
+const mainChatRowLifecycleContractFallback: MainChatRowLifecycleContractState = {
+    lifecycleOwner: 'legacy',
+    phase7Candidate: '',
+    fallback: 'legacy',
+    editingOwner: 'legacy',
+    streamingOwner: 'legacy',
+    unsafeOwner: 'legacy',
+    extensionMutatedOwner: 'legacy',
+    hasEditingRows: false,
+    hasStreamingRows: false,
+    hasUnsafeRows: false,
+    hasExtensionMutatedRows: false,
+    reason: 'unknown',
 };
 
 const mainChatMessageListStateSchema = z.object({
@@ -708,6 +862,9 @@ function asMainChatMessageListState(state: unknown): MainChatMessageListWorkspac
     const slashCommand = mainChatSlashCommandSchema.safeParse(bridgeState.slashCommand);
     const slashUi = mainChatSlashUiSchema.safeParse(bridgeState.slashUi);
     const streamingTransport = mainChatStreamingTransportSchema.safeParse(bridgeState.streamingTransport);
+    const quietTransport = mainChatQuietTransportSchema.safeParse(bridgeState.quietTransport);
+    const windowingContract = mainChatWindowingContractSchema.safeParse(bridgeState.windowingContract);
+    const rowLifecycleContract = mainChatRowLifecycleContractSchema.safeParse(bridgeState.rowLifecycleContract);
 
     return {
         ...bridgeState,
@@ -720,6 +877,9 @@ function asMainChatMessageListState(state: unknown): MainChatMessageListWorkspac
         slashCommand: slashCommand.success ? slashCommand.data : mainChatSlashCommandFallback,
         slashUi: slashUi.success ? slashUi.data : mainChatSlashUiFallback,
         streamingTransport: streamingTransport.success ? streamingTransport.data : mainChatStreamingTransportFallback,
+        quietTransport: quietTransport.success ? quietTransport.data : mainChatQuietTransportFallback,
+        windowingContract: windowingContract.success ? windowingContract.data : mainChatWindowingContractFallback,
+        rowLifecycleContract: rowLifecycleContract.success ? rowLifecycleContract.data : mainChatRowLifecycleContractFallback,
     };
 }
 
@@ -980,6 +1140,9 @@ function createMainChatVisibleTransportRuntime(kind: string): MainChatVisibleTra
     return {
         owner: 'react',
         kind,
+        supportStatus: 'react-owned',
+        supportPath: 'standard-openai-visible-direct-chat',
+        supportReason: 'supported-kind',
         phase: 'connecting',
         activeMessageId: null,
         observedTokenCount: 0,
@@ -991,6 +1154,19 @@ function createMainChatVisibleTransportRuntime(kind: string): MainChatVisibleTra
         recoveryStatusLabel: null,
         errorLabel: null,
         formattedMessageHtml: '',
+    };
+}
+
+function extractMainChatVisibleTransportDecision(
+    prepared: MainChatPreparedVisibleTransportRequest | undefined,
+    kind: string,
+): MainChatVisibleTransportDecisionState {
+    return {
+        owner: prepared?.owner === 'react' ? 'react' : 'legacy',
+        kind: String(prepared?.kind ?? kind ?? ''),
+        status: String(prepared?.status ?? ''),
+        path: String(prepared?.path ?? ''),
+        reason: String(prepared?.reason ?? ''),
     };
 }
 
@@ -1137,6 +1313,58 @@ function MainChatActiveTransportRowOwnerPortal({
     }, [finalizedRowOwned, messageRow, runtime.activeMessageId, runtime.formattedMessageHtml]);
 
     return null;
+}
+
+function MainChatRichBodyOwnerPortal({
+    messageRow,
+    snapshot,
+}: {
+    messageRow: HTMLElement;
+    snapshot: MainChatRichBodySnapshot;
+}) {
+    const targets = getMainChatRichBodyRowTargets(messageRow);
+
+    useLayoutEffect(() => {
+        if (!targets) {
+            return;
+        }
+
+        targets.messageBlock.dataset.mainChatRichBodyOwner = 'react';
+        targets.messageBlock.dataset.mainChatRichBodyRow = snapshot.messageId;
+        targets.reasoningDetails.open = snapshot.reasoningOpen ?? false;
+        targets.reasoningNode.innerHTML = snapshot.reasoningHtml;
+        targets.messageNode.innerHTML = snapshot.messageHtml;
+        targets.mediaNode.innerHTML = snapshot.mediaHtml;
+        targets.fileNode.innerHTML = snapshot.fileHtml;
+        targets.biasNode.innerHTML = snapshot.biasHtml;
+
+        return () => {
+            delete targets.messageBlock.dataset.mainChatRichBodyOwner;
+            delete targets.messageBlock.dataset.mainChatRichBodyRow;
+        };
+    }, [
+        snapshot.biasHtml,
+        snapshot.fileHtml,
+        snapshot.mediaHtml,
+        snapshot.messageHtml,
+        snapshot.messageId,
+        snapshot.reasoningHtml,
+        snapshot.reasoningOpen,
+        targets,
+    ]);
+
+    if (!targets) {
+        return null;
+    }
+
+    return (
+        <div
+            hidden
+            aria-hidden="true"
+            data-main-chat-rich-body-owner="react"
+            data-main-chat-rich-body-row={snapshot.messageId}
+        />
+    );
 }
 
 function MainChatMessageRowOwnerPortal({
@@ -2552,6 +2780,7 @@ function MainChatMessageListRestoreController({
 function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown; bridge?: WorkspacePanelBridge }) {
     const bridgeState = asMainChatMessageListState(state);
     const [reactVisibleTransportRuntime, setReactVisibleTransportRuntime] = useState<MainChatVisibleTransportRuntimeState | null>(null);
+    const [visibleTransportDecision, setVisibleTransportDecision] = useState<MainChatVisibleTransportDecisionState | null>(null);
     const visibleTransportGlobalExecutionInFlightRef = useRef(false);
     const messageRowMap = useMemo(() => {
         const rows = new Map<string, HTMLElement>();
@@ -2606,7 +2835,12 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
             }
 
             const attempts = Array.isArray(prepared.attempts) ? prepared.attempts : [];
-            setReactVisibleTransportRuntime(createMainChatVisibleTransportRuntime(kind));
+            setReactVisibleTransportRuntime({
+                ...createMainChatVisibleTransportRuntime(kind),
+                supportStatus: prepared.status ?? 'react-owned',
+                supportPath: prepared.path ?? 'standard-openai-visible-direct-chat',
+                supportReason: prepared.reason ?? 'supported-kind',
+            });
 
             for (let attemptIndex = 0; attemptIndex < attempts.length; attemptIndex += 1) {
                 const attempt = attempts[attemptIndex];
@@ -2692,6 +2926,7 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
     const visibleTransportMutation = useMutation({
         mutationFn: async (payload: { kind: string; messageId?: number }) => {
             const prepared = await bridge?.dispatchAction?.('prepareVisibleGeneration', payload) as MainChatPreparedVisibleTransportRequest | undefined;
+            setVisibleTransportDecision(extractMainChatVisibleTransportDecision(prepared, String(payload.kind ?? '')));
             return await executePreparedVisibleTransportRequest(prepared, payload);
         },
         retry: false,
@@ -2714,6 +2949,7 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
 
             visibleTransportGlobalExecutionInFlightRef.current = true;
             try {
+                setVisibleTransportDecision(extractMainChatVisibleTransportDecision(prepared, String(prepared.kind ?? '')));
                 return await executePreparedVisibleTransportRequest(prepared, {
                     kind: String(prepared.kind ?? ''),
                 });
@@ -2737,8 +2973,13 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
     );
     const visibleTransportBridgeState = deriveReactVisibleTransportBridgeState({
         runtime: reactVisibleTransportRuntime,
+        decision: visibleTransportDecision,
         generationControl: effectiveGenerationControl,
         streamingTransport: effectiveStreamingTransport,
+    });
+    const quietTransportBridgeState = deriveReactQuietTransportBridgeState({
+        runtime: bridgeState.quietTransport ?? mainChatQuietTransportFallback,
+        contract: bridgeState.quietTransport ?? mainChatQuietTransportFallback,
     });
     const activeRuntimeMessageRow = getMainChatActiveRuntimeMessageRow(
         messageRowMap,
@@ -2804,7 +3045,32 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
                 data-main-chat-streaming-transport-message-id={effectiveStreamingTransport.activeMessageId ?? ''}
                 data-main-chat-streaming-transport-fallback={effectiveStreamingTransport.fromFallbackAttempt ? 'true' : 'false'}
                 data-main-chat-visible-transport-owner={visibleTransportBridgeState.visibleTransportOwner}
-                data-main-chat-visible-transport-kind={reactVisibleTransportRuntime?.kind ?? ''}
+                data-main-chat-visible-transport-kind={visibleTransportBridgeState.visibleTransportKind}
+                data-main-chat-visible-transport-status={visibleTransportBridgeState.visibleTransportStatus}
+                data-main-chat-visible-transport-path={visibleTransportBridgeState.visibleTransportPath}
+                data-main-chat-visible-transport-reason={visibleTransportBridgeState.visibleTransportReason}
+                data-main-chat-windowing-owner={bridgeState.windowingContract?.windowingOwner ?? 'legacy'}
+                data-main-chat-windowing-load-more-owner={bridgeState.windowingContract?.loadMoreOwner ?? 'legacy'}
+                data-main-chat-windowing-restore-owner={bridgeState.windowingContract?.restoreOwner ?? 'legacy'}
+                data-main-chat-windowing-fallback={bridgeState.windowingContract?.fallback ?? 'legacy'}
+                data-main-chat-windowing-reason={bridgeState.windowingContract?.reason ?? 'unknown'}
+                data-main-chat-row-lifecycle-owner={bridgeState.rowLifecycleContract?.lifecycleOwner ?? 'legacy'}
+                data-main-chat-row-lifecycle-editing-owner={bridgeState.rowLifecycleContract?.editingOwner ?? 'legacy'}
+                data-main-chat-row-lifecycle-streaming-owner={bridgeState.rowLifecycleContract?.streamingOwner ?? 'legacy'}
+                data-main-chat-row-lifecycle-unsafe-owner={bridgeState.rowLifecycleContract?.unsafeOwner ?? 'legacy'}
+                data-main-chat-row-lifecycle-extension-owner={bridgeState.rowLifecycleContract?.extensionMutatedOwner ?? 'legacy'}
+                data-main-chat-quiet-transport-owner={quietTransportBridgeState.quietTransportOwner}
+                data-main-chat-quiet-transport-kind={quietTransportBridgeState.quietTransportKind}
+                data-main-chat-quiet-transport-status={quietTransportBridgeState.quietTransportStatus}
+                data-main-chat-quiet-transport-path={quietTransportBridgeState.quietTransportPath}
+                data-main-chat-quiet-transport-reason={quietTransportBridgeState.quietTransportReason}
+                data-main-chat-quiet-transport-phase={quietTransportBridgeState.quietTransportPhase}
+                data-main-chat-quiet-transport-error={quietTransportBridgeState.quietTransportError}
+                data-main-chat-quiet-transport-auto-recover={quietTransportBridgeState.quietTransportAutoRecover ? 'true' : 'false'}
+                data-main-chat-quiet-transport-streaming={quietTransportBridgeState.quietTransportUsesStreaming ? 'true' : 'false'}
+                data-main-chat-quiet-transport-visible-row={quietTransportBridgeState.quietTransportBindsVisibleRow ? 'true' : 'false'}
+                data-main-chat-quiet-transport-finalization={quietTransportBridgeState.quietTransportFinalization}
+                data-main-chat-quiet-transport-rollback={quietTransportBridgeState.quietTransportRollback}
             />
             <MainChatMessageListRestoreController key={bridgeState.chatId || 'main-chat-empty'} state={bridgeState} bridge={bridge} />
             <MainChatComposerOwnerPortal
@@ -2844,19 +3110,13 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
             })}
             {ownedRichBodySnapshots.map(snapshot => {
                 const messageRow = messageRowMap.get(snapshot.messageId);
-                const targets = messageRow ? getMainChatRichBodyRowTargets(messageRow) : null;
-                if (!targets) {
+                if (!(messageRow instanceof HTMLElement)) {
                     return null;
                 }
 
                 return createPortal(
-                    <div
-                        hidden
-                        aria-hidden="true"
-                        data-main-chat-rich-body-owner="react"
-                        data-main-chat-rich-body-row={snapshot.messageId}
-                    />,
-                    targets.messageBlock,
+                    <MainChatRichBodyOwnerPortal messageRow={messageRow} snapshot={snapshot} />,
+                    messageRow.querySelector('.mes_block') as HTMLElement,
                     `main-chat-rich-body-owner-${snapshot.messageId}`,
                 );
             })}

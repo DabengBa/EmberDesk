@@ -105,7 +105,7 @@ export function buildChatMessageRowPopulation(descriptor, {
 
 /**
  * Classifies the current renderer ownership contract for a message row.
- * This is descriptive only: message body formatting remains owned by legacy renderers.
+ * Safe finalized rows may be React-owned while excluded rows stay on the legacy fallback.
  *
  * @param {object} options DOM-derived row safety facts
  * @param {'finalized'|'editing'|'streaming'|'unsafe'} [options.rowState='finalized'] Current row lifecycle state
@@ -141,11 +141,47 @@ export function classifyChatMessageRendererContract({
     }
 
     return {
-        ...createRendererContract('react-renderer-candidate', 'safe-finalized-row'),
+        rendererOwner: 'react',
+        phase7Candidate: 'react-rich-body-owner',
+        fallback: 'legacy-rich-body-compatibility',
+        reason: 'safe-finalized-row',
         protectedSurfaces: {
             mesText: true,
             reasoning: Boolean(hasProtectedReasoning),
         },
+    };
+}
+
+/**
+ * Describes the final owner policy for non-finalized or excluded row lifecycle families.
+ * React keeps the message-list controller boundary while excluded families stay fail-closed on legacy facades.
+ *
+ * @param {object} options Presence flags for row lifecycle families
+ * @param {boolean} [options.hasEditingRows=false] Whether editing rows are currently present
+ * @param {boolean} [options.hasStreamingRows=false] Whether active streaming rows are currently present
+ * @param {boolean} [options.hasUnsafeRows=false] Whether structurally unsafe rows are currently present
+ * @param {boolean} [options.hasExtensionMutatedRows=false] Whether extension-mutated rows are currently present
+ * @returns {object} Row lifecycle ownership policy
+ */
+export function buildMainChatRowLifecycleContract({
+    hasEditingRows = false,
+    hasStreamingRows = false,
+    hasUnsafeRows = false,
+    hasExtensionMutatedRows = false,
+} = {}) {
+    return {
+        lifecycleOwner: 'react-message-list-controller',
+        phase7Candidate: 'react-row-lifecycle-owner',
+        fallback: 'legacy-row-lifecycle-facade',
+        editingOwner: 'legacy',
+        streamingOwner: 'legacy',
+        unsafeOwner: 'legacy',
+        extensionMutatedOwner: 'legacy',
+        hasEditingRows: Boolean(hasEditingRows),
+        hasStreamingRows: Boolean(hasStreamingRows),
+        hasUnsafeRows: Boolean(hasUnsafeRows),
+        hasExtensionMutatedRows: Boolean(hasExtensionMutatedRows),
+        reason: 'fail-closed-row-lifecycle-policy',
     };
 }
 
@@ -176,9 +212,11 @@ export function buildMainChatWindowingContract({
     const isLongChatWindow = Boolean(showMoreVisible) || normalizedTotal > normalizedRenderedIds.length;
 
     return {
-        windowingOwner: isLongChatWindow ? 'legacy-chat-truncation' : 'legacy-full-chat',
-        phase7Candidate: 'react-windowing-candidate',
-        fallback: 'legacy-show-more-messages',
+        windowingOwner: 'react-message-list-controller',
+        phase7Candidate: 'react-windowing-owner',
+        fallback: isLongChatWindow ? 'legacy-show-more-messages-facade' : 'not-needed',
+        loadMoreOwner: isLongChatWindow ? 'legacy' : 'not-needed',
+        restoreOwner: 'react',
         renderedMessageIds: normalizedRenderedIds,
         totalMessageCount: normalizedTotal,
         showMoreVisible: Boolean(showMoreVisible),

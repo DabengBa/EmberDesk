@@ -15,6 +15,12 @@ related: [page.chat_workspace, feature.extension_panel_open]
 
 The shared browser library is the import surface that lets browser modules and ES-module extensions reuse common dependencies such as sanitization, fuzzy search, compression, markdown rendering, and selected compatibility helpers from one documented place.
 
+## Final Compatibility Status
+
+- `/lib.js` is a long-term supported browser-module surface for first-party code and new ES-module extensions.
+- The legacy `window.*` shims installed from `public/lib.js` are frozen compatibility affordances, not a growth path for adding new globals.
+- Existing upstream-style `@sillytavern/*` aliases remain a separate frozen compatibility facade for ecosystems such as `JS-Slash-Runner`; when an extension only needs shared utilities, `/lib.js` is the preferred new import surface.
+
 ## User-Facing Lifecycle
 
 1. The workspace loads the shared library during normal startup.

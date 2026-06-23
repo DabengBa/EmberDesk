@@ -31,6 +31,18 @@ import {
     charUpdatePrimaryWorld,
     charSetAuxWorlds,
     flushDeletedWorldsFromUI,
+    selectWorldInfoEditorIndex,
+    applyWorldInfoSearchQuery,
+    applyWorldInfoSortOption,
+    createWorldInfoEntryFromEditor,
+    promptToCreateWorldInfo,
+    requestWorldInfoImportSelection,
+    exportCurrentWorldInfo,
+    renameCurrentWorldInfo,
+    duplicateCurrentWorldInfo,
+    deleteCurrentWorldInfo,
+    refreshCurrentWorldInfoEditor,
+    openWorldInfoEntryByUid,
 } from './scripts/world-info.js';
 import { scanImportedCharacter, showUnifiedImportConfirm, applyImportChoices, buildSkipAllChoices } from './scripts/import-confirm-dialog.js';
 
@@ -140,9 +152,28 @@ import {
 } from './scripts/utils.js';
 import { debounce_timeout, GENERATION_TYPE_TRIGGERS, IGNORE_SYMBOL, inject_ids, MEDIA_DISPLAY, MEDIA_SOURCE, MEDIA_TYPE, OVERSWIPE_BEHAVIOR, SCROLL_BEHAVIOR, SWIPE_DIRECTION, SWIPE_SOURCE, SWIPE_STATE } from './scripts/constants.js';
 
-import { cancelDebouncedMetadataSave, doDailyExtensionUpdatesCheck, extension_settings, initExtensions, loadExtensionSettings, runGenerationInterceptors, setDeferredExtensionLoader } from './scripts/extensions.js';
+import {
+    cancelDebouncedMetadataSave,
+    doDailyExtensionUpdatesCheck,
+    extension_settings,
+    initExtensions,
+    loadExtensionSettings,
+    runGenerationInterceptors,
+    setDeferredExtensionLoader,
+    toggleExtensionsHostNotifyUpdates,
+    openExtensionsHostManager,
+    openExtensionsHostInstaller,
+    updateExtensionsHostApiUrl,
+    updateExtensionsHostApiKey,
+    connectExtensionsHostApi,
+    setExtensionsHostAutoconnectEnabled,
+} from './scripts/extensions.js';
 import { COMMENT_NAME_DEFAULT, CONNECT_API_MAP, executeSlashCommandsOnChatInput, getMainChatSlashCommandAutoCompleteState, initDefaultSlashCommands, initSlashCommandAutoComplete, isExecutingCommandsFromChatInput, pauseScriptExecution, selectMainChatSlashCommandOption, setMainChatSlashCommandReactOwnerEnabled, stopScriptExecution, UNIQUE_APIS } from './scripts/slash-commands.js';
-import { classifyMainChatVisibleTransportOwner } from './scripts/main-chat-visible-transport-owner.js';
+import {
+    createMainChatQuietTransportDecision,
+    createMainChatVisibleTransportDecision,
+    createMainChatVisibleTransportFallbackDecision,
+} from './scripts/main-chat-visible-transport-owner.js';
 import { initMacroAutoComplete } from './scripts/autocomplete/MacroAutoComplete.js';
 import {
     tag_map,
@@ -169,6 +200,7 @@ import {
 } from './scripts/tags.js';
 import { checkOpenRouterAuth, initSecrets, readSecretState, secret_state, SECRET_KEYS } from './scripts/secrets.js';
 import {
+    createQuietGenerationLifecycleContract,
     createGenerationLifecyclePlan,
     getGenerationAttemptBaseline as getLifecycleGenerationAttemptBaseline,
     getGenerationFailureDecision,
@@ -208,7 +240,20 @@ import {
     updatePersonaConnectionsAvatarList,
     isPersonaPanelOpen,
 } from './scripts/personas.js';
-import { getBackgrounds, initBackgrounds, loadBackgroundSettings, background_settings } from './scripts/backgrounds.js';
+import {
+    getBackgrounds,
+    initBackgrounds,
+    loadBackgroundSettings,
+    background_settings,
+    applyBackgroundLibraryFilter,
+    applyBackgroundLibrarySort,
+    requestBackgroundUploadSelection,
+    selectBackgroundLibraryItem,
+    lockCurrentBackground,
+    unlockCurrentBackground,
+    runAutoBackgroundSelection,
+    refreshBackgroundLibrary,
+} from './scripts/backgrounds.js';
 import { getBackgroundPanelState } from './scripts/background-panel-controller.js';
 import { loader } from './scripts/action-loader.js';
 import { createSingleFlightTask, resolvePersistedCurrentVersion, resolveStartupSettingsPlan } from './scripts/startup-helpers.js';
@@ -231,7 +276,12 @@ import { initInputMarkdown } from './scripts/input-md-formatting.js';
 import { AbortReason } from './scripts/util/AbortReason.js';
 import { initSystemPrompts } from './scripts/sysprompt.js';
 import { registerExtensionSlashCommands as initExtensionSlashCommands } from './scripts/extensions-slashcommands.js';
-import { buildChatMessageRenderDescriptor, buildChatMessageRowPopulation } from './scripts/chat-message-render-descriptor.js';
+import {
+    buildChatMessageRenderDescriptor,
+    buildChatMessageRowPopulation,
+    buildMainChatRowLifecycleContract,
+    buildMainChatWindowingContract,
+} from './scripts/chat-message-render-descriptor.js';
 import { getStreamingControlState } from './scripts/chat-streaming-control-state.js';
 import { getMainChatComposerState } from './scripts/main-chat-composer-state.js';
 import { getMainChatSlashCommandState } from './scripts/main-chat-slash-command-state.js';
@@ -279,6 +329,7 @@ import {
     getCharacterLibraryFetchErrorData,
     hasCharacterLibraryPayloadChanged,
     parseCharacterLibraryFetchResponse,
+    projectCharacterLibraryQueryAgainstDeletedAvatars,
 } from './scripts/character-library-react-sync.js';
 import { mountReactWorkspacePanel } from './scripts/workspace-panels-react-bridge.js';
 import { runDeleteCharacterClosePreflight } from './scripts/delete-character-preflight.js';
@@ -328,6 +379,12 @@ const REACT_CHARACTER_LIBRARY_TOOLBAR_HOST_ID = 'emberdesk-react-character-libra
 let reactCharacterLibraryPanelModulePromise = null;
 let reactCharacterLibraryPanelMounted = false;
 let reactCharacterLibraryToolbarMounted = false;
+const characterLibraryToolbarState = {
+    searchQuery: '',
+    sortValue: '0:::',
+    hasSearchQuery: false,
+    hasSortValue: false,
+};
 let mainChatMessageListBridgeObserversBound = false;
 let mainChatMessageListBridgeRefreshFrame = 0;
 let mainChatMessageListBridgeSendFormObserver = null;
@@ -535,6 +592,54 @@ function getMainChatStreamingTransportStore() {
     }
 
     return globalThis.__emberDeskMainChatStreamingTransportStore;
+}
+
+function getMainChatQuietTransportStore() {
+    if (!globalThis.__emberDeskMainChatQuietTransportStore || typeof globalThis.__emberDeskMainChatQuietTransportStore !== 'object') {
+        globalThis.__emberDeskMainChatQuietTransportStore = {
+            latestSnapshot: null,
+        };
+    }
+
+    return globalThis.__emberDeskMainChatQuietTransportStore;
+}
+
+function rememberMainChatQuietTransportSnapshot(snapshot) {
+    if (!snapshot || typeof snapshot !== 'object') {
+        return;
+    }
+
+    const store = getMainChatQuietTransportStore();
+    store.latestSnapshot = structuredClone(snapshot);
+    scheduleMainChatMessageListPanelRefresh();
+}
+
+function getMainChatQuietTransportBridgeState() {
+    const snapshot = getMainChatQuietTransportStore().latestSnapshot;
+    if (snapshot && typeof snapshot === 'object') {
+        return snapshot;
+    }
+
+    return {
+        owner: 'legacy',
+        kind: '',
+        status: '',
+        path: '',
+        reason: '',
+        phase: 'idle',
+        error: '',
+        autoRecover: false,
+        usesStreamingTransport: false,
+        bindsVisibleMessageRow: false,
+        finalizationStrategy: '',
+        rollbackStrategy: '',
+    };
+}
+
+function isMainChatQuietTransportStopException(exception) {
+    const errorName = typeof exception?.name === 'string' ? exception.name : '';
+    const errorMessage = typeof exception?.message === 'string' ? exception.message : String(exception ?? '');
+    return errorName === 'AbortError' || /generation was aborted/i.test(errorMessage);
 }
 
 function resetMainChatStreamingTransportTerminalSnapshot() {
@@ -882,45 +987,29 @@ function getWorldInfoReactBridge() {
         dispatchAction(action, payload = {}) {
             switch (action) {
                 case 'selectWorld':
-                    $('#world_editor_select').val(String(payload?.worldIndex ?? '')).trigger('change');
-                    break;
+                    return selectWorldInfoEditorIndex(payload?.worldIndex ?? '');
                 case 'applySearchQuery':
-                    $('#world_info_search').val(String(payload?.searchQuery ?? '')).trigger('input');
-                    break;
+                    return applyWorldInfoSearchQuery(payload?.searchQuery ?? '');
                 case 'applySortOption':
-                    $('#world_info_sort_order').val(String(payload?.sortValue ?? '')).trigger('change');
-                    break;
+                    return applyWorldInfoSortOption(payload?.sortValue ?? '');
                 case 'createEntry':
-                    document.getElementById('world_create_button')?.click();
-                    break;
+                    return createWorldInfoEntryFromEditor();
                 case 'createWorld':
-                    document.getElementById('world_create_world')?.click();
-                    break;
+                    return promptToCreateWorldInfo();
                 case 'importWorld':
-                    document.getElementById('world_import_menu_item')?.click();
-                    break;
+                    return requestWorldInfoImportSelection();
                 case 'exportWorld':
-                    document.getElementById('world_export_menu_item')?.click();
-                    break;
+                    return exportCurrentWorldInfo();
                 case 'renameWorld':
-                    document.getElementById('world_rename_menu_item')?.click();
-                    break;
+                    return renameCurrentWorldInfo();
                 case 'duplicateWorld':
-                    document.getElementById('world_duplicate_menu_item')?.click();
-                    break;
+                    return duplicateCurrentWorldInfo();
                 case 'deleteWorld':
-                    document.getElementById('world_delete_menu_item')?.click();
-                    break;
+                    return deleteCurrentWorldInfo();
                 case 'refreshWorld':
-                    document.getElementById('world_refresh')?.click();
-                    break;
-                case 'openEntry': {
-                    const uid = String(payload?.uid ?? '');
-                    const entry = Array.from(document.querySelectorAll('#world_popup_entries_list .world_entry'))
-                        .find(element => element.getAttribute('uid') === uid);
-                    entry?.querySelector('.wi-card-expand-button')?.click();
-                    break;
-                }
+                    return refreshCurrentWorldInfoEditor();
+                case 'openEntry':
+                    return openWorldInfoEntryByUid(payload?.uid ?? '');
                 default:
                     console.warn('Unknown World Info React action', action);
             }
@@ -1051,6 +1140,10 @@ function isMainChatRichBodyEligible(messageRow, messageId = Number(messageRow?.g
         return false;
     }
 
+    if (hasMainChatRichBodyExtensionMutation(messageRow)) {
+        return false;
+    }
+
     return Boolean(
         messageRow.querySelector('.mes_block')
         && messageRow.querySelector('.mes_reasoning_details')
@@ -1060,6 +1153,77 @@ function isMainChatRichBodyEligible(messageRow, messageId = Number(messageRow?.g
         && messageRow.querySelector('.mes_file_wrapper')
         && messageRow.querySelector('.mes_bias'),
     );
+}
+
+function hasMainChatRichBodyExtensionMutation(messageRow) {
+    const messageText = messageRow?.querySelector('.mes_text');
+    if (!(messageText instanceof HTMLElement)) {
+        return true;
+    }
+
+    return Boolean(
+        messageRow.querySelector('.mes_streaming')
+        || messageRow.querySelector('.TH-streaming')
+        || messageText.querySelector('.TH-render'),
+    );
+}
+
+function hasMainChatExtensionMutationMarker(messageRow) {
+    const messageText = messageRow?.querySelector('.mes_text');
+    if (!(messageText instanceof HTMLElement)) {
+        return false;
+    }
+
+    return Boolean(
+        messageRow.querySelector('.TH-streaming')
+        || messageText.querySelector('.TH-render'),
+    );
+}
+
+function hasMainChatUnsafeRowStructure(messageRow) {
+    return !(
+        messageRow instanceof HTMLElement
+        && messageRow.parentElement?.id === 'chat'
+        && messageRow.querySelector('.mes_block')
+        && messageRow.querySelector('.mes_text')
+        && messageRow.querySelector('.mes_reasoning_details')
+        && messageRow.querySelector('.mes_reasoning')
+        && messageRow.querySelector('.mes_media_wrapper')
+        && messageRow.querySelector('.mes_file_wrapper')
+        && messageRow.querySelector('.mes_bias')
+    );
+}
+
+function hasMainChatEditingLifecycle(messageRow, messageId = Number(messageRow?.getAttribute?.('mesid'))) {
+    return Number(this_edit_mes_id) === messageId
+        || Boolean(messageRow?.querySelector('.edit_textarea, .reasoning_edit_textarea'));
+}
+
+function hasMainChatStreamingLifecycle(messageRow, messageId = Number(messageRow?.getAttribute?.('mesid'))) {
+    return Boolean(
+        messageRow?.querySelector('.mes_streaming')
+        || messageRow?.querySelector('.TH-streaming')
+        || (
+            streamingProcessor
+            && !streamingProcessor.isStopped
+            && !streamingProcessor.isFinished
+            && streamingProcessor.messageId === messageId
+        ),
+    );
+}
+
+function getMainChatVisibleAnchorMessageId(chatContainer, messageRows) {
+    if (!(chatContainer instanceof HTMLElement) || !Array.isArray(messageRows) || messageRows.length === 0) {
+        return null;
+    }
+
+    const chatRect = chatContainer.getBoundingClientRect();
+    const anchorRow = messageRows.find((row) => {
+        const rowRect = row.getBoundingClientRect();
+        return rowRect.bottom > chatRect.top && rowRect.top < chatRect.bottom;
+    }) ?? messageRows[0];
+
+    return anchorRow?.getAttribute('mesid') ?? null;
 }
 
 function buildMainChatRichBodySnapshot(messageRow, {
@@ -1225,7 +1389,7 @@ async function executeMainChatVisibleGenerationAction({ kind, messageId } = {}) 
 }
 
 async function prepareMainChatVisibleGenerationAction({ kind, messageId } = {}) {
-    const ownership = classifyMainChatVisibleTransportOwner({
+    const decision = createMainChatVisibleTransportDecision({
         kind,
         mainApi: main_api,
         selectedGroup: Boolean(selected_group),
@@ -1233,34 +1397,29 @@ async function prepareMainChatVisibleGenerationAction({ kind, messageId } = {}) 
         depth: 0,
     });
 
-    if (ownership.owner !== 'react') {
+    if (decision.owner !== 'react') {
         await runMainChatVisibleGenerationAction({ kind, messageId });
-        return {
-            owner: 'legacy',
-            kind,
-            reason: ownership.reason,
-        };
+        return decision;
     }
 
     switch (kind) {
         case 'submitComposer': {
             const prepared = await sendTextareaMessage({ visibleTransportHandoff: true });
             return isPreparedReactOwnedMainChatVisibleTransportRequest(prepared)
-                ? prepared
-                : { owner: 'legacy', kind, reason: 'legacy-executed' };
+                ? { ...prepared, status: decision.status, path: decision.path, reason: decision.reason }
+                : createMainChatVisibleTransportFallbackDecision(decision);
         }
         case 'continueLast': {
             const prepared = await Generate('continue', { visibleTransportHandoff: true });
             return isPreparedReactOwnedMainChatVisibleTransportRequest(prepared)
-                ? prepared
-                : { owner: 'legacy', kind, reason: 'legacy-executed' };
+                ? { ...prepared, status: decision.status, path: decision.path, reason: decision.reason }
+                : createMainChatVisibleTransportFallbackDecision(decision);
         }
         default:
             await runMainChatVisibleGenerationAction({ kind, messageId });
             return {
+                ...decision,
                 owner: 'legacy',
-                kind,
-                reason: 'unsupported-kind',
             };
     }
 }
@@ -1324,7 +1483,6 @@ function getMainChatMessageListReactBridgeState() {
             ...snapshot,
             schema: mainChatMessageActionSnapshotSchema,
         }));
-
     return {
         chatId: getCurrentChatId(),
         hasChatContainer: Boolean(chatContainer),
@@ -1341,6 +1499,20 @@ function getMainChatMessageListReactBridgeState() {
         slashCommand: getMainChatSlashCommandBridgeState(),
         slashUi: getMainChatSlashUiBridgeState(),
         streamingTransport: getMainChatStreamingTransportBridgeState(),
+        quietTransport: getMainChatQuietTransportBridgeState(),
+        windowingContract: buildMainChatWindowingContract({
+            renderedMessageIds: messageRows.map(row => row.getAttribute('mesid') ?? ''),
+            totalMessageCount: Array.isArray(chat) ? chat.length : messageRows.length,
+            showMoreVisible: Boolean(showMoreButton),
+            anchorMessageId: getMainChatVisibleAnchorMessageId(chatContainer, messageRows),
+            scrollTop: chatContainer?.scrollTop ?? 0,
+        }),
+        rowLifecycleContract: buildMainChatRowLifecycleContract({
+            hasEditingRows: messageRows.some(row => hasMainChatEditingLifecycle(row, Number(row.getAttribute('mesid')))),
+            hasStreamingRows: messageRows.some(row => hasMainChatStreamingLifecycle(row, Number(row.getAttribute('mesid')))),
+            hasUnsafeRows: messageRows.some(row => hasMainChatUnsafeRowStructure(row)),
+            hasExtensionMutatedRows: messageRows.some(row => hasMainChatExtensionMutationMarker(row)),
+        }),
         chatContainer,
         host,
         messageNodes: messageRows,
@@ -1510,52 +1682,33 @@ function getBackgroundLibraryReactBridgeState(stateOverrides = {}) {
 function getBackgroundLibraryReactBridge() {
     return {
         dispatchAction(action, payload = {}) {
-            switch (action) {
-                case 'applyBackgroundFilter':
-                    $('#bg-filter').val(String(payload?.filterQuery ?? '')).trigger('input');
-                    break;
-                case 'applyBackgroundSort':
-                    $('#bg-sort').val(String(payload?.sortValue ?? '')).trigger('change');
-                    break;
-                case 'uploadBackground':
-                    document.getElementById('add_bg_button')?.click();
-                    break;
-                case 'selectBackground': {
-                    const backgroundId = String(payload?.id ?? '');
-                    const source = String(payload?.source ?? '');
-                    const candidates = source === 'chat'
-                        ? document.querySelectorAll('#bg_custom_content .bg_example')
-                        : document.querySelectorAll('#bg_menu_content .bg_example');
-                    const backgroundElement = Array.from(candidates)
-                        .find(element => element.getAttribute('bgfile') === backgroundId);
-                    backgroundElement?.click();
-                    break;
+            const actionResult = (() => {
+                switch (action) {
+                    case 'applyBackgroundFilter':
+                        return applyBackgroundLibraryFilter(payload?.filterQuery ?? '');
+                    case 'applyBackgroundSort':
+                        return applyBackgroundLibrarySort(payload?.sortValue ?? '');
+                    case 'uploadBackground':
+                        return requestBackgroundUploadSelection();
+                    case 'selectBackground':
+                        return selectBackgroundLibraryItem(payload?.id ?? '', payload?.source ?? '');
+                    case 'lockBackground':
+                        return lockCurrentBackground();
+                    case 'unlockBackground':
+                        return unlockCurrentBackground();
+                    case 'autoBackground':
+                        return runAutoBackgroundSelection();
+                    case 'refreshBackgrounds':
+                        return refreshBackgroundLibrary();
+                    default:
+                        console.warn('Unknown Background Library React action', action);
+                        return undefined;
                 }
-                case 'lockBackground':
-                    {
-                        const lockControl = document.querySelector('.bg_example.selected-background .jg-lock') ?? document.querySelector('.bg_example .jg-lock');
-                        lockControl?.click();
-                    }
-                    break;
-                case 'unlockBackground':
-                    {
-                        const unlockControl = document.querySelector('.bg_example.locked-background .jg-unlock') ?? document.querySelector('.bg_example .jg-unlock');
-                        unlockControl?.click();
-                    }
-                    break;
-                case 'autoBackground':
-                    document.getElementById('auto_background')?.click();
-                    break;
-                case 'refreshBackgrounds':
-                    void getBackgrounds({ force: true }).finally(() => {
-                        void mountReactBackgroundLibraryPanel({ refreshQueued: false });
-                    });
-                    break;
-                default:
-                    console.warn('Unknown Background Library React action', action);
-            }
+            })();
 
-            void mountReactBackgroundLibraryPanel();
+            return Promise.resolve(actionResult).finally(() => {
+                void mountReactBackgroundLibraryPanel({ refreshQueued: false });
+            });
         },
     };
 }
@@ -1660,37 +1813,35 @@ function getExtensionsHostReactBridge() {
     return {
         dispatchAction(action, payload = {}) {
             let shouldRefresh = true;
-            switch (action) {
-                case 'toggleNotifyUpdates':
-                    document.getElementById('extensions_notify_updates')?.click();
-                    break;
-                case 'openManageExtensions':
-                    document.getElementById('extensions_details')?.click();
-                    break;
-                case 'openInstallExtension':
-                    document.getElementById('third_party_extension_button')?.click();
-                    break;
-                case 'updateExtrasApiUrl':
-                    $('#extensions_url').val(String(payload?.url ?? '')).trigger('input');
-                    shouldRefresh = false;
-                    break;
-                case 'updateExtrasApiKey':
-                    $('#extensions_api_key').val(String(payload?.apiKey ?? '')).trigger('input');
-                    shouldRefresh = false;
-                    break;
-                case 'connectExtrasApi':
-                    document.getElementById('extensions_connect')?.click();
-                    break;
-                case 'toggleAutoconnect':
-                    document.getElementById('extensions_autoconnect')?.click();
-                    break;
-                default:
-                    console.warn('Unknown Extensions Host React action', action);
-            }
+            const actionResult = (() => {
+                switch (action) {
+                    case 'toggleNotifyUpdates':
+                        return toggleExtensionsHostNotifyUpdates();
+                    case 'openManageExtensions':
+                        return openExtensionsHostManager();
+                    case 'openInstallExtension':
+                        return openExtensionsHostInstaller();
+                    case 'updateExtrasApiUrl':
+                        shouldRefresh = false;
+                        return updateExtensionsHostApiUrl(payload?.url ?? '');
+                    case 'updateExtrasApiKey':
+                        shouldRefresh = false;
+                        return updateExtensionsHostApiKey(payload?.apiKey ?? '');
+                    case 'connectExtrasApi':
+                        return connectExtensionsHostApi();
+                    case 'toggleAutoconnect':
+                        return setExtensionsHostAutoconnectEnabled(payload?.enabled ?? !document.getElementById('extensions_autoconnect')?.checked);
+                    default:
+                        console.warn('Unknown Extensions Host React action', action);
+                        return undefined;
+                }
+            })();
 
-            if (shouldRefresh) {
-                void mountReactExtensionsHostPanel();
-            }
+            return Promise.resolve(actionResult).finally(() => {
+                if (shouldRefresh) {
+                    void mountReactExtensionsHostPanel();
+                }
+            });
         },
     };
 }
@@ -1747,6 +1898,38 @@ function getSelectedCharacterLibrarySortValue() {
     const selectedOption = selector.selectedOptions?.[0] ?? selector.options?.[selector.selectedIndex] ?? selector.options?.[0];
     const selectedIndex = Array.from(selector.options).indexOf(selectedOption);
     return getCharacterLibrarySortOptionValue(selectedOption, Math.max(selectedIndex, 0));
+}
+
+function updateCharacterLibraryToolbarOwnerState({ searchQuery, sortValue } = {}) {
+    if (searchQuery !== undefined) {
+        characterLibraryToolbarState.searchQuery = String(searchQuery ?? '');
+        characterLibraryToolbarState.hasSearchQuery = true;
+    }
+
+    if (sortValue !== undefined) {
+        characterLibraryToolbarState.sortValue = String(sortValue ?? '0:::');
+        characterLibraryToolbarState.hasSortValue = true;
+    }
+}
+
+function getCharacterLibraryToolbarSearchQuery() {
+    if (!characterLibraryToolbarState.hasSearchQuery) {
+        updateCharacterLibraryToolbarOwnerState({
+            searchQuery: entitiesFilter.getFilterData(FILTER_TYPES.SEARCH),
+        });
+    }
+
+    return characterLibraryToolbarState.searchQuery;
+}
+
+function getCharacterLibraryToolbarSortValue() {
+    if (!characterLibraryToolbarState.hasSortValue) {
+        updateCharacterLibraryToolbarOwnerState({
+            sortValue: getSelectedCharacterLibrarySortValue(),
+        });
+    }
+
+    return characterLibraryToolbarState.sortValue;
 }
 
 function ensureReactCharacterLibraryToolbarHost() {
@@ -1812,6 +1995,7 @@ function getReactCharacterLibraryPanelBridge() {
         applySearchQuery(searchQuery) {
             const input = $('#character_search_bar');
             const normalizedQuery = String(searchQuery ?? '');
+            updateCharacterLibraryToolbarOwnerState({ searchQuery: normalizedQuery });
             if (String(input.val() ?? '') === normalizedQuery) {
                 return;
             }
@@ -1830,6 +2014,9 @@ function getReactCharacterLibraryPanelBridge() {
                 return;
             }
 
+            updateCharacterLibraryToolbarOwnerState({
+                sortValue: getCharacterLibrarySortOptionValue(selector.options[optionIndex], optionIndex),
+            });
             selector.selectedIndex = optionIndex;
             $('#character_sort_order').trigger('change');
         },
@@ -1872,8 +2059,8 @@ function createCharacterLibraryPanelStateSnapshot({ listElement, pageEntities, r
 
 function createCharacterLibraryToolbarStateSnapshot() {
     return {
-        searchQuery: String(entitiesFilter.getFilterData(FILTER_TYPES.SEARCH) ?? ''),
-        sortValue: getSelectedCharacterLibrarySortValue(),
+        searchQuery: getCharacterLibraryToolbarSearchQuery(),
+        sortValue: getCharacterLibraryToolbarSortValue(),
         sortOptions: getCharacterLibrarySortOptions(),
         isGrid: Boolean(power_user.charListGrid),
         isBulkEdit: $('#rm_print_characters_block').hasClass('bulk_select'),
@@ -2145,6 +2332,7 @@ const deferredBackgroundTask = createSingleFlightTask(() => measureStartupStage(
 let generation_started = new Date();
 /** @type {Character[]} */
 export let characters = [];
+const pendingDeletedCharacterAvatars = new Set();
 /**
  * Stringified index of a currently chosen entity in the characters array.
  * @type {string|undefined} Yes, we hate it as much as you do.
@@ -3366,6 +3554,9 @@ function verifyCharactersSearchSortRule() {
         searchOption.attr('hidden', '');
         $(`#character_sort_order option[data-order="${power_user.sort_order}"][data-field="${power_user.sort_field}"]`).prop('selected', true);
     }
+
+    updateCharacterLibraryToolbarOwnerState({ sortValue: getSelectedCharacterLibrarySortValue() });
+    void syncReactCharacterLibraryToolbarState();
 }
 
 /**
@@ -3585,8 +3776,24 @@ async function fetchAllCharactersDataOnly() {
     return normalizeCharacterListPayload(await parseCharacterLibraryFetchResponse(response));
 }
 
+function projectCharacterLibraryCharactersAgainstPendingDeletes(queryCharacters) {
+    const projection = projectCharacterLibraryQueryAgainstDeletedAvatars(
+        queryCharacters,
+        Array.from(pendingDeletedCharacterAvatars),
+    );
+
+    pendingDeletedCharacterAvatars.clear();
+    for (const avatar of projection.pendingDeletedAvatars) {
+        pendingDeletedCharacterAvatars.add(avatar);
+    }
+
+    return projection.characters;
+}
+
 async function syncCharactersFromQuery(queryCharacters) {
-    const normalizedCharacters = normalizeCharacterListPayload(queryCharacters);
+    const normalizedCharacters = projectCharacterLibraryCharactersAgainstPendingDeletes(
+        normalizeCharacterListPayload(queryCharacters),
+    );
 
     if (!hasCharacterLibraryPayloadChanged(characters, normalizedCharacters)) {
         return false;
@@ -3611,7 +3818,9 @@ async function syncCharactersFromQuery(queryCharacters) {
 export async function getCharacters() {
     try {
         const previousAvatar = this_chid !== undefined ? characters[this_chid]?.avatar : null;
-        const normalizedCharacters = await fetchAllCharactersDataOnly();
+        const normalizedCharacters = projectCharacterLibraryCharactersAgainstPendingDeletes(
+            await fetchAllCharactersDataOnly(),
+        );
         characters.splice(0, characters.length, ...normalizedCharacters);
 
         if (previousAvatar) {
@@ -5576,18 +5785,32 @@ export function getStoppingStrings(isImpersonate, isContinue, api = main_api) {
  * @prop {number} [responseLength] Maximum response length. If unset, the global default value is used.
  * @prop {number} [forceChId] Character ID to use for this generation run. Works in groups only.
  * @prop {object} [jsonSchema] JSON schema to use for the structured generation. Usually requires a special instruction.
+ * @prop {boolean} [backgroundGeneration] Whether this quiet request is acting as a background helper flow.
  * @prop {boolean} [removeReasoning] Parses and removes the reasoning block according to reasoning format preferences
  * @prop {boolean} [trimToSentence] Whether to trim the response to the last complete sentence
  * @param {GenerateQuietPromptParams} params Parameters for the quiet prompt generation
  * @returns {Promise<string>} Generated text. If using structured output, will contain a serialized JSON object.
  */
-export async function generateQuietPrompt({ quietPrompt = '', quietToLoud = false, skipWIAN = false, quietImage = null, quietName = null, responseLength = null, forceChId = null, jsonSchema = null, removeReasoning = true, trimToSentence = false } = {}) {
+export async function generateQuietPrompt({ quietPrompt = '', quietToLoud = false, skipWIAN = false, quietImage = null, quietName = null, responseLength = null, forceChId = null, jsonSchema = null, backgroundGeneration = false, removeReasoning = true, trimToSentence = false } = {}) {
     if (arguments.length > 0 && typeof arguments[0] !== 'object') {
         console.trace('generateQuietPrompt called with positional arguments. Please use an object instead.');
         [quietPrompt, quietToLoud, skipWIAN, quietImage, quietName, responseLength, forceChId, jsonSchema] = arguments;
     }
 
     const responseLengthCustomized = typeof responseLength === 'number' && responseLength > 0;
+    const quietTransportDecision = createMainChatQuietTransportDecision({
+        quietToLoud: quietToLoud ?? false,
+        backgroundGeneration: backgroundGeneration ?? false,
+    });
+    const quietTransportContract = createQuietGenerationLifecycleContract({
+        quietToLoud: quietToLoud ?? false,
+        backgroundGeneration: backgroundGeneration ?? false,
+    });
+    const quietTransportSnapshot = {
+        ...quietTransportDecision,
+        ...quietTransportContract,
+        error: '',
+    };
     let eventHook = () => { };
     try {
         /** @type {GenerateOptions} */
@@ -5601,6 +5824,10 @@ export async function generateQuietPrompt({ quietPrompt = '', quietToLoud = fals
             force_chid: forceChId ?? null,
             jsonSchema: jsonSchema ?? null,
         };
+        rememberMainChatQuietTransportSnapshot({
+            ...quietTransportSnapshot,
+            phase: 'running',
+        });
         if (responseLengthCustomized) {
             TempResponseLength.save(main_api, responseLength);
             eventHook = TempResponseLength.setupEventHook(main_api);
@@ -5608,7 +5835,20 @@ export async function generateQuietPrompt({ quietPrompt = '', quietToLoud = fals
         let result = await Generate('quiet', generateOptions);
         result = trimToSentence ? trimToEndSentence(result) : result;
         result = removeReasoning ? removeReasoningFromString(result) : result;
+        rememberMainChatQuietTransportSnapshot({
+            ...quietTransportSnapshot,
+            phase: 'completed',
+        });
         return result;
+    } catch (error) {
+        rememberMainChatQuietTransportSnapshot({
+            ...quietTransportSnapshot,
+            phase: isMainChatQuietTransportStopException(error) ? 'stopped' : 'error',
+            error: isMainChatQuietTransportStopException(error)
+                ? ''
+                : String(error?.message ?? error ?? ''),
+        });
+        throw error;
     } finally {
         if (responseLengthCustomized && TempResponseLength.isCustomized()) {
             TempResponseLength.restore(main_api);
@@ -8088,19 +8328,27 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
         }
 
         const handoffOwnership = visibleTransportHandoff
-            ? classifyMainChatVisibleTransportOwner({
+            ? createMainChatVisibleTransportDecision({
                 kind: visibleTransportKind ?? (type === 'continue' ? 'continueLast' : 'submitComposer'),
                 mainApi: main_api,
                 selectedGroup: Boolean(selected_group),
                 dryRun,
                 depth,
             })
-            : { owner: 'legacy', reason: 'legacy-executed' };
+            : {
+                owner: 'legacy',
+                kind: visibleTransportKind ?? (type === 'continue' ? 'continueLast' : 'submitComposer'),
+                status: 'legacy-fallback',
+                path: 'legacy-visible-transport-fallback',
+                reason: 'legacy-executed',
+            };
 
         if (handoffOwnership.owner === 'react') {
             return {
                 owner: 'react',
-                kind: visibleTransportKind ?? (type === 'continue' ? 'continueLast' : 'submitComposer'),
+                kind: handoffOwnership.kind,
+                status: handoffOwnership.status,
+                path: handoffOwnership.path,
                 reason: handoffOwnership.reason,
                 attempts,
                 prepareRetryAttempt,
@@ -13667,6 +13915,9 @@ function getCharacterDeleteDialogTitle(characterName) {
 async function removeCharacterFromUI(deletedAvatars = [], { deleteContext = null } = {}) {
     const refreshStartedAt = performance.now();
     const beforeDeleteSnapshot = createCharacterListEntitySnapshot(getEntitiesList({ doFilter: true }));
+    deletedAvatars
+        .filter(avatar => typeof avatar === 'string' && avatar.length > 0)
+        .forEach(avatar => pendingDeletedCharacterAvatars.add(avatar));
     cancelDebounce(printCharactersDebounced);
     preserveNeutralChat();
     await clearChat();
@@ -13876,6 +14127,8 @@ function initCharacterSearch() {
 
     searchInput.on('input', function () {
         const searchQuery = String($(this).val());
+        updateCharacterLibraryToolbarOwnerState({ searchQuery });
+        void syncReactCharacterLibraryToolbarState();
         setCharacterSearchBusy(true);
         debouncedCharacterSearch(searchQuery);
     });
