@@ -297,6 +297,7 @@ bun run docs:check
 📋 **详细规范**：[Phase 6 README](../specs/react-phase6-extension-compat/README.md)
 
 **持续工作**（非 Sprint 结构）：
+- `JS-Slash-Runner` 作为 primary compatibility gate；任何会破坏其 import、mount、event、slash-command、regex 或必需 global/export surface 的 candidate，都必须先被证明可迁移且可回滚
 - 兼容层维护期（至少 6 个月）
 - 废弃警告和迁移文档
 - 扩展市场审核和社区支持
@@ -305,7 +306,7 @@ bun run docs:check
 
 **退出条件**：
 - Phase 6 的完成不等于兼容层删除；它只提供 Phase 7 cutover 的前置证据。
-- 兼容层废弃、冻结或删除前必须有常用扩展验证清单、迁移指南、废弃警告周期、用户可回滚方案和 `bun run test:compat` 通过记录。
+- 兼容层废弃、冻结或删除前必须有以 `JS-Slash-Runner` 为首要样本的扩展验证清单、迁移指南、废弃警告周期、用户可回滚方案和 `bun run test:compat` 通过记录。
 - `globalThis.SillyTavern`、`eventSource` / `event_types`、`@sillytavern/*` alias 的任一破坏性变更都必须走 Phase 6 兼容评审和 Phase 7 cutover gate，不得作为 Phase 4/5 的顺手清理。
 
 ---
@@ -320,7 +321,7 @@ bun run docs:check
 - Phase 1-3B 对应 surface 的 guarded island / visible owner 已开启并通过回归门。
 - Phase 4A / 4B 对 main-chat transport、formatter、windowing 的 excluded paths 已完成独立 spec 和 proof。
 - Phase 5 对需要 typed API / route owner 的 surface 已完成 route parity、middleware-order proof 和 rollback plan。
-- Phase 6 对 extension API、mount compatibility、Tavern Helper、regex extension、`@sillytavern/*` alias 和常用扩展验证已完成维护期证据。
+- Phase 6 对 extension API、mount compatibility、`JS-Slash-Runner` primary gate、regex extension、`@sillytavern/*` alias 和所需次级扩展验证已完成维护期证据。
 - 每个 sprint 必须有 ADR 或 ADR update，说明本次移除 fallback 的范围、回滚策略、用户数据风险、扩展兼容风险和性能证据。
 
 **Sprint 列表**：
