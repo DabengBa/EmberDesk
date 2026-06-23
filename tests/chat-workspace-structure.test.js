@@ -25,6 +25,9 @@ describe('chat workspace structure', () => {
         });
 
         expect(indexHtml).toMatch(/id="send_textarea"[^>]*\baria-label="Chat message"/);
+        expect(indexHtml).toMatch(/id="send_textarea"[^>]*\baria-describedby="send_textarea_hint"/);
+        expect(indexHtml).toContain('id="send_textarea_hint"');
+        expect(indexHtml).toContain('data-i18n="Type /? for commands. Send requires an API connection."');
     });
 
     test('keeps chat options menu items keyboard reachable as buttons', () => {
@@ -122,6 +125,8 @@ describe('chat workspace structure', () => {
         ].forEach(([className, label]) => {
             expectButtonAffordance(getTagByClass(indexHtml, className), label);
         });
+
+        expect(indexHtml).toMatch(/class="[^"]*\bmes_edit_cancel\b[^"]*"[^>]*\bdata-action="cancel-edit"/);
     });
 
     test('keeps fallback provider controls embedded in the API configuration drawer', () => {

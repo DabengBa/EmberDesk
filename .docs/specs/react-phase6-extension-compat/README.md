@@ -19,6 +19,7 @@ Phase 6 是持续维护阶段，不是独立的 Sprint 集合。主要工作是�
 1. **兼容层维护**：至少 6 个月保持旧 API 可用
 2. **扩展迁移指南**：文档化新 API
 3. **社区支持**：协助扩展开发者迁移
+4. **破坏性变更评审**：任何 `globalThis.SillyTavern`、`eventSource` / `event_types` 或 `@sillytavern/*` alias 的删除、重命名或行为变更都必须经过 Phase 6 兼容评审
 
 ---
 
@@ -36,6 +37,17 @@ Phase 6 是持续维护阶段，不是独立的 Sprint 集合。主要工作是�
 - 保持 `globalThis.SillyTavern` 可用
 - 保持 `eventSource` / `event_types` 可用
 - 保持 `@sillytavern/*` 别名可用
+- 保持 `bun run test:compat` 作为兼容层最低 gate
+
+### 兼容层退出条件
+
+废弃或删除兼容层前必须同时满足：
+
+- 常用扩展验证清单完成，并覆盖 Tavern Helper、JS-Slash-Runner、Regex Manager、Quick Reply 和 Extensions Manager 等高风险扩展
+- 迁移指南和 API change log 已发布
+- 废弃警告周期已完成，且有用户可回滚方案
+- `bun run test:compat` 通过
+- 对应破坏性变更已有 ADR 或 Phase 6 兼容评审记录
 
 ### 2. 废弃警告
 

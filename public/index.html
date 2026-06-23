@@ -3918,7 +3918,7 @@
                             <div class="mes_edit_delete menu_button  fa-solid fa-trash-can" title="Delete this message" data-i18n="[title]Delete this message;[aria-label]Delete this message" role="button" aria-label="Delete this message" tabindex="0"></div>
                             <div class="mes_edit_up menu_button  fa-solid fa-chevron-up " title="Move message up" data-i18n="[title]Move message up;[aria-label]Move message up" role="button" aria-label="Move message up" tabindex="0"></div>
                             <div class="mes_edit_down menu_button  fa-solid fa-chevron-down" title="Move message down" data-i18n="[title]Move message down;[aria-label]Move message down" role="button" aria-label="Move message down" tabindex="0"></div>
-                            <div class="mes_edit_cancel menu_button  fa-solid fa-xmark" title="Cancel" data-i18n="[title]Cancel;[aria-label]Cancel" role="button" aria-label="Cancel" tabindex="0"></div>
+                            <div class="mes_edit_cancel menu_button  fa-solid fa-xmark" title="Cancel" data-i18n="[title]Cancel;[aria-label]Cancel" role="button" aria-label="Cancel" tabindex="0" data-action="cancel-edit"></div>
                         </div>
                     </div>
                     <details class="mes_reasoning_details">
@@ -4585,7 +4585,10 @@
                     <div id="leftSendForm" class="alignContentCenter">
                         <div id="options_button" class="fa-solid fa-bars interactable" title="Chat options" data-i18n="[title]Chat options;[aria-label]Chat options" role="button" aria-label="Chat options" tabindex="0"></div>
                     </div>
-                    <textarea id="send_textarea" name="text" class="mdHotkeys" data-i18n="[aria-label]Chat message;[no_connection_text]Not connected to API!;[connected_text]Type a message, or /? for help" aria-label="Chat message" placeholder="Not connected to API!" no_connection_text="Not connected to API!" connected_text="Type a message, or /? for help" autocomplete="off"></textarea>
+                    <div class="send_textarea_wrap">
+                        <textarea id="send_textarea" name="text" class="mdHotkeys" data-i18n="[aria-label]Chat message;[no_connection_text]Not connected to API!;[connected_text]Type a message, or /? for help" aria-label="Chat message" aria-describedby="send_textarea_hint" placeholder="Not connected to API!" no_connection_text="Not connected to API!" connected_text="Type a message, or /? for help" autocomplete="off"></textarea>
+                        <small id="send_textarea_hint" class="send_textarea_hint" data-i18n="Type /? for commands. Send requires an API connection.">Type /? for commands. Send requires an API connection.</small>
+                    </div>
                     <div id="rightSendForm" class="alignContentCenter">
                         <div id="stscript_continue" title="Continue script execution" class="stscript_btn stscript_continue" data-i18n="[title]Continue script execution">
                             <i class="fa-solid fa-play"></i>

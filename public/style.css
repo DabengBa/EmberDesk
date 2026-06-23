@@ -1716,8 +1716,6 @@ button {
     font-family: var(--mainFontFamily);
     margin: 0;
     text-shadow: 0px 0px calc(var(--shadowWidth) * 1px) var(--SmartThemeShadowColor);
-    flex: 1;
-    order: 3;
     field-sizing: content;
 
     --progColor: var(--SmartThemeBorderColor);
@@ -1737,6 +1735,23 @@ button {
             100% 100%,
             0% 100%);
     transition: clip-path var(--animation-duration-2x);
+}
+
+.send_textarea_wrap {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+    order: 3;
+}
+
+.send_textarea_hint {
+    color: var(--SmartThemeBodyColor);
+    font-size: calc(var(--mainFontSize) * 0.85);
+    line-height: 1.2;
+    opacity: 0.72;
+    padding: 0 6px 4px;
 }
 
 #send_textarea:placeholder-shown {

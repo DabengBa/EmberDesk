@@ -2,11 +2,11 @@
 
 ## 模块职责
 
-本文档定义 EmberDesk 从 jQuery 单体应用迁移到现代 React 生态的完整路线图。这是一个 18-24 个月的渐进式重构计划，在保持产品可用性和扩展兼容性的前提下，逐步替换技术栈核心组件。
+本文档定义 EmberDesk 从 jQuery 单体应用迁移到现代 React 生态的完整路线图。Phase 0-6 是约 18-24 个月的渐进式迁移计划，新增 Phase 7 作为 ADR-gated full owner cutover 收尾阶段；在保持产品可用性和扩展兼容性的前提下，逐步替换技术栈核心组件，并为每个 legacy owner / fallback 留出明确退出路径。
 
 ## 状态
 
-状态：执行中；Phase 0 基础设施已落地，Phase 1 已交付，Phase 2 Sprint 1-7 已按 guarded panel island 边界交付，Phase 3 已按当前批准的 guarded hidden main-chat island scope 交付，Phase 3B Sprint 1-5 已完成 visible row / actions / composer / slash / standard direct-chat transport owner cutover；Character Library、World Info、Background Library、Extensions Host 和当前 main-chat surface 仍保留同入口 legacy fallback，flag 关闭或 bundle 缺失时不替换原 surface
+状态：执行中；Phase 0 基础设施已落地，Phase 1 已交付，Phase 2 Sprint 1-7 已按 guarded panel island 边界交付，Phase 3 已按当前批准的 guarded hidden main-chat island scope 交付，Phase 3B Sprint 1-5 已完成 visible row / actions / composer / slash / standard direct-chat transport owner cutover；Character Library、World Info、Background Library、Extensions Host 和当前 main-chat surface 仍保留同入口 legacy fallback，flag 关闭或 bundle 缺失时不替换原 surface；所有 legacy owner / fallback 的最终退出统一进入新增 Phase 7 full owner cutover，不再悬空为泛化“未来处理”
 创建日期：2026-06-15  
 前置条件：`.docs/tech/modernization-roadmap.md` 已于 2026-06-05 冻结完成
 
@@ -45,7 +45,9 @@
 4. **测试驱动**：每个迁移步骤必须有对应的单元测试或 E2E 测试
 5. **性能可测**：保留 startup/interaction performance runner，迁移后性能不能劣化
 6. **TanStack 收口优先**：React 页面迁移默认必须使用 TanStack Form + Zod 管理表单和校验，使用 TanStack Query 管理服务端状态；任何例外都必须在对应 spec/ADR 中说明原因和退出计划
-7. **Page / panel island 优先**：Phase 1 的 React 页面和早期 Phase 2 的工作区面板都以 feature-flagged island 形式上线，必须保留 legacy fallback；全站 SPA、主工作区 shell 和扩展宿主迁移仍按后续 Phase 推进
+7. **Page / panel island 优先**：Phase 1 的 React 页面和早期 Phase 2 的工作区面板都以 feature-flagged island 形式上线，必须保留 legacy fallback；扩展兼容和全局 bridge 由 Phase 4 / Phase 6 建证据，legacy fallback / full SPA workspace shell 的删除或冻结统一由 Phase 7 决策
+8. **剩余项不悬空**：任何 Phase 完成时保留的 legacy owner、fallback path 或兼容边界，必须在本路线图中有后续 Phase、backlog 子阶段、ADR-only milestone 或明确退出条件；不得只写“未来处理”。
+9. **Full owner cutover 必须显式排期**：guarded island / visible owner 只代表可回滚迁移完成，不代表 legacy owner 已退出；每个保留的 legacy 行为 owner、DOM fallback、public API 兼容出口和 build-missing fallback 都必须在 Phase 7 标明 cutover 条件、验证门和退出策略。
 
 ## 迁移阶段
 
@@ -117,6 +119,15 @@
 - World Info React island 当前接管宿主壳、world select、search/sort、create/import/export/refresh buttons 和 entry shortcut 呈现；World Info prompt activation、regex engine、converter/import result semantics 和 deletion cascade 仍由 `public/scripts/world-info.js` 及相关 legacy modules 拥有。
 - Background Library React island 当前接管宿主壳、filter/sort controls、gallery presentation 和 upload/select/lock/unlock/auto/refresh entry points；background file APIs、thumbnail/lazy-load、folder state、selection effects 和 slash commands 仍由 `public/scripts/backgrounds.js` / `public/scripts/background-panel-controller.js` 拥有。
 - Extensions Host React island 当前接管宿主壳、notify/manage/install/Extras API host controls 和 protected mount-point status presentation；extension discovery、manifest loading、script/style injection、Tavern Helper、regex extension、wand menu templates、install/update/delete protocols 和 `@sillytavern/*` aliases 仍由 legacy extension compatibility boundary 拥有。第三方扩展 API 和迁移指南仍由 Phase 4 / Phase 6 处理。
+
+**Phase 2 后 full owner cutover 归属**：
+
+| Surface | 当前 Phase 2 完成定义 | 仍保留的 legacy owner / fallback | Full owner cutover 归属 |
+|---|---|---|---|
+| Character Library | React toolbar/list/search/sort/bulk 呈现、TanStack Query refresh、TanStack Form + Zod toolbar state、虚拟滚动窗口 | legacy tag controls、`entitiesFilter`、`characters` global array sync、delete dialog、bulk delete/tag side effects、protected row selectors、flag/build fallback | `Phase 7 Sprint 1: Character Library full owner cutover` |
+| World Info | React host、world select、search/sort、create/import/export/refresh entry points、entry shortcut 呈现 | prompt activation、regex engine、converter/import result semantics、delete cascade、legacy DOM action bridge、flag/build fallback | `Phase 7 Sprint 2: World Info full owner cutover` |
+| Background Library | React host、filter/sort、gallery presentation、upload/select/lock/unlock/auto/refresh entry points | `/api/backgrounds/*` action semantics、thumbnail/lazy-load、folder state、selection effects、slash commands、legacy background controller、flag/build fallback | `Phase 7 Sprint 3: Background Library full owner cutover` |
+| Extensions Host | React drawer host、notify/manage/install/Extras controls、mount readiness presentation | extension discovery、manifest loading、script/style injection、Tavern Helper、regex extension、wand menu templates、install/update/delete protocols、`@sillytavern/*` aliases、protected mount-point lifecycle、flag/build fallback | `Phase 7 Sprint 4: Extensions Host full owner cutover`，并依赖 Phase 6 兼容验证 |
 
 **Sprint 4-7 验证门**：
 ```powershell
@@ -194,23 +205,50 @@ bun run perf:interaction
 bun run docs:check
 ```
 
+**Phase 3 / 3B 后剩余项归属表**：
+
+| 剩余项 | 后续归属 | 当前路线图处理 |
+|---|---|---|
+| `non-OpenAI` / group / dry-run / nested visible transport | `Phase 4A` 补齐能力，`Phase 7 Sprint 5` 完成 full owner cutover | Phase 3B closure 后的第一批 main-chat backlog；进入实现前必须单独写 spec，继续使用 guarded request-level fallback；Phase 4A 证明所有 transport path 可由 React owner 承担后，Phase 7 才能移除 fallback。 |
+| `quiet` / background generation transport | `Phase 4A` 补齐能力，`Phase 7 Sprint 5` 完成 full owner cutover | 与标准 visible direct-chat 分开处理；只有在 background / quiet 行为、provider side effects 和 recovery 语义有独立 proof 后才能迁入 React owner；最终 fallback 退出归 Phase 7。 |
+| legacy `messageFormatting()` / rich media / file / LaTeX / code-block formatter owner | `Phase 4B` 抽取 renderer contract，`Phase 7 Sprint 6` 完成 full owner cutover | 当前 Phase 3B 复用 legacy formatted DOM；Phase 4B 先抽取 formatter contract 并保护扩展挂钩，Phase 7 再切 React renderer full owner。 |
+| legacy `chat_truncation` / `#show_more_messages` load-more 算法 | `Phase 4B` 抽取 windowing contract，`Phase 7 Sprint 6` 完成 full owner cutover | 当前 React 只做 headless measurement / restore；Phase 4B 先证明 long-chat performance 和 compatibility，Phase 7 再移除 legacy load-more owner。 |
+| `globalThis.SillyTavern`、`eventSource`、`event_types`、jQuery globals | Phase 4 / Phase 6 建兼容层，`Phase 7 Sprint 7` 审核是否可退出 | 通过 Zustand stores 和兼容层逐步收口；兼容 exports 在 Phase 6 维护期内保留，Phase 7 只能在常用扩展验证和废弃周期完成后决定删除、冻结或长期保留。 |
+| third-party extension API、mount compatibility、migration guide | Phase 4 / Phase 6 建桥和维护，`Phase 7 Sprint 4 / Sprint 7` 完成 owner/fallback 退出判断 | Phase 4 建兼容桥和迁移指南，Phase 6 维护废弃警告、社区迁移和常用扩展验证；Extensions Host full owner cutover 不得先于这些证据完成。 |
+| Express route owner / typed API / derived-cache ORM | Phase 5 | Hono / Drizzle 仍是后端现代化阶段，不与 Phase 3B 主聊天 UI closure 混合。 |
+| 移除 guarded island fallback 或切 full SPA workspace | `Phase 7: Full owner cutover and legacy fallback retirement` | 不再悬空为泛化 Future；Phase 7 各 sprint 逐面移除 fallback，full SPA workspace shell 仍必须有 ADR，证明扩展兼容、性能和 rollback 策略。 |
+
 ---
 
 ### Phase 4: 状态管理迁移（3 个月）
 
-**目标**：用 Zustand 替代全局对象，建立可预测的状态管理
+**目标**：用 Zustand 替代全局对象，建立可预测的状态管理，并承接 Phase 3 / 3B 留下的 main-chat compatibility transport / renderer extraction backlog，为 Phase 7 full owner cutover 提供状态和兼容前置
 
 📋 **详细规范**：[Phase 4 README](../specs/react-phase4-state-management/README.md)
+
+**Main-chat backlog 子阶段**：
+- `Phase 4A / Main-chat compatibility transport expansion`：把 `non-OpenAI`、group、dry-run、nested-visible、quiet/background generation 等 excluded transport path 分批评估并单独立 spec；默认继续 legacy fallback，只有 proof 足够时才切 React owner；所有已证明 path 必须登记到 Phase 7 Sprint 5 的 cutover checklist。
+- `Phase 4B / Main-chat renderer extraction`：抽取 legacy formatter、media/file/code/LaTeX/rich body、long-chat load-more/windowing contract；默认先做 contract extraction 和 compatibility proof，再考虑 visible renderer ownership；所有已抽取 contract 必须登记到 Phase 7 Sprint 6 的 cutover checklist。
 
 **Sprint 列表**：
 - 📋 [Sprint 1: Zustand stores 创建](../specs/react-phase4-state-management/phase4-sprint1-zustand-stores.md)（3 周）
 - 📋 [Sprint 2: 兼容层建立](../specs/react-phase4-state-management/phase4-sprint2-compat-bridge.md)（3 周）
 - 📋 [Sprint 3: 扩展迁移指南](../specs/react-phase4-state-management/phase4-sprint3-extension-guide.md)（2 周）
+- 📋 `Phase 4A: Main-chat compatibility transport expansion`（按独立 spec 分批执行；不阻塞 Phase 3B 完成状态）
+- 📋 `Phase 4B: Main-chat renderer extraction`（按独立 spec 分批执行；需要 formatter / extension / long-chat proof）
 
 **验证门**：
 ```powershell
 bun run test:compat
+bun run --cwd tests test:unit -- main-chat-visible-transport-owner.test.js chat-generation-lifecycle.test.js react-workspace-panels-helpers.test.js --runInBand
+bun run --cwd tests test:e2e -- chat-message-rendering.e2e.js chat-message-layout.e2e.js chat-message-streaming.e2e.js
+bun run perf:interaction
 ```
+
+**进入条件**：
+- 每个 `Phase 4A` transport path 必须先有独立 spec，列出 owner split、legacy fallback、provider/API scope、row identity proof、stop/retry/fallback proof 和 excluded paths。
+- 每个 `Phase 4B` renderer extraction 必须先有 formatter / extension compatibility contract，列出 semantic Doc IDs、DOM selector compatibility、long-chat performance proof 和 rollback plan。
+- Zustand/global bridge sprints 不得顺手迁移 provider transport 或 renderer owner；这些内容只能通过 `Phase 4A` / `Phase 4B` spec 进入。
 
 ---
 
@@ -224,6 +262,19 @@ bun run test:compat
 - 📋 [Sprint 1: Hono 路由搭建](../specs/react-phase5-backend-api/phase5-sprint1-hono-routes.md)（3 周）
 - 📋 [Sprint 2: Drizzle ORM 集成](../specs/react-phase5-backend-api/phase5-sprint2-drizzle-orm.md)（3 周）
 - 📋 [Sprint 3: Express 完全切换](../specs/react-phase5-backend-api/phase5-sprint3-express-sunset.md)（2 周）
+
+**进入条件与边界**：
+- Hono 接管前必须先有 ADR，证明 Express middleware order、sessions、CSRF、auth wall、static/public routes、private endpoints、uploads、error/404 handlers 的兼容策略。
+- Drizzle 只能先接管 derived SQLite cache；file-backed user data 仍是正本。任何把 SQLite 升级为 canonical storage 的方案必须另起 ADR。
+- Express sunset 不得在 Hono route parity、middleware-order proof、API compatibility tests、startup proof 和 rollback plan 完成前开始。
+
+**验证门**：
+```powershell
+bun run --cwd tests test:unit -- express5-route-compatibility.test.js --runInBand
+bun run test:unit
+bun run test:compat
+bun run docs:check
+```
 
 ---
 
@@ -240,6 +291,59 @@ bun run test:compat
 
 说明：`Extensions` 作为用户可见 drawer 宿主的 React UI 迁移属于 Phase 2；第三方扩展 API、挂载兼容、迁移指南和社区支持仍由 Phase 4 / Phase 6 负责。
 
+**退出条件**：
+- Phase 6 的完成不等于兼容层删除；它只提供 Phase 7 cutover 的前置证据。
+- 兼容层废弃、冻结或删除前必须有常用扩展验证清单、迁移指南、废弃警告周期、用户可回滚方案和 `bun run test:compat` 通过记录。
+- `globalThis.SillyTavern`、`eventSource` / `event_types`、`@sillytavern/*` alias 的任一破坏性变更都必须走 Phase 6 兼容评审和 Phase 7 cutover gate，不得作为 Phase 4/5 的顺手清理。
+
+---
+
+### Phase 7: Full owner cutover and legacy fallback retirement（4-6 个月，ADR-gated）
+
+**目标**：在 Phase 1-6 的 React islands、visible owners、Zustand/global bridge、typed API、extension compatibility 证据齐备后，逐面完成 full owner cutover，移除或冻结 legacy owner / guarded fallback / build-missing fallback，而不是继续保留双 owner。
+
+**进入条件**：
+- Phase 1-3B 对应 surface 的 guarded island / visible owner 已开启并通过回归门。
+- Phase 4A / 4B 对 main-chat transport、formatter、windowing 的 excluded paths 已完成独立 spec 和 proof。
+- Phase 5 对需要 typed API / route owner 的 surface 已完成 route parity、middleware-order proof 和 rollback plan。
+- Phase 6 对 extension API、mount compatibility、Tavern Helper、regex extension、`@sillytavern/*` alias 和常用扩展验证已完成维护期证据。
+- 每个 sprint 必须有 ADR 或 ADR update，说明本次移除 fallback 的范围、回滚策略、用户数据风险、扩展兼容风险和性能证据。
+
+**Sprint 列表**：
+- 📋 `Sprint 1: Character Library full owner cutover`（2-3 周）
+  React 接管 tag filtering、bulk side effects、delete confirmation integration、legacy `characters` global sync replacement 和 list lifecycle；移除 character-library panel 的 legacy fallback 前必须保留 protected selectors 或提供兼容 shim。
+- 📋 `Sprint 2: World Info full owner cutover`（3-4 周）
+  React 接管 World Info prompt activation、regex placement UI handoff、converter/import result handling、delete cascade 和 entry lifecycle；legacy `public/scripts/world-info.js` 只保留兼容出口或被明确废弃。
+- 📋 `Sprint 3: Background Library full owner cutover`（3 周）
+  React 接管 background file actions、thumbnail/lazy-load lifecycle、folder state、selection/lock side effects 和 background slash command handoff；legacy background controller fallback 退出。
+- 📋 `Sprint 4: Extensions Host full owner cutover`（4-6 周）
+  React 接管 extension discovery/status presentation、manifest lifecycle orchestration、install/update/delete UI protocol 和 mount readiness owner；第三方 extension execution、Tavern Helper、regex extension 和 `@sillytavern/*` alias 的删除/冻结必须由 Phase 6 证据决定，不能直接移除。
+- 📋 `Sprint 5: Main-chat transport full owner cutover`（4-6 周）
+  React transport owner 覆盖 OpenAI、non-OpenAI、group、dry-run、nested visible、quiet/background generation、stop/retry/fallback/token append/finalization；移除 request-level legacy fallback 前必须通过 provider matrix proof。
+- 📋 `Sprint 6: Main-chat renderer and windowing full owner cutover`（4-6 周）
+  React renderer owner 覆盖 formatter、rich media/file/LaTeX/code blocks、long-chat load-more/windowing、editing/unsafe/streaming row transitions；移除 `.mes_text` legacy formatter owner 前必须通过 extension compatibility 和 long-chat performance proof。
+- 📋 `Sprint 7: Workspace shell and global compatibility retirement decision`（3-4 周）
+  决定 full SPA workspace shell、legacy jQuery shell、`globalThis.SillyTavern`、`eventSource`、`event_types`、`@sillytavern/*` 的最终形态：删除、冻结为 compatibility facade，或进入长期支持。该 sprint 不能在 Phase 6 维护期证据不足时强行删除兼容面。
+
+**Full owner cutover 验证门**：
+```powershell
+bun run build:lib
+bun run build:react
+bun run build:react:character-library
+bun run build:react:workspace-panels
+bun run test:unit
+bun run test:compat
+bun run --cwd tests test:e2e -- login.e2e.js chat-message-rendering.e2e.js chat-message-layout.e2e.js chat-message-streaming.e2e.js
+bun run perf:startup
+bun run perf:interaction
+bun run docs:check
+```
+
+**退出条件**：
+- 每个 migrated surface 只有一个明确 runtime owner；legacy owner 若保留，必须是 documented compatibility facade，而不是可竞争的第二实现。
+- Guarded fallback、build-missing fallback 和 legacy DOM bridge 要么删除，要么在 ADR 中冻结为长期兼容策略并有测试覆盖。
+- 所有语义 Doc ID、tech docs、logic-description docs、PROJECT_HISTORY 和 ADR 都反映最终 owner split。
+
 ---
 
 ## 验证矩阵
@@ -251,18 +355,23 @@ bun run test:compat
 | React 页面迁移 | 对应页面的 E2E 测试通过 |
 | 角色库迁移 | `character-list-*.test.js` + `bun run test:compat` |
 | 主聊天迁移 | `chat-*.e2e.js` + `bun run test:compat` + `bun run perf:interaction` |
+| Phase 4A transport expansion | focused provider/transport unit tests + `chat-message-streaming.e2e.js` + `bun run test:compat` + rollback/fallback proof |
+| Phase 4B renderer extraction | `chat-message-rendering.e2e.js` + `chat-message-layout.e2e.js` + long-chat performance proof + extension compatibility proof |
+| Zustand/global bridge | store unit tests + compatibility bridge tests + `bun run test:compat` |
 | API 路由迁移 | 对应 endpoint 单元测试 + Postman/curl 手动验证 |
 | 扩展兼容性 | `bun run test:compat` + 手动测试 3-5 个常用扩展 |
+| Phase 7 full owner cutover | 对应 surface focused unit/E2E + `bun run build:lib` + `bun run build:react` + `bun run build:react:character-library` / `bun run build:react:workspace-panels` + `bun run test:compat` + startup/interaction perf + docs/ADR cutover checklist |
 | 性能回归 | `bun run perf:startup` + `bun run perf:interaction` |
 
 ## 风险与缓解
 
 | 风险 | 影响 | 概率 | 缓解措施 |
 |---|---|---|---|
-| React 迁移导致扩展失效 | 高 | 中 | 保持兼容层 6 个月，提前与扩展作者沟通 |
+| React 迁移导致扩展失效 | 高 | 中 | 保持兼容层至少 6 个月，提前与扩展作者沟通；任何破坏性删除必须进入 Phase 7 Sprint 4 / Sprint 7 gate |
 | 性能劣化 | 中 | 中 | 虚拟滚动 + 性能基准测试，每个 Phase 运行 perf runner |
 | 用户数据丢失 | 极高 | 低 | 保持文件存储不变，充分测试迁移脚本 |
 | 开发成本超支 | 中 | 高 | 渐进式迁移，每个 Phase 可独立交付和暂停 |
+| 双 owner 长期共存导致行为漂移 | 高 | 中 | 每个 legacy owner / fallback 必须登记到 Phase 7 sprint；未能删除的兼容面必须 ADR-frozen 并有测试覆盖 |
 | 技术栈过时 | 低 | 低 | TanStack 生态活跃，React 19 稳定，定期更新依赖 |
 
 ## ADR 需求
@@ -283,6 +392,17 @@ bun run test:compat
    - 决策：用 Drizzle 管理 SQLite derived cache
    - 理由：类型安全、迁移管理、查询构建
    - 权衡：学习曲线、对现有 SQL 查询的重写成本
+
+4. **ADR-AAAA: Phase 7 full owner cutover / guarded fallback retirement**
+   - 决策：逐 surface 判断是否删除 guarded island fallback、build-missing fallback、legacy DOM bridge，或冻结为长期 compatibility facade；full SPA workspace shell 也必须在此 ADR 家族下决策
+   - 理由：只有当扩展兼容、性能、路由、rollback、用户数据安全和对应 Phase 7 sprint checklist 均有证明时才允许推进
+   - 权衡：更少 legacy 复杂度和更清晰 owner split vs. 更高上线、扩展破坏和回滚成本
+   - 覆盖：Character Library、World Info、Background Library、Extensions Host、main-chat transport、main-chat renderer/windowing、workspace shell/global compatibility exports 必须分别有 ADR 或 ADR update
+
+5. **ADR-BBBB: Canonical storage 变更**
+   - 决策：是否让 SQLite / ORM 从 derived cache 进入用户数据正本路径
+   - 理由：当前路线图明确 file-backed user data 是正本，任何改变都超出 Phase 5 默认边界
+   - 权衡：查询能力和类型安全 vs. 数据迁移、备份、回滚和用户数据丢失风险
 
 ## 里程碑时间线
 
@@ -319,7 +439,8 @@ bun run test:compat
 2027 Q4 - 2028 Q1 (月 11-1)：Phase 4 状态管理迁移
   ├─ 月 11: Zustand stores 搭建
   ├─ 月 12: 全局兼容层建立
-  └─ 月 1: 扩展迁移指南 + 兼容性验证
+  ├─ 月 1: 扩展迁移指南 + 兼容性验证
+  └─ 后续 backlog: Phase 4A transport expansion + Phase 4B renderer extraction（按独立 spec 分批执行）
 
 2028 Q1-Q2 (月 2-4)：Phase 5 后端 API 现代化
   ├─ 月 2: Hono API 路由搭建
@@ -327,6 +448,14 @@ bun run test:compat
   └─ 月 4: Express → Hono 完全切换
 
 2028 Q2+：Phase 6 扩展兼容性演进（持续）
+  ├─ 维护期: 常用扩展验证、迁移指南、废弃警告
+  └─ 输出: Phase 7 Sprint 4 / Sprint 7 所需的删除、冻结或长期支持证据
+
+2028 Q3-Q4：Phase 7 full owner cutover and legacy fallback retirement（ADR-gated）
+  ├─ Sprint 1-3: Character Library / World Info / Background Library full owner cutover
+  ├─ Sprint 4: Extensions Host full owner cutover
+  ├─ Sprint 5-6: Main-chat transport / renderer / windowing full owner cutover
+  └─ Sprint 7: workspace shell 和 global compatibility retirement decision
 ```
 
 ## 成功标准
@@ -339,7 +468,9 @@ bun run test:compat
 ✅ **测试覆盖率**：单元测试覆盖率 > 70%，E2E 覆盖核心流程  
 ✅ **类型安全**：TypeScript 严格模式，前后端类型共享  
 ✅ **开发体验**：HMR < 200ms，类型提示完整，构建 < 30s  
-✅ **文档完备**：用户迁移指南、扩展开发文档、ADR 记录
+✅ **Owner 清晰**：每个迁移 surface 只有一个 runtime owner；legacy 代码若保留，必须是 documented compatibility facade
+✅ **Fallback 有归属**：guarded fallback、build-missing fallback、legacy DOM bridge、global compatibility exports 均已删除或由 ADR 冻结为长期支持面
+✅ **文档完备**：用户迁移指南、扩展开发文档、ADR 记录、Phase 7 cutover checklist 和最终 owner split 均已更新
 
 ## 退出策略
 
@@ -377,10 +508,11 @@ bun run test:compat
 - `globalThis.SillyTavern`, `eventSource` / `event_types`, `@sillytavern/*` (兼容层保持)
 
 未来规划绑定点：
-- future React-owned main-chat modules under `app/components/main-chat/*`, `app/lib/main-chat/*` and the matching TanStack Form / Query integration layer（Phase 3B 的 visible MessageRow / composer / slash / actions / transport owners；exact file map to be fixed per-sprint spec）
+- future React-owned main-chat modules under `app/components/main-chat/*`, `app/lib/main-chat/*` and the matching TanStack Form / Query integration layer（Phase 4A / 4B 的 excluded transport expansion、formatter extraction、long-chat renderer/windowing extraction；exact file map to be fixed per-sprint spec）
 - `app/stores/*` (Phase 4 Zustand stores)
 - `app/server/routes/*` (Phase 5 Hono API)
 - `app/compat/globalBridge.ts` (Phase 4 全局兼容层)
+- Phase 7 cutover specs / ADR updates will bind final owner exits for character library, World Info, background library, extensions host, main-chat transport, main-chat renderer/windowing, workspace shell, and global compatibility exports; exact file map must be fixed per sprint before deleting or freezing any fallback.
 
 ## 相关文档
 
@@ -393,10 +525,13 @@ bun run test:compat
 - [React workspace panel flags processing flow](../logic-description/react_workspace_panel_flags_processing_flow.md) - workspace React feature payload、HTML bootstrap 注入和 workspace-panel host/status bridge 边界
 - [Background Library Panel](../db/features/background-library-panel.md) - Phase 2 Sprint 6 当前 guarded action island 与 legacy-owned 行为边界
 - [Extensions Panel Open](../db/features/extension-panel-open.md) - Phase 2 Sprint 7 当前 guarded action island 与 legacy-owned 扩展行为边界
+- [ADR-0007: React page and panel islands with legacy fallbacks](../adr/0007-react-page-islands-with-legacy-fallbacks.md) - Phase 0-3B guarded island / fallback 基线；Phase 7 cutover ADR update 必须显式说明哪些 fallback 被删除、冻结或长期支持
 - React 推荐技术栈：`C:\SyncFiles\Softwares_Downloads\dev\Agents-Prompt\.docs\tech\recommended-stacks\react.md` - 技术选型来源
 
 ## 下一步行动
 
 1. **保持 Phase 3 / 3B 回归门常跑**：后续 Phase 4+ 变更继续以 `chat-message-rendering.e2e.js`、`chat-message-layout.e2e.js`、`chat-message-streaming.e2e.js` 和 `bun run test:compat` 保护当前 hidden/visible owner split，不回退已完成的 main-chat closure。
 2. **继续执行 TanStack 约束**：后续任何 React-owned main-chat 查询、mutation 或表单输入仍默认使用 TanStack Query + TanStack Form + Zod，除非新的 spec/ADR 明确记录例外和退出计划。
-3. **把额外兼容路径扩展视为新任务**：如果未来要把 quiet/background 或 non-OpenAI/group/nested transport 继续迁入 React owner，必须单独立 spec，而不是重写已完成的 Phase 3B 结论。
+3. **执行 Phase 4A / 4B backlog**：quiet/background、non-OpenAI、group、dry-run、nested transport 进入 `Phase 4A`；legacy formatter、media/file/code/LaTeX rich body 和 long-chat load-more/windowing 进入 `Phase 4B`。每项必须单独立 spec、保留 guarded fallback，并且不得重写已完成的 Phase 3 / 3B 结论。
+4. **准备 Phase 7 cutover specs 和 ADR update**：Character Library、World Info、Background Library、Extensions Host、main-chat transport、main-chat renderer/windowing、workspace shell/global compatibility exports 都必须在实现前列出当前 legacy owner、fallback path、删除/冻结条件、回滚方案和验证门。
+5. **把未删除 fallback 登记为长期兼容策略**：任何 Phase 7 后仍保留的 `globalThis.SillyTavern`、`eventSource`、`event_types`、`@sillytavern/*`、legacy DOM bridge 或 build-missing fallback，必须有 ADR 冻结理由和持续测试覆盖，不能继续作为未排期债务存在。

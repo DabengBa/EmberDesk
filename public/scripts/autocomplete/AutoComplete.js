@@ -5,6 +5,7 @@ import { AutoCompleteFuzzyScore } from './AutoCompleteFuzzyScore.js';
 import { BlankAutoCompleteOption } from './BlankAutoCompleteOption.js';
 import { AutoCompleteNameResult } from './AutoCompleteNameResult.js';
 import { AutoCompleteSecondaryNameResult } from './AutoCompleteSecondaryNameResult.js';
+import { limitAutocompleteResults, sortAutocompleteResults } from './autocomplete-ranking.js';
 
 /**@readonly*/
 /**@enum {Number}*/
@@ -378,7 +379,7 @@ export class AutoComplete {
             this.fuzzyRegex = /(.*)(.*)(.*)/;
         }
 
-        this.result = this.result
+        const resultOptions = this.result
             // update remaining options
             .map(option => {
                 // build element
@@ -395,21 +396,18 @@ export class AutoComplete {
                 // update the name to highlight the matched chars
                 this.updateName(option);
                 return option;
-            })
-            // sort by priority first, then by fuzzy score or alphabetical
-            .toSorted((a, b) => {
-                // First compare by sortPriority (lower = higher priority)
-                const priorityA = a.sortPriority ?? 100;
-                const priorityB = b.sortPriority ?? 100;
-                if (priorityA !== priorityB) {
-                    return priorityA - priorityB;
-                }
-                // Then by fuzzy score or alphabetical
-                if (this.matchType == 'fuzzy') {
-                    return this.fuzzyScoreCompare(a, b);
-                }
-                return a.name.localeCompare(b.name);
             });
+
+        this.result = sortAutocompleteResults(resultOptions, {
+            query: this.name,
+            matchType: this.matchType,
+            fuzzyCompare: this.fuzzyScoreCompare.bind(this),
+        });
+
+        this.result = limitAutocompleteResults(this.result, {
+            query: this.name,
+            isSlashCommand: this.effectiveParserResult == this.parserResult && this.text.trimStart().startsWith('/'),
+        });
 
 
         if (this.isForceHidden) {

@@ -44,3 +44,4 @@ Delete or avoid adding briefs that are:
 | `react-phase1-sprint2-setup-page.md` | Preserves the React Setup rollout intent, feature-flag/fallback boundary, and TanStack Form / Query / Zod adoption requirement. |
 | `react-phase1-sprint3-settings-panel.md` | Preserves the React Settings entry intent, the explicit exclusion of World Info / Backgrounds / Extensions, and the TanStack adoption gate. |
 | `react-phase2-character-library-panel-sprints-1-3.md` | Preserves the delivered Phase 2 Character Library panel-island intent, including search/sort/tag/bulk expectations and legacy tag-control ownership. |
+| `react-phase3b-visible-message-row-renderer.md` | Preserves the approved Phase 3B first slice: React takes over safe visible MessageRow rendering while actions, composer, slash UI, and provider transport remain separate later sprints. |
