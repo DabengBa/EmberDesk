@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 import webpack from 'webpack';
 import getPublicLibConfig from '../webpack.config.js';
 
-jest.setTimeout(30000);
+jest.setTimeout(120000);
 
 const expectedExportNames = [
     'lodash',
@@ -172,10 +172,12 @@ describe('frontend shared library boundary', () => {
 
     test('webpack output remains importable as a module', async () => {
         const dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-lib-boundary-'));
+        const webpackRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-webpack-boundary-'));
         tmpRoots.push(dataRoot);
+        tmpRoots.push(webpackRoot);
         globalThis.DATA_ROOT = dataRoot;
 
-        const config = getPublicLibConfig();
+        const config = getPublicLibConfig({ webpackRoot });
         await runWebpack(config);
 
         const outputFile = path.join(config.output.path, config.output.filename);

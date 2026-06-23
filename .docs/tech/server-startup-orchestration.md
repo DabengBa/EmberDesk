@@ -34,6 +34,7 @@ The split between 4a and 4b exists so that signal handlers are registered as soo
 Constraints:
 
 - `ServerStartup` is not modified. It owns IP auto-detection, HTTP/HTTPS server creation, and listen failure handling independently.
+- Per [ADR-0010](../adr/0010-express-runtime-owner-boundary.md), Express remains the accepted runtime owner for this host chain; narrow route-island experiments do not authorize host replacement.
 - Middleware order is preserved: helmet -> compression -> responseTime -> bodyParser -> CORS -> auth -> whitelist -> host whitelist -> access log -> sessions -> user data -> CSRF -> public/static routes -> auth wall -> CORS proxy -> upload parsing -> deprecated redirects -> domain routes -> error handler -> 404.
 - Cleanup order is preserved: statsOnExit -> cleanupPlugins -> diskCache.dispose -> disposeCharacterIndexDatabases -> setWindowTitle -> process.exit.
 - Express 5 compatibility routes are treated as production contracts, not migration experiments:

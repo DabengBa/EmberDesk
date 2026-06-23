@@ -16,7 +16,7 @@
 2. **构建工具升级**：用 Vite 承接 `/lib.js` 主构建、共享 React app 和 panel bundles；Webpack 只保留为 deprecated fallback / Docker precompile path
 3. **类型安全**：渐进式引入 TypeScript，前后端类型共享
 4. **状态管理**：后续 Phase 4 再评估用 Zustand 替代 `globalThis.SillyTavern` 全局对象；当前代码仍保留 legacy globals 兼容面
-5. **后端 API 现代化**：后续 Phase 5 再评估用 Hono 替代 Express；当前代码仍以 Express 5 为 API owner
+5. **后端 API 边界评估**：后续 Phase 5 再评估 typed API / route boundary 工具是否值得引入；当前代码仍以 Express 5 为 API owner，不预设 Hono 替换 Express
 6. **性能优化**：虚拟滚动优化长列表，启动时间和交互响应不劣化
 7. **扩展兼容性**：保持 `@sillytavern/*`、`eventSource`、`event_types` 兼容层 ≥6 个月
 
@@ -118,13 +118,17 @@
 │  ├─ phase4-sprint1-zustand-stores.md
 │  ├─ phase4-sprint2-compat-bridge.md
 │  └─ phase4-sprint3-extension-guide.md
-├─ react-phase5-backend-api/
-│  ├─ README.md
-│  ├─ phase5-sprint1-hono-routes.md          # Sprint 36: Hono 路由
-│  ├─ phase5-sprint2-drizzle-orm.md          # Sprint 38: Drizzle ORM
-│  └─ phase5-sprint3-express-sunset.md       # Sprint 40: Express 完全切换
-└─ react-phase6-extension-compat/
-   └─ README.md                               # 持续维护，无独立 Sprint
+├─ react-phase6-extension-compat/
+│  └─ README.md                               # 持续维护，无独立 Sprint
+└─ react-phase7-full-owner-cutover/
+   ├─ README.md
+   ├─ phase7-sprint1-character-library-full-owner-cutover.md
+   ├─ phase7-sprint2-world-info-full-owner-cutover.md
+   ├─ phase7-sprint3-background-library-full-owner-cutover.md
+   ├─ phase7-sprint4-extensions-host-full-owner-cutover.md
+   ├─ phase7-sprint5-main-chat-transport-full-owner-cutover.md
+   ├─ phase7-sprint6-main-chat-renderer-windowing-full-owner-cutover.md
+   └─ phase7-sprint7-workspace-shell-global-compatibility-decision.md
 ```
 
 ### 命名规范
@@ -132,7 +136,7 @@
 - **Phase 目录**：`react-phase{N}-{phase-slug}/`
 - **Phase README**：`README.md`（Phase 概览、目标、验证门）
 - **Sprint Spec**：`phase{N}-sprint{M}-{feature-slug}.md`
-  - `N`: Phase 编号（0-5）
+  - `N`: Phase 编号（0-7）
   - `M`: Phase 内 Sprint 序号（1, 2, 3...）
   - `feature-slug`: 功能描述（kebab-case）
 
@@ -185,7 +189,7 @@
 - ✅ Phase 2 Sprint 4-7 已推进到 guarded host/status bridge：`features.react.panels.worldInfo` / `backgroundLibrary` / `extensionsHost`、`public/scripts/workspace-panels-react-bridge.js`、`app/workspace-panels.tsx` 和 `build:react:workspace-panels` 已接线；World Info、Background Library、Extensions Host 现在可在 flag 开启时显示独立 readiness/status host。
 - ✅ ADR-0007 已接受，用于替代原先的 ADR 占位：早期 React 迁移采用 page/panel islands + legacy fallback，而不是一次性 SPA cutover。
 - 📋 Phase 2 Sprint 4-7 尚未完成完整 panel 行为迁移：World Info activation/import/regex/delete、Background upload/delete/rename/select/slash behavior、Extensions discovery/mount/API/install/update/delete behavior 仍由 legacy 面板拥有；当前 React host 只呈现受保护状态面。
-- 📋 TanStack Start、Hono、Zustand、Drizzle ORM、Vitest、shadcn/ui 和 Ant Design 仍是后续候选或原始推荐栈内容；当前代码事实只支持把 React 19、TanStack Router、TanStack Query、TanStack Form、Zod、TanStack Virtual、Vite 8、Tailwind v4、TypeScript 6 和 ESLint 10 写成已采用。
+- 📋 TanStack Start、Hono、Drizzle ORM、Vitest、shadcn/ui 和 Ant Design 仍是后续候选或原始推荐栈内容；当前代码事实只支持把 React 19、TanStack Router、TanStack Query、TanStack Form、Zod、TanStack Virtual、Vite 8、Tailwind v4、TypeScript 6、ESLint 10，以及在 Phase 4 已引入的 Zustand 写成已采用。
 
 ### 代码路径（预期）
 
@@ -199,7 +203,7 @@ D:\DEV\EmberDesk\
 │  ├─ lib/                        # 工具函数
 │  ├─ compat/                     # 兼容层
 │  │  └─ globalBridge.ts          # globalThis.SillyTavern 桥接
-│  └─ server/                     # Hono API（后期）
+│  └─ server/                     # typed API / route boundary experiments（若 Phase 5 证明值得引入）
 ├─ src/                           # 现有 Express 后端（保持）
 ├─ public/                        # 现有 jQuery 前端（逐步淘汰）
 └─ .docs/
@@ -213,7 +217,8 @@ D:\DEV\EmberDesk\
       ├─ react-phase2-sidebars/
       ├─ react-phase3-main-chat/
       ├─ react-phase4-state-management/
-      └─ react-phase5-backend-api/
+      ├─ react-phase6-extension-compat/
+      └─ react-phase7-full-owner-cutover/
 ```
 
 ### 验证门

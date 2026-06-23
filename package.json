@@ -60,6 +60,7 @@
         "handlebars": "^4.7.9",
         "helmet": "^8.1.0",
         "highlight.js": "^11.11.1",
+        "hono": "4.12.25",
         "host-validation-middleware": "^0.1.1",
         "html-entities": "^2.6.0",
         "iconv-lite": "^0.6.3",

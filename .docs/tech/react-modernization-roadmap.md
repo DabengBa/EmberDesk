@@ -28,12 +28,12 @@
 | 构建 | Vite 8 + deprecated Webpack fallback | 已采用 | Vite 构建 `/lib.js`、共享 React app、character-library panel bundle，以及 workspace panel action-island bundle；Webpack 仅保留为 `/lib.js` deprecated fallback / Docker precompile path。 |
 | 样式 | Tailwind CSS v4 + 既有 CSS | 已采用 | Tailwind v4 接入 React app；主工作区 legacy CSS 仍是现有页面和扩展兼容面的 owner。 |
 | UI 组件 | 本地 React 组件 | 已采用 | 当前代码使用 `app/components/*` 本地组件；shadcn/ui、Ant Design 尚未进入 `package.json`，不能写成已采用依赖。 |
-| API | Express 5 | 当前保留 | Hono 属于 Phase 5 未来候选，尚未安装或接管 API；迁移前必须有 ADR 和路由兼容证明。 |
+| API | Express 5 + narrow Hono route island | 当前保留 / 窄试点已完成 | Express 仍是 runtime owner；Phase 5 Sprint 1 只把 `POST /api/moving-ui/save` 迁到 Express 宿主下的 Hono route island，见 [ADR-0008](../adr/0008-hono-route-island-under-express-host.md) 与 [ADR-0010](../adr/0010-express-runtime-owner-boundary.md)。 |
 | 数据获取 | TanStack Query | 已采用 | React login/setup/settings、character-library panel、workspace panel shell，以及 World Info / Background Library / Extensions Host 的 guarded React state/action surfaces 已使用 TanStack Query。 |
 | 表单 | TanStack Form + Zod | 已采用 | React login/setup/settings、character-library toolbar、World Info controls、Background Library filter/sort controls 和 Extensions Host Extras controls 的 React-owned 表单/呈现态使用 TanStack Form + Zod；legacy-owned 控件可通过 host 边界保留。 |
 | 列表性能 | TanStack Virtual | 已采用 | Character Library panel 在大页尺寸下用 `@tanstack/react-virtual` 限制同时挂载行数；main-chat `mainChatMessageList` island 现在也用它做 headless measurement / snapshot / restore controller，但仍不渲染第二套可见消息列表。 |
 | 状态 | Zustand + legacy compatibility globals | 已采用 / 兼容保留 | Zustand 已用于 workspace panel mount/update/unmount store 和 main-chat observation store；`globalThis.SillyTavern`、`eventSource`、`event_types` 仍是兼容 owner，最终删除/冻结归 Phase 7。 |
-| 数据层 | file-backed user data + derived SQLite cache | 当前保留 | Drizzle ORM 尚未采用；SQLite 仍只作为 derived cache，不是用户数据正本。 |
+| 数据层 | file-backed user data + derived SQLite cache | 当前保留 | Phase 5 Sprint 2 已明确当前不采用 Drizzle；SQLite 仍只作为 derived cache，不是用户数据正本，见 [ADR-0009](../adr/0009-derived-cache-sqlite-drizzle-decision.md)。 |
 | 测试 | Jest + Playwright | 当前保留 | Vitest 尚未采用；现有验证仍以 Jest unit、Playwright E2E、docs compiler 和 focused compatibility tests 为主。 |
 | 工具 | ESLint / typecheck / focused proof scripts | 当前保留 | React Doctor 尚未采用；性能与逻辑证明依赖现有 runner 和 `.docs/logic-description/*_sandbox_proof.py`。 |
 
@@ -215,7 +215,7 @@ bun run docs:check
 | legacy `chat_truncation` / `#show_more_messages` load-more 算法 | `Phase 4B` 抽取 windowing contract，`Phase 7 Sprint 6` 完成 full owner cutover | 当前 React 只做 headless measurement / restore；Phase 4B 先证明 long-chat performance 和 compatibility，Phase 7 再移除 legacy load-more owner。 |
 | `globalThis.SillyTavern`、`eventSource`、`event_types`、jQuery globals | Phase 4 / Phase 6 建兼容层，`Phase 7 Sprint 7` 审核是否可退出 | 通过 Zustand stores 和兼容层逐步收口；兼容 exports 在 Phase 6 维护期内保留，Phase 7 只能在常用扩展验证和废弃周期完成后决定删除、冻结或长期保留。 |
 | third-party extension API、mount compatibility、migration guide | Phase 4 / Phase 6 建桥和维护，`Phase 7 Sprint 4 / Sprint 7` 完成 owner/fallback 退出判断 | Phase 4 建兼容桥和迁移指南，Phase 6 维护废弃警告、社区迁移和常用扩展验证；Extensions Host full owner cutover 不得先于这些证据完成。 |
-| Express route owner / typed API / derived-cache ORM | Phase 5 | Hono / Drizzle 仍是后端现代化阶段，不与 Phase 3B 主聊天 UI closure 混合。 |
+| Express route owner / typed API / derived-cache ORM | Phase 5（Sprint 1-3 已完成） | Hono 已完成一个 Express-hosted route-island proof；Drizzle 当前不采用；Express 继续保留为 runtime owner。 |
 | 移除 guarded island fallback 或切 full SPA workspace | `Phase 7: Full owner cutover and legacy fallback retirement` | 不再悬空为泛化 Future；Phase 7 各 sprint 逐面移除 fallback，full SPA workspace shell 仍必须有 ADR，证明扩展兼容、性能和 rollback 策略。 |
 
 ---
@@ -252,21 +252,33 @@ bun run perf:interaction
 
 ---
 
-### Phase 5: 后端 API 现代化（3 个月）
+### Phase 5: Typed API 与后端边界评估（3 个月）
 
-**目标**：用 Hono 替代 Express，建立类型安全的 API 层
+**目标**：评估并有限引入 typed API / route boundary 工具，而不是预设替换 Express；默认继续保持 Express 5 为 runtime owner，除非 ADR 和实证证明更进一步的切换值得做且可回滚
 
-📋 **详细规范**：[Phase 5 README](../specs/react-phase5-backend-api/README.md)
+📋 **归档记录**：[ADR-0008](../adr/0008-hono-route-island-under-express-host.md) · [ADR-0009](../adr/0009-derived-cache-sqlite-drizzle-decision.md) · [ADR-0010](../adr/0010-express-runtime-owner-boundary.md)
+
+**当前执行状态**：
+- `Sprint 1 / Hono route island`：已完成。`POST /api/moving-ui/save` 现在由 Express 宿主下的 Hono route island 拥有；body parsing、session、user、CSRF、auth wall、error/404 仍由 Express 宿主 owner 保留。见 [ADR-0008](../adr/0008-hono-route-island-under-express-host.md)。
+- `Sprint 2 / Drizzle decision gate`：已完成，结论为当前不采用 Drizzle。`character-index.sqlite` 继续使用 handwritten `node:sqlite` helper，derived-cache rebuild / fallback / reset-threshold contract 不变。见 [ADR-0009](../adr/0009-derived-cache-sqlite-drizzle-decision.md)。
+- `Sprint 3 / Express runtime owner gate`：已完成，结论为继续保留 Express 5 为 backend runtime owner。Hono route island proof 只授权窄 route owner 试点，不授权顶层 runtime replacement。见 [ADR-0010](../adr/0010-express-runtime-owner-boundary.md)。
 
 **Sprint 列表**：
-- 📋 [Sprint 1: Hono 路由搭建](../specs/react-phase5-backend-api/phase5-sprint1-hono-routes.md)（3 周）
-- 📋 [Sprint 2: Drizzle derived cache](../specs/react-phase5-backend-api/phase5-sprint2-drizzle-derived-cache.md)（3 周）
-- 📋 [Sprint 3: Express sunset gate](../specs/react-phase5-backend-api/phase5-sprint3-express-sunset-gate.md)（2 周）
+- ✅ [Sprint 1: Hono 路由搭建](../tech/briefs/react-phase5-sprint1-hono-route-shell-under-express-host.md)（3 周；落地为 `moving-ui/save` route island，见 [ADR-0008](../adr/0008-hono-route-island-under-express-host.md)）
+- ✅ [Sprint 2: Drizzle derived-cache decision gate](../tech/briefs/react-phase5-sprint2-drizzle-derived-cache-decision-gate.md)（3 周；结论为当前不采用，见 [ADR-0009](../adr/0009-derived-cache-sqlite-drizzle-decision.md)）
+- ✅ [Sprint 3: Express retention / sunset decision gate](../tech/briefs/react-phase5-sprint3-express-retention-or-sunset-decision-gate.md)（2 周；结论为保留 Express runtime owner，见 [ADR-0010](../adr/0010-express-runtime-owner-boundary.md)）
 
 **进入条件与边界**：
-- Hono 接管前必须先有 ADR，证明 Express middleware order、sessions、CSRF、auth wall、static/public routes、private endpoints、uploads、error/404 handlers 的兼容策略。
+- Phase 5 先回答“值不值得做”和“能不能少做”，再决定是否引入 Hono / Drizzle；typed API 价值不等于必须替换 Express。
+- Hono 若进入实现，首选模式是 Express-hosted route island，而不是顶层 runtime replacement。任何更大范围切换都必须先有 ADR，证明 Express middleware order、sessions、CSRF、auth wall、static/public routes、private endpoints、uploads、plugin mounting、error/404 handlers 的兼容策略。
 - Drizzle 只能先接管 derived SQLite cache；file-backed user data 仍是正本。任何把 SQLite 升级为 canonical storage 的方案必须另起 ADR。
-- Express sunset 不得在 Hono route parity、middleware-order proof、API compatibility tests、startup proof 和 rollback plan 完成前开始。
+- Express sunset 不是默认结果；若 route parity、rollback、plugin mounting 或 security middleware proof 不足，Phase 5 的有效结论可以是“保留 Express runtime owner，延期 sunset”。
+- `tests/express5-route-compatibility.test.js` 是宿主链保护门，不是 Hono parity 的充分证明；Hono route island 需要单独的 focused parity proof。
+
+**Phase 5 当前结论**：
+- EmberDesk 已证明一个可回滚的 Express-hosted Hono route island 模式，但没有把它提升为 backend runtime migration。
+- EmberDesk 当前没有证据证明 Drizzle 在 `character-index.sqlite` derived-cache 切片上值得引入。
+- EmberDesk 当前没有证据证明 Express runtime owner 已可 sunset；后续若再讨论，只能以新 spec/ADR 和更宽的 parity proof 重新开启。
 
 **验证门**：
 ```powershell
@@ -385,23 +397,28 @@ bun run docs:check
    - 理由：降低早期 React 化风险，保持 legacy rollback、扩展兼容边界和同入口迁移体验
    - 权衡：短期保留 React/jQuery 双实现、共享 build fallback，以及面板 bridge 复杂度
 
-2. **ADR-YYYY: 从 Express 迁移到 Hono**
-   - 决策：用 Hono 替代 Express 作为 API 框架
-   - 理由：类型安全、性能、现代化
-   - 权衡：生态成熟度、现有中间件迁移成本
+2. **[ADR-0008: Hono route island under Express host](../adr/0008-hono-route-island-under-express-host.md)**
+   - 决策：仅在 Express 宿主下，以 `POST /api/moving-ui/save` 为首个 Hono route island 试点；不授权顶层 runtime replacement
+   - 理由：先验证 typed route ergonomics 能否在不打穿现有 host chain 的前提下带来真实收益
+   - 权衡：更好的 typed contract / RPC 体验 vs. 新框架引入、测试面扩大、宿主/子路由双栈复杂度
 
-3. **ADR-ZZZZ: 引入 Drizzle ORM**
-   - 决策：用 Drizzle 管理 SQLite derived cache
-   - 理由：类型安全、迁移管理、查询构建
-   - 权衡：学习曲线、对现有 SQL 查询的重写成本
+3. **[ADR-0009: Derived cache SQLite Drizzle decision](../adr/0009-derived-cache-sqlite-drizzle-decision.md)**
+   - 决策：当前不为 `character-index.sqlite` derived-cache slice 引入 Drizzle，继续保留 handwritten `node:sqlite` helper
+   - 理由：保持 derived cache 可重建、可回滚，同时避免为简单 sidecar 查询引入额外抽象
+   - 权衡：schema tooling 和迁移管理 vs. 学习曲线、额外依赖、对现有 `node:sqlite` helper 的重写成本
 
-4. **ADR-AAAA: Phase 7 full owner cutover / guarded fallback retirement**
+4. **[ADR-0010: Express runtime owner boundary](../adr/0010-express-runtime-owner-boundary.md)**
+   - 决策：继续保留 Express 作为 backend runtime owner；未来若讨论 sunset，必须先补齐 middleware-order、plugin mount、proxy/upload/error/404、startup split 和 rollback proof
+   - 理由：route-island proof 不等于 whole-runtime parity；当前宿主链仍承载生产关键边界
+   - 权衡：保留成熟宿主与回滚确定性 vs. 持续承受双栈渐进现代化成本
+
+5. **ADR-AAAA: Phase 7 full owner cutover / guarded fallback retirement**
    - 决策：逐 surface 判断是否删除 guarded island fallback、build-missing fallback、legacy DOM bridge，或冻结为长期 compatibility facade；full SPA workspace shell 也必须在此 ADR 家族下决策
    - 理由：只有当扩展兼容、性能、路由、rollback、用户数据安全和对应 Phase 7 sprint checklist 均有证明时才允许推进
    - 权衡：更少 legacy 复杂度和更清晰 owner split vs. 更高上线、扩展破坏和回滚成本
    - 覆盖：Character Library、World Info、Background Library、Extensions Host、main-chat transport、main-chat renderer/windowing、workspace shell/global compatibility exports 必须分别有 ADR 或 ADR update
 
-5. **ADR-BBBB: Canonical storage 变更**
+6. **ADR-BBBB: Canonical storage 变更**
    - 决策：是否让 SQLite / ORM 从 derived cache 进入用户数据正本路径
    - 理由：当前路线图明确 file-backed user data 是正本，任何改变都超出 Phase 5 默认边界
    - 权衡：查询能力和类型安全 vs. 数据迁移、备份、回滚和用户数据丢失风险
@@ -444,10 +461,10 @@ bun run docs:check
   ├─ 月 1: 扩展迁移指南 + 兼容性验证
   └─ 后续 backlog: Phase 4A transport expansion + Phase 4B renderer extraction（按独立 spec 分批执行）
 
-2028 Q1-Q2 (月 2-4)：Phase 5 后端 API 现代化
-  ├─ 月 2: Hono API 路由搭建
-  ├─ 月 3: Drizzle ORM 集成
-  └─ 月 4: Express → Hono 完全切换
+2028 Q1-Q2 (月 2-4)：Phase 5 Typed API 与后端边界评估
+  ├─ 月 2: Express-hosted Hono route island 试点
+  ├─ 月 3: Drizzle derived-cache decision gate
+  └─ 月 4: Express retention or sunset ADR decision
 
 2028 Q2+：Phase 6 扩展兼容性演进（持续）
   ├─ 维护期: 常用扩展验证、迁移指南、废弃警告
@@ -512,7 +529,7 @@ bun run docs:check
 未来规划绑定点：
 - future React-owned main-chat modules under `app/components/main-chat/*`, `app/lib/main-chat/*` and the matching TanStack Form / Query integration layer（Phase 4A / 4B 的 excluded transport expansion、formatter extraction、long-chat renderer/windowing extraction；exact file map to be fixed per-sprint spec）
 - `app/stores/*` (Phase 4 Zustand stores)
-- `app/server/routes/*` (Phase 5 Hono API)
+- `src/endpoints/*` 与未来经单独 spec/ADR 批准的 route-island helpers（Phase 5 当前只落地 `src/endpoints/moving-ui.js` 的 Hono island；未形成独立后端 Hono app 目录）
 - `app/compat/globalBridge.ts` (Phase 4 全局兼容层)
 - Phase 7 cutover specs / ADR updates will bind final owner exits for character library, World Info, background library, extensions host, main-chat transport, main-chat renderer/windowing, workspace shell, and global compatibility exports; exact file map must be fixed per sprint before deleting or freezing any fallback.
 

@@ -13,6 +13,7 @@ const repoRoot = path.resolve(__dirname, '..');
 
 const tmpConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-login-react-config-'));
 const configPath = path.join(tmpConfigDir, 'config.yaml');
+const tmpRoots = [];
 
 beforeAll(() => {
     fs.writeFileSync(configPath, [
@@ -28,6 +29,9 @@ beforeAll(() => {
 
 afterEach(() => {
     delete process.env.EMBERDESK_FEATURES_REACT_PAGES_LOGIN;
+    for (const root of tmpRoots.splice(0)) {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
 });
 
 function listen(app) {
@@ -60,7 +64,7 @@ function createRequestContext() {
     };
 }
 
-async function createLoginRouteApp() {
+async function createLoginRouteApp({ reactLoginDistRoot } = {}) {
     globalThis.COMMAND_LINE_ARGS = { basicAuthMode: false };
 
     const usersModule = await import(`../src/users.js?loginRoute=${Date.now()}-${Math.random()}`);
@@ -72,11 +76,11 @@ async function createLoginRouteApp() {
         Object.assign(request, createRequestContext());
         next();
     });
-    app.get('/login', usersModule.loginPageMiddleware);
+    app.get('/login', usersModule.createLoginPageMiddleware({ reactLoginDistRoot }));
     app.get('/login.html', (_request, response) => {
         response.sendFile('login.html', { root: path.join(repoRoot, 'public') });
     });
-    app.use(featureModule.REACT_LOGIN_BASE_PATH, middlewareModule.getReactLoginServeMiddleware());
+    app.use(featureModule.REACT_LOGIN_BASE_PATH, middlewareModule.getReactLoginServeMiddleware(reactLoginDistRoot));
     app.use(express.static(path.join(repoRoot, 'public'), {}));
     return app;
 }
@@ -125,8 +129,9 @@ describe('login React route flag', () => {
 
     test('serves the React login shell from /login and keeps /login.html as fallback when the flag is enabled', async () => {
         process.env.EMBERDESK_FEATURES_REACT_PAGES_LOGIN = 'true';
-        const distRoot = path.join(repoRoot, 'app', 'dist');
+        const distRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-login-react-dist-'));
         const assetsRoot = path.join(distRoot, 'assets');
+        tmpRoots.push(distRoot);
         fs.mkdirSync(assetsRoot, { recursive: true });
         fs.writeFileSync(path.join(distRoot, 'index.html'), [
             '<!DOCTYPE html>',
@@ -142,7 +147,7 @@ describe('login React route flag', () => {
         ].join('\n'), 'utf8');
         fs.writeFileSync(path.join(assetsRoot, 'login.js'), 'console.log("react login");', 'utf8');
 
-        const app = await createLoginRouteApp();
+        const app = await createLoginRouteApp({ reactLoginDistRoot: distRoot });
 
         await usingApp(app, async (url) => {
             const loginResponse = await fetch(`${url}/login?noauto=1`);

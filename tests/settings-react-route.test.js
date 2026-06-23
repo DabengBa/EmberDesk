@@ -13,6 +13,7 @@ const repoRoot = path.resolve(__dirname, '..');
 
 const tmpConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-settings-react-config-'));
 const configPath = path.join(tmpConfigDir, 'config.yaml');
+const tmpRoots = [];
 
 beforeAll(() => {
     fs.writeFileSync(configPath, [
@@ -30,6 +31,9 @@ beforeAll(() => {
 
 afterEach(() => {
     delete process.env.EMBERDESK_FEATURES_REACT_PAGES_SETTINGS;
+    for (const root of tmpRoots.splice(0)) {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
 });
 
 function listen(app) {
@@ -66,7 +70,7 @@ function createRequestContext(isLoggedIn = true) {
     };
 }
 
-async function createSettingsRouteApp({ isLoggedIn = true } = {}) {
+async function createSettingsRouteApp({ isLoggedIn = true, reactLoginDistRoot } = {}) {
     globalThis.COMMAND_LINE_ARGS = { basicAuthMode: false };
 
     const usersModule = await import(`../src/users.js?settingsRoute=${Date.now()}-${Math.random()}`);
@@ -79,8 +83,8 @@ async function createSettingsRouteApp({ isLoggedIn = true } = {}) {
         Object.assign(request, createRequestContext(isLoggedIn));
         next();
     });
-    app.get('/settings', usersModule.settingsPageMiddleware);
-    app.use(basePathModule.REACT_LOGIN_BASE_PATH, middlewareModule.getReactLoginServeMiddleware());
+    app.get('/settings', usersModule.createSettingsPageMiddleware({ reactLoginDistRoot }));
+    app.use(basePathModule.REACT_LOGIN_BASE_PATH, middlewareModule.getReactLoginServeMiddleware(reactLoginDistRoot));
     app.use(express.static(path.join(repoRoot, 'public'), {}));
 
     return { app, featureModule };
@@ -561,8 +565,9 @@ describe('settings React route flag', () => {
 
     test('serves the React settings shell from /settings when the flag is enabled and the build exists', async () => {
         process.env.EMBERDESK_FEATURES_REACT_PAGES_SETTINGS = 'true';
-        const distRoot = path.join(repoRoot, 'app', 'dist');
+        const distRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-settings-react-dist-'));
         const assetsRoot = path.join(distRoot, 'assets');
+        tmpRoots.push(distRoot);
         fs.mkdirSync(assetsRoot, { recursive: true });
         fs.writeFileSync(path.join(distRoot, 'index.html'), [
             '<!DOCTYPE html>',
@@ -578,7 +583,7 @@ describe('settings React route flag', () => {
         ].join('\n'), 'utf8');
         fs.writeFileSync(path.join(assetsRoot, 'settings.js'), 'console.log("react settings");', 'utf8');
 
-        const { app, featureModule } = await createSettingsRouteApp();
+        const { app, featureModule } = await createSettingsRouteApp({ reactLoginDistRoot: distRoot });
 
         expect(featureModule.isReactSettingsEnabled()).toBe(true);
 

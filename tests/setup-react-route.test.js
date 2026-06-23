@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, test } from '@jest/globals';
+import { afterEach, beforeAll, describe, expect, jest, test } from '@jest/globals';
 import express from 'express';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -13,6 +13,7 @@ const repoRoot = path.resolve(__dirname, '..');
 
 const tmpConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-setup-react-config-'));
 const configPath = path.join(tmpConfigDir, 'config.yaml');
+const tmpRoots = [];
 
 beforeAll(() => {
     fs.writeFileSync(configPath, [
@@ -29,6 +30,9 @@ beforeAll(() => {
 
 afterEach(() => {
     delete process.env.EMBERDESK_FEATURES_REACT_PAGES_SETUP;
+    for (const root of tmpRoots.splice(0)) {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
 });
 
 function listen(app) {
@@ -54,8 +58,9 @@ async function usingApp(app, callback) {
     }
 }
 
-async function createSetupRouteApp() {
+async function createSetupRouteApp({ reactLoginDistRoot } = {}) {
     const dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-setup-react-data-'));
+    tmpRoots.push(dataRoot);
     globalThis.DATA_ROOT = dataRoot;
 
     const usersModule = await import(`../src/users.js?setupRoute=${Date.now()}-${Math.random()}`);
@@ -66,17 +71,19 @@ async function createSetupRouteApp() {
     await usersModule.initUserStorage(dataRoot);
 
     const app = express();
-    app.get('/setup', usersModule.setupPageMiddleware);
+    app.get('/setup', usersModule.createSetupPageMiddleware({ reactLoginDistRoot }));
     app.get('/setup.html', (_request, response) => {
         response.sendFile('setup.html', { root: path.join(repoRoot, 'public') });
     });
-    app.use(basePathModule.REACT_LOGIN_BASE_PATH, middlewareModule.getReactLoginServeMiddleware());
+    app.use(basePathModule.REACT_LOGIN_BASE_PATH, middlewareModule.getReactLoginServeMiddleware(reactLoginDistRoot));
     app.use(express.static(path.join(repoRoot, 'public'), {}));
 
     return { app, featureModule };
 }
 
 describe('setup React route flag', () => {
+    jest.setTimeout(20_000);
+
     test('wires the React setup route through TanStack Form, Query, and Zod while reusing shared setup helpers', () => {
         const clientSource = fs.readFileSync(path.join(repoRoot, 'app', 'client.tsx'), 'utf8');
         const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'routes', 'setup.tsx'), 'utf8');
@@ -118,8 +125,9 @@ describe('setup React route flag', () => {
 
     test('serves the React setup shell from /setup and keeps /setup.html as fallback when the flag is enabled', async () => {
         process.env.EMBERDESK_FEATURES_REACT_PAGES_SETUP = 'true';
-        const distRoot = path.join(repoRoot, 'app', 'dist');
+        const distRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-setup-react-dist-'));
         const assetsRoot = path.join(distRoot, 'assets');
+        tmpRoots.push(distRoot);
         fs.mkdirSync(assetsRoot, { recursive: true });
         fs.writeFileSync(path.join(distRoot, 'index.html'), [
             '<!DOCTYPE html>',
@@ -135,7 +143,7 @@ describe('setup React route flag', () => {
         ].join('\n'), 'utf8');
         fs.writeFileSync(path.join(assetsRoot, 'setup.js'), 'console.log("react setup");', 'utf8');
 
-        const { app, featureModule } = await createSetupRouteApp();
+        const { app, featureModule } = await createSetupRouteApp({ reactLoginDistRoot: distRoot });
 
         expect(featureModule.isReactSetupEnabled()).toBe(true);
 

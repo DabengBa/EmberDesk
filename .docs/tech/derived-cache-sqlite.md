@@ -18,6 +18,8 @@ The helper is infrastructure only. It owns:
 
 The helper does not own business rules. Entity modules continue to own their schema, payloads, freshness keys, invalidation rules, and filesystem fallback behavior.
 
+As of [ADR-0009](../adr/0009-derived-cache-sqlite-drizzle-decision.md), EmberDesk explicitly does not adopt Drizzle for this slice. The current handwritten `node:sqlite` helper remains the accepted fit because it already covers the derived-cache lifecycle and fallback contract without adding an ORM layer.
+
 ## Derived Cache Contract
 
 Canonical user data remains file-backed. SQLite sidecars are rebuildable acceleration artifacts under `_cache`.

@@ -65,6 +65,7 @@
         "handlebars": "^4.7.9",
         "helmet": "^8.1.0",
         "highlight.js": "^11.11.1",
+        "hono": "4.12.25",
         "host-validation-middleware": "^0.1.1",
         "html-entities": "^2.6.0",
         "iconv-lite": "^0.6.3",
@@ -1136,6 +1137,8 @@
     "helmet": ["helmet@8.1.0", "https://registry.npmmirror.com/helmet/-/helmet-8.1.0.tgz", {}, "sha512-jOiHyAZsmnr8LqoPGmCjYAaiuWwjAPLgY8ZX2XrmHawt99/u1y6RgrZMTeoPfpUbV96HOalYgz1qzkRbw54Pmg=="],
 
     "highlight.js": ["highlight.js@11.11.1", "https://registry.npmmirror.com/highlight.js/-/highlight.js-11.11.1.tgz", {}, "sha512-Xwwo44whKBVCYoliBQwaPvtd/2tYFkRQtXDWj1nackaV2JPXx3L0+Jvd8/qCJ2p+ML0/XVkJ2q+Mr+UVdpJK5w=="],
+
+    "hono": ["hono@4.12.25", "https://registry.npmmirror.com/hono/-/hono-4.12.25.tgz", {}, "sha512-2NFaIyNVgJmBs/ecmtGzlmluTFs5cHEWGTdu0t1HBwYzoGXOL5nUQBRMXsXWla5i4KkG//QMzVP88m1+I3fdAQ=="],
 
     "host-validation-middleware": ["host-validation-middleware@0.1.1", "https://registry.npmmirror.com/host-validation-middleware/-/host-validation-middleware-0.1.1.tgz", {}, "sha512-fakcpp+x4nbP0fACY5gaHWpaOfstq3w8uB6wvhbPBLqH9GV/tdiM9Ht5mclZVbUuPLGBw1bkH5yyTD6HZq057g=="],
 

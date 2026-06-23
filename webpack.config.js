@@ -55,13 +55,18 @@ const appVersion = await getVersion();
  * 1. Docker has got cache and the output file pre-baked.
  * 2. Non-Docker environments use the global DATA_ROOT variable to determine the cache and output directories.
  * @param {object} options Configuration options.
- * @param {boolean} [options.forceDist=false] Whether to force the use the /dist folder.
+  * @param {boolean} [options.forceDist=false] Whether to force the use the /dist folder.
+ * @param {string} [options.webpackRoot] Explicit Webpack root for test-local builds.
  * @param {boolean} [options.pruneCache=false] Whether to prune old cache directories.
  * @returns {import('webpack').Configuration}
  * @throws {Error} If the DATA_ROOT variable is not set.
  * */
-export default function getPublicLibConfig({ forceDist = false, pruneCache = false } = {}) {
+export default function getPublicLibConfig({ forceDist = false, webpackRoot: explicitWebpackRoot, pruneCache = false } = {}) {
     function getWebpackRoot() {
+        if (typeof explicitWebpackRoot === 'string' && explicitWebpackRoot.length > 0) {
+            return path.resolve(explicitWebpackRoot);
+        }
+
         if (forceDist || isDocker()) {
             return path.resolve(process.cwd(), 'dist', '_webpack');
         }

@@ -21,6 +21,7 @@ The loading pipeline follows four phases:
 Constraints:
 
 - `loadPlugins(app, pluginsPath)` is the sole export consumed by `server-main.js`. The call signature is unchanged.
+- Per [ADR-0010](../adr/0010-express-runtime-owner-boundary.md), plugin mounting under `/api/plugins/{id}` is part of the retained Express runtime-owner boundary. Any future server-runtime sunset proposal must prove equivalent mount and cleanup semantics first.
 - `enableServerPlugins` uses lazy evaluation (same pattern as `getEnableAccounts` in `user-storage.js`).
 - Plugin shape contract: `info` object with required string fields `id`, `name`, `description`; `init` function; optional `exit` function.
 - Plugin ID must match `/^[a-z0-9_-]+$/` and be unique across all loaded plugins.

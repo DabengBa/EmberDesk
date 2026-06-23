@@ -2,7 +2,7 @@
 
 This directory only keeps active or future development specs.
 
-Completed Phase 0, Phase 1, Phase 2, Phase 3, and Phase 3B implementation specs have been removed from this active workspace. Durable completion records live in:
+Completed Phase 0, Phase 1, Phase 2, Phase 3, Phase 3B, and Phase 5 implementation specs have been removed from this active workspace. Durable completion records live in:
 
 - [React modernization roadmap](../tech/react-modernization-roadmap.md)
 - [Project history](../PROJECT_HISTORY.md)
@@ -15,7 +15,6 @@ Completed Phase 0, Phase 1, Phase 2, Phase 3, and Phase 3B implementation specs 
 | Folder | Roadmap phase | Purpose |
 |---|---|---|
 | [react-phase4-state-management](react-phase4-state-management/README.md) | Phase 4 / 4A / 4B | Zustand/global bridge, extension migration guidance, main-chat transport and renderer extraction evidence. |
-| [react-phase5-backend-api](react-phase5-backend-api/README.md) | Phase 5 | Typed API modernization, Hono route shell proof, Drizzle derived-cache boundary, Express sunset gate. |
 | [react-phase6-extension-compat](react-phase6-extension-compat/README.md) | Phase 6 | Extension compatibility evidence before any breaking cutover decision. |
 | [react-phase7-full-owner-cutover](react-phase7-full-owner-cutover/README.md) | Phase 7 | Full owner cutover and legacy fallback retirement, split by migrated surface. |
 

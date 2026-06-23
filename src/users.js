@@ -264,78 +264,91 @@ export function requireLoginMiddleware(request, response, next) {
 
 /**
  * Middleware to host the login page.
- * @param {import('express').Request} request Request object
- * @param {import('express').Response} response Response object
+ * @param {object} [options]
+ * @param {string} [options.reactLoginDistRoot]
+ * @returns {import('express').RequestHandler}
  */
-export async function loginPageMiddleware(request, response) {
-    if (!getEnableAccounts()) {
-        console.log('User accounts are disabled. Redirecting to index page.');
-        return response.redirect('/');
-    }
-
-    try {
-        const { basicAuthMode } = globalThis.COMMAND_LINE_ARGS;
-        const autoLogin = await tryAutoLogin(request, basicAuthMode);
-
-        if (autoLogin) {
+export function createLoginPageMiddleware({ reactLoginDistRoot } = {}) {
+    return async function loginPageMiddleware(request, response) {
+        if (!getEnableAccounts()) {
+            console.log('User accounts are disabled. Redirecting to index page.');
             return response.redirect('/');
         }
-    } catch (error) {
-        console.error('Error during auto-login:', error);
-    }
 
-    if (isReactLoginEnabled()) {
-        if (hasReactLoginBuild()) {
-            return sendReactLoginIndex(response);
+        try {
+            const { basicAuthMode } = globalThis.COMMAND_LINE_ARGS;
+            const autoLogin = await tryAutoLogin(request, basicAuthMode);
+
+            if (autoLogin) {
+                return response.redirect('/');
+            }
+        } catch (error) {
+            console.error('Error during auto-login:', error);
         }
 
-        console.warn('React login flag is enabled, but app/dist/index.html was not found. Falling back to public/login.html.');
-    }
+        if (isReactLoginEnabled()) {
+            if (hasReactLoginBuild(reactLoginDistRoot)) {
+                return sendReactLoginIndex(response, reactLoginDistRoot);
+            }
 
-    return response.sendFile('login.html', { root: path.join(serverDirectory, 'public') });
+            console.warn('React login flag is enabled, but app/dist/index.html was not found. Falling back to public/login.html.');
+        }
+
+        return response.sendFile('login.html', { root: path.join(serverDirectory, 'public') });
+    };
 }
 
 /**
  * Middleware to host the first-time setup page.
- * @param {import('express').Request} request Request object
- * @param {import('express').Response} response Response object
+ * @param {object} [options]
+ * @param {string} [options.reactLoginDistRoot]
+ * @returns {import('express').RequestHandler}
  */
-export async function setupPageMiddleware(request, response) {
-    if (!await needsSetup()) {
-        return response.redirect('/login');
-    }
-
-    if (isReactSetupEnabled()) {
-        if (hasReactLoginBuild()) {
-            return sendReactLoginIndex(response);
+export function createSetupPageMiddleware({ reactLoginDistRoot } = {}) {
+    return async function setupPageMiddleware(request, response) {
+        if (!await needsSetup()) {
+            return response.redirect('/login');
         }
 
-        console.warn('React setup flag is enabled, but app/dist/index.html was not found. Falling back to public/setup.html.');
-    }
+        if (isReactSetupEnabled()) {
+            if (hasReactLoginBuild(reactLoginDistRoot)) {
+                return sendReactLoginIndex(response, reactLoginDistRoot);
+            }
 
-    return response.sendFile('setup.html', { root: path.join(serverDirectory, 'public') });
+            console.warn('React setup flag is enabled, but app/dist/index.html was not found. Falling back to public/setup.html.');
+        }
+
+        return response.sendFile('setup.html', { root: path.join(serverDirectory, 'public') });
+    };
 }
 
 /**
  * Middleware to host the React settings page or fall back to the legacy workspace.
- * @param {import('express').Request} request Request object
- * @param {import('express').Response} response Response object
+ * @param {object} [options]
+ * @param {string} [options.reactLoginDistRoot]
+ * @returns {import('express').RequestHandler}
  */
-export function settingsPageMiddleware(request, response) {
-    if (shouldRedirectToLogin(request)) {
-        return response.redirect('/login');
-    }
-
-    if (isReactSettingsEnabled()) {
-        if (hasReactLoginBuild()) {
-            return sendReactLoginIndex(response);
+export function createSettingsPageMiddleware({ reactLoginDistRoot } = {}) {
+    return function settingsPageMiddleware(request, response) {
+        if (shouldRedirectToLogin(request)) {
+            return response.redirect('/login');
         }
 
-        console.warn('React settings flag is enabled, but app/dist/index.html was not found. Falling back to /.');
-    }
+        if (isReactSettingsEnabled()) {
+            if (hasReactLoginBuild(reactLoginDistRoot)) {
+                return sendReactLoginIndex(response, reactLoginDistRoot);
+            }
 
-    return response.redirect('/');
+            console.warn('React settings flag is enabled, but app/dist/index.html was not found. Falling back to /.');
+        }
+
+        return response.redirect('/');
+    };
 }
+
+export const loginPageMiddleware = createLoginPageMiddleware();
+export const setupPageMiddleware = createSetupPageMiddleware();
+export const settingsPageMiddleware = createSettingsPageMiddleware();
 
 /**
  * Creates a route handler for serving files from a specific directory.
