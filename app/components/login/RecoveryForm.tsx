@@ -65,7 +65,7 @@ export function RecoveryForm({
 
                 <div id="recoveryStep2" style={{ display: currentStep === 2 ? 'block' : 'none' }}>
                     {currentStep === 2 && (
-                        <p className="mb-4 rounded-md border border-zinc-800 bg-zinc-950/70 px-3 py-2 text-sm text-zinc-400">
+                        <p className="login-recovery-note">
                             恢复码会输出到服务端控制台，请联系管理员获取。
                         </p>
                     )}
@@ -125,13 +125,12 @@ export function RecoveryForm({
                 {errorMessage}
             </div>
 
-            <a href="#" className="login-forgot" id="cancelRecovery" onClick={(event) => {
-                event.preventDefault();
+            <button type="button" className="login-forgot" id="cancelRecovery" onClick={() => {
                 onCancel();
             }}
             >
                 返回登录
-            </a>
+            </button>
         </section>
     );
 }

@@ -55,7 +55,7 @@ The sprint files above remain the roadmap-facing anchors. The dated implementati
 
 ## Shared Validation Gate
 
-```powershell
+```bash
 bun run build:lib
 bun run build:react
 bun run build:react:character-library

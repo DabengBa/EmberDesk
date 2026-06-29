@@ -76,7 +76,7 @@ Neutral clarifications:
 
 Validation command:
 
-```powershell
+```bash
 bun run --cwd tests test:unit -- express5-route-compatibility.test.js moving-ui-hono-route-island.test.js --runInBand
 ```
 

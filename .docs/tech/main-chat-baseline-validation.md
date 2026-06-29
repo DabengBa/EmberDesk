@@ -19,7 +19,7 @@ It does not change product semantics and does not update `.docs/db/`.
 
 The baseline requires these commands:
 
-```powershell
+```bash
 bun run --cwd tests test:unit -- chat-workspace-structure.test.js third-party-extension-compatibility.test.js --runInBand
 bun run --cwd tests test:e2e -- chat-message-layout.e2e.js
 bun run --cwd tests test:e2e -- chat-message-rendering.e2e.js
@@ -27,7 +27,7 @@ bun run --cwd tests test:e2e -- chat-message-rendering.e2e.js
 
 Optional aggregate compatibility gate:
 
-```powershell
+```bash
 bun run test:compat
 ```
 

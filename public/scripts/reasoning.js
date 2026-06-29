@@ -1187,21 +1187,22 @@ function setReasoningEventHandlers() {
     });
 
     $(document).on('click', '.mes_reasoning_header', function (e) {
+        e.preventDefault();
         const details = $(this).closest('.mes_reasoning_details');
         // Along with the CSS rules to mark blocks not toggle-able when they are empty, prevent them from actually being toggled, or being edited
         if (details.find('.mes_reasoning').is(':empty')) {
-            e.preventDefault();
             return;
         }
+
+        const wasOpen = details.prop('open') === true;
+        details.prop('open', !wasOpen);
 
         // If we are in message edit mode and reasoning area is closed, a click opens and edits it
         const mes = $(this).closest('.mes');
         const mesEditArea = mes.find('#curEditTextarea');
-        if (mesEditArea.length) {
+        if (mesEditArea.length && !wasOpen) {
             const summary = $(mes).find('.mes_reasoning_summary');
-            if (!summary.attr('open')) {
-                summary.find('.mes_reasoning_edit').trigger('click');
-            }
+            summary.find('.mes_reasoning_edit').trigger('click');
         }
     });
 

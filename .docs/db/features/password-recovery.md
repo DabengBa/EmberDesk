@@ -11,47 +11,48 @@ related: [page.login, feature.login_submit]
 
 `feature.password_recovery` represents the two-step password reset flow available from the login page. It covers switching from the login card to the recovery card, requesting a recovery code, and submitting the code with a new password. It does not cover the underlying code-generation or hashing mechanisms.
 
-## Feature Purpose
+## Purpose
 
-This feature lets a user who has forgotten their password regain access to their account without contacting an administrator.
+Let a user reset a forgotten password from the login surface through a recovery-card flow that returns them to normal sign-in after reset.
 
-## Trigger Entry
+## User-Visible Contract
 
-- **Primary entry**: press "Forgot password?" on the login card.
-- **Return entry**: press "Back to sign in" on the recovery card to return to the login form.
+- The Forgot password entry switches the login card to the recovery card without leaving [Login](page.login).
+- The recovery flow has two visible phases: request a recovery code for a handle, then submit the code with a new password.
+- Recovery errors appear on the recovery card and do not reveal whether the handle exists.
+- Recovery codes are single-use and short-lived; EmberDesk does not promise email, SMS, or in-app code delivery, so the user must obtain the code out of band from the server operator.
+- A successful reset returns the user to the login card; it does not automatically authenticate them.
+- The Back to sign in action cancels recovery and restores the normal login card without changing the password.
 
-## Interaction IDs
+## Semantic Interaction IDs
 
 - `feature.password_recovery`: the full recovery flow from start to finish.
 - `feature.password_recovery.open`: switching from login card to recovery card.
-- `feature.password_recovery.send_code`: submitting the handle to receive a recovery code.
+- `feature.password_recovery.send_code`: requesting a recovery code for a handle.
 - `feature.password_recovery.reset`: submitting the code and new password.
 - `feature.password_recovery.cancel`: returning to the login card without completing recovery.
 
-## User Flow
+## Acceptance Workflows
 
-1. The user presses "Forgot password?" on the login card.
-2. EmberDesk shows the recovery card and hides the login card.
-3. The user enters their handle and presses "Send recovery code".
-4. EmberDesk sends the code request to the server; the code is printed to the server console.
-5. The recovery card expands to show the code and new-password fields.
-6. The user enters the recovery code and a new password, then presses "Reset password".
-7. On success, EmberDesk returns to the login card so the user can sign in with the new password.
-8. On failure, the error is shown on the recovery card.
+- As a user who forgot their password, from [Login](page.login) open Forgot password, request a code for the handle, obtain the code out of band, enter the code and a new password, then reset; EmberDesk must return to the login card and require a normal sign-in with the new password, refresh or reopen must not auto-authenticate the user, and failure is automatic login, missing success transition, or a reset that cannot be followed by sign-in.
+- As a user who entered invalid recovery details, from the recovery card submit an unknown handle, expired code, wrong code, or invalid new password and then retry or cancel; EmberDesk must keep the recovery card visible with a generic recoverable error across that correction path, and failure is handle-existence disclosure, navigation to a separate error page, or a dead-end card.
+- As a user who changes their mind, from the recovery card choose Back to sign in before reset completes; EmberDesk must restore the login card with no password change, a refresh must show the normal login state rather than a half-completed reset, and failure is a forced password reset or recovery state that cannot be exited.
 
-## Business Rules And Boundaries
+## Feature-Specific Evidence
 
-- Recovery codes are single-use and expire after a short window.
-- **Recovery codes are printed to the server console log only.** There is no email, SMS, or in-app delivery mechanism. The server operator must relay the code to the user out-of-band (e.g. via chat, email, or terminal access).
-- A rate limit applies to code requests, configurable via `rateLimiting.accountsRecoverMaxAttempts` (default: 5). Separate from the login rate limit.
-- The recovery card does not reveal whether a handle exists; the server returns a generic error for unknown handles.
-- After a successful reset, the user must log in again; the recovery flow does not auto-authenticate.
+- Card switching, recovery-phase fields, generic errors, cancel behavior, and return to login are primary evidence.
+- Server console delivery of the code is operational evidence; it does not make code delivery an in-app user-visible promise.
+- Rate-limit responses support recovery proof only when the card shows recoverable feedback without account disclosure.
 
-## ID Boundary Notes
+## Failure Signals
 
-This feature is separate from [Login Submit](feature.login_submit) because recovery is a distinct user goal with its own flow, rate limits, and error states.
+- Recovery UI reveals whether the submitted handle exists.
+- Reset success authenticates the user automatically instead of returning to login.
+- The user cannot cancel back to the login card.
+- The recovery request implies email or SMS delivery that the product does not provide.
 
-## Outcomes
+## Boundaries
 
-- **Success**: the password is reset and the user returns to the login card.
-- **Failure**: an error message appears on the recovery card and the user can retry or cancel.
+- Normal sign-in after reset belongs to [Login Submit](feature.login_submit).
+- Login page layout belongs to [Login](page.login).
+- Password masking and reveal controls belong to [Password Visibility Toggle](feature.password_toggle).

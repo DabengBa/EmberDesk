@@ -13,60 +13,55 @@ related: [page.chat_workspace, feature.chat_message_rendering, feature.chat_gene
 
 It does not define how message text is generated, streamed, formatted, or stored.
 
-## Feature Purpose
+## Purpose
 
-This feature lets users operate on an existing chat message without leaving the conversation surface.
+Let users act on an already rendered chat message through discoverable row controls without leaving the conversation surface.
 
-## Trigger Entry
+## User-Visible Contract
 
-- **Message action entry**: use the actions exposed on a rendered message row.
-- **Expanded actions entry**: use additional message actions when the workspace is configured to show expanded message actions.
-- **Swipe entry**: use the message swipe controls when a message has visible swipe state.
-- **Reasoning entry**: use reasoning controls when the message includes an editable or collapsible reasoning block.
-- **Media gallery entry**: use gallery swipe controls when a message contains swipeable media.
-- **Failure recovery entry**: use the retry action attached to a failed generation row after automatic recovery has been exhausted.
+- Message text stays the primary content; actions must be discoverable by pointer, keyboard focus, touch/mobile paths, and accessible names without visually overwhelming the row.
+- High-frequency actions such as copy, edit, and opening the action menu remain quicker to reach than secondary or destructive actions.
+- Secondary actions such as checkpoint, swipe, reasoning controls, and media-gallery navigation appear only when valid for the current message state.
+- Danger actions keep clear accessible names and must not visually outrank normal copy/edit actions.
+- A failed generation row may expose a retry action only after [Chat Generation Auto Recovery](feature.chat_generation_auto_recovery) has exhausted automatic attempts; using it must not resubmit the already-rendered user message as a duplicate row.
+- Safe rows may show a React-owned visible action shell or the ordinary fallback shell, but the user-facing controls, mobile reachability, and compatibility hooks remain the same; unsafe or editing rows fall back cleanly.
 
-## Interaction IDs
+## Semantic Interaction IDs
 
 - `feature.chat_message_actions`: the overall message-row action surface.
 - `feature.chat_message_actions.primary_menu`: the message actions affordance attached to a message row.
-- `feature.chat_message_actions.copy`: copy the message text or action payload exposed by the existing message row controls.
-- `feature.chat_message_actions.edit`: enter or operate the existing message edit mode.
-- `feature.chat_message_actions.checkpoint`: open or create a checkpoint-related chat action from the message row.
-- `feature.chat_message_actions.swipe`: navigate message swipes when swipe controls are visible.
-- `feature.chat_message_actions.reasoning`: copy, edit, remove, or collapse reasoning blocks when reasoning controls are visible.
-- `feature.chat_message_actions.media_gallery`: navigate swipeable media attached to a message.
-- `feature.chat_message_actions.failure_retry`: retry generation from a recoverable failed assistant row after automatic recovery has been exhausted, without resubmitting the already-rendered user message as a new row.
+- `feature.chat_message_actions.copy`: copying message text or action payload exposed by row controls.
+- `feature.chat_message_actions.edit`: entering or operating message edit mode.
+- `feature.chat_message_actions.checkpoint`: opening or creating checkpoint-related chat actions from the row.
+- `feature.chat_message_actions.swipe`: navigating message swipes when swipe controls are visible.
+- `feature.chat_message_actions.reasoning`: copying, editing, removing, or collapsing reasoning blocks when visible.
+- `feature.chat_message_actions.media_gallery`: navigating swipeable media attached to a message.
+- `feature.chat_message_actions.failure_retry`: retrying a failed assistant row after automatic recovery is exhausted.
 
-## User Flow
+## Acceptance Workflows
 
-1. The user opens or continues a chat in [Chat Workspace](page.chat_workspace).
-2. EmberDesk renders one or more message rows in the main chat region.
-3. The user identifies an action on a message row by visible icon, accessible name, or keyboard focus.
-4. The user triggers the action.
-5. EmberDesk follows the existing action behavior, such as copying, entering edit mode, opening checkpoint chat, changing swipe, changing reasoning state, or navigating media.
+- As a chat user who wants to copy or edit a message, from a rendered row in [Chat Workspace](page.chat_workspace) locate the row controls by visible icon, accessible name, or keyboard focus and trigger copy or edit; EmberDesk must perform the row action while leaving message text readable and row identity stable after refresh or re-render, and failure is hidden high-frequency controls, lost focus path, or action execution on the wrong row.
+- As a user operating secondary message state, from a row with swipes, reasoning, checkpoint, or media controls trigger the relevant action and then re-render or revisit the row; EmberDesk must show those controls only when valid and update the visible row state without hiding the message body, with failure signaled by inactive controls shown as usable or valid controls missing from the row.
+- As a user recovering from a failed generation after automatic recovery ends, from the failed assistant row press retry and wait for the retry to settle; EmberDesk must retry from the same row context without duplicating the already-rendered user message, keep the composer usable after success or failure, and failure is a new duplicate user row or a retry action before recovery has exhausted.
+- As a mobile or keyboard user on a safe row owned by React or fallback, from the same row action surface use common actions; EmberDesk must preserve role/name reachability and fallback cleanly when the row enters edit or unsafe state, and failure is a mixed React/legacy menu, unreachable action, or missing compatibility hook.
 
-## Business Rules And Boundaries
+## Feature-Specific Evidence
 
-- Message text remains the primary content. Message actions should be discoverable without visually overwhelming the message body.
-- Message actions are tiered by task frequency and risk: Copy, Edit, and Message Actions are high-frequency; checkpoint, swipe, reasoning, and media/gallery actions are secondary; delete or remove actions are danger tier.
-- High-frequency actions should stay role/name reachable by pointer, keyboard focus, and touch/mobile paths. Secondary actions may remain in the expanded or overflow action surface when that keeps the message body readable.
-- Danger actions must keep clear accessible names and must not visually outrank Copy or Edit in normal reading state.
-- Message action controls must keep stable selectors and message DOM identity so first-party modules and compatible extensions can keep locating messages.
-- The protected message surfaces include `#chat > .mes`, `.mes_text`, `.mes[mesid]`, swipe controls, reasoning wrappers, media wrappers, and file wrappers.
-- Hidden or inactive message actions can remain hidden according to existing workspace state, but when an action becomes visible it should have a stable role, accessible name, and focus affordance.
-- Stored-message rendering belongs to [Chat Message Rendering](feature.chat_message_rendering); this feature depends on those stable message rows but does not own message body formatting or storage.
-- In the current Phase 3B boundary, safe stored or finalized rows can hand the visible message-action shell to React while keeping the same protected selectors, role/name surface, and per-row fallback rules. React renders the visible action shell for safe rows; copy/edit/delete/reasoning still route through the existing bridge surface, and supported direct-chat retry/swipe triggers may further hand the underlying visible transport to the React transport owner without changing the visible action affordance, mobile reachability, or compatibility hooks. If a row becomes unsafe, enters edit mode, loses the protected action shell, or otherwise fails validation, that row hands ownership back to the legacy action surface instead of leaving a mixed menu behind.
-- This feature does not change streaming, message formatting, slash-command parsing, event timing, or extension mount points.
+- Visible row controls, action priority, accessible names, focus behavior, mobile reachability, retry CTA, and row-level result are primary evidence.
+- Protected selectors such as `#chat > .mes`, `.mes_text`, `.mes[mesid]`, swipe, reasoning, media, and file wrappers are compatibility evidence only when visible actions remain correct.
+- React owner markers and bridge calls support migration proof but do not change the user-visible action contract.
 
-## ID Boundary Notes
+## Failure Signals
 
-This feature is separate from [Chat Workspace](page.chat_workspace) because message-row actions are a recurring user-visible control surface with compatibility risk. It is also separate from generation and streaming because it applies to messages that are already rendered.
+- Copy, edit, or action-menu controls are harder to reach than secondary or danger actions in normal reading state.
+- A danger action lacks clear accessible naming.
+- A failed-row retry duplicates the user message.
+- A row entering edit or unsafe state leaves a mixed or broken action shell.
+- Compatible message selectors disappear while actions are visible.
 
-## Outcomes
+## Boundaries
 
-- **Success**: the user can discover and use the available actions on a rendered message row, whether that safe row is currently showing the React-owned visible action shell or the ordinary legacy fallback.
-- **Priority state**: common actions remain quicker to reach than secondary or destructive actions, including on touch/mobile viewports.
-- **Failure retry state**: a failed generation row can expose a retry action and short recovery copy after automatic recovery has exhausted its bounded attempts, while preserving the message row and composer usability.
-- **Hidden state**: actions that are not valid for the current message remain hidden or inactive according to the existing UI rules.
-- **Compatibility state**: message DOM selectors and event-facing surfaces remain stable for compatible code.
+- Message body rendering belongs to [Chat Message Rendering](feature.chat_message_rendering).
+- Automatic generation recovery belongs to [Chat Generation Auto Recovery](feature.chat_generation_auto_recovery).
+- The chat workspace layout belongs to [Chat Workspace](page.chat_workspace).
+- Streaming token timing, slash-command parsing, event timing, extension mount points, and message storage are outside this feature.

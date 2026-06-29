@@ -75,7 +75,7 @@ Hidden marker attributes include:
 
 Focused proof:
 
-```powershell
+```bash
 bun run --cwd tests test:unit -- main-chat-slash-command-state.test.js react-workspace-panels-helpers.test.js third-party-extension-compatibility.test.js --runInBand
 bun run test:compat
 $env:EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST='true'; bun run --cwd tests test:e2e -- chat-message-streaming.e2e.js

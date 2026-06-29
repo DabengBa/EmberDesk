@@ -11,50 +11,51 @@ related: [page.chat_workspace, feature.chat_message_rendering, feature.chat_mess
 
 `feature.chat_generation_auto_recovery` represents the bounded retry chain that EmberDesk uses for visible main-chat generation failures. It covers the primary retry, the optional fallback-provider retry, the in-row recovery status, and the final manual retry CTA. It does not cover quiet generation, background generation, or provider-specific routing systems.
 
-## Feature Purpose
+## Purpose
 
-This feature lets EmberDesk recover from temporary visible-chat generation failures without immediately asking the user to restart the request by hand.
+Recover visible main-chat generation failures through a bounded retry chain before asking the user to retry manually.
 
-## Trigger Entry
+## User-Visible Contract
 
-- **Primary entry**: send, regenerate, continue, or swipe a visible main-chat reply.
+- The feature applies to visible main-chat send, continue, regenerate/retry, and swipe requests that produce or update an assistant row.
+- Recovery is bounded: the original request may be followed by one primary-provider retry and, when a ready fallback provider exists, one fallback-provider retry.
+- Recoverable failures keep the user message and assistant row identity stable; partial assistant text from an intermediate failed attempt is cleared before the next attempt continues.
+- If automatic recovery succeeds, the user sees only the final assistant text in the existing row.
+- If all automatic attempts fail, EmberDesk preserves the failed assistant row and exposes the ordinary manual retry action on that same row.
+- User stop is not automatic recovery; stopping generation leaves the workspace in the existing usable stop state without starting a new retry.
+- Unsupported visible generation paths and non-visible quiet/background helper requests remain outside this recovery promise and must fall back or complete without pretending to be visible-row recovery.
 
-## Interaction IDs
+## Semantic Interaction IDs
 
 - `feature.chat_generation_auto_recovery.primary_retry`: the automatic retry against the primary provider.
 - `feature.chat_generation_auto_recovery.fallback_retry`: the automatic retry against the configured fallback provider.
-- `feature.chat_generation_auto_recovery.status`: the in-row recovery status message.
-- `feature.chat_generation_auto_recovery.final_retry`: the existing manual retry CTA after automatic recovery is exhausted.
+- `feature.chat_generation_auto_recovery.status`: the in-row recovery status shown while the user waits.
+- `feature.chat_generation_auto_recovery.final_retry`: the manual retry action after automatic recovery is exhausted.
 
-## User Flow
+## Acceptance Workflows
 
-1. The user triggers a visible generation in the main chat.
-2. EmberDesk tries the primary provider.
-3. If the result is empty or otherwise recoverable, EmberDesk automatically retries once on the primary provider.
-4. If that still fails and the fallback provider is ready, EmberDesk automatically retries once on the fallback provider.
-5. If the fallback attempt succeeds, EmberDesk keeps only the final assistant text in the existing message row.
-6. If all attempts fail, EmberDesk shows the existing manual retry CTA on the same failed row.
+- As a chat user whose visible generation hits a recoverable primary-provider failure, from [Chat Workspace](page.chat_workspace) send or continue a message and let recovery run; EmberDesk must preserve the user message and assistant row, show recovery status, retry once on the primary provider, and either finalize text in the same row or expose manual retry after exhaustion, while refresh/reopen must not show duplicate assistant rows, and failure is row duplication, stale partial text, or unbounded retry.
+- As a user with [Fallback Provider](feature.fallback_provider) fully configured, from the same visible generation path encounter a second recoverable failure; EmberDesk must attempt the fallback at most once, show the final assistant text in the original row if it succeeds, and after refresh or final failure show the manual retry CTA if fallback fails, with failure signaled by fallback use when disabled, missing, or repeated indefinitely.
+- As a user who stops generation, from the active generation controls choose stop before recovery finishes and then retry manually only if desired; EmberDesk must leave the conversation in a stopped-but-usable state without triggering primary or fallback retry after stop, and failure is a new automatic attempt after an explicit stop.
+- As a user on an unsupported visible transport path, from a non-OpenAI, group, dry-run, or nested-visible request trigger generation and reopen the chat after it settles; EmberDesk must stay on the documented compatibility path with coherent visible row behavior, not a half-owned recovery state, and failure is hidden owner markers claiming recovery while the visible row behaves differently.
 
-## Business Rules And Boundaries
+## Feature-Specific Evidence
 
-- Recovery is bounded to three visible attempts total: original request, primary retry, and fallback retry.
-- Recoverable failures include empty reply, provider failure, streaming interruption, and other recoverable generation errors handled by the visible main-chat path.
-- User stop does not enter the automatic recovery chain.
-- Intermediate retry attempts clear partial assistant text before the next attempt continues.
-- Intermediate attempts do not expose the final message-rendered events that belong to the finished visible row.
-- The final failed state preserves the assistant row identity and uses the existing manual retry action.
-- When `features.react.panels.mainChatMessageList` is enabled, supported visible direct-chat `submitComposer`, `continueLast`, `retryGeneration`, `swipeLeft`, and `swipeRight` requests may hand request classification, visible token append, stop/error/completed transport state, and bounded retry sequencing to a React-owned transport mutation that still reuses the existing legacy generation lifecycle helpers. `retryGeneration` covers both the top-level regenerate button and the failed-row retry entry. Non-OpenAI, group, dry-run, and nested-visible paths stay on the ordinary legacy `Generate()` / `StreamingProcessor` path as ADR-frozen visible compatibility fallbacks. Quiet/background helper requests also stay legacy-owned, but they are now documented separately from the visible fallback matrix because they do not bind a visible assistant row or enter the bounded recovery chain at all.
-- Hidden `generationControl` and `streamingTransport` snapshots still exist as bridge contracts for tests and diagnostics, but they now describe either the live React-owned supported transport slice or the legacy fallback slice without changing the user-visible recovery semantics. The same hidden controller also publishes the visible transport decision tuple (`owner`, `kind`, `status`, `path`, `reason`) so unsupported or frozen compat paths remain auditable.
-- Quiet/background helper requests now publish their own hidden controller contract (`data-main-chat-quiet-transport-*`) with explicit legacy owner, request family, phase, no-auto-recovery, no-visible-row, `return-generated-text` finalization, and `caller-owned` rollback semantics, so diagnostics do not have to infer those rules from a visible fallback marker.
-- Provider stream pause/resume is not part of this feature. Slash-command execution has its own `SlashCommandAbortController` pause/continue/abort state and is outside this auto-recovery boundary.
+- In-row recovery status, preserved user message, single assistant row, final text, stop state, and manual retry CTA are primary evidence.
+- Hidden `generationControl`, `streamingTransport`, visible transport decision, and quiet/background transport markers are diagnostic evidence only when they match the visible row outcome.
+- Provider response errors, stream interruptions, and fallback-call counts support proof of the bounded attempt chain.
 
-## ID Boundary Notes
+## Failure Signals
 
-This feature is separate from [Fallback Provider](feature.fallback_provider) because it owns attempt sequencing rather than provider configuration. It is also separate from [Chat Message Rendering](feature.chat_message_rendering) because it depends on stable rows but does not define the base rendering contract.
+- Automatic recovery creates duplicate assistant rows or duplicate user messages.
+- Partial text from a failed intermediate attempt remains visible as final content.
+- User stop starts a retry.
+- Fallback provider is used when it is disabled or incomplete.
+- Recovery loops beyond the original request, one primary retry, and one fallback retry.
 
-## Outcomes
+## Boundaries
 
-- **Success state**: the visible assistant row contains the final generated text after at most one primary retry and one fallback retry.
-- **Final failure state**: the visible assistant row keeps its identity and exposes the ordinary retry CTA only after automatic recovery has been exhausted.
-- **Stop state**: user stop leaves the generation in the existing stop-to-usable state without triggering a new automatic retry.
-- **Bridge observation state**: hidden React markers can report `stopped`, `error`, `completed`, or fallback-attempt transport metadata, and they reflect the current owner split without changing the user-visible bounded retry rules or provider-selection semantics. Visible transport decision markers keep the frozen visible compat-path outcome observable while recovery stays legacy-owned, and the separate quiet/background markers keep non-visible helper requests observable without reclassifying them as recovery participants.
+- Fallback endpoint configuration belongs to [Fallback Provider](feature.fallback_provider).
+- Stable message body and row identity belong to [Chat Message Rendering](feature.chat_message_rendering).
+- Manual row retry controls belong to [Chat Message Actions](feature.chat_message_actions).
+- Quiet/background generation, provider-specific routing, and slash-command pause/continue/abort behavior are outside this feature.

@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { useMutation } from '@tanstack/react-query';
 import { useForm } from '@tanstack/react-form';
-import { measureElement, useVirtualizer, type ReactVirtualizer, type VirtualItem } from '@tanstack/react-virtual';
+import { measureElement, useVirtualizer, type VirtualItem, type Virtualizer } from '@tanstack/react-virtual';
 import { z } from 'zod';
 
 import {
@@ -777,7 +777,7 @@ function shouldRestoreExpandedMainChatWindow(snapshot: MainChatMessageListScroll
 
 function persistMainChatMessageListScrollSnapshot(
     state: MainChatMessageListWorkspacePanelState,
-    virtualizer: ReactVirtualizer<HTMLElement, HTMLElement>,
+    virtualizer: Virtualizer<HTMLElement, HTMLElement>,
 ) {
     const chatId = state.chatId?.trim();
     if (!chatId) {
@@ -1609,7 +1609,7 @@ function MainChatComposerOwnerPortal({
         composerForm.reset(formDefaults);
     }, [composerForm, formDefaults]);
 
-    const runSerializedComposerAction = async (payload: Record<string, unknown>) => {
+    const runSerializedComposerAction = useCallback(async (payload: Record<string, unknown>) => {
         if (composerActionInFlightRef.current) {
             return;
         }
@@ -1625,7 +1625,7 @@ function MainChatComposerOwnerPortal({
         } finally {
             composerActionInFlightRef.current = false;
         }
-    };
+    }, [bridge, onVisibleGeneration]);
 
     useLayoutEffect(() => {
         if (!targets) {
@@ -1731,7 +1731,6 @@ function MainChatComposerOwnerPortal({
     return createPortal(
         <>
             <ExistingDomNodeSlot node={targets.leftSendForm} slot="leftSendForm" />
-            <ExistingDomNodeSlot node={targets.sendTextarea} slot="send_textarea" />
             <ExistingDomNodeSlot node={targets.rightSendForm} slot="rightSendForm" />
         </>,
         targets.nonQrFormItems,
@@ -1803,7 +1802,7 @@ function MainChatSlashUiPortal({
                 >
                     <div className="autoComplete-details">
                         {shouldShowStatus ? (
-                            <div role="status">
+                            <output>
                                 {slashStatus.errorLabel
                                     ? `Error: ${slashStatus.errorLabel}`
                                     : slashStatus.aborted
@@ -1811,7 +1810,7 @@ function MainChatSlashUiPortal({
                                         : slashStatus.paused
                                             ? 'Paused'
                                             : ''}
-                            </div>
+                            </output>
                         ) : null}
                         {shouldShowDetails ? (
                             <div dangerouslySetInnerHTML={{ __html: slashUi.detailsHtml }} />
@@ -1859,36 +1858,49 @@ function WorkspacePanelShell({
             <div className="flex-container flexFlowColumn gap8">
                 <div className="flex-container justifyspacebetween alignitemscenter gap8">
                     <div className="title_restorable">{title}</div>
-                    <span
-                        className={status === 'error' ? 'warning' : 'success'}
-                        data-workspace-panel-status={status}
-                    >
-                        {status}
-                    </span>
+                    {status === 'loading' || status === 'error' ? (
+                        <span
+                            className={status === 'error' ? 'warning' : 'success'}
+                            data-workspace-panel-status={status}
+                        >
+                            {status}
+                        </span>
+                    ) : null}
                 </div>
                 {children}
-                {slots.length > 0 ? (
-                    <div className="flex-container flexFlowColumn gap4" data-workspace-legacy-slots={kind}>
-                        {slots.map(slot => {
-                            const protectedSlot = slot.id === 'extensions-settings'
-                                || slot.id === 'extensions-settings2'
-                                || slot.id === 'regex-container'
-                                || slot.id === 'extensions-menu-button'
-                                || slot.id === 'extensions-menu';
+                {slots.length > 0 || status !== 'idle' ? (
+                    <details className="workspace-panel-diagnostics" data-workspace-panel-diagnostics={kind}>
+                        <summary>Diagnostics</summary>
+                        <div className="flex-container flexFlowColumn gap4">
+                            <div className="flex-container justifyspacebetween alignitemscenter gap8">
+                                <span>Status</span>
+                                <span className={status === 'error' ? 'warning' : 'success'}>{status}</span>
+                            </div>
+                            {slots.length > 0 ? (
+                                <div className="flex-container flexFlowColumn gap4" data-workspace-legacy-slots={kind}>
+                                    {slots.map(slot => {
+                                        const protectedSlot = slot.id === 'extensions-settings'
+                                            || slot.id === 'extensions-settings2'
+                                            || slot.id === 'regex-container'
+                                            || slot.id === 'extensions-menu-button'
+                                            || slot.id === 'extensions-menu';
 
-                            return (
-                                <div
-                                    key={slot.id}
-                                    className={protectedSlot ? 'workspace-panel-legacy-slot workspace-panel-legacy-slot-protected' : 'workspace-panel-legacy-slot'}
-                                    data-workspace-legacy-slot={slot.id}
-                                    data-workspace-legacy-slot-ready={slot.ready ? 'true' : 'false'}
-                                >
-                                    <span>{slot.label}</span>
-                                    <span className={slot.ready ? 'success' : 'warning'}>{slot.ready ? 'Ready' : 'Legacy'}</span>
+                                        return (
+                                            <div
+                                                key={slot.id}
+                                                className={protectedSlot ? 'workspace-panel-legacy-slot workspace-panel-legacy-slot-protected' : 'workspace-panel-legacy-slot'}
+                                                data-workspace-legacy-slot={slot.id}
+                                                data-workspace-legacy-slot-ready={slot.ready ? 'true' : 'false'}
+                                            >
+                                                <span>{slot.label}</span>
+                                                <span className={slot.ready ? 'success' : 'warning'}>{slot.ready ? 'Ready' : 'Legacy'}</span>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
-                            );
-                        })}
-                    </div>
+                            ) : null}
+                        </div>
+                    </details>
                 ) : null}
             </div>
         </section>
@@ -1899,12 +1911,12 @@ function WorkspacePanelPlaceholder({ kind }: { kind: WorkspacePanelKind }) {
     return (
         <WorkspacePanelShell
             kind={kind}
-            title="React workspace panel host"
+            title="Workspace panel"
             status="idle"
         >
-                <div className="opacity50">
-                    {kind} is ready for its legacy bridge.
-                </div>
+            <div className="opacity50">
+                {kind} is ready.
+            </div>
         </WorkspacePanelShell>
     );
 }
@@ -1990,27 +2002,6 @@ function getExtensionsHostPanelStatus(bridgeState: ExtensionsHostWorkspacePanelS
     return 'empty';
 }
 
-function BridgeStateRow({
-    stateId,
-    label,
-    ready,
-    busy = false,
-}: {
-    stateId: string;
-    label: string;
-    ready: boolean;
-    busy?: boolean;
-}) {
-    const status = busy ? 'Busy' : ready ? 'Ready' : 'Missing';
-
-    return (
-        <div className="flex-container justifyspacebetween alignitemscenter gap8" data-world-info-bridge-state={stateId}>
-            <span>{label}</span>
-            <span className={ready ? 'success' : 'warning'}>{status}</span>
-        </div>
-    );
-}
-
 function WorldInfoWorkspacePanel({ state, bridge }: { state?: unknown; bridge?: WorkspacePanelBridge }) {
     const bridgeState = asWorldInfoState(state);
     const status = getWorldInfoPanelStatus(bridgeState);
@@ -2050,158 +2041,137 @@ function WorldInfoWorkspacePanel({ state, bridge }: { state?: unknown; bridge?: 
                 { id: 'legacy-editor', label: 'Legacy editor', ready: bridgeState.dropTargetPresent },
             ]}
         >
-                <BridgeStateRow
-                    stateId="global-selector"
-                    label="Global"
-                    ready={Boolean(bridgeState.globalSelectorPresent)}
-                />
-                <BridgeStateRow
-                    stateId="editor-selector"
-                    label="Editor"
-                    ready={Boolean(bridgeState.editorSelectorPresent && bridgeState.selectorsSeparated)}
-                />
-                <BridgeStateRow
-                    stateId="import"
-                    label="Import"
-                    ready={Boolean(bridgeState.importMenuPresent)}
-                    busy={Boolean(bridgeState.importBusy)}
-                />
-                <BridgeStateRow
-                    stateId="drop-target"
-                    label="Drop area"
-                    ready={Boolean(bridgeState.dropTargetPresent)}
-                />
-                <div className="flex-container flexFlowColumn gap8" data-world-info-react-workflow="editor-import-export">
-                    <div className="flex-container flexwrap gap8 alignitemscenter">
-                        <span role="status">Selected: {selectedWorldName}</span>
-                        <span role="status">Worlds: {worldNames.length}</span>
-                        <span role="status">Entries: {bridgeState.entryCount ?? entrySummaries.length}</span>
-                    </div>
-                    <div className="flex-container flexwrap gap8 alignitemscenter">
-                        <worldInfoForm.Field
-                            name="selectedWorldIndex"
-                            children={field => (
-                                <select
-                                    className="text_pole textarea_compact"
-                                    data-world-info-react-control="world-select"
-                                    value={field.state.value}
-                                    onChange={event => {
-                                        const worldIndex = event.target.value;
-                                        field.handleChange(worldIndex);
-                                        worldInfoActionMutation.mutate({ action: 'selectWorld', payload: { worldIndex } });
-                                    }}
-                                >
-                                    <option value="">--- Pick to Edit ---</option>
-                                    {worldNames.map(world => (
-                                        <option key={world.value} value={world.value}>
-                                            {world.label}
-                                        </option>
-                                    ))}
-                                </select>
-                            )}
-                        />
-                        <worldInfoForm.Field
-                            name="searchQuery"
-                            children={field => (
-                                <input
-                                    className="text_pole textarea_compact"
-                                    type="search"
-                                    data-world-info-react-control="search"
-                                    value={field.state.value}
-                                    onChange={event => {
-                                        const searchQuery = event.target.value;
-                                        field.handleChange(searchQuery);
-                                        worldInfoActionMutation.mutate({ action: 'applySearchQuery', payload: { searchQuery } });
-                                    }}
-                                />
-                            )}
-                        />
-                        <worldInfoForm.Field
-                            name="sortValue"
-                            children={field => (
-                                <select
-                                    className="text_pole textarea_compact"
-                                    data-world-info-react-control="sort"
-                                    value={field.state.value}
-                                    onChange={event => {
-                                        const sortValue = event.target.value;
-                                        field.handleChange(sortValue);
-                                        worldInfoActionMutation.mutate({ action: 'applySortOption', payload: { sortValue } });
-                                    }}
-                                >
-                                    {sortOptions.map(option => (
-                                        <option key={option.value} value={option.value} hidden={option.hidden}>
-                                            {option.label}
-                                        </option>
-                                    ))}
-                                </select>
-                            )}
-                        />
-                    </div>
-                    <div className="flex-container flexwrap gap8 alignitemscenter">
-                        <button
-                            type="button"
-                            className="menu_button"
-                            data-world-info-react-action="new-world"
-                            onClick={() => worldInfoActionMutation.mutate({ action: 'createWorld' })}
-                            disabled={!bridgeState.createWorldMenuPresent}
-                        >
-                            New World
-                        </button>
-                        <button
-                            type="button"
-                            className="menu_button"
-                            data-world-info-react-action="new-entry"
-                            onClick={() => worldInfoActionMutation.mutate({ action: 'createEntry' })}
-                            disabled={!bridgeState.canCreateEntry}
-                        >
-                            New Entry
-                        </button>
-                        <button
-                            type="button"
-                            className="menu_button"
-                            data-world-info-react-action="import"
-                            onClick={() => worldInfoActionMutation.mutate({ action: 'importWorld' })}
-                            disabled={Boolean(bridgeState.importBusy)}
-                        >
-                            Import
-                        </button>
-                        <button
-                            type="button"
-                            className="menu_button"
-                            data-world-info-react-action="export"
-                            onClick={() => worldInfoActionMutation.mutate({ action: 'exportWorld' })}
-                            disabled={!bridgeState.exportMenuPresent || !bridgeState.selectedWorldName}
-                        >
-                            Export
-                        </button>
-                        <button
-                            type="button"
-                            className="menu_button"
-                            data-world-info-react-action="refresh"
-                            onClick={() => worldInfoActionMutation.mutate({ action: 'refreshWorld' })}
-                            disabled={!bridgeState.refreshMenuPresent}
-                        >
-                            Refresh
-                        </button>
-                    </div>
-                    <div className="flex-container flexFlowColumn gap4" data-world-info-react-entries>
-                        {entrySummaries.length > 0 ? entrySummaries.map(entry => (
-                            <button
-                                key={entry.uid}
-                                type="button"
-                                className="menu_button justifyspacebetween"
-                                data-world-info-react-entry={entry.uid}
-                                onClick={() => worldInfoActionMutation.mutate({ action: 'openEntry', payload: { uid: entry.uid } })}
-                            >
-                                <span>{entry.title}</span>
-                                <span>{entry.disabled ? 'Disabled' : 'Edit'}</span>
-                            </button>
-                        )) : (
-                            <span className="opacity50">No visible entries</span>
-                        )}
-                    </div>
+            <div className="flex-container flexFlowColumn gap8" data-world-info-react-workflow="editor-import-export">
+                <div className="flex-container flexwrap gap8 alignitemscenter">
+                    <output>Selected: {selectedWorldName}</output>
+                    <output>Worlds: {worldNames.length}</output>
+                    <output>Entries: {bridgeState.entryCount ?? entrySummaries.length}</output>
                 </div>
+                <div className="flex-container flexwrap gap8 alignitemscenter">
+                    <worldInfoForm.Field name="selectedWorldIndex">
+                        {field => (
+                            <select
+                                className="text_pole textarea_compact"
+                                data-world-info-react-control="world-select"
+                                aria-label="World"
+                                value={field.state.value}
+                                onChange={event => {
+                                    const worldIndex = event.target.value;
+                                    field.handleChange(worldIndex);
+                                    worldInfoActionMutation.mutate({ action: 'selectWorld', payload: { worldIndex } });
+                                }}
+                            >
+                                <option value="">--- Pick to Edit ---</option>
+                                {worldNames.map(world => (
+                                    <option key={world.value} value={world.value}>
+                                        {world.label}
+                                    </option>
+                                ))}
+                            </select>
+                        )}
+                    </worldInfoForm.Field>
+                    <worldInfoForm.Field name="searchQuery">
+                        {field => (
+                            <input
+                                className="text_pole textarea_compact"
+                                type="search"
+                                data-world-info-react-control="search"
+                                aria-label="Search world info"
+                                value={field.state.value}
+                                onChange={event => {
+                                    const searchQuery = event.target.value;
+                                    field.handleChange(searchQuery);
+                                    worldInfoActionMutation.mutate({ action: 'applySearchQuery', payload: { searchQuery } });
+                                }}
+                            />
+                        )}
+                    </worldInfoForm.Field>
+                    <worldInfoForm.Field name="sortValue">
+                        {field => (
+                            <select
+                                className="text_pole textarea_compact"
+                                data-world-info-react-control="sort"
+                                aria-label="Sort world info"
+                                value={field.state.value}
+                                onChange={event => {
+                                    const sortValue = event.target.value;
+                                    field.handleChange(sortValue);
+                                    worldInfoActionMutation.mutate({ action: 'applySortOption', payload: { sortValue } });
+                                }}
+                            >
+                                {sortOptions.map(option => (
+                                    <option key={option.value} value={option.value} hidden={option.hidden}>
+                                        {option.label}
+                                    </option>
+                                ))}
+                            </select>
+                        )}
+                    </worldInfoForm.Field>
+                </div>
+                <div className="flex-container flexwrap gap8 alignitemscenter">
+                    <button
+                        type="button"
+                        className="menu_button"
+                        data-world-info-react-action="new-world"
+                        onClick={() => worldInfoActionMutation.mutate({ action: 'createWorld' })}
+                        disabled={!bridgeState.createWorldMenuPresent}
+                    >
+                            New World
+                    </button>
+                    <button
+                        type="button"
+                        className="menu_button"
+                        data-world-info-react-action="new-entry"
+                        onClick={() => worldInfoActionMutation.mutate({ action: 'createEntry' })}
+                        disabled={!bridgeState.canCreateEntry}
+                    >
+                            New Entry
+                    </button>
+                    <button
+                        type="button"
+                        className="menu_button"
+                        data-world-info-react-action="import"
+                        onClick={() => worldInfoActionMutation.mutate({ action: 'importWorld' })}
+                        disabled={Boolean(bridgeState.importBusy)}
+                    >
+                            Import
+                    </button>
+                    <button
+                        type="button"
+                        className="menu_button"
+                        data-world-info-react-action="export"
+                        onClick={() => worldInfoActionMutation.mutate({ action: 'exportWorld' })}
+                        disabled={!bridgeState.exportMenuPresent || !bridgeState.selectedWorldName}
+                    >
+                            Export
+                    </button>
+                    <button
+                        type="button"
+                        className="menu_button"
+                        data-world-info-react-action="refresh"
+                        onClick={() => worldInfoActionMutation.mutate({ action: 'refreshWorld' })}
+                        disabled={!bridgeState.refreshMenuPresent}
+                    >
+                            Refresh
+                    </button>
+                </div>
+                <div className="flex-container flexFlowColumn gap4" data-world-info-react-entries>
+                    {entrySummaries.length > 0 ? entrySummaries.map(entry => (
+                        <button
+                            key={entry.uid}
+                            type="button"
+                            className="menu_button workspace-panel-item-row workspace-panel-world-info-entry"
+                            data-world-info-react-entry={entry.uid}
+                            onClick={() => worldInfoActionMutation.mutate({ action: 'openEntry', payload: { uid: entry.uid } })}
+                        >
+                            <span className="workspace-panel-item-label">{entry.title}</span>
+                            <span className="workspace-panel-item-status">{entry.disabled ? 'Disabled' : 'Edit'}</span>
+                        </button>
+                    )) : (
+                        <span className="opacity50">No visible entries</span>
+                    )}
+                </div>
+            </div>
         </WorkspacePanelShell>
     );
 }
@@ -2225,12 +2195,12 @@ function BackgroundGallery({
                 <button
                     key={`${source}:${item.id}`}
                     type="button"
-                    className="menu_button justifyspacebetween"
+                    className="menu_button workspace-panel-item-row workspace-panel-background-item"
                     data-background-library-react-item={item.id}
                     onClick={() => actionMutation.mutate({ action: 'selectBackground', payload: { id: item.id, source } })}
                 >
-                    <span>{item.title}</span>
-                    <span>{item.locked ? 'Locked' : item.selected ? 'Selected' : item.animated ? 'Animated' : 'Select'}</span>
+                    <span className="workspace-panel-item-label">{item.title}</span>
+                    <span className="workspace-panel-item-status">{item.locked ? 'Locked' : item.selected ? 'Selected' : item.animated ? 'Animated' : 'Select'}</span>
                 </button>
             )) : (
                 <span className="opacity50">No backgrounds</span>
@@ -2255,15 +2225,6 @@ function BackgroundLibraryWorkspacePanel({ state, bridge }: { state?: unknown; b
         },
         retry: false,
     });
-    const statusLabel = bridgeState.showLoading
-        ? 'Loading'
-        : bridgeState.showError
-            ? 'Error'
-            : bridgeState.showEmpty
-                ? 'Empty'
-                : bridgeState.status === 'success'
-                        ? 'Ready'
-                        : 'Idle';
     const systemBackgrounds = bridgeState.systemBackgrounds ?? [];
     const chatBackgrounds = bridgeState.chatBackgrounds ?? [];
 
@@ -2283,125 +2244,96 @@ function BackgroundLibraryWorkspacePanel({ state, bridge }: { state?: unknown; b
                 { id: 'background-actions', label: 'Background actions', ready: bridgeState.systemContainerPresent || bridgeState.chatContainerPresent },
             ]}
         >
-                <div className="flex-container justifyspacebetween alignitemscenter gap8" data-background-library-bridge-state="status">
-                    <span>Status</span>
-                    <span className={bridgeState.showError ? 'warning' : 'success'}>{statusLabel}</span>
+            <div className="flex-container flexFlowColumn gap8" data-background-library-react-workflow="gallery-actions">
+                <div className="flex-container flexwrap gap8 alignitemscenter">
+                    <output>Folder view: {bridgeState.folderViewActive ? 'On' : 'Off'}</output>
+                    <output>Locked: {bridgeState.lockedCount ?? 0}</output>
+                    <output>Selected: {bridgeState.selectedCount ?? 0}</output>
                 </div>
-                <div className="flex-container justifyspacebetween alignitemscenter gap8" data-background-library-bridge-state="global-gallery">
-                    <span>Global</span>
-                    <span>{bridgeState.systemContainerPresent ? bridgeState.systemItemCount ?? 0 : 'Missing'}</span>
+                <div className="flex-container flexwrap gap8 alignitemscenter">
+                    <backgroundLibraryForm.Field name="filterQuery">
+                        {field => (
+                            <input
+                                className="text_pole textarea_compact"
+                                type="search"
+                                data-background-library-react-control="filter"
+                                aria-label="Filter backgrounds"
+                                value={field.state.value}
+                                onChange={event => {
+                                    const filterQuery = event.target.value;
+                                    field.handleChange(filterQuery);
+                                    backgroundLibraryActionMutation.mutate({ action: 'applyBackgroundFilter', payload: { filterQuery } });
+                                }}
+                            />
+                        )}
+                    </backgroundLibraryForm.Field>
+                    <backgroundLibraryForm.Field name="sortValue">
+                        {field => (
+                            <select
+                                className="text_pole textarea_compact"
+                                data-background-library-react-control="sort"
+                                aria-label="Sort backgrounds"
+                                value={field.state.value}
+                                onChange={event => {
+                                    const sortValue = event.target.value;
+                                    field.handleChange(sortValue);
+                                    backgroundLibraryActionMutation.mutate({ action: 'applyBackgroundSort', payload: { sortValue } });
+                                }}
+                            >
+                                <option value="az">A-Z</option>
+                                <option value="za">Z-A</option>
+                                <option value="newest">Newest</option>
+                                <option value="oldest">Oldest</option>
+                            </select>
+                        )}
+                    </backgroundLibraryForm.Field>
                 </div>
-                <div className="flex-container justifyspacebetween alignitemscenter gap8" data-background-library-bridge-state="chat-gallery">
-                    <span>Chat</span>
-                    <span>{bridgeState.chatContainerPresent ? bridgeState.chatItemCount ?? 0 : 'Missing'}</span>
-                </div>
-                <div className="flex-container flexFlowColumn gap8" data-background-library-react-workflow="gallery-actions">
-                    <div className="flex-container flexwrap gap8 alignitemscenter">
-                        <span role="status">Folder view: {bridgeState.folderViewActive ? 'On' : 'Off'}</span>
-                        <span role="status">Locked: {bridgeState.lockedCount ?? 0}</span>
-                        <span role="status">Selected: {bridgeState.selectedCount ?? 0}</span>
-                    </div>
-                    <div className="flex-container flexwrap gap8 alignitemscenter">
-                        <backgroundLibraryForm.Field
-                            name="filterQuery"
-                            children={field => (
-                                <input
-                                    className="text_pole textarea_compact"
-                                    type="search"
-                                    data-background-library-react-control="filter"
-                                    value={field.state.value}
-                                    onChange={event => {
-                                        const filterQuery = event.target.value;
-                                        field.handleChange(filterQuery);
-                                        backgroundLibraryActionMutation.mutate({ action: 'applyBackgroundFilter', payload: { filterQuery } });
-                                    }}
-                                />
-                            )}
-                        />
-                        <backgroundLibraryForm.Field
-                            name="sortValue"
-                            children={field => (
-                                <select
-                                    className="text_pole textarea_compact"
-                                    data-background-library-react-control="sort"
-                                    value={field.state.value}
-                                    onChange={event => {
-                                        const sortValue = event.target.value;
-                                        field.handleChange(sortValue);
-                                        backgroundLibraryActionMutation.mutate({ action: 'applyBackgroundSort', payload: { sortValue } });
-                                    }}
-                                >
-                                    <option value="az">A-Z</option>
-                                    <option value="za">Z-A</option>
-                                    <option value="newest">Newest</option>
-                                    <option value="oldest">Oldest</option>
-                                </select>
-                            )}
-                        />
-                    </div>
-                    <div className="flex-container flexwrap gap8 alignitemscenter">
-                        <button
-                            type="button"
-                            className="menu_button"
-                            data-background-library-react-action="upload"
-                            onClick={() => backgroundLibraryActionMutation.mutate({ action: 'uploadBackground' })}
-                        >
+                <div className="flex-container flexwrap gap8 alignitemscenter">
+                    <button
+                        type="button"
+                        className="menu_button"
+                        data-background-library-react-action="upload"
+                        onClick={() => backgroundLibraryActionMutation.mutate({ action: 'uploadBackground' })}
+                    >
                             Upload
-                        </button>
-                        <button
-                            type="button"
-                            className="menu_button"
-                            data-background-library-react-action="lock"
-                            onClick={() => backgroundLibraryActionMutation.mutate({ action: 'lockBackground' })}
-                        >
+                    </button>
+                    <button
+                        type="button"
+                        className="menu_button"
+                        data-background-library-react-action="lock"
+                        onClick={() => backgroundLibraryActionMutation.mutate({ action: 'lockBackground' })}
+                    >
                             Lock
-                        </button>
-                        <button
-                            type="button"
-                            className="menu_button"
-                            data-background-library-react-action="unlock"
-                            onClick={() => backgroundLibraryActionMutation.mutate({ action: 'unlockBackground' })}
-                        >
+                    </button>
+                    <button
+                        type="button"
+                        className="menu_button"
+                        data-background-library-react-action="unlock"
+                        onClick={() => backgroundLibraryActionMutation.mutate({ action: 'unlockBackground' })}
+                    >
                             Unlock
-                        </button>
-                        <button
-                            type="button"
-                            className="menu_button"
-                            data-background-library-react-action="auto"
-                            onClick={() => backgroundLibraryActionMutation.mutate({ action: 'autoBackground' })}
-                        >
+                    </button>
+                    <button
+                        type="button"
+                        className="menu_button"
+                        data-background-library-react-action="auto"
+                        onClick={() => backgroundLibraryActionMutation.mutate({ action: 'autoBackground' })}
+                    >
                             Auto
-                        </button>
-                        <button
-                            type="button"
-                            className="menu_button"
-                            data-background-library-react-action="refresh"
-                            onClick={() => backgroundLibraryActionMutation.mutate({ action: 'refreshBackgrounds' })}
-                        >
+                    </button>
+                    <button
+                        type="button"
+                        className="menu_button"
+                        data-background-library-react-action="refresh"
+                        onClick={() => backgroundLibraryActionMutation.mutate({ action: 'refreshBackgrounds' })}
+                    >
                             Refresh
-                        </button>
-                    </div>
-                    <BackgroundGallery source="global" items={systemBackgrounds} actionMutation={backgroundLibraryActionMutation} />
-                    <BackgroundGallery source="chat" items={chatBackgrounds} actionMutation={backgroundLibraryActionMutation} />
+                    </button>
                 </div>
+                <BackgroundGallery source="global" items={systemBackgrounds} actionMutation={backgroundLibraryActionMutation} />
+                <BackgroundGallery source="chat" items={chatBackgrounds} actionMutation={backgroundLibraryActionMutation} />
+            </div>
         </WorkspacePanelShell>
-    );
-}
-
-function ExtensionsHostStateRow({
-    stateId,
-    label,
-    ready,
-}: {
-    stateId: string;
-    label: string;
-    ready: boolean;
-}) {
-    return (
-        <div className="flex-container justifyspacebetween alignitemscenter gap8" data-extensions-host-bridge-state={stateId}>
-            <span>{label}</span>
-            <span className={ready ? 'success' : 'warning'}>{ready ? 'Ready' : 'Missing'}</span>
-        </div>
     );
 }
 
@@ -2421,21 +2353,6 @@ function ExtensionsHostWorkspacePanel({ state, bridge }: { state?: unknown; brid
         },
         retry: false,
     });
-    const loaderLabel = bridgeState.deferredState === 'failed'
-        ? 'Failed'
-        : bridgeState.deferredState === 'loading'
-            ? 'Loading'
-            : 'Ready';
-    const mountPointStatuses = bridgeState.mountPointStatuses?.length
-        ? bridgeState.mountPointStatuses
-        : [
-            { id: 'extensions_settings', label: 'Settings column', ready: bridgeState.extensionsSettingsPresent },
-            { id: 'extensions_settings2', label: 'Settings column 2', ready: bridgeState.extensionsSettings2Present },
-            { id: 'regex_container', label: 'Regex container', ready: bridgeState.regexContainerPresent },
-            { id: 'extensionsMenuButton', label: 'Wand button', ready: bridgeState.extensionsMenuButtonPresent },
-            { id: 'extensionsMenu', label: 'Wand menu', ready: bridgeState.extensionsMenuPresent },
-        ];
-
     useEffect(() => {
         extensionsHostForm.reset(formDefaults);
     }, [extensionsHostForm, formDefaults]);
@@ -2455,135 +2372,94 @@ function ExtensionsHostWorkspacePanel({ state, bridge }: { state?: unknown; brid
                 { id: 'extras-api', label: 'Extras API', ready: bridgeState.extrasApiControlsPresent },
             ]}
         >
-                <ExtensionsHostStateRow
-                    stateId="extensions-settings"
-                    label="Settings column"
-                    ready={Boolean(bridgeState.extensionsSettingsPresent)}
-                />
-                <ExtensionsHostStateRow
-                    stateId="extensions-settings2"
-                    label="Settings column 2"
-                    ready={Boolean(bridgeState.extensionsSettings2Present)}
-                />
-                <ExtensionsHostStateRow
-                    stateId="regex-container"
-                    label="Regex"
-                    ready={Boolean(bridgeState.regexContainerPresent)}
-                />
-                <ExtensionsHostStateRow
-                    stateId="wand-menu"
-                    label="Wand menu"
-                    ready={Boolean(bridgeState.extensionsMenuButtonPresent && bridgeState.extensionsMenuPresent)}
-                />
-                <ExtensionsHostStateRow
-                    stateId="extras-api"
-                    label="Extras API"
-                    ready={Boolean(bridgeState.extrasApiControlsPresent)}
-                />
-                <div className="flex-container justifyspacebetween alignitemscenter gap8" data-extensions-host-bridge-state="loader">
-                    <span>Loader</span>
-                    <span className={bridgeState.deferredState === 'failed' ? 'warning' : 'success'}>{loaderLabel}</span>
-                </div>
-                <div className="flex-container flexFlowColumn gap8" data-extensions-host-react-workflow="host-actions">
-                    <div className="flex-container flexwrap gap8 alignitemscenter">
-                        <label className="checkbox_label flexNoGap">
-                            <input
-                                type="checkbox"
-                                data-extensions-host-react-control="notify-updates"
-                                checked={Boolean(bridgeState.notifyUpdatesEnabled)}
-                                onChange={() => extensionsHostActionMutation.mutate({ action: 'toggleNotifyUpdates' })}
-                            />
+            <div className="flex-container flexFlowColumn gap8" data-extensions-host-react-workflow="host-actions">
+                <div className="flex-container flexwrap gap8 alignitemscenter">
+                    <label className="checkbox_label flexNoGap">
+                        <input
+                            type="checkbox"
+                            data-extensions-host-react-control="notify-updates"
+                            checked={Boolean(bridgeState.notifyUpdatesEnabled)}
+                            onChange={() => extensionsHostActionMutation.mutate({ action: 'toggleNotifyUpdates' })}
+                        />
                             Notify updates
-                        </label>
-                        <button
-                            type="button"
-                            className="menu_button"
-                            data-extensions-host-react-action="manage"
-                            onClick={() => extensionsHostActionMutation.mutate({ action: 'openManageExtensions' })}
-                            disabled={!bridgeState.manageButtonPresent}
-                        >
+                    </label>
+                    <button
+                        type="button"
+                        className="menu_button"
+                        data-extensions-host-react-action="manage"
+                        onClick={() => extensionsHostActionMutation.mutate({ action: 'openManageExtensions' })}
+                        disabled={!bridgeState.manageButtonPresent}
+                    >
                             Manage
-                        </button>
-                        <button
-                            type="button"
-                            className="menu_button"
-                            data-extensions-host-react-action="install"
-                            onClick={() => extensionsHostActionMutation.mutate({ action: 'openInstallExtension' })}
-                            disabled={!bridgeState.installButtonPresent}
-                        >
+                    </button>
+                    <button
+                        type="button"
+                        className="menu_button"
+                        data-extensions-host-react-action="install"
+                        onClick={() => extensionsHostActionMutation.mutate({ action: 'openInstallExtension' })}
+                        disabled={!bridgeState.installButtonPresent}
+                    >
                             Install
-                        </button>
-                    </div>
-                    <div className="flex-container flexwrap gap8 alignitemscenter">
-                        <extensionsHostForm.Field
-                            name="extrasApiUrl"
-                            children={field => (
-                                <input
-                                    className="text_pole textarea_compact"
-                                    type="url"
-                                    data-extensions-host-react-control="extras-url"
-                                    value={field.state.value}
-                                    onChange={event => {
-                                        const url = event.target.value;
-                                        field.handleChange(url);
-                                        extensionsHostActionMutation.mutate({ action: 'updateExtrasApiUrl', payload: { url } });
-                                    }}
-                                />
-                            )}
-                        />
-                        <extensionsHostForm.Field
-                            name="extrasApiKey"
-                            children={field => (
-                                <input
-                                    className="text_pole textarea_compact"
-                                    type="password"
-                                    data-extensions-host-react-control="extras-api-key"
-                                    placeholder={bridgeState.extrasApiKeySet ? 'Saved key' : 'Extras API key'}
-                                    value={field.state.value}
-                                    onChange={event => {
-                                        const apiKey = event.target.value;
-                                        field.handleChange(apiKey);
-                                        extensionsHostActionMutation.mutate({ action: 'updateExtrasApiKey', payload: { apiKey } });
-                                    }}
-                                />
-                            )}
-                        />
-                    </div>
-                    <div className="flex-container flexwrap gap8 alignitemscenter">
-                        <label className="checkbox_label flexNoGap">
-                            <input
-                                type="checkbox"
-                                data-extensions-host-react-control="autoconnect"
-                                checked={Boolean(bridgeState.autoconnectEnabled)}
-                                onChange={() => extensionsHostActionMutation.mutate({ action: 'toggleAutoconnect' })}
-                                disabled={!bridgeState.extrasApiControlsPresent}
-                            />
-                            Auto-connect
-                        </label>
-                        <button
-                            type="button"
-                            className="menu_button"
-                            data-extensions-host-react-action="connect"
-                            onClick={() => extensionsHostActionMutation.mutate({ action: 'connectExtrasApi' })}
-                            disabled={!bridgeState.extrasApiControlsPresent}
-                        >
-                            Connect
-                        </button>
-                        <span role="status">{bridgeState.extrasStatusText || 'Not connected...'}</span>
-                    </div>
-                    <div className="flex-container flexFlowColumn gap4" data-extensions-host-react-mount-points>
-                        {mountPointStatuses.map(mountPoint => (
-                            <div
-                                key={mountPoint.id}
-                                className="flex-container justifyspacebetween alignitemscenter gap8"
-                                data-extensions-host-react-mount-point={mountPoint.id}
-                            >
-                                <span>{mountPoint.label}</span>
-                                <span className={mountPoint.ready ? 'success' : 'warning'}>{mountPoint.ready ? 'Ready' : 'Missing'}</span>
-                            </div>
-                        ))}
-                    </div>
+                    </button>
                 </div>
+                <div className="flex-container flexwrap gap8 alignitemscenter">
+                    <extensionsHostForm.Field name="extrasApiUrl">
+                        {field => (
+                            <input
+                                className="text_pole textarea_compact"
+                                type="url"
+                                data-extensions-host-react-control="extras-url"
+                                aria-label="Extras API URL"
+                                value={field.state.value}
+                                onChange={event => {
+                                    const url = event.target.value;
+                                    field.handleChange(url);
+                                    extensionsHostActionMutation.mutate({ action: 'updateExtrasApiUrl', payload: { url } });
+                                }}
+                            />
+                        )}
+                    </extensionsHostForm.Field>
+                    <extensionsHostForm.Field name="extrasApiKey">
+                        {field => (
+                            <input
+                                className="text_pole textarea_compact"
+                                type="password"
+                                data-extensions-host-react-control="extras-api-key"
+                                aria-label="Extras API key"
+                                placeholder={bridgeState.extrasApiKeySet ? 'Saved key' : 'Extras API key'}
+                                value={field.state.value}
+                                onChange={event => {
+                                    const apiKey = event.target.value;
+                                    field.handleChange(apiKey);
+                                    extensionsHostActionMutation.mutate({ action: 'updateExtrasApiKey', payload: { apiKey } });
+                                }}
+                            />
+                        )}
+                    </extensionsHostForm.Field>
+                </div>
+                <div className="flex-container flexwrap gap8 alignitemscenter">
+                    <label className="checkbox_label flexNoGap">
+                        <input
+                            type="checkbox"
+                            data-extensions-host-react-control="autoconnect"
+                            checked={Boolean(bridgeState.autoconnectEnabled)}
+                            onChange={() => extensionsHostActionMutation.mutate({ action: 'toggleAutoconnect' })}
+                            disabled={!bridgeState.extrasApiControlsPresent}
+                        />
+                            Auto-connect
+                    </label>
+                    <button
+                        type="button"
+                        className="menu_button"
+                        data-extensions-host-react-action="connect"
+                        onClick={() => extensionsHostActionMutation.mutate({ action: 'connectExtrasApi' })}
+                        disabled={!bridgeState.extrasApiControlsPresent}
+                    >
+                            Connect
+                    </button>
+                    <output>{bridgeState.extrasStatusText || 'Not connected...'}</output>
+                </div>
+            </div>
         </WorkspacePanelShell>
     );
 }
@@ -2618,7 +2494,7 @@ function MainChatMessageListRestoreController({
         syncMainChatVirtualIndexes(state.messageNodes ?? []);
     }, [state.messageNodes, state.visibleMessageIds]);
 
-    const virtualizer = useVirtualizer({
+    const virtualizer = useVirtualizer<HTMLElement, HTMLElement>({
         count: messageIds.length,
         enabled: Boolean(state.chatId && state.chatContainer instanceof HTMLElement && messageIds.length > 0),
         getScrollElement: () => chatContainerRef.current,
@@ -2963,16 +2839,36 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
         };
     }, [executePreparedVisibleTransportRequest]);
 
+    const rawActiveRuntimeMessageRow = getMainChatActiveRuntimeMessageRow(
+        messageRowMap,
+        reactVisibleTransportRuntime?.activeMessageId,
+    );
+    const shouldIgnoreVisibleTransportRuntime = Boolean(
+        reactVisibleTransportRuntime?.activeMessageId !== null
+        && reactVisibleTransportRuntime?.activeMessageId !== undefined
+        && ![
+            'connecting',
+            'streaming',
+            'finalizing',
+            'recoveringPrimary',
+            'recoveringFallback',
+        ].includes(String(reactVisibleTransportRuntime.phase ?? ''))
+        && !(rawActiveRuntimeMessageRow instanceof HTMLElement),
+    );
+    const effectiveReactVisibleTransportRuntime = shouldIgnoreVisibleTransportRuntime
+        ? null
+        : reactVisibleTransportRuntime;
+    const activeRuntimeMessageRow = shouldIgnoreVisibleTransportRuntime ? null : rawActiveRuntimeMessageRow;
     const effectiveGenerationControl = buildReactOwnedMainChatGenerationControl(
-        reactVisibleTransportRuntime,
+        effectiveReactVisibleTransportRuntime,
         bridgeState.generationControl ?? mainChatGenerationControlFallback,
     );
     const effectiveStreamingTransport = buildReactOwnedMainChatStreamingTransport(
-        reactVisibleTransportRuntime,
+        effectiveReactVisibleTransportRuntime,
         bridgeState.streamingTransport ?? mainChatStreamingTransportFallback,
     );
     const visibleTransportBridgeState = deriveReactVisibleTransportBridgeState({
-        runtime: reactVisibleTransportRuntime,
+        runtime: effectiveReactVisibleTransportRuntime,
         decision: visibleTransportDecision,
         generationControl: effectiveGenerationControl,
         streamingTransport: effectiveStreamingTransport,
@@ -2981,33 +2877,6 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
         runtime: bridgeState.quietTransport ?? mainChatQuietTransportFallback,
         contract: bridgeState.quietTransport ?? mainChatQuietTransportFallback,
     });
-    const activeRuntimeMessageRow = getMainChatActiveRuntimeMessageRow(
-        messageRowMap,
-        reactVisibleTransportRuntime?.activeMessageId,
-    );
-
-    useEffect(() => {
-        if (
-            reactVisibleTransportRuntime?.activeMessageId === null
-            || reactVisibleTransportRuntime?.activeMessageId === undefined
-        ) {
-            return;
-        }
-
-        if ([
-            'connecting',
-            'streaming',
-            'finalizing',
-            'recoveringPrimary',
-            'recoveringFallback',
-        ].includes(String(reactVisibleTransportRuntime.phase ?? ''))) {
-            return;
-        }
-
-        if (!(activeRuntimeMessageRow instanceof HTMLElement)) {
-            setReactVisibleTransportRuntime(null);
-        }
-    }, [activeRuntimeMessageRow, reactVisibleTransportRuntime]);
 
     useEffect(() => {
         syncMainChatMessageListDom(
@@ -3089,11 +2958,11 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
                 }}
             />
             <MainChatSlashUiPortal state={bridgeState} bridge={bridge} />
-            {reactVisibleTransportRuntime && activeRuntimeMessageRow instanceof HTMLElement ? (
+            {effectiveReactVisibleTransportRuntime && activeRuntimeMessageRow instanceof HTMLElement ? (
                 <MainChatActiveTransportRowOwnerPortal
-                    runtime={reactVisibleTransportRuntime}
+                    runtime={effectiveReactVisibleTransportRuntime}
                     messageRow={activeRuntimeMessageRow}
-                    finalizedRowOwned={ownedMessageRowIds.has(String(reactVisibleTransportRuntime.activeMessageId ?? ''))}
+                    finalizedRowOwned={ownedMessageRowIds.has(String(effectiveReactVisibleTransportRuntime.activeMessageId ?? ''))}
                 />
             ) : null}
             {ownedMessageRowSnapshots.map(snapshot => {
@@ -3171,14 +3040,14 @@ function renderPanel(kind: WorkspacePanelKind, state?: unknown, bridge?: Workspa
 }
 
 function WorkspacePanelRoot({ kind, bridge }: { kind: WorkspacePanelKind; bridge?: WorkspacePanelBridge }) {
-    const stateQuery = useQuery({
+    const { data: panelState } = useQuery({
         queryKey: workspacePanelStateQueryKey(kind),
         queryFn: async () => queryClient.getQueryData(workspacePanelStateQueryKey(kind)) ?? null,
         initialData: () => queryClient.getQueryData(workspacePanelStateQueryKey(kind)) ?? null,
         staleTime: Number.POSITIVE_INFINITY,
     });
 
-    return renderPanel(kind, stateQuery.data, bridge);
+    return renderPanel(kind, panelState, bridge);
 }
 
 function renderIntoPanel(mount: WorkspacePanelMount) {

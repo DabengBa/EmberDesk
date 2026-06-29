@@ -17,7 +17,7 @@ import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from '
 import { SlashCommandEnumValue, enumTypes } from './slash-commands/SlashCommandEnumValue.js';
 import { commonEnumProviders, enumIcons } from './slash-commands/SlashCommandCommonEnumsProvider.js';
 import { SlashCommandClosure } from './slash-commands/SlashCommandClosure.js';
-import { callGenericPopup, Popup, POPUP_RESULT, POPUP_TYPE } from './popup.js';
+import { callGenericPopup, Popup, PopupUtils, POPUP_RESULT, POPUP_TYPE } from './popup.js';
 import { StructuredCloneMap } from './util/StructuredCloneMap.js';
 import { renderTemplateAsync } from './templates.js';
 import { t, translate } from './i18n.js';
@@ -1693,12 +1693,14 @@ async function deleteWorldInfoWithCascade(worldName) {
         let capturedCascade = { deleteWorlds: [], clearWorldReferences: false };
         const popup = new Popup(fullHtml, POPUP_TYPE.CONFIRM, '', {
             okButton: t`Delete`,
+            cancelButton: t`Cancel`,
             wider: true,
             leftAlign: true,
+            defaultResult: POPUP_RESULT.NEGATIVE,
             customButtons: [{
                 text: t`Delete All`,
                 result: POPUP_RESULT.CUSTOM1,
-                classes: ['popup-button-ok'],
+                classes: ['popup-button-danger'],
             }],
             onClosing: () => {
                 capturedCascade = captureCascadeChoices();
@@ -1709,6 +1711,7 @@ async function deleteWorldInfoWithCascade(worldName) {
                 document.querySelectorAll('.world-cascade-checkbox').forEach((checkbox) => { checkbox.checked = true; });
                 const deleteAllButton = popupInstance.dlg.querySelector(`[data-result="${POPUP_RESULT.CUSTOM1}"]`);
                 if (deleteAllButton) {
+                    deleteAllButton.classList.add('popup-button-danger');
                     deleteAllButton.addEventListener('click', () => {
                         document.querySelectorAll('.world-cascade-checkbox').forEach((checkbox) => { checkbox.checked = true; });
                         popupInstance.complete(POPUP_RESULT.AFFIRMATIVE);
@@ -1716,6 +1719,7 @@ async function deleteWorldInfoWithCascade(worldName) {
                 }
             },
         });
+        popup.okButton.classList.add('popup-button-danger');
         const result = await popup.show();
         if (!result || capturedCascade.deleteWorlds.length === 0) {
             return false;
@@ -1731,7 +1735,18 @@ async function deleteWorldInfoWithCascade(worldName) {
             return true;
         }
     } else {
-        const confirmed = await Popup.show.confirm(`Delete the World/Lorebook: "${worldName}"?`, 'This action is irreversible!');
+        const popup = new Popup(
+            PopupUtils.BuildTextWithHeader(`Delete the World/Lorebook: "${worldName}"?`, t`This action is irreversible!`),
+            POPUP_TYPE.CONFIRM,
+            '',
+            {
+                okButton: t`Delete`,
+                cancelButton: t`Cancel`,
+                defaultResult: POPUP_RESULT.NEGATIVE,
+            },
+        );
+        popup.okButton.classList.add('popup-button-danger');
+        const confirmed = await popup.show();
         if (!confirmed) {
             return false;
         }

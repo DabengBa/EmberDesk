@@ -45,6 +45,7 @@ describe('character library React panel scaffold', () => {
         expect(panelSource).toContain('getScrollElement: () => scrollElementRef.current');
         expect(toolbarSource).toContain('import { useForm } from \'@tanstack/react-form\';');
         expect(toolbarSource).toContain('characterLibraryToolbarSchema');
+        expect(toolbarSource).toContain('getCharacterLibraryBulkSelectionShortText');
         expect(toolbarSource).toContain('toolbarForm.reset(nextDefaults);');
         expect(toolbarSource).toContain('bridge.applySearchQuery');
         expect(toolbarSource).toContain('bridge.applySortOption');
@@ -52,8 +53,13 @@ describe('character library React panel scaffold', () => {
         expect(toolbarSource).toContain("className={`menu_button character-list-action${disabled ? ' disabled' : ''}`}");
         expect(toolbarSource).toContain('disabled={disabled}');
         expect(toolbarSource).toContain('aria-disabled={disabled}');
+        expect(toolbarSource).toContain('className="character-library-bulk-selected-count paginationjs-nav"');
+        expect(toolbarSource).toContain('role="status"');
+        expect(toolbarSource).toContain('aria-label={bulkSelectedLabel}');
         expect(toolbarSource).toContain('disabled={state.bulkSelectedCount === 0}');
         expect(helperSource).toContain('export const characterLibraryToolbarSchema = z.object(');
+        expect(helperSource).toContain('export function getCharacterLibraryBulkSelectionShortText(');
+        expect(helperSource).toContain('locale.toLowerCase().startsWith(\'zh\')');
     });
 
     test('keeps bogus-folder back block additive to virtualized character rows', () => {

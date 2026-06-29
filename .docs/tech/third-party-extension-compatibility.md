@@ -307,16 +307,14 @@ If a slice must touch one of those areas, add focused regression proof before ch
 
 Run this focused compatibility proof before and after frontend migration work:
 
-```powershell
+```bash
 bun run test:compat
 ```
 
 The direct tests-package command remains equivalent when debugging from `tests/`:
 
-```powershell
-Push-Location tests
-bun run test:unit -- third-party-extension-compatibility.test.js --runInBand
-Pop-Location
+```bash
+(cd tests && bun run test:unit -- third-party-extension-compatibility.test.js --runInBand)
 ```
 
 This test verifies mount points, Tavern Helper manifest and distributable files, `@sillytavern/*` import resolution, key module exports, slash-command public exports, event values, and regex placement values.
@@ -326,7 +324,7 @@ Structure tests may share assertions through `tests/helpers/frontend-structure-c
 
 When message row rendering, message actions, or main chat workspace structure changes, also run the focused message proof that matches the touched surface:
 
-```powershell
+```bash
 bun run --cwd tests test:unit -- chat-workspace-structure.test.js third-party-extension-compatibility.test.js --runInBand
 bun run --cwd tests test:e2e -- chat-message-layout.e2e.js
 bun run --cwd tests test:e2e -- chat-message-rendering.e2e.js
@@ -334,7 +332,7 @@ bun run --cwd tests test:e2e -- chat-message-rendering.e2e.js
 
 When character read-service or character route work changes `/api/characters/all`, `/api/characters/list`, or `/api/characters/get`, also run:
 
-```powershell
+```bash
 bun run --cwd tests test:unit -- character-read-service.test.js interaction-performance-index.test.js character-list-structure.test.js --runInBand
 ```
 

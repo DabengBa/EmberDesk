@@ -215,6 +215,22 @@ describe('world info card rendering', () => {
         expect(source).toContain('$(\'#rm_button_panel_pin_div .openIcon, #rightNavDrawerIcon.openIcon\')');
     });
 
+    test('world book deletion confirmations default to cancel and mark destructive actions', () => {
+        const source = read('public/scripts/world-info.js');
+        const deleteSource = source.slice(
+            source.indexOf('async function deleteWorldInfoWithCascade'),
+            source.indexOf('export async function deleteCurrentWorldInfo'),
+        );
+
+        expect(deleteSource).toContain('defaultResult: POPUP_RESULT.NEGATIVE');
+        expect(deleteSource).toContain('cancelButton: t`Cancel`');
+        expect(deleteSource).toContain('popup.okButton.classList.add(\'popup-button-danger\');');
+        expect(deleteSource).toContain('deleteAllButton.classList.add(\'popup-button-danger\');');
+        expect(deleteSource).toContain('new Popup(');
+        expect(deleteSource).toContain('PopupUtils.BuildTextWithHeader(`Delete the World/Lorebook: "${worldName}"?`, t`This action is irreversible!`)');
+        expect(deleteSource).toContain('okButton: t`Delete`');
+    });
+
     test('world info drawer stays reachable on mobile and tablet widths', () => {
         const css = read('public/css/world-info.css');
 

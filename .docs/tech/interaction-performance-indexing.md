@@ -344,7 +344,7 @@ Important reliability controls:
 
 Current local proof command:
 
-```powershell
+```bash
 node scripts/interaction-performance-runner.mjs --profile small --scenario suite --repeats 2 --pairs 1
 ```
 

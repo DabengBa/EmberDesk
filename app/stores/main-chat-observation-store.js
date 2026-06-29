@@ -45,6 +45,9 @@ function normalizeActiveMessageId(...candidates) {
     return null;
 }
 
+/**
+ * @param {Record<string, any>} [state]
+ */
 export function updateMainChatObservation(state = {}) {
     mainChatObservationStore.setState({
         activeMessageId: normalizeActiveMessageId(

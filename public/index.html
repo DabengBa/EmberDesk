@@ -49,7 +49,13 @@
 </head>
 
 <body class="no-blur">
-    <div id="preloader"></div>
+    <div id="preloader" role="status" aria-live="polite" aria-busy="true">
+        <div class="preloader-content">
+            <img src="img/logo.png" alt="EmberDesk" class="preloader-logo">
+            <div class="preloader-spinner fa-solid fa-gear fa-spin" aria-hidden="true"></div>
+            <div class="preloader-message" data-i18n="Initializing…">Initializing…</div>
+        </div>
+    </div>
     <div id="bg1"></div>
     <div id="character_context_menu" class="hidden">
         <ul>
@@ -534,8 +540,11 @@
                             <div class="base-url-field wide100p" data-source="openai,claude,makersuite">
                                 <label class="chat-completion-field wide100p" for="openai_reverse_proxy">
                                     <span class="field-label" data-i18n="Base URL">Base URL</span>
-                                    <input id="openai_reverse_proxy" type="text" class="text_pole" aria-label="Base URL" placeholder="Optional endpoint" />
+                                    <input id="openai_reverse_proxy" type="text" class="text_pole" aria-label="Base URL" aria-describedby="base_url_status" placeholder="Optional endpoint" />
                                 </label>
+                                <small id="base_url_status" class="base-url-status" role="status" aria-live="polite" data-mode="direct" data-i18n="Direct provider endpoint. API key stays in the API Key field.">
+                                    Direct provider endpoint. API key stays in the API Key field.
+                                </small>
                             </div>
                         </div>
                         <section id="fallback_provider_section" class="fallback-provider-section" data-doc-id="feature.fallback_provider" data-source="openai">
@@ -631,7 +640,7 @@
                             <div id="api_button_openai" class="api_button menu_button menu_button_icon" type="submit" data-i18n="Connect">Connect</div>
                             <div class="api_loading menu_button menu_button_icon" style="opacity:0.6" data-i18n="Cancel">Cancel</div>
                             <div data-source="openai" id="customize_additional_parameters" class="menu_button menu_button_icon api-action-secondary" data-i18n="Additional Parameters">Parameters</div>
-                            <div id="test_api_button" class="menu_button menu_button_icon" title="Send a short test message to verify your connection." data-i18n="[title]Send a short test message to verify your connection.;Test">Test</div>
+                            <div id="test_api_button" class="api_button menu_button menu_button_icon" title="Send a short test message to verify your connection." data-i18n="[title]Send a short test message to verify your connection.;Test">Test</div>
                         </div>
                         <div class="online_status">
                             <div class="online_status_indicator"></div>
@@ -2962,7 +2971,7 @@
                     <div class="fa-fw fa-solid fa-circle-xmark dragClose" id="closeZoom"></div>
                 </div>
                 <div class="zoomed_avatar_container">
-                    <img class="zoomed_avatar_img" src="" data-izoomify-url="" data-izoomify-magnify="1.8" data-izoomify-duration="300" alt="">
+                    <img class="zoomed_avatar_img" src="img/No-Image-Placeholder.svg" data-izoomify-url="" data-izoomify-magnify="1.8" data-izoomify-duration="300" alt="">
                 </div>
             </div>
         </div>
@@ -2978,7 +2987,7 @@
         <div id="user_avatar_template" class="template_element">
             <div class="avatar-container">
                 <div imgfile="" class="avatar">
-                    <img src="" alt="User Avatar">
+                    <img src="img/user-default.png" alt="User Avatar">
                 </div>
                 <div class="flex-container wide100pLess70px character_select_container">
                     <div class="wide100p character_name_block">
@@ -3008,7 +3017,7 @@
                         <h3 class="popup-header">text</h3>
                     </div>
                     <div class="popup-crop-wrap">
-                        <img class="popup-crop-image" src="">
+                        <img class="popup-crop-image" src="img/No-Image-Placeholder.svg">
                     </div>
                     <textarea class="popup-input text_pole result-control auto-select" rows="1" data-result="1" data-result-event="submit"></textarea>
                     <div class="popup-inputs"></div>
@@ -3312,7 +3321,7 @@
         <div id="past_chat_template" class="template_element">
             <div class="select_chat_block_wrapper flex-container">
                 <div class="select_chat_block  wide100p flex-container" file_name="">
-                    <div class="avatar"><img src="" loading="lazy" decoding="async"></div>
+                    <div class="avatar"><img src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async"></div>
                     <div id="select_chat_name_wrapper" class="flex-container alignitemscenter justifySpaceBetween wide100p">
                         <div class="flex-container alignItemsCenter">
                             <small class="select_chat_block_filename select_chat_block_filename_item"></small>
@@ -3716,7 +3725,7 @@
         <div id="character_template" class="template_element">
             <div class="character_select entity_block flex-container wide100p alignitemsflexstart" chid="" id="">
                 <div class="avatar" title="">
-                    <img src="" loading="lazy" decoding="async">
+                    <img src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async">
                     <i class="ch_fav_icon fa-solid fa-star" aria-hidden="true"></i>
                 </div>
                 <div class="flex-container wide100pLess70px character_select_container">
@@ -3875,7 +3884,7 @@
                 <div class="for_checkbox"></div><input type="checkbox" class="del_checkbox">
                 <div class="mesAvatarWrapper">
                     <div class="avatar">
-                        <img src="">
+                        <img src="img/No-Image-Placeholder.svg">
                     </div>
                     <div class="mesIDDisplay"></div>
                     <div class="mes_timer"></div>
@@ -3953,22 +3962,22 @@
         </div>
         <div id="group_avatars_template" class="template_element">
             <div class="avatar avatar_collage collage_1">
-                <img alt="img1" class="img_1" src="" loading="lazy" decoding="async">
+                <img alt="img1" class="img_1" src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async">
             </div>
             <div class="avatar avatar_collage collage_2">
-                <img alt="img1" class="img_1" src="" loading="lazy" decoding="async">
-                <img alt="img2" class="img_2" src="" loading="lazy" decoding="async">
+                <img alt="img1" class="img_1" src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async">
+                <img alt="img2" class="img_2" src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async">
             </div>
             <div class="avatar avatar_collage collage_3">
-                <img alt="img1" class="img_1" src="" loading="lazy" decoding="async">
-                <img alt="img2" class="img_2" src="" loading="lazy" decoding="async">
-                <img alt="img3" class="img_3" src="" loading="lazy" decoding="async">
+                <img alt="img1" class="img_1" src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async">
+                <img alt="img2" class="img_2" src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async">
+                <img alt="img3" class="img_3" src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async">
             </div>
             <div class="avatar avatar_collage collage_4">
-                <img alt="img1" class="img_1" src="" loading="lazy" decoding="async">
-                <img alt="img2" class="img_2" src="" loading="lazy" decoding="async">
-                <img alt="img3" class="img_3" src="" loading="lazy" decoding="async">
-                <img alt="img4" class="img_4" src="" loading="lazy" decoding="async">
+                <img alt="img1" class="img_1" src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async">
+                <img alt="img2" class="img_2" src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async">
+                <img alt="img3" class="img_3" src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async">
+                <img alt="img4" class="img_4" src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async">
             </div>
         </div>
 
@@ -4024,7 +4033,7 @@
         <div id="group_member_template" class="template_element">
             <div class="group_member">
                 <div class="avatar">
-                    <img alt="Avatar" src="" loading="lazy" decoding="async" />
+                    <img alt="Avatar" src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async" />
                 </div>
                 <div class="group_member_name">
                     <div class="character_name_block">
@@ -4052,7 +4061,7 @@
         <div id="group_list_template" class="template_element">
             <div class="group_select entity_block flex-container wide100p alignitemsflexstart">
                 <div class="avatar">
-                    <img src="">
+                    <img src="img/No-Image-Placeholder.svg">
                 </div>
                 <div class="flex-container wide100pLess70px gap5px group_select_container">
                     <div class="wide100p group_name_block character_name_block">
@@ -4100,7 +4109,7 @@
         </div>
         <div id="inline_avatar_template" class="template_element">
             <div class="avatar inline_avatar flex alignitemscenter textAlignCenter">
-                <img src="" loading="lazy" decoding="async">
+                <img src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async">
             </div>
         </div>
         <div id="alternate_greetings_template" class="template_element">
@@ -4169,7 +4178,7 @@
                     <div title="Caption" class="right_menu_button fa-lg fa-solid fa-envelope-open-text mes_img_caption" data-i18n="[title]Caption"></div>
                     <div title="Delete" class="right_menu_button fa-lg fa-solid fa-trash-can mes_media_delete" data-i18n="[title]Delete"></div>
                 </div>
-                <img class="mes_img" src="" />
+                <img class="mes_img" src="img/No-Image-Placeholder.svg" />
             </div>
         </div>
 

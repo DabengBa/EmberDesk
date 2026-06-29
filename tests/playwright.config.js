@@ -9,6 +9,7 @@ const dataRoot = process.env.PLAYWRIGHT_DATA_ROOT ?? '.tmp/playwright-e2e-data';
 const configPath = process.env.PLAYWRIGHT_CONFIG_PATH ?? '.tmp/playwright-e2e-config.yaml';
 const testUser = process.env.PLAYWRIGHT_USER ?? 'playwright-e2e';
 const testPassword = process.env.PLAYWRIGHT_PASSWORD ?? 'playwright';
+const chromeExecutablePath = process.env.PLAYWRIGHT_CHROME_EXECUTABLE || undefined;
 const workspacePanelFlagEnvKeys = [
     'EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST',
     'EMBERDESK_FEATURES_REACT_PANELS_WORLDINFO',
@@ -37,6 +38,7 @@ export default defineConfig({
     },
     use: {
         baseURL,
+        launchOptions: chromeExecutablePath ? { executablePath: chromeExecutablePath } : undefined,
         video: 'only-on-failure',
         screenshot: 'only-on-failure',
     },

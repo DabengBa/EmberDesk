@@ -26,11 +26,11 @@ describe('thumbnail lazy image loading templates', () => {
     test('index templates include lazy-loading and async-decoding on list avatar images', () => {
         const indexHtml = read('public/index.html');
 
-        expectTemplateFragment(indexHtml, 'character_template', '<img src="" loading="lazy" decoding="async">');
-        expectTemplateFragment(indexHtml, 'inline_avatar_template', '<img src="" loading="lazy" decoding="async">');
-        expectTemplateFragment(indexHtml, 'group_member_template', '<img alt="Avatar" src="" loading="lazy" decoding="async" />');
-        expectTemplateFragment(indexHtml, 'group_avatars_template', '<img alt="img4" class="img_4" src="" loading="lazy" decoding="async">');
-        expectTemplateFragment(indexHtml, 'past_chat_template', '<div class="avatar"><img src="" loading="lazy" decoding="async"></div>');
+        expectTemplateFragment(indexHtml, 'character_template', '<img src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async">');
+        expectTemplateFragment(indexHtml, 'inline_avatar_template', '<img src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async">');
+        expectTemplateFragment(indexHtml, 'group_member_template', '<img alt="Avatar" src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async" />');
+        expectTemplateFragment(indexHtml, 'group_avatars_template', '<img alt="img4" class="img_4" src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async">');
+        expectTemplateFragment(indexHtml, 'past_chat_template', '<div class="avatar"><img src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async"></div>');
     });
 
     test('swipe picker removes inherited past-chat avatars', () => {

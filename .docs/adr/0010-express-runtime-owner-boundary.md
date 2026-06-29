@@ -91,7 +91,7 @@ Neutral clarifications:
 
 Validation commands:
 
-```powershell
+```bash
 bun run --cwd tests test:unit -- express5-route-compatibility.test.js plugin-loader.test.js server-startup-profiler.test.js startup-critical-path.test.js startup-deferred-tasks.test.js startup-loader.test.js --runInBand
 bun run test:compat
 ```

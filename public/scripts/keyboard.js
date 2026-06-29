@@ -17,6 +17,7 @@ const interactableSelectors = [
     '.mes_buttons .mes_button', // Small inline buttons on the chat messages
     '.extraMesButtons>div:not(.mes_button)', // The extra/extension buttons inline on the chat messages
     '.swipe_left, .swipe_right', // Swipe buttons on the last message
+    '.mes_stop', // Stop button in the chat bar
     '.stscript_btn', // STscript buttons in the chat bar
     '.select2_choice_clickable+span.select2-container .select2-selection__choice__display', // select2 control elements if they are meant to be clickable
     '.avatar_load_preview', // Char display avatar selection
@@ -206,12 +207,12 @@ function initializeScrollResetBehaviors(element = document) {
 }
 
 /**
- * Handles keydown events on the document to trigger click on Enter key press for interactables
+ * Handles keydown events on the document to trigger click on Enter/Space key press for interactables
  *
  * @param {KeyboardEvent} event - The keyboard event
  */
 function handleGlobalKeyDown(event) {
-    if (event.key === 'Enter') {
+    if (event.key === 'Enter' || event.key === ' ') {
         if (!(event.target instanceof HTMLElement))
             return;
 
@@ -227,7 +228,10 @@ function handleGlobalKeyDown(event) {
 
         // Trigger click if a valid interactable is found and it's not disabled
         if (target && !target.classList.contains(DISABLED_CONTROL_CLASS)) {
-            console.debug('Triggering click on keyboard-focused interactable control via Enter', target);
+            if (event.key === ' ') {
+                event.preventDefault();
+            }
+            console.debug(`Triggering click on keyboard-focused interactable control via ${event.key === ' ' ? 'Space' : 'Enter'}`, target);
             target.click();
         }
     }

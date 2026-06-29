@@ -25,7 +25,7 @@ Make React the full owner for World Info panel behavior after Phase 4/6 compatib
 
 ## Validation
 
-```powershell
+```bash
 bun run build:react:workspace-panels
 bun run --cwd tests test:unit -- world-info-card-rendering.test.js world-info-import-feedback.test.js world-info-converters.test.js worldinfo-delete-cascade.test.js --runInBand
 bun run test:compat

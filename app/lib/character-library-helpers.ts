@@ -34,3 +34,7 @@ export function buildCharacterLibraryToolbarDefaults(state: CharacterLibraryTool
         bulkSelectedCount: state.bulkSelectedCount,
     };
 }
+
+export function getCharacterLibraryBulkSelectionShortText(count: number, locale = globalThis.navigator?.language ?? 'en') {
+    return locale.toLowerCase().startsWith('zh') ? `${count}个` : `${count} sel`;
+}

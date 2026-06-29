@@ -110,7 +110,7 @@ The processing outputs are:
 
 Run:
 
-```powershell
+```bash
 uv run python .docs/logic-description/react_character_library_sync_sandbox_proof.py
 ```
 

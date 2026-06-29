@@ -57,7 +57,7 @@ The change was pushed to `origin/csp-dev-techupgrade`, fast-forwarded to `origin
 
 Start by inspecting the working tree. There may be unrelated local changes; stage only the files that belong to the deployment.
 
-```powershell
+```bash
 git status --short
 git add <task-file-1> <task-file-2>
 git commit -m "<scope>: <summary>"
@@ -66,7 +66,7 @@ git push origin csp-dev-techupgrade
 
 Before updating the `sttest` branch, confirm it can fast-forward from the branch being deployed:
 
-```powershell
+```bash
 git fetch origin sttest csp-dev-techupgrade
 git merge-base --is-ancestor origin/sttest HEAD
 git push origin HEAD:sttest
@@ -78,19 +78,19 @@ Task-owned new files may be staged by explicit path when they are intended to en
 
 Run Git updates as `hostinger` so the working tree stays owned by `hostops:hostops`.
 
-```powershell
+```bash
 ssh hostinger "cd /opt/emberdesk-test && git fetch origin csp-dev-techupgrade && git pull --ff-only origin csp-dev-techupgrade && git rev-parse HEAD"
 ```
 
 Rebuild and restart the container as root:
 
-```powershell
+```bash
 ssh hostinger-root "cd /opt/emberdesk-test/deploy && docker compose up -d --build"
 ```
 
 Record the deployed revision:
 
-```powershell
+```bash
 ssh hostinger "cd /opt/emberdesk-test && git rev-parse HEAD > .deploy-revision && cat .deploy-revision"
 ```
 
@@ -98,21 +98,21 @@ ssh hostinger "cd /opt/emberdesk-test && git rev-parse HEAD > .deploy-revision &
 
 Check the container status:
 
-```powershell
+```bash
 ssh hostinger-root 'docker ps --filter name=emberdesk-test --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"'
 ssh hostinger-root 'docker inspect --format "{{.State.Health.Status}} {{.Image}}" emberdesk-test'
 ```
 
 Check the public HTTP surface:
 
-```powershell
+```bash
 ssh hostinger-root 'curl -sSI --max-time 15 https://sttest.tanyaleoallen.cloud/ | sed -n "1,12p"'
 ssh hostinger-root 'curl -sSI --max-time 15 https://sttest.tanyaleoallen.cloud/login | sed -n "1,12p"'
 ```
 
 For feature-specific verification, inspect the container filesystem or run a focused browser check. Example grep used for the welcome-panel deployment:
 
-```powershell
+```bash
 ssh hostinger-root 'docker exec emberdesk-test sh -lc "grep -n \"Recent Chats\\|recentChat\\|welcomeRecent\\|Temporary Chat\" /home/node/app/public/scripts/templates/welcomePanel.html || true"'
 ```
 
@@ -122,7 +122,7 @@ The expected result for that check is no match for the removed `Recent Chats` su
 
 Prefer rolling back to a known-good commit and rebuilding rather than using destructive resets.
 
-```powershell
+```bash
 ssh hostinger "cd /opt/emberdesk-test && git fetch origin csp-dev-techupgrade && git checkout <known-good-sha>"
 ssh hostinger-root "cd /opt/emberdesk-test/deploy && docker compose up -d --build"
 ssh hostinger "cd /opt/emberdesk-test && git rev-parse HEAD > .deploy-revision && cat .deploy-revision"

@@ -89,6 +89,7 @@ function SetupPage() {
         },
         retry: false,
     });
+    const { data: setupModeData } = setupModeQuery;
 
     const csrfTokenQuery = useQuery({
         queryKey: ['setup', 'csrf-token'],
@@ -108,21 +109,26 @@ function SetupPage() {
         retry: false,
         staleTime: Number.POSITIVE_INFINITY,
     });
+    const {
+        data: csrfToken,
+        error: csrfTokenError,
+        refetch: refetchCsrfToken,
+    } = csrfTokenQuery;
 
     async function ensureCsrfToken() {
-        if (typeof csrfTokenQuery.data === 'string' && csrfTokenQuery.data.length > 0) {
-            return csrfTokenQuery.data;
+        if (typeof csrfToken === 'string' && csrfToken.length > 0) {
+            return csrfToken;
         }
 
-        const result = await csrfTokenQuery.refetch();
+        const result = await refetchCsrfToken();
         if (typeof result.data === 'string' && result.data.length > 0) {
             return result.data;
         }
 
-        throw result.error ?? new MessageError(setupMessages.genericError);
+        throw result.error ?? csrfTokenError ?? new MessageError(setupMessages.genericError);
     }
 
-    const setupMode = setupModeQuery.data === 'set-password' ? 'set-password' : 'fresh';
+    const setupMode = setupModeData === 'set-password' ? 'set-password' : 'fresh';
     const activeSchema = setupMode === 'set-password' ? setPasswordSchema : freshSchema;
 
     const setupMutation = useMutation({
@@ -194,13 +200,13 @@ function SetupPage() {
     });
 
     useEffect(() => {
-        if (setupModeQuery.data === 'complete') {
+        if (setupModeData === 'complete') {
             window.location.href = '/login';
         }
-    }, [setupModeQuery.data]);
+    }, [setupModeData]);
 
     return (
-        <main className="login-page" role="main">
+        <main className="login-page">
             <SetupForm
                 form={setupForm}
                 mode={setupMode}

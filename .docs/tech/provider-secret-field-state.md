@@ -43,7 +43,7 @@ Important constraints:
 
 Focused proof:
 
-```powershell
+```bash
 bun run --cwd tests test:unit -- provider-secret-field-state.test.js chat-generation-auto-recovery.test.js secrets-input-map.test.js --runInBand
 bun run --cwd tests test:unit -- chat-workspace-structure.test.js openai-provider-capabilities.test.js --runInBand
 ```

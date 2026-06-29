@@ -25,7 +25,7 @@ Make the React Character Library the single runtime owner for the panel while pr
 
 ## Validation
 
-```powershell
+```bash
 bun run build:react:character-library
 bun run --cwd tests test:unit -- character-library-react-helpers.test.js character-library-react-panel-flag.test.js --runInBand
 bun run test:compat

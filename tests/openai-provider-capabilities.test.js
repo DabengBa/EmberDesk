@@ -92,6 +92,34 @@ describe('OpenAI provider capability helpers', () => {
         expect(source).toContain('generate_data.openai_secret_marker = fallbackOverrides.openaiSecretMarker;');
     });
 
+    test('keeps missing provider API key feedback visible before connection attempts', () => {
+        const source = fs.readFileSync(path.join(repoRoot, 'public/scripts/openai.js'), 'utf8');
+
+        expect(source).toContain('No secret key saved for ${oai_settings.chat_completion_source}');
+        expect(source).toContain('toastr.warning(t`Enter or save an API key before connecting.`);');
+    });
+
+    test('keeps missing provider credentials visible before test requests', () => {
+        const source = fs.readFileSync(path.join(repoRoot, 'public/scripts/openai.js'), 'utf8');
+
+        expect(source).toContain('function isProviderCredentialMissing()');
+        expect(source).toContain('if (isProviderCredentialMissing())');
+        expect(source).toContain('toastr.warning(t`Enter or save provider credentials before testing the connection.`);');
+    });
+
+    test('keeps API test requests visibly loading until they settle', () => {
+        const source = fs.readFileSync(path.join(repoRoot, 'public/scripts/openai.js'), 'utf8');
+        const testConnectionBody = source.match(/async function testApiConnection\(\) \{[\s\S]*?\n\}/)?.[0] ?? '';
+
+        expect(source).toContain('const API_TEST_REQUEST_TIMEOUT_MS = 15000;');
+        expect(testConnectionBody).toContain('startStatusLoading();');
+        expect(testConnectionBody).toContain('new AbortController()');
+        expect(testConnectionBody).toContain('API connection test timed out');
+        expect(testConnectionBody).toContain('} finally {');
+        expect(testConnectionBody).toContain('clearTimeout(timeout);');
+        expect(testConnectionBody).toContain('resultCheckStatus();');
+    });
+
     test('resolves model descriptors with structured capability fields', () => {
         const descriptor = resolveChatCompletionModel(settings(), { mainApi: 'openai' });
 

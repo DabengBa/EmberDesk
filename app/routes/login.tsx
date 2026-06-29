@@ -103,18 +103,23 @@ function LoginPage() {
         retry: false,
         staleTime: Number.POSITIVE_INFINITY,
     });
+    const {
+        data: csrfToken,
+        error: csrfTokenError,
+        refetch: refetchCsrfToken,
+    } = csrfTokenQuery;
 
     async function ensureCsrfToken() {
-        if (typeof csrfTokenQuery.data === 'string' && csrfTokenQuery.data.length > 0) {
-            return csrfTokenQuery.data;
+        if (typeof csrfToken === 'string' && csrfToken.length > 0) {
+            return csrfToken;
         }
 
-        const result = await csrfTokenQuery.refetch();
+        const result = await refetchCsrfToken();
         if (typeof result.data === 'string' && result.data.length > 0) {
             return result.data;
         }
 
-        throw result.error ?? new MessageError(loginMessages.genericError);
+        throw result.error ?? csrfTokenError ?? new MessageError(loginMessages.genericError);
     }
 
     const loginMutation = useMutation({
@@ -321,12 +326,13 @@ function LoginPage() {
     }
 
     return (
-        <main className="login-page" role="main">
+        <main className="login-page">
             <LoginForm
                 form={loginForm}
                 passwordVisible={passwordVisible}
                 loginVisible={loginVisible}
-                isSubmitting={loginMutation.isPending || lockoutSeconds !== null}
+                isSubmitting={loginMutation.isPending}
+                isLockedOut={lockoutSeconds !== null}
                 errorMessage={loginError}
                 onHandleChange={() => {
                     loginMutation.reset();

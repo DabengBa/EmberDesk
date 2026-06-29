@@ -134,6 +134,7 @@ const default_new_group_chat_prompt = '[Start a new group chat. Group members: {
 const default_new_example_chat_prompt = '[Example Chat]';
 const default_continue_nudge_prompt = '[Continue your last message without repeating its original content.]';
 const default_bias = 'Default (none)';
+const API_TEST_REQUEST_TIMEOUT_MS = 15000;
 const default_personality_format = '{{personality}}';
 const default_scenario_format = '{{scenario}}';
 const default_group_nudge_prompt = '[Write the next reply only as {{char}}.]';
@@ -3067,6 +3068,7 @@ function loadOpenAISettings(data, settings) {
     $(`#settings_preset_openai option[value="${openai_setting_names[oai_settings.preset_settings_openai]}"]`).prop('selected', true);
     $('#bind_preset_to_connection').prop('checked', oai_settings.bind_preset_to_connection);
     $('.reverse_proxy_warning').toggle(oai_settings.reverse_proxy !== '');
+    updateBaseUrlStatus();
     syncProxies();
 
     // Protect openai_max_context from being overridden by extensions on initial load
@@ -3880,13 +3882,40 @@ function updateUnifiedKeyField() {
     $field.val(state.value);
 }
 
+function updateBaseUrlStatus() {
+    const hasCustomEndpoint = Boolean(oai_settings.reverse_proxy);
+    $('#base_url_status')
+        .attr('data-mode', hasCustomEndpoint ? 'custom' : 'direct')
+        .text(hasCustomEndpoint
+            ? t`Custom endpoint active. API key field stores proxy password.`
+            : t`Direct provider endpoint. API key stays in the API Key field.`);
+}
+
 function onReverseProxyInput() {
     oai_settings.reverse_proxy = String($(this).val());
     oai_settings.custom_url = oai_settings.reverse_proxy;
     $('.reverse_proxy_warning').toggle(oai_settings.reverse_proxy != '');
     syncProxies();
     updateUnifiedKeyField();
+    updateBaseUrlStatus();
     saveSettingsDebounced();
+}
+
+function getPendingProviderCredentialValue(secretKey = resolveSecretKey()) {
+    if (secretKey === SECRET_KEYS.VERTEXAI_SERVICE_ACCOUNT) {
+        return String($('#vertexai_service_account_json').val() || '').trim();
+    }
+
+    return String($('#api_key_unified').val() || '').trim();
+}
+
+function isProviderCredentialMissing() {
+    if (oai_settings.reverse_proxy) {
+        return false;
+    }
+
+    const secretKey = resolveSecretKey();
+    return !!secretKey && !secret_state[secretKey] && !getPendingProviderCredentialValue(secretKey);
 }
 
 async function onConnectButtonClick(e) {
@@ -3917,6 +3946,7 @@ async function onConnectButtonClick(e) {
 
         if (!oai_settings.reverse_proxy && !secret_state[config.key] && !config.keyless) {
             console.log(`No secret key saved for ${oai_settings.chat_completion_source}`);
+            toastr.warning(t`Enter or save an API key before connecting.`);
             return;
         }
     }
@@ -3949,6 +3979,7 @@ function toggleChatCompletionForms() {
         [chat_completion_sources.MAKERSUITE]: 'https://generativelanguage.googleapis.com',
     };
     $('#openai_reverse_proxy').attr('placeholder', basePlaceholders[oai_settings.chat_completion_source] || '');
+    updateBaseUrlStatus();
 
     setToolReasoningControls();
 }
@@ -3960,12 +3991,31 @@ async function testApiConnection() {
         return;
     }
 
+    if (isProviderCredentialMissing()) {
+        toastr.warning(t`Enter or save provider credentials before testing the connection.`);
+        return;
+    }
+
+    startStatusLoading();
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort('API connection test timed out'), API_TEST_REQUEST_TIMEOUT_MS);
+
     try {
-        const reply = await sendOpenAIRequest('quiet', [{ 'role': 'user', 'content': 'Hi' }], new AbortController().signal);
+        const reply = await Promise.race([
+            sendOpenAIRequest('quiet', [{ 'role': 'user', 'content': 'Hi' }], controller.signal),
+            delay(API_TEST_REQUEST_TIMEOUT_MS).then(() => {
+                controller.abort('API connection test timed out');
+                throw new Error('API connection test timed out');
+            }),
+        ]);
         console.log(reply);
         toastr.success(t`API connection successful!`);
     } catch (err) {
         toastr.error(t`Could not get a reply from API. Check your connection settings / API key and try again.`);
+    } finally {
+        clearTimeout(timeout);
+        resultCheckStatus();
     }
 }
 
@@ -3983,7 +4033,9 @@ function onApiKeyUnifiedShowClick() {
 
 function updateFallbackProviderStatus() {
     const status = getFallbackProviderStatus(oai_settings, secret_state, SECRET_KEYS.OPENAI_FALLBACK);
-    $('#fallback_provider_status').text(status.text);
+    $('#fallback_provider_status')
+        .attr('data-state', status.state)
+        .text(status.text);
 }
 
 function onFallbackProviderApiKeyShowClick() {
@@ -4119,6 +4171,7 @@ function proxyUrlCallback(_, value) {
     oai_settings.reverse_proxy = value;
     $('#openai_reverse_proxy').val(value);
     syncProxies();
+    updateBaseUrlStatus();
     reconnectOpenAi();
     return oai_settings.reverse_proxy;
 }
@@ -4356,7 +4409,6 @@ export function initOpenAI() {
         cancelStatusCheck('Chat Completion source changed');
         model_list = [];
         oai_settings.chat_completion_source = String($(this).find(':selected').val());
-        $(this).attr('data-source', oai_settings.chat_completion_source);
         toggleChatCompletionForms();
         saveSettingsDebounced();
         reconnectOpenAi();

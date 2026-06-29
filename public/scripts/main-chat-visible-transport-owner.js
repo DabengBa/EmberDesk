@@ -116,6 +116,13 @@ export function classifyMainChatVisibleTransportOwner(input = {}) {
     };
 }
 
+/**
+ * @param {{
+ *   runtime?: Record<string, any> | null,
+ *   decision?: Record<string, any> | null,
+ *   contract?: Record<string, any> | null,
+ * }} [input]
+ */
 export function deriveReactQuietTransportBridgeState({
     runtime = null,
     decision = null,
@@ -137,6 +144,14 @@ export function deriveReactQuietTransportBridgeState({
     };
 }
 
+/**
+ * @param {{
+ *   runtime?: Record<string, any> | null,
+ *   decision?: Record<string, any> | null,
+ *   generationControl?: Record<string, any> | null,
+ *   streamingTransport?: Record<string, any> | null,
+ * }} [input]
+ */
 export function deriveReactVisibleTransportBridgeState({
     runtime = null,
     decision = null,

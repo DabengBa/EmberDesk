@@ -3,6 +3,7 @@ import { useEffect, useMemo } from 'react';
 import {
     buildCharacterLibraryToolbarDefaults,
     characterLibraryToolbarSchema,
+    getCharacterLibraryBulkSelectionShortText,
     type CharacterLibraryToolbarState,
 } from '@/lib/character-library-helpers';
 import { LegacyElementHost } from './LegacyElementHost';
@@ -50,6 +51,8 @@ export function CharacterLibraryToolbar({
     state: CharacterLibraryToolbarState;
 }) {
     const nextDefaults = useMemo(() => buildCharacterLibraryToolbarDefaults(state), [state]);
+    const bulkSelectedLabel = `${state.bulkSelectedCount} characters selected`;
+    const bulkSelectedShortText = getCharacterLibraryBulkSelectionShortText(state.bulkSelectedCount);
     const toolbarForm = useForm({
         defaultValues: nextDefaults,
         validators: {
@@ -63,7 +66,7 @@ export function CharacterLibraryToolbar({
 
     return (
         <div className="emberdesk-react-character-library-toolbar flexFlowColumn gap8">
-            <div className="flex-container flexnowrap gap8 justifySpaceBetween alignItemsCenter">
+            <div className="character-library-toolbar-actions flex-container flexnowrap gap8 justifySpaceBetween alignItemsCenter">
                 <div className="flex-container flexwrap gap8 alignItemsCenter">
                     <ToolbarActionButton label="New" title="Create New Character" onClick={() => bridge.clickLegacyAction('rm_button_create')} />
                     <ToolbarActionButton label="File" title="Import Character from File" onClick={() => bridge.clickLegacyAction('character_import_button')} />
@@ -76,7 +79,14 @@ export function CharacterLibraryToolbar({
                     <ToolbarActionButton label="Bulk" title="Bulk edit characters" onClick={() => bridge.toggleBulkEdit()} />
                     {state.isBulkEdit ? (
                         <>
-                            <span className="paginationjs-nav" role="status">{state.bulkSelectedCount} sel</span>
+                            <output
+                                className="character-library-bulk-selected-count paginationjs-nav"
+                                role="status"
+                                title={bulkSelectedLabel}
+                                aria-label={bulkSelectedLabel}
+                            >
+                                {bulkSelectedShortText}
+                            </output>
                             <ToolbarActionButton label="All" title="Bulk select all characters" onClick={() => bridge.selectAllInBulkMode()} />
                             <ToolbarActionButton
                                 label="Del"
@@ -88,16 +98,16 @@ export function CharacterLibraryToolbar({
                     ) : null}
                 </div>
             </div>
-            <div className="flex-container flexwrap gap8 alignItemsCenter">
-                <div className="flex-container flexnowrap gap8 alignItemsCenter">
+            <div className="character-library-toolbar-fields flex-container flexwrap gap8 alignItemsCenter">
+                <div className="character-library-toolbar-field flex-container flexnowrap gap8 alignItemsCenter">
                     <label htmlFor="emberdesk-react-character-search">Find</label>
-                    <toolbarForm.Field
-                        name="searchQuery"
-                        children={field => (
+                    <toolbarForm.Field name="searchQuery">
+                        {field => (
                             <input
                                 id="emberdesk-react-character-search"
                                 className="text_pole textarea_compact"
                                 type="search"
+                                aria-label="Find characters"
                                 value={field.state.value}
                                 onChange={event => {
                                     const searchQuery = event.target.value;
@@ -106,13 +116,12 @@ export function CharacterLibraryToolbar({
                                 }}
                             />
                         )}
-                    />
+                    </toolbarForm.Field>
                 </div>
-                <div className="flex-container flexnowrap gap8 alignItemsCenter">
+                <div className="character-library-toolbar-field flex-container flexnowrap gap8 alignItemsCenter">
                     <label htmlFor="emberdesk-react-character-sort">Sort</label>
-                    <toolbarForm.Field
-                        name="sortValue"
-                        children={field => (
+                    <toolbarForm.Field name="sortValue">
+                        {field => (
                             <select
                                 id="emberdesk-react-character-sort"
                                 className="text_pole textarea_compact"
@@ -130,7 +139,7 @@ export function CharacterLibraryToolbar({
                                 ))}
                             </select>
                         )}
-                    />
+                    </toolbarForm.Field>
                 </div>
             </div>
             <LegacyElementHost factory={() => state.tagControlsElement} />

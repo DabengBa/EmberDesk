@@ -56,6 +56,11 @@ function setWorkspacePanelSnapshot(kind, snapshot) {
     }));
 }
 
+/**
+ * @param {string} kind
+ * @param {unknown} [state]
+ * @param {unknown} [bridge]
+ */
 export function recordWorkspacePanelMount(kind, state = null, bridge = null) {
     assertWorkspacePanelKind(kind);
     setWorkspacePanelSnapshot(kind, {
@@ -67,6 +72,11 @@ export function recordWorkspacePanelMount(kind, state = null, bridge = null) {
     });
 }
 
+/**
+ * @param {string} kind
+ * @param {unknown} [state]
+ * @param {unknown} [bridge]
+ */
 export function recordWorkspacePanelUpdate(kind, state = null, bridge = undefined) {
     const previousSnapshot = getWorkspacePanelSnapshot(kind);
     setWorkspacePanelSnapshot(kind, {

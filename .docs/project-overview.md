@@ -32,10 +32,10 @@ It is not optimized for users who want a managed cloud product or a minimal one-
 - Frontend: HTML/CSS/jQuery main shell frozen as the long-term workspace facade, with progressive React page/panel islands and performance refactors around it
 - Build: Bun-managed scripts plus Vite for shared browser library output, the shared React app, and guarded React panel bundles; Webpack remains a deprecated `/lib.js` fallback
 - Entry point: `server.js` -> `src/server-main.js`
-- React migration: feature-flagged page islands for `/login`, `/setup`, and `/settings`, plus guarded workspace panel islands for Character Library, World Info, Background Library, and Extensions Host, with legacy fallbacks preserved (see [ADR-0007](adr/0007-react-page-islands-with-legacy-fallbacks.md))
-- Workspace panel islands: the server bootstrap payload now publishes independent `characterLibrary`, `mainChatMessageList`, `worldInfo`, `backgroundLibrary`, and `extensionsHost` flags. Character Library keeps its dedicated bundle; the shared workspace-panel bundle mounts the guarded main-chat, World Info, Background Library, and Extensions Host slices fail-closed behind the same payload. Flag-off or build-failure paths do not insert empty migration hosts, and legacy owners still perform World Info prompt/regex/delete semantics, Background file/API/slash behavior, extension discovery/mount/protocol behavior, and the remaining excluded main-chat transport/renderer behavior.
+- React migration: feature-flagged page islands for `/login`, `/setup`, and `/settings`, plus guarded workspace islands for Character Library, Main Chat Message List, World Info, Background Library, and Extensions Host. The delivered roadmap now treats the same-entry legacy paths as either documented emergency compatibility facades or ADR-frozen rollback owners, not as open migration debt (see [ADR-0007](adr/0007-react-page-islands-with-legacy-fallbacks.md)).
+- Workspace panel islands: the server bootstrap payload publishes independent `characterLibrary`, `mainChatMessageList`, `worldInfo`, `backgroundLibrary`, and `extensionsHost` flags. Character Library keeps its dedicated bundle; the shared workspace-panel bundle mounts the guarded main-chat, World Info, Background Library, and Extensions Host slices fail-closed behind the same payload. Flag-off or build-failure paths do not insert empty migration hosts, and remaining legacy owners are explicit compatibility boundaries rather than ambiguous competing implementations.
 - React state migration: Phase 4 has already landed the Zustand-backed workspace-panel and main-chat observation stores plus an allowlisted global compatibility bridge. The current roadmap now closes with `globalThis.SillyTavern` and `@sillytavern/*` frozen as documented public facades, `eventSource` / `event_types` kept as long-term supported public runtime contracts, jQuery globals limited to their documented compatibility surfaces, and `__emberDeskReactCompatibilityBridge` kept internal-only. `JS-Slash-Runner` remains the primary blocker sample for any future proposal that would narrow those surfaces.
-- Main-chat React boundary: the guarded main-chat island can own supported visible OpenAI direct-chat transport slices and record renderer/windowing candidate contracts, but provider compatibility fallback, quiet/background generation, legacy formatter HTML, extension-mutated rows, and long-chat load-more/windowing remain protected legacy owners until Phase 7 full owner cutover.
+- Main-chat React boundary: the guarded `mainChatMessageList` island now owns the visible composer, slash-status shell, safe row/action shell, and the standard OpenAI direct-chat visible transport path (`submitComposer`, `continueLast`, regenerate/retry, and swipe). The React controller also owns reading-position restore plus the row/windowing decision surface, while excluded non-OpenAI/group/dry-run/nested-visible requests, quiet/background helper requests, unsafe or extension-mutated rows, and the actual legacy `showMoreMessages()` execution path remain explicit compatibility owners or facades inside the same shell.
 
 Current architectural boundaries:
 
@@ -66,13 +66,13 @@ EmberDesk currently provides:
 
 - a main browser workspace for chat-centric LLM use
 - character-card management and large-library browsing
-- a guarded React character-library panel island inside the main workspace, keeping the same entry point while adding virtualized row rendering for large page sizes, preserving full library refresh/error semantics, and retaining legacy fallback behavior
+- a guarded React character-library panel island inside the main workspace, keeping the same entry point while making the React toolbar/list path the normal visible owner for large-library browsing and keeping only a documented emergency compatibility facade for flag-off or build-missing cases
 - chat history storage and recovery
 - real-browser proof for stored chat message rendering into stable message rows, plus message-row and send-form role/name affordance coverage for future main-chat changes
 - world info / lorebook workflows
 - background and extension surfaces inside the main shell
 - a documented shared browser library for common frontend utilities and extension compatibility
-- feature-flagged React page islands for login, setup, and the migrated Settings slice, plus guarded workspace panel islands for the character library, World Info, Background Library, and Extensions Host; TanStack Form, Zod, TanStack Query, and TanStack Virtual are used where React owns the migrated slice, while legacy rollback surfaces and legacy-owned behavior owners stay in place until later cleanup specs retire them
+- feature-flagged React page islands for login, setup, and the migrated Settings slice, plus guarded workspace islands for the character library, main-chat message list, World Info, Background Library, and Extensions Host; TanStack Form, Zod, TanStack Query, and TanStack Virtual are used where React owns the migrated slice, while same-entry rollback facades and explicit compatibility owners stay documented in place
 - Zustand-backed React state stores and an allowlisted compatibility bridge that let React-owned slices observe workspace/main-chat state without exposing broad panel internals or breaking legacy extension globals
 - Docker-friendly deployment and browser access across devices
 - focused startup and interaction performance work for daily-use paths
@@ -108,7 +108,7 @@ EmberDesk does not currently aim to:
 - Treat client-side derived lists as disposable views over canonical files; after destructive actions, stale delayed responses must not restore removed rows.
 - Keep compatibility-facing character row selectors and accessibility state synchronized when list rows are reused instead of re-rendered.
 - Treat main-chat message rows, send-form controls, `eventSource` / `event_types`, and slash-command surfaces as protected compatibility points; add focused browser and compatibility proof before changing rendering or streaming behavior.
-- Treat React modernization as feature-flagged page and panel islands until later phases prove workspace-shell and extension-host compatibility; preserve legacy fallback routes and panels until a cleanup spec removes them with evidence.
+- Treat React modernization as a closed roadmap, not an open-ended rewrite: the jQuery workspace shell is the long-term facade for `/`, React routes and islands remain additive inside it, and any future narrowing of compatibility exports or same-entry rollback facades requires new proof and a new ADR/spec boundary.
 
 ## One-Line Summary
 

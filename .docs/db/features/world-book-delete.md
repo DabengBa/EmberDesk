@@ -11,63 +11,50 @@ related: [page.chat_workspace, feature.world_info_panel, feature.character_delet
 
 `feature.world_book_delete` represents the confirmed removal of a world info / lorebook file from the user's collection, including optional cleanup of character references that point to the deleted book.
 
-## Feature Purpose
+## Purpose
 
-This feature lets a user remove an unwanted world book and, when other characters still reference it, decide whether to also clear those character-level references before deletion.
+Let a user delete a world info/lorebook file from the World Info editor while making any cleanup of character references an explicit choice.
 
-## Trigger Entry
+## User-Visible Contract
 
-- **Delete button**: use the delete button in the World Info editor panel documented by [World Info Panel](feature.world_info_panel).
-- **Preflight check**: EmberDesk calls `/api/worldinfo/delete-preflight` to determine whether any characters reference the world book.
-- **Dialog selection**: depending on the preflight result, EmberDesk shows either a cascade warning dialog or a simple confirmation.
+- Deleting a world book always requires explicit confirmation from the World Info editor surface.
+- When EmberDesk can see that other characters reference the world book, it shows a cascade warning with the world name, entry count, bound-character warning, and an unchecked option to clear those references.
+- The clear-references option is opt-in; deleting the world book without selecting it removes the world file but leaves other characters' references untouched.
+- If no bound characters are found, or if the preflight cannot provide bound-character details, EmberDesk falls back to a simple irreversible-delete confirmation rather than blocking deletion.
+- After deletion, visible World Info state is flushed so global selections, cached world lists, and the open editor no longer show the deleted world as editable.
+- Cleanup errors for individual character references must not pretend reference cleanup succeeded, but they also must not reverse the confirmed world-file deletion.
 
-## Interaction IDs
+## Semantic Interaction IDs
 
 - `feature.world_book_delete`: the full destructive delete behavior.
-- `feature.world_book_delete.preflight`: the server call that gathers bound character metadata before showing the dialog.
+- `feature.world_book_delete.preflight`: the visible decision point that determines whether the user sees cascade warning or simple confirmation.
 - `feature.world_book_delete.cascade_dialog`: the warning dialog shown when other characters reference the world book.
-- `feature.world_book_delete.clear_references`: the optional action that also strips the `extensions.world` field from bound characters.
+- `feature.world_book_delete.clear_references`: the optional user-selected cleanup of bound character references.
 
-## User Flow
+## Acceptance Workflows
 
-### World Book With Bound Characters
+- As a World Info user deleting a book with bound characters, from [World Info Panel](feature.world_info_panel) press delete and review the cascade warning; EmberDesk must show the world name, entry count, bound-character warning, and unchecked clear-references option, then on confirmation delete the world and refresh visible World Info state, while refresh/reopen must not show the deleted world as editable, and failure is deleting without confirmation or clearing character references without opt-in.
+- As a user deleting a world book with no visible bound-character risk, from the editor press delete and confirm the simple irreversible dialog; EmberDesk must remove the world and clear the editor/global selection state after refresh, cancel must leave everything unchanged, and failure is no confirmation, stale editor content, or deletion after cancel.
+- As a user whose bound-character preflight cannot complete, from the delete action continue through the simple confirmation fallback; EmberDesk must keep deletion recoverable through explicit user confirmation and must not show invented bound-character details, with failure signaled by a blocked delete with no recovery or a cascade warning based on unavailable evidence.
+- As a user opting into reference cleanup, from the cascade dialog check clear references and confirm; EmberDesk must visibly remove the deleted world and avoid leaving bound characters presented as still actively using it after refresh, and failure is claiming cleanup succeeded when errors remain or modifying unrelated character references.
 
-1. The user clicks the delete button in the World Info editor.
-2. EmberDesk calls `/api/worldinfo/delete-preflight` with the world book name.
-3. The preflight response includes the world book's entry count and the list of bound characters.
-4. Because bound characters exist, EmberDesk shows a **cascade warning dialog** containing:
-   - A heading: "Delete the World/Lorebook: 'name'?"
-   - The world book name, entry count, and a warning listing how many other characters still reference it.
-   - A "Also clear world info references in bound characters" checkbox (unchecked by default).
-   - A "Delete" button and a "Delete All" shortcut.
-5. If the user checks the "clear references" checkbox and confirms, EmberDesk calls `/api/worldinfo/delete-cascade` with `clear_references: true`, which strips the `extensions.world` field from all bound characters before deleting the world file.
-6. If the user confirms without checking the checkbox, EmberDesk deletes the world file only; bound characters retain their `extensions.world` reference (it becomes a dangling reference).
-7. Client-side state is flushed: cache, global selection, and the editor panel are updated.
+## Feature-Specific Evidence
 
-### World Book Without Bound Characters
+- Confirmation dialog type, cascade warning content, checkbox default, editor/global selection clearing, and post-refresh absence of the deleted world are primary evidence.
+- Preflight and cascade endpoint results are supporting evidence only when they match the visible dialog and resulting World Info state.
+- SQLite character-index availability can explain which dialog is shown, but users should still see a coherent confirmation path.
 
-1. The user clicks the delete button.
-2. The preflight response shows zero bound characters.
-3. EmberDesk shows a simple confirmation dialog: "Delete the World/Lorebook: 'name'?" with "This action is irreversible!"
-4. On confirmation, EmberDesk deletes the world file via `/api/worldinfo/delete`.
+## Failure Signals
 
-### Preflight Failure
+- A world book is removed without explicit confirmation.
+- Bound-character references are cleared by default.
+- The World Info editor continues showing a deleted world as editable.
+- Preflight failure strands the user with no confirmation path.
+- Cleanup errors are hidden while the UI claims all bound references were cleared.
 
-1. If the preflight request fails, EmberDesk falls through to the simple confirmation dialog.
-2. Deletion proceeds via the standard `/api/worldinfo/delete` endpoint.
+## Boundaries
 
-## Business Rules And Boundaries
-
-- Deletion must remain an explicit user-confirmed action.
-- When bound characters exist, the cascade warning dialog is mandatory; the simple confirmation is not shown.
-- The "clear references" checkbox is unchecked by default — the user must actively opt in to modify other characters.
-- This feature is initiated from the World Info editor surface documented by [World Info Panel](feature.world_info_panel).
-- This feature is separate from [Delete Character](feature.character_delete): deleting a character does not cascade to other characters' world references ([ADR-0005](../adr/0005-delete-no-cross-character-world-ref-cleanup.md)), but deleting a world book can optionally clear references because the referenced entity itself is being destroyed.
-- If the preflight request fails, deletion still proceeds via a simple confirmation dialog; the cascade warning is skipped gracefully.
-- The preflight endpoint uses the SQLite character index (when available) to find bound characters; if the index is not supported, the bound-characters list is empty and the simple confirmation is shown.
-
-## Outcomes
-
-- **Success**: the world file is deleted; if "clear references" was checked, bound characters have their `extensions.world` field stripped; client-side state is flushed and the editor panel is updated.
-- **Cancel**: the dialog closes without side effects.
-- **Failure**: individual errors during character-reference cleanup are caught and skipped; the world file deletion is not blocked by reference-cleanup failures.
+- Opening and editing World Info belongs to [World Info Panel](feature.world_info_panel).
+- Character deletion and character-owned cascade choices belong to [Delete Character](feature.character_delete).
+- Character-card identity belongs to [Character Card](term.character_card).
+- The no-cross-character-cleanup rule for deleting characters is recorded in [ADR-0005](../adr/0005-delete-no-cross-character-world-ref-cleanup.md).

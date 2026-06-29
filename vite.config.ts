@@ -98,11 +98,12 @@ export default defineConfig(({ mode }) => {
         publicDir: false,
 
         plugins: [
-            react(),
             TanStackRouterVite({
                 routesDirectory: path.resolve(process.cwd(), 'app/routes'),
                 generatedRouteTree: path.resolve(process.cwd(), 'app/routeTree.gen.ts'),
+                autoCodeSplitting: true,
             }),
+            react(),
         ],
 
         resolve: {

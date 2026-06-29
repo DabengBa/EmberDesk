@@ -131,7 +131,7 @@ Do not use this pattern for the main chat workspace until global startup, extens
 
 Focused proof for this slice:
 
-```powershell
+```bash
 cd tests
 bun run test:unit -- login-page-controller.test.js --runInBand
 bun run test:unit -- setup-page-controller.test.js --runInBand
@@ -145,7 +145,7 @@ bun run test:e2e -- sample.e2e.js
 
 Docs proof:
 
-```powershell
+```bash
 bun run docs:check
 bun run docs:build
 ```

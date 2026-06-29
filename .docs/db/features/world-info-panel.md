@@ -11,68 +11,55 @@ related: [page.chat_workspace, feature.world_book_delete, feature.character_dele
 
 `feature.world_info_panel` represents the user-facing World Info drawer inside [Chat Workspace](page.chat_workspace). It covers selecting global worlds, opening the World Info editor, managing visible world-book entries, and using the content editor dialog. It does not describe world scanning algorithms, token budgeting internals, storage files, or API implementation details.
 
-## Feature Purpose
+## Purpose
 
-This feature lets users keep lorebook context close to the chat workspace: they can activate global world info, choose a world book to edit, search and sort entries, and open individual entries without leaving the main browser shell.
+Keep World Info/lorebook activation and editing available inside the chat workspace through visible selectors, entry cards, editor controls, and import/export actions.
 
-## Trigger Entry
+## User-Visible Contract
 
-- **Drawer entry**: open the World Info drawer from the chat workspace.
-- **Global activation entry**: use the Global World Info multi-select to choose one or more worlds active in all chats.
-- **Editor entry**: select a world from the World Info Editor panel.
-- **Entry edit entry**: open an entry card or its content editor modal.
+- The World Info drawer belongs to [Chat Workspace](page.chat_workspace); users activate global worlds and edit world books without leaving the main shell.
+- Global world activation and editor selection are separate controls: selecting a world to edit does not automatically make it globally active.
+- Empty states are explicit. No global world, no selected editor world, no entries, and no embedded character book should show clear feedback instead of stale content.
+- The editor toolbar exposes search, sort, create, import, export, rename, duplicate, delete, refresh, backfill, and apply-sorting actions when valid for the selected world.
+- Entry cards provide scannable collapsed rows and focused editing through expansion or the content editor modal.
+- File import accepts supported `.json`, `.lorebook`, and `.png` files through the toolbar or drop target, blocks duplicate picker starts while active, shows progress and conflict decisions, and restores normal controls after success, skip, cancellation, parse failure, or network failure.
+- The guarded React host, when enabled, may own visible selector/search/sort/action shortcuts and readiness reporting, but it remains additive and must preserve the established World Info action chain and fallback controls.
 
-## Interaction IDs
+## Semantic Interaction IDs
 
 - `feature.world_info_panel`: the complete World Info drawer and editor surface.
 - `feature.world_info_panel.global_selector`: the Global World Info selector and its empty-state prompt.
-- `feature.world_info_panel.editor_selector`: the World Info Editor selector that chooses which world book is being edited.
-- `feature.world_info_panel.toolbar`: the editor toolbar for search, sort, create, import, export, rename, duplicate, delete, refresh, backfill, and apply-sorting actions.
-- `feature.world_info_panel.entry_card`: the collapsed entry-card list and per-entry expansion/edit affordance.
-- `feature.world_info_panel.content_editor`: the modal dialog for editing entry content.
-- `feature.world_info_panel.react_host`: the guarded React host/action surface that can mirror world selection, search/sort, import/export, refresh, and entry shortcuts while delegating behavior to the established World Info controls.
+- `feature.world_info_panel.editor_selector`: the World Info Editor selector that chooses which world book is edited.
+- `feature.world_info_panel.toolbar`: editor actions for search, sort, create, import, export, rename, duplicate, delete, refresh, backfill, and apply sorting.
+- `feature.world_info_panel.entry_card`: collapsed entry-card list and per-entry expansion/edit affordance.
+- `feature.world_info_panel.content_editor`: modal dialog for focused entry-content editing.
+- `feature.world_info_panel.react_host`: guarded host/action surface for mirrored selection, search/sort, import/export, refresh, and entry shortcuts.
 
-## User Flow
+## Acceptance Workflows
 
-1. The user opens the World Info drawer from the main workspace.
-2. EmberDesk shows a Global World Info panel and a World Info Editor panel.
-3. In the global panel, the user can select zero or more worlds that remain active across chats. When no global world is active, the selector shows an empty prompt.
-4. In the editor panel, the user selects a world book to inspect or modify.
-5. EmberDesk shows editor controls for searching, sorting, creating, importing, exporting, renaming, duplicating, deleting, refreshing, backfilling metadata, and applying sorting. When one or more files are being imported, the import action is disabled and shows visible in-progress feedback until the active import batch finishes.
-6. World entries appear as cards so the user can scan the list before expanding or editing a specific entry.
-7. When entry content needs more room, the content editor opens as a modal dialog with its own title, metadata, close control, and text area.
-8. In builds where the guarded React migration flag is enabled, the drawer can show a React host above the legacy editor. The host reports selector/import/drop-target readiness, shows the selected world and entry counts, and exposes world selection, search, sort, create, import, export, refresh, and entry shortcut controls that dispatch to the existing World Info action chain.
+- As a lorebook user who wants context active in all chats, from [Chat Workspace](page.chat_workspace) open the World Info drawer, choose global worlds, then separately select a world in the editor; EmberDesk must reflect global selections and editor content independently, refresh or reopen must not show stale entry content for an empty selection, and failure is editor selection silently activating global context or stale entries remaining after selection clears.
+- As a user editing world entries, from the editor selector choose a world, search or sort entries, open an entry card, and use the content editor modal; EmberDesk must show the selected world's entries, keep toolbar actions scoped to that world, preserve clear loading/empty/editing states after refresh or reopen, and failure is entry content from a different world or a modal without a visible close/recovery path.
+- As a user importing World Info files, from the toolbar or drop target import supported files, resolve overwrite conflicts, optionally cancel remaining batch work, and review the final result; EmberDesk must show busy/progress state, block duplicate starts, report detected format and entry counts when available, summarize imported/failed/skipped/unprocessed counts, and restore controls after completion or failure, with failure signaled by duplicate picker opens, raw technical errors as primary feedback, or hidden conflict choices.
+- As a user importing embedded lorebook data from a selected character, from the toolbar-adjacent character action attempt import and then retry manually if no book exists; EmberDesk must either import and switch visibly to the imported world or show an informational no-embedded-book state, and failure is silent no-op.
+- As a user on a build with the guarded World Info host enabled, from the host use selection, search/sort, create/import/export/refresh, and entry shortcuts; EmberDesk must produce the same visible World Info outcomes as the established controls, flag-off or mount failure must leave legacy controls as the behavior owner, and failure is a React shortcut that bypasses prompt activation, regex placement, import semantics, or deletion confirmation.
 
-## Business Rules And Boundaries
+## Feature-Specific Evidence
 
-- The drawer belongs to the chat workspace; users should not need a separate route to activate or edit World Info.
-- Global world activation and editor selection are separate controls because selecting a world for editing does not automatically mean it is globally active.
-- The World Info drawer can stay open alongside other workspace context, but its own panels and dialogs own their visible loading, empty, and editing states.
-- The toolbar import action accepts one or more `.json`, `.lorebook`, or `.png` files from the file picker, and the World Info editor panel accepts dropped files through the same import queue. A batch imports up to 50 supported files; unsupported extensions and extra files are skipped with visible feedback.
-- The toolbar import action prevents duplicate file-picker opens while an import batch is active; file parsing, conversion, overwrite checks, upload, success, skip, cancellation, and failure paths all restore the action to its normal state.
-- Single-file import shows the detected source format and entry count when available so overwrite decisions and successful outcomes have visible context.
-- Batch import processes files sequentially because each successful file can refresh the World Info selector and switch the editor to the imported world.
-- When a batch contains files that would overwrite existing World Info names, EmberDesk asks once whether to overwrite all conflicts, skip all conflicts, or confirm each conflict individually.
-- Import errors distinguish unsupported formats, damaged or incomplete files, PNG files without importable World Info data, oversized uploads, and connection/import failures when EmberDesk can identify the cause.
-- Embedded World/Lorebook import is a toolbar-adjacent character action: if a selected character has no embedded book data, EmberDesk reports that empty state instead of silently doing nothing.
-- Destructive world-book deletion is a separate semantic feature: [Delete World Book](feature.world_book_delete).
-- Character deletion may also delete selected world info files through its cascade section, but that destructive flow belongs to [Delete Character](feature.character_delete).
-- The guarded migration host is additive. If the migration flag is off, no extra World Info host is inserted; if the bundle cannot mount, the legacy controls remain the behavior owner. The React host owns its visible selection/search/sort/action controls, and those controls now route through the explicit `public/scripts/world-info.js` compatibility facade for world selection, search/sort, create/open entry, import/export, refresh, rename, duplicate, and delete flows. React still does not replace global activation, import parsing, regex placement, prompt activation, converter/import result semantics, or world-book deletion rules; those semantics remain owned by the World Info module instead of a raw DOM-click bridge.
-- Entry scanning, prompt injection, token budget calculations, server endpoints, and persistence details are outside this semantic ID.
+- Selector labels, empty prompts, selected world title, entry cards, toolbar availability, content editor modal, import progress, overwrite choices, final import summary, and no-embedded-book message are primary evidence.
+- Supported file extensions, batch limits, converter results, and endpoint responses are supporting evidence only when the visible import workflow matches.
+- `public/scripts/world-info.js` helper routing and React host readiness markers support migration proof; they do not replace visible drawer behavior.
 
-## Outcomes
+## Failure Signals
 
-- **Global selection changed**: selected worlds are reflected in the global selector labels and workspace state.
-- **Editor selected**: the editor panel shows the selected world book's entries and toolbar actions.
-- **Entry opened**: the selected entry expands or opens the content editor dialog for focused editing.
-- **Empty state**: if no global worlds or editor world are selected, the panel communicates that state without leaving stale entry content visible.
-- **Import in progress**: the import action is visibly busy, duplicate import starts are blocked, batch progress shows the current file position, and the action is restored after success, skip, cancellation, parse failure, or network failure.
-- **Import decision shown**: when an import would overwrite an existing world, the confirmation includes the detected format, available entry count, and action-specific overwrite/cancel choices.
-- **Batch import decision shown**: when multiple selected files would overwrite existing worlds, the batch conflict summary lets the user overwrite all conflicts, skip all conflicts, or fall back to individual overwrite confirmations.
-- **Import completed**: successful imports report the imported format and available entry count, then make the automatic switch to the imported World Info visible to the user.
-- **Batch import completed**: after the queue ends, EmberDesk reports aggregate imported, failed, skipped, and unprocessed counts without listing a long file inventory.
-- **Batch import cancelled**: cancelling remaining files from the progress toast lets the active file finish and leaves later files unprocessed in the final summary.
-- **Import failed**: failed imports show a recoverable reason instead of exposing raw technical error text as the primary message.
-- **No embedded book**: trying to import embedded World/Lorebook data from a selected character without embedded data produces an informational message.
-- **Deletion requested**: the user is routed into the separate [Delete World Book](feature.world_book_delete) confirmation flow.
-- **Migration host/action island shown**: when the guarded host is enabled, it reports selector/import/drop-target readiness and exposes React-owned world selection, search/sort, create/import/export/refresh, and entry shortcut controls while preserving the legacy action chain that completes the World Info workflow.
+- Global activation and editor selection are coupled without user intent.
+- Empty states leave stale world entries visible.
+- Import starts twice, loses progress feedback, or fails without a recoverable visible reason.
+- Batch conflict decisions are hidden or applied differently than the user chose.
+- The guarded host appears but the established World Info controls or fallback path disappear.
+
+## Boundaries
+
+- Destructive world-book deletion belongs to [Delete World Book](feature.world_book_delete).
+- Character deletion and character-owned World Info cascade choices belong to [Delete Character](feature.character_delete).
+- Character cards belong to [Character Card](term.character_card).
+- Entry scanning, prompt injection, token budgeting, persistence, and server endpoints are implementation concerns outside this semantic feature.

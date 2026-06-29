@@ -11,55 +11,49 @@ related: [page.chat_workspace, feature.character_library_panel, term.character_c
 
 `feature.unified_import_confirm` represents the consolidated confirmation dialog shown after importing a character card, replacing 4 separate popups (tags, world book, regex scripts, CSS) with a single unified dialog.
 
-## Feature Purpose
+## Purpose
 
-After importing a PNG/JSON character card, embedded content (tags, world books, regex scripts, creator notes CSS) previously triggered up to 4 independent popups at different stages of the import flow. This feature consolidates them into 1 dialog shown immediately after import, before the character is selected.
+Replace the chain of post-character-import popups with one immediate decision dialog for embedded tags, world books, regex scripts, and creator-note CSS.
 
-## Trigger Entry
+## User-Visible Contract
 
-- **Button import**: clicking the import button and selecting file(s) via the file picker.
-- **Drag-drop import**: dropping character card file(s) onto the app window.
+- After importing one or more [character cards](term.character_card) by file picker or drag/drop, EmberDesk scans the imported cards for embedded optional content before selecting the character.
+- If importable embedded content exists and the user's settings still require asking, EmberDesk shows one unified confirmation dialog with per-content checkboxes.
+- Tags are selected by default when they are askable; world books, regex scripts, and CSS choices require explicit user selection unless existing settings already suppress the section.
+- World book entries that would overwrite an existing world display a visible overwrite warning.
+- Confirm applies only the selected choices and suppresses the older individual follow-up popups for those imported cards; cancel/Skip All records skip choices so individual popups do not appear later.
+- If settings suppress all askable sections or no embedded content exists, no dialog appears and import continues through the normal character-selection path.
 
-## Interaction IDs
+## Semantic Interaction IDs
 
-- `feature.unified_import_confirm.scan`: scanning imported character data for embedded content.
-- `feature.unified_import_confirm.dialog`: the unified confirmation dialog with checkboxes.
-- `feature.unified_import_confirm.apply`: pre-setting storage keys so individual popups skip.
+- `feature.unified_import_confirm.scan`: scanning imported character data for embedded optional content.
+- `feature.unified_import_confirm.dialog`: the unified confirmation dialog with visible content choices.
+- `feature.unified_import_confirm.apply`: applying the selected choices and suppressing redundant follow-up popups for the import.
 
-## User Flow
+## Acceptance Workflows
 
-1. The user imports one or more character cards via button or drag-drop.
-2. EmberDesk refreshes the character list from the server.
-3. EmberDesk scans each imported character for embedded content: tags, world books, regex scripts, creator notes CSS.
-4. If any embedded content is detected (and not suppressed by user settings), EmberDesk shows a **single unified confirmation dialog** with checkboxes for each content type.
-5. Tags are checked by default (matching existing behavior); other items are unchecked by default.
-6. If a world book name matches an existing world, the label shows "(will overwrite)".
-7. The user confirms or cancels.
-8. **Confirm**: EmberDesk applies the selected choices — imports tags, imports world books, enables regex scripts, sets CSS preference — and pre-sets storage keys so individual popups do not appear later.
-9. **Cancel (Skip All)**: EmberDesk pre-sets all storage keys to "skip" state. Individual popups do not appear. Users can still manually import via "Import Card Lore" button, regex extension settings, etc.
-10. EmberDesk imports tags (respecting the user's choice), then selects the imported character.
+- As a character-library user importing a card with embedded content, from [Chat Workspace](page.chat_workspace) import by button or drag/drop and review the unified dialog; EmberDesk must show one dialog with relevant sections, default tags selected, other optional content unselected, overwrite warning when needed, and after confirm the selected choices apply before the character is selected, while refresh or later character switch must not replay the old individual popups; failure is multiple popups, wrong defaults, or no visible overwrite warning.
+- As a user who wants to skip embedded content, from the unified dialog choose cancel or Skip All; EmberDesk must skip all optional embedded content for that import, suppress later individual prompts for the imported cards, and leave manual import paths available, with failure signaled by skipped content appearing or individual popups returning after cancel.
+- As a user importing cards with no askable embedded content or settings that suppress all sections, from either import entry complete the import; EmberDesk must select/import normally without showing an unnecessary dialog, refresh/reopen must show the imported character in the library, and failure is a blank confirmation dialog or blocked character selection.
+- As a user batch-importing several cards, from the import entry select or drop multiple files and reopen the library after completion; EmberDesk must aggregate askable embedded content into one dialog with a concise title, continue processing remaining cards if one card's optional content fails, and keep completed imports visible after reopen, while failure is one optional-content error blocking the whole batch or a dialog title that becomes unusable with many names.
 
-## Business Rules And Boundaries
+## Feature-Specific Evidence
 
-- The unified dialog only appears if the character contains importable embedded content AND the corresponding user setting has not suppressed it.
-- If `tag_import_setting` is not `ASK`, the tags section is hidden from the dialog (tags are imported silently or skipped per the existing setting).
-- If `world_import_dialog` is `false`, the world book section is hidden.
-- If no sections remain after filtering, no dialog is shown and the import proceeds normally.
-- Individual popups are NOT deleted — they still serve non-import use cases (e.g., "Import Card Lore" button, `/import-tags` slash command, character switching events).
-- The unified dialog uses `callGenericPopup` with `POPUP_TYPE.CONFIRM`.
-- Storage pre-set mechanism: `AlertWI_${avatar}`, `AlertRegex_${avatar}`, `AllowGlobalStyles-${avatar}` in `accountStorage`.
-- Batch import shows aggregated content from all imported characters in a single dialog.
-- The `importCharactersTags()` function now accepts an optional `{ importSetting }` parameter to bypass the `ASK` mode when the unified dialog has already handled the decision.
-- Both import entry points (button and drag-drop) share a single `handleUnifiedImport()` function to avoid logic duplication.
-- If applying choices fails for one character, the error is logged and remaining characters continue processing — one failure does not block the entire import.
-- When importing a world book, the `$('#import_character_info').data('chid')` DOM state is saved before and restored after the call to prevent cross-character pollution in batch imports.
-- All user-visible strings in the dialog use the `t` i18n tagged template literal system.
-- When batch-importing more than 3 characters, the dialog title truncates to the first 3 names plus "+N".
-- World book names that match existing worlds display a styled "(will overwrite)" warning in yellow bold text.
-- Characters not found after `getCharacters()` refresh are logged with `console.warn` and silently skipped.
+- Dialog sections, checkbox defaults, overwrite labels, selected character after import, and absence of later individual popups are primary evidence.
+- Account-storage suppression keys, `handleUnifiedImport()`, and tag-import options are supporting evidence only when the visible import decisions match.
+- Console warnings for missing refreshed characters are diagnostic evidence, not user-visible success criteria.
 
-## Outcomes
+## Failure Signals
 
-- **Success**: user selections are applied, storage keys are pre-set, individual popups are suppressed for the imported character(s).
-- **Cancel**: all embedded content is skipped, storage keys are pre-set to "skip" state, no individual popups appear.
-- **No content**: no dialog shown, import proceeds with existing tag import behavior.
+- Importing one card produces several separate optional-content popups.
+- Cancel/Skip All still allows later individual prompts for the same imported card.
+- Existing user settings are ignored and suppressed sections appear anyway.
+- A world overwrite risk is hidden from the dialog.
+- One embedded-content failure stops unrelated imported cards from completing.
+
+## Boundaries
+
+- Character browsing and selection belong to [Character Library Panel](feature.character_library_panel).
+- Character-card identity belongs to [Character Card](term.character_card).
+- World Info editing and manual lorebook import belong to [World Info Panel](feature.world_info_panel).
+- Extension-specific regex settings are outside this feature except for the import-time decision prompt.

@@ -11,68 +11,51 @@ related: [page.chat_workspace, feature.character_delete, feature.character_expor
 
 `feature.character_library_panel` represents the user-visible workflow for browsing, reopening, and selecting character cards from the main workspace. It does not include editing the card schema itself or deleting the card after confirmation.
 
-## Feature Purpose
+## Purpose
 
-This feature lets users work with large character libraries, search/filter them, and enter bulk edit flows without leaving the main workspace.
+Let users browse, search, filter, sort, bulk-select, and choose [character cards](term.character_card) from the main workspace without moving to a separate route.
 
-## Trigger Entry
+## User-Visible Contract
 
-- **Primary entry**: open or focus the character list area inside [Chat Workspace](page.chat_workspace).
-- **Repeat entry**: reopen the same list during a normal daily-use session.
+- The character-library entry point stays inside [Chat Workspace](page.chat_workspace); the guarded React panel is the normal visible owner for list/search/sort/bulk browsing state, with the legacy panel retained only as a documented flag-off or bundle-failure fallback.
+- The panel remains usable for large libraries by keeping pagination, virtualized visible rows for very large page sizes, lazy avatar behavior, and steady-state reopen performance focused on the current browsing task.
+- Character rows show current card metadata, avatars, tags, favorite state, last-chat summaries, and mixed character/group/folder identity without changing the user's list definition during search, sort, filtering, or pagination.
+- Search, sort, tag filters, page size changes, and pagination should update the visible list without unnecessary clear-and-rebuild churn when the next page is unambiguous; ambiguous states may fall back to a full refresh for correctness.
+- Character row identity remains stable for browsing, active-card state, bulk selection, and compatible extension selectors.
+- Bulk-select mode provides visible selection hints, synchronized selected styling and checked state, selected count, select-all controls, and disabled-until-selection destructive actions.
+- After delete flows, the panel keeps safe pagination context, prevents late snapshots from reintroducing deleted cards, and still falls back to full refresh for complex states when that is the clearer recovery path.
 
-## Interaction IDs
+## Semantic Interaction IDs
 
 - `feature.character_library_panel`: the full character-library browsing surface.
 - `feature.character_library_panel.primary_entry`: the action that brings the character list into focus.
-- `feature.character_library_panel.select_card`: choosing one [character card](term.character_card) as the active context.
+- `feature.character_library_panel.select_card`: choosing one [character card](term.character_card) as the active workspace context.
 
-## User Flow
+## Acceptance Workflows
 
-1. The user opens or focuses the character library panel.
-2. EmberDesk shows the same workspace entry point regardless of migration state: the normal runtime owner for the toolbar/list surface is the React panel path, while the legacy panel is retained only as a documented flag-off or bundle-failure compatibility facade from that same entry.
-3. The user scrolls the list, searches, changes sort order, or filters by tags without leaving the panel.
-4. The user may enter bulk-select mode, select one or more cards, and continue into the existing bulk tag or delete flows.
-5. The user selects a card to continue work in the main workspace.
+- As a workspace user who wants to continue with a character, from [Chat Workspace](page.chat_workspace) open the character library, search or filter, sort, paginate, and select a card; EmberDesk must show the expected mixed library rows and make the chosen card active in the workspace, reopening the panel in the same session should preserve a steady-state browsing experience, and failure is a blank list, stale metadata, or selection that opens the wrong card.
+- As a user browsing a large library, from the panel choose a large page size, scroll, and change sort/search/filter state; EmberDesk must keep rows responsive with stable pagination and visible avatars/placeholders, fall back to a full refresh only for ambiguous states, and after refresh or fallback must show a coherent current list, with failure signaled by mounted-row churn that clears the list unnecessarily or leaves a stale mixed view after filter changes.
+- As a user selecting cards in bulk mode, from the toolbar enter bulk select, click cards and checkboxes, sort or paginate, then review selected count and delete/tag availability; EmberDesk must keep row styling, checkbox state, accessible selected/checked state, and disabled-until-selection controls synchronized across redraws and page changes, and failure is a selected card without matching checkbox/count state or a destructive action enabled with zero selection.
+- As a user returning after character deletion, from an ordinary unfiltered page delete one or more cards through [Delete Character](feature.character_delete) and return to the panel; EmberDesk must keep the original page when valid or move to the last valid page, removed rows must not return after refresh or late list snapshots, and failure is page reset, deleted-card resurrection, or active-character hooks pointing at removed rows.
+- As a user on a build where the React panel is unavailable, from the same workspace entry open the fallback library surface and refresh the workspace; EmberDesk must keep browsing, selection, bulk affordances, and delete/export entry points available through the same entry, and failure is a missing route, empty migration host, or behavior split between normal and fallback surfaces.
 
-## Business Rules And Boundaries
+## Feature-Specific Evidence
 
-- The panel should remain usable for large libraries during ordinary repeated use.
-- The character-library entry point stays in the main workspace; users do not need to learn a new route or separate page for the migrated panel.
-- Summary metadata such as last-chat information should reflect the latest known state when the list is shown.
-- In steady-state repeated use, EmberDesk may reuse precomputed card-summary state so reopening the panel feels faster than a full cold re-derivation of every card.
-- Reopening the panel in non-Firefox browsers may also reuse short-lived cached avatar thumbnails, reducing repeated image transfer cost without changing character-card source-of-truth behavior.
-- Newly generated JPEG thumbnails in that flow now default to a lower quality setting (`85` instead of `95`), but existing installs with an explicit `thumbnails.quality` override must change or remove that config value first, and already-cached thumbnails must still be cleared before regeneration will actually produce lower-quality replacements.
-- List-style avatar surfaces in the library flow may use native browser lazy-loading and async decoding so offscreen thumbnails do less upfront work without changing the card-selection flow.
-- Those same list-style avatar images now also paint a themed placeholder background on the `<img>` surface, reducing stark white or transparent flashes while thumbnails are still loading or decoding.
-- When a character card image is newly created, imported, duplicated, edited, or overwritten, EmberDesk now starts best-effort avatar thumbnail pregeneration immediately after the canonical write succeeds so the next ordinary library open is more likely to hit a ready file instead of triggering first-read thumbnail work.
-- If a delayed edit response targets a card that has already been deleted from the local library, EmberDesk skips refreshing that row so the visible list stays aligned with the user's delete action.
-- Character rows expose a stable DOM identity contract for list browsing and extension-adjacent scripts: `data-chid` is the standard identity, legacy `chid` remains available for older selectors, and `id="CharID${chid}"` remains the active-row and bulk-edit hook.
-- Search, sort, and tag filtering remain part of the same panel surface and keep the existing mixed character/group/folder browsing semantics instead of switching to a different list definition.
-- The React character-library panel is the only normal runtime owner for visible list/search/sort/bulk browsing state; any remaining legacy fallback is an emergency compatibility facade, not a second long-term owner.
-- When the panel refreshes character data, visible card details should reflect changes to the card's full library metadata, not only the row's name, avatar, favorite state, or last-chat summary.
-- When the panel refreshes character data after delete flows, EmberDesk temporarily projects stale late query snapshots against the just-deleted avatar set so a delayed `/api/characters/all` response cannot reinsert the deleted card into the visible list before the server snapshot catches up.
-- If the library is too large for the eager character-data load, EmberDesk keeps the existing visible guidance that directs the user to enable lazy character loading in configuration instead of silently failing the panel.
-- On very large page sizes such as `1000 / page`, the migrated panel keeps the current pagination shell but reduces the number of simultaneously mounted visible rows to the scroll window instead of rendering every row at once.
-- During ordinary sort, search, filter, pagination, or page-size changes, the panel now keeps matching visible rows mounted when the next page is unambiguous, so safe browsing updates do not need to visibly clear and rebuild the whole list.
-- If the panel is in a bogus-folder back-navigation state or the next visible page becomes ambiguous, EmberDesk may still fall back to the full list refresh path to preserve correctness instead of leaving a stale mixed view behind.
-- After an ordinary unfiltered single-character delete, the panel keeps the remaining visible character rows aligned with the shifted `characters` array by rewriting `data-chid`, legacy `chid`, and `CharID${chid}` values instead of forcing a whole-list redraw or clearing the character-list container.
-- After a bulk delete in an unfiltered library, the panel preserves pagination context when the after-delete page can be computed: the original page remains visible if it still exists, otherwise the panel moves to the last valid page.
-- If the delete occurs in a complex browsing state such as active search/filtering, bogus-folder drilldown, ambiguous row identity, or an in-flight list print, the panel may fall back to the full list refresh path to preserve correctness.
-- The character-list toolbar is grouped for scanning as a compact control surface: creation/import/group and sort controls read first, while search, grid/list, bulk edit, selected count, select-all, and delete controls stay together as the follow-up action row.
-- The workspace entry points that open the character management drawer and select the Characters tab expose stable button roles, accessible names, and focus targets so the panel can be reached by keyboard, browser automation, and assistive technology without relying only on icon titles.
-- When bulk-select mode is active, the toolbar exposes a short visible hint that character cards can be clicked to select them, so selection is not discoverable only through the checkbox or tooltip.
-- Character cards in bulk-select mode keep visual selected styling, the legacy `.bulk_select_checkbox` affordance, and accessible selected/checked state synchronized on both the card row and checkbox after clicks, sorting, filtering, and pagination redraws.
-- Bulk delete remains unavailable until at least one character is selected, even when the compact toolbar keeps the bulk status controls visible in the same operation context.
-- The same bulk-select affordances and delete/tag flows remain available whether the workspace is on the normal React-owned path or the documented emergency fallback facade.
-- Ordinary character rows keep their Character type badge in the DOM for localization and compatibility, but it is visually quiet by default so users can scan names, avatars, and tags first.
-- Group rows continue to show their Group badge so mixed character/group lists remain distinguishable.
-- Browsing and selecting cards belong to this feature; destructive removal belongs to [Delete Character](feature.character_delete), and exporting a selected card belongs to [Character Export](feature.character_export).
+- Visible rows, toolbar grouping, search/sort/filter results, pagination text, selected count, selected styling, active-card transition, avatar placeholders, and reopen behavior are primary evidence.
+- Stable selectors such as `data-chid`, legacy `chid`, `id="CharID${chid}"`, and `.bulk_select_checkbox` are compatibility evidence only when the visible row and selection state match.
+- Thumbnail caching, thumbnail quality, lazy decoding, pregeneration, and derived card summaries are performance evidence; they do not change the user-facing source-of-truth contract.
 
-## ID Boundary Notes
+## Failure Signals
 
-This feature covers browsing, visibility, and selection of character rows. Confirmation flows and irreversible removal are intentionally documented under a separate semantic ID because they are a distinct user action with different risk.
+- The character library opens as an empty migration host while the legacy fallback would have been usable.
+- Search, sort, pagination, or filtering leaves selected rows, counts, or active-card identity out of sync.
+- Bulk delete is enabled with no selected character.
+- Deleted cards reappear after delayed edit responses, late `/api/characters/all` snapshots, or page refresh.
+- Large page sizes render every row at once and make the panel visibly unusable.
 
-## Outcomes
+## Boundaries
 
-- **Success**: the list appears, rows are browseable, search/sort/tag filters and bulk mode remain usable, and a selected card becomes the active workspace context.
-- **Repeat-open expectation**: reopening the panel in the same session should feel like a steady-state interaction rather than a full cold rescan, because EmberDesk can reuse precomputed card summaries for this surface.
+- Destructive removal belongs to [Delete Character](feature.character_delete).
+- Exporting the active card belongs to [Character Export](feature.character_export).
+- The card concept belongs to [Character Card](term.character_card).
+- Workspace shell placement belongs to [Chat Workspace](page.chat_workspace).

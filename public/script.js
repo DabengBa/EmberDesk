@@ -985,36 +985,41 @@ function getWorldInfoReactBridgeState() {
 function getWorldInfoReactBridge() {
     return {
         dispatchAction(action, payload = {}) {
-            switch (action) {
-                case 'selectWorld':
-                    return selectWorldInfoEditorIndex(payload?.worldIndex ?? '');
-                case 'applySearchQuery':
-                    return applyWorldInfoSearchQuery(payload?.searchQuery ?? '');
-                case 'applySortOption':
-                    return applyWorldInfoSortOption(payload?.sortValue ?? '');
-                case 'createEntry':
-                    return createWorldInfoEntryFromEditor();
-                case 'createWorld':
-                    return promptToCreateWorldInfo();
-                case 'importWorld':
-                    return requestWorldInfoImportSelection();
-                case 'exportWorld':
-                    return exportCurrentWorldInfo();
-                case 'renameWorld':
-                    return renameCurrentWorldInfo();
-                case 'duplicateWorld':
-                    return duplicateCurrentWorldInfo();
-                case 'deleteWorld':
-                    return deleteCurrentWorldInfo();
-                case 'refreshWorld':
-                    return refreshCurrentWorldInfoEditor();
-                case 'openEntry':
-                    return openWorldInfoEntryByUid(payload?.uid ?? '');
-                default:
-                    console.warn('Unknown World Info React action', action);
-            }
+            const actionResult = (() => {
+                switch (action) {
+                    case 'selectWorld':
+                        return selectWorldInfoEditorIndex(payload?.worldIndex ?? '');
+                    case 'applySearchQuery':
+                        return applyWorldInfoSearchQuery(payload?.searchQuery ?? '');
+                    case 'applySortOption':
+                        return applyWorldInfoSortOption(payload?.sortValue ?? '');
+                    case 'createEntry':
+                        return createWorldInfoEntryFromEditor();
+                    case 'createWorld':
+                        return promptToCreateWorldInfo();
+                    case 'importWorld':
+                        return requestWorldInfoImportSelection();
+                    case 'exportWorld':
+                        return exportCurrentWorldInfo();
+                    case 'renameWorld':
+                        return renameCurrentWorldInfo();
+                    case 'duplicateWorld':
+                        return duplicateCurrentWorldInfo();
+                    case 'deleteWorld':
+                        return deleteCurrentWorldInfo();
+                    case 'refreshWorld':
+                        return refreshCurrentWorldInfoEditor();
+                    case 'openEntry':
+                        return openWorldInfoEntryByUid(payload?.uid ?? '');
+                    default:
+                        console.warn('Unknown World Info React action', action);
+                        return undefined;
+                }
+            })();
 
-            void mountReactWorldInfoPanel();
+            return Promise.resolve(actionResult).finally(() => {
+                void mountReactWorldInfoPanel();
+            });
         },
     };
 }
@@ -2850,12 +2855,16 @@ export function cancelStatusCheck(reason = 'Manually cancelled status check') {
 }
 
 export function displayOnlineStatus() {
+    const sendTextareaHint = $('#send_textarea_hint');
+
     if (online_status == 'no_connection') {
         $('.online_status_indicator').removeClass('success');
         $('.online_status_text').text($('#API-status-top').attr('no_connection_text'));
+        sendTextareaHint.text(t`Type /? for commands. Send requires an API connection.`);
     } else {
         $('.online_status_indicator').addClass('success');
         $('.online_status_text').text(online_status);
+        sendTextareaHint.text(t`Type /? for commands.`);
     }
 }
 
@@ -5187,6 +5196,7 @@ export function appendMediaToMessage(mes, messageElement, scrollBehavior = SCROL
         mediaWrapper.empty().append(mediaBlocks);
         restoreMediaStates(states);
         doAdjustScroll();
+        void mountReactMainChatMessageListPanel();
     });
 }
 
@@ -12364,7 +12374,7 @@ export function setGenerationProgress(progress) {
         $('#send_textarea').css({ 'background': '', 'transition': '' });
     } else {
         $('#send_textarea').css({
-            'background': `linear-gradient(90deg, #008000d6 ${progress}%, transparent ${progress}%)`,
+            'background': `linear-gradient(90deg, color-mix(in srgb, var(--success-green) 84%, transparent) ${progress}%, transparent ${progress}%)`,
             'transition': '0.25s ease-in-out',
         });
     }
@@ -15344,11 +15354,7 @@ jQuery(async function () {
         icon.toggleClass('down up');
         icon.toggleClass('fa-circle-chevron-down fa-circle-chevron-up');
         drawer.trigger('inline-drawer-toggle');
-        drawerContent.stop().slideToggle({
-            complete: () => {
-                $(this).css('height', '');
-            },
-        });
+        drawerContent.stop(true, true).css({ display: '', height: '' }).toggleClass('openInlineDrawer');
 
         // Set the height of "autoSetHeight" textareas within the inline-drawer to their scroll height
         if (!CSS.supports('field-sizing', 'content')) {

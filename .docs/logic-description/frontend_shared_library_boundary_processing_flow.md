@@ -80,7 +80,7 @@ The default export and named export must refer to the same value.
 
 Run:
 
-```powershell
+```bash
 uv run python .docs/logic-description/frontend_shared_library_boundary_sandbox_proof.py
 ```
 

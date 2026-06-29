@@ -25,7 +25,7 @@ Decide the final runtime shape of the workspace shell and global compatibility e
 
 ## Validation
 
-```powershell
+```bash
 bun run build:lib
 bun run build:react
 bun run build:react:workspace-panels

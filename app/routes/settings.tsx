@@ -209,18 +209,23 @@ function SettingsPage() {
         retry: false,
         staleTime: Number.POSITIVE_INFINITY,
     });
+    const {
+        data: csrfToken,
+        error: csrfTokenError,
+        refetch: refetchCsrfToken,
+    } = csrfTokenQuery;
 
     async function ensureCsrfToken() {
-        if (typeof csrfTokenQuery.data === 'string' && csrfTokenQuery.data.length > 0) {
-            return csrfTokenQuery.data;
+        if (typeof csrfToken === 'string' && csrfToken.length > 0) {
+            return csrfToken;
         }
 
-        const result = await csrfTokenQuery.refetch();
+        const result = await refetchCsrfToken();
         if (typeof result.data === 'string' && result.data.length > 0) {
             return result.data;
         }
 
-        throw result.error ?? new MessageError('无法获取 CSRF token。');
+        throw result.error ?? csrfTokenError ?? new MessageError('无法获取 CSRF token。');
     }
 
     const settingsQuery = useQuery({
@@ -244,6 +249,10 @@ function SettingsPage() {
         },
         retry: false,
     });
+    const {
+        data: settingsData,
+        refetch: refetchSettings,
+    } = settingsQuery;
 
     const secretsQuery = useQuery({
         queryKey: ['settings', 'provider-secrets'],
@@ -264,8 +273,12 @@ function SettingsPage() {
         },
         retry: false,
     });
+    const {
+        data: secretsData,
+        refetch: refetchSecrets,
+    } = secretsQuery;
 
-    const parsedPayload = settingsQuery.data ? parseSettingsPayload(settingsQuery.data) : null;
+    const parsedPayload = settingsData ? parseSettingsPayload(settingsData) : null;
 
     const settingsForm = useForm({
         canSubmitWhenInvalid: true,
@@ -319,7 +332,7 @@ function SettingsPage() {
                 throw new MessageError('设置保存失败。');
             }
 
-            await settingsQuery.refetch();
+            await refetchSettings();
             setSaveStatus({ kind: 'success', message: '设置已保存。' });
             return payload;
         },
@@ -358,7 +371,7 @@ function SettingsPage() {
         },
         source: providerSource,
         secretKey: currentSecretKey,
-        secretState: secretsQuery.data,
+        secretState: secretsData,
         chatCompletionSources: {
             OPENAI: 'openai',
             CLAUDE: 'claude',
@@ -379,7 +392,7 @@ function SettingsPage() {
         fallback_provider_enabled: settingsFormValues.providers.fallbackProviderEnabled,
         fallback_provider_base_url: settingsFormValues.providers.fallbackProviderBaseUrl,
         fallback_provider_model: settingsFormValues.providers.fallbackProviderModel,
-    }, secretsQuery.data, fallbackSecretKey);
+    }, secretsData, fallbackSecretKey);
 
     const providerSecretMutation = useMutation({
         mutationFn: async (options: { key: string; value: string; mode: 'save' | 'clear' }) => {
@@ -467,18 +480,18 @@ function SettingsPage() {
     }, [saveStatus]);
 
     const payloadSummary = useMemo(() => {
-        if (!settingsQuery.data) {
+        if (!settingsData) {
             return [];
         }
 
         return [
-            { label: 'Themes', value: Array.isArray(settingsQuery.data.themes) ? settingsQuery.data.themes.length : 0 },
-            { label: 'OpenAI Presets', value: Array.isArray(settingsQuery.data.openai_setting_names) ? settingsQuery.data.openai_setting_names.length : 0 },
-            { label: 'Context Presets', value: Array.isArray(settingsQuery.data.context) ? settingsQuery.data.context.length : 0 },
+            { label: 'Themes', value: Array.isArray(settingsData.themes) ? settingsData.themes.length : 0 },
+            { label: 'OpenAI Presets', value: Array.isArray(settingsData.openai_setting_names) ? settingsData.openai_setting_names.length : 0 },
+            { label: 'Context Presets', value: Array.isArray(settingsData.context) ? settingsData.context.length : 0 },
         ];
-    }, [settingsQuery.data]);
+    }, [settingsData]);
 
-    const isBusy = settingsQuery.isPending || saveMutation.isPending || secretsQuery.isPending || providerSecretMutation.isPending;
+    const isBusy = saveMutation.isPending || secretsQuery.isPending || providerSecretMutation.isPending;
 
     function clearTransientState() {
         saveMutation.reset();
@@ -503,7 +516,7 @@ function SettingsPage() {
                 value: options.value,
             });
 
-            await secretsQuery.refetch();
+            await refetchSecrets();
             if (result.shouldClearInput) {
                 options.clearInput();
             }
@@ -518,44 +531,42 @@ function SettingsPage() {
         : 'Disabled';
 
     return (
-        <main className="min-h-dvh bg-zinc-950 text-zinc-100">
-            <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 lg:flex-row lg:px-6">
-                <section className="flex-1 rounded-lg border border-zinc-800 bg-zinc-950/80 p-6 shadow-2xl shadow-black/20">
-                    <header className="mb-6 space-y-2">
-                        <p className="text-sm font-medium uppercase tracking-[0.2em] text-emerald-300">Settings</p>
-                        <h1 className="text-3xl font-semibold text-zinc-50">React settings entry</h1>
-                        <p className="max-w-3xl text-sm leading-6 text-zinc-400">
-                            这个页面现在收口 Sprint 3 的主设置链路：General 里的默认生成行为，Providers 里的 fallback 与 Vertex AI，User Interface 里的主题和显示偏好，以及 Advanced 里的模板、auto-swipe 与 STscript 基础设置。
+        <main className="settings-page">
+            <div className="settings-layout">
+                <section className="settings-main-panel">
+                    <header className="settings-page-header">
+                        <h1 className="settings-page-title">Settings</h1>
+                        <p className="settings-page-summary">
+                            Defaults, providers, workspace display, and power-user controls.
                         </p>
                     </header>
 
                     <SettingsTabs tabs={settingsTabDefinitions} activeTab={activeTab} onChange={setActiveTab} />
 
-                    <div className="mt-6 space-y-4">
+                    <div className="settings-stack">
                         {settingsQuery.isPending && (
-                            <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4 text-sm text-zinc-300">
-                                正在加载当前 settings payload...
+                            <div className="settings-status settings-status--info">
+                                正在加载当前设置...
                             </div>
                         )}
 
                         {pageError && (
-                            <div className="rounded-lg border border-rose-400/30 bg-rose-500/10 p-4 text-sm text-rose-200">
+                            <div className="settings-status settings-status--error">
                                 {pageError}
                             </div>
                         )}
 
                         {saveStatus && (
-                            <div
-                                className="rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200"
-                                role="status"
+                            <output
+                                className="settings-status settings-status--success"
                                 aria-live="polite"
                             >
                                 {saveStatus.message}
-                            </div>
+                            </output>
                         )}
 
                         <form
-                            className="space-y-4"
+                            className="settings-form"
                             onSubmit={(event) => {
                                 event.preventDefault();
                                 event.stopPropagation();
@@ -893,27 +904,27 @@ function SettingsPage() {
                                         disabled={isBusy || !settingsFormValues.providers.fallbackProviderEnabled}
                                         onValueChange={clearTransientState}
                                     />
-                                    <div className="md:col-span-2 rounded-lg border border-zinc-800 bg-zinc-900/70 p-4">
-                                        <div className="flex flex-wrap items-start justify-between gap-3">
-                                            <div className="space-y-1">
-                                                <h3 className="text-sm font-medium text-zinc-100">Provider API Key</h3>
-                                                <p className="text-sm text-zinc-400">
-                                                    Direct provider mode 下通过 `/api/secrets/*` 保存和清除 API key，不把 secret 写入普通 settings 保存流。
+                                    <div className="settings-inline-panel">
+                                        <div className="settings-inline-header">
+                                            <div>
+                                                <h3 className="settings-card-title">Provider API Key</h3>
+                                                <p className="settings-card-description">
+                                                    Secret storage is kept separate from normal settings.
                                                 </p>
                                             </div>
-                                            <span className="rounded-md border border-zinc-800 px-2 py-1 text-xs text-zinc-300">
+                                            <span className="settings-pill">
                                                 {unifiedKeyFieldState.placeholder}
                                             </span>
                                         </div>
 
                                         {directSecretMode ? (
-                                            <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                                            <div className="settings-inline-actions">
                                                 <input
                                                     type="password"
                                                     id="provider-secret-input"
                                                     name="provider-secret-input"
                                                     aria-label="Provider API Key"
-                                                    className="w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-emerald-400"
+                                                    className="settings-input"
                                                     placeholder={unifiedKeyFieldState.placeholder}
                                                     value={providerSecretInput}
                                                     disabled={providerSecretMutation.isPending}
@@ -925,7 +936,7 @@ function SettingsPage() {
                                                 />
                                                 <button
                                                     type="button"
-                                                    className="inline-flex items-center justify-center rounded-md bg-emerald-400 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                                                    className="settings-button settings-button--primary"
                                                     disabled={providerSecretMutation.isPending}
                                                     onClick={() => {
                                                         if (!currentSecretKey) {
@@ -944,7 +955,7 @@ function SettingsPage() {
                                                 </button>
                                                 <button
                                                     type="button"
-                                                    className="inline-flex items-center justify-center rounded-md border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:border-zinc-600 hover:text-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                                    className="settings-button settings-button--secondary"
                                                     disabled={providerSecretMutation.isPending}
                                                     onClick={() => {
                                                         if (!currentSecretKey) {
@@ -963,35 +974,35 @@ function SettingsPage() {
                                                 </button>
                                             </div>
                                         ) : (
-                                            <p className="mt-4 text-sm text-zinc-400">
+                                            <p className="settings-card-description">
                                                 {vertexAiFullMode
-                                                    ? '当前 Google provider 处于 Vertex AI Service Account 模式。service account JSON 仍由 legacy API Configuration 管理，React 不会把它映射成普通 API key。'
+                                                    ? 'Service account JSON remains in API Configuration.'
                                                     : unifiedKeyFieldState.vertexAiActive
-                                                        ? '当前 Google provider 处于 Vertex AI Express 模式。Express key 会继续走 secrets 存储；service account JSON 仍留在 legacy API Configuration。'
-                                                        : '当前启用了 reverse proxy。这个模式下统一 key 是 proxy password，因此 React 只在 direct provider 模式下接入 `/api/secrets/*`。'}
+                                                        ? 'Vertex Express key uses the secrets store.'
+                                                        : 'Reverse proxy mode uses Proxy Password instead.'}
                                             </p>
                                         )}
                                     </div>
 
-                                    <div className="md:col-span-2 rounded-lg border border-zinc-800 bg-zinc-900/70 p-4">
-                                        <div className="flex flex-wrap items-start justify-between gap-3">
-                                            <div className="space-y-1">
-                                                <h3 className="text-sm font-medium text-zinc-100">Fallback Provider Secret</h3>
-                                                <p className="text-sm text-zinc-400">
-                                                    Fallback provider 的 key 继续使用独立的 server-side secret。
+                                    <div className="settings-inline-panel">
+                                        <div className="settings-inline-header">
+                                            <div>
+                                                <h3 className="settings-card-title">Fallback Provider Secret</h3>
+                                                <p className="settings-card-description">
+                                                    Separate server-side key for fallback routing.
                                                 </p>
                                             </div>
-                                            <span className="rounded-md border border-zinc-800 px-2 py-1 text-xs text-zinc-300">
+                                            <span className="settings-pill">
                                                 {activeFallbackStatus}
                                             </span>
                                         </div>
-                                        <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                                        <div className="settings-inline-actions">
                                             <input
                                                 type="password"
                                                 id="fallback-provider-secret-input"
                                                 name="fallback-provider-secret-input"
                                                 aria-label="Fallback Provider API Key"
-                                                className="w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-emerald-400"
+                                                className="settings-input"
                                                 placeholder="Fallback API Key"
                                                 value={fallbackSecretInput}
                                                 disabled={providerSecretMutation.isPending || !settingsFormValues.providers.fallbackProviderEnabled}
@@ -1003,7 +1014,7 @@ function SettingsPage() {
                                             />
                                             <button
                                                 type="button"
-                                                className="inline-flex items-center justify-center rounded-md bg-emerald-400 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                                                className="settings-button settings-button--primary"
                                                 disabled={providerSecretMutation.isPending || !settingsFormValues.providers.fallbackProviderEnabled}
                                                 onClick={() => {
                                                     void handleProviderSecretAction({
@@ -1019,7 +1030,7 @@ function SettingsPage() {
                                             </button>
                                             <button
                                                 type="button"
-                                                className="inline-flex items-center justify-center rounded-md border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:border-zinc-600 hover:text-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                                className="settings-button settings-button--secondary"
                                                 disabled={providerSecretMutation.isPending || !settingsFormValues.providers.fallbackProviderEnabled}
                                                 onClick={() => {
                                                     void handleProviderSecretAction({
@@ -1747,15 +1758,15 @@ function SettingsPage() {
                                 </SettingsSection>
                             </div>
 
-                            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-950/70 px-4 py-3">
-                                <p className="text-sm text-zinc-400">
-                                    当前保存会提交完整 settings 对象，但只改写 React 已接管字段。
+                            <div className="settings-save-bar">
+                                <p className="settings-save-note">
+                                    只保存本页字段。
                                 </p>
                                 <settingsForm.Subscribe selector={state => state.isPristine}>
                                     {isPristine => (
                                         <button
                                             type="submit"
-                                            className="inline-flex items-center rounded-md bg-emerald-400 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                                            className="settings-button settings-button--primary"
                                             disabled={isBusy || settingsQuery.isPending || isPristine}
                                         >
                                             {saveMutation.isPending ? '保存中...' : isPristine ? '修改后可保存' : '保存设置'}
@@ -1767,30 +1778,30 @@ function SettingsPage() {
                     </div>
                 </section>
 
-                <aside className="w-full max-w-xl space-y-4 lg:max-w-sm">
-                    <section className="rounded-lg border border-zinc-800 bg-zinc-950/80 p-5">
-                        <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-zinc-300">Payload Summary</h2>
-                        <div className="mt-4 grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+                <aside className="settings-side">
+                    <section className="settings-side-panel">
+                        <h2 className="settings-side-title">Payload Summary</h2>
+                        <div className="settings-metrics">
                             {payloadSummary.map(item => (
-                                <div key={item.label} className="rounded-md border border-zinc-800 bg-zinc-900 px-3 py-3">
-                                    <div className="text-xs uppercase tracking-[0.18em] text-zinc-500">{item.label}</div>
-                                    <div className="mt-2 text-2xl font-semibold text-zinc-50">{item.value}</div>
+                                <div key={item.label} className="settings-metric">
+                                    <div className="settings-metric-label">{item.label}</div>
+                                    <div className="settings-metric-value">{item.value}</div>
                                 </div>
                             ))}
                         </div>
                     </section>
 
-                    <section className="rounded-lg border border-zinc-800 bg-zinc-950/80 p-5">
-                        <div className="flex items-start justify-between gap-3">
-                            <div className="space-y-1">
-                                <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-zinc-300">Developer diagnostics</h2>
-                                <p className="text-sm text-zinc-400">
-                                    迁移覆盖范围和原始 payload 结构说明，默认折叠，避免干扰正常设置操作。
+                    <section className="settings-side-panel">
+                        <div className="settings-diagnostics-header">
+                            <div>
+                                <h2 className="settings-side-title">Diagnostics</h2>
+                                <p className="settings-card-description">
+                                    Field ownership for debugging.
                                 </p>
                             </div>
                             <button
                                 type="button"
-                                className="inline-flex items-center rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 transition hover:border-zinc-600 hover:text-zinc-50"
+                                className="settings-button settings-button--secondary"
                                 onClick={() => setShowDiagnostics(value => !value)}
                                 aria-expanded={showDiagnostics}
                             >
@@ -1799,12 +1810,12 @@ function SettingsPage() {
                         </div>
 
                         {showDiagnostics && (
-                            <div className="mt-4 space-y-4">
-                                <div className="space-y-4 text-sm text-zinc-300">
+                            <div className="settings-diagnostics-body">
+                                <div>
                                     {Object.entries(settingsCoverage.reactOwned as Record<string, string[]>).map(([tabId, paths]) => (
-                                        <div key={tabId} className="space-y-2">
-                                            <h3 className="font-medium text-zinc-100">{settingsTabDefinitions.find(tab => tab.id === tabId)?.label}</h3>
-                                            <ul className="space-y-1 text-zinc-400">
+                                        <div key={tabId} className="settings-diagnostics-group">
+                                            <h3 className="settings-diagnostics-title">{settingsTabDefinitions.find(tab => tab.id === tabId)?.label}</h3>
+                                            <ul className="settings-diagnostics-list">
                                                 {paths.map((coveragePath: string) => (
                                                     <li key={coveragePath}>{coveragePath}</li>
                                                 ))}
@@ -1813,9 +1824,9 @@ function SettingsPage() {
                                     ))}
                                 </div>
 
-                                <div>
-                                    <h3 className="text-sm font-medium uppercase tracking-[0.16em] text-zinc-300">Still legacy-owned</h3>
-                                    <ul className="mt-3 space-y-2 text-sm text-zinc-400">
+                                <div className="settings-diagnostics-group">
+                                    <h3 className="settings-diagnostics-title">Legacy-owned</h3>
+                                    <ul className="settings-diagnostics-list">
                                         {settingsCoverage.legacyOwned.map(path => (
                                             <li key={path}>{path}</li>
                                         ))}

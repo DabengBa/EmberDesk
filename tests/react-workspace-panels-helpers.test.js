@@ -165,8 +165,12 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('function WorkspacePanelShell');
         expect(workspacePanelSource).toContain('data-react-workspace-panel-shell={kind}');
         expect(workspacePanelSource).toContain('data-workspace-panel-status={status}');
+        expect(workspacePanelSource).toContain('className="workspace-panel-diagnostics"');
+        expect(workspacePanelSource).toContain('<summary>Diagnostics</summary>');
         expect(workspacePanelSource).toContain('data-workspace-legacy-slot={slot.id}');
         expect(workspacePanelSource).toContain('slot.id === \'extensions-settings\'');
+        expect(workspacePanelSource).not.toContain('React workspace panel host');
+        expect(workspacePanelSource).not.toContain('is ready for its legacy bridge');
         expect(workspacePanelSource).not.toContain('id="extensions_settings"');
         expect(workspacePanelSource).not.toContain('id="regex_container"');
     });
@@ -194,13 +198,12 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('function WorldInfoWorkspacePanel');
         expect(workspacePanelSource).toContain('kind="worldInfo"');
         expect(workspacePanelSource).toContain('interface WorldInfoWorkspacePanelState');
-        expect(workspacePanelSource).toContain('data-world-info-bridge-state={stateId}');
-        expect(workspacePanelSource).toContain('stateId="global-selector"');
-        expect(workspacePanelSource).toContain('stateId="editor-selector"');
-        expect(workspacePanelSource).toContain('stateId="import"');
-        expect(workspacePanelSource).toContain('stateId="drop-target"');
-        expect(workspacePanelSource).toContain('legacyBoundary="activation-import-regex-prompt-delete"');
+        expect(workspacePanelSource).toContain("{ id: 'global-selector', label: 'Global selector', ready: bridgeState.globalSelectorPresent }");
+        expect(workspacePanelSource).toContain("{ id: 'editor-selector', label: 'Editor selector', ready: bridgeState.editorSelectorPresent && bridgeState.selectorsSeparated }");
+        expect(workspacePanelSource).toContain("{ id: 'import-controls', label: 'Import controls', ready: bridgeState.importMenuPresent }");
         expect(workspacePanelSource).toContain("{ id: 'legacy-editor', label: 'Legacy editor', ready: bridgeState.dropTargetPresent }");
+        expect(workspacePanelSource).not.toContain('data-world-info-bridge-state={stateId}');
+        expect(workspacePanelSource).toContain('legacyBoundary="activation-import-regex-prompt-delete"');
     });
 
     test('renders a World Info editor/import/export workflow through React-owned controls and explicit world-info helpers', () => {
@@ -228,6 +231,9 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('case \'applySearchQuery\':');
         expect(scriptSource).toContain('case \'importWorld\':');
         expect(scriptSource).toContain('case \'exportWorld\':');
+        expect(scriptSource).toContain('const actionResult = (() => {');
+        expect(scriptSource).toContain('return Promise.resolve(actionResult).finally(() => {');
+        expect(scriptSource).toContain('void mountReactWorldInfoPanel();');
         expect(scriptSource).toContain('bridge: getWorldInfoReactBridge()');
         expect(scriptSource).not.toContain('$(\'#world_info_search\').val(String(payload?.searchQuery ?? \'\')).trigger(\'input\');');
         expect(scriptSource).not.toContain('$(\'#world_info_sort_order\').val(String(payload?.sortValue ?? \'\')).trigger(\'change\');');
@@ -266,9 +272,18 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('data-world-info-react-control="sort"');
         expect(workspacePanelSource).toContain('data-world-info-react-action="import"');
         expect(workspacePanelSource).toContain('data-world-info-react-action="export"');
+        expect(workspacePanelSource).toContain('className="menu_button workspace-panel-item-row workspace-panel-world-info-entry"');
         expect(workspacePanelSource).toContain('data-world-info-react-entry={entry.uid}');
+        expect(workspacePanelSource).toContain('className="workspace-panel-item-label"');
+        expect(workspacePanelSource).toContain('className="workspace-panel-item-status"');
         expect(workspacePanelSource).toContain('worldInfoActionMutation.mutate({ action: \'importWorld\' })');
         expect(workspacePanelSource).toContain('worldInfoActionMutation.mutate({ action: \'exportWorld\' })');
+
+        const styleSource = read('public/style.css');
+        expect(styleSource).toContain('.workspace-panel-item-row.menu_button');
+        expect(styleSource).toContain('width: 100%;');
+        expect(styleSource).toContain('overflow-wrap: anywhere;');
+        expect(styleSource).toContain('white-space: nowrap;');
     });
 
     test('wires Background Library to an independent React host with load and refresh state', () => {
@@ -298,9 +313,9 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('interface BackgroundLibraryWorkspacePanelState');
         expect(workspacePanelSource).toContain('function BackgroundLibraryWorkspacePanel');
         expect(workspacePanelSource).toContain('kind="backgroundLibrary"');
-        expect(workspacePanelSource).toContain('data-background-library-bridge-state="status"');
-        expect(workspacePanelSource).toContain('data-background-library-bridge-state="global-gallery"');
-        expect(workspacePanelSource).toContain('data-background-library-bridge-state="chat-gallery"');
+        expect(workspacePanelSource).toContain("{ id: 'global-gallery', label: 'Global gallery', ready: bridgeState.systemContainerPresent }");
+        expect(workspacePanelSource).toContain("{ id: 'chat-gallery', label: 'Chat gallery', ready: bridgeState.chatContainerPresent }");
+        expect(workspacePanelSource).not.toContain('data-background-library-bridge-state="status"');
         expect(workspacePanelSource).toContain('legacyBoundary="upload-delete-rename-select-lock-slash"');
         expect(workspacePanelSource).toContain("{ id: 'background-actions', label: 'Background actions', ready: bridgeState.systemContainerPresent || bridgeState.chatContainerPresent }");
     });
@@ -369,6 +384,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('data-background-library-react-gallery={source}');
         expect(workspacePanelSource).toContain('<BackgroundGallery source="global" items={systemBackgrounds} actionMutation={backgroundLibraryActionMutation} />');
         expect(workspacePanelSource).toContain('<BackgroundGallery source="chat" items={chatBackgrounds} actionMutation={backgroundLibraryActionMutation} />');
+        expect(workspacePanelSource).toContain('className="menu_button workspace-panel-item-row workspace-panel-background-item"');
         expect(workspacePanelSource).toContain('data-background-library-react-item={item.id}');
         expect(workspacePanelSource).toContain('backgroundLibraryActionMutation.mutate({ action: \'uploadBackground\' })');
         expect(workspacePanelSource).toContain('backgroundLibraryActionMutation.mutate({ action: \'lockBackground\' })');
@@ -407,14 +423,14 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('interface ExtensionsHostWorkspacePanelState');
         expect(workspacePanelSource).toContain('function ExtensionsHostWorkspacePanel');
         expect(workspacePanelSource).toContain('kind="extensionsHost"');
-        expect(workspacePanelSource).toContain('data-extensions-host-bridge-state={stateId}');
-        expect(workspacePanelSource).toContain('stateId="extensions-settings"');
-        expect(workspacePanelSource).toContain('stateId="extensions-settings2"');
-        expect(workspacePanelSource).toContain('stateId="regex-container"');
-        expect(workspacePanelSource).toContain('stateId="wand-menu"');
-        expect(workspacePanelSource).toContain('stateId="extras-api"');
-        expect(workspacePanelSource).toContain('legacyBoundary="mount-points-loader-wand-regex-aliases"');
+        expect(workspacePanelSource).toContain("{ id: 'extensions-settings', label: 'Settings column', ready: bridgeState.extensionsSettingsPresent }");
+        expect(workspacePanelSource).toContain("{ id: 'extensions-settings2', label: 'Settings column 2', ready: bridgeState.extensionsSettings2Present }");
+        expect(workspacePanelSource).toContain("{ id: 'regex-container', label: 'Regex container', ready: bridgeState.regexContainerPresent }");
+        expect(workspacePanelSource).toContain("{ id: 'extensions-menu-button', label: 'Wand button', ready: bridgeState.extensionsMenuButtonPresent }");
         expect(workspacePanelSource).toContain("{ id: 'extensions-menu', label: 'Wand menu', ready: bridgeState.extensionsMenuPresent }");
+        expect(workspacePanelSource).toContain("{ id: 'extras-api', label: 'Extras API', ready: bridgeState.extrasApiControlsPresent }");
+        expect(workspacePanelSource).not.toContain('data-extensions-host-bridge-state={stateId}');
+        expect(workspacePanelSource).toContain('legacyBoundary="mount-points-loader-wand-regex-aliases"');
     });
 
     test('renders an Extensions Host workflow through React-owned controls and explicit extensions helpers', () => {
@@ -475,7 +491,8 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('data-extensions-host-react-control="extras-api-key"');
         expect(workspacePanelSource).toContain('data-extensions-host-react-control="autoconnect"');
         expect(workspacePanelSource).toContain('data-extensions-host-react-action="connect"');
-        expect(workspacePanelSource).toContain('data-extensions-host-react-mount-point={mountPoint.id}');
+        expect(workspacePanelSource).toContain('data-workspace-legacy-slot={slot.id}');
+        expect(workspacePanelSource).not.toContain('data-extensions-host-react-mount-point={mountPoint.id}');
         expect(workspacePanelSource).toContain('extensionsHostActionMutation.mutate({ action: \'toggleNotifyUpdates\' })');
         expect(workspacePanelSource).toContain('extensionsHostActionMutation.mutate({ action: \'openManageExtensions\' })');
         expect(workspacePanelSource).toContain('extensionsHostActionMutation.mutate({ action: \'openInstallExtension\' })');
@@ -591,6 +608,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('function ExistingDomNodeSlot(');
         expect(workspacePanelSource).toContain('function MainChatComposerOwnerPortal(');
         expect(workspacePanelSource).toContain('function MainChatSlashUiPortal(');
+        expect(workspacePanelSource).not.toContain('<ExistingDomNodeSlot node={targets.sendTextarea} slot="send_textarea" />');
         expect(workspacePanelSource).toContain('data-main-chat-message-list-controller="true"');
         expect(workspacePanelSource).toContain('data-main-chat-message-list-status={bridgeState.hasChatContainer ? \'ready\' : \'missing\'}');
         expect(workspacePanelSource).toContain('data-main-chat-generation-control-phase={effectiveGenerationControl.phase ?? \'idle\'}');

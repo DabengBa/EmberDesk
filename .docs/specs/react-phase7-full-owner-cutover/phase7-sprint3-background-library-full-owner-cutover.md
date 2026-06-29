@@ -25,7 +25,7 @@ Make React the full owner for Background Library panel behavior.
 
 ## Validation
 
-```powershell
+```bash
 bun run build:react:workspace-panels
 bun run --cwd tests test:unit -- background-panel-controller.test.js thumbnail-placeholder-background.test.js --runInBand
 bun run test:compat

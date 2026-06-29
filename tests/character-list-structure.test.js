@@ -241,6 +241,23 @@ describe('character list structure', () => {
         expect(styleSource).toMatch(/@media screen and \(max-width: 600px\)[\s\S]*grid-template-areas:\s*["']create["'][\s\S]*["']sort["'][\s\S]*["']view["'][\s\S]*["']bulk["']/);
     });
 
+    test('keeps character URL import examples readable inside narrow popups', () => {
+        const styleSource = read('public/style.css');
+        const importTemplate = read('public/scripts/templates/importCharacters.html');
+        const sourcesRule = styleSource.match(/#dialogue_popup \.sources_list,\s*\.popup \.sources_list\s*\{(?<body>[^}]+)\}/)?.groups?.body;
+        const sourcesListRule = styleSource.match(/#dialogue_popup \.sources_list ul,\s*\.popup \.sources_list ul\s*\{(?<body>[^}]+)\}/)?.groups?.body;
+        const sourcesExampleRule = styleSource.match(/#dialogue_popup \.sources_list tt,\s*\.popup \.sources_list tt\s*\{(?<body>[^}]+)\}/)?.groups?.body;
+
+        expect(importTemplate).toContain('class="sources_list justifyLeft"');
+        expect(importTemplate).toContain('<tt>Anonymous/example-character</tt>');
+        expect(importTemplate).toContain('Perchance Character');
+        expect(sourcesRule).toContain('max-width: 100%');
+        expect(sourcesRule).toContain('overflow-wrap: anywhere');
+        expect(sourcesListRule).toContain('padding-left: 1.35em');
+        expect(sourcesExampleRule).toContain('white-space: normal');
+        expect(sourcesExampleRule).toContain('overflow-wrap: anywhere');
+    });
+
     test('keeps ordinary character type badges quiet while group badges remain visible', () => {
         const styleSource = read('public/style.css');
 
@@ -353,8 +370,19 @@ describe('character list structure', () => {
         expect(overlaySource).toContain('deleteContext: { source: \'bulk\', selectedCount: count }');
         expect(overlaySource).toContain('temporary chat — unsaved messages will be lost');
 
+        const showWorldInfoCascadeDialogSource = extractFunctionSource(cascadeDialogSource, 'showWorldInfoCascadeDialog');
+        expect(showWorldInfoCascadeDialogSource).toContain('defaultResult: POPUP_RESULT.NEGATIVE');
+        expect(showWorldInfoCascadeDialogSource).toContain('cancelButton: t`Cancel`');
+        expect(showWorldInfoCascadeDialogSource).toContain('classes: [\'popup-button-danger\']');
+        expect(showWorldInfoCascadeDialogSource).toContain('btn.classList.add(\'popup-button-danger\');');
+        expect(showWorldInfoCascadeDialogSource).toContain('popup.okButton.classList.add(\'popup-button-danger\');');
+
         const showDeleteConfirmWithCascadeSource = extractFunctionSource(cascadeDialogSource, 'showDeleteConfirmWithCascade');
         expect(showDeleteConfirmWithCascadeSource).toContain('defaultResult: POPUP_RESULT.NEGATIVE');
+        expect(showDeleteConfirmWithCascadeSource).toContain('cancelButton: t`Cancel`');
+        expect(showDeleteConfirmWithCascadeSource).toContain('classes: [\'popup-button-danger\']');
+        expect(showDeleteConfirmWithCascadeSource).toContain('btn.classList.add(\'popup-button-danger\');');
+        expect(showDeleteConfirmWithCascadeSource).toContain('popup.okButton.classList.add(\'popup-button-danger\');');
         expect(showDeleteConfirmWithCascadeSource).toContain('const chatCb = document.getElementById(\'del_char_checkbox\');');
         expect(showDeleteConfirmWithCascadeSource).toContain('if (chatCb) chatCb.checked = true;');
         expect(showDeleteConfirmWithCascadeSource).toContain('document.querySelectorAll(\'.world-cascade-checkbox\').forEach((cb) => { cb.checked = true; });');

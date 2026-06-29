@@ -118,25 +118,25 @@ Removing a global requires a deprecation cycle and extension-facing migration no
 
 Focused boundary proof:
 
-```powershell
+```bash
 bun run test:unit -- frontend-shared-library-boundary.test.js --runInBand
 ```
 
 Touched-file lint:
 
-```powershell
+```bash
 bunx eslint public/lib.js tests/frontend-shared-library-boundary.test.js
 ```
 
 Logic-description proof:
 
-```powershell
+```bash
 uv run python .docs/logic-description/frontend_shared_library_boundary_sandbox_proof.py
 ```
 
 Docs check:
 
-```powershell
+```bash
 bun run docs:check
 ```
 

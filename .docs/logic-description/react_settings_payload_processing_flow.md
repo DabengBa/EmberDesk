@@ -137,7 +137,7 @@ Special rules:
 
 Run:
 
-```powershell
+```bash
 uv run python .docs/logic-description/react_settings_payload_sandbox_proof.py
 ```
 

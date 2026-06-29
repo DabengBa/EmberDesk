@@ -111,7 +111,7 @@ The only React-visible output in this sprint is a hidden controller marker:
 
 Run:
 
-```powershell
+```bash
 uv run python .docs/logic-description/main_chat_generation_control_bridge_sandbox_proof.py
 ```
 

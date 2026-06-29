@@ -63,6 +63,15 @@ test-results/
 .docs/db/dist/
 .playwright-cli/
 .tmp/
+/.tmp-*
+/tmp/
+/plan.md
+/spec.md
+/design.md
+/DEVLOG.md
+*.stream.jsonl
+*.tmp
+*.temp
 config.dev-local.yaml
 .deploy-revision
 .docs/audit.md

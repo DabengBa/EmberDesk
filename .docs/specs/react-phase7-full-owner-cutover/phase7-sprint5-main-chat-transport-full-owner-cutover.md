@@ -25,7 +25,7 @@ Make the React visible transport owner cover all approved main-chat provider pat
 
 ## Validation
 
-```powershell
+```bash
 bun run build:react:workspace-panels
 bun run --cwd tests test:unit -- main-chat-visible-transport-owner.test.js chat-generation-lifecycle.test.js --runInBand
 bun run --cwd tests test:e2e -- chat-message-streaming.e2e.js

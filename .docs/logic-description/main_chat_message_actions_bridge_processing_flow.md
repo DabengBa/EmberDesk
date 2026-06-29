@@ -144,7 +144,7 @@ The marker payload still looks like:
 
 Run:
 
-```powershell
+```bash
 uv run python .docs/logic-description/main_chat_message_actions_bridge_sandbox_proof.py
 ```
 

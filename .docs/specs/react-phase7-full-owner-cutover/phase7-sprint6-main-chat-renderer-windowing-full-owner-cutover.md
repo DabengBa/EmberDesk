@@ -25,7 +25,7 @@ Make React the full owner for approved main-chat renderer and windowing behavior
 
 ## Validation
 
-```powershell
+```bash
 bun run build:react:workspace-panels
 bun run --cwd tests test:e2e -- chat-message-rendering.e2e.js chat-message-layout.e2e.js chat-message-streaming.e2e.js
 bun run test:compat

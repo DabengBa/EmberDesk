@@ -25,13 +25,13 @@ Phase 6 的 primary compatibility gate 是 `JS-Slash-Runner`。
 
 ## Validation
 
-```powershell
+```bash
 bun run test:compat
 bun run docs:check
 ```
 
 When the change touched global compatibility evidence, the delivered proof also included:
 
-```powershell
+```bash
 bun run --cwd tests test:unit -- global-compatibility-bridge.test.js --runInBand
 ```

@@ -25,4 +25,30 @@ describe('unified character import confirmation dialog', () => {
         expect(importAllButtonSource).toContain('cb.checked = true');
         expect(importAllButtonSource).toContain('importAllChoices = {');
     });
+
+    test('keeps import confirmation styling in the shared popup stylesheet', () => {
+        const source = read('public/scripts/import-confirm-dialog.js');
+        const popupStyles = read('public/css/popup.css');
+
+        expect(source).not.toContain('<style>');
+        expect(source).toContain('class="import-confirm-dialog"');
+        expect(source).toContain('class="import-opt-title"');
+        expect(source).toContain('class="import-opt-char"');
+        expect(source).toContain('class="import-opt-list"');
+        expect(source).toContain('class="import-opt-item"');
+        expect(source).toContain('class="import-opt-body"');
+        expect(source).toContain('class="import-opt-label"');
+        expect(source).toContain('class="import-opt-meta"');
+        expect(source).toContain('class="import-opt-chip"');
+        expect(source).toContain('class="import-opt-overwrite"');
+
+        expect(popupStyles).toContain('.import-confirm-dialog');
+        expect(popupStyles).toContain('.import-opt-char');
+        expect(popupStyles).toContain('var(--SmartThemeQuoteColor)');
+        expect(popupStyles).toContain('var(--SmartThemeEmColor)');
+        expect(popupStyles).toContain('var(--SmartThemeBorderColor)');
+        expect(popupStyles).toContain('@media (max-width: 480px)');
+        expect(popupStyles).toContain('.popup-controls');
+        expect(popupStyles).toContain('flex-wrap: wrap;');
+    });
 });

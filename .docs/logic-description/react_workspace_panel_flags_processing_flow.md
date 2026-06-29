@@ -343,7 +343,7 @@ The processing outputs are:
 
 Run:
 
-```powershell
+```bash
 uv run python .docs/logic-description/react_workspace_panel_flags_sandbox_proof.py
 ```
 

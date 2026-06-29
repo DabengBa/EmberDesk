@@ -112,7 +112,22 @@ describe('login React route flag', () => {
         const recoveryFormSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'login', 'RecoveryForm.tsx'), 'utf8');
 
         expect(recoveryFormSource).toContain('{currentStep === 2 && (');
+        expect(recoveryFormSource).toContain('className="login-recovery-note"');
         expect(recoveryFormSource).toContain('恢复码会输出到服务端控制台，请联系管理员获取。');
+        expect(recoveryFormSource).not.toContain('border-zinc');
+        expect(recoveryFormSource).not.toContain('bg-zinc');
+    });
+
+    test('keeps account lockout distinct from login submission copy', () => {
+        const loginRouteSource = fs.readFileSync(path.join(repoRoot, 'app', 'routes', 'login.tsx'), 'utf8');
+        const loginFormSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'login', 'LoginForm.tsx'), 'utf8');
+
+        expect(loginRouteSource).toContain('isSubmitting={loginMutation.isPending}');
+        expect(loginRouteSource).toContain('isLockedOut={lockoutSeconds !== null}');
+        expect(loginRouteSource).not.toContain('isSubmitting={loginMutation.isPending || lockoutSeconds !== null}');
+        expect(loginFormSource).toContain('const controlsDisabled = isSubmitting || isLockedOut;');
+        expect(loginFormSource).toContain("const buttonLabel = isSubmitting ? '登录中...' : isLockedOut ? '已锁定' : '登录';");
+        expect(loginFormSource).toContain('disabled={controlsDisabled}');
     });
 
     test('keeps /login on the legacy page when the React flag is disabled', async () => {

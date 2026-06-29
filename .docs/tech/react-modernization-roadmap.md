@@ -130,7 +130,7 @@
 | Extensions Host | React drawer host、notify/manage/install/Extras controls、mount readiness presentation | extension discovery、manifest loading、script/style injection、Tavern Helper、regex extension、wand menu templates、install/update/delete protocols、`@sillytavern/*` aliases、protected mount-point lifecycle、flag/build fallback | `Phase 7 Sprint 4: Extensions Host full owner cutover`，并依赖 Phase 6 兼容验证 |
 
 **Sprint 4-7 验证门**：
-```powershell
+```bash
 bun run --cwd tests test:unit -- world-info-card-rendering.test.js world-info-import-feedback.test.js world-info-converters.test.js worldinfo-delete-cascade.test.js background-panel-controller.test.js thumbnail-placeholder-background.test.js workspace-react-panel-flags.test.js react-workspace-panels-helpers.test.js --runInBand
 bun run build:react:workspace-panels
 bun run test:compat
@@ -198,7 +198,7 @@ bun run docs:check
 - ✅ `Sprint 5 / Provider Transport And Token Append Owner`（4 周，已完成标准 visible OpenAI direct-chat transport closure：React-owned visible transport 支持 `submitComposer` / `continueLast` / regenerate / retry / swipe；excluded compatibility path 继续 legacy fallback）
 
 **Phase 3B 验证门**：
-```powershell
+```bash
 bun run --cwd tests test:e2e -- chat-message-rendering.e2e.js chat-message-layout.e2e.js chat-message-streaming.e2e.js
 bun run test:compat
 bun run perf:interaction
@@ -238,7 +238,7 @@ bun run docs:check
 - ✅ [Phase 4B: Main-chat renderer extraction](briefs/react-phase4-state-management-sequenced-specs.md)（已建立 renderer/windowing contract 和 long-chat/extension proof；不等于 Phase 7 full owner cutover）
 
 **验证门**：
-```powershell
+```bash
 bun run test:compat
 bun run --cwd tests test:unit -- main-chat-visible-transport-owner.test.js chat-generation-lifecycle.test.js react-workspace-panels-helpers.test.js --runInBand
 bun run --cwd tests test:e2e -- chat-message-rendering.e2e.js chat-message-layout.e2e.js chat-message-streaming.e2e.js
@@ -281,7 +281,7 @@ bun run perf:interaction
 - EmberDesk 当前没有证据证明 Express runtime owner 已可 sunset；后续若再讨论，只能以新 spec/ADR 和更宽的 parity proof 重新开启。
 
 **验证门**：
-```powershell
+```bash
 bun run --cwd tests test:unit -- express5-route-compatibility.test.js --runInBand
 bun run test:unit
 bun run test:compat
@@ -343,7 +343,7 @@ bun run docs:check
   当前 roadmap 选择冻结 legacy jQuery workspace shell 作为长期 runtime facade，而不是推进 full SPA shell；`globalThis.SillyTavern` 与 `@sillytavern/*` 被冻结为 documented public compatibility facades，`eventSource` / `event_types` 保持长期支持，`__emberDeskReactCompatibilityBridge` 明确 internal-only。
 
 **Full owner cutover 验证门**：
-```powershell
+```bash
 bun run build:lib
 bun run build:react
 bun run build:react:character-library

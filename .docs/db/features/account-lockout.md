@@ -11,47 +11,46 @@ related: [page.login, feature.login_submit]
 
 `feature.account_lockout` represents the per-account rate limiting and temporary lockout that activates after repeated failed login attempts for the same handle. It covers the lockout countdown displayed on the login page, the error message, and the automatic unlock after the lockout window expires. It does not cover the separate per-IP rate limit or password recovery.
 
-## Feature Purpose
+## Purpose
 
-This feature protects individual accounts from brute-force login attempts by temporarily blocking further attempts after too many failures.
+Protect an individual account from repeated failed login attempts by turning the login card into a temporary, visible lockout state after the configured threshold is reached.
 
-## Trigger Entry
+## User-Visible Contract
 
-- **Passive entry**: any failed login attempt contributes to the account's failure counter.
-- **Visible entry**: the lockout state becomes visible when the failure counter exceeds the configured threshold (default: 5 attempts).
+- EmberDesk counts failed sign-in attempts per handle and shows a lockout only after the account threshold is exceeded; the message must not confirm whether the handle is real.
+- While lockout is active, the login card shows a countdown and disables normal submit so the user sees that retry is temporarily unavailable.
+- When the lockout window expires, the countdown disappears and the same login card becomes usable again without requiring a separate recovery route.
+- A successful login before lockout clears the account failure state, so the user does not carry stale lockout risk into the authenticated workspace.
+- Operators may configure the account threshold, duration, or disable account lockout, but the user-facing behavior remains either a temporary countdown or normal login availability.
 
-## Interaction IDs
+## Semantic Interaction IDs
 
 - `feature.account_lockout`: the full lockout-and-unlock lifecycle.
-- `feature.account_lockout.activate`: the moment the lockout triggers and the countdown appears.
-- `feature.account_lockout.countdown`: the visible countdown timer shown on the login card.
-- `feature.account_lockout.expire`: the lockout window ending and normal login resuming.
+- `feature.account_lockout.activate`: the transition from ordinary authentication failure to visible lockout.
+- `feature.account_lockout.countdown`: the countdown state shown on the login card while retry is blocked.
+- `feature.account_lockout.expire`: the visible return from lockout to normal login availability.
 
-## User Flow
+## Acceptance Workflows
 
-1. The user submits incorrect credentials multiple times for the same handle.
-2. After the configured number of failures, the server responds with a 429 status and a `Retry-After` header.
-3. EmberDesk displays a lockout error message with a countdown timer on the login card.
-4. The login button is disabled for the duration of the lockout.
-5. When the countdown reaches zero, the error message disappears and the user can attempt login again.
-6. A successful login clears the failure counter for that account.
+- As a registered user who wants to regain access after mistyping credentials, from [Login](page.login) submit the same handle with incorrect passwords until the lockout threshold is reached; EmberDesk must show a generic lockout message, a countdown, and a disabled submit path, the countdown must survive refresh until the window expires, and failure is any disclosure that the handle exists or any accepted login submit while the countdown is active.
+- As a registered user who remembers the correct password before lockout, from [Login](page.login) submit valid credentials after one or more earlier failures; EmberDesk must navigate to [Chat Workspace](page.chat_workspace), a refresh or reopen must keep the authenticated workspace rather than returning to a stale lockout, and failure is any residual countdown or generic lockout after successful authentication.
+- As a locked-out user waiting for recovery, from the same login card wait until the countdown reaches zero or refresh near expiry, then submit valid credentials; EmberDesk must re-enable login on the card and allow normal authentication after the window ends, and failure is a countdown that sticks at zero, a disabled button after expiry, or a lockout message that never clears.
 
-## Business Rules And Boundaries
+## Feature-Specific Evidence
 
-- The lockout is per-account (keyed by handle), independent of the per-IP rate limit.
-- The default lockout window is 300 seconds (5 minutes), configurable via `rateLimiting.accountsLoginLockoutDuration`.
-- The default threshold is 5 failed attempts, configurable via `rateLimiting.accountsLoginMaxAttempts`.
-- Set `rateLimiting.accountsLoginMaxAttempts: 0` to disable account lockout entirely.
-- A successful login clears both the per-account and per-IP failure counters.
-- The lockout message does not confirm whether the handle exists; the same error is returned for unknown handles.
-- The countdown is driven by the `Retry-After` header from the server, not by a client-side timer estimate.
+- The visible countdown is derived from the server-provided retry window; DOM timers are supporting evidence, not the contract.
+- Account lockout is distinct from per-IP rate limiting and should be proven through the login card state rather than raw status codes alone.
+- Config evidence may include `rateLimiting.accountsLoginMaxAttempts` and `rateLimiting.accountsLoginLockoutDuration`, but the user-visible proof is the countdown, disabled submit state, expiry, and successful post-expiry login.
 
-## ID Boundary Notes
+## Failure Signals
 
-This feature is separate from [Login Submit](feature.login_submit) because lockout is a security-rate-limiting behavior with its own visible state and user experience, not part of the normal authentication flow.
+- The lockout copy reveals whether the submitted handle exists.
+- The login button remains enabled while the card says the account is locked.
+- The countdown expires but the user cannot retry without a page restart.
+- A successful login leaves stale lockout state visible on a later login page visit.
 
-## Outcomes
+## Boundaries
 
-- **Lockout active**: the countdown is visible and the login button is disabled.
-- **Lockout expired**: the countdown disappears and login is available again.
-- **Successful login before lockout**: the failure counter is cleared and no lockout occurs.
+- Normal credential submission belongs to [Login Submit](feature.login_submit).
+- Password reset belongs to [Password Recovery](feature.password_recovery).
+- The login page layout, config table, and authentication-page composition belong to [Login](page.login).

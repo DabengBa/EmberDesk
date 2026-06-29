@@ -25,7 +25,7 @@ Make React the full owner for the Extensions Host UI while deciding which extens
 
 ## Validation
 
-```powershell
+```bash
 bun run build:react:workspace-panels
 bun run test:compat
 bun run docs:check

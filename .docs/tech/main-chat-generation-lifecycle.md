@@ -44,7 +44,7 @@ The lifecycle module decides recovery and cleanup around streaming, but it does 
 
 Focused proof:
 
-```powershell
+```bash
 bun run --cwd tests test:unit -- chat-generation-lifecycle.test.js chat-generation-auto-recovery.test.js chat-workspace-structure.test.js --runInBand
 bun run --cwd tests test:e2e -- chat-message-streaming.e2e.js
 bun run test:compat

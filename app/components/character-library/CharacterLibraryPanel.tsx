@@ -59,7 +59,10 @@ export function CharacterLibraryPanel({ bridge, state }: { bridge: CharacterLibr
         scrollElementRef.current = state.scrollElement;
     }, [state.scrollElement]);
 
-    const charactersQuery = useQuery({
+    const {
+        data: charactersData,
+        dataUpdatedAt: charactersDataUpdatedAt,
+    } = useQuery({
         queryKey: ['character-library', 'all'],
         queryFn: async () => {
             return await bridge.fetchAllCharacters?.() ?? bridge.getAllCharacters?.() ?? [];
@@ -72,12 +75,12 @@ export function CharacterLibraryPanel({ bridge, state }: { bridge: CharacterLibr
     });
 
     useEffect(() => {
-        if (!charactersQuery.data) {
+        if (!charactersData) {
             return;
         }
 
-        void bridge.syncCharactersFromQuery?.(charactersQuery.data);
-    }, [bridge, charactersQuery.data, charactersQuery.dataUpdatedAt]);
+        void bridge.syncCharactersFromQuery?.(charactersData);
+    }, [bridge, charactersData, charactersDataUpdatedAt]);
 
     const estimatedRowHeight = state.estimatedRowHeight ?? 112;
     const virtualizer = useVirtualizer({

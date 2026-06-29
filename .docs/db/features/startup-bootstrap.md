@@ -11,40 +11,45 @@ related: [page.chat_workspace, feature.background_library_panel, feature.extensi
 
 `feature.startup_bootstrap` represents the user-visible loading experience from opening EmberDesk's root URL to reaching a usable main shell. It covers visible readiness and follow-up panel loading behavior, not backend startup internals or profiler metrics.
 
-## Feature Purpose
+## Purpose
 
-This feature gets the user to a usable workspace as quickly as possible while allowing slower secondary surfaces to finish in the background.
+Bring the user from the root EmberDesk URL to a usable main workspace while slower secondary panels continue loading locally.
 
-## Trigger Entry
+## User-Visible Contract
 
-- **Primary entry**: open the EmberDesk root URL in a browser tab.
-- **Repeat entry**: reload an existing EmberDesk browser tab.
+- Opening or reloading the root workspace shows a startup overlay only while core workspace readiness is still required.
+- The overlay disappears when the main shell is usable for real interaction, even if secondary surfaces such as backgrounds or extensions are still warming.
+- Deferred background or extension failures surface in their own panel areas instead of returning the whole workspace to global loading.
+- The root workspace remains the long-term runtime facade for `/`; feature-flagged React routes or guarded panel islands may enhance surfaces, but disabled flags or missing bundles must not invalidate the same root shell.
+- Refreshing the root URL repeats the same visible readiness contract and must not strand the user between shell and panel states.
 
-## Interaction IDs
+## Semantic Interaction IDs
 
 - `feature.startup_bootstrap`: the full visible startup experience for the main shell.
 - `feature.startup_bootstrap.primary_entry`: loading caused by opening or reloading the root workspace.
 
-## User Flow
+## Acceptance Workflows
 
-1. The user opens the root workspace URL.
-2. EmberDesk shows a startup overlay while core shell data is prepared.
-3. The overlay disappears as soon as the main shell is ready for real interaction.
-4. The user can start using the workspace even if secondary surfaces such as backgrounds or extensions are still finishing deferred loading.
+- As a returning workspace user who wants to start chatting, from the root URL open or reload EmberDesk; EmberDesk must show startup feedback only until the main shell can be used, secondary panels may still show local loading, reload must repeat the same readiness contract, and failure is a startup overlay that blocks the shell until every secondary surface finishes.
+- As a user encountering a secondary panel failure during startup, from the usable workspace open the affected background or extension surface and retry or refresh it locally; EmberDesk must keep the main shell usable and show retry, refresh, or error state locally in that surface, and failure is returning to global loading or leaving a blank panel with no recovery cue.
+- As a user on a build with React routes or panel islands disabled or unavailable, from `/` open the workspace; EmberDesk must still present the established root shell and fallback surfaces, refresh must preserve that root entry, and failure is a missing bundle or flag-off state replacing the workspace with an empty migration host.
 
-## Business Rules And Boundaries
+## Feature-Specific Evidence
 
-- The main shell must become usable before every secondary surface has finished loading.
-- Deferred panel work must not leave the workspace looking permanently blocked.
-- Failures in secondary deferred work should surface locally in the affected panel instead of forcing the whole workspace back into a global loading state.
-- The root workspace bootstrap remains the long-term runtime facade for `/`; feature-flagged React routes and guarded panel islands may enhance surrounding surfaces, but a disabled flag or missing bundle must not replace or invalidate the same root shell.
+- Startup overlay disappearance, usable workspace controls, and local panel loading/error states are primary evidence.
+- Performance timings and profiler stages are supporting evidence only after the visible readiness contract is satisfied.
+- React bundle availability and feature flags are migration evidence, not alternate user-visible contracts.
 
-## ID Boundary Notes
+## Failure Signals
 
-This feature stops at the visible browser-side readiness of the workspace. Server boot timing, profiler stages, and transport details belong to tech docs, not to this semantic feature.
+- The global startup overlay remains after the main shell could otherwise be used.
+- A background or extension load failure blocks the whole workspace.
+- Refreshing the root URL leaves the user between a hidden overlay and unusable shell.
+- Flag-off or bundle-missing React paths produce an empty workspace instead of the established shell.
 
-## Outcomes
+## Boundaries
 
-- **Success**: the startup overlay disappears and the workspace becomes usable.
-- **Deferred follow-up**: supporting panels keep warming up in the background while the user can already interact with the shell.
-- **Partial failure**: the main shell can remain usable while a slower supporting surface exposes its own retry or refresh state.
+- Background panel loading and refresh behavior belongs to [Background Library Panel](feature.background_library_panel).
+- Extension surface loading and retry behavior belongs to [Extensions Panel Open](feature.extension_panel_open).
+- The workspace layout and navigation surface belong to [Chat Workspace](page.chat_workspace).
+- Server startup phases, profiler metrics, and transport internals belong to tech docs, not this semantic feature.

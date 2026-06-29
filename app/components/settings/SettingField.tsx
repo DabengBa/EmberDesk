@@ -9,7 +9,7 @@ type SettingFieldProps = {
     form: any;
     name: string;
     label: string;
-    description: string;
+    description?: string;
     variant?: 'text' | 'number' | 'textarea' | 'select' | 'toggle';
     selectValueType?: 'string' | 'number';
     placeholder?: string;
@@ -36,31 +36,40 @@ export function SettingField({
     options = [],
     onValueChange,
 }: SettingFieldProps) {
+    const fieldId = `settings-${name.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+    const descriptionId = description ? `${fieldId}-description` : undefined;
+
     return (
         <form.Field name={name}>
             {(field: any) => {
                 const errorMessage = getFieldErrorMessage(field?.state?.meta?.errors);
-                const sharedClassName = 'w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-emerald-400';
+                const errorId = errorMessage ? `${fieldId}-error` : undefined;
+                const describedBy = [descriptionId, errorId].filter(Boolean).join(' ') || undefined;
 
                 return (
                     <form.Subscribe selector={(state: any) => getValueAtPath(state.values, name)}>
                         {(currentValue: any) => (
-                            <label className={`space-y-2 ${variant === 'toggle' ? 'md:col-span-2' : ''}`}>
+                            <label className={`settings-field ${variant === 'toggle' ? 'settings-field--wide' : ''}`}>
                                 {variant !== 'toggle' && (
-                                    <div className="space-y-1">
-                                        <span className="block text-sm font-medium text-zinc-100">{label}</span>
-                                        <span className="block text-sm text-zinc-400">{description}</span>
+                                    <div>
+                                        <span className="settings-field-label">{label}</span>
+                                        {description && (
+                                            <span id={descriptionId} className="settings-field-description">
+                                                {description}
+                                            </span>
+                                        )}
                                     </div>
                                 )}
 
                                 {variant === 'textarea' && (
                                     <textarea
-                                        id={name}
+                                        id={fieldId}
                                         name={name}
-                                        className={`${sharedClassName} min-h-28 resize-y`}
+                                        className="settings-input settings-textarea"
                                         value={String(currentValue ?? '')}
                                         placeholder={placeholder}
                                         disabled={disabled}
+                                        aria-describedby={describedBy}
                                         onBlur={field.handleBlur}
                                         onChange={event => {
                                             field.handleChange(event.target.value);
@@ -72,12 +81,13 @@ export function SettingField({
                                 {variant === 'text' && (
                                     <input
                                         type="text"
-                                        id={name}
+                                        id={fieldId}
                                         name={name}
-                                        className={sharedClassName}
+                                        className="settings-input"
                                         value={String(currentValue ?? '')}
                                         placeholder={placeholder}
                                         disabled={disabled}
+                                        aria-describedby={describedBy}
                                         onBlur={field.handleBlur}
                                         onChange={event => {
                                             field.handleChange(event.target.value);
@@ -89,14 +99,15 @@ export function SettingField({
                                 {variant === 'number' && (
                                     <input
                                         type="number"
-                                        id={name}
+                                        id={fieldId}
                                         name={name}
-                                        className={sharedClassName}
+                                        className="settings-input"
                                         value={Number(currentValue ?? 0)}
                                         min={min}
                                         max={max}
                                         step={step}
                                         disabled={disabled}
+                                        aria-describedby={describedBy}
                                         onBlur={field.handleBlur}
                                         onChange={event => {
                                             const nextValue = event.target.value;
@@ -108,11 +119,12 @@ export function SettingField({
 
                                 {variant === 'select' && (
                                     <select
-                                        id={name}
+                                        id={fieldId}
                                         name={name}
-                                        className={sharedClassName}
+                                        className="settings-input settings-select"
                                         value={String(currentValue ?? '')}
                                         disabled={disabled}
+                                        aria-describedby={describedBy}
                                         onBlur={field.handleBlur}
                                         onChange={event => {
                                             const nextValue = selectValueType === 'number'
@@ -131,18 +143,23 @@ export function SettingField({
                                 )}
 
                                 {variant === 'toggle' && (
-                                    <span className="flex items-start justify-between gap-4 rounded-md border border-zinc-800 bg-zinc-900 px-4 py-3">
-                                        <span className="space-y-1">
-                                            <span className="block text-sm font-medium text-zinc-100">{label}</span>
-                                            <span className="block text-sm text-zinc-400">{description}</span>
+                                    <span className="settings-toggle">
+                                        <span className="settings-toggle-body">
+                                            <span className="settings-toggle-label">{label}</span>
+                                            {description && (
+                                                <span id={descriptionId} className="settings-field-description">
+                                                    {description}
+                                                </span>
+                                            )}
                                         </span>
                                         <input
                                             type="checkbox"
-                                            id={name}
+                                            id={fieldId}
                                             name={name}
-                                            className="mt-1 h-4 w-4 accent-emerald-400"
+                                            className="settings-checkbox"
                                             checked={Boolean(currentValue)}
                                             disabled={disabled}
+                                            aria-describedby={describedBy}
                                             onBlur={field.handleBlur}
                                             onChange={event => {
                                                 field.handleChange(event.target.checked);
@@ -152,7 +169,7 @@ export function SettingField({
                                     </span>
                                 )}
 
-                                {errorMessage && <span className="block text-sm text-rose-300">{errorMessage}</span>}
+                                {errorMessage && <span id={errorId} className="settings-field-error">{errorMessage}</span>}
                             </label>
                         )}
                     </form.Subscribe>

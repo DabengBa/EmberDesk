@@ -18,12 +18,14 @@ export async function showWorldInfoCascadeDialog(worldInfos) {
 
     const popup = new Popup(html, POPUP_TYPE.CONFIRM, '', {
         okButton: t`Delete`,
+        cancelButton: t`Cancel`,
         wider: true,
         leftAlign: true,
+        defaultResult: POPUP_RESULT.NEGATIVE,
         customButtons: [{
             text: t`Delete All`,
             result: POPUP_RESULT.CUSTOM1,
-            classes: ['popup-button-ok'],
+            classes: ['popup-button-danger'],
         }],
         onClosing: () => {
             capturedCascade = captureCascadeChoices();
@@ -32,6 +34,7 @@ export async function showWorldInfoCascadeDialog(worldInfos) {
         onOpen: (p) => {
             const btn = p.dlg.querySelector('[data-result="' + POPUP_RESULT.CUSTOM1 + '"]');
             if (btn) {
+                btn.classList.add('popup-button-danger');
                 btn.addEventListener('click', () => {
                     document.querySelectorAll('.world-cascade-checkbox').forEach((cb) => { cb.checked = true; });
                     p.complete(POPUP_RESULT.AFFIRMATIVE);
@@ -39,6 +42,7 @@ export async function showWorldInfoCascadeDialog(worldInfos) {
             }
         },
     });
+    popup.okButton.classList.add('popup-button-danger');
 
     const result = await popup.show();
     if (!result) {
@@ -63,13 +67,14 @@ export async function showDeleteConfirmWithCascade(title, content) {
 
     const popup = new Popup(fullContent, POPUP_TYPE.CONFIRM, '', {
         okButton: t`Delete`,
+        cancelButton: t`Cancel`,
         wider: true,
         leftAlign: true,
         defaultResult: POPUP_RESULT.NEGATIVE,
         customButtons: [{
             text: t`Delete All`,
             result: POPUP_RESULT.CUSTOM1,
-            classes: ['popup-button-ok'],
+            classes: ['popup-button-danger'],
         }],
         onClosing: () => {
             deleteChats = !!document.getElementById('del_char_checkbox')?.checked;
@@ -79,6 +84,7 @@ export async function showDeleteConfirmWithCascade(title, content) {
         onOpen: (p) => {
             const btn = p.dlg.querySelector('[data-result="' + POPUP_RESULT.CUSTOM1 + '"]');
             if (btn) {
+                btn.classList.add('popup-button-danger');
                 btn.addEventListener('click', () => {
                     const chatCb = document.getElementById('del_char_checkbox');
                     if (chatCb) chatCb.checked = true;
@@ -88,6 +94,7 @@ export async function showDeleteConfirmWithCascade(title, content) {
             }
         },
     });
+    popup.okButton.classList.add('popup-button-danger');
 
     const result = await popup.show();
     if (!result) {

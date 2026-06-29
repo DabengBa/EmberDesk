@@ -11,71 +11,48 @@ related: [page.setup, page.login, feature.login_submit]
 
 `feature.first_time_setup` represents the one-time account hardening flow that runs before EmberDesk allows normal workspace access. It covers setup detection, the redirect to the setup page, fresh admin account creation, the legacy single passwordless-user password setup path, and the transition to the authenticated workspace. It does not cover subsequent logins, multi-user management, or password recovery.
 
-## Feature Purpose
+## Purpose
 
-This feature ensures that every deployment reaches a password-protected account state before normal use, eliminating the security gap of passwordless auto-login.
+Force a new or legacy passwordless deployment through a visible account-hardening flow before normal workspace access is allowed.
 
-## Trigger Entry
+## User-Visible Contract
 
-- **Automatic entry**: visiting any route when `enableUserAccounts` is true and storage either has no users or has exactly one user without a password.
-- **Direct entry**: navigating to `/setup` (redirects to `/login` if setup is already complete).
-- **Legacy rollback entry**: navigating to `/setup.html` always opens the legacy setup page for rollback testing or operator fallback.
+- When account login is enabled and setup is still required, visiting the workspace routes the operator to [Setup](page.setup) instead of exposing the workspace.
+- Fresh setup lets the operator create the first password-protected admin account with handle, optional display name, password, and confirmation.
+- The legacy single-passwordless-user path asks only for a new password and confirmation for the existing user; it must not create a duplicate account.
+- Passwordless setup completion is not allowed: validation errors appear on the setup card and the operator can correct input there.
+- After setup succeeds, the operator is authenticated and reaches [Chat Workspace](page.chat_workspace); once setup is complete, `/setup` no longer opens the setup form and redirects to login.
+- `/setup.html` remains a legacy rollback surface for operator fallback, but it must preserve the same setup semantics.
 
-## Interaction IDs
+## Semantic Interaction IDs
 
 - `feature.first_time_setup`: the full setup lifecycle.
-- `feature.first_time_setup.detect`: the server-side detection that triggers the setup redirect.
-- `feature.first_time_setup.submit`: the form submission that creates the admin account.
+- `feature.first_time_setup.detect`: the visible setup-required routing state before normal workspace access.
+- `feature.first_time_setup.submit`: submitting setup details to create or harden the admin account.
 
-## User Flow
+## Acceptance Workflows
 
-1. Operator starts EmberDesk for the first time with `enableUserAccounts: true`.
-2. Browser navigates to `http://localhost:8000/`.
-3. Server detects zero users in storage (`needsSetup()` returns true).
-4. Browser redirects to `/setup`.
-5. Operator enters a handle, optional display name, and password.
-6. Operator confirms the password.
-7. Operator submits the form.
-8. Server validates input, creates the admin user, establishes a session.
-9. Browser redirects to `/` — operator is inside the workspace.
+- As a first-time operator who wants to secure a new deployment, from the root workspace URL with account login enabled and no users, follow the redirect to [Setup](page.setup), enter handle, optional display name, password, and matching confirmation, then submit; EmberDesk must create the admin session and open [Chat Workspace](page.chat_workspace), refresh or reopen must not expose passwordless access, and failure is reaching the workspace before setup or returning to setup after success.
+- As an operator upgrading a deployment with exactly one passwordless user, from `/setup` enter and confirm a password in the reduced setup form; EmberDesk must authenticate the existing user and open the workspace without asking for handle/display name, later login must require that password, and failure is creating a second user, showing fresh-account fields, or allowing workspace access without setting a password.
+- As an operator whose setup input is invalid, from [Setup](page.setup) submit missing or mismatched password fields; EmberDesk must keep the setup card visible with an error and allow correction, a refresh must still show setup-required state until valid completion, and failure is silent navigation, partial account creation, or lost recovery path.
+- As an operator after setup is complete, from `/setup` open the setup route again; EmberDesk must redirect to [Login](page.login), the legacy `/setup.html` fallback must remain available only as a rollback surface with matching setup semantics, and failure is reopening the normal setup form for an already secured deployment.
 
-Legacy password setup path:
+## Feature-Specific Evidence
 
-1. Server finds exactly one stored user and that user has no password.
-2. Browser opens `/setup`.
-3. `GET /api/users/setup-mode` returns `set-password`.
-4. The setup page hides handle and display-name fields and asks only for password confirmation.
-5. Operator submits a password.
-6. Server stores the password hash for the existing user, establishes a session, and redirects the browser to `/`.
+- Visible redirect behavior, setup mode, form fields, inline errors, and final workspace navigation are primary evidence.
+- `needsSetup()` in `src/user-storage.js`, setup public endpoints, setup middleware, React `/setup`, and legacy `public/scripts/setup.js` are implementation evidence for the same user-facing contract.
+- Storage state and password hashes are supporting evidence, not substitutes for proving the operator cannot access the workspace before setup.
 
-## Business Rules And Boundaries
+## Failure Signals
 
-- The setup page is shown only when `enableUserAccounts` is true and storage either has zero users or exactly one passwordless user.
-- The handle is slugified: lowercase alphanumeric with hyphens, no leading/trailing hyphens.
-- The password is required; passwordless accounts are not allowed through setup.
-- The display name defaults to the handle if left empty.
-- The created user is always `admin: true` and `enabled: true`.
-- If setup is already complete, visiting `/setup` redirects to `/login`.
-- The setup endpoint does not use rate limiting (it is a one-time operation).
-- `initUserStorage()` does not create a default user when `enableUserAccounts` is true. Storage starts empty.
-- Existing deployments with multiple users or password-protected users are unaffected: `needsSetup()` returns false.
-- Existing deployments with one passwordless user must set a password before normal workspace access.
+- A passwordless account reaches the workspace while setup is still required.
+- Fresh setup accepts an empty password or mismatched confirmation.
+- The legacy passwordless-user path creates a new account instead of hardening the existing user.
+- `/setup` remains open after setup has already completed.
 
-## ID Boundary Notes
+## Boundaries
 
-This feature is separate from [Login Submit](feature.login_submit) because setup is a one-time initialization action, not a recurring authentication flow. Setup creates the first user; login authenticates existing users.
-
-## Outcomes
-
-- **Success**: the admin account is created, the operator is logged in, and the workspace loads.
-- **Password set for existing user**: the existing single passwordless user receives a password, the operator is logged in, and the workspace loads.
-- **Setup already complete**: the operator is redirected to `/login`.
-- **Validation failure**: an error message appears on the setup card and the operator can retry.
-
-## Code Binding Points
-
-- `needsSetup()` in `src/user-storage.js` owns server-side setup gating.
-- `GET /api/users/setup-mode` and `POST /api/users/setup` in `src/endpoints/users-public.js` own setup mode and submission behavior.
-- `setupPageMiddleware()` in `src/users.js` owns `/setup` route selection, including the React feature flag and legacy fallback decision.
-- `app/routes/setup.tsx` owns the React setup behavior for `/setup` when `features.react.pages.setup` is enabled.
-- `createSetupController()` and `initSetupPage()` in `public/scripts/setup.js` own the legacy setup behavior, including the stable `/setup.html` fallback surface.
+- Recurring authentication belongs to [Login Submit](feature.login_submit).
+- Login-page composition belongs to [Login](page.login).
+- Setup page layout and routing details belong to [Setup](page.setup).
+- Password visibility on setup fields belongs to [Password Visibility Toggle](feature.password_toggle).

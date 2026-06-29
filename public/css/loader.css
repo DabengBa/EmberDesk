@@ -16,6 +16,39 @@
     opacity: 1;
 }
 
+#preloader,
+.preloader-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.preloader-content {
+    flex-direction: column;
+    gap: 1.5rem;
+    max-width: min(320px, calc(100vw - 3rem));
+    text-align: center;
+}
+
+.preloader-logo {
+    width: min(150px, 50vw);
+    height: auto;
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+}
+
+.preloader-spinner {
+    font-size: 2rem;
+    line-height: 1;
+}
+
+.preloader-message {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    font-size: 1.25rem;
+    font-weight: 500;
+    opacity: 0.9;
+}
+
 #load-spinner {
     --spinner-size: 2em;
     transition: opacity var(--animation-duration-2x) ease-out, transform var(--animation-duration-2x) ease-out;
@@ -84,5 +117,4 @@
     font-size: 1.25rem;
     font-weight: 500;
     opacity: 0.9;
-    letter-spacing: 0.02em;
 }

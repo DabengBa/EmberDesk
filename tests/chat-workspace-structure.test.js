@@ -9,8 +9,26 @@ import {
 } from './helpers/frontend-structure-contract.js';
 
 describe('chat workspace structure', () => {
+    test('keeps the first-paint preloader visible before startup scripts run', () => {
+        const indexHtml = readRepoFile('public/index.html');
+        const loaderCss = readRepoFile('public/css/loader.css');
+
+        expect(indexHtml).toMatch(/id="preloader"[^>]*\brole="status"[^>]*\baria-live="polite"[^>]*\baria-busy="true"/);
+        expect(indexHtml).toContain('class="preloader-content"');
+        expect(indexHtml).toContain('class="preloader-logo"');
+        expect(indexHtml).toContain('class="preloader-spinner fa-solid fa-gear fa-spin"');
+        expect(indexHtml).toContain('class="preloader-message"');
+        expect(indexHtml).toContain('Initializing…');
+        expect(loaderCss).toContain('#preloader,');
+        expect(loaderCss).toContain('.preloader-content');
+        expect(loaderCss).toContain('max-width: min(320px, calc(100vw - 3rem));');
+        expect(loaderCss).toContain('overflow-wrap: anywhere;');
+    });
+
     test('keeps send-form controls discoverable by role and accessible name', () => {
         const indexHtml = readRepoFile('public/index.html');
+        const scriptSource = readRepoFile('public/script.js');
+        const keyboardSource = readRepoFile('public/scripts/keyboard.js');
 
         [
             ['options_button', 'Chat options'],
@@ -28,6 +46,14 @@ describe('chat workspace structure', () => {
         expect(indexHtml).toMatch(/id="send_textarea"[^>]*\baria-describedby="send_textarea_hint"/);
         expect(indexHtml).toContain('id="send_textarea_hint"');
         expect(indexHtml).toContain('data-i18n="Type /? for commands. Send requires an API connection."');
+        expect(scriptSource).toContain("const sendTextareaHint = $('#send_textarea_hint');");
+        expect(scriptSource).toContain('sendTextareaHint.text(t`Type /? for commands. Send requires an API connection.`);');
+        expect(scriptSource).toContain('sendTextareaHint.text(t`Type /? for commands.`);');
+        expect(keyboardSource).toContain("'.mes_stop', // Stop button in the chat bar");
+        expect(keyboardSource).toContain("event.key === 'Enter' || event.key === ' '");
+        expect(keyboardSource).toContain("event.key === ' '");
+        expect(keyboardSource).toContain('event.preventDefault();');
+        expect(keyboardSource).toContain('target.click();');
     });
 
     test('keeps chat options menu items keyboard reachable as buttons', () => {
@@ -85,6 +111,30 @@ describe('chat workspace structure', () => {
         expect(getTagByClass(indexHtml, 'mes_img_swipe_right')).toContain('mes_img_swipe_right');
     });
 
+    test('refreshes React main-chat snapshots after async media attachments render', () => {
+        const scriptSource = readRepoFile('public/script.js');
+
+        expectContainsMarkers(scriptSource, [
+            'Promise.race([Promise.all(mediaPromises), delay(debounce_timeout.short)]).then(() => {',
+            'mediaWrapper.empty().append(mediaBlocks);',
+            'void mountReactMainChatMessageListPanel();',
+        ]);
+        const appendIndex = scriptSource.indexOf('mediaWrapper.empty().append(mediaBlocks);');
+        const refreshIndex = scriptSource.indexOf('void mountReactMainChatMessageListPanel();', appendIndex);
+        expect(refreshIndex).toBeGreaterThan(appendIndex);
+    });
+
+    test('keeps reasoning header toggle explicit for React-owned message rows', () => {
+        const reasoningSource = readRepoFile('public/scripts/reasoning.js');
+
+        expectContainsMarkers(reasoningSource, [
+            "$(document).on('click', '.mes_reasoning_header', function (e) {",
+            'e.preventDefault();',
+            "const wasOpen = details.prop('open') === true;",
+            'details.prop(\'open\', !wasOpen);',
+        ]);
+    });
+
     test('keeps message row actions discoverable by role and accessible name', () => {
         const indexHtml = readRepoFile('public/index.html');
 
@@ -131,6 +181,8 @@ describe('chat workspace structure', () => {
 
     test('keeps fallback provider controls embedded in the API configuration drawer', () => {
         const indexHtml = readRepoFile('public/index.html');
+        const scriptSource = readRepoFile('public/scripts/openai.js');
+        const styleSource = readRepoFile('public/style.css');
 
         const fallbackProviderContract = [
             'id="fallback_provider_section"',
@@ -155,19 +207,33 @@ describe('chat workspace structure', () => {
 
         expect(indexHtml).not.toMatch(/<dialog[^>]*id="fallback_provider_section"/);
         expect(indexHtml).toMatch(/id="fallback_provider_enabled"[^>]*type="checkbox"/);
+        expect(indexHtml).toMatch(/<select id="chat_completion_source">/);
+        expect(indexHtml).not.toMatch(/<select id="chat_completion_source"[^>]*data-source/);
+        expect(scriptSource).not.toContain("$(this).attr('data-source', oai_settings.chat_completion_source);");
+        expect(scriptSource).toContain("$('[data-source]').each(function () {");
         expect(indexHtml).toMatch(/<div class="base-url-field wide100p"[^>]*data-source="openai,claude,makersuite">[\s\S]*<label class="chat-completion-field wide100p"[^>]*for="openai_reverse_proxy"/);
+        expect(indexHtml).toMatch(/id="openai_reverse_proxy"[^>]*\baria-describedby="base_url_status"/);
+        expect(indexHtml).toMatch(/id="base_url_status"[^>]*\brole="status"[^>]*\baria-live="polite"[^>]*\bdata-mode="direct"/);
+        expect(scriptSource).toContain('function updateBaseUrlStatus()');
+        expect(scriptSource).toContain(".attr('data-mode', hasCustomEndpoint ? 'custom' : 'direct')");
+        expect(scriptSource).toContain('Custom endpoint active. API key field stores proxy password.');
+        expect(styleSource).toContain('.base-url-status[data-mode="custom"]');
         expect(indexHtml).toMatch(/<div class="fallback-provider-details">[\s\S]*id="fallback_provider_base_url"/);
         expect(indexHtml).toMatch(/id="fallback_provider_base_url"[^>]*\baria-label="Fallback provider Base URL"/);
         expect(indexHtml).toMatch(/id="fallback_provider_model"[^>]*\bplaceholder="gpt-4.1-mini"/);
         expect(indexHtml).toMatch(/id="fallback_provider_api_key"[^>]*\bautocomplete="off"/);
         expect(indexHtml).toMatch(/id="fallback_provider_status"[^>]*\baria-live="polite"/);
         expect(indexHtml).toMatch(/id="fallback_provider_cost_warning"[^>]*\brole="note"/);
+        expect(indexHtml).toMatch(/id="test_api_button"[^>]*class="[^"]*\bapi_button\b/);
+        expect(scriptSource).toContain(".attr('data-state', status.state)");
+        expect(styleSource).toContain('.fallback-provider-status[data-state="ready"]');
+        expect(styleSource).toContain('.fallback-provider-status[data-state="needs_setup"]');
+        expect(styleSource).toContain('.fallback-provider-status[data-state="disabled"]');
 
         expectButtonAffordance(getTagByClass(indexHtml, 'fallback_provider_api_key_show'), 'Show fallback API key');
         expectButtonAffordance(getTagByClass(indexHtml, 'fallback_provider_save_key'), 'Save fallback API key');
         expectButtonAffordance(getTagByClass(indexHtml, 'fallback_provider_clear_key'), 'Clear fallback API key');
 
-        const styleSource = readRepoFile('public/style.css');
         expect(styleSource).toContain('.fallback-provider-section:not(:has(#fallback_provider_enabled:checked)) .fallback-provider-details');
         expect(styleSource).toContain('.fallback-provider-section:has(#fallback_provider_enabled:checked) .fallback-provider-details');
     });

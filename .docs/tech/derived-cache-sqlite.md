@@ -126,7 +126,7 @@ SQLite WAL supports concurrent readers, but multiple EmberDesk writer processes 
 
 Primary proof:
 
-```powershell
+```bash
 bun run --cwd tests test:unit -- derived-cache-sqlite.test.js --runInBand
 bun run --cwd tests test:unit -- interaction-performance-index.test.js --runInBand
 ```

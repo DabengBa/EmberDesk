@@ -6,6 +6,7 @@ type LoginFormProps = {
     passwordVisible: boolean;
     loginVisible: boolean;
     isSubmitting: boolean;
+    isLockedOut: boolean;
     errorMessage: string;
     onHandleChange: () => void;
     onPasswordChange: () => void;
@@ -19,6 +20,7 @@ export function LoginForm({
     passwordVisible,
     loginVisible,
     isSubmitting,
+    isLockedOut,
     errorMessage,
     onHandleChange,
     onPasswordChange,
@@ -27,6 +29,8 @@ export function LoginForm({
     onShowRecovery,
 }: LoginFormProps) {
     const alertClassName = `login-error${errorMessage ? ' login-error--visible' : ''}`;
+    const controlsDisabled = isSubmitting || isLockedOut;
+    const buttonLabel = isSubmitting ? '登录中...' : isLockedOut ? '已锁定' : '登录';
 
     return (
         <section className="login-card login-card--entry" id="loginCard" style={{ display: loginVisible ? 'block' : 'none' }} aria-labelledby="login-title">
@@ -55,7 +59,7 @@ export function LoginForm({
                                         field.handleChange(event.target.value);
                                         onHandleChange();
                                     }}
-                                    disabled={isSubmitting}
+                                    disabled={controlsDisabled}
                                 />
                             </div>
                         )}
@@ -72,7 +76,7 @@ export function LoginForm({
                                 placeholder="请输入密码"
                                 value={field.state.value}
                                 visible={passwordVisible}
-                                disabled={isSubmitting}
+                                disabled={controlsDisabled}
                                 onChange={event => {
                                     field.handleChange(event.target.value);
                                     onPasswordChange();
@@ -84,8 +88,8 @@ export function LoginForm({
                 </div>
 
                 <div className="login-actions">
-                    <button type="submit" className="login-btn" id="loginButton" disabled={isSubmitting}>
-                        {isSubmitting ? '登录中...' : '登录'}
+                    <button type="submit" className="login-btn" id="loginButton" disabled={controlsDisabled}>
+                        {buttonLabel}
                     </button>
                 </div>
             </form>
@@ -94,13 +98,12 @@ export function LoginForm({
                 {errorMessage}
             </div>
 
-            <a href="#" className="login-forgot" id="forgotLink" onClick={(event) => {
-                event.preventDefault();
+            <button type="button" className="login-forgot" id="forgotLink" onClick={() => {
                 onShowRecovery();
             }}
             >
                 忘记密码？
-            </a>
+            </button>
         </section>
     );
 }

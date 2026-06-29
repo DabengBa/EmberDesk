@@ -18,8 +18,8 @@
 
 Use Bun for local install and task execution:
 
-```powershell
-bun ci
+```bash
+bun ci --ignore-scripts
 bun run build:lib
 bun run build:react
 bun run build:react:character-library
@@ -28,7 +28,7 @@ bun run docs:build
 bun run test:unit
 bun run test:compat
 bun run test:e2e
-Push-Location tests; bun ci; Pop-Location
+(cd tests && bun ci --ignore-scripts)
 ```
 
 Use `bun run test:compat` before and after frontend jQuery slices that must preserve regex, Tavern Helper / JS-Slash-Runner, or character-list DOM compatibility. It delegates to the focused Jest proof in the `tests` package and is a compatibility gate, not a replacement for slice-specific tests.
@@ -44,7 +44,7 @@ Use Vite build scripts for frontend build proof:
 Docker and release install verification also use Bun:
 
 - Docker copies Bun from `oven/bun:1.3.14-alpine` and runs `bun install --frozen-lockfile --production --no-progress`.
-- PR workflows install with `bun ci`.
+- PR workflows install with `bun ci --ignore-scripts`.
 - npm release workflow installs production dependencies with Bun, then keeps `npm publish` only for registry publication.
 
 ## Boundaries
@@ -61,8 +61,8 @@ Docker and release install verification also use Bun:
 Validated migration surfaces should include:
 
 - `npm view @types/node version` before changing the Node type package.
-- Root `bun ci`.
-- `tests` `bun ci`.
+- Root `bun ci --ignore-scripts`.
+- `tests` `bun ci --ignore-scripts`.
 - `bun run docs:build`.
 - `bun run test:unit`.
 - `bun run test:e2e` when runtime or startup compatibility must be proven end to end.

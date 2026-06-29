@@ -57,5 +57,5 @@ function normalizeErrorLabel(errorLabel, hasError) {
         return errorLabel.trim();
     }
 
-    return Boolean(hasError) ? 'error' : null;
+    return hasError ? 'error' : null;
 }

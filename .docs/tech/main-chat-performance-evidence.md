@@ -77,18 +77,18 @@ Known seed-environment noise such as the missing default persona thumbnail and t
 
 Focused proof for the report shape:
 
-```powershell
+```bash
 bun run --cwd tests test:unit -- interaction-performance-report.test.js character-list-structure.test.js --runInBand
 ```
 
 Runner proof:
 
-```powershell
+```bash
 bun run perf:interaction
 ```
 
 Focused browser rendering proof:
 
-```powershell
+```bash
 bun run --cwd tests test:e2e -- chat-message-rendering.e2e.js
 ```

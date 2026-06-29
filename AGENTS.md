@@ -42,9 +42,9 @@ EmberDesk is a self-hosted browser LLM workspace forked from SillyTavern. The pr
 
 ## Commands
 
-```powershell
+```bash
 bun ci
-Push-Location tests; bun ci; Pop-Location
+(cd tests && bun ci)
 bun run build:lib              # Vite 构建 (主构建)
 bun run build:react            # React page app
 bun run build:react:character-library

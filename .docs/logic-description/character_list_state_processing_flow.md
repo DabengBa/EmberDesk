@@ -316,7 +316,7 @@ Hidden rows that are not currently returned by the container remain selected in 
 
 Run:
 
-```powershell
+```bash
 uv run python .docs/logic-description/character_list_state_sandbox_proof.py
 ```
 

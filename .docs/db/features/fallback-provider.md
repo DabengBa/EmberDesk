@@ -11,15 +11,19 @@ related: [page.api_configuration, feature.connection_profile]
 
 `feature.fallback_provider` represents the optional OpenAI-compatible fallback connection that lives inside the API configuration drawer. It covers the fallback enabled toggle, base URL, model, secret-backed API key controls, and the visible cost warning. It does not cover general connection profiles, provider routing, or non-OpenAI-compatible protocols.
 
-## Feature Purpose
+## Purpose
 
-This feature lets a user preconfigure a second OpenAI-compatible endpoint that EmberDesk can use only when main-chat automatic recovery needs a fallback attempt.
+Let a user configure an optional second OpenAI-compatible endpoint that automatic visible-chat recovery may use after the primary provider retry is exhausted.
 
-## Trigger Entry
+## User-Visible Contract
 
-- **Primary entry**: open the fallback provider section inside [API Configuration](page.api_configuration).
+- The fallback section lives inside [API Configuration](page.api_configuration) and remains separate from the main provider credentials.
+- Fallback use is disabled until the user enables it and supplies the required base URL, model, and dedicated API key.
+- The section shows enough readiness state and warning copy for the user to understand that fallback can create extra API requests and cost.
+- The fallback API key is handled as a dedicated secret; after save, the UI must not expose the raw secret as plain settings text.
+- If saving the fallback key fails, the typed value remains available in the input so the user can retry or copy it instead of losing the secret.
 
-## Interaction IDs
+## Semantic Interaction IDs
 
 - `feature.fallback_provider.enabled`: enabling or disabling fallback use.
 - `feature.fallback_provider.base_url`: entering the fallback endpoint.
@@ -27,29 +31,27 @@ This feature lets a user preconfigure a second OpenAI-compatible endpoint that E
 - `feature.fallback_provider.api_key`: saving or clearing the dedicated fallback secret.
 - `feature.fallback_provider.status`: reading the current readiness state.
 
-## User Flow
+## Acceptance Workflows
 
-1. The user opens the API configuration drawer.
-2. The user fills in the fallback base URL, model, and dedicated API key.
-3. The user enables fallback use when ready.
-4. EmberDesk keeps the fallback settings and secret available for later automatic recovery attempts.
-5. When visible main-chat generation fails, EmberDesk may temporarily use the fallback provider once after the primary retry is exhausted.
+- As an API-configuration user who wants a recovery endpoint, from [API Configuration](page.api_configuration) open the fallback section, enter base URL, model, and API key, then enable fallback; EmberDesk must show a ready enabled state with cost warning while hiding the saved key as a raw setting, refresh or reopen must keep the configured readiness without exposing the secret, and failure is fallback shown as ready with missing fields, lost settings, or leaked secret text.
+- As a cautious user who wants fallback configured but inactive, from the fallback section fill fields and leave the enable toggle off or disable it later; EmberDesk must preserve the visible configuration while making fallback inactive, later re-enable must restore readiness, and failure is automatic fallback use while the section is disabled.
+- As a user whose fallback key save fails, from the fallback API key input attempt to save and receive an error; EmberDesk must keep the entered key visible in that input for retry or copying, leave the section not-ready until save succeeds, and failure is clearing the typed secret or reporting readiness after failed save.
 
-## Business Rules And Boundaries
+## Feature-Specific Evidence
 
-- The fallback provider is OpenAI-compatible only.
-- The fallback API key is stored in the dedicated server-side secret entry and is not written into the normal settings payload as plain text.
-- The fallback API key uses its own drawer input and secret mapping. If saving the key fails, the entered value remains in the input so the user can retry or copy it instead of losing the value.
-- The fallback provider is not a connection profile and is not captured or applied by profile switching.
-- Fallback use stays disabled until the user enables it and provides the required base URL, model, and secret.
-- The cost warning stays visible so the user understands fallback use can create extra API requests and charges.
+- Visible enabled/disabled/readiness state, warning copy, and key placeholder behavior are primary evidence.
+- Secret storage checks are supporting evidence only when the UI proves the raw fallback key is not exposed after save.
+- Automatic use of the fallback provider is proven under [Chat Generation Auto Recovery](feature.chat_generation_auto_recovery), not by this configuration feature alone.
 
-## ID Boundary Notes
+## Failure Signals
 
-This feature is separate from [Custom Base URL](feature.custom_base_url) because it is optional recovery infrastructure, not the main provider credential path. It is also separate from [Connection Profile](feature.connection_profile) because profile switching does not own its persistence.
+- The section can be enabled and shown ready without a base URL, model, or saved key.
+- Connection profiles overwrite, capture, or silently clear fallback fields.
+- Saving the fallback secret fails and the entered value disappears.
+- The UI hides the cost warning while fallback is enabled.
 
-## Outcomes
+## Boundaries
 
-- **Ready state**: the fallback provider is enabled and fully configured.
-- **Incomplete state**: one or more required fields are missing, so the fallback provider cannot be used.
-- **Disabled state**: the section remains configured but inactive until the user turns it on.
+- Main provider base URL and API key handling belongs to [Custom Base URL](feature.custom_base_url).
+- Named profile switching belongs to [Connection Profile](feature.connection_profile).
+- Retry sequencing and fallback attempt timing belong to [Chat Generation Auto Recovery](feature.chat_generation_auto_recovery).

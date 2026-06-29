@@ -177,6 +177,8 @@ body.no-blur .popup[open]::backdrop {
     display: flex;
     align-self: center;
     gap: 20px;
+    flex-wrap: wrap;
+    justify-content: center;
 }
 
 .menu_button.menu_button_default {
@@ -203,6 +205,101 @@ body.no-blur .popup[open]::backdrop {
 
 .popup-controls .menu_button:hover:focus-visible {
     filter: brightness(1.3) saturate(1.3);
+}
+
+.import-confirm-dialog {
+    text-align: start;
+}
+
+.import-opt-title {
+    margin-bottom: 10px;
+    font-size: 1.05rem;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+.import-opt-char {
+    color: var(--SmartThemeQuoteColor);
+    overflow-wrap: anywhere;
+}
+
+.import-opt-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.import-opt-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    min-width: 0;
+    padding: 5px 6px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background var(--animation-duration);
+}
+
+.import-opt-item:hover,
+.import-opt-item:focus-within {
+    background: var(--white10a);
+}
+
+.import-opt-item + .import-opt-item {
+    border-top: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 45%, transparent);
+}
+
+.import-opt-item input[type="checkbox"] {
+    flex-shrink: 0;
+    margin-top: 3px;
+    accent-color: var(--SmartThemeQuoteColor);
+}
+
+.import-opt-body {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.import-opt-label {
+    font-size: 0.9rem;
+    font-weight: 500;
+    line-height: 1.3;
+}
+
+.import-opt-meta {
+    color: var(--SmartThemeEmColor);
+    font-size: 0.8rem;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+}
+
+.import-opt-chip {
+    display: inline-block;
+    margin-right: 3px;
+    padding: 0 4px;
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 65%, transparent);
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor) 56%, var(--black70a) 44%);
+    font-size: 0.78rem;
+    line-height: 1.5;
+}
+
+.import-opt-overwrite {
+    color: var(--warning);
+    font-weight: 500;
+}
+
+@media (max-width: 480px) {
+    .popup-controls {
+        gap: 8px;
+    }
+
+    .popup-controls .menu_button {
+        flex: 1 1 calc(50% - 8px);
+        min-width: min(100%, 9rem);
+    }
 }
 
 .popup .popup-button-close {
