@@ -35,8 +35,6 @@ RUN \
 
 # Pre-compile public libraries
 RUN \
-  echo "*** Run Vite lib build ***" && \
-  bun run build:lib && \
   echo "*** Run Webpack ***" && \
   node "./docker/build-lib.js"
 
