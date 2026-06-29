@@ -19,8 +19,8 @@ export default function getViteLibServeMiddleware() {
             if (fs.existsSync(libPath)) {
                 return res.sendFile(libPath);
             }
-            // Fallback: file not found, continue to next middleware
-            return res.status(404).send('lib.js not found. Run "bun run build:lib" first.');
+            // Fall through to the deprecated Webpack middleware when the Vite bundle is absent.
+            return next();
         }
         next();
     }

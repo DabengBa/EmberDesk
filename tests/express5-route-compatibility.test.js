@@ -17,6 +17,7 @@ import {
     disabledCorsProxyMiddleware,
     oauthCallbackMiddleware,
 } from '../src/express-route-compat.js';
+import getViteLibServeMiddleware from '../src/middleware/vite-lib-serve.js';
 import getWebpackServeMiddleware from '../src/middleware/webpack-serve.js';
 import userCssMiddleware from '../src/middleware/userCss.js';
 import multerMonkeyPatch from '../src/middleware/multerMonkeyPatch.js';
@@ -495,6 +496,40 @@ describe('Express 5 route compatibility', () => {
                 await response.arrayBuffer();
             }
         });
+    });
+
+    test('missing Vite lib output falls through to the Webpack lib asset', async () => {
+        const distLibRoot = path.join(repoRoot, 'dist', 'lib');
+        const distLibFile = path.join(distLibRoot, 'lib.js');
+        const distBackupFile = path.join(distLibRoot, `lib.js.backup-${Date.now()}`);
+        const hadDistLib = fs.existsSync(distLibFile);
+
+        fs.mkdirSync(distLibRoot, { recursive: true });
+        if (hadDistLib) {
+            fs.renameSync(distLibFile, distBackupFile);
+        }
+
+        try {
+            const webpackConfig = getPublicLibConfig();
+            fs.mkdirSync(webpackConfig.output.path, { recursive: true });
+            fs.writeFileSync(path.join(webpackConfig.output.path, webpackConfig.output.filename), 'export const fallback = true;', 'utf8');
+
+            const app = express();
+            app.use(getViteLibServeMiddleware());
+            app.use(getWebpackServeMiddleware());
+
+            await usingApp(app, async (url) => {
+                const response = await fetch(`${url}/lib.js`);
+                expect(response.status).toBe(200);
+                expect(response.headers.get('content-type')).toContain('text/javascript');
+                expect(await response.text()).toContain('fallback = true');
+            });
+        } finally {
+            fs.rmSync(distLibFile, { force: true });
+            if (hadDistLib) {
+                fs.renameSync(distBackupFile, distLibFile);
+            }
+        }
     });
 
     test('missing user CSS still returns an empty stylesheet response', async () => {
