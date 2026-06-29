@@ -14004,8 +14004,8 @@ export async function doNavbarIconClick() {
     const isOpeningWorldInfoDrawer = targetDrawerID === 'WorldInfo' && !drawerWasOpenAlready;
 
     if (!drawerWasOpenAlready) {
-        const $worldInfoBlockingDrawers = $('#right-nav-panel.openDrawer').not(drawer);
-        const $worldInfoBlockingIcons = $('#rm_button_panel_pin_div .openIcon, #rightNavDrawerIcon.openIcon');
+        const $worldInfoBlockingDrawers = $('#right-nav-panel.openDrawer:not(.pinnedOpen)').not(drawer);
+        const $worldInfoBlockingIcons = $('#rm_button_panel_pin_div .openIcon:not(.drawerPinnedOpen), #rightNavDrawerIcon.openIcon:not(.drawerPinnedOpen)');
         const $openDrawers = isOpeningWorldInfoDrawer
             ? $('.openDrawer').not(drawer).not($worldInfoBlockingDrawers).not('.pinnedOpen').add($worldInfoBlockingDrawers)
             : $('.openDrawer:not(.pinnedOpen)');

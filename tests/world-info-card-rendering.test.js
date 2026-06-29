@@ -205,14 +205,16 @@ describe('world info card rendering', () => {
         expect(rehydrateSource).toContain('void hideWorldEditor();');
     });
 
-    test('world info drawer takes precedence over the character drawer when opened from the top bar', () => {
+    test('world info drawer closes only an unpinned character drawer when opened from the top bar', () => {
         const source = read('public/script.js');
 
         expect(source).toContain('const isOpeningWorldInfoDrawer = targetDrawerID === \'WorldInfo\' && !drawerWasOpenAlready;');
         expect(source).toContain('const $openDrawers = isOpeningWorldInfoDrawer');
-        expect(source).toContain('$(\'#right-nav-panel.openDrawer\').not(drawer)');
+        expect(source).toContain('$(\'#right-nav-panel.openDrawer:not(.pinnedOpen)\').not(drawer)');
+        expect(source).not.toContain('$(\'#right-nav-panel.openDrawer\').not(drawer)');
         expect(source).toContain('const $openIcons = isOpeningWorldInfoDrawer');
-        expect(source).toContain('$(\'#rm_button_panel_pin_div .openIcon, #rightNavDrawerIcon.openIcon\')');
+        expect(source).toContain('$(\'#rm_button_panel_pin_div .openIcon:not(.drawerPinnedOpen), #rightNavDrawerIcon.openIcon:not(.drawerPinnedOpen)\')');
+        expect(source).not.toContain('$(\'#rm_button_panel_pin_div .openIcon, #rightNavDrawerIcon.openIcon\')');
     });
 
     test('world book deletion confirmations default to cancel and mark destructive actions', () => {

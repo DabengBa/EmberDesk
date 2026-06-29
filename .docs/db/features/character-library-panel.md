@@ -18,6 +18,7 @@ Let users browse, search, filter, sort, bulk-select, and choose [character cards
 ## User-Visible Contract
 
 - The character-library entry point stays inside [Chat Workspace](page.chat_workspace); the guarded React panel is the normal visible owner for list/search/sort/bulk browsing state, with the legacy panel retained only as a documented flag-off or bundle-failure fallback.
+- When the Character Management lock is enabled, the character-library panel remains open while users open supporting drawers such as World Info; when it is not locked, opening another drawer may close it to keep the workspace uncluttered.
 - The panel remains usable for large libraries by keeping pagination, virtualized visible rows for very large page sizes, lazy avatar behavior, and steady-state reopen performance focused on the current browsing task.
 - Character rows show current card metadata, avatars, tags, favorite state, last-chat summaries, and mixed character/group/folder identity without changing the user's list definition during search, sort, filtering, or pagination.
 - Search, sort, tag filters, page size changes, and pagination should update the visible list without unnecessary clear-and-rebuild churn when the next page is unambiguous; ambiguous states may fall back to a full refresh for correctness.
@@ -38,6 +39,7 @@ Let users browse, search, filter, sort, bulk-select, and choose [character cards
 - As a user selecting cards in bulk mode, from the toolbar enter bulk select, click cards and checkboxes, sort or paginate, then review selected count and delete/tag availability; EmberDesk must keep row styling, checkbox state, accessible selected/checked state, and disabled-until-selection controls synchronized across redraws and page changes, and failure is a selected card without matching checkbox/count state or a destructive action enabled with zero selection.
 - As a user returning after character deletion, from an ordinary unfiltered page delete one or more cards through [Delete Character](feature.character_delete) and return to the panel; EmberDesk must keep the original page when valid or move to the last valid page, removed rows must not return after refresh or late list snapshots, and failure is page reset, deleted-card resurrection, or active-character hooks pointing at removed rows.
 - As a user on a build where the React panel is unavailable, from the same workspace entry open the fallback library surface and refresh the workspace; EmberDesk must keep browsing, selection, bulk affordances, and delete/export entry points available through the same entry, and failure is a missing route, empty migration host, or behavior split between normal and fallback surfaces.
+- As a user comparing character details with World Info, from [Chat Workspace](page.chat_workspace) open Character Management, enable its lock, then open the World Info drawer; EmberDesk must leave Character Management visible while World Info opens, and failure is the locked character panel disappearing.
 
 ## Feature-Specific Evidence
 
