@@ -1,4 +1,4 @@
-import { getConfigValue } from './util.js';
+import { isReactPageEnabled } from './react-feature-flags.js';
 
 /**
  * Whether the React settings page is enabled.
@@ -6,5 +6,5 @@ import { getConfigValue } from './util.js';
  * @returns {boolean}
  */
 export function isReactSettingsEnabled() {
-    return getConfigValue('features.react.pages.settings', false, 'boolean');
+    return isReactPageEnabled('settings');
 }

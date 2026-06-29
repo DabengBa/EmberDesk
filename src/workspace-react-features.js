@@ -1,11 +1,6 @@
-import { isReactCharacterLibraryEnabled } from './react-character-library-feature.js';
-import { getConfigValue } from './util.js';
+import { isReactWorkspacePanelEnabled } from './react-feature-flags.js';
 
 export const WORKSPACE_REACT_FEATURES_GLOBAL = '__emberDeskWorkspaceFeatures';
-
-function isReactWorkspacePanelEnabled(panelName) {
-    return getConfigValue(`features.react.panels.${panelName}`, false, 'boolean');
-}
 
 export function isReactWorldInfoPanelEnabled() {
     return isReactWorkspacePanelEnabled('worldInfo');
@@ -30,7 +25,7 @@ export function isReactExtensionsHostPanelEnabled() {
 export function getWorkspaceReactFeatures() {
     return {
         reactPanels: {
-            characterLibrary: isReactCharacterLibraryEnabled(),
+            characterLibrary: isReactWorkspacePanelEnabled('characterLibrary'),
             mainChatMessageList: isReactMainChatMessageListPanelEnabled(),
             worldInfo: isReactWorldInfoPanelEnabled(),
             backgroundLibrary: isReactBackgroundLibraryPanelEnabled(),

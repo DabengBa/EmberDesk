@@ -13,6 +13,8 @@ Primary files:
 - `src/util.js` — `getConfigValue`, `stringToBool`, `setConfigFilePath`, `keyToEnv`
 - `default/config.yaml` — canonical default values
 
+`src/util.js` no longer carries EmberDesk's archive/zip helper implementations. Those now live in `src/archive-utils.js` and are re-exported for compatibility, so this document intentionally treats `util.js` only as the remaining config-related helper surface.
+
 ## Architecture And Constraints
 
 `CommandLineParser.parse()` is the sole entry point, called once from `server.js`. It orchestrates three phases with an explicit dependency order:

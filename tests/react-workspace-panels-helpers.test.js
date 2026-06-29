@@ -10,6 +10,11 @@ import {
     isReactWorkspacePanelEnabled,
     mountReactWorkspacePanel,
 } from '../public/scripts/workspace-panels-react-bridge.js';
+import {
+    createWorkspacePanelActionBridge,
+    createWorkspacePanelStateChangeHandler,
+    mountWorkspacePanelHost,
+} from '../public/scripts/workspace-panel-host-controller.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -155,6 +160,80 @@ describe('React workspace panels bridge helpers', () => {
         expect(panelModule.mountWorkspacePanel).toHaveBeenCalledWith('worldInfo', container, expect.objectContaining({ state: { selectorsSeparated: true } }));
     });
 
+    test('mounts workspace panel hosts only when the guarded flag stays enabled and forwards disabled cleanup', async () => {
+        const ensureContainer = jest.fn(() => ({ nodeType: 1 }));
+        const getState = jest.fn(() => ({ ready: true }));
+        const bridge = { dispatchAction: jest.fn() };
+        const onDisabled = jest.fn();
+
+        await expect(mountWorkspacePanelHost({
+            kind: 'worldInfo',
+            ensureContainer,
+            getState,
+            bridge,
+            features: { reactPanels: { worldInfo: false } },
+            onDisabled,
+        })).resolves.toBe(false);
+
+        expect(onDisabled).toHaveBeenCalledTimes(1);
+        expect(ensureContainer).not.toHaveBeenCalled();
+        expect(getState).not.toHaveBeenCalled();
+    });
+
+    test('remounts shared workspace panel hosts after action settle based on action result', async () => {
+        const remount = jest.fn();
+        const dispatchAction = jest.fn()
+            .mockResolvedValueOnce(true)
+            .mockResolvedValueOnce(false);
+        const bridge = createWorkspacePanelActionBridge({
+            dispatchAction,
+            remount,
+            shouldRemount(actionResult) {
+                return actionResult !== false;
+            },
+        });
+
+        await expect(bridge.dispatchAction('first')).resolves.toBe(true);
+        await expect(bridge.dispatchAction('second')).resolves.toBe(false);
+
+        expect(dispatchAction).toHaveBeenNthCalledWith(1, 'first', {});
+        expect(dispatchAction).toHaveBeenNthCalledWith(2, 'second', {});
+        expect(remount).toHaveBeenCalledTimes(1);
+    });
+
+    test('normalizes workspace panel state-change events into remount overrides', () => {
+        const remount = jest.fn();
+        const handleStateChange = createWorkspacePanelStateChangeHandler(remount);
+
+        handleStateChange(new CustomEvent('emberdesk:test', { detail: { refreshQueued: true } }));
+        handleStateChange(new Event('emberdesk:test'));
+
+        expect(remount).toHaveBeenNthCalledWith(1, { refreshQueued: true });
+        expect(remount).toHaveBeenNthCalledWith(2, {});
+    });
+
+    test('routes workspace panel host lifecycle through a shared host controller seam', () => {
+        const scriptSource = read('public/script.js');
+        const hostControllerSource = read('public/scripts/workspace-panel-host-controller.js');
+
+        expect(scriptSource).toContain("from './scripts/workspace-panel-host-controller.js'");
+        expect(scriptSource).toContain('mountWorkspacePanelHost({');
+        expect(scriptSource).toContain('createWorkspacePanelActionBridge({');
+        expect(scriptSource).toContain('createWorkspacePanelStateChangeHandler(');
+        expect(scriptSource).toContain('initWorkspacePanelDrawerBridge({');
+        expect(scriptSource).toContain("kind: 'worldInfo'");
+        expect(scriptSource).toContain("kind: 'backgroundLibrary'");
+        expect(scriptSource).toContain("kind: 'extensionsHost'");
+        expect(scriptSource).toContain("kind: 'mainChatMessageList'");
+
+        expect(hostControllerSource).toContain('export async function mountWorkspacePanelHost({');
+        expect(hostControllerSource).toContain('export function createWorkspacePanelActionBridge({');
+        expect(hostControllerSource).toContain('export function createWorkspacePanelStateChangeHandler(remount)');
+        expect(hostControllerSource).toContain('export function initWorkspacePanelDrawerBridge({');
+        expect(hostControllerSource).toContain('return Promise.resolve(dispatchAction(action, payload)).then(actionResult => {');
+        expect(hostControllerSource).toContain('if (shouldRemount(actionResult, action, payload)) {');
+    });
+
     test('uses a shared Query-backed workspace panel shell with safe legacy slot markers', () => {
         const workspacePanelSource = read('app/workspace-panels.tsx');
 
@@ -189,9 +268,9 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('importBusy: importMenuItem?.getAttribute(\'aria-disabled\') === \'true\' || importFileInput?.disabled === true');
         expect(scriptSource).toContain('dropTargetPresent: Boolean(worldPopup)');
         expect(scriptSource).toContain('async function mountReactWorldInfoPanel()');
-        expect(scriptSource).toContain('if (!getWorkspaceReactFeatures()?.reactPanels?.worldInfo)');
+        expect(scriptSource).toContain('return mountWorkspacePanelHost({');
         expect(scriptSource).toContain('kind: \'worldInfo\'');
-        expect(scriptSource).toContain('state: getWorldInfoReactBridgeState()');
+        expect(scriptSource).toContain('getState: () => getWorldInfoReactBridgeState()');
         expect(scriptSource).toContain('void mountReactWorldInfoPanel();');
         expect(scriptSource).not.toContain('mountReactWorkspacePanel({\n        kind: \'worldInfo\',\n        container: document.getElementById(\'world_popup\')');
 
@@ -231,8 +310,8 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('case \'applySearchQuery\':');
         expect(scriptSource).toContain('case \'importWorld\':');
         expect(scriptSource).toContain('case \'exportWorld\':');
-        expect(scriptSource).toContain('const actionResult = (() => {');
-        expect(scriptSource).toContain('return Promise.resolve(actionResult).finally(() => {');
+        expect(scriptSource).toContain('return createWorkspacePanelActionBridge({');
+        expect(scriptSource).toContain('dispatchAction(action, payload = {}) {');
         expect(scriptSource).toContain('void mountReactWorldInfoPanel();');
         expect(scriptSource).toContain('bridge: getWorldInfoReactBridge()');
         expect(scriptSource).not.toContain('$(\'#world_info_search\').val(String(payload?.searchQuery ?? \'\')).trigger(\'input\');');
@@ -301,10 +380,10 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('getBackgroundPanelState({');
         expect(scriptSource).toContain('async function mountReactBackgroundLibraryPanel(');
         expect(scriptSource).toContain('kind: \'backgroundLibrary\'');
-        expect(scriptSource).toContain('state: getBackgroundLibraryReactBridgeState(stateOverrides)');
-        expect(scriptSource).toContain('function handleReactBackgroundLibraryStateChange(event)');
-        expect(scriptSource).toContain('document.addEventListener(\'emberdesk:background-library-state-change\', handleReactBackgroundLibraryStateChange);');
-        expect(scriptSource).toContain('void mountReactBackgroundLibraryPanel();');
+        expect(scriptSource).toContain('getState: overrides => getBackgroundLibraryReactBridgeState(overrides ?? stateOverrides)');
+        expect(scriptSource).toContain('const handleReactBackgroundLibraryStateChange = createWorkspacePanelStateChangeHandler(');
+        expect(scriptSource).toContain('initWorkspacePanelDrawerBridge({');
+        expect(scriptSource).toContain('void mountReactBackgroundLibraryPanel(stateOverrides);');
 
         expect(backgroundsSource).toContain('function dispatchBackgroundLibraryStateChange(detail = {})');
         expect(backgroundsSource).toContain('document.dispatchEvent(new CustomEvent(\'emberdesk:background-library-state-change\'');
@@ -342,8 +421,8 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('case \'applyBackgroundSort\':');
         expect(scriptSource).toContain('case \'uploadBackground\':');
         expect(scriptSource).toContain('case \'selectBackground\':');
-        expect(scriptSource).toContain('const actionResult = (() => {');
-        expect(scriptSource).toContain('return Promise.resolve(actionResult).finally(() => {');
+        expect(scriptSource).toContain('return createWorkspacePanelActionBridge({');
+        expect(scriptSource).toContain('dispatchAction(action, payload = {}) {');
         expect(scriptSource).toContain('void mountReactBackgroundLibraryPanel({ refreshQueued: false });');
         expect(scriptSource).toContain('bridge: getBackgroundLibraryReactBridge()');
         expect(scriptSource).not.toContain('$(\'#bg-filter\').val(String(payload?.filterQuery ?? \'\')).trigger(\'input\');');
@@ -406,11 +485,11 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('extensionsMenuPresent: Boolean(extensionsMenu)');
         expect(scriptSource).toContain('extrasApiControlsPresent: Boolean(extensionsStatus && extensionsUrl && extensionsApiKey && extensionsConnect && extensionsAutoconnect)');
         expect(scriptSource).toContain('async function mountReactExtensionsHostPanel(');
-        expect(scriptSource).toContain('if (!getWorkspaceReactFeatures()?.reactPanels?.extensionsHost)');
+        expect(scriptSource).toContain('return mountWorkspacePanelHost({');
         expect(scriptSource).toContain('kind: \'extensionsHost\'');
-        expect(scriptSource).toContain('state: getExtensionsHostReactBridgeState(stateOverrides)');
-        expect(scriptSource).toContain('function handleReactExtensionsHostStateChange(event)');
-        expect(scriptSource).toContain('document.addEventListener(\'emberdesk:extensions-host-state-change\', handleReactExtensionsHostStateChange);');
+        expect(scriptSource).toContain('getState: overrides => getExtensionsHostReactBridgeState(overrides ?? stateOverrides)');
+        expect(scriptSource).toContain('const handleReactExtensionsHostStateChange = createWorkspacePanelStateChangeHandler(');
+        expect(scriptSource).toContain('initWorkspacePanelDrawerBridge({');
         expect(scriptSource).toContain('void mountReactExtensionsHostPanel();');
         expect(scriptSource).not.toContain('container: document.getElementById(\'extensions_settings\')');
         expect(scriptSource).not.toContain('container: document.getElementById(\'extensions_settings2\')');
@@ -459,8 +538,9 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('case \'updateExtrasApiKey\':');
         expect(scriptSource).toContain('case \'connectExtrasApi\':');
         expect(scriptSource).toContain('case \'toggleAutoconnect\':');
-        expect(scriptSource).toContain('const actionResult = (() => {');
-        expect(scriptSource).toContain('return Promise.resolve(actionResult).finally(() => {');
+        expect(scriptSource).toContain('return createWorkspacePanelActionBridge({');
+        expect(scriptSource).toContain('shouldRemount(actionResult) {');
+        expect(scriptSource).toContain('return actionResult !== false;');
         expect(scriptSource).toContain('bridge: getExtensionsHostReactBridge()');
         expect(scriptSource).not.toContain('document.getElementById(\'extensions_notify_updates\')?.click();');
         expect(scriptSource).not.toContain('document.getElementById(\'extensions_details\')?.click();');
@@ -546,7 +626,6 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('activeContext: getMainChatComposerActiveContext()');
         expect(scriptSource).toContain('text: textarea?.value ?? \'\'');
         expect(scriptSource).toContain('autocompleteVisible: isMainChatSlashAutocompleteVisible()');
-        expect(scriptSource).toContain('setMainChatSlashCommandReactOwnerEnabled(true);');
         expect(scriptSource).toContain('setMainChatSlashCommandReactOwnerEnabled(false);');
         expect(scriptSource).toContain('void mountReactMainChatMessageListPanel();');
         expect(scriptSource).toContain('observedTokenCount: streamingProcessor?.observedTokenCount ?? 0');
@@ -563,9 +642,11 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('case \'selectSlashAutocompleteOption\':');
         expect(scriptSource).toContain('case \'triggerVisibleGeneration\':');
         expect(scriptSource).toContain('async function mountReactMainChatMessageListPanel(');
-        expect(scriptSource).toContain('if (!getWorkspaceReactFeatures()?.reactPanels?.mainChatMessageList)');
+        expect(scriptSource).toContain('return createWorkspacePanelActionBridge({');
+        expect(scriptSource).toContain('setMainChatSlashCommandReactOwnerEnabled(Boolean(payload?.enabled));');
+        expect(scriptSource).toContain('shouldRemount(actionResult) {');
         expect(scriptSource).toContain('kind: \'mainChatMessageList\'');
-        expect(scriptSource).toContain('state: getMainChatMessageListReactBridgeState()');
+        expect(scriptSource).toContain('getState: () => getMainChatMessageListReactBridgeState()');
         expect(scriptSource).toContain('bridge: getMainChatMessageListReactBridge()');
         expect(scriptSource).toContain('cleanupMainChatMessageListReactHost()');
         expect(scriptSource).toContain('document.getElementById(\'chat\')');
@@ -704,7 +785,8 @@ describe('React workspace panels bridge helpers', () => {
         const workspacePanelSource = read('app/workspace-panels.tsx');
 
         expect(scriptSource).toContain('buildMessageActionSnapshot');
-        expect(scriptSource).toContain('const mainChatMessageActionSnapshotSchema = \'mainChatMessageActionSnapshotSchema\';');
+        expect(scriptSource).toContain('MAIN_CHAT_MESSAGE_ACTION_SNAPSHOT_SCHEMA');
+        expect(scriptSource).toContain('const mainChatMessageActionSnapshotSchema = MAIN_CHAT_MESSAGE_ACTION_SNAPSHOT_SCHEMA;');
         expect(scriptSource).toContain('messageActionSnapshots = messageRows');
         expect(scriptSource).toContain('schema: mainChatMessageActionSnapshotSchema');
         expect(scriptSource).toContain('messageActionSnapshots: messageActionSnapshots');

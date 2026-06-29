@@ -30,6 +30,7 @@ import {
     editCharacterCard,
     renameCharacterCard,
 } from './character-write-service.js';
+import { createCharacterImportCoordinator } from './character-import-service.js';
 
 import { areThumbnailsEnabled, generateThumbnail, invalidateThumbnail } from './thumbnails.js';
 import { importRisuSprites } from './sprites.js';
@@ -639,6 +640,15 @@ async function refreshCharacterIndexEntrySafe(directories, avatar, operation) {
         console.warn(`Character index refresh skipped after ${operation} for ${avatar}:`, error);
     }
 }
+
+const importCharacterUpload = createCharacterImportCoordinator({
+    importFromYaml,
+    importFromJson,
+    importFromPng,
+    importFromCharX,
+    importFromByaf,
+    refreshCharacterIndexEntry: refreshCharacterIndexEntrySafe,
+});
 
 /**
  * @param {import('../users.js').UserDirectoryList} directories
@@ -1870,33 +1880,22 @@ router.post('/import', async function (request, response) {
         }
     };
 
-    const formatImportFunctions = {
-        'yaml': importFromYaml,
-        'yml': importFromYaml,
-        'json': importFromJson,
-        'png': importFromPng,
-        'charx': importFromCharX,
-        'byaf': importFromByaf,
-    };
-
     try {
-        const importFunction = formatImportFunctions[format];
+        const result = await importCharacterUpload({
+            uploadPath,
+            format,
+            preservedFileName,
+            request,
+            response,
+        });
 
-        if (!importFunction) {
-            throw new Error(`Unsupported format: ${format}`);
-        }
-
-        const fileName = await importFunction(uploadPath, { request, response }, preservedFileName);
-
-        if (!fileName) {
+        if (!result.ok) {
             console.warn('Failed to import character');
             removeUploadedFile();
             return response.sendStatus(400);
         }
 
-        const avatarName = fileName.endsWith('.png') ? fileName : `${fileName}.png`;
-        await refreshCharacterIndexEntrySafe(request.user.directories, avatarName, 'import');
-        response.send({ file_name: fileName });
+        response.send({ file_name: result.fileName });
     } catch (err) {
         console.error(err);
         try {

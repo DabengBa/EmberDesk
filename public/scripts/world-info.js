@@ -1,6 +1,5 @@
 import { Fuse } from '../lib.js';
 
-import { saveSettings, substituteParams, getRequestHeaders, chat_metadata, this_chid, characters, saveCharacterDebounced, menu_type, eventSource, event_types, getExtensionPromptByName, saveMetadata, getCurrentChatId, extension_prompt_roles, create_save, createOrEditCharacter, name1, getOneCharacter, select_selected_character } from '../script.js';
 import { download, debounce, initScrollHeight, resetScrollHeight, parseJsonFile, extractDataFromPng, getFileBuffer, getCharaFilename, escapeRegex, PAGINATION_TEMPLATE, navigation_option, waitUntilCondition, isTrueBoolean, setValueByPath, flashHighlight, select2ModifyOptions, getSelect2OptionId, dynamicSelect2DataViaAjax, highlightRegex, select2ChoiceClickSubscribe, isFalseBoolean, getSanitizedFilename, checkOverwriteExistingData, getStringHash, parseStringArray, cancelDebounce, findChar, onlyUnique, equalsIgnoreCaseAndAccents, uuidv4, normalizeArray, getUniqueName, logSlashCommandWarn, addLongPressEvent, escapeHtml } from './utils.js';
 import { extension_settings, getContext } from './extensions.js';
 import { NOTE_MODULE_NAME, metadata_keys, shouldWIAddPrompt } from './authors-note.js';
@@ -28,8 +27,159 @@ import { buildCascadeSectionHtml, captureCascadeChoices } from './world-cascade-
 import { convertAgnaiMemoryBook, convertCharacterBook, convertNovelLorebook, convertRisuLorebook } from './world-info-converters.js';
 import { DragAndDropHandler } from './dragdrop.js';
 import { createWorldInfoImportResult, summarizeWorldInfoBatchImport } from './world-info-import-results.js';
+import { requireWorldInfoShellContext } from './world-info-shell-context.js';
 
 export { convertCharacterBook };
+
+function getWorldInfoShell() {
+    return requireWorldInfoShellContext();
+}
+
+function saveSettings() {
+    return getWorldInfoShell().saveSettings();
+}
+
+function substituteParams(value) {
+    return getWorldInfoShell().substituteParams(value);
+}
+
+function getRequestHeaders(options) {
+    return getWorldInfoShell().getRequestHeaders(options);
+}
+
+function getCurrentShellCharacterId() {
+    return getWorldInfoShell().getCurrentCharacterId();
+}
+
+function getCurrentShellMenuType() {
+    return getWorldInfoShell().getMenuType();
+}
+
+function getCurrentShellName1() {
+    return getWorldInfoShell().getName1();
+}
+
+function saveCharacterDebounced() {
+    return getWorldInfoShell().saveCharacterDebounced();
+}
+
+function saveMetadata() {
+    return getWorldInfoShell().saveMetadata();
+}
+
+function getCurrentChatId() {
+    return getWorldInfoShell().getCurrentChatId();
+}
+
+function getExtensionPromptByName(promptName) {
+    return getWorldInfoShell().getExtensionPromptByName(promptName);
+}
+
+function createOrEditCharacter() {
+    return getWorldInfoShell().createOrEditCharacter();
+}
+
+function getOneCharacter(avatar) {
+    return getWorldInfoShell().getOneCharacter(avatar);
+}
+
+function select_selected_character(chid, options) {
+    return getWorldInfoShell().selectSelectedCharacter(chid, options);
+}
+
+const eventSource = new Proxy({}, {
+    get(_target, property) {
+        return getWorldInfoShell().eventSource[property];
+    },
+});
+
+const event_types = new Proxy({}, {
+    get(_target, property) {
+        return getWorldInfoShell().eventTypes[property];
+    },
+});
+
+const chat_metadata = new Proxy({}, {
+    get(_target, property) {
+        return getWorldInfoShell().getChatMetadata()[property];
+    },
+    set(_target, property, value) {
+        getWorldInfoShell().getChatMetadata()[property] = value;
+        return true;
+    },
+    deleteProperty(_target, property) {
+        delete getWorldInfoShell().getChatMetadata()[property];
+        return true;
+    },
+    has(_target, property) {
+        return property in getWorldInfoShell().getChatMetadata();
+    },
+    ownKeys() {
+        return Reflect.ownKeys(getWorldInfoShell().getChatMetadata());
+    },
+    getOwnPropertyDescriptor(_target, property) {
+        return Object.getOwnPropertyDescriptor(getWorldInfoShell().getChatMetadata(), property) ?? {
+            configurable: true,
+            enumerable: true,
+            writable: true,
+            value: undefined,
+        };
+    },
+});
+
+const characters = new Proxy([], {
+    get(_target, property) {
+        return getWorldInfoShell().getCharacters()[property];
+    },
+    set(_target, property, value) {
+        getWorldInfoShell().getCharacters()[property] = value;
+        return true;
+    },
+    has(_target, property) {
+        return property in getWorldInfoShell().getCharacters();
+    },
+    ownKeys() {
+        return Reflect.ownKeys(getWorldInfoShell().getCharacters());
+    },
+    getOwnPropertyDescriptor(_target, property) {
+        return Object.getOwnPropertyDescriptor(getWorldInfoShell().getCharacters(), property) ?? {
+            configurable: true,
+            enumerable: true,
+            writable: true,
+            value: undefined,
+        };
+    },
+});
+
+const extension_prompt_roles = new Proxy({}, {
+    get(_target, property) {
+        return getWorldInfoShell().extensionPromptRoles[property];
+    },
+});
+
+const create_save = new Proxy({}, {
+    get(_target, property) {
+        return getWorldInfoShell().getCreateSave()[property];
+    },
+    set(_target, property, value) {
+        getWorldInfoShell().getCreateSave()[property] = value;
+        return true;
+    },
+    has(_target, property) {
+        return property in getWorldInfoShell().getCreateSave();
+    },
+    ownKeys() {
+        return Reflect.ownKeys(getWorldInfoShell().getCreateSave());
+    },
+    getOwnPropertyDescriptor(_target, property) {
+        return Object.getOwnPropertyDescriptor(getWorldInfoShell().getCreateSave(), property) ?? {
+            configurable: true,
+            enumerable: true,
+            writable: true,
+            value: undefined,
+        };
+    },
+});
 
 export const world_info_insertion_strategy = {
     evenly: 0,
@@ -1856,7 +2006,7 @@ function registerWorldInfoSlashCommands() {
         }
 
         if (isTrueBoolean(String(create))) {
-            const newName = await createWorldWithName(name, `Persona Book ${name1}`.replace(/[^a-z0-9 -]/gi, '_').replace(/_{2,}/g, '_').substring(0, 64));
+            const newName = await createWorldWithName(name, `Persona Book ${getCurrentShellName1()}`.replace(/[^a-z0-9 -]/gi, '_').replace(/_{2,}/g, '_').substring(0, 64));
             power_user.persona_description_lorebook = newName;
             setPersonaDescription();
             saveSettingsDebounced();
@@ -1904,7 +2054,7 @@ function registerWorldInfoSlashCommands() {
                 await charUpdatePrimaryWorld(newName);
             }
             // Refresh UI, if needed
-            setWorldInfoButtonClass(this_chid);
+            setWorldInfoButtonClass(getCurrentShellCharacterId());
             books.push(newName);
         }
 
@@ -2877,7 +3027,7 @@ export async function flushDeletedWorldsFromUI(worldNames) {
     if (names.has(charWorld)) {
         $('#character_world').val('').trigger('change');
         setWorldInfoButtonClass(undefined, false);
-        if (menu_type !== 'create') {
+        if (getCurrentShellMenuType() !== 'create') {
             saveCharacterDebounced();
         }
     }
@@ -5147,7 +5297,7 @@ async function updateWorldInfoLinks(oldName, newName) {
                 await getOneCharacter(character.avatar);
 
                 // Flag if the currently open character was affected
-                if (String(chid) === String(this_chid)) {
+                if (String(chid) === String(getCurrentShellCharacterId())) {
                     activeCharacterUpdated = true;
                 }
 
@@ -5161,8 +5311,8 @@ async function updateWorldInfoLinks(oldName, newName) {
         // update the UI fields
         // only required if the currently selected character was changed
         if (activeCharacterUpdated) {
-            select_selected_character(this_chid, { switchMenu: false });
-            setWorldInfoButtonClass(this_chid, true);
+            select_selected_character(getCurrentShellCharacterId(), { switchMenu: false });
+            setWorldInfoButtonClass(getCurrentShellCharacterId(), true);
         }
     }
 }
@@ -5273,7 +5423,7 @@ export async function createNewWorldInfo(worldName, { interactive = false } = {}
 }
 
 async function getCharacterLore() {
-    const character = characters[this_chid];
+    const character = characters[getCurrentShellCharacterId()];
     const name = character?.name;
     /** @type {Set<string>} */
     let worldsToSearch = new Set();
@@ -5284,7 +5434,7 @@ async function getCharacterLore() {
     }
 
     // TODO: Maybe make the utility function not use the window context?
-    const fileName = getCharaFilename(this_chid);
+    const fileName = getCharaFilename(getCurrentShellCharacterId());
     const extraCharLore = world_info.charLore?.find((e) => e.name === fileName);
     if (extraCharLore) {
         worldsToSearch = new Set([...worldsToSearch, ...extraCharLore.extraBooks]);
@@ -5624,7 +5774,7 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
             }
 
             if (entry.characterFilter && entry.characterFilter?.tags?.length > 0) {
-                const tagKey = getTagKeyForEntity(this_chid);
+                const tagKey = getTagKeyForEntity(getCurrentShellCharacterId());
 
                 if (tagKey) {
                     const tagMapEntry = context.tagMap[tagKey];
@@ -6806,7 +6956,7 @@ export async function charUpdatePrimaryWorld(name) {
 
     console.debug('Character world selected:', name);
 
-    if (menu_type == 'create') {
+    if (getCurrentShellMenuType() == 'create') {
         create_save.world = name;
         return;
     }
@@ -6855,7 +7005,7 @@ export function charSetAuxWorlds(fileName, books) {
 function updateAuxBooks(fileName, computeNext) {
     if (!fileName) return;
 
-    if (menu_type === 'create') {
+    if (getCurrentShellMenuType() === 'create') {
         const current = create_save.extra_books ?? [];
         create_save.extra_books = normalizeArray(computeNext(current));
         return; // no debounced save in create flow

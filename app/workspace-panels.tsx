@@ -24,6 +24,14 @@ import {
     deriveReactQuietTransportBridgeState,
     deriveReactVisibleTransportBridgeState,
 } from '../public/scripts/main-chat-visible-transport-owner.js';
+import {
+    MAIN_CHAT_MESSAGE_ACTION_SNAPSHOT_SCHEMA,
+    MAIN_CHAT_MESSAGE_ROW_SNAPSHOT_SCHEMA,
+    MAIN_CHAT_RICH_BODY_SNAPSHOT_SCHEMA,
+    MAIN_CHAT_VISIBLE_TRANSPORT_PATHS,
+    MAIN_CHAT_VISIBLE_TRANSPORT_REASONS,
+    MAIN_CHAT_VISIBLE_TRANSPORT_STATUSES,
+} from '../public/scripts/main-chat-bridge-contract.js';
 
 export type WorkspacePanelKind = 'worldInfo' | 'backgroundLibrary' | 'extensionsHost' | 'mainChatMessageList';
 
@@ -357,7 +365,7 @@ interface MainChatPreparedVisibleTransportRequest {
 }
 
 interface MainChatRichBodySnapshot {
-    schema: 'mainChatRichBodySnapshotSchema';
+    schema: typeof MAIN_CHAT_RICH_BODY_SNAPSHOT_SCHEMA;
     messageId: string;
     state: 'finalized';
     eligible: true;
@@ -370,7 +378,7 @@ interface MainChatRichBodySnapshot {
 }
 
 interface MainChatMessageRowSnapshot {
-    schema: 'mainChatMessageRowSnapshotSchema';
+    schema: typeof MAIN_CHAT_MESSAGE_ROW_SNAPSHOT_SCHEMA;
     messageId: string;
     state: 'finalized';
     eligible: true;
@@ -390,7 +398,7 @@ interface MainChatMessageRowSnapshot {
 }
 
 interface MainChatMessageActionSnapshot {
-    schema: 'mainChatMessageActionSnapshotSchema';
+    schema: typeof MAIN_CHAT_MESSAGE_ACTION_SNAPSHOT_SCHEMA;
     messageId: string;
     eligible: true;
     expanded: boolean;
@@ -448,7 +456,7 @@ const extensionsHostPanelFormSchema = z.object({
 });
 
 const mainChatRichBodySnapshotSchema = z.object({
-    schema: z.literal('mainChatRichBodySnapshotSchema'),
+    schema: z.literal(MAIN_CHAT_RICH_BODY_SNAPSHOT_SCHEMA),
     messageId: z.string().min(1),
     state: z.literal('finalized'),
     eligible: z.literal(true),
@@ -461,7 +469,7 @@ const mainChatRichBodySnapshotSchema = z.object({
 });
 
 const mainChatMessageRowSnapshotSchema = z.object({
-    schema: z.literal('mainChatMessageRowSnapshotSchema'),
+    schema: z.literal(MAIN_CHAT_MESSAGE_ROW_SNAPSHOT_SCHEMA),
     messageId: z.string().min(1),
     state: z.literal('finalized'),
     eligible: z.literal(true),
@@ -481,7 +489,7 @@ const mainChatMessageRowSnapshotSchema = z.object({
 });
 
 const mainChatMessageActionSnapshotSchema = z.object({
-    schema: z.literal('mainChatMessageActionSnapshotSchema'),
+    schema: z.literal(MAIN_CHAT_MESSAGE_ACTION_SNAPSHOT_SCHEMA),
     messageId: z.string().min(1),
     eligible: z.literal(true),
     expanded: z.boolean(),
@@ -1140,9 +1148,9 @@ function createMainChatVisibleTransportRuntime(kind: string): MainChatVisibleTra
     return {
         owner: 'react',
         kind,
-        supportStatus: 'react-owned',
-        supportPath: 'standard-openai-visible-direct-chat',
-        supportReason: 'supported-kind',
+        supportStatus: MAIN_CHAT_VISIBLE_TRANSPORT_STATUSES.REACT_OWNED,
+        supportPath: MAIN_CHAT_VISIBLE_TRANSPORT_PATHS.STANDARD_OPENAI_VISIBLE_DIRECT_CHAT,
+        supportReason: MAIN_CHAT_VISIBLE_TRANSPORT_REASONS.SUPPORTED_KIND,
         phase: 'connecting',
         activeMessageId: null,
         observedTokenCount: 0,
@@ -2713,9 +2721,9 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
             const attempts = Array.isArray(prepared.attempts) ? prepared.attempts : [];
             setReactVisibleTransportRuntime({
                 ...createMainChatVisibleTransportRuntime(kind),
-                supportStatus: prepared.status ?? 'react-owned',
-                supportPath: prepared.path ?? 'standard-openai-visible-direct-chat',
-                supportReason: prepared.reason ?? 'supported-kind',
+                supportStatus: prepared.status ?? MAIN_CHAT_VISIBLE_TRANSPORT_STATUSES.REACT_OWNED,
+                supportPath: prepared.path ?? MAIN_CHAT_VISIBLE_TRANSPORT_PATHS.STANDARD_OPENAI_VISIBLE_DIRECT_CHAT,
+                supportReason: prepared.reason ?? MAIN_CHAT_VISIBLE_TRANSPORT_REASONS.SUPPORTED_KIND,
             });
 
             for (let attemptIndex = 0; attemptIndex < attempts.length; attemptIndex += 1) {

@@ -1,3 +1,5 @@
+import { MAIN_CHAT_RICH_BODY_RENDERER_REASONS } from './main-chat-bridge-contract.js';
+
 /**
  * Builds pure render decisions for a stored, finalized chat message row.
  * DOM mutation, formatting, avatar resolution, and streaming updates stay with public/script.js.
@@ -121,30 +123,30 @@ export function classifyChatMessageRendererContract({
     extensionMutated = false,
 } = {}) {
     if (!hasMesText) {
-        return createRendererContract('unsupported-with-reason', 'missing-mes-text');
+        return createRendererContract('unsupported-with-reason', MAIN_CHAT_RICH_BODY_RENDERER_REASONS.MISSING_MES_TEXT);
     }
 
     if (extensionMutated) {
-        return createRendererContract('legacy-fallback-required', 'extension-mutated-row');
+        return createRendererContract('legacy-fallback-required', MAIN_CHAT_RICH_BODY_RENDERER_REASONS.EXTENSION_MUTATED_ROW);
     }
 
     if (rowState === 'editing') {
-        return createRendererContract('legacy-fallback-required', 'editing-row');
+        return createRendererContract('legacy-fallback-required', MAIN_CHAT_RICH_BODY_RENDERER_REASONS.EDITING_ROW);
     }
 
     if (rowState === 'streaming') {
-        return createRendererContract('legacy-fallback-required', 'streaming-row');
+        return createRendererContract('legacy-fallback-required', MAIN_CHAT_RICH_BODY_RENDERER_REASONS.STREAMING_ROW);
     }
 
     if (rowState === 'unsafe') {
-        return createRendererContract('unsupported-with-reason', 'unsafe-row');
+        return createRendererContract('unsupported-with-reason', MAIN_CHAT_RICH_BODY_RENDERER_REASONS.UNSAFE_ROW);
     }
 
     return {
         rendererOwner: 'react',
         phase7Candidate: 'react-rich-body-owner',
         fallback: 'legacy-rich-body-compatibility',
-        reason: 'safe-finalized-row',
+        reason: MAIN_CHAT_RICH_BODY_RENDERER_REASONS.SAFE_FINALIZED_ROW,
         protectedSurfaces: {
             mesText: true,
             reasoning: Boolean(hasProtectedReasoning),

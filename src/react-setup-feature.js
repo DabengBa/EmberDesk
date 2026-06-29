@@ -1,4 +1,4 @@
-import { getConfigValue } from './util.js';
+import { isReactPageEnabled } from './react-feature-flags.js';
 
 /**
  * Whether the React setup page is enabled.
@@ -6,5 +6,5 @@ import { getConfigValue } from './util.js';
  * @returns {boolean}
  */
 export function isReactSetupEnabled() {
-    return getConfigValue('features.react.pages.setup', false, 'boolean');
+    return isReactPageEnabled('setup');
 }

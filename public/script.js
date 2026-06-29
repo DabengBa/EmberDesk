@@ -174,6 +174,14 @@ import {
     createMainChatVisibleTransportDecision,
     createMainChatVisibleTransportFallbackDecision,
 } from './scripts/main-chat-visible-transport-owner.js';
+import {
+    MAIN_CHAT_MESSAGE_ACTION_SNAPSHOT_SCHEMA,
+    MAIN_CHAT_MESSAGE_ROW_SNAPSHOT_SCHEMA,
+    MAIN_CHAT_RICH_BODY_SNAPSHOT_SCHEMA,
+    MAIN_CHAT_VISIBLE_TRANSPORT_PATHS,
+    MAIN_CHAT_VISIBLE_TRANSPORT_REASONS,
+    MAIN_CHAT_VISIBLE_TRANSPORT_STATUSES,
+} from './scripts/main-chat-bridge-contract.js';
 import { initMacroAutoComplete } from './scripts/autocomplete/MacroAutoComplete.js';
 import {
     tag_map,
@@ -312,6 +320,13 @@ import { addChatBackupsBrowser } from './scripts/chat-backups.js';
 import { onboardingExperimentalMacroEngine } from './scripts/macros/engine/MacroDiagnostics.js';
 import { compressRequest, setRequestCompressionConfig } from './scripts/request-compression.js';
 import { canJumpToSwipeForMessage, canOpenSwipePickerForMessage, initSwipePicker } from './scripts/swipe-picker.js';
+import {
+    mountWorkspacePanelHost,
+    createWorkspacePanelActionBridge,
+    createWorkspacePanelStateChangeHandler,
+    initWorkspacePanelDrawerBridge,
+} from './scripts/workspace-panel-host-controller.js';
+import { registerWorldInfoShellContext } from './scripts/world-info-shell-context.js';
 import { getCharacterDeleteCandidates, removeCharactersFromState, shouldRefreshCharacterAfterEdit } from './scripts/character-list-state.js';
 import {
     CHARACTER_LIST_PAGE_SIZE_OPTIONS,
@@ -361,6 +376,28 @@ export function getWorkspaceReactFeatures() {
     };
 }
 
+registerWorldInfoShellContext({
+    saveSettings: () => saveSettings(),
+    substituteParams: (value) => substituteParams(value),
+    getRequestHeaders: (options) => getRequestHeaders(options),
+    getChatMetadata: () => chat_metadata,
+    getCurrentCharacterId: () => this_chid,
+    getCharacters: () => characters,
+    saveCharacterDebounced: () => saveCharacterDebounced(),
+    getMenuType: () => menu_type,
+    eventSource,
+    eventTypes: event_types,
+    getExtensionPromptByName: (promptName) => getExtensionPromptByName(promptName),
+    saveMetadata: () => saveMetadata(),
+    getCurrentChatId: () => getCurrentChatId(),
+    extensionPromptRoles: extension_prompt_roles,
+    getCreateSave: () => create_save,
+    createOrEditCharacter: () => createOrEditCharacter(),
+    getName1: () => name1,
+    getOneCharacter: (avatar) => getOneCharacter(avatar),
+    selectSelectedCharacter: (chid, options) => select_selected_character(chid, options),
+});
+
 export function isReactCharacterLibraryPanelEnabled() {
     return Boolean(getWorkspaceReactFeatures()?.reactPanels?.characterLibrary);
 }
@@ -370,9 +407,9 @@ const BACKGROUND_LIBRARY_REACT_HOST_ID = 'emberdesk-react-background-library-pan
 const EXTENSIONS_HOST_REACT_HOST_ID = 'emberdesk-react-extensions-host-panel-host';
 const MAIN_CHAT_MESSAGE_LIST_REACT_HOST_ID = 'emberdesk-react-main-chat-message-list-host';
 const MAIN_CHAT_SCROLL_RESTORE_THRESHOLD_PX = 12;
-const mainChatMessageRowSnapshotSchema = 'mainChatMessageRowSnapshotSchema';
-const mainChatRichBodySnapshotSchema = 'mainChatRichBodySnapshotSchema';
-const mainChatMessageActionSnapshotSchema = 'mainChatMessageActionSnapshotSchema';
+const mainChatMessageRowSnapshotSchema = MAIN_CHAT_MESSAGE_ROW_SNAPSHOT_SCHEMA;
+const mainChatRichBodySnapshotSchema = MAIN_CHAT_RICH_BODY_SNAPSHOT_SCHEMA;
+const mainChatMessageActionSnapshotSchema = MAIN_CHAT_MESSAGE_ACTION_SNAPSHOT_SCHEMA;
 const STREAMING_TRANSPORT_TERMINAL_PHASES = new Set(['stopped', 'completed', 'error']);
 const REACT_CHARACTER_LIBRARY_PANEL_ASSET_PATH = '/react/login/assets/character-library-panel.js';
 const REACT_CHARACTER_LIBRARY_TOOLBAR_HOST_ID = 'emberdesk-react-character-library-toolbar';
@@ -983,56 +1020,49 @@ function getWorldInfoReactBridgeState() {
 }
 
 function getWorldInfoReactBridge() {
-    return {
+    return createWorkspacePanelActionBridge({
         dispatchAction(action, payload = {}) {
-            const actionResult = (() => {
-                switch (action) {
-                    case 'selectWorld':
-                        return selectWorldInfoEditorIndex(payload?.worldIndex ?? '');
-                    case 'applySearchQuery':
-                        return applyWorldInfoSearchQuery(payload?.searchQuery ?? '');
-                    case 'applySortOption':
-                        return applyWorldInfoSortOption(payload?.sortValue ?? '');
-                    case 'createEntry':
-                        return createWorldInfoEntryFromEditor();
-                    case 'createWorld':
-                        return promptToCreateWorldInfo();
-                    case 'importWorld':
-                        return requestWorldInfoImportSelection();
-                    case 'exportWorld':
-                        return exportCurrentWorldInfo();
-                    case 'renameWorld':
-                        return renameCurrentWorldInfo();
-                    case 'duplicateWorld':
-                        return duplicateCurrentWorldInfo();
-                    case 'deleteWorld':
-                        return deleteCurrentWorldInfo();
-                    case 'refreshWorld':
-                        return refreshCurrentWorldInfoEditor();
-                    case 'openEntry':
-                        return openWorldInfoEntryByUid(payload?.uid ?? '');
-                    default:
-                        console.warn('Unknown World Info React action', action);
-                        return undefined;
-                }
-            })();
-
-            return Promise.resolve(actionResult).finally(() => {
-                void mountReactWorldInfoPanel();
-            });
+            switch (action) {
+                case 'selectWorld':
+                    return selectWorldInfoEditorIndex(payload?.worldIndex ?? '');
+                case 'applySearchQuery':
+                    return applyWorldInfoSearchQuery(payload?.searchQuery ?? '');
+                case 'applySortOption':
+                    return applyWorldInfoSortOption(payload?.sortValue ?? '');
+                case 'createEntry':
+                    return createWorldInfoEntryFromEditor();
+                case 'createWorld':
+                    return promptToCreateWorldInfo();
+                case 'importWorld':
+                    return requestWorldInfoImportSelection();
+                case 'exportWorld':
+                    return exportCurrentWorldInfo();
+                case 'renameWorld':
+                    return renameCurrentWorldInfo();
+                case 'duplicateWorld':
+                    return duplicateCurrentWorldInfo();
+                case 'deleteWorld':
+                    return deleteCurrentWorldInfo();
+                case 'refreshWorld':
+                    return refreshCurrentWorldInfoEditor();
+                case 'openEntry':
+                    return openWorldInfoEntryByUid(payload?.uid ?? '');
+                default:
+                    console.warn('Unknown World Info React action', action);
+                    return undefined;
+            }
         },
-    };
+        remount: () => {
+            void mountReactWorldInfoPanel();
+        },
+    });
 }
 
 async function mountReactWorldInfoPanel() {
-    if (!getWorkspaceReactFeatures()?.reactPanels?.worldInfo) {
-        return false;
-    }
-
-    return mountReactWorkspacePanel({
+    return mountWorkspacePanelHost({
         kind: 'worldInfo',
-        container: ensureWorldInfoReactHost(),
-        state: getWorldInfoReactBridgeState(),
+        ensureContainer: ensureWorldInfoReactHost,
+        getState: () => getWorldInfoReactBridgeState(),
         bridge: getWorldInfoReactBridge(),
         features: getWorkspaceReactFeatures(),
     });
@@ -1539,7 +1569,7 @@ function getMainChatMessageListReactBridgeState() {
 }
 
 function getMainChatMessageListReactBridge() {
-    return {
+    return createWorkspacePanelActionBridge({
         async dispatchAction(action, payload = {}) {
             let shouldRefreshPanel = true;
             const messageId = Number(payload?.messageId);
@@ -1587,28 +1617,27 @@ function getMainChatMessageListReactBridge() {
                 default:
                     console.warn('Unknown Main Chat React action', action);
             }
-
-            if (shouldRefreshPanel) {
-                void mountReactMainChatMessageListPanel();
-            }
+            return shouldRefreshPanel;
         },
-    };
+        shouldRemount(actionResult) {
+            return actionResult !== false;
+        },
+        remount: () => {
+            void mountReactMainChatMessageListPanel();
+        },
+    });
 }
 
 async function mountReactMainChatMessageListPanel() {
-    if (!getWorkspaceReactFeatures()?.reactPanels?.mainChatMessageList) {
-        cleanupMainChatMessageListReactHost();
-        return false;
-    }
-
-    setMainChatSlashCommandReactOwnerEnabled(true);
-
-    return mountReactWorkspacePanel({
+    return mountWorkspacePanelHost({
         kind: 'mainChatMessageList',
-        container: ensureMainChatMessageListReactHost(),
-        state: getMainChatMessageListReactBridgeState(),
+        ensureContainer: ensureMainChatMessageListReactHost,
+        getState: () => getMainChatMessageListReactBridgeState(),
         bridge: getMainChatMessageListReactBridge(),
         features: getWorkspaceReactFeatures(),
+        onDisabled() {
+            cleanupMainChatMessageListReactHost();
+        },
     });
 }
 
@@ -1685,65 +1714,62 @@ function getBackgroundLibraryReactBridgeState(stateOverrides = {}) {
 }
 
 function getBackgroundLibraryReactBridge() {
-    return {
+    return createWorkspacePanelActionBridge({
         dispatchAction(action, payload = {}) {
-            const actionResult = (() => {
-                switch (action) {
-                    case 'applyBackgroundFilter':
-                        return applyBackgroundLibraryFilter(payload?.filterQuery ?? '');
-                    case 'applyBackgroundSort':
-                        return applyBackgroundLibrarySort(payload?.sortValue ?? '');
-                    case 'uploadBackground':
-                        return requestBackgroundUploadSelection();
-                    case 'selectBackground':
-                        return selectBackgroundLibraryItem(payload?.id ?? '', payload?.source ?? '');
-                    case 'lockBackground':
-                        return lockCurrentBackground();
-                    case 'unlockBackground':
-                        return unlockCurrentBackground();
-                    case 'autoBackground':
-                        return runAutoBackgroundSelection();
-                    case 'refreshBackgrounds':
-                        return refreshBackgroundLibrary();
-                    default:
-                        console.warn('Unknown Background Library React action', action);
-                        return undefined;
-                }
-            })();
-
-            return Promise.resolve(actionResult).finally(() => {
-                void mountReactBackgroundLibraryPanel({ refreshQueued: false });
-            });
+            switch (action) {
+                case 'applyBackgroundFilter':
+                    return applyBackgroundLibraryFilter(payload?.filterQuery ?? '');
+                case 'applyBackgroundSort':
+                    return applyBackgroundLibrarySort(payload?.sortValue ?? '');
+                case 'uploadBackground':
+                    return requestBackgroundUploadSelection();
+                case 'selectBackground':
+                    return selectBackgroundLibraryItem(payload?.id ?? '', payload?.source ?? '');
+                case 'lockBackground':
+                    return lockCurrentBackground();
+                case 'unlockBackground':
+                    return unlockCurrentBackground();
+                case 'autoBackground':
+                    return runAutoBackgroundSelection();
+                case 'refreshBackgrounds':
+                    return refreshBackgroundLibrary();
+                default:
+                    console.warn('Unknown Background Library React action', action);
+                    return undefined;
+            }
         },
-    };
+        remount: () => {
+            void mountReactBackgroundLibraryPanel({ refreshQueued: false });
+        },
+    });
 }
 
 async function mountReactBackgroundLibraryPanel(stateOverrides = {}) {
-    if (!getWorkspaceReactFeatures()?.reactPanels?.backgroundLibrary) {
-        return false;
-    }
-
-    return mountReactWorkspacePanel({
+    return mountWorkspacePanelHost({
         kind: 'backgroundLibrary',
-        container: ensureBackgroundLibraryReactHost(),
-        state: getBackgroundLibraryReactBridgeState(stateOverrides),
+        ensureContainer: ensureBackgroundLibraryReactHost,
+        getState: overrides => getBackgroundLibraryReactBridgeState(overrides ?? stateOverrides),
         bridge: getBackgroundLibraryReactBridge(),
         features: getWorkspaceReactFeatures(),
+        stateOverrides,
     });
 }
-
-function handleReactBackgroundLibraryStateChange(event) {
-    const stateOverrides = event instanceof CustomEvent && event.detail ? event.detail : {};
+const handleReactBackgroundLibraryStateChange = createWorkspacePanelStateChangeHandler((stateOverrides) => {
     void mountReactBackgroundLibraryPanel(stateOverrides);
-}
+});
 
 function initReactBackgroundLibraryBridge() {
-    document.removeEventListener('emberdesk:background-library-state-change', handleReactBackgroundLibraryStateChange);
-    document.addEventListener('emberdesk:background-library-state-change', handleReactBackgroundLibraryStateChange);
-    $('#backgrounds-drawer-toggle').off('click.reactBackgroundLibrary').on('click.reactBackgroundLibrary', () => {
-        void mountReactBackgroundLibraryPanel();
+    initWorkspacePanelDrawerBridge({
+        removeEventTarget: document,
+        addEventTarget: document,
+        eventName: 'emberdesk:background-library-state-change',
+        stateChangeHandler: handleReactBackgroundLibraryStateChange,
+        drawerSelector: '#backgrounds-drawer-toggle',
+        drawerNamespace: 'reactBackgroundLibrary',
+        remount(stateOverrides) {
+            void mountReactBackgroundLibraryPanel(stateOverrides);
+        },
     });
-    void mountReactBackgroundLibraryPanel();
 }
 
 function ensureExtensionsHostReactHost() {
@@ -1815,68 +1841,65 @@ function getExtensionsHostReactMountPointStatuses() {
 }
 
 function getExtensionsHostReactBridge() {
-    return {
+    return createWorkspacePanelActionBridge({
         dispatchAction(action, payload = {}) {
-            let shouldRefresh = true;
-            const actionResult = (() => {
-                switch (action) {
-                    case 'toggleNotifyUpdates':
-                        return toggleExtensionsHostNotifyUpdates();
-                    case 'openManageExtensions':
-                        return openExtensionsHostManager();
-                    case 'openInstallExtension':
-                        return openExtensionsHostInstaller();
-                    case 'updateExtrasApiUrl':
-                        shouldRefresh = false;
-                        return updateExtensionsHostApiUrl(payload?.url ?? '');
-                    case 'updateExtrasApiKey':
-                        shouldRefresh = false;
-                        return updateExtensionsHostApiKey(payload?.apiKey ?? '');
-                    case 'connectExtrasApi':
-                        return connectExtensionsHostApi();
-                    case 'toggleAutoconnect':
-                        return setExtensionsHostAutoconnectEnabled(payload?.enabled ?? !document.getElementById('extensions_autoconnect')?.checked);
-                    default:
-                        console.warn('Unknown Extensions Host React action', action);
-                        return undefined;
-                }
-            })();
-
-            return Promise.resolve(actionResult).finally(() => {
-                if (shouldRefresh) {
-                    void mountReactExtensionsHostPanel();
-                }
-            });
+            switch (action) {
+                case 'toggleNotifyUpdates':
+                    return toggleExtensionsHostNotifyUpdates();
+                case 'openManageExtensions':
+                    return openExtensionsHostManager();
+                case 'openInstallExtension':
+                    return openExtensionsHostInstaller();
+                case 'updateExtrasApiUrl':
+                    updateExtensionsHostApiUrl(payload?.url ?? '');
+                    return false;
+                case 'updateExtrasApiKey':
+                    updateExtensionsHostApiKey(payload?.apiKey ?? '');
+                    return false;
+                case 'connectExtrasApi':
+                    return connectExtensionsHostApi();
+                case 'toggleAutoconnect':
+                    return setExtensionsHostAutoconnectEnabled(payload?.enabled ?? !document.getElementById('extensions_autoconnect')?.checked);
+                default:
+                    console.warn('Unknown Extensions Host React action', action);
+                    return undefined;
+            }
         },
-    };
+        shouldRemount(actionResult) {
+            return actionResult !== false;
+        },
+        remount: () => {
+            void mountReactExtensionsHostPanel();
+        },
+    });
 }
 
 async function mountReactExtensionsHostPanel(stateOverrides = {}) {
-    if (!getWorkspaceReactFeatures()?.reactPanels?.extensionsHost) {
-        return false;
-    }
-
-    return mountReactWorkspacePanel({
+    return mountWorkspacePanelHost({
         kind: 'extensionsHost',
-        container: ensureExtensionsHostReactHost(),
-        state: getExtensionsHostReactBridgeState(stateOverrides),
+        ensureContainer: ensureExtensionsHostReactHost,
+        getState: overrides => getExtensionsHostReactBridgeState(overrides ?? stateOverrides),
         bridge: getExtensionsHostReactBridge(),
         features: getWorkspaceReactFeatures(),
+        stateOverrides,
     });
 }
-
-function handleReactExtensionsHostStateChange(event) {
-    const stateOverrides = event instanceof CustomEvent && event.detail ? event.detail : {};
+const handleReactExtensionsHostStateChange = createWorkspacePanelStateChangeHandler((stateOverrides) => {
     void mountReactExtensionsHostPanel(stateOverrides);
-}
+});
 
 function initReactExtensionsHostBridge() {
-    document.removeEventListener('emberdesk:extensions-host-state-change', handleReactExtensionsHostStateChange);
-    document.addEventListener('emberdesk:extensions-host-state-change', handleReactExtensionsHostStateChange);
-    $('#extensions-settings-button .drawer-toggle').off('click.reactExtensionsHost').on('click.reactExtensionsHost', () => {
-        void mountReactExtensionsHostPanel();
+    initWorkspacePanelDrawerBridge({
+        removeEventTarget: document,
+        addEventTarget: document,
+        eventName: 'emberdesk:extensions-host-state-change',
+        stateChangeHandler: handleReactExtensionsHostStateChange,
+        drawerSelector: '#extensions-settings-button .drawer-toggle',
+        drawerNamespace: 'reactExtensionsHost',
+        remount(stateOverrides) {
+            void mountReactExtensionsHostPanel(stateOverrides);
+        },
     });
-    void mountReactExtensionsHostPanel();
 }
 
 function getCharacterLibrarySortOptionValue(option, index) {
@@ -8348,9 +8371,9 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
             : {
                 owner: 'legacy',
                 kind: visibleTransportKind ?? (type === 'continue' ? 'continueLast' : 'submitComposer'),
-                status: 'legacy-fallback',
-                path: 'legacy-visible-transport-fallback',
-                reason: 'legacy-executed',
+                status: MAIN_CHAT_VISIBLE_TRANSPORT_STATUSES.LEGACY_FALLBACK,
+                path: MAIN_CHAT_VISIBLE_TRANSPORT_PATHS.LEGACY_VISIBLE_TRANSPORT_FALLBACK,
+                reason: MAIN_CHAT_VISIBLE_TRANSPORT_REASONS.LEGACY_EXECUTED,
             };
 
         if (handoffOwnership.owner === 'react') {

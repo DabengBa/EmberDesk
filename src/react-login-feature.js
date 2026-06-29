@@ -1,4 +1,4 @@
-import { getConfigValue } from './util.js';
+import { isReactPageEnabled } from './react-feature-flags.js';
 
 export const REACT_LOGIN_BASE_PATH = '/react/login/';
 
@@ -7,5 +7,5 @@ export const REACT_LOGIN_BASE_PATH = '/react/login/';
  * @returns {boolean}
  */
 export function isReactLoginEnabled() {
-    return getConfigValue('features.react.pages.login', false, 'boolean');
+    return isReactPageEnabled('login');
 }

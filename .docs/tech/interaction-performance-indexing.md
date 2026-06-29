@@ -10,6 +10,7 @@ Primary files:
 - `src/derived-cache-sqlite.js`
 - `src/endpoints/character-read-service.js`
 - `src/endpoints/character-write-service.js`
+- `src/endpoints/character-import-service.js`
 - `src/endpoints/characters.js`
 - `src/endpoints/chats.js`
 - `src/interaction-performance-report.js`
@@ -83,6 +84,12 @@ Separate from the read-side character route service, EmberDesk now also routes s
 - `/api/characters/edit` delegates metadata-only writes with `shouldRegenerateThumbnail: false`, replacement-avatar upload cleanup, cache busting, and post-write character-index refresh to `editCharacterCard`
 - the related single-card `/api/characters/rename` path delegates old-card read/update, chats-directory copy/remove, old avatar deletion, old index deletion, and new index refresh to `renameCharacterCard`
 - routes keep request validation and legacy HTTP response mapping; the service owns write-side effect ordering through explicit dependencies that are covered by `tests/character-write-service.test.js`
+
+Separate from the single-card write service, EmberDesk now also routes `POST /api/characters/import` through `src/endpoints/character-import-service.js`:
+
+- the route still owns request/file validation, upload cleanup, and HTTP `{ file_name }` / `400 { error: true }` response mapping
+- the import coordinator now owns format dispatch across PNG / JSON / YAML / CHARX / BYAF inputs, empty-result normalization, and post-import `refreshCharacterIndexEntrySafe(..., 'import')`
+- the coordinator keeps imported cards file-backed and only refreshes the derived index after canonical import success
 
 ## Architecture And Constraints
 
@@ -378,6 +385,8 @@ Character-chat mutations in `src/endpoints/chats.js` now mark chat-derived aggre
 This keeps `chat_size` and `date_last_chat` accurate on the next list read without making autosave synchronous-and-heavy.
 
 Import now normalizes the avatar name before refreshing the derived row, so imported cards consistently update the index even when the internal file name comes back without `.png`.
+
+This import refresh now happens through the route-adjacent coordinator instead of the route body itself, so the import side-effect order is testable without turning the derived index into a new source of truth.
 
 ### Delete-flow UI update
 
