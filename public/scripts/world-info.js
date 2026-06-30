@@ -27,7 +27,7 @@ import { buildCascadeSectionHtml, captureCascadeChoices } from './world-cascade-
 import { convertAgnaiMemoryBook, convertCharacterBook, convertNovelLorebook, convertRisuLorebook } from './world-info-converters.js';
 import { DragAndDropHandler } from './dragdrop.js';
 import { createWorldInfoImportResult, summarizeWorldInfoBatchImport } from './world-info-import-results.js';
-import { requireWorldInfoShellContext } from './world-info-shell-context.js';
+import { getWorldInfoShellEventSourceProperty, requireWorldInfoShellContext } from './world-info-shell-context.js';
 
 export { convertCharacterBook };
 
@@ -89,7 +89,7 @@ function select_selected_character(chid, options) {
 
 const eventSource = new Proxy({}, {
     get(_target, property) {
-        return getWorldInfoShell().eventSource[property];
+        return getWorldInfoShellEventSourceProperty(property);
     },
 });
 

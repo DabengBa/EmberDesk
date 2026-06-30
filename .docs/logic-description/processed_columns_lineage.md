@@ -11,6 +11,7 @@ Current owning flow:
 - [React Character Library Sync Processing Flow](react_character_library_sync_processing_flow.md)
 - [React Settings Payload Processing Flow](react_settings_payload_processing_flow.md)
 - [React Workspace Panel Flags Processing Flow](react_workspace_panel_flags_processing_flow.md)
+- [World Info Shell Context Processing Flow](world_info_shell_context_processing_flow.md)
 - [Main Chat Generation Control Bridge Processing Flow](main_chat_generation_control_bridge_processing_flow.md)
 - [Main Chat Message Actions Bridge Processing Flow](main_chat_message_actions_bridge_processing_flow.md)
 
@@ -56,6 +57,10 @@ Current owning flow:
 | `extensionsHostBridgeState` | `#extensions_settings`, `#extensions_settings2`, `#regex_container`, `#extensionsMenuButton`, `#extensionsMenu`, notify checkbox, Extras API controls, `#extensions_startup_loading`, and `emberdesk:extensions-host-state-change` details | Build protected mount-point readiness, notify/manage/install state, Extras URL/key/autoconnect/status state, normalized mount-point statuses, deferred loader state, and loading placeholder presence for the guarded Extensions Host action island | Missing protected nodes become absent readiness rows; React action entries delegate to legacy controls, while extension discovery, manifest loading, wand menu, regex, and install/update/delete behavior remain legacy-owned |
 | `workspacePanelModuleCache` | dynamic import of `/react/login/assets/workspace-panels.js` | Cache one in-flight or fulfilled workspace-panel scaffold bundle promise per browser session | Import failure clears the cache so a later retry can attempt the bundle again |
 | `workspacePanelBridgeResult` | requested panel kind, feature payload, host container, bridge state/action object, and workspace-panel bundle | Return `true` only after an enabled panel with a host container loads the bundle and dispatches `mountWorkspacePanel(kind, container, { state, bridge })` | Disabled flags, missing containers, or import failures return `false` and leave the legacy panel path as fallback |
+| `registeredWorldInfoShellContext` | `public/script.js` registration object | Store the shell-owned World Info context without evaluating later-declared shell constants during registration | Eager reads of later constants can block workspace startup before `app_ready`; the lazy accessor proof protects this boundary |
+| `requiredWorldInfoShellContext` | currently registered World Info shell context | Return the stored context unchanged or throw the exact missing-context error | Missing context fails closed with `World Info shell context is not registered.`; no hidden direct-import fallback is allowed |
+| `extensionPromptRoles` | lazy getter over `extension_prompt_roles` registered by `public/script.js` | Read the role map only when `public/scripts/world-info.js` needs role data | Eager reads can trigger a temporal-dead-zone startup failure and strand the shell on global loading feedback |
+| `eventSourcePropertyValue` | registered `eventSource` plus requested property name | Return non-function values unchanged; bind function values to the original emitter before returning them to the proxy | Unbound emitter methods can lose `this`, breaking listener storage or event dispatch |
 | `mainChatGenerationControlState` | body generating marker, `streamingProcessor`, recovery status row, failure notice, failure retry, continue visibility, and active message row | Normalize legacy facts through a pure classifier with priority `recovering`, `error`, `stopped`, `completed`, `streaming`, `idle` | Missing or unsafe fields normalize to safe defaults; React schema failure uses idle fallback |
 | `mainChatGenerationControlPhase` | classified state plus structured `data-recovery-stage` | Emit one of `idle`, `streaming`, `recoveringPrimary`, `recoveringFallback`, `stopped`, `completed`, or `error` | Unsupported phases fail React validation and become `idle` in the hidden marker |
 | `mainChatGenerationControlContinueVisible` | observed `#mes_continue` element visibility | Report `true` only when `continueSurface` is `legacy` | Hidden or missing legacy continue surface reports `false` even in recoverable phases |
@@ -73,6 +78,7 @@ Current owning flow:
 - Keep React character-library sync rows aligned with `react_character_library_sync_processing_flow.md` and `react_character_library_sync_sandbox_proof.py`.
 - Keep React settings payload rows aligned with `react_settings_payload_processing_flow.md` and `react_settings_payload_sandbox_proof.py`.
 - Keep React workspace panel flag rows aligned with `react_workspace_panel_flags_processing_flow.md` and `react_workspace_panel_flags_sandbox_proof.py`.
+- Keep World Info shell-context rows aligned with `world_info_shell_context_processing_flow.md` and `world_info_shell_context_sandbox_proof.py`.
 - Keep main-chat generation-control rows aligned with `main_chat_generation_control_bridge_processing_flow.md` and `main_chat_generation_control_bridge_sandbox_proof.py`.
 - Keep main-chat message-action rows aligned with `main_chat_message_actions_bridge_processing_flow.md` and `main_chat_message_actions_bridge_sandbox_proof.py`.
 - Add a new row when a documentation proof script starts producing a new named output.

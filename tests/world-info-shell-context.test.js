@@ -59,6 +59,28 @@ describe('world info shell context', () => {
         expect(module.requireWorldInfoShellContext()).toBe(shellContext);
     });
 
+    test('binds eventSource methods to the underlying emitter instance', async () => {
+        const module = await importContextModule();
+        const eventSource = {
+            calls: [],
+            on(eventName, listener) {
+                this.calls.push({ eventName, listener, self: this });
+                return this;
+            },
+        };
+
+        module.registerWorldInfoShellContext({ eventSource });
+
+        const on = module.getWorldInfoShellEventSourceProperty('on');
+        const listener = () => {};
+        const result = on('chat_changed', listener);
+
+        expect(result).toBe(eventSource);
+        expect(eventSource.calls).toEqual([
+            { eventName: 'chat_changed', listener, self: eventSource },
+        ]);
+    });
+
     test('routes world-info shell dependencies through the dedicated context seam', () => {
         const worldInfoSource = read('public/scripts/world-info.js');
         const scriptSource = read('public/script.js');
@@ -66,10 +88,12 @@ describe('world info shell context', () => {
         expect(worldInfoSource).toContain("from './world-info-shell-context.js'");
         expect(worldInfoSource).not.toContain("from '../script.js'");
         expect(worldInfoSource).toContain('requireWorldInfoShellContext');
+        expect(worldInfoSource).toContain('getWorldInfoShellEventSourceProperty');
         expect(worldInfoSource).toContain('function getWorldInfoShell()');
         expect(scriptSource).toContain('registerWorldInfoShellContext({');
         expect(scriptSource).toContain('getChatMetadata: () => chat_metadata');
         expect(scriptSource).toContain('getCurrentCharacterId: () => this_chid');
         expect(scriptSource).toContain('getCharacters: () => characters');
+        expect(scriptSource).toContain('get extensionPromptRoles() { return extension_prompt_roles; }');
     });
 });

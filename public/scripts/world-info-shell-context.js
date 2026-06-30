@@ -16,6 +16,12 @@ export function requireWorldInfoShellContext() {
     return worldInfoShellContext;
 }
 
+export function getWorldInfoShellEventSourceProperty(property) {
+    const source = requireWorldInfoShellContext().eventSource;
+    const value = source[property];
+    return typeof value === 'function' ? value.bind(source) : value;
+}
+
 export function clearWorldInfoShellContext() {
     worldInfoShellContext = null;
 }

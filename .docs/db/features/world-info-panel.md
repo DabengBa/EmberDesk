@@ -18,6 +18,7 @@ Keep World Info/lorebook activation and editing available inside the chat worksp
 ## User-Visible Contract
 
 - The World Info drawer belongs to [Chat Workspace](page.chat_workspace); users activate global worlds and edit world books without leaving the main shell.
+- Opening World Info from the top bar must respect already locked workspace drawers. In particular, a locked Character Management panel remains visible while the World Info drawer opens, so users can compare character details and lorebook state side by side.
 - Global world activation and editor selection are separate controls: selecting a world to edit does not automatically make it globally active.
 - Empty states are explicit. No global world, no selected editor world, no entries, and no embedded character book should show clear feedback instead of stale content.
 - The editor toolbar exposes search, sort, create, import, export, rename, duplicate, delete, refresh, backfill, and apply-sorting actions when valid for the selected world.
@@ -41,6 +42,7 @@ Keep World Info/lorebook activation and editing available inside the chat worksp
 - As a user editing world entries, from the editor selector choose a world, search or sort entries, open an entry card, and use the content editor modal; EmberDesk must show the selected world's entries, keep toolbar actions scoped to that world, preserve clear loading/empty/editing states after refresh or reopen, and failure is entry content from a different world or a modal without a visible close/recovery path.
 - As a user importing World Info files, from the toolbar or drop target import supported files, resolve overwrite conflicts, optionally cancel remaining batch work, and review the final result; EmberDesk must show busy/progress state, block duplicate starts, report detected format and entry counts when available, summarize imported/failed/skipped/unprocessed counts, and restore controls after completion or failure, with failure signaled by duplicate picker opens, raw technical errors as primary feedback, or hidden conflict choices.
 - As a user importing embedded lorebook data from a selected character, from the toolbar-adjacent character action attempt import and then retry manually if no book exists; EmberDesk must either import and switch visibly to the imported world or show an informational no-embedded-book state, and failure is silent no-op.
+- As a user comparing a character with its lorebook state, from [Chat Workspace](page.chat_workspace) lock Character Management, then open the World Info drawer; EmberDesk must show the World Info editor while the locked Character Management panel remains visible and usable, and failure is the character panel disappearing or the workspace returning to a global loading state.
 - As a user on a build with the guarded World Info host enabled, from the host use selection, search/sort, create/import/export/refresh, and entry shortcuts; EmberDesk must produce the same visible World Info outcomes as the established controls, flag-off or mount failure must leave legacy controls as the behavior owner, and failure is a React shortcut that bypasses prompt activation, regex placement, import semantics, or deletion confirmation.
 
 ## Feature-Specific Evidence
@@ -48,6 +50,7 @@ Keep World Info/lorebook activation and editing available inside the chat worksp
 - Selector labels, empty prompts, selected world title, entry cards, toolbar availability, content editor modal, import progress, overwrite choices, final import summary, and no-embedded-book message are primary evidence.
 - Supported file extensions, batch limits, converter results, and endpoint responses are supporting evidence only when the visible import workflow matches.
 - `public/scripts/world-info.js` helper routing and React host readiness markers support migration proof; they do not replace visible drawer behavior.
+- Browser evidence for the locked Character Management plus World Info path should show both panels visible at the same time; DOM state such as `openDrawer` / `pinnedOpen` is supporting evidence only when the visible panels match.
 
 ## Failure Signals
 
@@ -55,6 +58,7 @@ Keep World Info/lorebook activation and editing available inside the chat worksp
 - Empty states leave stale world entries visible.
 - Import starts twice, loses progress feedback, or fails without a recoverable visible reason.
 - Batch conflict decisions are hidden or applied differently than the user chose.
+- Opening World Info closes a locked Character Management panel or strands the shell on global startup feedback.
 - The guarded host appears but the established World Info controls or fallback path disappear.
 
 ## Boundaries

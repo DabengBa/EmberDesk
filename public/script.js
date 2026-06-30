@@ -390,7 +390,7 @@ registerWorldInfoShellContext({
     getExtensionPromptByName: (promptName) => getExtensionPromptByName(promptName),
     saveMetadata: () => saveMetadata(),
     getCurrentChatId: () => getCurrentChatId(),
-    extensionPromptRoles: extension_prompt_roles,
+    get extensionPromptRoles() { return extension_prompt_roles; },
     getCreateSave: () => create_save,
     createOrEditCharacter: () => createOrEditCharacter(),
     getName1: () => name1,
