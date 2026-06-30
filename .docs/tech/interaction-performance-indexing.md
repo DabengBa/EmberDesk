@@ -342,7 +342,7 @@ Artifact contract:
 - schema version and reset count
 - fallback or disabled reason such as `force_off`, `unsupported`, or `reset_threshold_exceeded`
 
-The artifact intentionally omits `dbPath`, data-root paths, usernames, character filenames, and other user-specific filesystem details. For character route scenarios, the runner reads the sidecar runtime status from a perf-only `X-EmberDesk-Character-Index-Status` response header emitted only when `EMBERDESK_INTERACTION_PERF_MODE=1`; the header keeps `open` as sidecar runtime state, while `indexedPathObserved` records whether the sampled request used an indexed path. This is diagnostic evidence only; it does not add a health endpoint and does not change `/api/characters/all` or `/api/characters/get` response bodies.
+This derived-cache observability section intentionally omits `dbPath`, data-root paths, usernames, character filenames, and other user-specific filesystem details. Other report sections still include synthetic benchmark payload summaries, such as sample avatar names, for parity debugging. For character route scenarios, the runner reads the sidecar runtime status from a perf-only `X-EmberDesk-Character-Index-Status` response header emitted only when `EMBERDESK_INTERACTION_PERF_MODE=1`; the header keeps `open` as sidecar runtime state, while `indexedPathObserved` records whether the sampled request used an indexed path. This is diagnostic evidence only; it does not add a health endpoint and does not change `/api/characters/all` or `/api/characters/get` response bodies.
 
 Raw runner artifacts are local evidence and are not committed by default. Durable docs should record the command, runtime, scenario set, warnings, and the local artifact path used during the delivery.
 
