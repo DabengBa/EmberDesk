@@ -38,6 +38,7 @@ const expectedExportNames = [
 ];
 
 const legacyGlobalNames = [
+    '_',
     'Fuse',
     'DOMPurify',
     'hljs',

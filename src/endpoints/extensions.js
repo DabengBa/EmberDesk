@@ -8,6 +8,7 @@ import { CheckRepoActions, default as simpleGit } from 'simple-git';
 import { PUBLIC_DIRECTORIES } from '../constants.js';
 import { getConfigValue, isValidUrl } from '../util.js';
 import { createGitClient } from '../git/client.js';
+import { getExtensionRepositoryUpdateState } from '../extension-repo-update-state.js';
 
 const gitBackend = getConfigValue('git.backend', 'auto');
 
@@ -40,27 +41,7 @@ async function getManifest(extensionPath) {
  */
 async function checkIfRepoIsUpToDate(extensionPath) {
     const git = simpleGit({ baseDir: extensionPath, ...OPTIONS });
-    await git.fetch('origin');
-    const currentBranch = await git.branch();
-    const currentCommitHash = await git.revparse(['HEAD']);
-    const log = await git.log({
-        from: currentCommitHash,
-        to: `origin/${currentBranch.current}`,
-    });
-
-    // Fetch remote repository information
-    const remotes = await git.getRemotes(true);
-    if (remotes.length === 0) {
-        return {
-            isUpToDate: true,
-            remoteUrl: '',
-        };
-    }
-
-    return {
-        isUpToDate: log.total === 0,
-        remoteUrl: remotes[0].refs.fetch, // URL of the remote repository
-    };
+    return getExtensionRepositoryUpdateState(git);
 }
 
 export const router = express.Router();

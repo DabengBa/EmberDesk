@@ -1,4 +1,8 @@
-import { describe, test, expect, jest } from '@jest/globals';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+import { afterEach, describe, test, expect, jest } from '@jest/globals';
 import {
     keyToEnv,
     getBasicAuthHeader,
@@ -31,7 +35,23 @@ import {
     excludeKeysByYaml,
     Cache,
     MemoryLimitedMap,
+    getImages,
 } from '../src/util';
+import { MEDIA_REQUEST_TYPE } from '../src/constants';
+
+const tempRoots = [];
+
+afterEach(() => {
+    while (tempRoots.length > 0) {
+        fs.rmSync(tempRoots.pop(), { recursive: true, force: true });
+    }
+});
+
+function makeTempDir(prefix) {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+    tempRoots.push(root);
+    return root;
+}
 
 describe('keyToEnv', () => {
     test('should convert dotted key to env var format', () => {
@@ -44,6 +64,30 @@ describe('keyToEnv', () => {
 
     test('should coerce non-string input via String()', () => {
         expect(keyToEnv(42)).toBe('EMBERDESK_42');
+    });
+});
+
+describe('getImages', () => {
+    test('should return image files and ignore non-media files', () => {
+        const root = makeTempDir('emberdesk-get-images-');
+        fs.writeFileSync(path.join(root, 'avatar.png'), 'png', 'utf8');
+        fs.writeFileSync(path.join(root, 'notes.txt'), 'text', 'utf8');
+        fs.mkdirSync(path.join(root, 'nested'));
+
+        expect(getImages(root)).toEqual(['avatar.png']);
+    });
+
+    test('should include requested media types', () => {
+        const root = makeTempDir('emberdesk-get-images-media-');
+        fs.writeFileSync(path.join(root, 'avatar.png'), 'png', 'utf8');
+        fs.writeFileSync(path.join(root, 'theme.mp3'), 'mp3', 'utf8');
+        fs.writeFileSync(path.join(root, 'clip.webm'), 'webm', 'utf8');
+
+        expect(getImages(
+            root,
+            'name',
+            MEDIA_REQUEST_TYPE.IMAGE | MEDIA_REQUEST_TYPE.AUDIO | MEDIA_REQUEST_TYPE.VIDEO,
+        )).toEqual(['avatar.png', 'clip.webm', 'theme.mp3']);
     });
 });
 

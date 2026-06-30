@@ -12,6 +12,7 @@ import readline from 'node:readline';
 import yaml from 'yaml';
 import { sync as commandExistsSync } from 'command-exists';
 import _ from 'lodash';
+import mime from 'mime-types';
 import { default as simpleGit } from 'simple-git';
 import chalk from 'chalk';
 import bytes from 'bytes';

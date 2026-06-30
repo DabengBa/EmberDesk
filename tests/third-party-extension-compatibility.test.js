@@ -204,6 +204,7 @@ describe('third-party extension compatibility boundary', () => {
         expect(bundledEntry).toContain('appendTo(\'#extensions_settings\')');
         expect(bundledEntry).toContain('globalThis.YAML');
         expect(bundledEntry).toContain('globalThis.z');
+        expect(readPublicFile('lib.js')).toContain('window._ = lodash');
 
         expect(fs.readFileSync(path.join(tavernHelperRoot, 'src', 'function', 'index.ts'), 'utf8'))
             .toContain('globalThis.TavernHelper = getTavernHelper()');

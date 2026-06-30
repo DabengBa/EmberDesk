@@ -40,6 +40,10 @@ export function initLibraryShims() {
     if (!window) {
         return;
     }
+    if (!('_' in window)) {
+        // @ts-ignore
+        window._ = lodash;
+    }
     if (!('Fuse' in window)) {
         // @ts-ignore
         window.Fuse = Fuse;
