@@ -2,6 +2,7 @@
 created: 2026-06-30
 source: user
 confirmed: true
+last_updated: 2026-06-30
 ---
 
 # Chat Import Service Coordinator Intent
@@ -20,10 +21,18 @@ confirmed: true
 
 - User expectation: 降低 `/api/chats/import` 路由复杂度，让外部格式转换、目标文件命名、写入计划和错误分类可被单元测试覆盖。
 - Recommended first slice: 新增或扩展 route-adjacent coordinator，复用现有 `chat-import-converters`，路由仍负责 Express request/response 与 upload cleanup。
-- Current status: spec drafted, awaiting approval.
+- Current status: delivery completed and archived through the feature wrap-up on 2026-06-30.
 - Change history:
   - 2026-06-30: 记录用户要求的 5 个现代化 successor specs，并选择本切口的最小可交付边界。
   - 2026-06-30: `$grill-with-docs` 复核后强调 Express 5 async error 行为不得改变当前 `{ error: true }` response contract，并把 upload cleanup owner 作为上线阻塞风险写入 spec。
+  - 2026-06-30: 交付 route-adjacent `chat-import-service.js`，把 JSON/JSONL import planning、write/copy plans、错误分类和 upload cleanup intent 从 Express route 中分离出来；`src/endpoints/chats.js` 仍负责 request/response/status mapping、实际文件写入/copy/unlink 和 character chat stats dirty marking。
+
+## Implementation Traceability
+
+- Code path: `src/endpoints/chat-import-service.js` owns deterministic character chat import planning; `src/endpoints/chats.js` keeps the `/api/chats/import` Express route, guard checks, response mapping, write/copy/unlink side effects, and derived character-index dirty marking.
+- Proof path: `tests/chat-import-service.test.js` covers supported JSON, CAI multi-chat JSON, unsupported/malformed JSON, valid JSONL copy, Chub JSONL flattening, invalid JSONL cleanup intent, target path planning, and dirty-marking intent. Existing `tests/chat-import-converters.test.js` and `tests/chat-route-service.test.js` remain the surrounding regression proof.
+- User-visible behavior: no intentional change to import entry point, success response `{ res: true, fileNames }`, failure response `{ error: true }`, missing body/file `400` guards, JSONL storage format, or group chat import.
+- Delivery status: completed by the feature wrap-up commit for this brief.
 
 ## Constraints
 
@@ -39,7 +48,9 @@ confirmed: true
 - `.docs/tech/server-startup-orchestration.md`
 - `.docs/tech/briefs/260605-04-chat-route-service-extraction.md`
 - `src/endpoints/chats.js`
+- `src/endpoints/chat-import-service.js`
 - `src/endpoints/chat-import-converters.js`
 - `src/endpoints/chat-route-service.js`
+- `tests/chat-import-service.test.js`
 - `tests/chat-import-converters.test.js`
 - `tests/chat-route-service.test.js`

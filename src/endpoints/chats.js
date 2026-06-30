@@ -24,9 +24,10 @@ import {
 } from '../util.js';
 import { isCharacterIndexSupported, markCharacterChatStatsDirty } from './character-index.js';
 import {
-    flattenChubChat,
-    getJsonChatImportConverter,
-} from './chat-import-converters.js';
+    CHAT_IMPORT_ERROR_KINDS,
+    CHAT_IMPORT_UPLOAD_CLEANUP,
+    createCharacterChatImportPlan,
+} from './chat-import-service.js';
 import { createChatBackupPlan } from './chat-backup-helpers.js';
 import {
     readRecentChatPayload,
@@ -55,6 +56,36 @@ function markCharacterChatStatsDirtySafe(directories, avatar, operation) {
         markCharacterChatStatsDirty(directories.root, avatar);
     } catch (error) {
         console.warn(`Character index chat-stat invalidation skipped after ${operation} for ${avatar}:`, error);
+    }
+}
+
+function warnAboutChatImportFailure(importPlan) {
+    if (importPlan.error) {
+        console.error(importPlan.error);
+        return;
+    }
+
+    if (importPlan.errorKind === CHAT_IMPORT_ERROR_KINDS.UNSUPPORTED_JSON_FORMAT) {
+        console.error('Incorrect chat format .json');
+        return;
+    }
+
+    if (importPlan.errorKind === CHAT_IMPORT_ERROR_KINDS.INVALID_JSONL_FORMAT) {
+        console.error('Incorrect chat format .jsonl');
+        return;
+    }
+
+    console.error(`Chat import failed: ${importPlan.errorKind}`);
+}
+
+function writeCharacterChatImportPlan(importPlan) {
+    for (const write of importPlan.writes) {
+        if (write.kind === 'copy-upload') {
+            fs.copyFileSync(write.uploadPath, write.filePath);
+            continue;
+        }
+
+        writeFileAtomicSync(write.filePath, write.contents, 'utf8');
     }
 }
 
@@ -552,69 +583,36 @@ router.post('/import', validateAvatarUrlMiddleware, function (request, response)
 
         if (format === 'json') {
             fs.unlinkSync(pathToUpload);
-            const jsonData = JSON.parse(data);
-
-            /** @type {function(string, string, object): string|string[]} */
-            const importFunc = getJsonChatImportConverter(jsonData);
-
-            if (!importFunc) { // Unknown format
-                console.error('Incorrect chat format .json');
-                return response.send({ error: true });
-            }
-
-            const handleChat = (chat) => {
-                const fileName = `${characterName} - ${humanizedDateTime()} imported.jsonl`;
-                const filePath = path.join(directoryPath, fileName);
-                fileNames.push(fileName);
-                writeFileAtomicSync(filePath, chat, 'utf8');
-            };
-
-            const chat = importFunc(userName, characterName, jsonData);
-
-            if (Array.isArray(chat)) {
-                chat.forEach(handleChat);
-            } else {
-                handleChat(chat);
-            }
-
-            markCharacterChatStatsDirtySafe(request.user.directories, request.body.avatar_url, 'chat import');
-            return response.send({ res: true, fileNames });
         }
 
-        if (format === 'jsonl') {
-            let lines = data.split('\n');
-            const header = lines[0];
+        const importPlan = createCharacterChatImportPlan({
+            format,
+            data,
+            directories: request.user.directories,
+            avatarUrl,
+            characterName,
+            userName,
+            timestampLabel: humanizedDateTime,
+            uploadPath: pathToUpload,
+        });
 
-            const jsonData = JSON.parse(header);
+        if (!importPlan.ok) {
+            warnAboutChatImportFailure(importPlan);
+            return response.send({ error: true });
+        }
 
-            if (!(jsonData.user_name !== undefined || jsonData.name !== undefined || jsonData.chat_metadata !== undefined)) {
-                console.error('Incorrect chat format .jsonl');
-                return response.send({ error: true });
-            }
+        writeCharacterChatImportPlan(importPlan);
+        fileNames.push(...importPlan.fileNames);
 
-            // Do a tiny bit of work to import Chub Chat data
-            // Processing the entire file is so fast that it's not worth checking if it's a Chub chat first
-            let flattenedChat = data;
-            try {
-                // flattening is unlikely to break, but it's not worth failing to
-                // import normal chats in an attempt to import a Chub chat
-                flattenedChat = flattenChubChat(userName, characterName, lines);
-            } catch (error) {
-                console.warn('Failed to flatten Chub Chat data: ', error);
-            }
-
-            const fileName = `${characterName} - ${humanizedDateTime()} imported.jsonl`;
-            const filePath = path.join(directoryPath, fileName);
-            fileNames.push(fileName);
-            if (flattenedChat !== data) {
-                writeFileAtomicSync(filePath, flattenedChat, 'utf8');
-            } else {
-                fs.copyFileSync(pathToUpload, filePath);
-            }
+        if (importPlan.uploadCleanup === CHAT_IMPORT_UPLOAD_CLEANUP.AFTER_SUCCESS) {
             fs.unlinkSync(pathToUpload);
-            markCharacterChatStatsDirtySafe(request.user.directories, request.body.avatar_url, 'chat import');
-            response.send({ res: true, fileNames });
         }
+
+        if (importPlan.shouldMarkChatStatsDirty) {
+            markCharacterChatStatsDirtySafe(request.user.directories, request.body.avatar_url, 'chat import');
+        }
+
+        return response.send({ res: true, fileNames });
     } catch (error) {
         console.error(error);
         return response.send({ error: true });
