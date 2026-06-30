@@ -1,5 +1,36 @@
 import { mountReactWorkspacePanel } from './workspace-panels-react-bridge.js';
 
+export function decideWorkspacePanelHostLifecycle({
+    kind,
+    features,
+    hasContainer,
+    lockedPanel = '',
+}) {
+    const featureEnabled = Boolean(features?.reactPanels?.[kind]);
+
+    if (!featureEnabled) {
+        return {
+            fallbackReason: 'feature-disabled',
+            preserveLockedPanel: Boolean(lockedPanel),
+            shouldMount: false,
+        };
+    }
+
+    if (!hasContainer) {
+        return {
+            fallbackReason: 'missing-container',
+            preserveLockedPanel: Boolean(lockedPanel),
+            shouldMount: false,
+        };
+    }
+
+    return {
+        fallbackReason: '',
+        preserveLockedPanel: Boolean(lockedPanel),
+        shouldMount: true,
+    };
+}
+
 export async function mountWorkspacePanelHost({
     kind,
     features,
@@ -16,9 +47,20 @@ export async function mountWorkspacePanelHost({
         return false;
     }
 
+    const container = ensureContainer();
+    const decision = decideWorkspacePanelHostLifecycle({
+        kind,
+        features,
+        hasContainer: Boolean(container),
+    });
+
+    if (!decision.shouldMount) {
+        return false;
+    }
+
     return mountReactWorkspacePanel({
         kind,
-        container: ensureContainer(),
+        container,
         state: getState(stateOverrides),
         bridge,
         features,

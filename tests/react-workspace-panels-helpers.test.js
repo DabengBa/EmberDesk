@@ -13,6 +13,7 @@ import {
 import {
     createWorkspacePanelActionBridge,
     createWorkspacePanelStateChangeHandler,
+    decideWorkspacePanelHostLifecycle,
     mountWorkspacePanelHost,
 } from '../public/scripts/workspace-panel-host-controller.js';
 
@@ -178,6 +179,89 @@ describe('React workspace panels bridge helpers', () => {
         expect(onDisabled).toHaveBeenCalledTimes(1);
         expect(ensureContainer).not.toHaveBeenCalled();
         expect(getState).not.toHaveBeenCalled();
+    });
+
+    test('keeps workspace panel host fallback conservative when the container is missing', async () => {
+        const ensureContainer = jest.fn(() => null);
+        const getState = jest.fn(() => ({ ready: true }));
+
+        await expect(mountWorkspacePanelHost({
+            kind: 'worldInfo',
+            ensureContainer,
+            getState,
+            features: { reactPanels: { worldInfo: true } },
+        })).resolves.toBe(false);
+
+        expect(ensureContainer).toHaveBeenCalledTimes(1);
+        expect(getState).not.toHaveBeenCalled();
+    });
+
+    test('decides workspace panel host lifecycle from plain state without touching DOM', () => {
+        expect(decideWorkspacePanelHostLifecycle({
+            kind: 'worldInfo',
+            features: { reactPanels: { worldInfo: true } },
+            hasContainer: true,
+            lockedPanel: 'characterLibrary',
+        })).toEqual({
+            fallbackReason: '',
+            preserveLockedPanel: true,
+            shouldMount: true,
+        });
+
+        expect(decideWorkspacePanelHostLifecycle({
+            kind: 'worldInfo',
+            features: { reactPanels: { worldInfo: false } },
+            hasContainer: true,
+            lockedPanel: 'characterLibrary',
+        })).toEqual({
+            fallbackReason: 'feature-disabled',
+            preserveLockedPanel: true,
+            shouldMount: false,
+        });
+
+        expect(decideWorkspacePanelHostLifecycle({
+            kind: 'worldInfo',
+            features: { reactPanels: { worldInfo: true } },
+            hasContainer: false,
+            lockedPanel: '',
+        })).toEqual({
+            fallbackReason: 'missing-container',
+            preserveLockedPanel: false,
+            shouldMount: false,
+        });
+
+        expect(decideWorkspacePanelHostLifecycle({
+            kind: 'worldInfo',
+            features: { reactPanels: { worldInfo: true } },
+            hasContainer: false,
+            lockedPanel: 'characterLibrary',
+        })).toEqual({
+            fallbackReason: 'missing-container',
+            preserveLockedPanel: true,
+            shouldMount: false,
+        });
+
+        expect(decideWorkspacePanelHostLifecycle({
+            kind: 'worldInfo',
+            features: { reactPanels: { worldInfo: true } },
+            hasContainer: true,
+            lockedPanel: '',
+        })).toEqual({
+            fallbackReason: '',
+            preserveLockedPanel: false,
+            shouldMount: true,
+        });
+
+        expect(decideWorkspacePanelHostLifecycle({
+            kind: 'unknownPanel',
+            features: { reactPanels: { worldInfo: true } },
+            hasContainer: true,
+            lockedPanel: 'characterLibrary',
+        })).toEqual({
+            fallbackReason: 'feature-disabled',
+            preserveLockedPanel: true,
+            shouldMount: false,
+        });
     });
 
     test('remounts shared workspace panel hosts after action settle based on action result', async () => {
