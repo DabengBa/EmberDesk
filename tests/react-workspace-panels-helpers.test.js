@@ -178,7 +178,7 @@ describe('React workspace panels bridge helpers', () => {
             },
             onError,
         })).resolves.toEqual(createWorkspacePanelFallbackResult('worldInfo', WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.BUNDLE_LOAD_FAILED));
-        expect(onError).toHaveBeenCalledWith(expect.any(Error), 'worldInfo');
+        expect(onError).toHaveBeenCalledWith(expect.any(Error), 'worldInfo', WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.BUNDLE_LOAD_FAILED);
 
         await expect(mountReactWorkspacePanel({
             kind: 'backgroundLibrary',
@@ -191,6 +191,7 @@ describe('React workspace panels bridge helpers', () => {
             }),
             onError,
         })).resolves.toEqual(createWorkspacePanelFallbackResult('backgroundLibrary', WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.MOUNT_FAILED));
+        expect(onError).toHaveBeenCalledWith(expect.any(Error), 'backgroundLibrary', WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.MOUNT_FAILED);
 
         await expect(mountReactWorkspacePanel({
             kind: 'worldInfo',

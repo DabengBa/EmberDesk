@@ -46,7 +46,10 @@ export async function mountReactWorkspacePanel({
     bridge,
     features,
     loadModule = loadWorkspacePanelsModule,
-    onError = (error, panelKind) => console.warn(`React ${panelKind} workspace panel failed to load. Falling back to legacy panel.`, error),
+    onError = (error, panelKind, reason) => {
+        const action = reason === WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.MOUNT_FAILED ? 'mount' : 'load';
+        console.warn(`React ${panelKind} workspace panel failed to ${action}. Falling back to legacy panel.`, error);
+    },
 }) {
     if (!isReactWorkspacePanelEnabled(kind, features)) {
         return createWorkspacePanelFallbackResult(kind, WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.FEATURE_DISABLED);
@@ -60,7 +63,7 @@ export async function mountReactWorkspacePanel({
     try {
         panelModule = await loadModule();
     } catch (error) {
-        onError(error, kind);
+        onError(error, kind, WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.BUNDLE_LOAD_FAILED);
         return createWorkspacePanelFallbackResult(kind, WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.BUNDLE_LOAD_FAILED);
     }
 
@@ -68,7 +71,7 @@ export async function mountReactWorkspacePanel({
         panelModule.mountWorkspacePanel(kind, container, { state, bridge });
         return createWorkspacePanelMountedResult(kind);
     } catch (error) {
-        onError(error, kind);
+        onError(error, kind, WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.MOUNT_FAILED);
         return createWorkspacePanelFallbackResult(kind, WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.MOUNT_FAILED);
     }
 }
