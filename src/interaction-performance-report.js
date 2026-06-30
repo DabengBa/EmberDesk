@@ -139,6 +139,74 @@ export function buildVariantComparison(onSamples, offSamples) {
     };
 }
 
+function sanitizeCharacterIndexStatus(status) {
+    if (!status || typeof status !== 'object') {
+        return null;
+    }
+
+    const disabledReason = status.disabledReason ?? null;
+    return {
+        mode: status.mode ?? null,
+        supported: Boolean(status.supported),
+        open: Boolean(status.open),
+        indexedPathObserved: Boolean(status.indexedPathObserved),
+        schemaVersion: typeof status.schemaVersion === 'number' ? status.schemaVersion : null,
+        resetCount: typeof status.resetCount === 'number' ? status.resetCount : 0,
+        disabledReason,
+        fallbackReason: disabledReason ?? (status.supported ? null : 'filesystem_fallback'),
+    };
+}
+
+export function buildDerivedCacheObservabilitySummary(scenarios) {
+    const summary = {};
+
+    for (const scenario of scenarios ?? []) {
+        for (const pair of scenario?.pairs ?? []) {
+            for (const variant of pair?.variants ?? []) {
+                const sanitizedStatus = sanitizeCharacterIndexStatus(variant.characterIndex);
+                if (!sanitizedStatus) {
+                    continue;
+                }
+
+                const variantName = variant.variant ?? 'unknown';
+                summary[variantName] ??= [];
+                summary[variantName].push({
+                    scenario: scenario.scenario ?? null,
+                    ...sanitizedStatus,
+                });
+            }
+        }
+    }
+
+    return summary;
+}
+
+export function renderDerivedCacheObservabilityMarkdown(summary) {
+    const lines = ['## Derived Cache Observability', ''];
+    const variantNames = Object.keys(summary ?? {}).sort();
+
+    if (variantNames.length === 0) {
+        return [...lines, '- No character-index sidecar status was recorded.'].join('\n');
+    }
+
+    for (const variantName of variantNames) {
+        for (const status of summary[variantName] ?? []) {
+            const details = [
+                `mode=${status.mode ?? 'unknown'}`,
+                `supported=${status.supported}`,
+                `open=${status.open}`,
+                `indexedPathObserved=${status.indexedPathObserved}`,
+                `schema=${status.schemaVersion ?? 'n/a'}`,
+                `resets=${status.resetCount ?? 0}`,
+                `fallback=${status.fallbackReason ?? 'none'}`,
+            ].join(', ');
+            lines.push(`- ${variantName} / ${status.scenario ?? 'unknown'}: ${details}`);
+        }
+    }
+
+    return lines.join('\n');
+}
+
 function calculateDelta(onValue, offValue) {
     if (typeof onValue !== 'number' || typeof offValue !== 'number') {
         return null;

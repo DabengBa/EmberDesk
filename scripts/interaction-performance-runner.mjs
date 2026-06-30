@@ -10,12 +10,15 @@ import { chromium } from '../tests/node_modules/playwright/index.mjs';
 
 import { DEFAULT_USER, SETTINGS_FILE } from '../src/constants.js';
 import {
+    buildDerivedCacheObservabilitySummary,
     buildVariantComparison,
     compareScenarioPayloads,
+    renderDerivedCacheObservabilityMarkdown,
     summarizeScenarioPayload,
     validateInteractionPath,
 } from '../src/interaction-performance-report.js';
 import { write as writeCharacterCardPngData } from '../src/character-card-parser.js';
+import { getCharacterIndexStatus } from '../src/endpoints/character-index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -133,6 +136,7 @@ const report = {
     measuredRepeats,
     pairCount,
     scenarios: scenarioResults,
+    derivedCache: buildDerivedCacheObservabilitySummary(scenarioResults),
     warnings: scenarioResults.flatMap(result => result.warnings ?? []),
     runtime: {
         node: process.versions.node,
@@ -337,6 +341,7 @@ async function runScenarioPairs({ runDir, baselineRoot, scenarioName, measuredRe
                     warnings: variant.warnings,
                     sampleCount: variant.samples.length,
                     payloadPath: variant.payloadPath,
+                    characterIndex: variant.characterIndex,
                 })),
             })),
         },
@@ -346,6 +351,7 @@ async function runScenarioPairs({ runDir, baselineRoot, scenarioName, measuredRe
 async function runScenarioVariant({ scenarioName, variant, variantRoot, port, measuredRepeats, screenshotRoot }) {
     const dataRoot = variantRoot;
     const configPath = path.join(variantRoot, 'config.yaml');
+    const userRoot = path.join(variantRoot, DEFAULT_USER.handle);
     const url = new URL(`http://127.0.0.1:${port}/perf-harness.html`).toString();
     const targetAvatar = chooseTargetAvatar(variantRoot);
     const env = {
@@ -372,9 +378,49 @@ async function runScenarioVariant({ scenarioName, variant, variantRoot, port, me
             measuredRepeats,
             targetAvatar,
         });
-        return result;
+        return {
+            ...result,
+            characterIndex: collectCharacterIndexStatus({
+                userRoot,
+                variant,
+                samples: result.samples,
+            }),
+        };
     } finally {
         await stopServer(server);
+    }
+}
+
+function collectCharacterIndexStatus({ userRoot, variant, samples }) {
+    const previousMode = process.env.EMBERDESK_CHARACTER_INDEX_MODE;
+    process.env.EMBERDESK_CHARACTER_INDEX_MODE = variant === 'sqlite_on' ? 'force_on' : 'force_off';
+
+    try {
+        const observedIndexedPath = samples.some(sample => String(sample.path ?? '').includes(':indexed'));
+        const sampledStatus = samples.find(sample => sample.characterIndexStatus)?.characterIndexStatus ?? null;
+        if (sampledStatus) {
+            return {
+                ...sampledStatus,
+                indexedPathObserved: observedIndexedPath,
+            };
+        }
+
+        const status = getCharacterIndexStatus(userRoot);
+        return {
+            mode: status.mode,
+            supported: status.supported,
+            open: status.open,
+            schemaVersion: status.schemaVersion,
+            resetCount: status.resetCount,
+            disabledReason: status.disabledReason,
+            indexedPathObserved: observedIndexedPath,
+        };
+    } finally {
+        if (previousMode === undefined) {
+            delete process.env.EMBERDESK_CHARACTER_INDEX_MODE;
+        } else {
+            process.env.EMBERDESK_CHARACTER_INDEX_MODE = previousMode;
+        }
     }
 }
 
@@ -624,6 +670,7 @@ async function invokeScenarioRequest(page, csrfToken, scenarioName, avatar) {
                 browserMs,
                 path: response.headers.get('X-EmberDesk-Interaction-Path'),
                 serverTiming: response.headers.get('Server-Timing'),
+                characterIndexStatus: response.headers.get('X-EmberDesk-Character-Index-Status'),
                 payload,
             };
         }, { token: csrfToken });
@@ -650,6 +697,7 @@ async function invokeScenarioRequest(page, csrfToken, scenarioName, avatar) {
                 browserMs,
                 path: response.headers.get('X-EmberDesk-Interaction-Path'),
                 serverTiming: response.headers.get('Server-Timing'),
+                characterIndexStatus: response.headers.get('X-EmberDesk-Character-Index-Status'),
                 payload,
             };
         }, { token: csrfToken, targetAvatar: avatar });
@@ -1416,6 +1464,7 @@ function normalizeSample(scenarioName, variant, sample, sampleIndex, sampleCount
         sampleIndex,
         sampleCount,
         path: sample.path ?? null,
+        characterIndexStatus: parseCharacterIndexStatus(sample.characterIndexStatus),
         timing: {
             browserMs: round(sample.browserMs),
             serverRouteMs: parseServerTiming(sample.serverTiming),
@@ -1440,6 +1489,30 @@ function normalizeSample(scenarioName, variant, sample, sampleIndex, sampleCount
         },
         payloadSummary: summarizeScenarioPayload(scenarioName, sample.payload),
     };
+}
+
+function parseCharacterIndexStatus(headerValue) {
+    if (typeof headerValue !== 'string' || headerValue.length === 0) {
+        return null;
+    }
+
+    try {
+        const status = JSON.parse(headerValue);
+        if (!status || typeof status !== 'object') {
+            return null;
+        }
+
+        return {
+            mode: status.mode ?? null,
+            supported: Boolean(status.supported),
+            open: Boolean(status.open),
+            schemaVersion: typeof status.schemaVersion === 'number' ? status.schemaVersion : null,
+            resetCount: typeof status.resetCount === 'number' ? status.resetCount : 0,
+            disabledReason: status.disabledReason ?? null,
+        };
+    } catch {
+        return null;
+    }
 }
 
 function parseServerTiming(headerValue) {
@@ -1699,6 +1772,8 @@ function renderMarkdownReport(report) {
         `- Measured repeats: ${report.measuredRepeats}`,
         `- JSON: ${reportPath}`,
         `- Samples: ${samplesPath}`,
+        '',
+        renderDerivedCacheObservabilityMarkdown(report.derivedCache),
         '',
         scenarioLines,
     ].join('\n');

@@ -1254,6 +1254,8 @@ describe('character index', () => {
         expect(response.statusCode).toBe(200);
         expect(response.headers['x-emberdesk-interaction-path']).toBeDefined();
         expect(response.headers['server-timing']).toContain('route;dur=');
+        expect(response.headers['x-emberdesk-character-index-status']).toBeDefined();
+        expect(response.headers['x-emberdesk-character-index-status']).not.toContain('dbPath');
     });
 
     test('serves a richer shallow summary from /api/characters/list without full-only fields', async () => {
@@ -1324,5 +1326,7 @@ describe('character index', () => {
         expect(response.statusCode).toBe(200);
         expect(response.headers['x-emberdesk-interaction-path']).toBeDefined();
         expect(response.headers['server-timing']).toContain('route;dur=');
+        expect(response.headers['x-emberdesk-character-index-status']).toBeDefined();
+        expect(response.headers['x-emberdesk-character-index-status']).not.toContain('dbPath');
     });
 });

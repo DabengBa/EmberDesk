@@ -43,6 +43,7 @@ import {
     deleteCharacterIndexEntry,
     findCharactersBoundToWorld,
     getFreshIndexedCharacterFullPayload,
+    getCharacterIndexStatus,
     isCharacterIndexSupported,
     listIndexedCharacterPayloads,
     upsertCharacterIndexEntry,
@@ -64,7 +65,7 @@ function isInteractionPerfModeEnabled() {
     return process.env.EMBERDESK_INTERACTION_PERF_MODE === '1';
 }
 
-function applyInteractionPerfHeaders(response, pathName, startedAt) {
+function applyInteractionPerfHeaders(response, pathName, startedAt, directories = null) {
     if (!isInteractionPerfModeEnabled()) {
         return;
     }
@@ -72,6 +73,18 @@ function applyInteractionPerfHeaders(response, pathName, startedAt) {
     const durationMs = Math.max(0, performance.now() - startedAt);
     response.set('X-EmberDesk-Interaction-Path', pathName);
     response.set('Server-Timing', `route;dur=${durationMs.toFixed(1)}`);
+
+    if (directories?.root) {
+        const status = getCharacterIndexStatus(directories.root);
+        response.set('X-EmberDesk-Character-Index-Status', JSON.stringify({
+            mode: status.mode,
+            supported: status.supported,
+            open: status.open,
+            schemaVersion: status.schemaVersion,
+            resetCount: status.resetCount,
+            disabledReason: status.disabledReason,
+        }));
+    }
 }
 
 class DiskCache {
@@ -1768,12 +1781,12 @@ router.post('/all', async function (request, response) {
             dependencies: createCharacterReadDependencies(),
         });
 
-        applyInteractionPerfHeaders(response, payload.interactionPath, startedAt);
+        applyInteractionPerfHeaders(response, payload.interactionPath, startedAt, request.user.directories);
         return response.send(payload.result.data);
     } catch (err) {
         console.error(err);
         const isRangeError = err instanceof RangeError;
-        applyInteractionPerfHeaders(response, 'characters_all:error', startedAt);
+        applyInteractionPerfHeaders(response, 'characters_all:error', startedAt, request.user?.directories);
         response.status(500).send({ overflow: isRangeError, error: true });
     }
 });
@@ -1798,11 +1811,11 @@ router.post('/get', validateAvatarUrlMiddleware, async function (request, respon
             return response.sendStatus(404);
         }
 
-        applyInteractionPerfHeaders(response, payload.interactionPath, startedAt);
+        applyInteractionPerfHeaders(response, payload.interactionPath, startedAt, request.user.directories);
         return response.send(payload.result.data);
     } catch (err) {
         console.error(err);
-        applyInteractionPerfHeaders(response, 'characters_get:error', startedAt);
+        applyInteractionPerfHeaders(response, 'characters_get:error', startedAt, request.user?.directories);
         response.sendStatus(500);
     }
 });

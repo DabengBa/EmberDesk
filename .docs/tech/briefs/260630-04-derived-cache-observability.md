@@ -2,6 +2,7 @@
 created: 2026-06-30
 source: user
 confirmed: true
+last_updated: 2026-06-30
 ---
 
 # Derived Cache Observability Intent
@@ -20,10 +21,18 @@ EmberDesk 当前只把 SQLite 用作 character index derived sidecar，且 ADR-0
 
 - User expectation: 性能报告能说明本次跑的是 SQLite fast path、filesystem fallback、force_off、unsupported 还是 reset-threshold disabled，从而让性能结论可审计。
 - Recommended first slice: 将现有 character-index sidecar read-only status 纳入 `scripts/interaction-performance-runner.mjs` 输出和 `src/interaction-performance-report.js` 汇总。
-- Current status: spec drafted, awaiting approval.
+- Current status: delivered and ready for wrap-up.
 - Change history:
   - 2026-06-30: 记录用户要求的 5 个现代化 successor specs，并选择本切口的最小可交付边界。
   - 2026-06-30: `$grill-with-docs` 复核后确认无需 health endpoint / ORM / 新 sidecar；只复用 read-only status、interaction headers 和 performance artifact，并补充 Node `node:sqlite` 与 Server-Timing 官方证据。
+  - 2026-06-30: 交付 interaction performance artifact 的 derived cache observability：runner 在每个 sqlite_on/sqlite_off variant summary 中记录 sanitized character-index status，report JSON/Markdown 汇总 mode、supported/open、indexed-path observation、schema/reset 和 fallback reason，同时剥离 `dbPath` 与用户 data-root 路径。
+  - 2026-06-30: delivery review 确认 `open` 保持为服务端 sidecar runtime status，indexed route evidence 单独记录为 `indexedPathObserved`；新增状态只来自 `EMBERDESK_INTERACTION_PERF_MODE=1` 下的 perf-only header，不改变角色路由响应体或用户界面。
+
+## Implementation Traceability
+
+- Code path: `scripts/interaction-performance-runner.mjs` collects sanitized character-index status per scenario variant; `src/interaction-performance-report.js` builds the `derivedCache` JSON summary and Markdown section.
+- Proof path: `tests/interaction-performance-report.test.js` covers sqlite_on/sqlite_off/reset-threshold summaries, Markdown rendering, and path redaction; `tests/derived-cache-sqlite.test.js` and `tests/interaction-performance-index.test.js` continue proving force-off, unsupported fallback, reset threshold, and route contract behavior.
+- User-visible behavior: no intentional change to `/api/characters/all`, `/api/characters/get`, character-index schema, canonical file-backed storage, or user-facing UI. The only route-level addition is a perf-only diagnostic header under `EMBERDESK_INTERACTION_PERF_MODE=1`.
 
 ## Constraints
 
@@ -44,3 +53,4 @@ EmberDesk 当前只把 SQLite 用作 character index derived sidecar，且 ADR-0
 - `scripts/interaction-performance-runner.mjs`
 - `tests/derived-cache-sqlite.test.js`
 - `tests/interaction-performance-report.test.js`
+- `tests/interaction-performance-index.test.js`

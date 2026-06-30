@@ -2,7 +2,9 @@ import { describe, expect, test } from '@jest/globals';
 
 import {
     buildVariantComparison,
+    buildDerivedCacheObservabilitySummary,
     compareScenarioPayloads,
+    renderDerivedCacheObservabilityMarkdown,
     summarizeScenarioPayload,
     summarizeInteractionSamples,
     validateInteractionPath,
@@ -246,6 +248,178 @@ describe('interaction performance report helpers', () => {
             absoluteMs: -80,
             relativePct: -38.1,
         });
+    });
+
+    test('summarizes derived character-index status without leaking database paths', () => {
+        const summary = buildDerivedCacheObservabilitySummary([
+            {
+                scenario: 'characters_all_warm_repeat',
+                pairs: [{
+                    variants: [
+                        {
+                            variant: 'sqlite_on',
+                            characterIndex: {
+                                mode: 'force_on',
+                                supported: true,
+                                open: true,
+                                indexedPathObserved: true,
+                                schemaVersion: 3,
+                                resetCount: 0,
+                                disabledReason: null,
+                                dbPath: '/private/data/default-user/_cache/character-index.sqlite',
+                            },
+                        },
+                        {
+                            variant: 'sqlite_off',
+                            characterIndex: {
+                                mode: 'force_off',
+                                supported: false,
+                                open: false,
+                                indexedPathObserved: false,
+                                schemaVersion: 3,
+                                resetCount: 0,
+                                disabledReason: 'force_off',
+                                dbPath: '/private/data/default-user/_cache/character-index.sqlite',
+                            },
+                        },
+                    ],
+                }],
+            },
+            {
+                scenario: 'characters_get_warm_repeat',
+                pairs: [{
+                    variants: [
+                        {
+                            variant: 'sqlite_on',
+                            characterIndex: {
+                                mode: 'auto',
+                                supported: false,
+                                open: false,
+                                indexedPathObserved: false,
+                                schemaVersion: 3,
+                                resetCount: 2,
+                                disabledReason: 'reset_threshold_exceeded',
+                                dbPath: '/private/data/default-user/_cache/character-index.sqlite',
+                            },
+                        },
+                        {
+                            variant: 'sqlite_on_unsupported',
+                            characterIndex: {
+                                mode: 'auto',
+                                supported: false,
+                                open: false,
+                                indexedPathObserved: false,
+                                schemaVersion: 3,
+                                resetCount: 0,
+                                disabledReason: 'unsupported',
+                                dbPath: '/private/data/default-user/_cache/character-index.sqlite',
+                            },
+                        },
+                    ],
+                }],
+            },
+        ]);
+
+        expect(summary).toEqual({
+            sqlite_on: [
+                {
+                    scenario: 'characters_all_warm_repeat',
+                    mode: 'force_on',
+                    supported: true,
+                    open: true,
+                    indexedPathObserved: true,
+                    schemaVersion: 3,
+                    resetCount: 0,
+                    disabledReason: null,
+                    fallbackReason: null,
+                },
+                {
+                    scenario: 'characters_get_warm_repeat',
+                    mode: 'auto',
+                    supported: false,
+                    open: false,
+                    indexedPathObserved: false,
+                    schemaVersion: 3,
+                    resetCount: 2,
+                    disabledReason: 'reset_threshold_exceeded',
+                    fallbackReason: 'reset_threshold_exceeded',
+                },
+            ],
+            sqlite_on_unsupported: [
+                {
+                    scenario: 'characters_get_warm_repeat',
+                    mode: 'auto',
+                    supported: false,
+                    open: false,
+                    indexedPathObserved: false,
+                    schemaVersion: 3,
+                    resetCount: 0,
+                    disabledReason: 'unsupported',
+                    fallbackReason: 'unsupported',
+                },
+            ],
+            sqlite_off: [
+                {
+                    scenario: 'characters_all_warm_repeat',
+                    mode: 'force_off',
+                    supported: false,
+                    open: false,
+                    indexedPathObserved: false,
+                    schemaVersion: 3,
+                    resetCount: 0,
+                    disabledReason: 'force_off',
+                    fallbackReason: 'force_off',
+                },
+            ],
+        });
+        expect(JSON.stringify(summary)).not.toContain('/private/data');
+    });
+
+    test('renders derived character-index status in Markdown', () => {
+        const markdown = renderDerivedCacheObservabilityMarkdown({
+            sqlite_on: [
+                {
+                    scenario: 'characters_all_warm_repeat',
+                    mode: 'force_on',
+                    supported: true,
+                    open: true,
+                    indexedPathObserved: true,
+                    schemaVersion: 3,
+                    resetCount: 0,
+                    disabledReason: null,
+                    fallbackReason: null,
+                },
+                {
+                    scenario: 'characters_get_warm_repeat',
+                    mode: 'auto',
+                    supported: false,
+                    open: false,
+                    indexedPathObserved: false,
+                    schemaVersion: 3,
+                    resetCount: 2,
+                    disabledReason: 'reset_threshold_exceeded',
+                    fallbackReason: 'reset_threshold_exceeded',
+                },
+            ],
+            sqlite_off: [
+                {
+                    scenario: 'characters_all_warm_repeat',
+                    mode: 'force_off',
+                    supported: false,
+                    open: false,
+                    indexedPathObserved: false,
+                    schemaVersion: 3,
+                    resetCount: 0,
+                    disabledReason: 'force_off',
+                    fallbackReason: 'force_off',
+                },
+            ],
+        });
+
+        expect(markdown).toContain('## Derived Cache Observability');
+        expect(markdown).toContain('- sqlite_on / characters_all_warm_repeat: mode=force_on, supported=true, open=true, indexedPathObserved=true, schema=3, resets=0, fallback=none');
+        expect(markdown).toContain('- sqlite_on / characters_get_warm_repeat: mode=auto, supported=false, open=false, indexedPathObserved=false, schema=3, resets=2, fallback=reset_threshold_exceeded');
+        expect(markdown).toContain('- sqlite_off / characters_all_warm_repeat: mode=force_off, supported=false, open=false, indexedPathObserved=false, schema=3, resets=0, fallback=force_off');
     });
 
     test('compares character list payloads by semantic fields only', () => {
