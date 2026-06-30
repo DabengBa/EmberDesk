@@ -1,3 +1,8 @@
+import {
+    WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS,
+    createWorkspacePanelFallbackResult,
+    createWorkspacePanelMountedResult,
+} from './workspace-panel-mount-contract.js';
 import { mountReactWorkspacePanel } from './workspace-panels-react-bridge.js';
 
 export function decideWorkspacePanelHostLifecycle({
@@ -8,20 +13,14 @@ export function decideWorkspacePanelHostLifecycle({
     const featureEnabled = Boolean(features?.reactPanels?.[kind]);
 
     if (!featureEnabled) {
-        return {
-            shouldMount: false,
-        };
+        return createWorkspacePanelFallbackResult(kind, WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.FEATURE_DISABLED);
     }
 
     if (!hasContainer) {
-        return {
-            shouldMount: false,
-        };
+        return createWorkspacePanelFallbackResult(kind, WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.MISSING_CONTAINER);
     }
 
-    return {
-        shouldMount: true,
-    };
+    return createWorkspacePanelMountedResult(kind);
 }
 
 export async function mountWorkspacePanelHost({
@@ -37,7 +36,7 @@ export async function mountWorkspacePanelHost({
         if (typeof onDisabled === 'function') {
             onDisabled();
         }
-        return false;
+        return createWorkspacePanelFallbackResult(kind, WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.FEATURE_DISABLED);
     }
 
     const container = ensureContainer();
@@ -47,8 +46,8 @@ export async function mountWorkspacePanelHost({
         hasContainer: Boolean(container),
     });
 
-    if (!decision.shouldMount) {
-        return false;
+    if (!decision.mounted) {
+        return decision;
     }
 
     return mountReactWorkspacePanel({

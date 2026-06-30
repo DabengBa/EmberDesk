@@ -11,6 +11,12 @@ import {
     mountReactWorkspacePanel,
 } from '../public/scripts/workspace-panels-react-bridge.js';
 import {
+    WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS,
+    WORKSPACE_PANEL_MOUNT_STATUSES,
+    createWorkspacePanelFallbackResult,
+    createWorkspacePanelMountedResult,
+} from '../public/scripts/workspace-panel-mount-contract.js';
+import {
     createWorkspacePanelActionBridge,
     createWorkspacePanelStateChangeHandler,
     decideWorkspacePanelHostLifecycle,
@@ -56,6 +62,30 @@ describe('React workspace panels bridge helpers', () => {
         expect(isReactWorkspacePanelEnabled('mainChatMessageList', features)).toBe(true);
         expect(isReactWorkspacePanelEnabled('backgroundLibrary', features)).toBe(false);
         expect(isReactWorkspacePanelEnabled('extensionsHost', features)).toBe(false);
+    });
+
+    test('keeps internal workspace panel mount result constants and helpers aligned', () => {
+        expect(WORKSPACE_PANEL_MOUNT_STATUSES).toEqual({
+            FALLBACK: 'fallback',
+            MOUNTED: 'mounted',
+        });
+        expect(WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS).toEqual({
+            BUNDLE_LOAD_FAILED: 'bundle-load-failed',
+            FEATURE_DISABLED: 'feature-disabled',
+            MISSING_CONTAINER: 'missing-container',
+            MOUNT_FAILED: 'mount-failed',
+        });
+        expect(createWorkspacePanelMountedResult('worldInfo')).toEqual({
+            kind: 'worldInfo',
+            mounted: true,
+            status: 'mounted',
+        });
+        expect(createWorkspacePanelFallbackResult('worldInfo', WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.MISSING_CONTAINER)).toEqual({
+            kind: 'worldInfo',
+            mounted: false,
+            reason: 'missing-container',
+            status: 'fallback',
+        });
     });
 
     test('ships a main-chat message-list panel contract through the shared workspace panel asset', () => {
@@ -118,7 +148,7 @@ describe('React workspace panels bridge helpers', () => {
         await expect(failingLoader()).resolves.toBe(importedModule);
     });
 
-    test('mounts enabled panels and returns false for fallback when disabled, missing, or failed', async () => {
+    test('mounts enabled panels and returns structured results for fallback and success', async () => {
         const container = { nodeType: 1 };
         const panelModule = { mountWorkspacePanel: jest.fn() };
         const onError = jest.fn();
@@ -129,7 +159,7 @@ describe('React workspace panels bridge helpers', () => {
             features: { reactPanels: { worldInfo: false } },
             loadModule: async () => panelModule,
             onError,
-        })).resolves.toBe(false);
+        })).resolves.toEqual(createWorkspacePanelFallbackResult('worldInfo', WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.FEATURE_DISABLED));
 
         await expect(mountReactWorkspacePanel({
             kind: 'worldInfo',
@@ -137,7 +167,7 @@ describe('React workspace panels bridge helpers', () => {
             features: { reactPanels: { worldInfo: true } },
             loadModule: async () => panelModule,
             onError,
-        })).resolves.toBe(false);
+        })).resolves.toEqual(createWorkspacePanelFallbackResult('worldInfo', WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.MISSING_CONTAINER));
 
         await expect(mountReactWorkspacePanel({
             kind: 'worldInfo',
@@ -147,8 +177,20 @@ describe('React workspace panels bridge helpers', () => {
                 throw new Error('chunk missing');
             },
             onError,
-        })).resolves.toBe(false);
+        })).resolves.toEqual(createWorkspacePanelFallbackResult('worldInfo', WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.BUNDLE_LOAD_FAILED));
         expect(onError).toHaveBeenCalledWith(expect.any(Error), 'worldInfo');
+
+        await expect(mountReactWorkspacePanel({
+            kind: 'backgroundLibrary',
+            container,
+            features: { reactPanels: { backgroundLibrary: true } },
+            loadModule: async () => ({
+                mountWorkspacePanel() {
+                    throw new Error('mount exploded');
+                },
+            }),
+            onError,
+        })).resolves.toEqual(createWorkspacePanelFallbackResult('backgroundLibrary', WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.MOUNT_FAILED));
 
         await expect(mountReactWorkspacePanel({
             kind: 'worldInfo',
@@ -157,7 +199,7 @@ describe('React workspace panels bridge helpers', () => {
             features: { reactPanels: { worldInfo: true } },
             loadModule: async () => panelModule,
             onError,
-        })).resolves.toBe(true);
+        })).resolves.toEqual(createWorkspacePanelMountedResult('worldInfo'));
         expect(panelModule.mountWorkspacePanel).toHaveBeenCalledWith('worldInfo', container, expect.objectContaining({ state: { selectorsSeparated: true } }));
     });
 
@@ -174,7 +216,7 @@ describe('React workspace panels bridge helpers', () => {
             bridge,
             features: { reactPanels: { worldInfo: false } },
             onDisabled,
-        })).resolves.toBe(false);
+        })).resolves.toEqual(createWorkspacePanelFallbackResult('worldInfo', WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.FEATURE_DISABLED));
 
         expect(onDisabled).toHaveBeenCalledTimes(1);
         expect(ensureContainer).not.toHaveBeenCalled();
@@ -190,7 +232,7 @@ describe('React workspace panels bridge helpers', () => {
             ensureContainer,
             getState,
             features: { reactPanels: { worldInfo: true } },
-        })).resolves.toBe(false);
+        })).resolves.toEqual(createWorkspacePanelFallbackResult('worldInfo', WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.MISSING_CONTAINER));
 
         expect(ensureContainer).toHaveBeenCalledTimes(1);
         expect(getState).not.toHaveBeenCalled();
@@ -201,41 +243,31 @@ describe('React workspace panels bridge helpers', () => {
             kind: 'worldInfo',
             features: { reactPanels: { worldInfo: true } },
             hasContainer: true,
-        })).toEqual({
-            shouldMount: true,
-        });
+        })).toEqual(createWorkspacePanelMountedResult('worldInfo'));
 
         expect(decideWorkspacePanelHostLifecycle({
             kind: 'worldInfo',
             features: { reactPanels: { worldInfo: false } },
             hasContainer: true,
-        })).toEqual({
-            shouldMount: false,
-        });
+        })).toEqual(createWorkspacePanelFallbackResult('worldInfo', WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.FEATURE_DISABLED));
 
         expect(decideWorkspacePanelHostLifecycle({
             kind: 'worldInfo',
             features: { reactPanels: { worldInfo: true } },
             hasContainer: false,
-        })).toEqual({
-            shouldMount: false,
-        });
+        })).toEqual(createWorkspacePanelFallbackResult('worldInfo', WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.MISSING_CONTAINER));
 
         expect(decideWorkspacePanelHostLifecycle({
             kind: 'worldInfo',
             features: { reactPanels: { worldInfo: true } },
             hasContainer: true,
-        })).toEqual({
-            shouldMount: true,
-        });
+        })).toEqual(createWorkspacePanelMountedResult('worldInfo'));
 
         expect(decideWorkspacePanelHostLifecycle({
             kind: 'unknownPanel',
             features: { reactPanels: { worldInfo: true } },
             hasContainer: true,
-        })).toEqual({
-            shouldMount: false,
-        });
+        })).toEqual(createWorkspacePanelFallbackResult('unknownPanel', WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.FEATURE_DISABLED));
     });
 
     test('remounts shared workspace panel hosts after action settle based on action result', async () => {
