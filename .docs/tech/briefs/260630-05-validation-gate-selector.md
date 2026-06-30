@@ -2,6 +2,7 @@
 created: 2026-06-30
 source: user
 confirmed: true
+last_updated: 2026-06-30
 ---
 
 # Validation Gate Selector Intent
@@ -20,10 +21,18 @@ EmberDesk 已有大量 focused validation gates，但选择命令仍依赖开发
 
 - User expectation: 未来实现 agent 能根据触碰面快速选择最低验证命令，并知道何时必须追加 `bun run test:compat`、`docs:check` 或 Playwright。
 - Recommended first slice: 新增轻量 validation gate selector 文档/脚本，复用现有 package scripts 和 tech docs，不引入新测试框架。
-- Current status: spec drafted, awaiting approval.
+- Current status: delivered and ready for wrap-up.
 - Change history:
   - 2026-06-30: 记录用户要求的 5 个现代化 successor specs，并选择本切口的最小可交付边界。
   - 2026-06-30: `$grill-with-docs` 复核后确认 selector 必须 advisory-only，不自动运行、不替换 Jest/Playwright/docs compiler，也不把 focused Jest gates 改成 Bun test。
+  - 2026-06-30: 实现只读 validation gate selector：`src/validation-gate-selector.js` 维护 touched-surface 到 focused command 的 advisory mapping，`scripts/validation-gate-selector.mjs` 提供 CLI 输出，测试覆盖 dedupe、source references、CLI 和不推荐 `bun test` 的边界。
+  - 2026-06-30: final review 收窄宽泛 surface-name 匹配，避免 `vite.config.js`、`tests/playwright.config.js` 等前端构建配置误触发 startup required gate；`default/config.yaml` 因同时承载 React panel flags 和默认启动配置，仍保留 React panel + startup/config 双 gate 建议。
+
+## Implementation Traceability
+
+- Code path: `src/validation-gate-selector.js`, `scripts/validation-gate-selector.mjs`.
+- Proof path: `tests/validation-gate-selector.test.js`.
+- User-visible behavior: none; this is a developer workflow helper and does not add UI, API, package script, CI workflow, or release gate.
 
 ## Constraints
 
@@ -42,3 +51,6 @@ EmberDesk 已有大量 focused validation gates，但选择命令仍依赖开发
 - `package.json`
 - `tests/helpers/frontend-structure-contract.js`
 - `.docs/db/scripts/doc-compiler.js`
+- `src/validation-gate-selector.js`
+- `scripts/validation-gate-selector.mjs`
+- `tests/validation-gate-selector.test.js`
