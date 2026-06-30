@@ -117,6 +117,14 @@ describe('validation gate selector', () => {
         expect(formatted).toContain('final diff review may add or remove validation');
     });
 
+    test('formats an empty advisory result defensively', () => {
+        const formatted = formatValidationGateSelection();
+
+        expect(formatted).toContain('Validation Gate Selector (advisory-only)');
+        expect(formatted).toContain('No focused gates matched');
+        expect(formatted).toContain('final diff review may add or remove validation');
+    });
+
     test('CLI accepts path arguments and prints advisory gates without mutating files', () => {
         const output = execFileSync('node', [
             path.join(repoRoot, 'scripts/validation-gate-selector.mjs'),

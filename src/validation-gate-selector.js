@@ -222,6 +222,7 @@ export function selectValidationGates(inputs) {
  * @param {ReturnType<typeof selectValidationGates>} selection
  */
 export function formatValidationGateSelection(selection) {
+    const notes = selection?.notes ?? [ADVISORY_NOTE];
     const lines = [
         'Validation Gate Selector (advisory-only)',
         '',
@@ -240,7 +241,7 @@ export function formatValidationGateSelection(selection) {
         }
     }
 
-    lines.push('', ...selection.notes.map(note => `Note: ${note}`));
+    lines.push('', ...notes.map(note => `Note: ${note}`));
     return `${lines.join('\n')}\n`;
 }
 
