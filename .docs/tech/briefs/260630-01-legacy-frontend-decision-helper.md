@@ -20,14 +20,14 @@ EmberDesk 已冻结 jQuery workspace shell 作为 `/` 的长期 facade。`public
 ### Domain: locked workspace drawer decision helper
 
 - User expectation: 降低 `public/script.js` 中工作区抽屉/锁定面板状态决策的复杂度，让后续修复能先验证状态规则，再触碰 DOM。
-- Recommended first slice: 抽出一个纯 helper，描述锁定 Character Management 与 World Info/Background/Extensions/main-chat panel 共存时是否保留、切换或跳过重挂载。
+- Recommended first slice: 抽出一个纯 helper，先覆盖 guarded React workspace panel host 的 feature flag 与 container 挂载/回退判断；锁定面板共存语义保持 legacy shell 原状，不在本切片重新建模。
 - Current status: delivered and archived.
 - Change history:
   - 2026-06-30: 记录用户要求的 5 个现代化 successor specs，并选择本切口的最小可交付边界。
   - 2026-06-30: `$grill-with-docs` 复核后收紧为 pure function only；不新增 UI、React owner、配置或 workspace shell 迁移，并把 `public/script.js` 长期 facade 作为 Elephant 风险写入 spec。
 - Implementation traceability:
-  - Code path: `public/scripts/workspace-panel-host-controller.js` now exports `decideWorkspacePanelHostLifecycle(...)` for plain-data host lifecycle decisions and routes enabled host mounts through it without changing legacy fallback behavior.
-  - Proof path: `tests/react-workspace-panels-helpers.test.js` covers enabled, disabled, unknown, locked, unlocked, missing-container, and no-remount outcomes; `tests/third-party-extension-compatibility.test.js` remains the protected-surface gate.
+  - Code path: `public/scripts/workspace-panel-host-controller.js` now exports `decideWorkspacePanelHostLifecycle(...)` for plain-data host mount decisions and routes enabled host mounts through it without changing legacy fallback behavior.
+  - Proof path: `tests/react-workspace-panels-helpers.test.js` covers enabled, disabled, unknown, missing-container, and no-remount outcomes; `tests/third-party-extension-compatibility.test.js` remains the protected-surface gate.
   - Delivery status: delivered on 2026-06-30; no user-visible DOM, wording, panel entry, lock behavior, extension mount, slash-command, regex, message-rendering, or compatibility export changes.
 
 ## Constraints

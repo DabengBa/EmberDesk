@@ -196,15 +196,12 @@ describe('React workspace panels bridge helpers', () => {
         expect(getState).not.toHaveBeenCalled();
     });
 
-    test('decides workspace panel host lifecycle from plain state without touching DOM', () => {
+    test('decides workspace panel host mounting from plain state without touching DOM', () => {
         expect(decideWorkspacePanelHostLifecycle({
             kind: 'worldInfo',
             features: { reactPanels: { worldInfo: true } },
             hasContainer: true,
-            lockedPanel: 'characterLibrary',
         })).toEqual({
-            fallbackReason: '',
-            preserveLockedPanel: true,
             shouldMount: true,
         });
 
@@ -212,10 +209,7 @@ describe('React workspace panels bridge helpers', () => {
             kind: 'worldInfo',
             features: { reactPanels: { worldInfo: false } },
             hasContainer: true,
-            lockedPanel: 'characterLibrary',
         })).toEqual({
-            fallbackReason: 'feature-disabled',
-            preserveLockedPanel: true,
             shouldMount: false,
         });
 
@@ -223,21 +217,7 @@ describe('React workspace panels bridge helpers', () => {
             kind: 'worldInfo',
             features: { reactPanels: { worldInfo: true } },
             hasContainer: false,
-            lockedPanel: '',
         })).toEqual({
-            fallbackReason: 'missing-container',
-            preserveLockedPanel: false,
-            shouldMount: false,
-        });
-
-        expect(decideWorkspacePanelHostLifecycle({
-            kind: 'worldInfo',
-            features: { reactPanels: { worldInfo: true } },
-            hasContainer: false,
-            lockedPanel: 'characterLibrary',
-        })).toEqual({
-            fallbackReason: 'missing-container',
-            preserveLockedPanel: true,
             shouldMount: false,
         });
 
@@ -245,10 +225,7 @@ describe('React workspace panels bridge helpers', () => {
             kind: 'worldInfo',
             features: { reactPanels: { worldInfo: true } },
             hasContainer: true,
-            lockedPanel: '',
         })).toEqual({
-            fallbackReason: '',
-            preserveLockedPanel: false,
             shouldMount: true,
         });
 
@@ -256,10 +233,7 @@ describe('React workspace panels bridge helpers', () => {
             kind: 'unknownPanel',
             features: { reactPanels: { worldInfo: true } },
             hasContainer: true,
-            lockedPanel: 'characterLibrary',
         })).toEqual({
-            fallbackReason: 'feature-disabled',
-            preserveLockedPanel: true,
             shouldMount: false,
         });
     });

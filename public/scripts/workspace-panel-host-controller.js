@@ -4,29 +4,22 @@ export function decideWorkspacePanelHostLifecycle({
     kind,
     features,
     hasContainer,
-    lockedPanel = '',
 }) {
     const featureEnabled = Boolean(features?.reactPanels?.[kind]);
 
     if (!featureEnabled) {
         return {
-            fallbackReason: 'feature-disabled',
-            preserveLockedPanel: Boolean(lockedPanel),
             shouldMount: false,
         };
     }
 
     if (!hasContainer) {
         return {
-            fallbackReason: 'missing-container',
-            preserveLockedPanel: Boolean(lockedPanel),
             shouldMount: false,
         };
     }
 
     return {
-        fallbackReason: '',
-        preserveLockedPanel: Boolean(lockedPanel),
         shouldMount: true,
     };
 }
