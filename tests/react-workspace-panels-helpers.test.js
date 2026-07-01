@@ -1065,4 +1065,17 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('messageRow.dataset.mainChatMessageRowOwner = \'react\';');
         expect(workspacePanelSource).toContain('messageRow.dataset.mainChatMessageRow = snapshot.messageId;');
     });
+
+    test('publishes main-chat layout shell ownership without taking message row structure', () => {
+        const workspacePanelSource = read('app/workspace-panels.tsx');
+
+        expect(workspacePanelSource).toContain('data-main-chat-layout-owner="react"');
+        expect(workspacePanelSource).toContain('data-main-chat-layout-status=');
+        expect(workspacePanelSource).toContain('data-main-chat-local-status=');
+        expect(workspacePanelSource).toContain('syncMainChatLayoutShellDom(');
+        expect(workspacePanelSource).toContain('data-main-chat-layout-owner');
+        expect(workspacePanelSource).toContain("role={status === 'error' ? 'alert' : 'status'}");
+        expect(workspacePanelSource).toContain("aria-live={status === 'error' ? 'assertive' : 'polite'}");
+        expect(workspacePanelSource).not.toContain('createPortal(<MainChatMessageListWorkspacePanel');
+    });
 });

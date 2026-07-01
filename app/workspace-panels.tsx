@@ -49,6 +49,7 @@ interface WorkspacePanelMountOptions {
 }
 
 type WorkspacePanelStatus = 'idle' | 'loading' | 'empty' | 'success' | 'error';
+type MainChatLayoutStatus = 'loading' | 'empty' | 'success' | 'streaming' | 'recovering' | 'error';
 
 interface WorkspacePanelBridge {
     dispatchAction?: (action: string, payload?: Record<string, unknown>) => Promise<unknown> | unknown;
@@ -1856,6 +1857,86 @@ function MainChatSlashUiPortal({
     );
 }
 
+function getMainChatLocalStatus(
+    state: MainChatMessageListWorkspacePanelState,
+    generationControl: MainChatGenerationControlState,
+): MainChatLayoutStatus {
+    if (!state.hasChatContainer) {
+        return 'loading';
+    }
+
+    if (generationControl.state === 'error' || generationControl.failureNoticeVisible || generationControl.failureRetryVisible) {
+        return 'error';
+    }
+
+    if (generationControl.state === 'recovering') {
+        return 'recovering';
+    }
+
+    if (generationControl.state === 'streaming') {
+        return 'streaming';
+    }
+
+    if ((state.messageCount ?? 0) === 0) {
+        return 'empty';
+    }
+
+    return 'success';
+}
+
+function getMainChatLocalStatusLabel(status: MainChatLayoutStatus, generationControl: MainChatGenerationControlState) {
+    if (generationControl.recoveryStatusLabel) {
+        return generationControl.recoveryStatusLabel;
+    }
+
+    switch (status) {
+        case 'loading':
+            return 'Preparing chat layout';
+        case 'empty':
+            return 'Open a character or start a chat';
+        case 'streaming':
+            return 'Generating response';
+        case 'recovering':
+            return 'Recovering generation';
+        case 'error':
+            return 'Generation needs attention';
+        case 'success':
+        default:
+            return 'Chat ready';
+    }
+}
+
+function MainChatLayoutStatusPortal({
+    state,
+    status,
+    label,
+}: {
+    state: MainChatMessageListWorkspacePanelState;
+    status: MainChatLayoutStatus;
+    label: string;
+}) {
+    const sendForm = state.sendForm;
+    const shouldShow = status !== 'success';
+
+    if (!(sendForm instanceof HTMLElement) || !shouldShow) {
+        return null;
+    }
+
+    return createPortal(
+        <div
+            className="react-main-chat-local-status"
+            data-main-chat-local-status={status}
+            role={status === 'error' ? 'alert' : 'status'}
+            aria-live={status === 'error' ? 'assertive' : 'polite'}
+        >
+            <span className="react-main-chat-local-status-dot" aria-hidden="true" />
+            <span>{label}</span>
+        </div>,
+        sendForm,
+        'main-chat-layout-local-status',
+    );
+}
+
 function workspacePanelStateQueryKey(kind: WorkspacePanelKind) {
     return ['workspace-panel', kind, 'bridge-state'] as const;
 }
@@ -2909,6 +2990,8 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
         runtime: bridgeState.quietTransport ?? mainChatQuietTransportFallback,
         contract: bridgeState.quietTransport ?? mainChatQuietTransportFallback,
     });
+    const mainChatLocalStatus = getMainChatLocalStatus(bridgeState, effectiveGenerationControl);
+    const mainChatLocalStatusLabel = getMainChatLocalStatusLabel(mainChatLocalStatus, effectiveGenerationControl);
 
     useEffect(() => {
         syncMainChatMessageListDom(
@@ -2919,12 +3002,24 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
         );
     }, [bridgeState]);
 
+    useLayoutEffect(() => {
+        return syncMainChatLayoutShellDom(
+            bridgeState,
+            mainChatLocalStatus,
+            mainChatLocalStatusLabel,
+        );
+    }, [bridgeState, mainChatLocalStatus, mainChatLocalStatusLabel]);
+
     return (
         <>
             <div
                 hidden
                 data-main-chat-message-list-controller="true"
                 data-main-chat-message-list-status={bridgeState.hasChatContainer ? 'ready' : 'missing'}
+                data-main-chat-layout-owner="react"
+                data-main-chat-layout-status={bridgeState.hasChatContainer ? 'success' : 'loading'}
+                data-main-chat-local-status={mainChatLocalStatus}
+                data-main-chat-local-status-label={mainChatLocalStatusLabel}
                 data-main-chat-generation-control-phase={effectiveGenerationControl.phase ?? 'idle'}
                 data-main-chat-generation-control-retry={effectiveGenerationControl.failureRetryVisible ? 'visible' : 'hidden'}
                 data-main-chat-composer-length={bridgeState.composer?.valueLength ?? 0}
@@ -2988,6 +3083,11 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
                         messageId: Number.isInteger(messageId) && messageId >= 0 ? messageId : undefined,
                     });
                 }}
+            />
+            <MainChatLayoutStatusPortal
+                state={bridgeState}
+                status={mainChatLocalStatus}
+                label={mainChatLocalStatusLabel}
             />
             <MainChatSlashUiPortal state={bridgeState} bridge={bridge} />
             {effectiveReactVisibleTransportRuntime && activeRuntimeMessageRow instanceof HTMLElement ? (
@@ -3054,6 +3154,50 @@ function syncMainChatMessageListDom(
     if (chatContainer.firstChild !== host) {
         chatContainer.insertBefore(host, chatContainer.firstChild);
     }
+}
+
+function syncMainChatLayoutShellDom(
+    state: MainChatMessageListWorkspacePanelState,
+    status: MainChatLayoutStatus,
+    label: string,
+) {
+    const chatContainer = state.chatContainer;
+    const sendForm = state.sendForm;
+    const nonQrFormItems = state.nonQrFormItems;
+    const layoutTargets: HTMLElement[] = [];
+
+    if (chatContainer instanceof HTMLElement) {
+        chatContainer.dataset.mainChatLayoutOwner = 'react';
+        chatContainer.dataset.mainChatLayoutStatus = state.hasChatContainer ? 'success' : 'loading';
+        chatContainer.dataset.mainChatLocalStatus = status;
+        chatContainer.dataset.mainChatLocalStatusLabel = label;
+        layoutTargets.push(chatContainer);
+    }
+
+    if (sendForm instanceof HTMLElement) {
+        sendForm.dataset.mainChatLayoutOwner = 'react';
+        sendForm.dataset.mainChatLayoutStatus = state.hasChatContainer ? 'success' : 'loading';
+        sendForm.dataset.mainChatLocalStatus = status;
+        sendForm.dataset.mainChatLocalStatusLabel = label;
+        layoutTargets.push(sendForm);
+    }
+
+    if (nonQrFormItems instanceof HTMLElement) {
+        nonQrFormItems.dataset.mainChatLayoutOwner = 'react';
+        nonQrFormItems.dataset.mainChatLayoutStatus = state.hasChatContainer ? 'success' : 'loading';
+        nonQrFormItems.dataset.mainChatLocalStatus = status;
+        nonQrFormItems.dataset.mainChatLocalStatusLabel = label;
+        layoutTargets.push(nonQrFormItems);
+    }
+
+    return () => {
+        for (const target of layoutTargets) {
+            delete target.dataset.mainChatLayoutOwner;
+            delete target.dataset.mainChatLayoutStatus;
+            delete target.dataset.mainChatLocalStatus;
+            delete target.dataset.mainChatLocalStatusLabel;
+        }
+    };
 }
 
 function renderPanel(kind: WorkspacePanelKind, state?: unknown, bridge?: WorkspacePanelBridge): ReactNode {

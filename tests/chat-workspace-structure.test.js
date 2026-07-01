@@ -61,6 +61,26 @@ describe('chat workspace structure', () => {
         expect(styleSource).toContain('body[data-react-workspace-shell-chrome="mounted"] .drawer-opener[data-target="extensions-settings-button"]');
     });
 
+    test('lets React own main-chat outer layout without wrapping protected rows', () => {
+        const workspacePanelSource = readRepoFile('app/workspace-panels.tsx');
+        const styleSource = readRepoFile('public/style.css');
+
+        expectContainsMarkers(workspacePanelSource, [
+            'syncMainChatLayoutShellDom(',
+            'chatContainer.dataset.mainChatLayoutOwner = \'react\';',
+            'sendForm.dataset.mainChatLayoutOwner = \'react\';',
+            'data-main-chat-layout-owner="react"',
+            'data-main-chat-local-status=',
+        ], { contractName: 'React main-chat layout shell' });
+        expect(workspacePanelSource).toContain("messageRow.parentElement?.id !== 'chat'");
+        expect(workspacePanelSource).not.toContain('chatContainer.appendChild(messageRow');
+        expect(styleSource).toContain('body[data-react-workspace-shell-chrome="mounted"] #chat[data-main-chat-layout-owner="react"]');
+        expect(styleSource).toContain('#send_form[data-main-chat-layout-owner="react"]');
+        expect(styleSource).toContain('#nonQRFormItems[data-main-chat-layout-owner="react"]');
+        expect(styleSource).toContain('var(--error-color, var(--ember-red))');
+        expect(styleSource).not.toContain('var(--error-red)');
+    });
+
     test('keeps send-form controls discoverable by role and accessible name', () => {
         const indexHtml = readRepoFile('public/index.html');
         const scriptSource = readRepoFile('public/script.js');

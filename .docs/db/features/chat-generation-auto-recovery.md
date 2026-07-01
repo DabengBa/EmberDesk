@@ -22,6 +22,7 @@ Recover visible main-chat generation failures through a bounded retry chain befo
 - Recoverable failures keep the user message and assistant row identity stable; partial assistant text from an intermediate failed attempt is cleared before the next attempt continues.
 - If automatic recovery succeeds, the user sees only the final assistant text in the existing row.
 - If all automatic attempts fail, EmberDesk preserves the failed assistant row and exposes the ordinary manual retry action on that same row.
+- When the guarded React main-chat shell is mounted, the current generation/recovery phase can also appear as a local shell status near the composer; this is placement/status ownership, not a new retry algorithm.
 - User stop is not automatic recovery; stopping generation leaves the workspace in the existing usable stop state without starting a new retry.
 - Unsupported visible generation paths and non-visible quiet/background helper requests remain outside this recovery promise and must fall back or complete without pretending to be visible-row recovery.
 
@@ -43,6 +44,7 @@ Recover visible main-chat generation failures through a bounded retry chain befo
 
 - In-row recovery status, preserved user message, single assistant row, final text, stop state, and manual retry CTA are primary evidence.
 - Hidden `generationControl`, `streamingTransport`, visible transport decision, and quiet/background transport markers are diagnostic evidence only when they match the visible row outcome.
+- `data-main-chat-local-status` is local shell-status evidence only; retry bounds and final row outcome still require generation-control, transport, row, and CTA proof.
 - Provider response errors, stream interruptions, and fallback-call counts support proof of the bounded attempt chain.
 
 ## Failure Signals

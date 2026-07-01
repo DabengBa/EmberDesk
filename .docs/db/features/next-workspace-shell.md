@@ -2,7 +2,7 @@
 id: feature.next_workspace_shell
 type: feature
 name: Next Workspace Shell
-related: [page.chat_workspace, feature.startup_bootstrap, feature.character_library_panel, feature.world_info_panel, feature.background_library_panel, feature.extension_panel_open]
+related: [page.chat_workspace, feature.startup_bootstrap, feature.character_library_panel, feature.chat_message_rendering, feature.chat_message_actions, feature.chat_generation_auto_recovery, feature.world_info_panel, feature.background_library_panel, feature.extension_panel_open]
 ---
 
 # Feature: Next Workspace Shell
@@ -20,6 +20,7 @@ Give users one modern, compact workspace frame for current context, shell status
 - Opening `/` on a build with shell takeover enabled shows a React-owned workspace chrome instead of competing legacy and React top navigation.
 - The chrome summarizes the current context in understandable terms for no active chat, temporary Assistant chat, normal character chat, and group chat.
 - Primary entries for Character Library, World Info, Backgrounds, Extensions, and Settings are reachable by role/name and route through the existing workspace behavior or the existing Settings route.
+- The main-chat outer layout can be React shell-owned through existing `#chat`, `#send_form`, and `#nonQRFormItems` containers so the chat canvas, composer/action rail, and local generation status feel coordinated without wrapping or moving message rows.
 - The chrome must not cover readable chat rows, `#send_textarea`, `#send_but`, or protected extension mount points.
 - If the feature flag is disabled, the bundle cannot load, or the chrome cannot mount, EmberDesk keeps the legacy workspace chrome usable and records a structured takeover reason.
 - Development and CI strict mode should expose missing host, invalid payload, bundle-load, or mount failures instead of treating fallback as success.
@@ -30,6 +31,7 @@ Give users one modern, compact workspace frame for current context, shell status
 - `feature.next_workspace_shell.primary_navigation`: the Character Library, World Info, Backgrounds, Extensions, and Settings entry set.
 - `feature.next_workspace_shell.context_summary`: the current character/group/assistant/no-chat summary.
 - `feature.next_workspace_shell.recovery_status`: the shell-level loading, empty, success, or error status area.
+- `feature.next_workspace_shell.main_chat_layout`: the main-chat layout/status ownership markers on existing chat and composer containers.
 - `feature.next_workspace_shell.rollback`: the documented flag-off or mount-failure legacy chrome path with recorded reason.
 
 ## Acceptance Workflows
@@ -43,6 +45,7 @@ Give users one modern, compact workspace frame for current context, shell status
 
 - The React chrome root, role/name navigation entries, status attributes, and context text are primary evidence.
 - The hidden same-entry takeover marker and `data-react-workspace-shell-chrome-status` support diagnostics and automated proof.
+- Main-chat layout markers such as `data-main-chat-layout-owner`, `data-main-chat-layout-status`, and `data-main-chat-local-status` support proof that React owns only the outer placement/status shell.
 - Protected DOM checks for `#chat > .mes`, `#send_textarea`, `#send_but`, `#extensions_settings`, `#extensions_settings2`, and `#regex_container` are compatibility evidence.
 - `/workspace-next` must not appear as a route or fallback target for this feature.
 
@@ -59,3 +62,4 @@ Give users one modern, compact workspace frame for current context, shell status
 - Startup readiness and initial overlay behavior belong to [Workspace Startup Bootstrap](feature.startup_bootstrap).
 - Character Library, World Info, Backgrounds, and Extensions retain their own feature contracts after the shell opens them.
 - Message rendering, composer behavior, slash parser, regex engine, provider transport, and extension protocols are not owned by this feature.
+- Main-chat shell ownership is limited to outer layout/status placement; row rendering, row actions, slash command execution, and provider transport remain governed by their feature contracts.
