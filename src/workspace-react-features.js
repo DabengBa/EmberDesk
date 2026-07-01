@@ -1,4 +1,8 @@
-import { isReactWorkspacePanelEnabled } from './react-feature-flags.js';
+import {
+    isReactShellTakeoverEnabled,
+    isReactShellTakeoverStrictModeEnabled,
+    isReactWorkspacePanelEnabled,
+} from './react-feature-flags.js';
 
 export const WORKSPACE_REACT_FEATURES_GLOBAL = '__emberDeskWorkspaceFeatures';
 
@@ -20,7 +24,7 @@ export function isReactExtensionsHostPanelEnabled() {
 
 /**
  * Resolve the feature payload that the legacy workspace shell can read at startup.
- * @returns {{reactPanels: {characterLibrary: boolean, mainChatMessageList: boolean, worldInfo: boolean, backgroundLibrary: boolean, extensionsHost: boolean}}}
+ * @returns {{reactPanels: {characterLibrary: boolean, mainChatMessageList: boolean, worldInfo: boolean, backgroundLibrary: boolean, extensionsHost: boolean}, reactShell: {takeover: boolean, strict: boolean}}}
  */
 export function getWorkspaceReactFeatures() {
     return {
@@ -31,12 +35,16 @@ export function getWorkspaceReactFeatures() {
             backgroundLibrary: isReactBackgroundLibraryPanelEnabled(),
             extensionsHost: isReactExtensionsHostPanelEnabled(),
         },
+        reactShell: {
+            strict: isReactShellTakeoverStrictModeEnabled(),
+            takeover: isReactShellTakeoverEnabled(),
+        },
     };
 }
 
 /**
  * Serialize the workspace feature payload for inline HTML bootstrapping.
- * @param {{reactPanels: {characterLibrary: boolean, mainChatMessageList?: boolean, worldInfo?: boolean, backgroundLibrary?: boolean, extensionsHost?: boolean}}} workspaceReactFeatures
+ * @param {{reactPanels: {characterLibrary: boolean, mainChatMessageList?: boolean, worldInfo?: boolean, backgroundLibrary?: boolean, extensionsHost?: boolean}, reactShell?: {strict?: boolean, takeover?: boolean}}} workspaceReactFeatures
  * @returns {string}
  */
 export function serializeWorkspaceReactFeatures(workspaceReactFeatures) {
@@ -48,7 +56,7 @@ export function serializeWorkspaceReactFeatures(workspaceReactFeatures) {
 
 /**
  * Build an inline script that exposes workspace React features to the legacy shell.
- * @param {{reactPanels: {characterLibrary: boolean, mainChatMessageList?: boolean, worldInfo?: boolean, backgroundLibrary?: boolean, extensionsHost?: boolean}}} workspaceReactFeatures
+ * @param {{reactPanels: {characterLibrary: boolean, mainChatMessageList?: boolean, worldInfo?: boolean, backgroundLibrary?: boolean, extensionsHost?: boolean}, reactShell?: {strict?: boolean, takeover?: boolean}}} workspaceReactFeatures
  * @returns {string}
  */
 export function buildWorkspaceReactFeaturesScript(workspaceReactFeatures) {
@@ -59,7 +67,7 @@ export function buildWorkspaceReactFeaturesScript(workspaceReactFeatures) {
 /**
  * Inject the workspace React feature payload into the workspace HTML shell.
  * @param {string} html
- * @param {{reactPanels: {characterLibrary: boolean, mainChatMessageList?: boolean, worldInfo?: boolean, backgroundLibrary?: boolean, extensionsHost?: boolean}}} workspaceReactFeatures
+ * @param {{reactPanels: {characterLibrary: boolean, mainChatMessageList?: boolean, worldInfo?: boolean, backgroundLibrary?: boolean, extensionsHost?: boolean}, reactShell?: {strict?: boolean, takeover?: boolean}}} workspaceReactFeatures
  * @returns {string}
  */
 export function injectWorkspaceReactFeatures(html, workspaceReactFeatures = getWorkspaceReactFeatures()) {

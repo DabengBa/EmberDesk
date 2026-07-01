@@ -19,6 +19,16 @@ Completed Phase 0, Phase 1, Phase 2, Phase 3, Phase 3B, Phase 4, Phase 5, and Ph
 | [react-phase6-extension-compat](react-phase6-extension-compat/README.md) | Phase 6 | Durable phase-level entry for the completed extension compatibility evidence and JS-Slash-Runner gate. |
 | [react-phase7-full-owner-cutover](react-phase7-full-owner-cutover/README.md) | Phase 7 | Durable phase-level entry for the completed full owner cutover and final shell/global decisions. |
 
+## Active / Future Specs
+
+| Folder | Spec set | Purpose |
+|---|---|---|
+| [260701-02-react-workspace-chrome](260701-02-react-workspace-chrome/spec.md) | Next Workspace Shell | Future same-entry React chrome takeover for current `/`. |
+| [260701-03-panel-dock-and-drawer-coordination](260701-03-panel-dock-and-drawer-coordination/spec.md) | Next Workspace Shell | Future React shell ownership for panel dock and drawer coordination. |
+| [260701-04-main-chat-layout-and-composer-shell](260701-04-main-chat-layout-and-composer-shell/spec.md) | Next Workspace Shell | Future React shell ownership for main-chat layout and composer shell. |
+| [260701-05-responsive-and-recovery-hardening](260701-05-responsive-and-recovery-hardening/spec.md) | Next Workspace Shell | Future responsive behavior and local recovery hardening. |
+| [260701-06-default-owner-gate-and-adr-package](260701-06-default-owner-gate-and-adr-package/spec.md) | Next Workspace Shell | Future evidence gate for default `/` shell owner and ADR update package. |
+
 ## Maintenance Rule
 
 When a phase is completed and durable records have moved to the roadmap, project history, briefs, semantic docs, and logic-description docs, remove its dated implementation specs from this directory. Keep only the smallest phase-level archive entry that still helps future readers find the durable owners.

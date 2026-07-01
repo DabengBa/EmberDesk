@@ -22,6 +22,12 @@ import {
     decideWorkspacePanelHostLifecycle,
     mountWorkspacePanelHost,
 } from '../public/scripts/workspace-panel-host-controller.js';
+import {
+    WORKSPACE_SHELL_TAKEOVER_FAILURE_REASONS,
+    WORKSPACE_SHELL_TAKEOVER_STATUSES,
+    decideWorkspaceShellTakeover,
+    isReactWorkspaceShellTakeoverEnabled,
+} from '../public/scripts/workspace-shell-takeover-contract.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -41,10 +47,15 @@ describe('React workspace panels bridge helpers', () => {
                 backgroundLibrary: false,
                 extensionsHost: false,
             },
+            reactShell: {
+                strict: false,
+                takeover: false,
+            },
         });
 
         expect(isReactWorkspacePanelEnabled('worldInfo')).toBe(false);
         expect(isReactWorkspacePanelEnabled('mainChatMessageList')).toBe(false);
+        expect(isReactWorkspaceShellTakeoverEnabled()).toBe(false);
     });
 
     test('reads individual panel enablement without enabling unrelated panels', () => {
@@ -86,6 +97,109 @@ describe('React workspace panels bridge helpers', () => {
             reason: 'missing-container',
             status: 'fallback',
         });
+    });
+
+    test('decides same-entry shell takeover with strict failures separated from production safety fallback', () => {
+        expect(WORKSPACE_SHELL_TAKEOVER_STATUSES).toEqual({
+            DISABLED: 'disabled',
+            FAILED: 'failed',
+            READY: 'ready',
+            ROLLBACK: 'rollback',
+        });
+        expect(WORKSPACE_SHELL_TAKEOVER_FAILURE_REASONS).toEqual({
+            BUNDLE_LOAD_FAILED: 'bundle-load-failed',
+            FEATURE_DISABLED: 'feature-disabled',
+            INVALID_PAYLOAD: 'invalid-payload',
+            MISSING_HOST: 'missing-host',
+            MOUNT_FAILED: 'mount-failed',
+            ROLLBACK_REQUESTED: 'rollback-requested',
+        });
+
+        expect(decideWorkspaceShellTakeover({
+            features: { reactShell: { takeover: false } },
+            hasHost: true,
+        })).toEqual({
+            reason: 'feature-disabled',
+            status: 'disabled',
+            takeover: false,
+        });
+
+        expect(decideWorkspaceShellTakeover({
+            features: { reactShell: { takeover: true } },
+            hasHost: true,
+        })).toEqual({
+            status: 'ready',
+            takeover: true,
+        });
+
+        expect(() => decideWorkspaceShellTakeover({
+            features: { reactShell: { takeover: true } },
+            hasHost: false,
+            strict: true,
+        })).toThrow('React workspace shell takeover required but failed: missing-host');
+
+        expect(() => decideWorkspaceShellTakeover({
+            features: { reactShell: { strict: true, takeover: 'true' } },
+            hasHost: true,
+        })).toThrow('React workspace shell takeover required but failed: invalid-payload');
+
+        expect(decideWorkspaceShellTakeover({
+            features: { reactShell: { takeover: true } },
+            hasHost: false,
+            strict: false,
+        })).toEqual({
+            reason: 'missing-host',
+            status: 'failed',
+            takeover: false,
+        });
+
+        expect(() => decideWorkspaceShellTakeover({
+            features: { reactShell: { strict: true, takeover: true } },
+            hasHost: false,
+        })).toThrow('React workspace shell takeover required but failed: missing-host');
+
+        expect(decideWorkspaceShellTakeover({
+            failureReason: WORKSPACE_SHELL_TAKEOVER_FAILURE_REASONS.BUNDLE_LOAD_FAILED,
+            features: { reactShell: { takeover: true } },
+            hasHost: true,
+            strict: false,
+        })).toEqual({
+            reason: 'bundle-load-failed',
+            status: 'failed',
+            takeover: false,
+        });
+
+        expect(() => decideWorkspaceShellTakeover({
+            failureReason: WORKSPACE_SHELL_TAKEOVER_FAILURE_REASONS.MOUNT_FAILED,
+            features: { reactShell: { takeover: true } },
+            hasHost: true,
+            strict: true,
+        })).toThrow('React workspace shell takeover required but failed: mount-failed');
+
+        expect(decideWorkspaceShellTakeover({
+            features: { reactShell: { takeover: true } },
+            hasHost: true,
+            rollback: true,
+        })).toEqual({
+            reason: 'rollback-requested',
+            status: 'rollback',
+            takeover: false,
+        });
+    });
+
+    test('wires same-entry shell takeover diagnostics without replacing the legacy workspace shell', () => {
+        const scriptSource = read('public/script.js');
+
+        expect(scriptSource).toContain("from './scripts/workspace-shell-takeover-contract.js';");
+        expect(scriptSource).toContain('const WORKSPACE_SHELL_TAKEOVER_MARKER_ID = \'emberdesk-react-shell-takeover-foundation\';');
+        expect(scriptSource).toContain('function publishWorkspaceShellTakeoverDiagnostic');
+        expect(scriptSource).toContain('decideWorkspaceShellTakeover({');
+        expect(scriptSource).toContain('strict,');
+        expect(scriptSource).toContain('if (!document.body)');
+        expect(scriptSource).toContain('data-react-workspace-shell-takeover-status');
+        expect(scriptSource).toContain('data-react-workspace-shell-takeover-reason');
+        expect(scriptSource).toContain('publishWorkspaceShellTakeoverDiagnostic();');
+        expect(scriptSource).not.toContain('document.body.innerHTML =');
     });
 
     test('ships a main-chat message-list panel contract through the shared workspace panel asset', () => {

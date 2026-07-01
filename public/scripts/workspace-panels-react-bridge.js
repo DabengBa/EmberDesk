@@ -15,6 +15,10 @@ export function getDefaultWorkspaceReactFeatures() {
             backgroundLibrary: false,
             extensionsHost: false,
         },
+        reactShell: {
+            strict: false,
+            takeover: false,
+        },
     };
 }
 

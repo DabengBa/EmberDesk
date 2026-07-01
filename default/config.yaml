@@ -115,6 +115,8 @@ features:
       worldInfo: false
       backgroundLibrary: false
       extensionsHost: false
+    shell:
+      takeover: false
 
 # -- SSO LOGIN CONFIGURATION --
 sso:

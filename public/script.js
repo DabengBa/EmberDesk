@@ -347,6 +347,7 @@ import {
     projectCharacterLibraryQueryAgainstDeletedAvatars,
 } from './scripts/character-library-react-sync.js';
 import { mountReactWorkspacePanel } from './scripts/workspace-panels-react-bridge.js';
+import { decideWorkspaceShellTakeover } from './scripts/workspace-shell-takeover-contract.js';
 import { runDeleteCharacterClosePreflight } from './scripts/delete-character-preflight.js';
 
 // API OBJECT FOR EXTERNAL WIRING
@@ -372,6 +373,10 @@ export function getWorkspaceReactFeatures() {
             worldInfo: false,
             backgroundLibrary: false,
             extensionsHost: false,
+        },
+        reactShell: {
+            strict: false,
+            takeover: false,
         },
     };
 }
@@ -406,6 +411,7 @@ const WORLD_INFO_REACT_HOST_ID = 'emberdesk-react-world-info-panel-host';
 const BACKGROUND_LIBRARY_REACT_HOST_ID = 'emberdesk-react-background-library-panel-host';
 const EXTENSIONS_HOST_REACT_HOST_ID = 'emberdesk-react-extensions-host-panel-host';
 const MAIN_CHAT_MESSAGE_LIST_REACT_HOST_ID = 'emberdesk-react-main-chat-message-list-host';
+const WORKSPACE_SHELL_TAKEOVER_MARKER_ID = 'emberdesk-react-shell-takeover-foundation';
 const MAIN_CHAT_SCROLL_RESTORE_THRESHOLD_PX = 12;
 const mainChatMessageRowSnapshotSchema = MAIN_CHAT_MESSAGE_ROW_SNAPSHOT_SCHEMA;
 const mainChatRichBodySnapshotSchema = MAIN_CHAT_RICH_BODY_SNAPSHOT_SCHEMA;
@@ -430,6 +436,44 @@ let mainChatMessageListBridgeBodyObserver = null;
 let mainChatMessageActionsController = null;
 let mainChatMessageListPendingRestoreChatId = null;
 let mainChatMessageRenderGeneration = 0;
+
+export function publishWorkspaceShellTakeoverDiagnostic({
+    strict,
+    rollback = false,
+} = {}) {
+    const result = decideWorkspaceShellTakeover({
+        features: getWorkspaceReactFeatures(),
+        hasHost: Boolean(document.body),
+        rollback,
+        strict,
+    });
+
+    if (!document.body) {
+        return result;
+    }
+
+    let marker = document.getElementById(WORKSPACE_SHELL_TAKEOVER_MARKER_ID);
+    if (!marker) {
+        marker = document.createElement('div');
+        marker.id = WORKSPACE_SHELL_TAKEOVER_MARKER_ID;
+        marker.hidden = true;
+        document.body.append(marker);
+    }
+
+    marker.dataset.reactWorkspaceShellTakeoverStatus = result.status;
+    marker.dataset.reactWorkspaceShellTakeoverEnabled = String(result.takeover);
+
+    if (result.reason) {
+        marker.dataset.reactWorkspaceShellTakeoverReason = result.reason;
+        marker.setAttribute('data-react-workspace-shell-takeover-reason', result.reason);
+    } else {
+        delete marker.dataset.reactWorkspaceShellTakeoverReason;
+        marker.removeAttribute('data-react-workspace-shell-takeover-reason');
+    }
+
+    marker.setAttribute('data-react-workspace-shell-takeover-status', result.status);
+    return result;
+}
 
 function getMainChatMessageListScrollSnapshotStore() {
     if (!(globalThis.__emberDeskMainChatMessageListScrollSnapshots instanceof Map)) {
@@ -2852,6 +2896,7 @@ async function firstLoadInit() {
     markStartup('app:initialized');
     await measureStartupStage('hideInitLoader', () => initLoaderHandle.hide());
     await measureStartupStage('fixViewport', () => fixViewport());
+    publishWorkspaceShellTakeoverDiagnostic();
     await measureStartupStage('emitAppReady', () => eventSource.emit(event_types.APP_READY));
     startupProfile.appReadyAtMs = roundStartupTime(performance.now());
     markStartup('app:ready');

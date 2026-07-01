@@ -22,6 +22,7 @@ Bring the user from the root EmberDesk URL to a usable main workspace while slow
 - Deferred background or extension failures surface in their own panel areas instead of returning the whole workspace to global loading.
 - Compatibility facade registration during startup must not read shell-owned constants before the main workspace module has initialized them; if a facade dependency is needed before full startup, the shell exposes it through a lazy accessor or callable context so the startup overlay can still clear.
 - The root workspace remains the long-term runtime facade for `/`; feature-flagged React routes or guarded panel islands may enhance surfaces, but disabled flags or missing bundles must not invalidate the same root shell.
+- Same-entry React shell takeover diagnostics may be published during startup after the main shell has a host to attach diagnostic state. Development and CI should treat an enabled but unmountable takeover foundation as a failure, while production safety paths may leave the existing shell visible with a recorded failure reason instead of showing an empty migration host.
 - Refreshing the root URL repeats the same visible readiness contract and must not strand the user between shell and panel states.
 
 ## Semantic Interaction IDs
@@ -34,6 +35,7 @@ Bring the user from the root EmberDesk URL to a usable main workspace while slow
 - As a returning workspace user who wants to start chatting, from the root URL open or reload EmberDesk; EmberDesk must show startup feedback only until the main shell can be used, secondary panels may still show local loading, reload must repeat the same readiness contract, and failure is a startup overlay that blocks the shell until every secondary surface finishes.
 - As a user encountering a secondary panel failure during startup, from the usable workspace open the affected background or extension surface and retry or refresh it locally; EmberDesk must keep the main shell usable and show retry, refresh, or error state locally in that surface, and failure is returning to global loading or leaving a blank panel with no recovery cue.
 - As a user on a build with React routes or panel islands disabled or unavailable, from `/` open the workspace; EmberDesk must still present the established root shell and fallback surfaces, refresh must preserve that root entry, and failure is a missing bundle or flag-off state replacing the workspace with an empty migration host.
+- As a user on a build where same-entry React shell takeover diagnostics are enabled, from `/` open the workspace; EmberDesk must keep the existing workspace visible until later shell takeover stages actually change layout, development and CI must fail when required takeover conditions are missing, and production safety fallback must record a reason rather than silently masking the problem.
 - As a user opening the root workspace after World Info or other compatibility facades are loaded, EmberDesk must finish main-shell initialization and remove the startup overlay before secondary panel work continues; failure is a JavaScript initialization-order error that leaves the user stuck on global `Initializing...` feedback.
 
 ## Feature-Specific Evidence
@@ -49,6 +51,7 @@ Bring the user from the root EmberDesk URL to a usable main workspace while slow
 - Refreshing the root URL leaves the user between a hidden overlay and unusable shell.
 - A compatibility facade reads a not-yet-initialized shell constant during module registration and blocks `app_ready`.
 - Flag-off or bundle-missing React paths produce an empty workspace instead of the established shell.
+- Enabled shell takeover diagnostics fail silently in development or CI instead of exposing the missing host, invalid payload, or mount failure reason.
 
 ## Boundaries
 

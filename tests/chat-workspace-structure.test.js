@@ -25,6 +25,20 @@ describe('chat workspace structure', () => {
         expect(loaderCss).toContain('overflow-wrap: anywhere;');
     });
 
+    test('keeps same-entry shell takeover diagnostics hidden from the visible workspace', () => {
+        const scriptSource = readRepoFile('public/script.js');
+
+        expectContainsMarkers(scriptSource, [
+            'WORKSPACE_SHELL_TAKEOVER_MARKER_ID',
+            'marker.hidden = true;',
+            'data-react-workspace-shell-takeover-status',
+            'data-react-workspace-shell-takeover-reason',
+            'publishWorkspaceShellTakeoverDiagnostic();',
+        ], { contractName: 'same-entry shell takeover diagnostic marker' });
+        expect(scriptSource).not.toContain('workspace-next');
+        expect(scriptSource).not.toContain('/workspace-next');
+    });
+
     test('keeps send-form controls discoverable by role and accessible name', () => {
         const indexHtml = readRepoFile('public/index.html');
         const scriptSource = readRepoFile('public/script.js');

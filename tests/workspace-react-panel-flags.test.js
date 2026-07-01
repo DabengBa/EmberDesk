@@ -31,6 +31,8 @@ beforeAll(() => {
         '      worldInfo: false',
         '      backgroundLibrary: false',
         '      extensionsHost: false',
+        '    shell:',
+        '      takeover: false',
         '',
     ].join('\n'), 'utf8');
     setConfigFilePath(configPath);
@@ -42,6 +44,7 @@ afterEach(() => {
     delete process.env.EMBERDESK_FEATURES_REACT_PANELS_WORLDINFO;
     delete process.env.EMBERDESK_FEATURES_REACT_PANELS_BACKGROUNDLIBRARY;
     delete process.env.EMBERDESK_FEATURES_REACT_PANELS_EXTENSIONSHOST;
+    delete process.env.EMBERDESK_FEATURES_REACT_SHELL_TAKEOVER;
 });
 
 describe('workspace React panel flags', () => {
@@ -56,8 +59,13 @@ describe('workspace React panel flags', () => {
                 backgroundLibrary: false,
                 extensionsHost: false,
             },
+            reactShell: {
+                strict: false,
+                takeover: false,
+            },
         });
 
+        process.env.EMBERDESK_FEATURES_REACT_SHELL_TAKEOVER = 'true';
         process.env.EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST = 'true';
         process.env.EMBERDESK_FEATURES_REACT_PANELS_WORLDINFO = 'true';
         process.env.EMBERDESK_FEATURES_REACT_PANELS_BACKGROUNDLIBRARY = 'true';
@@ -71,7 +79,26 @@ describe('workspace React panel flags', () => {
                 backgroundLibrary: true,
                 extensionsHost: true,
             },
+            reactShell: {
+                strict: true,
+                takeover: true,
+            },
         });
+
+        const previousNodeEnv = process.env.NODE_ENV;
+        try {
+            process.env.NODE_ENV = 'production';
+            expect(featureBootstrapModule.getWorkspaceReactFeatures().reactShell).toEqual({
+                strict: false,
+                takeover: true,
+            });
+        } finally {
+            if (previousNodeEnv === undefined) {
+                delete process.env.NODE_ENV;
+            } else {
+                process.env.NODE_ENV = previousNodeEnv;
+            }
+        }
     });
 
     test('escapes the workspace panel feature bootstrap payload before injecting it into HTML', async () => {
@@ -85,10 +112,15 @@ describe('workspace React panel flags', () => {
                 extensionsHost: true,
                 unsafe: '<script>alert(1)</script>&',
             },
+            reactShell: {
+                strict: true,
+                takeover: true,
+            },
         });
 
         expect(html).toContain('window.__emberDeskWorkspaceFeatures');
         expect(html).toContain('"mainChatMessageList":true');
+        expect(html).toContain('"reactShell":{"strict":true,"takeover":true}');
         expect(html).toContain('"worldInfo":true');
         expect(html).toContain('"backgroundLibrary":true');
         expect(html).toContain('"extensionsHost":true');
@@ -102,6 +134,8 @@ describe('workspace React panel flags', () => {
         const packageSource = read('package.json');
         const viteSource = read('vite.config.ts');
 
+        expect(configSource).toContain('shell:');
+        expect(configSource).toContain('takeover: false');
         expect(configSource).toContain('mainChatMessageList: false');
         expect(configSource).toContain('worldInfo: false');
         expect(configSource).toContain('backgroundLibrary: false');
