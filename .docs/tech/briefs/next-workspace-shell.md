@@ -71,25 +71,27 @@
 - **当前状态**：Phase A foundation 已交付同入口 takeover feature payload、诊断 marker 和 owner/failure vocabulary；未新增 `/workspace-next`。
 - **变更历史**：
   - 2026-07-01: 第一阶段实现落地到 `src/workspace-react-features.js`、`public/scripts/workspace-shell-takeover-contract.js`、`public/script.js` 和对应 focused tests。
-- **实现追踪**：开发完成，待提交；持久事实见 `.docs/PROJECT_HISTORY.md` 的 2026-07-01 same-entry shell takeover foundation 记录。
+  - 2026-07-01: 第二阶段实现同入口 React workspace chrome；仍未新增 `/workspace-next`。
+- **实现追踪**：第一阶段和第二阶段均已开发完成并进入 wrap-up；持久事实见 `.docs/PROJECT_HISTORY.md` 的 2026-07-01 same-entry shell takeover foundation 与 same-entry React workspace chrome 记录。
 
 ### Domain 2: 继续接管而不是重做
 
 - **用户期望**：已有 React surface 应继续向外接管，形成统一体验。
 - **设计结论**：每个 spec 优先复用现有 React panel/main-chat owner，不引入第二套角色库、第二套消息列表或第二套扩展协议。
-- **当前状态**：第一阶段只发布隐藏诊断和决策契约，不改变可见布局；legacy shell 仍是当前可见工作区，后续阶段才逐步接管 chrome、panel dock 和主聊天 shell。
+- **当前状态**：第一阶段发布隐藏诊断和决策契约；第二阶段在 `features.react.shell.takeover=true` 时让 React 接管可见外层 chrome、当前上下文摘要、shell 状态和主导航入口。Legacy drawer 内容、chat、composer 和 protected extension mount points 仍保留为兼容 substrate。
 - **变更历史**：
   - 2026-07-01: 明确 fallback 不是开发通过条件；dev/CI/test strict 失败和 production safety fallback 被拆成不同语义。
-- **实现追踪**：`reactShell.strict` 由 bootstrap payload 暴露，CI 或非 production 环境在 takeover 开启时默认 strict；production 默认保留 safety fallback。
+  - 2026-07-01: 真实浏览器 smoke 发现旧 `Character Management` 和 `Extensions` 主入口仍与 React chrome 竞争；已通过 `body[data-react-workspace-shell-chrome="mounted"]` 隐藏 legacy primary entry buttons，同时保留 drawer content。
+- **实现追踪**：`reactShell.strict` 由 bootstrap payload 暴露，CI 或非 production 环境在 takeover 开启时默认 strict；production 默认保留 safety fallback。React chrome 代码路径为 `public/script.js`、`public/scripts/workspace-panels-react-bridge.js`、`app/workspace-panels.tsx`、`public/style.css`。
 
 ### Domain 3: 阶段化证明
 
 - **用户期望**：每个阶段再分多个步骤，有独立 spec 开发文档。
 - **设计结论**：6 个 specs 按 foundation、chrome、panel coordination、main-chat shell、responsive/recovery、ADR gate 排列。
-- **当前状态**：第一阶段已通过 focused unit、compat、React workspace panel build、semantic docs build/check；后续 02-06 specs 仍是待批准输入。
+- **当前状态**：第一阶段 foundation 和第二阶段 React chrome 已通过 focused unit、compat、React workspace panel build、semantic docs build/check、layout E2E，以及 takeover=true 的真实浏览器 smoke；后续 03-06 specs 仍是待批准输入。
 - **变更历史**：
   - 2026-07-01: 第一阶段 review 修复了 failure vocabulary 过窄、strict mode 未进入 bootstrap payload、早期 body 缺失会抛原始错误的问题。
-- **实现追踪**：验证面包括 `workspace-react-panel-flags.test.js`、`react-workspace-panels-helpers.test.js`、`chat-workspace-structure.test.js`、`bun run test:compat`、`bun run build:react:workspace-panels`、`bun run docs:build`。
+- **实现追踪**：验证面包括 `workspace-react-panel-flags.test.js`、`react-workspace-panels-helpers.test.js`、`chat-workspace-structure.test.js`、`bun run test:compat`、`bun run build:react:workspace-panels`、`bun run docs:build`、`PLAYWRIGHT_CHROME_EXECUTABLE=/opt/google/chrome/chrome bun run --cwd tests test:e2e -- chat-message-layout.e2e.js --workers=1`，以及 2026-07-01 takeover=true smoke（chrome/takeover status `ready`，visible legacy primary entries `0`，composer not overlapped，no `/workspace-next`）。
 
 ## 源证据链
 
@@ -108,3 +110,4 @@
 - 2026-07-01: 创建 `Next Workspace Shell` 意图记录，原方案为 opt-in `/workspace-next`。
 - 2026-07-01: 按用户反馈改为当前 `/` 同入口继续接管；删除旧旁路 route spec，改成 6 个 same-entry takeover specs。
 - 2026-07-01: 交付第一阶段 same-entry shell takeover foundation；同入口 feature payload、strict/safety 决策、hidden marker 和 semantic docs 已落地。
+- 2026-07-01: 交付第二阶段 React workspace chrome；同入口 React chrome、role/name 主导航、legacy primary entry 隐藏、semantic feature doc 和 browser smoke 已落地。

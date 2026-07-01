@@ -1,0 +1,61 @@
+---
+id: feature.next_workspace_shell
+type: feature
+name: Next Workspace Shell
+related: [page.chat_workspace, feature.startup_bootstrap, feature.character_library_panel, feature.world_info_panel, feature.background_library_panel, feature.extension_panel_open]
+---
+
+# Feature: Next Workspace Shell
+
+## ID 解释
+
+`feature.next_workspace_shell` represents the same-entry React workspace chrome that can own the visible outer frame of the root [Chat Workspace](page.chat_workspace) without introducing a separate `/workspace-next` route.
+
+## Purpose
+
+Give users one modern, compact workspace frame for current context, shell status, and primary navigation while preserving the established chat, composer, drawer, and extension compatibility surfaces underneath it.
+
+## User-Visible Contract
+
+- Opening `/` on a build with shell takeover enabled shows a React-owned workspace chrome instead of competing legacy and React top navigation.
+- The chrome summarizes the current context in understandable terms for no active chat, temporary Assistant chat, normal character chat, and group chat.
+- Primary entries for Character Library, World Info, Backgrounds, Extensions, and Settings are reachable by role/name and route through the existing workspace behavior or the existing Settings route.
+- The chrome must not cover readable chat rows, `#send_textarea`, `#send_but`, or protected extension mount points.
+- If the feature flag is disabled, the bundle cannot load, or the chrome cannot mount, EmberDesk keeps the legacy workspace chrome usable and records a structured takeover reason.
+- Development and CI strict mode should expose missing host, invalid payload, bundle-load, or mount failures instead of treating fallback as success.
+
+## Semantic Interaction IDs
+
+- `feature.next_workspace_shell`: the overall same-entry React chrome owner state.
+- `feature.next_workspace_shell.primary_navigation`: the Character Library, World Info, Backgrounds, Extensions, and Settings entry set.
+- `feature.next_workspace_shell.context_summary`: the current character/group/assistant/no-chat summary.
+- `feature.next_workspace_shell.recovery_status`: the shell-level loading, empty, success, or error status area.
+- `feature.next_workspace_shell.rollback`: the documented flag-off or mount-failure legacy chrome path with recorded reason.
+
+## Acceptance Workflows
+
+- As a workspace user on a build with takeover enabled, open `/`; EmberDesk must show one React chrome with current context and primary entries, and failure is old and new top navigation competing for the same job.
+- As a user switching from no chat to a character or temporary Assistant chat, continue using the workspace; the chrome summary must update to a clear state without requiring a refresh, and failure is a stale or misleading current-context label.
+- As a user opening Character Library, World Info, Backgrounds, Extensions, or Settings from the chrome, use the named entry; EmberDesk must open the established surface or route while preserving protected DOM and extension locations, and failure is a visible button that does nothing or clears legacy panel content.
+- As a user on a flag-off, missing-bundle, or mount-failure build, open `/`; EmberDesk must leave the legacy chrome usable and record the failure reason, and failure is a blank page, hidden navigation, or silent development fallback.
+
+## Feature-Specific Evidence
+
+- The React chrome root, role/name navigation entries, status attributes, and context text are primary evidence.
+- The hidden same-entry takeover marker and `data-react-workspace-shell-chrome-status` support diagnostics and automated proof.
+- Protected DOM checks for `#chat > .mes`, `#send_textarea`, `#send_but`, `#extensions_settings`, `#extensions_settings2`, and `#regex_container` are compatibility evidence.
+- `/workspace-next` must not appear as a route or fallback target for this feature.
+
+## Failure Signals
+
+- Legacy top navigation and React chrome are both visible as primary navigation owners.
+- Shell fallback hides the reason in development or CI.
+- React chrome hides or moves message rows, composer controls, or extension mount points.
+- Secondary panel loading blocks the entire workspace startup or makes chat unavailable.
+- Primary navigation entries are only reachable by brittle selector paths and not by user-visible role/name.
+
+## Boundaries
+
+- Startup readiness and initial overlay behavior belong to [Workspace Startup Bootstrap](feature.startup_bootstrap).
+- Character Library, World Info, Backgrounds, and Extensions retain their own feature contracts after the shell opens them.
+- Message rendering, composer behavior, slash parser, regex engine, provider transport, and extension protocols are not owned by this feature.

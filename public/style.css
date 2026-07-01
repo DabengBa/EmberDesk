@@ -6395,6 +6395,149 @@ body:not(.caption) .mes_img_caption {
 
 }
 
+#emberdesk-react-workspace-shell-chrome-host {
+    position: absolute;
+    z-index: 3010;
+    inset-block-start: 0;
+    inset-inline: 0;
+    width: var(--sheldWidth);
+    min-width: min(100vw, 320px);
+    height: var(--topBarBlockSize);
+    margin: 0 auto;
+    color: var(--SmartThemeBodyColor);
+    pointer-events: none;
+}
+
+body[data-react-workspace-shell-chrome="mounted"] #top-bar,
+body[data-react-workspace-shell-chrome="mounted"] #top-settings-holder > .drawer > .drawer-toggle,
+body[data-react-workspace-shell-chrome="mounted"] .drawer-opener[data-target="rightNavHolder"],
+body[data-react-workspace-shell-chrome="mounted"] .drawer-opener[data-target="extensions-settings-button"] {
+    display: none !important;
+}
+
+.react-workspace-shell-chrome {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(130px, 0.4fr);
+    align-items: center;
+    gap: 10px;
+    height: 100%;
+    padding: 3px 8px;
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 78%, transparent);
+    border-radius: 0 0 5px 5px;
+    background-color: color-mix(in srgb, var(--SmartThemeBlurTintColor) 88%, var(--black70a) 12%);
+    box-shadow: 0 2px 20px 0 var(--black70a);
+    backdrop-filter: blur(var(--SmartThemeBlurStrength));
+    -webkit-backdrop-filter: blur(var(--SmartThemeBlurStrength));
+    pointer-events: auto;
+}
+
+.react-workspace-shell-context {
+    min-width: 0;
+}
+
+.react-workspace-shell-kicker,
+.react-workspace-shell-meta,
+.react-workspace-shell-status {
+    color: color-mix(in srgb, var(--SmartThemeBodyColor) 68%, var(--SmartThemeBlurTintColor) 32%);
+    font-size: calc(var(--mainFontSize) * 0.78);
+    line-height: 1.2;
+}
+
+.react-workspace-shell-title {
+    overflow: hidden;
+    color: var(--SmartThemeBodyColor);
+    font-size: calc(var(--mainFontSize) * 0.98);
+    font-weight: 600;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.react-workspace-shell-meta {
+    display: flex;
+    min-width: 0;
+    gap: 8px;
+}
+
+.react-workspace-shell-meta span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.react-workspace-shell-nav {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.react-workspace-shell-nav-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    min-height: 30px;
+    gap: 5px;
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 70%, transparent);
+    border-radius: 5px;
+    padding: 3px 6px;
+    background-color: color-mix(in srgb, var(--SmartThemeBlurTintColor) 76%, var(--black50a) 24%);
+    color: var(--SmartThemeBodyColor);
+    font: inherit;
+    font-size: calc(var(--mainFontSize) * 0.86);
+    line-height: 1.2;
+    cursor: pointer;
+}
+
+.react-workspace-shell-nav-button:hover,
+.react-workspace-shell-nav-button:focus-visible {
+    background-color: var(--white30a);
+}
+
+.react-workspace-shell-nav-button:focus-visible {
+    outline: 1px solid var(--interactable-outline-color);
+    outline-offset: 2px;
+}
+
+.react-workspace-shell-status {
+    display: inline-flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 5px;
+}
+
+.react-workspace-shell-status-dot {
+    flex: 0 0 auto;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background-color: var(--success-green);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--success-green) 70%, transparent);
+}
+
+@media screen and (max-width: 800px) {
+    .react-workspace-shell-chrome {
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 5px;
+    }
+
+    .react-workspace-shell-status {
+        display: none;
+    }
+
+    .react-workspace-shell-nav-button span {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        clip-path: inset(50%);
+        white-space: nowrap;
+    }
+}
+
 body:has(.drawer-content.maximized) #top-settings-holder:has(.drawer-content.openDrawer:not(.fillLeft):not(.fillRight)),
 body:has(.drawer-content.open) #top-settings-holder:has(.drawer-content.openDrawer:not(.fillLeft):not(.fillRight)),
 body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDrawer:not(.fillLeft):not(.fillRight)) {

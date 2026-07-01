@@ -346,8 +346,11 @@ import {
     parseCharacterLibraryFetchResponse,
     projectCharacterLibraryQueryAgainstDeletedAvatars,
 } from './scripts/character-library-react-sync.js';
-import { mountReactWorkspacePanel } from './scripts/workspace-panels-react-bridge.js';
-import { decideWorkspaceShellTakeover } from './scripts/workspace-shell-takeover-contract.js';
+import { mountReactWorkspacePanel, mountReactWorkspaceShellChrome } from './scripts/workspace-panels-react-bridge.js';
+import {
+    WORKSPACE_SHELL_TAKEOVER_STATUSES,
+    decideWorkspaceShellTakeover,
+} from './scripts/workspace-shell-takeover-contract.js';
 import { runDeleteCharacterClosePreflight } from './scripts/delete-character-preflight.js';
 
 // API OBJECT FOR EXTERNAL WIRING
@@ -412,6 +415,8 @@ const BACKGROUND_LIBRARY_REACT_HOST_ID = 'emberdesk-react-background-library-pan
 const EXTENSIONS_HOST_REACT_HOST_ID = 'emberdesk-react-extensions-host-panel-host';
 const MAIN_CHAT_MESSAGE_LIST_REACT_HOST_ID = 'emberdesk-react-main-chat-message-list-host';
 const WORKSPACE_SHELL_TAKEOVER_MARKER_ID = 'emberdesk-react-shell-takeover-foundation';
+const WORKSPACE_SHELL_CHROME_HOST_ID = 'emberdesk-react-workspace-shell-chrome-host';
+const LEGACY_WORKSPACE_CHROME_SELECTOR = '#top-bar, #top-settings-holder > .drawer > .drawer-toggle, .drawer-opener[data-target="rightNavHolder"], .drawer-opener[data-target="extensions-settings-button"]';
 const MAIN_CHAT_SCROLL_RESTORE_THRESHOLD_PX = 12;
 const mainChatMessageRowSnapshotSchema = MAIN_CHAT_MESSAGE_ROW_SNAPSHOT_SCHEMA;
 const mainChatRichBodySnapshotSchema = MAIN_CHAT_RICH_BODY_SNAPSHOT_SCHEMA;
@@ -440,8 +445,10 @@ let mainChatMessageRenderGeneration = 0;
 export function publishWorkspaceShellTakeoverDiagnostic({
     strict,
     rollback = false,
+    failureReason = undefined,
 } = {}) {
     const result = decideWorkspaceShellTakeover({
+        failureReason,
         features: getWorkspaceReactFeatures(),
         hasHost: Boolean(document.body),
         rollback,
@@ -472,6 +479,150 @@ export function publishWorkspaceShellTakeoverDiagnostic({
     }
 
     marker.setAttribute('data-react-workspace-shell-takeover-status', result.status);
+    return result;
+}
+
+function ensureWorkspaceShellChromeHost() {
+    let host = document.getElementById(WORKSPACE_SHELL_CHROME_HOST_ID);
+    if (host) {
+        return host;
+    }
+
+    host = document.createElement('div');
+    host.id = WORKSPACE_SHELL_CHROME_HOST_ID;
+    host.setAttribute('data-doc-id', 'feature.next_workspace_shell page.chat_workspace');
+    const sheld = document.getElementById('sheld');
+    document.body.insertBefore(host, sheld ?? document.body.firstElementChild);
+    return host;
+}
+
+function getWorkspaceShellActiveContext() {
+    if (selected_group) {
+        return 'group';
+    }
+
+    if (this_chid !== undefined) {
+        return 'character';
+    }
+
+    return typeof name2 === 'string' && name2.trim() ? 'assistant' : 'none';
+}
+
+function getWorkspaceShellChromeState(statusLabel = 'Workspace ready') {
+    const activeContext = getWorkspaceShellActiveContext();
+    const group = selected_group ? groups.find(x => x.id == selected_group) : null;
+    const character = this_chid !== undefined ? characters[this_chid] : null;
+    const contextTitle = activeContext === 'group'
+        ? (group?.name || 'Group chat')
+        : activeContext === 'character'
+            ? (character?.name || name2 || 'Character')
+            : activeContext === 'assistant'
+                ? (name2 || 'Assistant')
+                : '';
+    const chatTitle = getCurrentChatId() || character?.chat || group?.chat_id || '';
+
+    return {
+        activeContext,
+        contextTitle,
+        contextSubtitle: activeContext === 'none' ? 'No active chat' : activeContext === 'group' ? 'Group chat' : activeContext === 'character' ? 'Character chat' : 'Assistant chat',
+        chatTitle,
+        messageCount: Array.isArray(chat) ? chat.length : 0,
+        temporaryChat: document.getElementById('temporary_chat_status')?.hidden === false,
+        status: activeContext === 'none' ? 'empty' : 'success',
+        statusLabel,
+    };
+}
+
+function hideLegacyWorkspaceChromeForReact() {
+    document.body.dataset.reactWorkspaceShellChrome = 'mounted';
+    document.querySelectorAll(LEGACY_WORKSPACE_CHROME_SELECTOR).forEach((element) => {
+        if (!(element instanceof HTMLElement)) {
+            return;
+        }
+        element.dataset.legacyWorkspaceChromeHiddenByReact = 'true';
+        element.setAttribute('data-legacy-workspace-chrome-hidden-by-react', 'true');
+        element.hidden = true;
+    });
+}
+
+function restoreLegacyWorkspaceChromeFromReact() {
+    delete document.body.dataset.reactWorkspaceShellChrome;
+    document.querySelectorAll('[data-legacy-workspace-chrome-hidden-by-react="true"]').forEach((element) => {
+        if (!(element instanceof HTMLElement)) {
+            return;
+        }
+        delete element.dataset.legacyWorkspaceChromeHiddenByReact;
+        element.hidden = false;
+    });
+}
+
+async function openWorkspaceShellDrawer(drawerId) {
+    const drawer = document.getElementById(drawerId);
+    const drawerToggle = drawer?.closest('.drawer')?.querySelector(':scope > .drawer-toggle');
+    if (!(drawer instanceof HTMLElement) || !(drawerToggle instanceof HTMLElement)) {
+        return;
+    }
+
+    if (!drawer.classList.contains('openDrawer')) {
+        await doNavbarIconClick.call(drawerToggle);
+    }
+}
+
+function getWorkspaceShellChromeBridge() {
+    return {
+        async dispatchAction(action) {
+            switch (action) {
+                case 'openCharacterLibrary':
+                    await openWorkspaceShellDrawer('right-nav-panel');
+                    $('#rm_button_characters').trigger('click');
+                    return;
+                case 'openWorldInfo':
+                    await openWorkspaceShellDrawer('WorldInfo');
+                    return;
+                case 'openBackgrounds':
+                    await openWorkspaceShellDrawer('Backgrounds');
+                    return;
+                case 'openExtensions':
+                    await openWorkspaceShellDrawer('rm_extensions_block');
+                    return;
+                case 'openSettings':
+                    window.location.assign('/settings');
+                    return;
+                default:
+                    console.warn('Unknown React workspace shell chrome action', action);
+            }
+        },
+    };
+}
+
+async function mountReactWorkspaceShellChromeHost(statusLabel = 'Workspace ready') {
+    const readyResult = publishWorkspaceShellTakeoverDiagnostic();
+    if (readyResult.status !== WORKSPACE_SHELL_TAKEOVER_STATUSES.READY) {
+        restoreLegacyWorkspaceChromeFromReact();
+        return readyResult;
+    }
+
+    const host = ensureWorkspaceShellChromeHost();
+    host.dataset.reactWorkspaceShellChromeStatus = 'loading';
+    host.setAttribute('data-react-workspace-shell-chrome-status', 'loading');
+
+    const result = await mountReactWorkspaceShellChrome({
+        container: host,
+        state: getWorkspaceShellChromeState(statusLabel),
+        bridge: getWorkspaceShellChromeBridge(),
+        features: getWorkspaceReactFeatures(),
+    });
+
+    host.dataset.reactWorkspaceShellChromeStatus = result.status;
+    host.setAttribute('data-react-workspace-shell-chrome-status', result.status);
+
+    if (result.status === WORKSPACE_SHELL_TAKEOVER_STATUSES.READY) {
+        hideLegacyWorkspaceChromeForReact();
+    } else {
+        restoreLegacyWorkspaceChromeFromReact();
+        publishWorkspaceShellTakeoverDiagnostic({ failureReason: result.reason });
+    }
+
     return result;
 }
 
@@ -2896,7 +3047,7 @@ async function firstLoadInit() {
     markStartup('app:initialized');
     await measureStartupStage('hideInitLoader', () => initLoaderHandle.hide());
     await measureStartupStage('fixViewport', () => fixViewport());
-    publishWorkspaceShellTakeoverDiagnostic();
+    await measureStartupStage('mountReactWorkspaceShellChrome', () => mountReactWorkspaceShellChromeHost());
     await measureStartupStage('emitAppReady', () => eventSource.emit(event_types.APP_READY));
     startupProfile.appReadyAtMs = roundStartupTime(performance.now());
     markStartup('app:ready');
@@ -15844,22 +15995,27 @@ jQuery(async function () {
     });
 
     eventSource.on(event_types.CHAT_CHANGED, () => {
+        void mountReactWorkspaceShellChromeHost();
         void mountReactMainChatMessageListPanel();
     });
 
     eventSource.on(event_types.CHAT_LOADED, () => {
+        void mountReactWorkspaceShellChromeHost();
         void mountReactMainChatMessageListPanel();
     });
 
     eventSource.on(event_types.MESSAGE_RECEIVED, () => {
+        void mountReactWorkspaceShellChromeHost();
         void mountReactMainChatMessageListPanel();
     });
 
     eventSource.on(event_types.MORE_MESSAGES_LOADED, () => {
+        void mountReactWorkspaceShellChromeHost();
         void mountReactMainChatMessageListPanel();
     });
 
     eventSource.on(event_types.USER_MESSAGE_RENDERED, () => {
+        void mountReactWorkspaceShellChromeHost();
         void mountReactMainChatMessageListPanel();
     });
 

@@ -3,6 +3,13 @@ import {
     createWorkspacePanelFallbackResult,
     createWorkspacePanelMountedResult,
 } from './workspace-panel-mount-contract.js';
+import {
+    WORKSPACE_SHELL_TAKEOVER_FAILURE_REASONS,
+    createWorkspaceShellTakeoverDisabledResult,
+    createWorkspaceShellTakeoverFailedResult,
+    createWorkspaceShellTakeoverReadyResult,
+    isReactWorkspaceShellTakeoverEnabled,
+} from './workspace-shell-takeover-contract.js';
 
 export const REACT_WORKSPACE_PANELS_ASSET_PATH = '/react/login/assets/workspace-panels.js';
 
@@ -77,5 +84,41 @@ export async function mountReactWorkspacePanel({
     } catch (error) {
         onError(error, kind, WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.MOUNT_FAILED);
         return createWorkspacePanelFallbackResult(kind, WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.MOUNT_FAILED);
+    }
+}
+
+export async function mountReactWorkspaceShellChrome({
+    container,
+    state,
+    bridge,
+    features,
+    loadModule = loadWorkspacePanelsModule,
+    onError = (error, reason) => {
+        const action = reason === WORKSPACE_SHELL_TAKEOVER_FAILURE_REASONS.MOUNT_FAILED ? 'mount' : 'load';
+        console.warn(`React workspace shell chrome failed to ${action}. Falling back to legacy chrome.`, error);
+    },
+}) {
+    if (!isReactWorkspaceShellTakeoverEnabled(features)) {
+        return createWorkspaceShellTakeoverDisabledResult();
+    }
+
+    if (!container) {
+        return createWorkspaceShellTakeoverFailedResult(WORKSPACE_SHELL_TAKEOVER_FAILURE_REASONS.MISSING_HOST);
+    }
+
+    let panelModule;
+    try {
+        panelModule = await loadModule();
+    } catch (error) {
+        onError(error, WORKSPACE_SHELL_TAKEOVER_FAILURE_REASONS.BUNDLE_LOAD_FAILED);
+        return createWorkspaceShellTakeoverFailedResult(WORKSPACE_SHELL_TAKEOVER_FAILURE_REASONS.BUNDLE_LOAD_FAILED);
+    }
+
+    try {
+        panelModule.mountWorkspaceShellChrome(container, { state, bridge });
+        return createWorkspaceShellTakeoverReadyResult();
+    } catch (error) {
+        onError(error, WORKSPACE_SHELL_TAKEOVER_FAILURE_REASONS.MOUNT_FAILED);
+        return createWorkspaceShellTakeoverFailedResult(WORKSPACE_SHELL_TAKEOVER_FAILURE_REASONS.MOUNT_FAILED);
     }
 }

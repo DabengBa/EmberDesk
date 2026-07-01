@@ -3,7 +3,7 @@ id: page.chat_workspace
 type: page
 name: Chat Workspace
 route: /
-related: [page.login, page.settings, feature.startup_bootstrap, feature.character_library_panel, feature.chat_message_rendering, feature.chat_message_actions, feature.chat_generation_auto_recovery, feature.character_export, feature.character_delete, feature.world_info_panel, feature.background_library_panel, feature.extension_panel_open, term.character_card, term.shared_browser_library]
+related: [page.login, page.settings, feature.startup_bootstrap, feature.next_workspace_shell, feature.character_library_panel, feature.chat_message_rendering, feature.chat_message_actions, feature.chat_generation_auto_recovery, feature.character_export, feature.character_delete, feature.world_info_panel, feature.background_library_panel, feature.extension_panel_open, term.character_card, term.shared_browser_library]
 ---
 
 # Page: Chat Workspace
@@ -27,6 +27,7 @@ This page exists so a user can run their daily LLM workflow from one browser sur
 ## Page-Level Semantic IDs
 
 - `feature.startup_bootstrap`: the visible shell-loading experience between opening the URL and reaching a usable workspace.
+- `feature.next_workspace_shell`: the same-entry React workspace chrome that can own current context, shell status, and primary workspace navigation.
 - `feature.character_library_panel`: browsing and selecting character cards from the workspace.
 - `feature.chat_message_rendering`: displaying stored or finalized chat messages as readable text inside stable message rows.
 - `feature.chat_message_actions`: discovering and using actions attached to rendered chat messages.
@@ -43,6 +44,7 @@ This page exists so a user can run their daily LLM workflow from one browser sur
 ## Included Features
 
 !include feature.startup_bootstrap
+!include feature.next_workspace_shell
 !include feature.character_library_panel
 !include feature.chat_message_rendering
 !include feature.chat_message_actions
@@ -70,8 +72,8 @@ This page exists so a user can run their daily LLM workflow from one browser sur
 - **Temporary chat state**: when the user opens a temporary Assistant chat, the workspace shows a visible temporary-chat status near the current-character title area; it is cleared when a normal character context is selected or a permanent Assistant chat is opened.
 - **Post-active-delete safe state**: after deleting the active character, the selected-character title area must route to a safe empty or library state rather than trying to reopen the deleted card.
 - **World Info panel state**: the World Info drawer keeps global activation controls separate from the editor selector; empty global selection and editor selection states must not leave stale entry content visible.
-- **Workspace shell final-owner state**: EmberDesk closes the current modernization roadmap with the existing jQuery workspace shell frozen as the long-term runtime facade for `/`. React routes and guarded panel/message-list islands remain additive owners inside that shell, and flag-off or build-missing paths roll back to the same workspace facade instead of implying a later full-SPA shell replacement.
-- **Same-entry shell takeover foundation state**: A later successor path can enable a same-entry React shell takeover foundation inside the current `/` workspace. This foundation does not create a separate `/workspace-next` route and does not visibly redesign the workspace by itself; it publishes owner/failure diagnostics so later React chrome and layout work can prove that the current entry is ready to be taken over. In development and CI, an enabled takeover foundation must fail fast when required host or payload conditions are missing instead of silently passing through legacy fallback. In production safety paths or explicit rollback states, the existing workspace shell can remain visible so users are not stranded by a blank or broken page, while diagnostics record the failure reason.
+- **Workspace shell successor state**: EmberDesk has reopened the shell owner boundary as a same-entry takeover path for `/`, not as a separate `/workspace-next` route. When `features.react.shell.takeover` is enabled and the React bundle mounts, the visible top workspace chrome can be React-owned while the established chat, composer, drawer content, and protected extension mount points remain in place. When the flag is off, the bundle is missing, or mount fails, the legacy chrome remains the rollback owner and diagnostics record the reason.
+- **Same-entry shell takeover state**: The takeover path publishes hidden diagnostics and a visible React chrome host in the current workspace. In development and CI, an enabled takeover should fail fast when required host, payload, bundle, or mount conditions are missing instead of silently passing through legacy fallback. In production safety paths or explicit rollback states, the existing workspace shell can remain visible so users are not stranded by a blank or broken page, while diagnostics record the failure reason.
 - **Global compatibility export state**: `globalThis.SillyTavern` stays as a frozen public compatibility facade, `eventSource` / `event_types` stay as long-term supported public runtime contracts, `@sillytavern/*` stays as a frozen browser-module facade for existing extension ecosystems, `/lib.js` stays as the preferred long-term shared browser utility surface, and `__emberDeskReactCompatibilityBridge` stays internal-only.
 - **Shared-library state**: the workspace loads a shared browser library during startup so first-party modules and compatible extensions can use documented imports and legacy globals without each surface bundling its own copy.
 - **Message rendering state**: stored or finalized messages render into stable `.mes[mesid]` rows with readable `.mes_text`, while message-row actions remain attached to the rendered row.

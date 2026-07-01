@@ -39,6 +39,28 @@ describe('chat workspace structure', () => {
         expect(scriptSource).not.toContain('/workspace-next');
     });
 
+    test('mounts React workspace chrome without hiding protected drawer contents', () => {
+        const scriptSource = readRepoFile('public/script.js');
+        const styleSource = readRepoFile('public/style.css');
+
+        expectContainsMarkers(scriptSource, [
+            'WORKSPACE_SHELL_CHROME_HOST_ID',
+            'ensureWorkspaceShellChromeHost',
+            'LEGACY_WORKSPACE_CHROME_SELECTOR',
+            '#top-bar, #top-settings-holder > .drawer > .drawer-toggle, .drawer-opener[data-target="rightNavHolder"], .drawer-opener[data-target="extensions-settings-button"]',
+            'data-react-workspace-shell-chrome-status',
+            'data-legacy-workspace-chrome-hidden-by-react',
+            'openWorkspaceShellDrawer',
+        ], { contractName: 'same-entry React workspace chrome host' });
+        expect(scriptSource).not.toContain('#top-settings-holder[hidden]');
+        expect(scriptSource).not.toContain('document.getElementById(\'top-settings-holder\').hidden = true');
+        expect(scriptSource).not.toContain('workspace-next');
+        expect(styleSource).toContain('#emberdesk-react-workspace-shell-chrome-host');
+        expect(styleSource).toContain('.react-workspace-shell-chrome');
+        expect(styleSource).toContain('body[data-react-workspace-shell-chrome="mounted"] .drawer-opener[data-target="rightNavHolder"]');
+        expect(styleSource).toContain('body[data-react-workspace-shell-chrome="mounted"] .drawer-opener[data-target="extensions-settings-button"]');
+    });
+
     test('keeps send-form controls discoverable by role and accessible name', () => {
         const indexHtml = readRepoFile('public/index.html');
         const scriptSource = readRepoFile('public/script.js');

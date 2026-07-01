@@ -202,6 +202,30 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).not.toContain('document.body.innerHTML =');
     });
 
+    test('wires a same-entry React workspace chrome host through the shared panel asset', () => {
+        const scriptSource = read('public/script.js');
+        const bridgeSource = read('public/scripts/workspace-panels-react-bridge.js');
+        const workspacePanelSource = read('app/workspace-panels.tsx');
+
+        expect(scriptSource).toContain('WORKSPACE_SHELL_CHROME_HOST_ID');
+        expect(scriptSource).toContain('ensureWorkspaceShellChromeHost');
+        expect(scriptSource).toContain('mountReactWorkspaceShellChrome');
+        expect(scriptSource).toContain('data-react-workspace-shell-chrome-status');
+        expect(scriptSource).toContain('data-legacy-workspace-chrome-hidden-by-react');
+        expect(scriptSource).not.toContain('workspace-next');
+        expect(scriptSource).not.toContain('/workspace-next');
+
+        expect(bridgeSource).toContain('mountReactWorkspaceShellChrome');
+        expect(bridgeSource).toContain('panelModule.mountWorkspaceShellChrome');
+        expect(workspacePanelSource).toContain('export function mountWorkspaceShellChrome');
+        expect(workspacePanelSource).toContain('ReactWorkspaceShellChrome');
+        expect(workspacePanelSource).toContain('Character Library');
+        expect(workspacePanelSource).toContain('World Info');
+        expect(workspacePanelSource).toContain('Backgrounds');
+        expect(workspacePanelSource).toContain('Extensions');
+        expect(workspacePanelSource).toContain('Settings');
+    });
+
     test('ships a main-chat message-list panel contract through the shared workspace panel asset', () => {
         const configSource = read('default/config.yaml');
         const packageSource = read('package.json');

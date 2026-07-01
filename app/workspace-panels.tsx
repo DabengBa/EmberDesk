@@ -54,6 +54,29 @@ interface WorkspacePanelBridge {
     dispatchAction?: (action: string, payload?: Record<string, unknown>) => Promise<unknown> | unknown;
 }
 
+interface WorkspaceShellChromeMount {
+    root: Root;
+    container: HTMLElement;
+    state?: WorkspaceShellChromeState;
+    bridge?: WorkspacePanelBridge;
+}
+
+interface WorkspaceShellChromeMountOptions {
+    state?: WorkspaceShellChromeState;
+    bridge?: WorkspacePanelBridge;
+}
+
+interface WorkspaceShellChromeState {
+    activeContext?: 'none' | 'assistant' | 'character' | 'group';
+    contextTitle?: string;
+    contextSubtitle?: string;
+    chatTitle?: string;
+    messageCount?: number;
+    temporaryChat?: boolean;
+    status?: 'loading' | 'empty' | 'success' | 'error';
+    statusLabel?: string;
+}
+
 interface WorkspacePanelLegacySlot {
     id: string;
     label: string;
@@ -434,6 +457,7 @@ function getMainChatMessageListScrollSnapshotStore() {
 
 const queryClient = new QueryClient();
 const mountedPanels = new Map<WorkspacePanelKind, WorkspacePanelMount>();
+let mountedShellChrome: WorkspaceShellChromeMount | null = null;
 const mainChatMessageListScrollSnapshots = getMainChatMessageListScrollSnapshotStore();
 const MAIN_CHAT_VIRTUAL_INDEX_ATTRIBUTE = 'data-main-chat-virtual-index';
 const MAIN_CHAT_SCROLL_RESTORE_THRESHOLD_PX = 12;
@@ -3058,6 +3082,97 @@ function WorkspacePanelRoot({ kind, bridge }: { kind: WorkspacePanelKind; bridge
     return renderPanel(kind, panelState, bridge);
 }
 
+const workspaceShellNavigationEntries = [
+    { action: 'openCharacterLibrary', icon: 'fa-address-book', label: 'Character Library' },
+    { action: 'openWorldInfo', icon: 'fa-book-atlas', label: 'World Info' },
+    { action: 'openBackgrounds', icon: 'fa-image', label: 'Backgrounds' },
+    { action: 'openExtensions', icon: 'fa-cubes', label: 'Extensions' },
+    { action: 'openSettings', icon: 'fa-gear', label: 'Settings' },
+] as const;
+
+function getWorkspaceShellContextLabel(state: WorkspaceShellChromeState) {
+    if (state.activeContext === 'group') {
+        return 'Group chat';
+    }
+
+    if (state.activeContext === 'character') {
+        return 'Character chat';
+    }
+
+    if (state.activeContext === 'assistant') {
+        return 'Assistant chat';
+    }
+
+    return 'No active chat';
+}
+
+function ReactWorkspaceShellChrome({
+    state = {},
+    bridge,
+}: {
+    state?: WorkspaceShellChromeState;
+    bridge?: WorkspacePanelBridge;
+}) {
+    const contextTitle = state.contextTitle?.trim() || 'Choose a character';
+    const contextSubtitle = state.contextSubtitle?.trim() || getWorkspaceShellContextLabel(state);
+    const chatTitle = state.chatTitle?.trim() || 'No chat selected';
+    const status = state.status ?? (state.activeContext === 'none' ? 'empty' : 'success');
+    const statusLabel = state.statusLabel ?? (status === 'empty' ? 'Ready for a character' : 'Workspace ready');
+    const messageCount = Number.isFinite(state.messageCount) ? state.messageCount : 0;
+
+    const dispatchAction = useCallback((action: string) => {
+        void bridge?.dispatchAction?.(action);
+    }, [bridge]);
+
+    return (
+        <header
+            className="react-workspace-shell-chrome"
+            data-react-workspace-shell-chrome="true"
+            data-react-workspace-shell-chrome-status={status}
+            data-react-workspace-shell-chrome-context={state.activeContext ?? 'none'}
+            data-doc-id="feature.next_workspace_shell page.chat_workspace"
+        >
+            <section className="react-workspace-shell-context" aria-label="Current workspace context">
+                <div className="react-workspace-shell-kicker">{contextSubtitle}</div>
+                <div className="react-workspace-shell-title">{contextTitle}</div>
+                <div className="react-workspace-shell-meta">
+                    <span>{chatTitle}</span>
+                    <span>{messageCount} messages</span>
+                    {state.temporaryChat ? <span>Temporary chat</span> : null}
+                </div>
+            </section>
+            <nav className="react-workspace-shell-nav" aria-label="Workspace navigation">
+                {workspaceShellNavigationEntries.map(entry => (
+                    <button
+                        key={entry.action}
+                        type="button"
+                        className="react-workspace-shell-nav-button"
+                        aria-label={entry.label}
+                        onClick={() => dispatchAction(entry.action)}
+                    >
+                        <i className={`fa-solid ${entry.icon}`} aria-hidden="true" />
+                        <span>{entry.label}</span>
+                    </button>
+                ))}
+            </nav>
+            <section className="react-workspace-shell-status" aria-live="polite">
+                <span className="react-workspace-shell-status-dot" aria-hidden="true" />
+                <span>{statusLabel}</span>
+            </section>
+        </header>
+    );
+}
+
+function renderIntoShellChrome(mount: WorkspaceShellChromeMount) {
+    mount.root.render(
+        <StrictMode>
+            <QueryClientProvider client={queryClient}>
+                <ReactWorkspaceShellChrome state={mount.state} bridge={mount.bridge} />
+            </QueryClientProvider>
+        </StrictMode>,
+    );
+}
+
 function renderIntoPanel(mount: WorkspacePanelMount) {
     recordWorkspacePanelUpdate(mount.kind, mount.state ?? null, mount.bridge);
     if (mount.kind === 'mainChatMessageList') {
@@ -3098,6 +3213,40 @@ export function mountWorkspacePanel(kind: WorkspacePanelKind, container: HTMLEle
     mountedPanels.set(kind, mount);
     recordWorkspacePanelMount(kind, options.state ?? null, options.bridge);
     renderIntoPanel(mount);
+}
+
+export function mountWorkspaceShellChrome(container: HTMLElement, options: WorkspaceShellChromeMountOptions = {}) {
+    attachGlobalCompatibilityBridge();
+    if (mountedShellChrome) {
+        if (mountedShellChrome.container !== container) {
+            mountedShellChrome.root.unmount();
+        } else {
+            mountedShellChrome.state = options.state;
+            mountedShellChrome.bridge = options.bridge;
+            renderIntoShellChrome(mountedShellChrome);
+            return;
+        }
+    }
+
+    mountedShellChrome = {
+        root: createRoot(container),
+        container,
+        state: options.state,
+        bridge: options.bridge,
+    };
+    renderIntoShellChrome(mountedShellChrome);
+}
+
+export function unmountWorkspaceShellChrome() {
+    if (!mountedShellChrome) {
+        return;
+    }
+
+    mountedShellChrome.root.unmount();
+    mountedShellChrome = null;
+    if (mountedPanels.size === 0) {
+        detachGlobalCompatibilityBridge();
+    }
 }
 
 export function updateWorkspacePanel(kind: WorkspacePanelKind, options: WorkspacePanelMountOptions = {}) {
