@@ -10,6 +10,7 @@ import json
 WORKSPACE_REACT_FEATURES_GLOBAL = "__emberDeskWorkspaceFeatures"
 PANEL_NAMES = (
     "characterLibrary",
+    "mainChatMessageList",
     "worldInfo",
     "backgroundLibrary",
     "extensionsHost",
@@ -21,11 +22,30 @@ EXTENSIONS_HOST_REACT_HOST_ID = "emberdesk-react-extensions-host-panel-host"
 
 
 def build_workspace_react_features(config):
+    react_config = config.get("features", {}).get("react", {})
     panels = {}
-    configured_panels = config.get("features", {}).get("react", {}).get("panels", {})
+    configured_panels = react_config.get("panels", {})
     for panel_name in PANEL_NAMES:
         panels[panel_name] = configured_panels.get(panel_name) is True
-    return {"reactPanels": panels}
+
+    pages = {
+        "settings": react_config.get("pages", {}).get("settings") is True,
+    }
+    takeover = react_config.get("shell", {}).get("takeover") is True
+    node_env = config.get("nodeEnv")
+    strict = takeover and (
+        config.get("ci") == "true"
+        or node_env == "development"
+        or node_env == "test"
+    )
+    return {
+        "reactPages": pages,
+        "reactPanels": panels,
+        "reactShell": {
+            "strict": strict,
+            "takeover": takeover,
+        },
+    }
 
 
 def serialize_workspace_react_features(features):
@@ -549,39 +569,80 @@ def mount_extensions_host_panel(document, features, loader, on_error, state_over
 def main():
     default_features = build_workspace_react_features({})
     assert default_features == {
+        "reactPages": {
+            "settings": False,
+        },
         "reactPanels": {
             "characterLibrary": False,
+            "mainChatMessageList": False,
             "worldInfo": False,
             "backgroundLibrary": False,
             "extensionsHost": False,
-        }
+        },
+        "reactShell": {
+            "strict": False,
+            "takeover": False,
+        },
     }
 
     mixed_features = build_workspace_react_features({
         "features": {
             "react": {
+                "pages": {
+                    "settings": True,
+                },
                 "panels": {
                     "characterLibrary": True,
+                    "mainChatMessageList": True,
                     "worldInfo": True,
                     "backgroundLibrary": False,
                     "extensionsHost": True,
-                }
+                },
+                "shell": {
+                    "takeover": True,
+                },
             }
-        }
+        },
+        "nodeEnv": "development",
     })
+    assert mixed_features["reactPages"]["settings"] is True
     assert mixed_features["reactPanels"]["characterLibrary"] is True
+    assert mixed_features["reactPanels"]["mainChatMessageList"] is True
     assert mixed_features["reactPanels"]["worldInfo"] is True
     assert mixed_features["reactPanels"]["backgroundLibrary"] is False
     assert mixed_features["reactPanels"]["extensionsHost"] is True
+    assert mixed_features["reactShell"] == {"strict": True, "takeover": True}
+
+    shell_takeover_without_node_env = build_workspace_react_features({
+        "features": {
+            "react": {
+                "shell": {"takeover": True},
+            },
+        },
+    })
+    assert shell_takeover_without_node_env["reactShell"] == {"strict": False, "takeover": True}
+
+    shell_takeover_in_ci = build_workspace_react_features({
+        "features": {
+            "react": {
+                "shell": {"takeover": True},
+            },
+        },
+        "ci": "true",
+    })
+    assert shell_takeover_in_ci["reactShell"] == {"strict": True, "takeover": True}
 
     unsafe_features = {
+        "reactPages": {"settings": True},
         "reactPanels": {
             "characterLibrary": True,
+            "mainChatMessageList": True,
             "worldInfo": True,
             "backgroundLibrary": False,
             "extensionsHost": False,
             "unsafe": "<script>alert(1)</script>&",
-        }
+        },
+        "reactShell": {"strict": True, "takeover": True},
     }
     script = build_workspace_react_features_script(unsafe_features)
     assert f"window.{WORKSPACE_REACT_FEATURES_GLOBAL}" in script
@@ -606,11 +667,14 @@ def main():
     assert inject_workspace_react_features(None, mixed_features) is None
 
     disabled_panel_features = {
+        "reactPages": {"settings": False},
         "reactPanels": {
+            "mainChatMessageList": False,
             "worldInfo": False,
             "backgroundLibrary": False,
             "extensionsHost": False,
-        }
+        },
+        "reactShell": {"strict": False, "takeover": False},
     }
     disabled_loader = FakeWorkspacePanelsLoader([FakeWorkspacePanelModule()])
     disabled_errors = []

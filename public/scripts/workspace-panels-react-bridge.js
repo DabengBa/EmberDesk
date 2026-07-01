@@ -15,6 +15,9 @@ export const REACT_WORKSPACE_PANELS_ASSET_PATH = '/react/login/assets/workspace-
 
 export function getDefaultWorkspaceReactFeatures() {
     return {
+        reactPages: {
+            settings: false,
+        },
         reactPanels: {
             characterLibrary: false,
             mainChatMessageList: false,

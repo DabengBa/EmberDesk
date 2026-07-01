@@ -65,7 +65,14 @@ Consequences:
 
 2026-06-24 Phase 7 Sprint 7 final decision:
 
-- EmberDesk does not move to a full SPA workspace shell in the current roadmap. The existing jQuery workspace shell is frozen as the long-term runtime facade for `/`, while React pages, guarded panel islands, and the guarded main-chat island remain additive owners inside that shell.
+- EmberDesk did not move to a full SPA workspace shell in the Phase 7 closeout. At that point, the existing jQuery workspace shell was frozen as the runtime facade for `/`, while React pages, guarded panel islands, and the guarded main-chat island remained additive owners inside that shell.
 - Flag-off, build-missing, and bundle-import-failure paths no longer count as vague temporary debt for the root workspace shell. They are explicit rollback behavior on the same workspace facade and must stay documented and test-covered.
 - `globalThis.SillyTavern` remains a frozen public compatibility facade, `eventSource` / `event_types` remain long-term supported public runtime contracts, and `@sillytavern/*` remains a frozen documented browser-module facade for existing extension ecosystems such as `JS-Slash-Runner`.
 - The shared `/lib.js` browser library remains the preferred long-term utility surface for new ES-module extensions, while `__emberDeskReactCompatibilityBridge` remains internal-only and cannot become a public escape hatch or replacement API.
+
+2026-07-01 Next Workspace Shell successor update:
+
+- The "no full SPA workspace shell" decision remains in force for separate-route or whole-app cutover proposals: EmberDesk still does not introduce `/workspace-next`, does not replace the file-backed model, and does not retire extension/slash/event compatibility surfaces as part of shell modernization.
+- The workspace shell boundary has been explicitly reopened as a same-entry successor path for the current `/` route. `features.react.shell.takeover` may mount a React-owned outer chrome and main-chat layout/status shell while keeping drawer contents, protected message rows, extension mount points, and legacy rollback available on the same entry.
+- The bootstrap payload now includes `reactPages.settings`, independent workspace panel flags, and `reactShell.{takeover,strict}`. Strict takeover failures are limited to CI, explicit development, and explicit test environments; self-hosted starts with `NODE_ENV` unset keep the production safety fallback semantics.
+- React workspace chrome may hide legacy primary toggles only after equivalent role/name entries exist in the React chrome. AI Config, Formatting, Character Library, World Info, Backgrounds, Extensions, and Settings now have React chrome entries; Settings routes to `/settings` only when the React Settings page is enabled and otherwise opens the existing User Settings drawer.

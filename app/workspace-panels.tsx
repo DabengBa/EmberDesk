@@ -3227,6 +3227,8 @@ function WorkspacePanelRoot({ kind, bridge }: { kind: WorkspacePanelKind; bridge
 }
 
 const workspaceShellNavigationEntries = [
+    { action: 'openAIConfig', icon: 'fa-sliders', label: 'AI Config' },
+    { action: 'openFormatting', icon: 'fa-font', label: 'Formatting' },
     { action: 'openCharacterLibrary', icon: 'fa-address-book', label: 'Character Library' },
     { action: 'openWorldInfo', icon: 'fa-book-atlas', label: 'World Info' },
     { action: 'openBackgrounds', icon: 'fa-image', label: 'Backgrounds' },

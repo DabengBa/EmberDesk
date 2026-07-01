@@ -346,7 +346,7 @@ import {
     parseCharacterLibraryFetchResponse,
     projectCharacterLibraryQueryAgainstDeletedAvatars,
 } from './scripts/character-library-react-sync.js';
-import { mountReactWorkspacePanel, mountReactWorkspaceShellChrome } from './scripts/workspace-panels-react-bridge.js';
+import { mountReactWorkspaceShellChrome } from './scripts/workspace-panels-react-bridge.js';
 import {
     WORKSPACE_SHELL_TAKEOVER_STATUSES,
     decideWorkspaceShellTakeover,
@@ -370,6 +370,9 @@ if (globalThis.location?.pathname === '/' && globalThis.location?.search.include
 
 export function getWorkspaceReactFeatures() {
     return globalThis.__emberDeskWorkspaceFeatures ?? {
+        reactPages: {
+            settings: false,
+        },
         reactPanels: {
             characterLibrary: false,
             mainChatMessageList: false,
@@ -416,7 +419,7 @@ const EXTENSIONS_HOST_REACT_HOST_ID = 'emberdesk-react-extensions-host-panel-hos
 const MAIN_CHAT_MESSAGE_LIST_REACT_HOST_ID = 'emberdesk-react-main-chat-message-list-host';
 const WORKSPACE_SHELL_TAKEOVER_MARKER_ID = 'emberdesk-react-shell-takeover-foundation';
 const WORKSPACE_SHELL_CHROME_HOST_ID = 'emberdesk-react-workspace-shell-chrome-host';
-const LEGACY_WORKSPACE_CHROME_SELECTOR = '#top-bar, #top-settings-holder > .drawer > .drawer-toggle, .drawer-opener[data-target="rightNavHolder"], .drawer-opener[data-target="extensions-settings-button"]';
+const LEGACY_WORKSPACE_CHROME_SELECTOR = '#top-bar, #ai-config-button > .drawer-toggle, #advanced-formatting-button > .drawer-toggle, #user-settings-button > .drawer-toggle, .drawer-opener[data-target="rightNavHolder"], .drawer-opener[data-target="extensions-settings-button"]';
 const MAIN_CHAT_SCROLL_RESTORE_THRESHOLD_PX = 12;
 const mainChatMessageRowSnapshotSchema = MAIN_CHAT_MESSAGE_ROW_SNAPSHOT_SCHEMA;
 const mainChatRichBodySnapshotSchema = MAIN_CHAT_RICH_BODY_SNAPSHOT_SCHEMA;
@@ -572,6 +575,12 @@ function getWorkspaceShellChromeBridge() {
     return {
         async dispatchAction(action) {
             switch (action) {
+                case 'openAIConfig':
+                    await openWorkspaceShellDrawer('left-nav-panel');
+                    return;
+                case 'openFormatting':
+                    await openWorkspaceShellDrawer('AdvancedFormatting');
+                    return;
                 case 'openCharacterLibrary':
                     await openWorkspaceShellDrawer('right-nav-panel');
                     $('#rm_button_characters').trigger('click');
@@ -586,7 +595,11 @@ function getWorkspaceShellChromeBridge() {
                     await openWorkspaceShellDrawer('rm_extensions_block');
                     return;
                 case 'openSettings':
-                    window.location.assign('/settings');
+                    if (getWorkspaceReactFeatures()?.reactPages?.settings) {
+                        window.location.assign('/settings');
+                    } else {
+                        await openWorkspaceShellDrawer('user-settings-block');
+                    }
                     return;
                 default:
                     console.warn('Unknown React workspace shell chrome action', action);

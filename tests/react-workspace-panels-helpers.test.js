@@ -47,6 +47,9 @@ describe('React workspace panels bridge helpers', () => {
                 backgroundLibrary: false,
                 extensionsHost: false,
             },
+            reactPages: {
+                settings: false,
+            },
             reactShell: {
                 strict: false,
                 takeover: false,
@@ -219,11 +222,19 @@ describe('React workspace panels bridge helpers', () => {
         expect(bridgeSource).toContain('panelModule.mountWorkspaceShellChrome');
         expect(workspacePanelSource).toContain('export function mountWorkspaceShellChrome');
         expect(workspacePanelSource).toContain('ReactWorkspaceShellChrome');
+        expect(workspacePanelSource).toContain('AI Config');
+        expect(workspacePanelSource).toContain('Formatting');
         expect(workspacePanelSource).toContain('Character Library');
         expect(workspacePanelSource).toContain('World Info');
         expect(workspacePanelSource).toContain('Backgrounds');
         expect(workspacePanelSource).toContain('Extensions');
         expect(workspacePanelSource).toContain('Settings');
+        expect(scriptSource).toContain("case 'openAIConfig':");
+        expect(scriptSource).toContain("await openWorkspaceShellDrawer('left-nav-panel');");
+        expect(scriptSource).toContain("case 'openFormatting':");
+        expect(scriptSource).toContain("await openWorkspaceShellDrawer('AdvancedFormatting');");
+        expect(scriptSource).toContain('if (getWorkspaceReactFeatures()?.reactPages?.settings)');
+        expect(scriptSource).toContain("await openWorkspaceShellDrawer('user-settings-block');");
     });
 
     test('ships a main-chat message-list panel contract through the shared workspace panel asset', () => {
@@ -487,7 +498,7 @@ describe('React workspace panels bridge helpers', () => {
         const scriptSource = read('public/script.js');
         const workspacePanelSource = read('app/workspace-panels.tsx');
 
-        expect(scriptSource).toContain('mountReactWorkspacePanel');
+        expect(scriptSource).toContain('mountWorkspacePanelHost');
         expect(scriptSource).toContain('const WORLD_INFO_REACT_HOST_ID = \'emberdesk-react-world-info-panel-host\';');
         expect(scriptSource).toContain('function ensureWorldInfoReactHost()');
         expect(scriptSource).toContain('function getWorldInfoReactBridgeState()');

@@ -6,7 +6,7 @@
 
 ## 状态
 
-状态：开发完成，进入兼容维护；Phase 0-6 已按当前批准边界交付，Phase 7 Sprint 1-7 已完成 full owner cutover 与最终决策闭环。Character Library、World Info、Background Library、Extensions Host 和当前 main-chat surface 的同入口 legacy path 已不再被视为未决竞争实现：它们要么被 React owner 取代，要么被 ADR 冻结为同入口 compatibility facade / rollback owner。最终 shell 结论是不推进 full SPA workspace shell；现有 jQuery workspace shell 作为长期 facade 保留，`globalThis.SillyTavern` 与 `@sillytavern/*` 冻结为 documented compatibility facades，`eventSource` / `event_types` 保持长期支持。
+状态：原 React 现代化 roadmap 已开发完成并进入兼容维护；Phase 0-6 已按批准边界交付，Phase 7 Sprint 1-7 已完成 full owner cutover 与最终决策闭环。Character Library、World Info、Background Library、Extensions Host 和当前 main-chat surface 的同入口 legacy path 已不再被视为未决竞争实现：它们要么被 React owner 取代，要么被 ADR 冻结为同入口 compatibility facade / rollback owner。2026-06-24 的结论仍是不推进 separate-route/full SPA workspace shell；2026-07-01 的 Next Workspace Shell successor 在此基础上重开当前 `/` 的 same-entry shell takeover，允许 React 接管外层 chrome 和主聊天 layout/status，而不新增 `/workspace-next`、不删除兼容 substrate。`globalThis.SillyTavern` 与 `@sillytavern/*` 仍冻结为 documented compatibility facades，`eventSource` / `event_types` 保持长期支持。
 创建日期：2026-06-15  
 前置条件：`.docs/tech/modernization-roadmap.md` 已于 2026-06-05 冻结完成
 
@@ -343,7 +343,7 @@ bun run docs:check
 - ✅ [Sprint 6: Main-chat renderer and windowing full owner cutover](../specs/react-phase7-full-owner-cutover/phase7-sprint6-main-chat-renderer-windowing-full-owner-cutover.md)（已交付）
   React 现在是 safe finalized row rich-body、row-lifecycle policy 和 reading-position restore 的单一 owner；editing/streaming/unsafe/extension-mutated rows 与 `showMoreMessages()` 被明确冻结在 documented legacy facades。
 - ✅ [Sprint 7: Workspace shell and global compatibility retirement decision](../specs/react-phase7-full-owner-cutover/phase7-sprint7-workspace-shell-global-compatibility-decision.md)（已交付）
-  当前 roadmap 选择冻结 legacy jQuery workspace shell 作为长期 runtime facade，而不是推进 full SPA shell；`globalThis.SillyTavern` 与 `@sillytavern/*` 被冻结为 documented public compatibility facades，`eventSource` / `event_types` 保持长期支持，`__emberDeskReactCompatibilityBridge` 明确 internal-only。
+  当前 roadmap 的关闭结论是不推进 separate-route/full SPA shell；2026-07-01 successor 已把当前 `/` 重新打开为 same-entry React shell takeover path。该 successor 允许 React chrome/layout 接管外层可见框架，但 legacy drawer contents、message rows、extension mount points、slash/regex/event surfaces 和 rollback substrate 仍保留。`globalThis.SillyTavern` 与 `@sillytavern/*` 被冻结为 documented public compatibility facades，`eventSource` / `event_types` 保持长期支持，`__emberDeskReactCompatibilityBridge` 明确 internal-only。
 
 **Full owner cutover 验证门**：
 ```bash
@@ -536,7 +536,7 @@ bun run docs:check
 未来规划绑定点：
 - future React-owned main-chat modules under `app/components/main-chat/*`, `app/lib/main-chat/*` and the matching TanStack Form / Query integration layer（Phase 4A / 4B 的 archived proof已经固定当前 owner split；exact file map for full cutover must be fixed by the Phase 7 transport / renderer specs and ADR updates）
 - `src/endpoints/*` 与未来经单独 spec/ADR 批准的 route-island helpers（Phase 5 当前只落地 `src/endpoints/moving-ui.js` 的 Hono island；未形成独立后端 Hono app 目录）
-- Any future work that reopens character library, World Info, background library, extensions host, main-chat transport, main-chat renderer/windowing, workspace shell, or global compatibility exports must start from the completed Phase 7 ADR closeout instead of treating those owner splits as unfinished roadmap debt.
+- Any future work that reopens character library, World Info, background library, extensions host, main-chat transport, main-chat renderer/windowing, workspace shell, or global compatibility exports must start from the completed Phase 7 ADR closeout and the 2026-07-01 Next Workspace Shell successor notes instead of treating those owner splits as unfinished roadmap debt.
 
 ## 相关文档
 
@@ -555,5 +555,5 @@ bun run docs:check
 ## 下一步行动
 
 1. **持续跑回归门**：后续维护继续以 `chat-message-rendering.e2e.js`、`chat-message-layout.e2e.js`、`chat-message-streaming.e2e.js`、focused unit proof、`bun run test:compat`、`bun run perf:startup` 和 `bun run perf:interaction` 保护已冻结的 owner split。
-2. **把当前 shell/global 结论当作基线而不是 backlog**：若未来有人想重开 full SPA shell、删除 `globalThis.SillyTavern`、缩减 `eventSource` / `event_types`、或收窄 `@sillytavern/*`，必须新开 spec/ADR，并提供 replacement、migration note、rollback 与 `JS-Slash-Runner` 级证据。
+2. **把当前 shell/global 结论当作基线而不是 backlog**：若未来有人想重开 separate-route/full SPA shell、删除 `globalThis.SillyTavern`、缩减 `eventSource` / `event_types`、或收窄 `@sillytavern/*`，必须新开 spec/ADR，并提供 replacement、migration note、rollback 与 `JS-Slash-Runner` 级证据。当前已批准的 Next Workspace Shell 是当前 `/` 的 same-entry takeover，不是 full SPA 旁路。
 3. **继续执行 TanStack 和兼容边界约束**：后续任何新增 React-owned 查询、mutation 或表单输入仍默认使用 TanStack Query + TanStack Form + Zod，且不得顺手扩张 `__emberDeskReactCompatibilityBridge` 或新增未文档化 public compatibility surface。

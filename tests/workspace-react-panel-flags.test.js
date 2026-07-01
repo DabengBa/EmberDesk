@@ -52,6 +52,9 @@ describe('workspace React panel flags', () => {
         const featureBootstrapModule = await import(`../src/workspace-react-features.js?workspacePanelFlags=${Date.now()}-${Math.random()}`);
 
         expect(featureBootstrapModule.getWorkspaceReactFeatures()).toEqual({
+            reactPages: {
+                settings: false,
+            },
             reactPanels: {
                 characterLibrary: false,
                 mainChatMessageList: false,
@@ -72,6 +75,9 @@ describe('workspace React panel flags', () => {
         process.env.EMBERDESK_FEATURES_REACT_PANELS_EXTENSIONSHOST = 'true';
 
         expect(featureBootstrapModule.getWorkspaceReactFeatures()).toEqual({
+            reactPages: {
+                settings: false,
+            },
             reactPanels: {
                 characterLibrary: false,
                 mainChatMessageList: true,
@@ -87,6 +93,18 @@ describe('workspace React panel flags', () => {
 
         const previousNodeEnv = process.env.NODE_ENV;
         try {
+            delete process.env.NODE_ENV;
+            expect(featureBootstrapModule.getWorkspaceReactFeatures().reactShell).toEqual({
+                strict: false,
+                takeover: true,
+            });
+
+            process.env.NODE_ENV = 'development';
+            expect(featureBootstrapModule.getWorkspaceReactFeatures().reactShell).toEqual({
+                strict: true,
+                takeover: true,
+            });
+
             process.env.NODE_ENV = 'production';
             expect(featureBootstrapModule.getWorkspaceReactFeatures().reactShell).toEqual({
                 strict: false,
@@ -112,6 +130,9 @@ describe('workspace React panel flags', () => {
                 extensionsHost: true,
                 unsafe: '<script>alert(1)</script>&',
             },
+            reactPages: {
+                settings: true,
+            },
             reactShell: {
                 strict: true,
                 takeover: true,
@@ -121,6 +142,7 @@ describe('workspace React panel flags', () => {
         expect(html).toContain('window.__emberDeskWorkspaceFeatures');
         expect(html).toContain('"mainChatMessageList":true');
         expect(html).toContain('"reactShell":{"strict":true,"takeover":true}');
+        expect(html).toContain('"reactPages":{"settings":true}');
         expect(html).toContain('"worldInfo":true');
         expect(html).toContain('"backgroundLibrary":true');
         expect(html).toContain('"extensionsHost":true');

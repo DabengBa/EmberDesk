@@ -83,7 +83,9 @@
   - 2026-07-01: 明确 fallback 不是开发通过条件；dev/CI/test strict 失败和 production safety fallback 被拆成不同语义。
   - 2026-07-01: 真实浏览器 smoke 发现旧 `Character Management` 和 `Extensions` 主入口仍与 React chrome 竞争；已通过 `body[data-react-workspace-shell-chrome="mounted"]` 隐藏 legacy primary entry buttons，同时保留 drawer content。
   - 2026-07-01: 第四阶段的窄切片已让 React main-chat shell 标记现有 `#chat`、`#send_form`、`#nonQRFormItems` 为外层 layout/status owner，并在 composer 附近显示本地 generation/recovery status；该交付不假设第三阶段 panel dock 已完成。
-- **实现追踪**：`reactShell.strict` 由 bootstrap payload 暴露，CI 或非 production 环境在 takeover 开启时默认 strict；production 默认保留 safety fallback。React chrome 和 main-chat layout shell 代码路径为 `public/script.js`、`public/scripts/workspace-panels-react-bridge.js`、`app/workspace-panels.tsx`、`public/style.css`。
+  - 2026-07-01: 代码审查发现 React chrome 隐藏 legacy drawer toggle 的范围大于 React 替代入口，已补齐 AI Config 与 Formatting 入口；Settings 在 React Settings page 未启用时改为打开 legacy User Settings drawer。
+  - 2026-07-01: strict 判定从 `NODE_ENV !== 'production'` 收窄为 CI、`NODE_ENV=development` 或 `NODE_ENV=test`，避免普通自托管未设置 `NODE_ENV` 时误入 fail-fast。
+- **实现追踪**：`reactPages.settings` 与 `reactShell.strict` 由 bootstrap payload 暴露，CI、`NODE_ENV=development` 或 `NODE_ENV=test` 在 takeover 开启时进入 strict；未设置 `NODE_ENV` 或 production 默认保留 safety fallback。React chrome 当前入口为 AI Config、Formatting、Character Library、World Info、Backgrounds、Extensions、Settings；代码路径为 `src/workspace-react-features.js`、`src/react-feature-flags.js`、`public/script.js`、`public/scripts/workspace-panels-react-bridge.js`、`app/workspace-panels.tsx`、`public/style.css`。
 
 ### Domain 3: 阶段化证明
 

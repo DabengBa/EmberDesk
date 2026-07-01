@@ -47,11 +47,18 @@ describe('chat workspace structure', () => {
             'WORKSPACE_SHELL_CHROME_HOST_ID',
             'ensureWorkspaceShellChromeHost',
             'LEGACY_WORKSPACE_CHROME_SELECTOR',
-            '#top-bar, #top-settings-holder > .drawer > .drawer-toggle, .drawer-opener[data-target="rightNavHolder"], .drawer-opener[data-target="extensions-settings-button"]',
+            '#top-bar, #ai-config-button > .drawer-toggle, #advanced-formatting-button > .drawer-toggle, #user-settings-button > .drawer-toggle, .drawer-opener[data-target="rightNavHolder"], .drawer-opener[data-target="extensions-settings-button"]',
             'data-react-workspace-shell-chrome-status',
             'data-legacy-workspace-chrome-hidden-by-react',
             'openWorkspaceShellDrawer',
+            "case 'openAIConfig':",
+            "await openWorkspaceShellDrawer('left-nav-panel');",
+            "case 'openFormatting':",
+            "await openWorkspaceShellDrawer('AdvancedFormatting');",
+            'if (getWorkspaceReactFeatures()?.reactPages?.settings)',
+            "await openWorkspaceShellDrawer('user-settings-block');",
         ], { contractName: 'same-entry React workspace chrome host' });
+        expect(scriptSource).not.toContain('#top-settings-holder > .drawer > .drawer-toggle');
         expect(scriptSource).not.toContain('#top-settings-holder[hidden]');
         expect(scriptSource).not.toContain('document.getElementById(\'top-settings-holder\').hidden = true');
         expect(scriptSource).not.toContain('workspace-next');

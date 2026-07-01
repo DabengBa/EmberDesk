@@ -31,5 +31,9 @@ export function isReactShellTakeoverEnabled() {
  * @returns {boolean}
  */
 export function isReactShellTakeoverStrictModeEnabled() {
-    return isReactShellTakeoverEnabled() && (process.env.CI === 'true' || process.env.NODE_ENV !== 'production');
+    return isReactShellTakeoverEnabled() && (
+        process.env.CI === 'true'
+        || process.env.NODE_ENV === 'development'
+        || process.env.NODE_ENV === 'test'
+    );
 }

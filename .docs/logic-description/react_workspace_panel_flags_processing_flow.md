@@ -29,6 +29,7 @@
 Goals:
 
 - Document the current workspace React feature payload exposed to the legacy workspace shell.
+- Document the current same-entry shell takeover payload, including React Settings route availability and strict/fallback mode.
 - Make the HTML bootstrap serialization and injection rules reproducible without importing production code.
 - Document the current browser-side workspace panel bridge helper that loads the shared scaffold bundle and falls back to legacy panels when disabled, missing, or failed.
 - Record the current split between the delivered workspace feature payload, the dedicated Character Library bundle, and the shared workspace-panel bundle that now also mounts the guarded main-chat message-list island.
@@ -49,6 +50,9 @@ Inputs:
 - `features.react.panels.worldInfo`: controls the current World Info independent React readiness host.
 - `features.react.panels.backgroundLibrary`: controls the current Background Library independent React status host.
 - `features.react.panels.extensionsHost`: controls the current Extensions Host independent React host.
+- `features.react.pages.settings`: controls whether the React workspace chrome Settings entry routes to `/settings` or opens the legacy User Settings drawer.
+- `features.react.shell.takeover`: controls whether the current `/` workspace attempts same-entry React shell chrome takeover.
+- `CI`, `NODE_ENV`: control whether takeover failures are strict. `CI=true`, `NODE_ENV=development`, and `NODE_ENV=test` enable strict mode when takeover is enabled; an unset `NODE_ENV` keeps safety fallback behavior.
 - `workspaceIndexHtml`: the legacy workspace HTML string read before response send.
 - `panelKind`: the requested shared-bundle panel kind, currently one of `mainChatMessageList`, `worldInfo`, `backgroundLibrary`, or `extensionsHost`.
 - `panelContainer`: the independent host element passed to the shared React workspace-panel bridge.
@@ -70,6 +74,8 @@ Missing or non-boolean panel flags resolve to `false`. The default config keeps 
 The processing outputs are:
 
 - `workspaceReactFeatures`: the object exposed to the browser as `window.__emberDeskWorkspaceFeatures`.
+- `workspaceReactFeatures.reactPages.settings`: whether React Settings is available as a route target from workspace chrome.
+- `workspaceReactFeatures.reactShell`: the same-entry takeover and strict/fallback mode payload read by the browser shell.
 - `workspaceReactFeaturesScript`: the escaped inline bootstrap script.
 - `workspaceReactFeaturesHtml`: the workspace HTML with the bootstrap script inserted once.
 - `mainChatMessageListReactHost`: an idempotent host inside `#chat` for the guarded React main-chat island, or cleanup/fallback when the main-chat flag is disabled.
@@ -87,9 +93,12 @@ The processing outputs are:
 
 ### Build workspace feature payload
 
-1. Resolve each supported workspace panel flag from configuration.
-2. Return one `reactPanels` object containing `characterLibrary`, `mainChatMessageList`, `worldInfo`, `backgroundLibrary`, and `extensionsHost`.
-3. Treat each flag independently; enabling one panel must not imply another panel is enabled.
+1. Resolve the React Settings page flag from configuration into `reactPages.settings`.
+2. Resolve each supported workspace panel flag from configuration.
+3. Return one `reactPanels` object containing `characterLibrary`, `mainChatMessageList`, `worldInfo`, `backgroundLibrary`, and `extensionsHost`.
+4. Resolve `reactShell.takeover` from configuration.
+5. Resolve `reactShell.strict` only when takeover is enabled and the runtime is CI, explicit development, or explicit test.
+6. Treat each flag independently; enabling one panel or page must not imply another panel or page is enabled.
 
 ### Serialize bootstrap script
 
@@ -236,7 +245,9 @@ The processing outputs are:
 ## Key Rules
 
 - The feature payload is a bootstrap contract from the server to the legacy browser shell; it is not a product-facing settings surface.
+- The same payload now includes `reactPages.settings` and `reactShell` because the React workspace chrome needs to decide whether Settings is a route transition or a legacy drawer action, and whether takeover failures should fail fast or keep the safety fallback.
 - The delivered workspace bootstrap payload now covers both dedicated-bundle and shared-bundle React slices. `characterLibrary` uses its own character-library bundle; `mainChatMessageList`, `worldInfo`, `backgroundLibrary`, and `extensionsHost` use the shared `workspace-panels.js` bundle.
+- `reactShell.strict` is not a synonym for "not production"; unconfigured self-hosted starts with `NODE_ENV` unset keep safety fallback behavior.
 - The `mainChatMessageList` flag may mount a guarded React island inside the existing `#chat` surface, but excluded non-OpenAI/group/dry-run/nested/quiet/background transport paths, legacy formatter/rich-body HTML, and long-chat load-more ownership remain legacy-owned.
 - The World Info flag may mount an independent React host/action island inside the legacy World Info editor panel, but World Info activation, import result semantics, regex placement, prompt activation, and world-book deletion still remain owned by `public/scripts/world-info.js`; React now reaches that owner through explicit helper functions instead of directly poking the legacy DOM controls.
 - The Background Library flag may mount an independent React host inside the legacy Backgrounds panel, and the visible React filter/gallery/action path is now the normal owner for that surface. Underlying selection, lock, folder, thumbnail, and slash-compatible behavior still executes through the `public/scripts/backgrounds.js` compatibility facade; file APIs and protected slash-command exports are not reimplemented in React.
@@ -252,11 +263,19 @@ The processing outputs are:
 ```json
 {
   "workspaceReactFeatures": {
+    "reactPages": {
+      "settings": false
+    },
     "reactPanels": {
       "characterLibrary": false,
+      "mainChatMessageList": false,
       "worldInfo": false,
       "backgroundLibrary": false,
       "extensionsHost": false
+    },
+    "reactShell": {
+      "strict": false,
+      "takeover": false
     }
   },
   "workspaceReactFeaturesHtml": "<html><head><script>window.__emberDeskWorkspaceFeatures = {...};</script></head><body></body></html>",
@@ -347,7 +366,7 @@ Run:
 uv run python .docs/logic-description/react_workspace_panel_flags_sandbox_proof.py
 ```
 
-The proof script embeds fake feature inputs, HTML, DOM host placement, bridge-state discovery, bridge action dispatch, and dynamic-import outcomes. It verifies default disabled flags, independent panel enablement, escaped bootstrap payloads, insertion before `</head>`, prepend fallback when no head tag exists, idempotent no-op behavior when the bootstrap script is already present, flag-off wrapper paths that do not create World Info / Background Library / Extensions Host hosts, World Info host reuse and placement before `#world_popup`, World Info bridge-state and action dispatch, Background Library host reuse and placement before `#bg_tabs`, Background Library bridge-state and action dispatch, Extensions Host host reuse and placement before `.extensions_block`, Extensions Host bridge-state and action dispatch, fail-closed bridge results, dynamic import cache reset after failure, and successful mount dispatch with forwarded state and bridge.
+The proof script embeds fake feature inputs, HTML, DOM host placement, bridge-state discovery, bridge action dispatch, and dynamic-import outcomes. It verifies default disabled flags, React Settings page flag output, independent panel enablement, same-entry shell takeover strict-mode rules, escaped bootstrap payloads, insertion before `</head>`, prepend fallback when no head tag exists, idempotent no-op behavior when the bootstrap script is already present, flag-off wrapper paths that do not create World Info / Background Library / Extensions Host hosts, World Info host reuse and placement before `#world_popup`, World Info bridge-state and action dispatch, Background Library host reuse and placement before `#bg_tabs`, Background Library bridge-state and action dispatch, Extensions Host host reuse and placement before `.extensions_block`, Extensions Host bridge-state and action dispatch, fail-closed bridge results, dynamic import cache reset after failure, and successful mount dispatch with forwarded state and bridge.
 
 ## Boundaries And Failure Modes
 
