@@ -54,6 +54,7 @@ interface WorkspacePanelMountOptions {
 }
 
 type WorkspacePanelStatus = 'idle' | 'loading' | 'empty' | 'success' | 'error';
+type WorkspacePanelDockStatus = 'idle' | 'disabled' | 'loading' | 'empty' | 'success' | 'error';
 type MainChatLayoutStatus = 'loading' | 'empty' | 'success' | 'streaming' | 'recovering' | 'error';
 
 interface WorkspacePanelBridge {
@@ -70,7 +71,7 @@ interface WorkspacePanelDockDispatchResult {
 
 interface WorkspacePanelDockSnapshot {
     activePanelKind: WorkspaceDockPanelKind | null;
-    activePanelStatus: 'idle' | 'disabled' | 'loading' | 'empty' | 'success' | 'error';
+    activePanelStatus: WorkspacePanelDockStatus;
     fallbackReason: string | null;
     lockedPanelKinds: WorkspaceDockPanelKind[];
     openPanelKinds: WorkspaceDockPanelKind[];
@@ -2061,7 +2062,7 @@ function WorkspacePanelShell({
                             className="workspace-panel-status-badge"
                             data-workspace-panel-status={status}
                         >
-                            {status}
+                            {getWorkspacePanelVisibleStatusLabel(status)}
                         </span>
                     ) : null}
                 </div>
@@ -3459,6 +3460,55 @@ function normalizeWorkspacePanelDockStatus(result: unknown) {
     return 'success';
 }
 
+function getWorkspacePanelDockKindLabel(kind: WorkspaceDockPanelKind) {
+    switch (kind) {
+        case 'characterLibrary':
+            return 'Character Library';
+        case 'worldInfo':
+            return 'World Info';
+        case 'backgroundLibrary':
+            return 'Backgrounds';
+        case 'extensionsHost':
+            return 'Extensions';
+        default:
+            return 'Workspace panel';
+    }
+}
+
+function getWorkspacePanelDockStatusLabel(status: WorkspacePanelDockStatus) {
+    switch (status) {
+        case 'loading':
+            return 'opening';
+        case 'empty':
+            return 'needs setup';
+        case 'error':
+            return 'needs attention';
+        case 'disabled':
+            return 'using legacy panel';
+        case 'idle':
+            return 'idle';
+        case 'success':
+        default:
+            return 'ready';
+    }
+}
+
+function getWorkspacePanelVisibleStatusLabel(status: WorkspacePanelStatus) {
+    switch (status) {
+        case 'loading':
+            return 'opening';
+        case 'empty':
+            return 'needs setup';
+        case 'error':
+            return 'needs attention';
+        case 'idle':
+            return 'idle';
+        case 'success':
+        default:
+            return 'ready';
+    }
+}
+
 function useWorkspacePanelDockSnapshot() {
     const [dockSnapshot, setDockSnapshot] = useState<WorkspacePanelDockSnapshot>(() => getWorkspacePanelDockSnapshot());
 
@@ -3565,7 +3615,9 @@ function ReactWorkspaceShellChrome({
                             aria-pressed={entry.panelKind ? isPanelEntryActive : undefined}
                             data-workspace-shell-panel-entry={entry.panelKind}
                             data-workspace-shell-panel-active={isPanelEntryActive ? 'true' : 'false'}
-                            onClick={() => {
+                            onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
                                 void dispatchAction(entry);
                             }}
                         >
@@ -3584,7 +3636,7 @@ function ReactWorkspaceShellChrome({
                         data-workspace-panel-dock-kind={dockSnapshot.activePanelKind}
                         data-workspace-panel-dock-status={dockSnapshot.activePanelStatus}
                     >
-                        {dockSnapshot.activePanelKind}: {dockSnapshot.activePanelStatus}
+                        {getWorkspacePanelDockKindLabel(dockSnapshot.activePanelKind)} {getWorkspacePanelDockStatusLabel(dockSnapshot.activePanelStatus)}
                     </span>
                 ) : null}
             </section>

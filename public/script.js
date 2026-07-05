@@ -571,6 +571,18 @@ async function openWorkspaceShellDrawer(drawerId) {
     }
 }
 
+async function ensureWorkspaceShellDeferredPanel(panelId) {
+    try {
+        await ensurePanel(panelId);
+    } catch (error) {
+        console.warn('React workspace shell could not preload deferred panel.', panelId, error);
+    }
+}
+
+function waitForWorkspaceShellPanelOpenTask() {
+    return new Promise(resolve => setTimeout(resolve, 0));
+}
+
 function getWorkspaceShellPanelDockState(kind) {
     const drawerId = {
         characterLibrary: 'right-nav-panel',
@@ -605,6 +617,8 @@ function createWorkspaceShellPanelResult(kind, resultOrMounted) {
 function getWorkspaceShellChromeBridge() {
     return {
         async dispatchAction(action) {
+            await waitForWorkspaceShellPanelOpenTask();
+
             switch (action) {
                 case 'openAIConfig':
                     await openWorkspaceShellDrawer('left-nav-panel');
@@ -617,6 +631,7 @@ function getWorkspaceShellChromeBridge() {
                     $('#rm_button_characters').trigger('click');
                     return createWorkspaceShellPanelResult('characterLibrary', isReactCharacterLibraryPanelEnabled());
                 case 'openWorldInfo':
+                    await ensureWorkspaceShellDeferredPanel('world-info-body');
                     await openWorkspaceShellDrawer('WorldInfo');
                     return createWorkspaceShellPanelResult('worldInfo', await mountReactWorldInfoPanel());
                 case 'openBackgrounds':

@@ -54,6 +54,7 @@ function LegacyEntityRow({ bridge, entity }: LegacyEntityRowProps) {
 
 export function CharacterLibraryPanel({ bridge, state }: { bridge: CharacterLibraryPanelBridge; state: CharacterLibraryPanelState; }) {
     const scrollElementRef = useRef<HTMLElement | null>(state.scrollElement);
+    const lastSyncedCharactersDataUpdatedAtRef = useRef<number | null>(null);
 
     useEffect(() => {
         scrollElementRef.current = state.scrollElement;
@@ -79,6 +80,11 @@ export function CharacterLibraryPanel({ bridge, state }: { bridge: CharacterLibr
             return;
         }
 
+        if (lastSyncedCharactersDataUpdatedAtRef.current === charactersDataUpdatedAt) {
+            return;
+        }
+
+        lastSyncedCharactersDataUpdatedAtRef.current = charactersDataUpdatedAt;
         void bridge.syncCharactersFromQuery?.(charactersData);
     }, [bridge, charactersData, charactersDataUpdatedAt]);
 

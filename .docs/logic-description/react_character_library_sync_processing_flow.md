@@ -34,6 +34,8 @@ Inputs:
 - `response.ok`, `response.status`, `response.statusText`, and `response.json()`: the observable response fields used by the parser.
 - `currentCharacters`: the current legacy workspace `characters` array.
 - `nextCharacters`: the normalized character array returned through the React Query bridge.
+- `charactersDataUpdatedAt`: the React Query snapshot timestamp for the current `nextCharacters` payload.
+- `lastSyncedCharactersDataUpdatedAt`: the last React Query snapshot timestamp already synchronized into the legacy workspace bridge.
 - `previousAvatar`: the active character avatar before sync starts, when one is selected.
 
 `nextCharacters` is normalized by the existing workspace helper before comparison. This flow starts after that normalization boundary.
@@ -46,6 +48,7 @@ The processing outputs are:
 - `characterLibraryFetchError`: the failed fetch error shape with status, status text, and parsed response data.
 - `characterLibraryFetchErrorData`: the parsed response `data` exposed from a character-library fetch error for legacy popup handling.
 - `characterLibraryPayloadChanged`: boolean decision from comparing the current and next full character payloads.
+- `characterLibrarySyncDeduplicated`: whether the current React Query snapshot is skipped because that same `charactersDataUpdatedAt` was already synchronized.
 - `characterLibrarySyncDecision`: whether the legacy `characters` array is replaced and whether active-avatar reselection is attempted.
 
 ## Staged Processing Flow
@@ -68,11 +71,13 @@ The processing outputs are:
 
 ### Sync changed payloads into the workspace
 
-1. If the payload is unchanged, return without replacing the array.
-2. Capture the active character avatar before replacing the array.
-3. Replace the legacy `characters` array in place with the normalized next array.
-4. If the previous active avatar still exists in the new array, update the active character id and reselect it without switching menus.
-5. Refresh groups and reprint the character list through the existing workspace path.
+1. If `charactersDataUpdatedAt` matches `lastSyncedCharactersDataUpdatedAt`, return without a second sync for the same React Query snapshot.
+2. Remember the current `charactersDataUpdatedAt` as the latest synchronized snapshot before dispatching to the legacy bridge.
+3. If the payload is unchanged, return without replacing the array.
+4. Capture the active character avatar before replacing the array.
+5. Replace the legacy `characters` array in place with the normalized next array.
+6. If the previous active avatar still exists in the new array, update the active character id and reselect it without switching menus.
+7. Refresh groups and reprint the character list through the existing workspace path.
 
 ## Key Rules
 
@@ -80,6 +85,7 @@ The processing outputs are:
 - Non-JSON failed responses degrade to `data: null` instead of hiding the original status and status text.
 - Structured error data is exposed only for the character-library fetch error shape; unrelated errors do not pretend to be API payloads.
 - Full payload comparison is intentional: changes to tags or other card metadata must not be ignored just because name, avatar, favorite state, and last-chat fields stayed the same.
+- React Query snapshot timestamps also gate sync: one `charactersDataUpdatedAt` value may trigger at most one bridge sync, even if React re-renders with the same snapshot again.
 - The legacy `characters` array is mutated in place so existing workspace references keep seeing the updated array object.
 - Query-driven sync does not own the active-character-missing reload warning; the full `getCharacters()` path still owns that user-facing recovery.
 
@@ -97,6 +103,7 @@ The processing outputs are:
   },
   "characterLibraryFetchErrorData": { "overflow": true },
   "characterLibraryPayloadChanged": true,
+  "characterLibrarySyncDeduplicated": false,
   "characterLibrarySyncDecision": {
     "changed": true,
     "reselectedAvatar": "alpha.png",
@@ -122,4 +129,5 @@ The proof script embeds fake fetch responses and fake character arrays. It verif
 - If a failed response has no JSON body, the error still carries status and status text but exposes `data: null`.
 - If a non-character-library exception is caught by the legacy caller, structured API data is unavailable and the overflow popup path does not run.
 - If the next payload is identical after normalization, sync is skipped and no group refresh or list reprint is requested.
+- If React re-renders with the same `charactersDataUpdatedAt`, sync is skipped even before payload comparison so the same query snapshot does not loop back through the legacy bridge twice.
 - If the active avatar is missing after query-driven sync, the sync still updates the array and list; the hard reload warning remains owned by the full `getCharacters()` recovery path.

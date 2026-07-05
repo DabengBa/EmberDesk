@@ -25,6 +25,14 @@ WORKSPACE_SHELL_DRAWER_IDS = {
     "backgroundLibrary": "Backgrounds",
     "extensionsHost": "rm_extensions_block",
 }
+WORKSPACE_PANEL_VISIBLE_STATUS_LABELS = {
+    "idle": "idle",
+    "loading": "opening",
+    "empty": "needs setup",
+    "success": "ready",
+    "error": "needs attention",
+    "disabled": "using legacy panel",
+}
 
 
 def build_workspace_react_features(config):
@@ -136,6 +144,10 @@ def normalize_workspace_panel_dock_status(result):
     if result.get("status") in {"loading", "empty", "success", "error"}:
         return result["status"]
     return "success"
+
+
+def get_workspace_panel_visible_status_label(status):
+    return WORKSPACE_PANEL_VISIBLE_STATUS_LABELS.get(status, "ready")
 
 
 def create_default_workspace_panel_dock_snapshot():
@@ -799,6 +811,9 @@ def main():
         "status": "fallback",
     }
     assert normalize_workspace_panel_dock_status(fallback_shell_result) == "disabled"
+    assert get_workspace_panel_visible_status_label("loading") == "opening"
+    assert get_workspace_panel_visible_status_label("error") == "needs attention"
+    assert get_workspace_panel_visible_status_label("disabled") == "using legacy panel"
 
     mounted_shell_result = create_workspace_shell_panel_result(dock_document, "characterLibrary", True)
     assert mounted_shell_result == {

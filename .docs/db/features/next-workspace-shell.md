@@ -23,9 +23,11 @@ Give users one modern, compact workspace frame for current context, shell status
 - Settings opens the standalone React Settings route only when that page flag is enabled; otherwise it opens the existing User Settings drawer in the current workspace.
 - The main-chat outer layout can be React shell-owned through existing `#chat`, `#send_form`, and `#nonQRFormItems` containers so the chat canvas, composer/action rail, and local generation status feel coordinated without wrapping or moving message rows.
 - Character Library, World Info, Backgrounds, and Extensions entries publish a transient React dock owner state so the shell can show the active panel and local mounted/disabled/loading/empty/success/error status while the existing facades continue to own panel behavior.
+- Visible shell and panel status badges use short human-readable phrases such as `opening`, `ready`, and `needs attention`; raw internal status enums stay in diagnostics instead of the default path.
 - Local empty/error recovery actions stay scoped to the affected surface instead of blocking the full workspace. Current examples include opening Character Library from an empty main-chat state, retrying or continuing a failed visible generation, importing or refreshing World Info, uploading or refreshing Backgrounds, and opening Manage or retrying Extras connection from Extensions.
 - The current dock path also preserves drawer `pinnedOpen` facts as transient `locked` / `pinned` metadata for compatibility snapshots and focused proof, but the visible shell chrome does not render separate pinned/locked badges.
 - The latest manual panel open, refocus, and pinned drawer intent is remembered only for the current browser page session. EmberDesk does not add a new persistent workspace preference for that shell state.
+- Opening Character Library, World Info, Backgrounds, or Extensions from the chrome must succeed on the first click without freezing the visible workspace or requiring a second click to settle panel state.
 - The chrome must not cover readable chat rows, `#send_textarea`, `#send_but`, or protected extension mount points.
 - If the feature flag is disabled, the bundle cannot load, or the chrome cannot mount, EmberDesk keeps the legacy workspace chrome usable and records a structured takeover reason.
 - Development, test, and CI strict mode should expose missing host, invalid payload, bundle-load, or mount failures instead of treating fallback as success; an unspecified `NODE_ENV` keeps the production safety fallback behavior.
@@ -52,6 +54,7 @@ Give users one modern, compact workspace frame for current context, shell status
 ## Feature-Specific Evidence
 
 - The React chrome root, role/name navigation entries, status attributes, and context text are primary evidence.
+- Active navigation state plus the local dock/status badge are the primary “action succeeded” signals; this feature does not require an extra success toast for ordinary panel open actions.
 - The hidden same-entry takeover marker and `data-react-workspace-shell-chrome-status` support diagnostics and automated proof.
 - Main-chat layout markers such as `data-main-chat-layout-owner`, `data-main-chat-layout-status`, and `data-main-chat-local-status` support proof that React owns only the outer placement/status shell.
 - Panel dock markers such as `data-workspace-shell-panel-entry`, `data-workspace-shell-panel-active`, and `data-workspace-panel-dock-status` support proof that React owns coordination state without taking over World Info, Background, Extension, or character-row semantics.
@@ -65,6 +68,7 @@ Give users one modern, compact workspace frame for current context, shell status
 - Shell fallback hides the reason in development, test, or CI.
 - React chrome hides or moves message rows, composer controls, or extension mount points.
 - Secondary panel loading blocks the entire workspace startup or makes chat unavailable.
+- Visible shell or panel badges expose raw internal enums such as `loading` or `success` instead of short user-facing phrases.
 - Primary navigation entries are only reachable by brittle selector paths and not by user-visible role/name.
 
 ## Boundaries

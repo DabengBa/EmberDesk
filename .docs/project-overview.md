@@ -68,7 +68,7 @@ EmberDesk currently provides:
 - a main browser workspace for chat-centric LLM use
 - character-card management and large-library browsing
 - a guarded React character-library panel island inside the main workspace, keeping the same entry point while making the React toolbar/list path the normal visible owner for large-library browsing and keeping only a documented emergency compatibility facade for flag-off or build-missing cases
-- an opt-in same-entry React workspace chrome for current context, shell status, AI Config, Formatting, Character Library, World Info, Backgrounds, Extensions, and Settings navigation, with Settings falling back to the legacy drawer when the React settings page is unavailable and panel entries exposing only transient active/status coordination instead of persistent shell-owned drawer state
+- an opt-in same-entry React workspace chrome for current context, shell status, AI Config, Formatting, Character Library, World Info, Backgrounds, Extensions, and Settings navigation, with Settings falling back to the legacy drawer when the React settings page is unavailable, visible status copy kept in short human-readable phrases, mobile status chrome hidden when width is tight, and panel entries exposing only transient active/status coordination instead of persistent shell-owned drawer state
 - chat history storage and recovery
 - real-browser proof for stored chat message rendering into stable message rows, plus message-row and send-form role/name affordance coverage for future main-chat changes
 - world info / lorebook workflows

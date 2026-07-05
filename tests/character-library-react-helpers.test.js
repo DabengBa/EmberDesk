@@ -41,6 +41,7 @@ describe('character library React panel scaffold', () => {
         expect(panelSource).toContain('import { useVirtualizer } from \'@tanstack/react-virtual\';');
         expect(panelSource).toContain('import { useQuery } from \'@tanstack/react-query\';');
         expect(panelSource).toContain('queryKey: [\'character-library\', \'all\']');
+        expect(panelSource).toContain('lastSyncedCharactersDataUpdatedAtRef');
         expect(panelSource).toContain('count: state.pageEntities.length');
         expect(panelSource).toContain('getScrollElement: () => scrollElementRef.current');
         expect(toolbarSource).toContain('import { useForm } from \'@tanstack/react-form\';');

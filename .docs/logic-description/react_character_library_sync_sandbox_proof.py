@@ -54,9 +54,37 @@ def has_character_library_payload_changed(current_characters, next_characters):
     return stringify_payload(current_characters) != stringify_payload(next_characters)
 
 
-def sync_characters_from_query(current_characters, next_characters, active_avatar=None):
+def sync_characters_from_query(
+    current_characters,
+    next_characters,
+    active_avatar=None,
+    *,
+    characters_data_updated_at=None,
+    last_synced_characters_data_updated_at=None,
+):
+    if (
+        characters_data_updated_at is not None
+        and last_synced_characters_data_updated_at == characters_data_updated_at
+    ):
+        return {
+            "deduplicated": True,
+            "lastSyncedCharactersDataUpdatedAt": last_synced_characters_data_updated_at,
+            "changed": False,
+            "reselectedAvatar": None,
+            "refreshedGroups": False,
+            "reprintedCharacters": False,
+        }
+
+    next_last_synced = (
+        characters_data_updated_at
+        if characters_data_updated_at is not None
+        else last_synced_characters_data_updated_at
+    )
+
     if not has_character_library_payload_changed(current_characters, next_characters):
         return {
+            "deduplicated": False,
+            "lastSyncedCharactersDataUpdatedAt": next_last_synced,
             "changed": False,
             "reselectedAvatar": None,
             "refreshedGroups": False,
@@ -69,6 +97,8 @@ def sync_characters_from_query(current_characters, next_characters, active_avata
         reselected_avatar = active_avatar
 
     return {
+        "deduplicated": False,
+        "lastSyncedCharactersDataUpdatedAt": next_last_synced,
         "changed": True,
         "reselectedAvatar": reselected_avatar,
         "refreshedGroups": True,
@@ -134,8 +164,16 @@ def main():
     assert has_character_library_payload_changed(current_characters, next_characters) is True
     assert has_character_library_payload_changed(next_characters, [dict(next_characters[0])]) is False
 
-    sync_decision = sync_characters_from_query(current_characters, next_characters, active_avatar="alpha.png")
+    sync_decision = sync_characters_from_query(
+        current_characters,
+        next_characters,
+        active_avatar="alpha.png",
+        characters_data_updated_at=101,
+        last_synced_characters_data_updated_at=99,
+    )
     assert sync_decision == {
+        "deduplicated": False,
+        "lastSyncedCharactersDataUpdatedAt": 101,
         "changed": True,
         "reselectedAvatar": "alpha.png",
         "refreshedGroups": True,
@@ -143,8 +181,32 @@ def main():
     }
     assert current_characters == next_characters
 
-    no_op_decision = sync_characters_from_query(current_characters, [dict(next_characters[0])], active_avatar="alpha.png")
+    no_op_decision = sync_characters_from_query(
+        current_characters,
+        [dict(next_characters[0])],
+        active_avatar="alpha.png",
+        characters_data_updated_at=102,
+        last_synced_characters_data_updated_at=101,
+    )
     assert no_op_decision == {
+        "deduplicated": False,
+        "lastSyncedCharactersDataUpdatedAt": 102,
+        "changed": False,
+        "reselectedAvatar": None,
+        "refreshedGroups": False,
+        "reprintedCharacters": False,
+    }
+
+    deduplicated_decision = sync_characters_from_query(
+        current_characters,
+        [dict(next_characters[0])],
+        active_avatar="alpha.png",
+        characters_data_updated_at=102,
+        last_synced_characters_data_updated_at=102,
+    )
+    assert deduplicated_decision == {
+        "deduplicated": True,
+        "lastSyncedCharactersDataUpdatedAt": 102,
         "changed": False,
         "reselectedAvatar": None,
         "refreshedGroups": False,

@@ -61,7 +61,9 @@ Inputs:
 - `workspaceIndexHtml`: the legacy workspace HTML string read before response send.
 - `workspaceShellPanelKind`: one of `characterLibrary`, `worldInfo`, `backgroundLibrary`, or `extensionsHost` for same-entry shell panel navigation.
 - `workspaceShellDrawer`: the legacy drawer matched from the panel kind (`#right-nav-panel`, `#WorldInfo`, `#Backgrounds`, or `#rm_extensions_block`).
+- `workspaceShellPanelOpenTask`: the deferred macrotask boundary used before shell-driven panel actions run against legacy drawer listeners.
 - `workspaceShellPanelResult`: the settled result returned from `public/script.js` after the shell opens a drawer and optionally mounts the guarded panel host.
+- `worldInfoDeferredPanel`: the deferred `world-info-body` panel that must be preloaded before the shell opens World Info from the React chrome.
 - `panelKind`: the requested shared-bundle panel kind, currently one of `mainChatMessageList`, `worldInfo`, `backgroundLibrary`, or `extensionsHost`.
 - `panelContainer`: the independent host element passed to the shared React workspace-panel bridge.
 - `worldInfoReactHost`: the DOM element created inside `#wiEditorPanel` before `#world_popup` when the World Info flag is enabled.
@@ -99,6 +101,7 @@ The processing outputs are:
 - `workspaceShellPanelDockState`: the transient `locked` / `pinned` facts derived from the current legacy drawer `.pinnedOpen` class.
 - `workspaceShellPanelActionResult`: the shell-facing result object that merges mount/fallback outcome with the current dock facts.
 - `workspacePanelDockSnapshot`: the in-memory dock snapshot with active kind, active status, fallback reason, and remembered locked/open/pinned panel lists for the current browser page session.
+- `workspacePanelVisibleStatusLabel`: the short human-readable status phrase used by visible shell/panel badges while raw enums stay in diagnostics.
 
 ## Staged Processing Flow
 
@@ -127,15 +130,19 @@ The processing outputs are:
 ### Coordinate shell panel dock state
 
 1. React shell panel entries for Character Library, World Info, Backgrounds, and Extensions dispatch through the same `public/script.js` bridge that opens the existing drawers.
-2. Before dispatch, `app/workspace-panels.tsx` records an optimistic dock intent for the selected panel kind, setting the active panel and a transient `loading` status.
-3. `public/script.js` resolves the current legacy drawer for the panel kind and reads whether it currently has the `.pinnedOpen` class.
-4. The drawer `.pinnedOpen` fact is copied into transient `locked` and `pinned` booleans; this keeps current drawer state observable without introducing new persistent shell ownership.
-5. `public/script.js` merges those booleans into the settled panel result:
+2. The React click handler stops the default button/document click chain so the dock intent is not replayed through competing legacy listeners.
+3. Before dispatch, `app/workspace-panels.tsx` records an optimistic dock intent for the selected panel kind, setting the active panel and a transient `loading` status.
+4. `public/script.js` waits one macrotask before the shell-driven legacy panel action runs, so the React click task settles before legacy drawer listeners fire.
+5. For `worldInfo`, `public/script.js` preloads the deferred `world-info-body` panel before opening the drawer so the first visible open does not stall on a missing deferred panel.
+6. `public/script.js` resolves the current legacy drawer for the panel kind and reads whether it currently has the `.pinnedOpen` class.
+7. The drawer `.pinnedOpen` fact is copied into transient `locked` and `pinned` booleans; this keeps current drawer state observable without introducing new persistent shell ownership.
+8. `public/script.js` merges those booleans into the settled panel result:
    - truthy boolean -> `{ mounted: true, status: 'mounted', locked, pinned }`
    - falsey boolean -> `{ mounted: false, status: 'fallback', reason: 'feature-disabled', locked, pinned }`
    - object result -> copy object fields and overwrite `locked` / `pinned` from the current drawer
-6. `app/workspace-panels.tsx` normalizes the settled result to one of `disabled`, `loading`, `empty`, `success`, or `error`, then records it in the dock store unless a newer click has already superseded that action.
-7. The visible shell uses the dock store only for active-panel, local-status, and local empty/error recovery feedback; pinned/locked facts stay in the transient store and compatibility snapshot rather than becoming separate shell badges.
+9. `app/workspace-panels.tsx` normalizes the settled result to one of `disabled`, `loading`, `empty`, `success`, or `error`, then records it in the dock store unless a newer click has already superseded that action.
+10. Visible shell and panel badges map those states to short phrases such as `opening`, `ready`, and `needs attention`; raw enums remain diagnostics-only.
+11. The visible shell uses the dock store only for active-panel, local-status, and local empty/error recovery feedback; pinned/locked facts stay in the transient store and compatibility snapshot rather than becoming separate shell badges.
 
 ### Guard individual panel mount calls
 

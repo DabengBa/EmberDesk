@@ -83,3 +83,9 @@ Consequences:
 - The shell records an optimistic `loading` intent before each panel action and then normalizes the settled result to `disabled`, `loading`, `empty`, `success`, or `error` without creating a second owner for World Info, Background, Extensions, or character-library behavior.
 - Current drawer `pinnedOpen` facts are copied into transient `locked` / `pinned` metadata for compatibility snapshots and focused proof, but the visible shell chrome only shows active-panel and dock-status feedback; it does not render separate pinned/locked badges.
 - `__emberDeskReactCompatibilityBridge` may expose the sanitized `workspacePanelDock` snapshot for internal diagnostics and migration proof, but it remains internal-only and does not replace the documented public compatibility surfaces.
+
+2026-07-06 Browser walkthrough hardening update:
+
+- The same-entry shell now treats first-open panel safety as part of the boundary contract: shell-driven panel actions wait one macrotask before entering legacy drawer listeners, and World Info preloads its deferred `world-info-body` panel before the drawer opens so first-click shell opens do not freeze the visible workspace.
+- Character Library query synchronization now treats one React Query snapshot timestamp as one bridge-sync budget; repeated renders of the same `charactersDataUpdatedAt` must not loop the same payload back through the legacy character-library bridge.
+- Visible shell and panel badges now use short human-readable phrases while raw enums remain in diagnostics. The migration boundary keeps internal state vocabulary out of the default user path instead of normalizing the shell around implementation terms.

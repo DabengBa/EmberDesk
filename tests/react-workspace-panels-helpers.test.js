@@ -248,6 +248,9 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('panelKind?: WorkspaceDockPanelKind;');
         expect(workspacePanelSource).toContain('function useWorkspacePanelDockSnapshot()');
         expect(workspacePanelSource).toContain('function normalizeWorkspacePanelDockStatus(');
+        expect(workspacePanelSource).toContain('function getWorkspacePanelDockKindLabel(');
+        expect(workspacePanelSource).toContain('function getWorkspacePanelDockStatusLabel(');
+        expect(workspacePanelSource).toContain('function getWorkspacePanelVisibleStatusLabel(');
         expect(workspacePanelSource).toContain('const dockSnapshot = useWorkspacePanelDockSnapshot();');
         expect(workspacePanelSource).toContain('const panelDispatchSequenceRef = useRef(0);');
         expect(workspacePanelSource).toContain('const dispatchSequence = panelDispatchSequenceRef.current + 1;');
@@ -261,10 +264,19 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('data-workspace-shell-panel-entry={entry.panelKind}');
         expect(workspacePanelSource).toContain('data-workspace-shell-panel-active={isPanelEntryActive ? \'true\' : \'false\'}');
         expect(workspacePanelSource).toContain('aria-pressed={entry.panelKind ? isPanelEntryActive : undefined}');
+        expect(workspacePanelSource).toContain('event.stopPropagation();');
         expect(workspacePanelSource).toContain('data-workspace-panel-dock-status={dockSnapshot.activePanelStatus}');
+        expect(workspacePanelSource).toContain('getWorkspacePanelDockKindLabel(dockSnapshot.activePanelKind)');
+        expect(workspacePanelSource).toContain('getWorkspacePanelDockStatusLabel(dockSnapshot.activePanelStatus)');
+        expect(scriptSource).toContain('async dispatchAction(action) {\n            await waitForWorkspaceShellPanelOpenTask();');
         expect(scriptSource).toContain("case 'openCharacterLibrary':");
         expect(workspacePanelSource).toContain("panelKind: 'characterLibrary'");
         expect(scriptSource).toContain("case 'openWorldInfo':");
+        expect(scriptSource).toContain('function waitForWorkspaceShellPanelOpenTask()');
+        expect(scriptSource).toContain('await waitForWorkspaceShellPanelOpenTask();');
+        expect(scriptSource).toContain("await ensureWorkspaceShellDeferredPanel('world-info-body');");
+        expect(scriptSource.indexOf('await waitForWorkspaceShellPanelOpenTask();')).toBeLessThan(scriptSource.indexOf("await ensureWorkspaceShellDeferredPanel('world-info-body');"));
+        expect(scriptSource.indexOf("await ensureWorkspaceShellDeferredPanel('world-info-body');")).toBeLessThan(scriptSource.indexOf("await openWorkspaceShellDrawer('WorldInfo');"));
         expect(workspacePanelSource).toContain("panelKind: 'worldInfo'");
         expect(scriptSource).toContain("case 'openBackgrounds':");
         expect(workspacePanelSource).toContain("panelKind: 'backgroundLibrary'");
@@ -533,6 +545,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('function WorkspacePanelShell');
         expect(workspacePanelSource).toContain('data-react-workspace-panel-shell={kind}');
         expect(workspacePanelSource).toContain('data-workspace-panel-status={status}');
+        expect(workspacePanelSource).toContain('getWorkspacePanelVisibleStatusLabel(status)');
         expect(workspacePanelSource).toContain('data-workspace-panel-recovery-state={status}');
         expect(workspacePanelSource).toContain('data-workspace-panel-recovery-action={action.id}');
         expect(workspacePanelSource).toContain('className="workspace-panel-diagnostics"');
