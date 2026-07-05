@@ -4,6 +4,8 @@
 
 - Owner: React workspace panel bootstrap documentation
 - Current code binding:
+  - `app/stores/workspace-panel-store.js`
+  - `app/compat/global-compatibility-bridge.js`
   - `src/workspace-react-features.js`
   - `src/server-main.js`
   - `public/script.js`
@@ -16,7 +18,9 @@
   - `vite.config.ts`
   - `tests/workspace-react-panel-flags.test.js`
   - `tests/react-workspace-panels-helpers.test.js`
-- Related tech doc: [.docs/tech/react-modernization-roadmap.md](../tech/react-modernization-roadmap.md)
+- Related tech docs:
+  - [.docs/tech/react-modernization-roadmap.md](../tech/react-modernization-roadmap.md)
+  - [.docs/tech/workspace-shell-panel-dock-coordination.md](../tech/workspace-shell-panel-dock-coordination.md)
 - Related semantic docs:
   - [.docs/db/pages/chat-workspace.md](../db/pages/chat-workspace.md)
   - [.docs/db/features/character-library-panel.md](../db/features/character-library-panel.md)
@@ -30,6 +34,7 @@ Goals:
 
 - Document the current workspace React feature payload exposed to the legacy workspace shell.
 - Document the current same-entry shell takeover payload, including React Settings route availability and strict/fallback mode.
+- Document the current same-entry shell dock intent/result flow and the sanitized compatibility snapshot that follows panel navigation.
 - Make the HTML bootstrap serialization and injection rules reproducible without importing production code.
 - Document the current browser-side workspace panel bridge helper that loads the shared scaffold bundle and falls back to legacy panels when disabled, missing, or failed.
 - Record the current split between the delivered workspace feature payload, the dedicated Character Library bundle, and the shared workspace-panel bundle that now also mounts the guarded main-chat message-list island.
@@ -54,6 +59,9 @@ Inputs:
 - `features.react.shell.takeover`: controls whether the current `/` workspace attempts same-entry React shell chrome takeover.
 - `CI`, `NODE_ENV`: control whether takeover failures are strict. `CI=true`, `NODE_ENV=development`, and `NODE_ENV=test` enable strict mode when takeover is enabled; an unset `NODE_ENV` keeps safety fallback behavior.
 - `workspaceIndexHtml`: the legacy workspace HTML string read before response send.
+- `workspaceShellPanelKind`: one of `characterLibrary`, `worldInfo`, `backgroundLibrary`, or `extensionsHost` for same-entry shell panel navigation.
+- `workspaceShellDrawer`: the legacy drawer matched from the panel kind (`#right-nav-panel`, `#WorldInfo`, `#Backgrounds`, or `#rm_extensions_block`).
+- `workspaceShellPanelResult`: the settled result returned from `public/script.js` after the shell opens a drawer and optionally mounts the guarded panel host.
 - `panelKind`: the requested shared-bundle panel kind, currently one of `mainChatMessageList`, `worldInfo`, `backgroundLibrary`, or `extensionsHost`.
 - `panelContainer`: the independent host element passed to the shared React workspace-panel bridge.
 - `worldInfoReactHost`: the DOM element created inside `#wiEditorPanel` before `#world_popup` when the World Info flag is enabled.
@@ -88,6 +96,9 @@ The processing outputs are:
 - `extensionsHostBridgeState`: a payload passed to the React workspace-panel bundle for protected mount-point readiness, Extras host controls, notify/manage/install controls, and deferred loader state.
 - `workspacePanelBridgeResult`: `true` only when a panel is enabled, has a container, loads the scaffold bundle, and calls `mountWorkspacePanel(kind, container, { state, bridge })`; otherwise `false` so the legacy panel remains the visible behavior owner.
 - `workspacePanelModuleCache`: the browser-side dynamic import cache for the shared workspace-panel scaffold bundle.
+- `workspaceShellPanelDockState`: the transient `locked` / `pinned` facts derived from the current legacy drawer `.pinnedOpen` class.
+- `workspaceShellPanelActionResult`: the shell-facing result object that merges mount/fallback outcome with the current dock facts.
+- `workspacePanelDockSnapshot`: the in-memory dock snapshot with active kind, active status, fallback reason, and remembered locked/open/pinned panel lists.
 
 ## Staged Processing Flow
 
@@ -112,6 +123,19 @@ The processing outputs are:
 2. If the HTML already contains `window.__emberDeskWorkspaceFeatures`, return it unchanged to avoid duplicate bootstrap scripts.
 3. If a closing `</head>` tag exists, insert the script immediately before that tag.
 4. Otherwise prepend the script before the HTML body.
+
+### Coordinate shell panel dock state
+
+1. React shell panel entries for Character Library, World Info, Backgrounds, and Extensions dispatch through the same `public/script.js` bridge that opens the existing drawers.
+2. Before dispatch, `app/workspace-panels.tsx` records an optimistic dock intent for the selected panel kind, setting the active panel and a transient `loading` status.
+3. `public/script.js` resolves the current legacy drawer for the panel kind and reads whether it currently has the `.pinnedOpen` class.
+4. The drawer `.pinnedOpen` fact is copied into transient `locked` and `pinned` booleans; this keeps current drawer state observable without introducing new persistent shell ownership.
+5. `public/script.js` merges those booleans into the settled panel result:
+   - truthy boolean -> `{ mounted: true, status: 'mounted', locked, pinned }`
+   - falsey boolean -> `{ mounted: false, status: 'fallback', reason: 'feature-disabled', locked, pinned }`
+   - object result -> copy object fields and overwrite `locked` / `pinned` from the current drawer
+6. `app/workspace-panels.tsx` normalizes the settled result to one of `disabled`, `loading`, `empty`, `success`, or `error`, then records it in the dock store unless a newer click has already superseded that action.
+7. The visible shell uses the dock store only for active-panel and local-status feedback; pinned/locked facts stay in the transient store and compatibility snapshot rather than becoming separate shell badges.
 
 ### Guard individual panel mount calls
 
@@ -246,8 +270,10 @@ The processing outputs are:
 
 - The feature payload is a bootstrap contract from the server to the legacy browser shell; it is not a product-facing settings surface.
 - The same payload now includes `reactPages.settings` and `reactShell` because the React workspace chrome needs to decide whether Settings is a route transition or a legacy drawer action, and whether takeover failures should fail fast or keep the safety fallback.
+- Same-entry shell dock coordination is transient by design: `workspacePanelDock` is in-memory only, derived from current drawer state, and reset with the browser session.
 - The delivered workspace bootstrap payload now covers both dedicated-bundle and shared-bundle React slices. `characterLibrary` uses its own character-library bundle; `mainChatMessageList`, `worldInfo`, `backgroundLibrary`, and `extensionsHost` use the shared `workspace-panels.js` bundle.
 - `reactShell.strict` is not a synonym for "not production"; unconfigured self-hosted starts with `NODE_ENV` unset keep safety fallback behavior.
+- The visible shell chrome does not render separate pinned/locked badges. Those facts are preserved only as transient dock metadata and compatibility-snapshot evidence derived from the current legacy drawer classes.
 - The `mainChatMessageList` flag may mount a guarded React island inside the existing `#chat` surface, but excluded non-OpenAI/group/dry-run/nested/quiet/background transport paths, legacy formatter/rich-body HTML, and long-chat load-more ownership remain legacy-owned.
 - The World Info flag may mount an independent React host/action island inside the legacy World Info editor panel, but World Info activation, import result semantics, regex placement, prompt activation, and world-book deletion still remain owned by `public/scripts/world-info.js`; React now reaches that owner through explicit helper functions instead of directly poking the legacy DOM controls.
 - The Background Library flag may mount an independent React host inside the legacy Backgrounds panel, and the visible React filter/gallery/action path is now the normal owner for that surface. Underlying selection, lock, folder, thumbnail, and slash-compatible behavior still executes through the `public/scripts/backgrounds.js` compatibility facade; file APIs and protected slash-command exports are not reimplemented in React.
@@ -279,6 +305,26 @@ The processing outputs are:
     }
   },
   "workspaceReactFeaturesHtml": "<html><head><script>window.__emberDeskWorkspaceFeatures = {...};</script></head><body></body></html>",
+  "workspaceShellPanelDockState": {
+    "locked": true,
+    "pinned": true
+  },
+  "workspaceShellPanelActionResult": {
+    "kind": "worldInfo",
+    "mounted": false,
+    "reason": "feature-disabled",
+    "status": "fallback",
+    "locked": true,
+    "pinned": true
+  },
+  "workspacePanelDockSnapshot": {
+    "activePanelKind": "worldInfo",
+    "activePanelStatus": "disabled",
+    "fallbackReason": "feature-disabled",
+    "lockedPanelKinds": [],
+    "openPanelKinds": ["worldInfo"],
+    "pinnedPanelKinds": ["worldInfo"]
+  },
   "worldInfoReactHost": {
     "disabledFlag": null,
     "missingEditorPanel": null,
@@ -366,11 +412,12 @@ Run:
 uv run python .docs/logic-description/react_workspace_panel_flags_sandbox_proof.py
 ```
 
-The proof script embeds fake feature inputs, HTML, DOM host placement, bridge-state discovery, bridge action dispatch, and dynamic-import outcomes. It verifies default disabled flags, React Settings page flag output, independent panel enablement, same-entry shell takeover strict-mode rules, escaped bootstrap payloads, insertion before `</head>`, prepend fallback when no head tag exists, idempotent no-op behavior when the bootstrap script is already present, flag-off wrapper paths that do not create World Info / Background Library / Extensions Host hosts, World Info host reuse and placement before `#world_popup`, World Info bridge-state and action dispatch, Background Library host reuse and placement before `#bg_tabs`, Background Library bridge-state and action dispatch, Extensions Host host reuse and placement before `.extensions_block`, Extensions Host bridge-state and action dispatch, fail-closed bridge results, dynamic import cache reset after failure, and successful mount dispatch with forwarded state and bridge.
+The proof script embeds fake feature inputs, HTML, shell-dock drawer facts, DOM host placement, bridge-state discovery, bridge action dispatch, and dynamic-import outcomes. It verifies default disabled flags, React Settings page flag output, independent panel enablement, same-entry shell takeover strict-mode rules, escaped bootstrap payloads, insertion before `</head>`, prepend fallback when no head tag exists, idempotent no-op behavior when the bootstrap script is already present, transient shell dock result normalization from current drawer `.pinnedOpen` state, remembered dock snapshot updates, flag-off wrapper paths that do not create World Info / Background Library / Extensions Host hosts, World Info host reuse and placement before `#world_popup`, World Info bridge-state and action dispatch, Background Library host reuse and placement before `#bg_tabs`, Background Library bridge-state and action dispatch, Extensions Host host reuse and placement before `.extensions_block`, Extensions Host bridge-state and action dispatch, fail-closed bridge results, dynamic import cache reset after failure, and successful mount dispatch with forwarded state and bridge.
 
 ## Boundaries And Failure Modes
 
 - If all flags are false, the legacy workspace should continue to render its legacy panels and should not receive empty World Info, Background Library, or Extensions Host migration hosts.
 - If a future panel flag is true but its browser bridge or bundle fails to load, that panel must fall back to the legacy surface instead of making the workspace unusable.
+- If a drawer is pinned in legacy DOM, the dock flow may preserve that fact as transient `locked` / `pinned` metadata, but this flow must not treat that metadata as permission to replace or reimplement the underlying drawer behavior.
 - If the HTML has no closing head tag, prepending the bootstrap script is acceptable because the script only writes a global feature payload.
 - This flow documents the shared bridge fallback rule plus the current World Info, Background Library, and Extensions Host host/action islands, but it does not validate the semantic correctness of legacy-owned prompt scanning, background file operations, or third-party extension protocols. Those remain covered by their focused legacy and compatibility tests.

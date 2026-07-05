@@ -3347,15 +3347,21 @@ function ReactWorkspaceShellChrome({
     const statusLabel = state.statusLabel ?? (status === 'empty' ? 'Ready for a character' : 'Workspace ready');
     const messageCount = Number.isFinite(state.messageCount) ? state.messageCount : 0;
     const dockSnapshot = useWorkspacePanelDockSnapshot();
+    const panelDispatchSequenceRef = useRef(0);
 
     const dispatchAction = useCallback(async (entry: WorkspaceShellNavigationEntry) => {
+        const dispatchSequence = panelDispatchSequenceRef.current + 1;
         if (entry.panelKind) {
+            panelDispatchSequenceRef.current = dispatchSequence;
             recordWorkspacePanelDockIntent(entry.panelKind);
         }
 
         try {
             const result = await bridge?.dispatchAction?.(entry.action);
             if (entry.panelKind) {
+                if (panelDispatchSequenceRef.current !== dispatchSequence) {
+                    return;
+                }
                 recordWorkspacePanelDockResult(entry.panelKind, {
                     fallbackReason: getWorkspacePanelDockFallbackReason(result),
                     locked: Boolean(asWorkspacePanelDockDispatchResult(result).locked),
@@ -3365,6 +3371,9 @@ function ReactWorkspaceShellChrome({
             }
         } catch (error) {
             if (entry.panelKind) {
+                if (panelDispatchSequenceRef.current !== dispatchSequence) {
+                    return;
+                }
                 recordWorkspacePanelDockResult(entry.panelKind, {
                     fallbackReason: 'action-failed',
                     status: 'error',

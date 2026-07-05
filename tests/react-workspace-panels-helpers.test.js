@@ -249,6 +249,9 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('function useWorkspacePanelDockSnapshot()');
         expect(workspacePanelSource).toContain('function normalizeWorkspacePanelDockStatus(');
         expect(workspacePanelSource).toContain('const dockSnapshot = useWorkspacePanelDockSnapshot();');
+        expect(workspacePanelSource).toContain('const panelDispatchSequenceRef = useRef(0);');
+        expect(workspacePanelSource).toContain('const dispatchSequence = panelDispatchSequenceRef.current + 1;');
+        expect(workspacePanelSource).toContain('if (panelDispatchSequenceRef.current !== dispatchSequence) {');
         expect(workspacePanelSource).toContain('recordWorkspacePanelDockIntent(entry.panelKind);');
         expect(workspacePanelSource).toContain('recordWorkspacePanelDockResult(entry.panelKind, {');
         expect(workspacePanelSource).toContain('fallbackReason: getWorkspacePanelDockFallbackReason(result),');

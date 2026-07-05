@@ -6,7 +6,7 @@
 
 ## 状态
 
-状态：原 React 现代化 roadmap 已开发完成并进入兼容维护；Phase 0-6 已按批准边界交付，Phase 7 Sprint 1-7 已完成 full owner cutover 与最终决策闭环。Character Library、World Info、Background Library、Extensions Host 和当前 main-chat surface 的同入口 legacy path 已不再被视为未决竞争实现：它们要么被 React owner 取代，要么被 ADR 冻结为同入口 compatibility facade / rollback owner。2026-06-24 的结论仍是不推进 separate-route/full SPA workspace shell；2026-07-01 的 Next Workspace Shell successor 在此基础上重开当前 `/` 的 same-entry shell takeover，允许 React 接管外层 chrome 和主聊天 layout/status，而不新增 `/workspace-next`、不删除兼容 substrate。`globalThis.SillyTavern` 与 `@sillytavern/*` 仍冻结为 documented compatibility facades，`eventSource` / `event_types` 保持长期支持。
+状态：原 React 现代化 roadmap 已开发完成并进入兼容维护；Phase 0-6 已按批准边界交付，Phase 7 Sprint 1-7 已完成 full owner cutover 与最终决策闭环。Character Library、World Info、Background Library、Extensions Host 和当前 main-chat surface 的同入口 legacy path 已不再被视为未决竞争实现：它们要么被 React owner 取代，要么被 ADR 冻结为同入口 compatibility facade / rollback owner。2026-06-24 的结论仍是不推进 separate-route/full SPA workspace shell；2026-07-01 的 Next Workspace Shell successor 在此基础上重开当前 `/` 的 same-entry shell takeover，允许 React 接管外层 chrome 和主聊天 layout/status，而不新增 `/workspace-next`、不删除兼容 substrate。2026-07-05 的后续收口把 Character Library、World Info、Backgrounds、Extensions 的 panel entry 协调落实为 transient dock state：可见 shell 只发布 active/status 反馈，当前 drawer `pinnedOpen` 事实只保留在内部 compatibility snapshot 中。`globalThis.SillyTavern` 与 `@sillytavern/*` 仍冻结为 documented compatibility facades，`eventSource` / `event_types` 保持长期支持。
 创建日期：2026-06-15  
 前置条件：`.docs/tech/modernization-roadmap.md` 已于 2026-06-05 冻结完成
 
@@ -547,6 +547,7 @@ bun run docs:check
 - [React settings payload processing flow](../logic-description/react_settings_payload_processing_flow.md) - React `/settings` form defaults、save payload、legacy Vertex AI round-trip 与 advanced reasoning effort 兼容规则
 - [React character-library sync processing flow](../logic-description/react_character_library_sync_processing_flow.md) - React character-library island 与 legacy `characters` 状态同步规则
 - [React workspace panel flags processing flow](../logic-description/react_workspace_panel_flags_processing_flow.md) - workspace React feature payload、HTML bootstrap 注入和 workspace-panel host/status bridge 边界
+- [Workspace shell panel dock coordination](workspace-shell-panel-dock-coordination.md) - same-entry React shell 如何记录 transient dock status、归一化结果，并把当前 drawer `pinnedOpen` 事实限制在内部 compatibility snapshot
 - [Background Library Panel](../db/features/background-library-panel.md) - Phase 2 Sprint 6 当前 guarded action island 与 legacy-owned 行为边界
 - [Extensions Panel Open](../db/features/extension-panel-open.md) - Phase 2 Sprint 7 当前 guarded action island 与 legacy-owned 扩展行为边界
 - [ADR-0007: React page and panel islands with legacy fallbacks](../adr/0007-react-page-islands-with-legacy-fallbacks.md) - Phase 0-3B guarded island / fallback 基线；Phase 7 cutover ADR update 必须显式说明哪些 fallback 被删除、冻结或长期支持

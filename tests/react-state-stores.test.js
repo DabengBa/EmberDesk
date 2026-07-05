@@ -114,6 +114,7 @@ describe('React state stores', () => {
 
         recordWorkspacePanelDockResult('worldInfo', {
             status: 'success',
+            pinned: false,
         });
         expect(getWorkspacePanelDockSnapshot()).toMatchObject({
             activePanelKind: 'worldInfo',
@@ -126,6 +127,50 @@ describe('React state stores', () => {
         expect(() => recordWorkspacePanelDockIntent('mainChatMessageList')).toThrow('Unsupported workspace dock panel kind');
 
         unsubscribe();
+    });
+
+    test('keeps existing pinned and locked dock hints while refocusing a panel', () => {
+        resetWorkspacePanelStore();
+
+        recordWorkspacePanelDockResult('worldInfo', {
+            locked: true,
+            pinned: true,
+            status: 'success',
+        });
+        recordWorkspacePanelDockIntent('worldInfo');
+
+        expect(getWorkspacePanelDockSnapshot()).toMatchObject({
+            activePanelKind: 'worldInfo',
+            activePanelStatus: 'loading',
+            lockedPanelKinds: ['worldInfo'],
+            pinnedPanelKinds: ['worldInfo'],
+        });
+
+        recordWorkspacePanelDockResult('worldInfo', {
+            fallbackReason: 'action-failed',
+            status: 'error',
+        });
+
+        expect(getWorkspacePanelDockSnapshot()).toMatchObject({
+            activePanelKind: 'worldInfo',
+            activePanelStatus: 'error',
+            fallbackReason: 'action-failed',
+            lockedPanelKinds: ['worldInfo'],
+            pinnedPanelKinds: ['worldInfo'],
+        });
+
+        recordWorkspacePanelDockResult('worldInfo', {
+            locked: false,
+            pinned: false,
+            status: 'success',
+        });
+
+        expect(getWorkspacePanelDockSnapshot()).toMatchObject({
+            activePanelKind: 'worldInfo',
+            activePanelStatus: 'success',
+            lockedPanelKinds: [],
+            pinnedPanelKinds: [],
+        });
     });
 
     test('records sanitized main-chat observation snapshots and resets safely', () => {

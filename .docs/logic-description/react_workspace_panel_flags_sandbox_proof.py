@@ -19,6 +19,12 @@ REACT_WORKSPACE_PANELS_ASSET_PATH = "/react/login/assets/workspace-panels.js"
 WORLD_INFO_REACT_HOST_ID = "emberdesk-react-world-info-panel-host"
 BACKGROUND_LIBRARY_REACT_HOST_ID = "emberdesk-react-background-library-panel-host"
 EXTENSIONS_HOST_REACT_HOST_ID = "emberdesk-react-extensions-host-panel-host"
+WORKSPACE_SHELL_DRAWER_IDS = {
+    "characterLibrary": "right-nav-panel",
+    "worldInfo": "WorldInfo",
+    "backgroundLibrary": "Backgrounds",
+    "extensionsHost": "rm_extensions_block",
+}
 
 
 def build_workspace_react_features(config):
@@ -80,6 +86,114 @@ def inject_workspace_react_features(html, features):
 
 def is_react_workspace_panel_enabled(kind, features):
     return bool(features.get("reactPanels", {}).get(kind))
+
+
+def get_workspace_shell_panel_dock_state(document, kind):
+    drawer_id = WORKSPACE_SHELL_DRAWER_IDS.get(kind)
+    drawer = document.get(drawer_id) if drawer_id else None
+    pinned = drawer is not None and "pinnedOpen" in drawer.class_name.split()
+    return {
+        "locked": pinned,
+        "pinned": pinned,
+    }
+
+
+def create_workspace_shell_panel_result(document, kind, result_or_mounted):
+    dock_state = get_workspace_shell_panel_dock_state(document, kind)
+    if isinstance(result_or_mounted, dict):
+        return {
+            **result_or_mounted,
+            "locked": dock_state["locked"],
+            "pinned": dock_state["pinned"],
+        }
+
+    if result_or_mounted:
+        return {
+            "kind": kind,
+            "locked": dock_state["locked"],
+            "mounted": True,
+            "pinned": dock_state["pinned"],
+            "status": "mounted",
+        }
+
+    return {
+        "kind": kind,
+        "locked": dock_state["locked"],
+        "mounted": False,
+        "pinned": dock_state["pinned"],
+        "reason": "feature-disabled",
+        "status": "fallback",
+    }
+
+
+def normalize_workspace_panel_dock_status(result):
+    if result.get("mounted") is True or result.get("status") == "mounted":
+        return "success"
+    if result.get("status") == "disabled":
+        return "disabled"
+    if result.get("status") == "fallback":
+        return "disabled" if result.get("reason") == "feature-disabled" else "error"
+    if result.get("status") in {"loading", "empty", "success", "error"}:
+        return result["status"]
+    return "success"
+
+
+def create_default_workspace_panel_dock_snapshot():
+    return {
+        "activePanelKind": None,
+        "activePanelStatus": "idle",
+        "fallbackReason": None,
+        "lockedPanelKinds": [],
+        "openPanelKinds": [],
+        "pinnedPanelKinds": [],
+    }
+
+
+def reconcile_panel_kind_presence(panel_kinds, kind, should_remember):
+    next_panel_kinds = [panel_kind for panel_kind in panel_kinds if panel_kind != kind]
+    return next_panel_kinds + [kind] if should_remember else next_panel_kinds
+
+
+def remember_panel_kind(panel_kinds, kind):
+    return panel_kinds if kind in panel_kinds else panel_kinds + [kind]
+
+
+def record_workspace_panel_dock_intent(snapshot, kind, locked=None, pinned=None):
+    return {
+        "activePanelKind": kind,
+        "activePanelStatus": "loading",
+        "fallbackReason": None,
+        "lockedPanelKinds": reconcile_panel_kind_presence(
+            snapshot["lockedPanelKinds"],
+            kind,
+            kind in snapshot["lockedPanelKinds"] if locked is None else locked,
+        ),
+        "openPanelKinds": remember_panel_kind(snapshot["openPanelKinds"], kind),
+        "pinnedPanelKinds": reconcile_panel_kind_presence(
+            snapshot["pinnedPanelKinds"],
+            kind,
+            kind in snapshot["pinnedPanelKinds"] if pinned is None else pinned,
+        ),
+    }
+
+
+def record_workspace_panel_dock_result(snapshot, kind, result):
+    return {
+        "activePanelKind": kind,
+        "activePanelStatus": normalize_workspace_panel_dock_status(result),
+        "fallbackReason": result.get("fallbackReason"),
+        "lockedPanelKinds": reconcile_panel_kind_presence(
+            snapshot["lockedPanelKinds"],
+            kind,
+            kind in snapshot["lockedPanelKinds"] if result.get("locked") is None else result.get("locked"),
+        ),
+        "openPanelKinds": remember_panel_kind(snapshot["openPanelKinds"], kind),
+        "pinnedPanelKinds": reconcile_panel_kind_presence(
+            snapshot["pinnedPanelKinds"],
+            kind,
+            kind in snapshot["pinnedPanelKinds"] if result.get("pinned") is None else result.get("pinned"),
+        ),
+    }
 
 
 class FakeElement:
@@ -665,6 +779,75 @@ def main():
 
     assert inject_workspace_react_features("", mixed_features) == ""
     assert inject_workspace_react_features(None, mixed_features) is None
+
+    dock_document = {
+        "WorldInfo": FakeElement("WorldInfo"),
+        "right-nav-panel": FakeElement("right-nav-panel"),
+    }
+    dock_document["WorldInfo"].class_name = "drawer-content openDrawer pinnedOpen"
+
+    dock_state = get_workspace_shell_panel_dock_state(dock_document, "worldInfo")
+    assert dock_state == {"locked": True, "pinned": True}
+
+    fallback_shell_result = create_workspace_shell_panel_result(dock_document, "worldInfo", False)
+    assert fallback_shell_result == {
+        "kind": "worldInfo",
+        "locked": True,
+        "mounted": False,
+        "pinned": True,
+        "reason": "feature-disabled",
+        "status": "fallback",
+    }
+    assert normalize_workspace_panel_dock_status(fallback_shell_result) == "disabled"
+
+    mounted_shell_result = create_workspace_shell_panel_result(dock_document, "characterLibrary", True)
+    assert mounted_shell_result == {
+        "kind": "characterLibrary",
+        "locked": False,
+        "mounted": True,
+        "pinned": False,
+        "status": "mounted",
+    }
+    assert normalize_workspace_panel_dock_status(mounted_shell_result) == "success"
+
+    dock_snapshot = create_default_workspace_panel_dock_snapshot()
+    dock_snapshot = record_workspace_panel_dock_intent(dock_snapshot, "characterLibrary", locked=True)
+    assert dock_snapshot == {
+        "activePanelKind": "characterLibrary",
+        "activePanelStatus": "loading",
+        "fallbackReason": None,
+        "lockedPanelKinds": ["characterLibrary"],
+        "openPanelKinds": ["characterLibrary"],
+        "pinnedPanelKinds": [],
+    }
+
+    dock_snapshot = record_workspace_panel_dock_result(dock_snapshot, "worldInfo", {
+        "fallbackReason": "feature-disabled",
+        "pinned": True,
+        "status": "fallback",
+        "reason": "feature-disabled",
+    })
+    assert dock_snapshot == {
+        "activePanelKind": "worldInfo",
+        "activePanelStatus": "disabled",
+        "fallbackReason": "feature-disabled",
+        "lockedPanelKinds": ["characterLibrary"],
+        "openPanelKinds": ["characterLibrary", "worldInfo"],
+        "pinnedPanelKinds": ["worldInfo"],
+    }
+
+    dock_snapshot = record_workspace_panel_dock_result(dock_snapshot, "worldInfo", {
+        "status": "success",
+        "pinned": False,
+    })
+    assert dock_snapshot == {
+        "activePanelKind": "worldInfo",
+        "activePanelStatus": "success",
+        "fallbackReason": None,
+        "lockedPanelKinds": ["characterLibrary"],
+        "openPanelKinds": ["characterLibrary", "worldInfo"],
+        "pinnedPanelKinds": [],
+    }
 
     disabled_panel_features = {
         "reactPages": {"settings": False},

@@ -117,23 +117,28 @@ function reconcilePanelKindPresence(panelKinds, kind, shouldRemember) {
 
 function setWorkspacePanelDockSnapshot(kind, {
     fallbackReason = null,
-    locked = false,
-    pinned = false,
+    locked,
+    pinned,
     status,
 }) {
     assertWorkspacePanelDockKind(kind);
     assertWorkspacePanelDockStatus(status);
-    workspacePanelStore.setState(currentState => ({
-        dock: {
-            activePanelKind: kind,
-            activePanelStatus: status,
-            fallbackReason,
-            lockedPanelKinds: reconcilePanelKindPresence(currentState.dock.lockedPanelKinds, kind, locked),
-            openPanelKinds: rememberPanelKind(currentState.dock.openPanelKinds, kind, true),
-            pinnedPanelKinds: reconcilePanelKindPresence(currentState.dock.pinnedPanelKinds, kind, pinned),
-            updatedAt: Date.now(),
-        },
-    }));
+    workspacePanelStore.setState(currentState => {
+        const shouldKeepLocked = locked ?? currentState.dock.lockedPanelKinds.includes(kind);
+        const shouldKeepPinned = pinned ?? currentState.dock.pinnedPanelKinds.includes(kind);
+
+        return {
+            dock: {
+                activePanelKind: kind,
+                activePanelStatus: status,
+                fallbackReason,
+                lockedPanelKinds: reconcilePanelKindPresence(currentState.dock.lockedPanelKinds, kind, shouldKeepLocked),
+                openPanelKinds: rememberPanelKind(currentState.dock.openPanelKinds, kind, true),
+                pinnedPanelKinds: reconcilePanelKindPresence(currentState.dock.pinnedPanelKinds, kind, shouldKeepPinned),
+                updatedAt: Date.now(),
+            },
+        };
+    });
 }
 
 /**
@@ -180,8 +185,8 @@ export function recordWorkspacePanelUnmount(kind) {
 export function recordWorkspacePanelDockIntent(kind, options = {}) {
     setWorkspacePanelDockSnapshot(kind, {
         fallbackReason: null,
-        locked: Boolean(options.locked),
-        pinned: Boolean(options.pinned),
+        locked: options.locked,
+        pinned: options.pinned,
         status: 'loading',
     });
 }
@@ -193,8 +198,8 @@ export function recordWorkspacePanelDockIntent(kind, options = {}) {
 export function recordWorkspacePanelDockResult(kind, result = {}) {
     setWorkspacePanelDockSnapshot(kind, {
         fallbackReason: result.fallbackReason ?? null,
-        locked: Boolean(result.locked),
-        pinned: Boolean(result.pinned),
+        locked: result.locked,
+        pinned: result.pinned,
         status: result.status ?? 'success',
     });
 }
