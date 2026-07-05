@@ -1,11 +1,15 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
 import {
+    getWorkspacePanelDockSnapshot,
     getWorkspacePanelSnapshot,
+    recordWorkspacePanelDockIntent,
+    recordWorkspacePanelDockResult,
     recordWorkspacePanelMount,
     recordWorkspacePanelUnmount,
     recordWorkspacePanelUpdate,
     resetWorkspacePanelStore,
+    subscribeWorkspacePanelDock,
     subscribeWorkspacePanel,
 } from '../app/stores/workspace-panel-store.js';
 import {
@@ -63,6 +67,65 @@ describe('React state stores', () => {
 
         expect(() => getWorkspacePanelSnapshot('unknownPanel')).toThrow('Unsupported workspace panel kind');
         expect(() => recordWorkspacePanelMount('unknownPanel', {})).toThrow('Unsupported workspace panel kind');
+    });
+
+    test('records transient workspace panel dock state for shell coordination', () => {
+        resetWorkspacePanelStore();
+        const listener = jest.fn();
+        const unsubscribe = subscribeWorkspacePanelDock(listener);
+
+        expect(getWorkspacePanelDockSnapshot()).toEqual({
+            activePanelKind: null,
+            activePanelStatus: 'idle',
+            fallbackReason: null,
+            lockedPanelKinds: [],
+            openPanelKinds: [],
+            pinnedPanelKinds: [],
+            updatedAt: 0,
+        });
+
+        recordWorkspacePanelDockIntent('characterLibrary', { locked: true });
+
+        expect(getWorkspacePanelDockSnapshot()).toMatchObject({
+            activePanelKind: 'characterLibrary',
+            activePanelStatus: 'loading',
+            fallbackReason: null,
+            lockedPanelKinds: ['characterLibrary'],
+            openPanelKinds: ['characterLibrary'],
+            pinnedPanelKinds: [],
+        });
+        expect(listener).toHaveBeenCalledTimes(1);
+
+        recordWorkspacePanelDockResult('worldInfo', {
+            fallbackReason: 'feature-disabled',
+            pinned: true,
+            status: 'disabled',
+        });
+
+        expect(getWorkspacePanelDockSnapshot()).toMatchObject({
+            activePanelKind: 'worldInfo',
+            activePanelStatus: 'disabled',
+            fallbackReason: 'feature-disabled',
+            lockedPanelKinds: ['characterLibrary'],
+            openPanelKinds: ['characterLibrary', 'worldInfo'],
+            pinnedPanelKinds: ['worldInfo'],
+        });
+        expect(listener).toHaveBeenCalledTimes(2);
+
+        recordWorkspacePanelDockResult('worldInfo', {
+            status: 'success',
+        });
+        expect(getWorkspacePanelDockSnapshot()).toMatchObject({
+            activePanelKind: 'worldInfo',
+            activePanelStatus: 'success',
+            lockedPanelKinds: ['characterLibrary'],
+            pinnedPanelKinds: [],
+        });
+        expect(listener).toHaveBeenCalledTimes(3);
+
+        expect(() => recordWorkspacePanelDockIntent('mainChatMessageList')).toThrow('Unsupported workspace dock panel kind');
+
+        unsubscribe();
     });
 
     test('records sanitized main-chat observation snapshots and resets safely', () => {

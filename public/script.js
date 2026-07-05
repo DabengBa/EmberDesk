@@ -571,6 +571,37 @@ async function openWorkspaceShellDrawer(drawerId) {
     }
 }
 
+function getWorkspaceShellPanelDockState(kind) {
+    const drawerId = {
+        characterLibrary: 'right-nav-panel',
+        worldInfo: 'WorldInfo',
+        backgroundLibrary: 'Backgrounds',
+        extensionsHost: 'rm_extensions_block',
+    }[kind];
+    const drawer = drawerId ? document.getElementById(drawerId) : null;
+    const pinned = drawer?.classList.contains('pinnedOpen') === true;
+
+    return {
+        locked: pinned,
+        pinned,
+    };
+}
+
+function createWorkspaceShellPanelResult(kind, resultOrMounted) {
+    const dockState = getWorkspaceShellPanelDockState(kind);
+    if (resultOrMounted && typeof resultOrMounted === 'object') {
+        return {
+            ...resultOrMounted,
+            locked: dockState.locked,
+            pinned: dockState.pinned,
+        };
+    }
+
+    return resultOrMounted
+        ? { kind, locked: dockState.locked, mounted: true, pinned: dockState.pinned, status: 'mounted' }
+        : { kind, locked: dockState.locked, mounted: false, pinned: dockState.pinned, reason: 'feature-disabled', status: 'fallback' };
+}
+
 function getWorkspaceShellChromeBridge() {
     return {
         async dispatchAction(action) {
@@ -584,16 +615,16 @@ function getWorkspaceShellChromeBridge() {
                 case 'openCharacterLibrary':
                     await openWorkspaceShellDrawer('right-nav-panel');
                     $('#rm_button_characters').trigger('click');
-                    return;
+                    return createWorkspaceShellPanelResult('characterLibrary', isReactCharacterLibraryPanelEnabled());
                 case 'openWorldInfo':
                     await openWorkspaceShellDrawer('WorldInfo');
-                    return;
+                    return createWorkspaceShellPanelResult('worldInfo', await mountReactWorldInfoPanel());
                 case 'openBackgrounds':
                     await openWorkspaceShellDrawer('Backgrounds');
-                    return;
+                    return createWorkspaceShellPanelResult('backgroundLibrary', await mountReactBackgroundLibraryPanel());
                 case 'openExtensions':
                     await openWorkspaceShellDrawer('rm_extensions_block');
-                    return;
+                    return createWorkspaceShellPanelResult('extensionsHost', await mountReactExtensionsHostPanel());
                 case 'openSettings':
                     if (getWorkspaceReactFeatures()?.reactPages?.settings) {
                         window.location.assign('/settings');

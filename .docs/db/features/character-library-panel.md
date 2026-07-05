@@ -18,6 +18,7 @@ Let users browse, search, filter, sort, bulk-select, and choose [character cards
 ## User-Visible Contract
 
 - The character-library entry point stays inside [Chat Workspace](page.chat_workspace); the guarded React panel is the normal visible owner for list/search/sort/bulk browsing state, with the legacy panel retained only as a documented flag-off or bundle-failure fallback.
+- When the same-entry React shell is enabled, its Character Library entry owns the transient dock/active-panel state and reports mounted or fallback status while the character-library panel remains the owner of browsing, row identity, selection, and bulk state.
 - When the Character Management lock is enabled, the character-library panel remains open while users open supporting drawers such as World Info; when it is not locked, opening another drawer may close it to keep the workspace uncluttered.
 - The panel remains usable for large libraries by keeping pagination, virtualized visible rows for very large page sizes, lazy avatar behavior, and steady-state reopen performance focused on the current browsing task.
 - Character rows show current card metadata, avatars, tags, favorite state, last-chat summaries, and mixed character/group/folder identity without changing the user's list definition during search, sort, filtering, or pagination.

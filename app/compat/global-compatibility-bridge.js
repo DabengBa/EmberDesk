@@ -1,6 +1,8 @@
 import {
     WORKSPACE_PANEL_KINDS,
+    getWorkspacePanelDockSnapshot,
     getWorkspacePanelSnapshot,
+    subscribeWorkspacePanelDock,
     subscribeWorkspacePanel,
 } from '../stores/workspace-panel-store.js';
 import {
@@ -74,6 +76,14 @@ function freezeSnapshot(snapshot) {
         mainChatObservation: snapshot.mainChatObservation === null
             ? null
             : Object.freeze({ ...snapshot.mainChatObservation }),
+        workspacePanelDock: snapshot.workspacePanelDock === null
+            ? null
+            : Object.freeze({
+                ...snapshot.workspacePanelDock,
+                lockedPanelKinds: Object.freeze([...(snapshot.workspacePanelDock.lockedPanelKinds ?? [])]),
+                openPanelKinds: Object.freeze([...(snapshot.workspacePanelDock.openPanelKinds ?? [])]),
+                pinnedPanelKinds: Object.freeze([...(snapshot.workspacePanelDock.pinnedPanelKinds ?? [])]),
+            }),
         workspacePanels: Object.freeze(Object.fromEntries(
             Object.entries(snapshot.workspacePanels).map(([kind, panelSnapshot]) => [
                 kind,
@@ -217,6 +227,7 @@ function createDetachedSnapshot(legacyScope) {
             hasEventTypes: Boolean(legacyScope?.event_types && typeof legacyScope.event_types === 'object'),
         },
         mainChatObservation: null,
+        workspacePanelDock: null,
         workspacePanels: {},
     });
 }
@@ -230,6 +241,7 @@ function createAttachedSnapshot(legacyScope) {
             hasEventTypes: Boolean(legacyScope?.event_types && typeof legacyScope.event_types === 'object'),
         },
         mainChatObservation: cloneJsonSafe(getMainChatObservationSnapshot()),
+        workspacePanelDock: cloneJsonSafe(getWorkspacePanelDockSnapshot()),
         workspacePanels: Object.fromEntries(
             WORKSPACE_PANEL_KINDS.map(kind => [kind, cloneWorkspacePanelSnapshot(kind, getWorkspacePanelSnapshot(kind))]),
         ),
@@ -244,6 +256,7 @@ function createBridgeController({ legacyScope, bridgeKey }) {
     };
     const unsubscribers = [
         subscribeMainChatObservation(refreshSnapshot),
+        subscribeWorkspacePanelDock(refreshSnapshot),
         ...WORKSPACE_PANEL_KINDS.map(kind => subscribeWorkspacePanel(kind, refreshSnapshot)),
     ];
     const bridge = {

@@ -237,6 +237,52 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain("await openWorkspaceShellDrawer('user-settings-block');");
     });
 
+    test('coordinates React shell panel entries with transient dock state and legacy fallback results', () => {
+        const scriptSource = read('public/script.js');
+        const workspacePanelSource = read('app/workspace-panels.tsx');
+
+        expect(workspacePanelSource).toContain('recordWorkspacePanelDockIntent,');
+        expect(workspacePanelSource).toContain('recordWorkspacePanelDockResult,');
+        expect(workspacePanelSource).toContain('getWorkspacePanelDockSnapshot,');
+        expect(workspacePanelSource).toContain('subscribeWorkspacePanelDock,');
+        expect(workspacePanelSource).toContain('panelKind?: WorkspaceDockPanelKind;');
+        expect(workspacePanelSource).toContain('function useWorkspacePanelDockSnapshot()');
+        expect(workspacePanelSource).toContain('function normalizeWorkspacePanelDockStatus(');
+        expect(workspacePanelSource).toContain('const dockSnapshot = useWorkspacePanelDockSnapshot();');
+        expect(workspacePanelSource).toContain('recordWorkspacePanelDockIntent(entry.panelKind);');
+        expect(workspacePanelSource).toContain('recordWorkspacePanelDockResult(entry.panelKind, {');
+        expect(workspacePanelSource).toContain('fallbackReason: getWorkspacePanelDockFallbackReason(result),');
+        expect(workspacePanelSource).toContain('locked: Boolean(asWorkspacePanelDockDispatchResult(result).locked),');
+        expect(workspacePanelSource).toContain('pinned: Boolean(asWorkspacePanelDockDispatchResult(result).pinned),');
+        expect(workspacePanelSource).toContain('status: normalizeWorkspacePanelDockStatus(result),');
+        expect(workspacePanelSource).toContain('data-workspace-shell-panel-entry={entry.panelKind}');
+        expect(workspacePanelSource).toContain('data-workspace-shell-panel-active={isPanelEntryActive ? \'true\' : \'false\'}');
+        expect(workspacePanelSource).toContain('aria-pressed={entry.panelKind ? isPanelEntryActive : undefined}');
+        expect(workspacePanelSource).toContain('data-workspace-panel-dock-status={dockSnapshot.activePanelStatus}');
+        expect(scriptSource).toContain("case 'openCharacterLibrary':");
+        expect(workspacePanelSource).toContain("panelKind: 'characterLibrary'");
+        expect(scriptSource).toContain("case 'openWorldInfo':");
+        expect(workspacePanelSource).toContain("panelKind: 'worldInfo'");
+        expect(scriptSource).toContain("case 'openBackgrounds':");
+        expect(workspacePanelSource).toContain("panelKind: 'backgroundLibrary'");
+        expect(scriptSource).toContain("case 'openExtensions':");
+        expect(workspacePanelSource).toContain("panelKind: 'extensionsHost'");
+        expect(scriptSource).toContain('return createWorkspaceShellPanelResult(');
+        expect(scriptSource).toContain('function getWorkspaceShellPanelDockState(kind)');
+        expect(scriptSource).toContain('locked: dockState.locked,');
+        expect(scriptSource).toContain('pinned: dockState.pinned,');
+        expect(scriptSource).toContain("return createWorkspaceShellPanelResult('characterLibrary',");
+        expect(scriptSource).toContain("return createWorkspaceShellPanelResult('worldInfo', await mountReactWorldInfoPanel());");
+        expect(scriptSource).toContain("return createWorkspaceShellPanelResult('backgroundLibrary', await mountReactBackgroundLibraryPanel());");
+        expect(scriptSource).toContain("return createWorkspaceShellPanelResult('extensionsHost', await mountReactExtensionsHostPanel());");
+
+        const styleSource = read('public/style.css');
+        expect(styleSource).toContain('.react-workspace-shell-nav-button[data-workspace-shell-panel-active="true"]');
+        expect(styleSource).toContain('.react-workspace-panel-dock-status');
+        expect(styleSource).toContain('.react-workspace-panel-dock-status[data-workspace-panel-dock-status="error"]');
+        expect(styleSource).toContain('.react-workspace-panel-dock-status[data-workspace-panel-dock-status="disabled"]');
+    });
+
     test('ships a main-chat message-list panel contract through the shared workspace panel asset', () => {
         const configSource = read('default/config.yaml');
         const packageSource = read('package.json');

@@ -25,6 +25,7 @@ Keep World Info/lorebook activation and editing available inside the chat worksp
 - Entry cards provide scannable collapsed rows and focused editing through expansion or the content editor modal.
 - File import accepts supported `.json`, `.lorebook`, and `.png` files through the toolbar or drop target, blocks duplicate picker starts while active, shows progress and conflict decisions, and restores normal controls after success, skip, cancellation, parse failure, or network failure.
 - The guarded React host, when enabled, may own visible selector/search/sort/action shortcuts and readiness reporting, but it remains additive and must preserve the established World Info action chain and fallback controls.
+- When the same-entry React shell is enabled, its World Info entry owns only the transient active-panel/dock state and mounted or fallback status; prompt activation, regex placement, converter/import outcomes, and world-book deletion semantics remain owned by the World Info facade.
 
 ## Semantic Interaction IDs
 

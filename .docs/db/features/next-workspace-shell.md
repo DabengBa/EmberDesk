@@ -22,6 +22,7 @@ Give users one modern, compact workspace frame for current context, shell status
 - Primary entries for AI Config, Formatting, Character Library, World Info, Backgrounds, Extensions, and Settings are reachable by role/name and route through the existing workspace behavior or the existing Settings route.
 - Settings opens the standalone React Settings route only when that page flag is enabled; otherwise it opens the existing User Settings drawer in the current workspace.
 - The main-chat outer layout can be React shell-owned through existing `#chat`, `#send_form`, and `#nonQRFormItems` containers so the chat canvas, composer/action rail, and local generation status feel coordinated without wrapping or moving message rows.
+- Character Library, World Info, Backgrounds, and Extensions entries publish a transient React dock owner state so the shell can show the active panel, local mounted/fallback status, and pinned/locked hints while the existing facades continue to own panel behavior.
 - The chrome must not cover readable chat rows, `#send_textarea`, `#send_but`, or protected extension mount points.
 - If the feature flag is disabled, the bundle cannot load, or the chrome cannot mount, EmberDesk keeps the legacy workspace chrome usable and records a structured takeover reason.
 - Development, test, and CI strict mode should expose missing host, invalid payload, bundle-load, or mount failures instead of treating fallback as success; an unspecified `NODE_ENV` keeps the production safety fallback behavior.
@@ -33,6 +34,7 @@ Give users one modern, compact workspace frame for current context, shell status
 - `feature.next_workspace_shell.context_summary`: the current character/group/assistant/no-chat summary.
 - `feature.next_workspace_shell.recovery_status`: the shell-level loading, empty, success, or error status area.
 - `feature.next_workspace_shell.main_chat_layout`: the main-chat layout/status ownership markers on existing chat and composer containers.
+- `feature.next_workspace_shell.panel_dock`: the transient active panel and dock status for Character Library, World Info, Backgrounds, and Extensions.
 - `feature.next_workspace_shell.rollback`: the documented flag-off or mount-failure legacy chrome path with recorded reason.
 
 ## Acceptance Workflows
@@ -40,6 +42,7 @@ Give users one modern, compact workspace frame for current context, shell status
 - As a workspace user on a build with takeover enabled, open `/`; EmberDesk must show one React chrome with current context and primary entries, and failure is old and new top navigation competing for the same job.
 - As a user switching from no chat to a character or temporary Assistant chat, continue using the workspace; the chrome summary must update to a clear state without requiring a refresh, and failure is a stale or misleading current-context label.
 - As a user opening AI Config, Formatting, Character Library, World Info, Backgrounds, Extensions, or Settings from the chrome, use the named entry; EmberDesk must open the established surface or route while preserving protected DOM and extension locations, and failure is a visible button that does nothing or clears legacy panel content.
+- As a user switching between Character Library, World Info, Backgrounds, and Extensions, use the named entries; EmberDesk must mark the active panel locally, keep panel loading/error/fallback state scoped to the panel/dock surface, and preserve pinned or locked drawers instead of closing them as incidental navigation cleanup.
 - As a user on a flag-off, missing-bundle, or mount-failure build, open `/`; EmberDesk must leave the legacy chrome usable and record the failure reason, and failure is a blank page, hidden navigation, or silent development/test/CI fallback.
 
 ## Feature-Specific Evidence
@@ -47,6 +50,7 @@ Give users one modern, compact workspace frame for current context, shell status
 - The React chrome root, role/name navigation entries, status attributes, and context text are primary evidence.
 - The hidden same-entry takeover marker and `data-react-workspace-shell-chrome-status` support diagnostics and automated proof.
 - Main-chat layout markers such as `data-main-chat-layout-owner`, `data-main-chat-layout-status`, and `data-main-chat-local-status` support proof that React owns only the outer placement/status shell.
+- Panel dock markers such as `data-workspace-shell-panel-entry`, `data-workspace-shell-panel-active`, and `data-workspace-panel-dock-status` support proof that React owns coordination state without taking over World Info, Background, Extension, or character-row semantics.
 - Protected DOM checks for `#chat > .mes`, `#send_textarea`, `#send_but`, `#extensions_settings`, `#extensions_settings2`, and `#regex_container` are compatibility evidence.
 - `/workspace-next` must not appear as a route or fallback target for this feature.
 

@@ -64,6 +64,9 @@ describe('chat workspace structure', () => {
         expect(scriptSource).not.toContain('workspace-next');
         expect(styleSource).toContain('#emberdesk-react-workspace-shell-chrome-host');
         expect(styleSource).toContain('.react-workspace-shell-chrome');
+        expect(styleSource).toContain('.react-workspace-shell-nav-button[data-workspace-shell-panel-active="true"]');
+        expect(styleSource).toContain('.react-workspace-panel-dock-status');
+        expect(styleSource).toContain('body[data-react-workspace-shell-chrome="mounted"] .react-workspace-panel-dock-status');
         expect(styleSource).toContain('body[data-react-workspace-shell-chrome="mounted"] .drawer-opener[data-target="rightNavHolder"]');
         expect(styleSource).toContain('body[data-react-workspace-shell-chrome="mounted"] .drawer-opener[data-target="extensions-settings-button"]');
     });

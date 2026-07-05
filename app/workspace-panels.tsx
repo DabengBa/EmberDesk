@@ -12,9 +12,13 @@ import {
     detachGlobalCompatibilityBridge,
 } from './compat/global-compatibility-bridge.js';
 import {
+    getWorkspacePanelDockSnapshot,
+    recordWorkspacePanelDockIntent,
+    recordWorkspacePanelDockResult,
     recordWorkspacePanelMount,
     recordWorkspacePanelUnmount,
     recordWorkspacePanelUpdate,
+    subscribeWorkspacePanelDock,
 } from './stores/workspace-panel-store.js';
 import {
     resetMainChatObservationStore,
@@ -34,6 +38,7 @@ import {
 } from '../public/scripts/main-chat-bridge-contract.js';
 
 export type WorkspacePanelKind = 'worldInfo' | 'backgroundLibrary' | 'extensionsHost' | 'mainChatMessageList';
+type WorkspaceDockPanelKind = 'characterLibrary' | 'worldInfo' | 'backgroundLibrary' | 'extensionsHost';
 
 interface WorkspacePanelMount {
     root: Root;
@@ -53,6 +58,24 @@ type MainChatLayoutStatus = 'loading' | 'empty' | 'success' | 'streaming' | 'rec
 
 interface WorkspacePanelBridge {
     dispatchAction?: (action: string, payload?: Record<string, unknown>) => Promise<unknown> | unknown;
+}
+
+interface WorkspacePanelDockDispatchResult {
+    locked?: boolean;
+    mounted?: boolean;
+    pinned?: boolean;
+    reason?: string;
+    status?: string;
+}
+
+interface WorkspacePanelDockSnapshot {
+    activePanelKind: WorkspaceDockPanelKind | null;
+    activePanelStatus: 'idle' | 'disabled' | 'loading' | 'empty' | 'success' | 'error';
+    fallbackReason: string | null;
+    lockedPanelKinds: WorkspaceDockPanelKind[];
+    openPanelKinds: WorkspaceDockPanelKind[];
+    pinnedPanelKinds: WorkspaceDockPanelKind[];
+    updatedAt: number;
 }
 
 interface WorkspaceShellChromeMount {
@@ -86,6 +109,13 @@ interface WorkspacePanelLegacySlot {
 
 interface WorkspacePanelActionMutation {
     mutate(options: { action: string; payload?: Record<string, unknown> }): void;
+}
+
+interface WorkspaceShellNavigationEntry {
+    action: string;
+    icon: string;
+    label: string;
+    panelKind?: WorkspaceDockPanelKind;
 }
 
 interface WorldInfoWorkspacePanelState {
@@ -3226,15 +3256,66 @@ function WorkspacePanelRoot({ kind, bridge }: { kind: WorkspacePanelKind; bridge
     return renderPanel(kind, panelState, bridge);
 }
 
-const workspaceShellNavigationEntries = [
+const workspaceShellNavigationEntries: WorkspaceShellNavigationEntry[] = [
     { action: 'openAIConfig', icon: 'fa-sliders', label: 'AI Config' },
     { action: 'openFormatting', icon: 'fa-font', label: 'Formatting' },
-    { action: 'openCharacterLibrary', icon: 'fa-address-book', label: 'Character Library' },
-    { action: 'openWorldInfo', icon: 'fa-book-atlas', label: 'World Info' },
-    { action: 'openBackgrounds', icon: 'fa-image', label: 'Backgrounds' },
-    { action: 'openExtensions', icon: 'fa-cubes', label: 'Extensions' },
+    { action: 'openCharacterLibrary', icon: 'fa-address-book', label: 'Character Library', panelKind: 'characterLibrary' },
+    { action: 'openWorldInfo', icon: 'fa-book-atlas', label: 'World Info', panelKind: 'worldInfo' },
+    { action: 'openBackgrounds', icon: 'fa-image', label: 'Backgrounds', panelKind: 'backgroundLibrary' },
+    { action: 'openExtensions', icon: 'fa-cubes', label: 'Extensions', panelKind: 'extensionsHost' },
     { action: 'openSettings', icon: 'fa-gear', label: 'Settings' },
-] as const;
+];
+
+function asWorkspacePanelDockDispatchResult(result: unknown): WorkspacePanelDockDispatchResult {
+    if (!result || typeof result !== 'object') {
+        return {};
+    }
+
+    return result as WorkspacePanelDockDispatchResult;
+}
+
+function getWorkspacePanelDockFallbackReason(result: unknown) {
+    const dispatchResult = asWorkspacePanelDockDispatchResult(result);
+    return typeof dispatchResult.reason === 'string' && dispatchResult.reason.trim()
+        ? dispatchResult.reason
+        : null;
+}
+
+function normalizeWorkspacePanelDockStatus(result: unknown) {
+    const dispatchResult = asWorkspacePanelDockDispatchResult(result);
+    if (dispatchResult.mounted === true || dispatchResult.status === 'mounted') {
+        return 'success';
+    }
+
+    if (dispatchResult.status === 'disabled') {
+        return 'disabled';
+    }
+
+    if (dispatchResult.status === 'fallback') {
+        return dispatchResult.reason === 'feature-disabled' ? 'disabled' : 'error';
+    }
+
+    if (
+        dispatchResult.status === 'loading'
+        || dispatchResult.status === 'empty'
+        || dispatchResult.status === 'success'
+        || dispatchResult.status === 'error'
+    ) {
+        return dispatchResult.status;
+    }
+
+    return 'success';
+}
+
+function useWorkspacePanelDockSnapshot() {
+    const [dockSnapshot, setDockSnapshot] = useState<WorkspacePanelDockSnapshot>(() => getWorkspacePanelDockSnapshot());
+
+    useEffect(() => subscribeWorkspacePanelDock((nextSnapshot: WorkspacePanelDockSnapshot) => {
+        setDockSnapshot(nextSnapshot);
+    }), []);
+
+    return dockSnapshot;
+}
 
 function getWorkspaceShellContextLabel(state: WorkspaceShellChromeState) {
     if (state.activeContext === 'group') {
@@ -3265,9 +3346,32 @@ function ReactWorkspaceShellChrome({
     const status = state.status ?? (state.activeContext === 'none' ? 'empty' : 'success');
     const statusLabel = state.statusLabel ?? (status === 'empty' ? 'Ready for a character' : 'Workspace ready');
     const messageCount = Number.isFinite(state.messageCount) ? state.messageCount : 0;
+    const dockSnapshot = useWorkspacePanelDockSnapshot();
 
-    const dispatchAction = useCallback((action: string) => {
-        void bridge?.dispatchAction?.(action);
+    const dispatchAction = useCallback(async (entry: WorkspaceShellNavigationEntry) => {
+        if (entry.panelKind) {
+            recordWorkspacePanelDockIntent(entry.panelKind);
+        }
+
+        try {
+            const result = await bridge?.dispatchAction?.(entry.action);
+            if (entry.panelKind) {
+                recordWorkspacePanelDockResult(entry.panelKind, {
+                    fallbackReason: getWorkspacePanelDockFallbackReason(result),
+                    locked: Boolean(asWorkspacePanelDockDispatchResult(result).locked),
+                    pinned: Boolean(asWorkspacePanelDockDispatchResult(result).pinned),
+                    status: normalizeWorkspacePanelDockStatus(result),
+                });
+            }
+        } catch (error) {
+            if (entry.panelKind) {
+                recordWorkspacePanelDockResult(entry.panelKind, {
+                    fallbackReason: 'action-failed',
+                    status: 'error',
+                });
+            }
+            console.warn('React workspace shell panel action failed.', error);
+        }
     }, [bridge]);
 
     return (
@@ -3288,22 +3392,40 @@ function ReactWorkspaceShellChrome({
                 </div>
             </section>
             <nav className="react-workspace-shell-nav" aria-label="Workspace navigation">
-                {workspaceShellNavigationEntries.map(entry => (
-                    <button
-                        key={entry.action}
-                        type="button"
-                        className="react-workspace-shell-nav-button"
-                        aria-label={entry.label}
-                        onClick={() => dispatchAction(entry.action)}
-                    >
-                        <i className={`fa-solid ${entry.icon}`} aria-hidden="true" />
-                        <span>{entry.label}</span>
-                    </button>
-                ))}
+                {workspaceShellNavigationEntries.map(entry => {
+                    const isPanelEntryActive = Boolean(entry.panelKind && dockSnapshot.activePanelKind === entry.panelKind);
+
+                    return (
+                        <button
+                            key={entry.action}
+                            type="button"
+                            className="react-workspace-shell-nav-button"
+                            aria-label={entry.label}
+                            aria-pressed={entry.panelKind ? isPanelEntryActive : undefined}
+                            data-workspace-shell-panel-entry={entry.panelKind}
+                            data-workspace-shell-panel-active={isPanelEntryActive ? 'true' : 'false'}
+                            onClick={() => {
+                                void dispatchAction(entry);
+                            }}
+                        >
+                            <i className={`fa-solid ${entry.icon}`} aria-hidden="true" />
+                            <span>{entry.label}</span>
+                        </button>
+                    );
+                })}
             </nav>
             <section className="react-workspace-shell-status" aria-live="polite">
                 <span className="react-workspace-shell-status-dot" aria-hidden="true" />
                 <span>{statusLabel}</span>
+                {dockSnapshot.activePanelKind ? (
+                    <span
+                        className="react-workspace-panel-dock-status"
+                        data-workspace-panel-dock-kind={dockSnapshot.activePanelKind}
+                        data-workspace-panel-dock-status={dockSnapshot.activePanelStatus}
+                    >
+                        {dockSnapshot.activePanelKind}: {dockSnapshot.activePanelStatus}
+                    </span>
+                ) : null}
             </section>
         </header>
     );

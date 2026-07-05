@@ -7,6 +7,7 @@ import {
     resetGlobalCompatibilityBridgeForTests,
 } from '../app/compat/global-compatibility-bridge.js';
 import {
+    recordWorkspacePanelDockResult,
     recordWorkspacePanelMount,
     recordWorkspacePanelUpdate,
     resetWorkspacePanelStore,
@@ -92,6 +93,31 @@ describe('global compatibility bridge', () => {
         expect(legacyScope.__emberDeskReactCompatibilityBridge).toBeUndefined();
     });
 
+    test('publishes workspace panel dock ownership without exposing behavior internals', () => {
+        resetWorkspacePanelStore();
+        resetMainChatObservationStore();
+        resetGlobalCompatibilityBridgeForTests();
+        const legacyScope = createLegacyScope();
+
+        const controller = attachGlobalCompatibilityBridge({ legacyScope });
+        recordWorkspacePanelDockResult('extensionsHost', {
+            fallbackReason: 'bundle-load-failed',
+            pinned: true,
+            status: 'error',
+        });
+
+        expect(controller.bridge.getSnapshot().workspacePanelDock).toMatchObject({
+            activePanelKind: 'extensionsHost',
+            activePanelStatus: 'error',
+            fallbackReason: 'bundle-load-failed',
+            lockedPanelKinds: [],
+            openPanelKinds: ['extensionsHost'],
+            pinnedPanelKinds: ['extensionsHost'],
+        });
+
+        controller.detach();
+    });
+
     test('updates snapshots, double attaches cleanly, and detaches subscriptions', () => {
         resetWorkspacePanelStore();
         resetMainChatObservationStore();
@@ -120,6 +146,7 @@ describe('global compatibility bridge', () => {
                 hasEventTypes: true,
             },
             mainChatObservation: null,
+            workspacePanelDock: null,
             workspacePanels: {},
         });
     });
