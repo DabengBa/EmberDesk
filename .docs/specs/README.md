@@ -27,7 +27,6 @@ Completed Phase 0, Phase 1, Phase 2, Phase 3, Phase 3B, Phase 4, Phase 5, and Ph
 | [260701-03-panel-dock-and-drawer-coordination](260701-03-panel-dock-and-drawer-coordination/spec.md) | Next Workspace Shell | Future React shell ownership for panel dock and drawer coordination. |
 | [260701-04-main-chat-layout-and-composer-shell](260701-04-main-chat-layout-and-composer-shell/spec.md) | Next Workspace Shell | Future React shell ownership for main-chat layout and composer shell. |
 | [260701-05-responsive-and-recovery-hardening](260701-05-responsive-and-recovery-hardening/spec.md) | Next Workspace Shell | Future responsive behavior and local recovery hardening. |
-| [260701-06-default-owner-gate-and-adr-package](260701-06-default-owner-gate-and-adr-package/spec.md) | Next Workspace Shell | Future evidence gate for default `/` shell owner and ADR update package. |
 
 ## Maintenance Rule
 
