@@ -107,6 +107,13 @@ interface WorkspacePanelLegacySlot {
     ready?: boolean;
 }
 
+interface WorkspacePanelRecoveryAction {
+    id: string;
+    label: string;
+    disabled?: boolean;
+    onClick: () => void;
+}
+
 interface WorkspacePanelActionMutation {
     mutate(options: { action: string; payload?: Record<string, unknown> }): void;
 }
@@ -1421,12 +1428,7 @@ function MainChatRichBodyOwnerPortal({
     }
 
     return (
-        <div
-            hidden
-            aria-hidden="true"
-            data-main-chat-rich-body-owner="react"
-            data-main-chat-rich-body-row={snapshot.messageId}
-        />
+        <div hidden aria-hidden="true" />
     );
 }
 
@@ -1940,16 +1942,51 @@ function MainChatLayoutStatusPortal({
     state,
     status,
     label,
+    bridge,
+    generationControl,
 }: {
     state: MainChatMessageListWorkspacePanelState;
     status: MainChatLayoutStatus;
     label: string;
+    bridge?: WorkspacePanelBridge;
+    generationControl: MainChatGenerationControlState;
 }) {
     const sendForm = state.sendForm;
     const shouldShow = status !== 'success';
+    const actions: WorkspacePanelRecoveryAction[] = [];
 
     if (!(sendForm instanceof HTMLElement) || !shouldShow) {
         return null;
+    }
+
+    if (status === 'empty') {
+        actions.push({
+            id: 'open-character-library',
+            label: 'Open character library',
+            onClick: () => {
+                void bridge?.dispatchAction?.('openCharacterLibrary');
+            },
+        });
+    }
+
+    if (status === 'error' && generationControl.failureRetryVisible) {
+        actions.push({
+            id: 'retry-generation',
+            label: 'Retry generation',
+            onClick: () => {
+                void bridge?.dispatchAction?.('triggerVisibleGeneration', { kind: 'retryGeneration' });
+            },
+        });
+    }
+
+    if (status === 'error' && generationControl.continueVisible) {
+        actions.push({
+            id: 'continue-last-message',
+            label: 'Continue last message',
+            onClick: () => {
+                void bridge?.dispatchAction?.('triggerVisibleGeneration', { kind: 'continueLast' });
+            },
+        });
     }
 
     return createPortal(
@@ -1961,6 +1998,22 @@ function MainChatLayoutStatusPortal({
         >
             <span className="react-main-chat-local-status-dot" aria-hidden="true" />
             <span>{label}</span>
+            {actions.length > 0 ? (
+                <span className="react-main-chat-local-actions">
+                    {actions.map(action => (
+                        <button
+                            key={action.id}
+                            type="button"
+                            className="menu_button menu_button_icon"
+                            data-main-chat-local-action={action.id}
+                            onClick={action.onClick}
+                            disabled={action.disabled}
+                        >
+                            {action.label}
+                        </button>
+                    ))}
+                </span>
+            ) : null}
         </div>,
         sendForm,
         'main-chat-layout-local-status',
@@ -1975,6 +2028,7 @@ function WorkspacePanelShell({
     kind,
     title,
     status,
+    actions = [],
     legacyBoundary,
     slots = [],
     children,
@@ -1982,6 +2036,7 @@ function WorkspacePanelShell({
     kind: WorkspacePanelKind;
     title: string;
     status: WorkspacePanelStatus;
+    actions?: WorkspacePanelRecoveryAction[];
     legacyBoundary?: string;
     slots?: WorkspacePanelLegacySlot[];
     children: ReactNode;
@@ -2003,13 +2058,34 @@ function WorkspacePanelShell({
                     <div className="title_restorable">{title}</div>
                     {status === 'loading' || status === 'error' ? (
                         <span
-                            className={status === 'error' ? 'warning' : 'success'}
+                            className="workspace-panel-status-badge"
                             data-workspace-panel-status={status}
                         >
                             {status}
                         </span>
                     ) : null}
                 </div>
+                {actions.length > 0 ? (
+                    <div
+                        className="workspace-panel-recovery"
+                        data-workspace-panel-recovery-state={status}
+                    >
+                        <div className="workspace-panel-recovery-actions">
+                            {actions.map(action => (
+                                <button
+                                    key={action.id}
+                                    type="button"
+                                    className="menu_button menu_button_icon"
+                                    data-workspace-panel-recovery-action={action.id}
+                                    onClick={action.onClick}
+                                    disabled={action.disabled}
+                                >
+                                    {action.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                ) : null}
                 {children}
                 {slots.length > 0 || status !== 'idle' ? (
                     <details className="workspace-panel-diagnostics" data-workspace-panel-diagnostics={kind}>
@@ -2017,7 +2093,7 @@ function WorkspacePanelShell({
                         <div className="flex-container flexFlowColumn gap4">
                             <div className="flex-container justifyspacebetween alignitemscenter gap8">
                                 <span>Status</span>
-                                <span className={status === 'error' ? 'warning' : 'success'}>{status}</span>
+                                <span className="workspace-panel-status-badge" data-workspace-panel-status={status}>{status}</span>
                             </div>
                             {slots.length > 0 ? (
                                 <div className="flex-container flexFlowColumn gap4" data-workspace-legacy-slots={kind}>
@@ -2036,7 +2112,12 @@ function WorkspacePanelShell({
                                                 data-workspace-legacy-slot-ready={slot.ready ? 'true' : 'false'}
                                             >
                                                 <span>{slot.label}</span>
-                                                <span className={slot.ready ? 'success' : 'warning'}>{slot.ready ? 'Ready' : 'Legacy'}</span>
+                                                <span
+                                                    className="workspace-panel-legacy-slot-status"
+                                                    data-workspace-panel-legacy-ready={slot.ready ? 'true' : 'false'}
+                                                >
+                                                    {slot.ready ? 'Ready' : 'Legacy'}
+                                                </span>
                                             </div>
                                         );
                                     })}
@@ -2093,8 +2174,8 @@ function getWorldInfoPanelStatus(bridgeState: WorldInfoWorkspacePanelState): Wor
         return 'loading';
     }
 
-    if (!bridgeState.globalSelectorPresent && !bridgeState.editorSelectorPresent && !bridgeState.importMenuPresent) {
-        return 'empty';
+    if (!bridgeState.globalSelectorPresent && !bridgeState.editorSelectorPresent) {
+        return bridgeState.importMenuPresent || bridgeState.refreshMenuPresent ? 'empty' : 'error';
     }
 
     if (bridgeState.globalSelectorPresent && bridgeState.editorSelectorPresent && bridgeState.selectorsSeparated) {
@@ -2170,12 +2251,34 @@ function WorldInfoWorkspacePanel({ state, bridge }: { state?: unknown; bridge?: 
     const sortOptions = bridgeState.sortOptions ?? [];
     const entrySummaries = bridgeState.entrySummaries ?? [];
     const selectedWorldName = bridgeState.selectedWorldName || 'No world selected';
+    const recoveryActions: WorkspacePanelRecoveryAction[] = [];
+
+    if (status === 'empty') {
+        if (bridgeState.importMenuPresent) {
+            recoveryActions.push({
+                id: 'import-world',
+                label: 'Import world',
+                disabled: Boolean(bridgeState.importBusy),
+                onClick: () => worldInfoActionMutation.mutate({ action: 'importWorld' }),
+            });
+        }
+    }
+
+    if ((status === 'empty' || status === 'error') && bridgeState.refreshMenuPresent) {
+        recoveryActions.push({
+            id: 'refresh-world',
+            label: 'Refresh panel',
+            disabled: !bridgeState.refreshMenuPresent,
+            onClick: () => worldInfoActionMutation.mutate({ action: 'refreshWorld' }),
+        });
+    }
 
     return (
         <WorkspacePanelShell
             kind="worldInfo"
             title="World Info"
             status={status}
+            actions={recoveryActions}
             legacyBoundary="activation-import-regex-prompt-delete"
             slots={[
                 { id: 'global-selector', label: 'Global selector', ready: bridgeState.globalSelectorPresent },
@@ -2370,16 +2473,34 @@ function BackgroundLibraryWorkspacePanel({ state, bridge }: { state?: unknown; b
     });
     const systemBackgrounds = bridgeState.systemBackgrounds ?? [];
     const chatBackgrounds = bridgeState.chatBackgrounds ?? [];
+    const recoveryActions: WorkspacePanelRecoveryAction[] = [];
 
     useEffect(() => {
         backgroundLibraryForm.reset(formDefaults);
     }, [backgroundLibraryForm, formDefaults]);
+
+    if (status === 'empty') {
+        recoveryActions.push({
+            id: 'upload-background',
+            label: 'Upload background',
+            onClick: () => backgroundLibraryActionMutation.mutate({ action: 'uploadBackground' }),
+        });
+    }
+
+    if (status === 'empty' || status === 'error') {
+        recoveryActions.push({
+            id: 'refresh-backgrounds',
+            label: 'Refresh panel',
+            onClick: () => backgroundLibraryActionMutation.mutate({ action: 'refreshBackgrounds' }),
+        });
+    }
 
     return (
         <WorkspacePanelShell
             kind="backgroundLibrary"
             title="Backgrounds"
             status={status}
+            actions={recoveryActions}
             legacyBoundary="upload-delete-rename-select-lock-slash"
             slots={[
                 { id: 'global-gallery', label: 'Global gallery', ready: bridgeState.systemContainerPresent },
@@ -2499,12 +2620,41 @@ function ExtensionsHostWorkspacePanel({ state, bridge }: { state?: unknown; brid
     useEffect(() => {
         extensionsHostForm.reset(formDefaults);
     }, [extensionsHostForm, formDefaults]);
+    const recoveryActions: WorkspacePanelRecoveryAction[] = [];
+
+    if (status === 'empty') {
+        recoveryActions.push({
+            id: 'install-extension',
+            label: 'Install extension',
+            disabled: !bridgeState.installButtonPresent,
+            onClick: () => extensionsHostActionMutation.mutate({ action: 'openInstallExtension' }),
+        });
+    }
+
+    if (status === 'empty' || status === 'error') {
+        recoveryActions.push({
+            id: 'open-manage-extensions',
+            label: 'Open manage',
+            disabled: !bridgeState.manageButtonPresent,
+            onClick: () => extensionsHostActionMutation.mutate({ action: 'openManageExtensions' }),
+        });
+    }
+
+    if (status === 'error') {
+        recoveryActions.push({
+            id: 'connect-extras-api',
+            label: 'Retry connection',
+            disabled: !bridgeState.extrasApiControlsPresent,
+            onClick: () => extensionsHostActionMutation.mutate({ action: 'connectExtrasApi' }),
+        });
+    }
 
     return (
         <WorkspacePanelShell
             kind="extensionsHost"
             title="Extensions"
             status={status}
+            actions={recoveryActions}
             legacyBoundary="mount-points-loader-wand-regex-aliases"
             slots={[
                 { id: 'extensions-settings', label: 'Settings column', ready: bridgeState.extensionsSettingsPresent },
@@ -3118,6 +3268,8 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
                 state={bridgeState}
                 status={mainChatLocalStatus}
                 label={mainChatLocalStatusLabel}
+                bridge={bridge}
+                generationControl={effectiveGenerationControl}
             />
             <MainChatSlashUiPortal state={bridgeState} bridge={bridge} />
             {effectiveReactVisibleTransportRuntime && activeRuntimeMessageRow instanceof HTMLElement ? (

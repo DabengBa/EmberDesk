@@ -6435,7 +6435,7 @@ body[data-react-workspace-shell-chrome="mounted"] #chat[data-main-chat-layout-ow
 
 .react-main-chat-local-status {
     position: absolute;
-    inset-block-start: -34px;
+    inset-block-end: calc(100% + 6px);
     inset-inline: 8px;
     display: inline-flex;
     max-width: calc(100% - 16px);
@@ -6475,6 +6475,78 @@ body[data-react-workspace-shell-chrome="mounted"] #chat[data-main-chat-layout-ow
 
 .react-main-chat-local-status[data-main-chat-local-status="empty"] {
     opacity: 0.88;
+}
+
+.react-main-chat-local-actions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-inline-start: 4px;
+    pointer-events: auto;
+}
+
+.react-main-chat-local-status .react-main-chat-local-actions {
+    pointer-events: auto;
+}
+
+.react-main-chat-local-actions .menu_button {
+    min-height: 24px;
+    padding: 2px 8px;
+    font-size: calc(var(--mainFontSize) * 0.76);
+    line-height: 1.1;
+    white-space: nowrap;
+}
+
+.workspace-panel-recovery {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.workspace-panel-recovery-actions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.workspace-panel-recovery-actions .menu_button {
+    min-height: 26px;
+}
+
+.workspace-panel-status-badge,
+.workspace-panel-legacy-slot-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border-radius: 999px;
+    font-size: calc(var(--mainFontSize) * 0.76);
+    line-height: 1.15;
+}
+
+.workspace-panel-status-badge {
+    padding: 2px 8px;
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 70%, transparent);
+    background-color: color-mix(in srgb, var(--SmartThemeBlurTintColor) 82%, transparent);
+    color: color-mix(in srgb, var(--SmartThemeBodyColor) 80%, var(--SmartThemeBlurTintColor) 20%);
+}
+
+.workspace-panel-status-badge[data-workspace-panel-status="loading"] {
+    border-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 42%, transparent);
+    color: color-mix(in srgb, var(--SmartThemeQuoteColor) 72%, var(--SmartThemeBodyColor) 28%);
+}
+
+.workspace-panel-status-badge[data-workspace-panel-status="error"] {
+    border-color: color-mix(in srgb, var(--error-color, var(--ember-red)) 46%, transparent);
+    color: var(--error-color, var(--ember-red));
+}
+
+.workspace-panel-legacy-slot-status[data-workspace-panel-legacy-ready="true"] {
+    color: var(--success-green);
+}
+
+.workspace-panel-legacy-slot-status[data-workspace-panel-legacy-ready="false"] {
+    color: var(--warning);
+    font-weight: 600;
 }
 
 .react-workspace-shell-chrome {
@@ -6608,6 +6680,21 @@ body[data-react-workspace-shell-chrome="mounted"] #chat[data-main-chat-layout-ow
 }
 
 @media screen and (max-width: 800px) {
+    .react-main-chat-local-status {
+        inset-inline: 6px;
+        max-width: calc(100% - 12px);
+        flex-wrap: wrap;
+    }
+
+    .react-main-chat-local-actions {
+        width: 100%;
+        margin-inline-start: 0;
+    }
+
+    .workspace-panel-recovery-actions {
+        width: 100%;
+    }
+
     .react-workspace-shell-chrome {
         grid-template-columns: minmax(0, 1fr) auto;
         gap: 5px;

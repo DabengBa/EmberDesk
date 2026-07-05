@@ -11,7 +11,7 @@ It owns transient dock state, status normalization, and compatibility-snapshot b
 - `src/workspace-react-features.js` exposes `reactPages.settings`, independent panel flags, and `reactShell.{takeover,strict}` to the legacy workspace HTML before response send.
 - `public/script.js` remains the runtime owner for opening existing drawers and invoking the current panel facades. The React shell never bypasses that path with a second panel behavior implementation.
 - `app/workspace-panels.tsx` owns the visible React chrome, navigation entry metadata, local dock loading/result bookkeeping, status normalization, and shell-facing data attributes.
-- `app/stores/workspace-panel-store.js` owns the ephemeral `workspacePanelDock` snapshot. It is in-memory only and is reset with the browser session.
+- `app/stores/workspace-panel-store.js` owns the ephemeral `workspacePanelDock` snapshot. It is in-memory only, remembers the latest manual open/refocus/pinned hints for the current page session, and is reset with the browser session.
 - `app/compat/global-compatibility-bridge.js` exposes a sanitized `workspacePanelDock` snapshot for internal diagnostics and migration proof. It remains internal-only and does not replace `globalThis.SillyTavern`, `eventSource`, `event_types`, or `@sillytavern/*`.
 - The dock path must fail closed. Disabled flags, missing containers, bundle-load failures, or mount failures must keep the legacy drawer surface usable and must not create empty migration hosts.
 - The dock path must not close or replace protected legacy content as incidental navigation cleanup. It coordinates panel entry state; it does not become the owner of World Info, background file actions, extension protocols, or Character Library data flows.
@@ -26,7 +26,7 @@ It owns transient dock state, status normalization, and compatibility-snapshot b
 4. `getWorkspaceShellPanelDockState(kind)` reads the current drawer element and maps the legacy `.pinnedOpen` class to transient `locked` and `pinned` booleans. This preserves current drawer facts without promoting them into persisted shell state.
 5. `createWorkspaceShellPanelResult(kind, resultOrMounted)` merges the settled mount/fallback result with the current dock facts. For a falsey result it returns a fallback payload with reason `feature-disabled`; for a truthy boolean it returns a mounted payload.
 6. Back in `app/workspace-panels.tsx`, the result is normalized to one of `disabled`, `loading`, `empty`, `success`, or `error`. A sequence counter prevents stale async completions from overwriting a newer click's dock status.
-7. The visible React shell publishes only the active-panel marker and dock status:
+7. The visible React shell publishes only the active-panel marker, dock status, and local empty/error recovery actions for the affected surface:
    - `aria-pressed` on the active panel button
    - `data-workspace-shell-panel-active`
    - `data-workspace-panel-dock-status`

@@ -87,6 +87,15 @@ describe('chat workspace structure', () => {
         expect(styleSource).toContain('body[data-react-workspace-shell-chrome="mounted"] #chat[data-main-chat-layout-owner="react"]');
         expect(styleSource).toContain('#send_form[data-main-chat-layout-owner="react"]');
         expect(styleSource).toContain('#nonQRFormItems[data-main-chat-layout-owner="react"]');
+        expect(styleSource).toContain('.react-main-chat-local-actions');
+        expect(styleSource).toContain('.react-main-chat-local-actions .menu_button');
+        expect(styleSource).toContain('.react-main-chat-local-status {');
+        expect(styleSource).toContain('pointer-events: none;');
+        expect(styleSource).toContain('.react-main-chat-local-status .react-main-chat-local-actions {');
+        expect(styleSource).toContain('pointer-events: auto;');
+        expect(styleSource).toContain('inset-block-end: calc(100% + 6px);');
+        expect(styleSource).toContain('.workspace-panel-status-badge');
+        expect(styleSource).toContain('.workspace-panel-legacy-slot-status');
         expect(styleSource).toContain('var(--error-color, var(--ember-red))');
         expect(styleSource).not.toContain('var(--error-red)');
     });

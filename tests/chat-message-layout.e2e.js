@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('chat message layout', () => {
-    async function loadStaticChatLayout(page) {
+    async function loadStaticChatLayout(page, { localStatusMarkup = '' } = {}) {
         await page.goto('/style.css');
         await page.setContent(`
             <!doctype html>
@@ -33,6 +33,7 @@ test.describe('chat message layout', () => {
                         </article>
                     </main>
                     <form id="send_form">
+                        ${localStatusMarkup}
                         <textarea id="send_textarea" aria-label="Send a message"></textarea>
                         <button id="send_but" type="button" aria-label="Send message">Send</button>
                         <button id="mes_stop" class="mes_stop" type="button" aria-label="Abort request">Stop</button>
@@ -142,4 +143,44 @@ test.describe('chat message layout', () => {
             expect(geometry.textBottom).toBeLessThan(geometry.formTop);
         });
     }
+
+    test('keeps wrapped local recovery actions above the composer on a narrow phone viewport', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await loadStaticChatLayout(page, {
+            localStatusMarkup: `
+                <div class="react-main-chat-local-status" data-main-chat-local-status="error">
+                    <span class="react-main-chat-local-status-dot" aria-hidden="true"></span>
+                    <span>Generation failed</span>
+                    <span class="react-main-chat-local-actions">
+                        <button type="button" class="menu_button menu_button_icon">Retry generation</button>
+                        <button type="button" class="menu_button menu_button_icon">Continue last message</button>
+                    </span>
+                </div>
+            `,
+        });
+
+        const geometry = await page.evaluate(() => {
+            const textarea = document.querySelector('#send_textarea');
+            const button = document.querySelector('.react-main-chat-local-actions .menu_button');
+
+            if (!(textarea instanceof HTMLElement) || !(button instanceof HTMLElement)) {
+                return null;
+            }
+
+            const textareaRect = textarea.getBoundingClientRect();
+            const buttonRect = button.getBoundingClientRect();
+            const probeX = textareaRect.left + 20;
+            const probeY = textareaRect.top + 2;
+            const hit = document.elementFromPoint(probeX, probeY);
+
+            return {
+                overlapsTextarea: buttonRect.bottom > textareaRect.top && buttonRect.top < textareaRect.bottom,
+                hitIsRecoveryButton: Boolean(hit?.closest?.('.react-main-chat-local-actions .menu_button')),
+            };
+        });
+
+        expect(geometry).not.toBeNull();
+        expect(geometry.overlapsTextarea).toBe(false);
+        expect(geometry.hitIsRecoveryButton).toBe(false);
+    });
 });

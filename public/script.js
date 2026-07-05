@@ -1814,6 +1814,10 @@ function getMainChatMessageListReactBridge() {
             const messageId = Number(payload?.messageId);
             const normalizedMessageId = Number.isInteger(messageId) && messageId >= 0 ? messageId : undefined;
             switch (action) {
+                case 'openCharacterLibrary':
+                    await openWorkspaceShellDrawer('right-nav-panel');
+                    $('#rm_button_characters').trigger('click');
+                    break;
                 case 'loadMoreUntilMessage': {
                     const anchorMessageId = String(payload?.anchorMessageId ?? '');
                     if (!anchorMessageId) {
@@ -11373,6 +11377,7 @@ export async function messageEdit(editMessageId) {
     }
 
     updateEditArrowClasses();
+    scheduleMainChatMessageListPanelRefresh();
 }
 
 /**

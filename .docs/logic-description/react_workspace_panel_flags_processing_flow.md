@@ -98,7 +98,7 @@ The processing outputs are:
 - `workspacePanelModuleCache`: the browser-side dynamic import cache for the shared workspace-panel scaffold bundle.
 - `workspaceShellPanelDockState`: the transient `locked` / `pinned` facts derived from the current legacy drawer `.pinnedOpen` class.
 - `workspaceShellPanelActionResult`: the shell-facing result object that merges mount/fallback outcome with the current dock facts.
-- `workspacePanelDockSnapshot`: the in-memory dock snapshot with active kind, active status, fallback reason, and remembered locked/open/pinned panel lists.
+- `workspacePanelDockSnapshot`: the in-memory dock snapshot with active kind, active status, fallback reason, and remembered locked/open/pinned panel lists for the current browser page session.
 
 ## Staged Processing Flow
 
@@ -135,7 +135,7 @@ The processing outputs are:
    - falsey boolean -> `{ mounted: false, status: 'fallback', reason: 'feature-disabled', locked, pinned }`
    - object result -> copy object fields and overwrite `locked` / `pinned` from the current drawer
 6. `app/workspace-panels.tsx` normalizes the settled result to one of `disabled`, `loading`, `empty`, `success`, or `error`, then records it in the dock store unless a newer click has already superseded that action.
-7. The visible shell uses the dock store only for active-panel and local-status feedback; pinned/locked facts stay in the transient store and compatibility snapshot rather than becoming separate shell badges.
+7. The visible shell uses the dock store only for active-panel, local-status, and local empty/error recovery feedback; pinned/locked facts stay in the transient store and compatibility snapshot rather than becoming separate shell badges.
 
 ### Guard individual panel mount calls
 

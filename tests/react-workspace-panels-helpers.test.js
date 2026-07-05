@@ -533,6 +533,8 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('function WorkspacePanelShell');
         expect(workspacePanelSource).toContain('data-react-workspace-panel-shell={kind}');
         expect(workspacePanelSource).toContain('data-workspace-panel-status={status}');
+        expect(workspacePanelSource).toContain('data-workspace-panel-recovery-state={status}');
+        expect(workspacePanelSource).toContain('data-workspace-panel-recovery-action={action.id}');
         expect(workspacePanelSource).toContain('className="workspace-panel-diagnostics"');
         expect(workspacePanelSource).toContain('<summary>Diagnostics</summary>');
         expect(workspacePanelSource).toContain('data-workspace-legacy-slot={slot.id}');
@@ -634,6 +636,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('import { z } from \'zod\';');
         expect(workspacePanelSource).toContain('const worldInfoPanelFormSchema = z.object(');
         expect(workspacePanelSource).toContain('function buildWorldInfoPanelFormDefaults');
+        expect(workspacePanelSource).toContain('return bridgeState.importMenuPresent || bridgeState.refreshMenuPresent ? \'empty\' : \'error\';');
         expect(workspacePanelSource).toContain('const worldInfoActionMutation = useMutation({');
         expect(workspacePanelSource).toContain('data-world-info-react-control="world-select"');
         expect(workspacePanelSource).toContain('data-world-info-react-control="search"');
@@ -644,6 +647,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('data-world-info-react-entry={entry.uid}');
         expect(workspacePanelSource).toContain('className="workspace-panel-item-label"');
         expect(workspacePanelSource).toContain('className="workspace-panel-item-status"');
+        expect(workspacePanelSource).toContain('if (bridgeState.importMenuPresent) {');
         expect(workspacePanelSource).toContain('worldInfoActionMutation.mutate({ action: \'importWorld\' })');
         expect(workspacePanelSource).toContain('worldInfoActionMutation.mutate({ action: \'exportWorld\' })');
 
@@ -1065,8 +1069,8 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('targets.fileNode.innerHTML = snapshot.fileHtml;');
         expect(workspacePanelSource).toContain('targets.biasNode.innerHTML = snapshot.biasHtml;');
         expect(workspacePanelSource).toContain('targets.reasoningDetails.open = snapshot.reasoningOpen ?? false;');
-        expect(workspacePanelSource).toContain('data-main-chat-rich-body-owner="react"');
-        expect(workspacePanelSource).toContain('data-main-chat-rich-body-row={snapshot.messageId}');
+        expect(workspacePanelSource).toContain('targets.messageBlock.dataset.mainChatRichBodyOwner = \'react\'');
+        expect(workspacePanelSource).toContain('targets.messageBlock.dataset.mainChatRichBodyRow = snapshot.messageId');
     });
 
     test('defines a visible message-action owner contract for safe main-chat rows', () => {
@@ -1128,14 +1132,20 @@ describe('React workspace panels bridge helpers', () => {
 
     test('publishes main-chat layout shell ownership without taking message row structure', () => {
         const workspacePanelSource = read('app/workspace-panels.tsx');
+        const scriptSource = read('public/script.js');
 
         expect(workspacePanelSource).toContain('data-main-chat-layout-owner="react"');
         expect(workspacePanelSource).toContain('data-main-chat-layout-status=');
         expect(workspacePanelSource).toContain('data-main-chat-local-status=');
+        expect(workspacePanelSource).toContain('data-main-chat-local-action={action.id}');
+        expect(workspacePanelSource).toContain('bridge?.dispatchAction?.(\'openCharacterLibrary\')');
         expect(workspacePanelSource).toContain('syncMainChatLayoutShellDom(');
         expect(workspacePanelSource).toContain('data-main-chat-layout-owner');
         expect(workspacePanelSource).toContain("role={status === 'error' ? 'alert' : 'status'}");
         expect(workspacePanelSource).toContain("aria-live={status === 'error' ? 'assertive' : 'polite'}");
         expect(workspacePanelSource).not.toContain('createPortal(<MainChatMessageListWorkspacePanel');
+        expect(scriptSource).toContain('export async function messageEdit(editMessageId)');
+        expect(scriptSource).toContain('updateEditArrowClasses();');
+        expect(scriptSource).toContain('scheduleMainChatMessageListPanelRefresh();');
     });
 });
