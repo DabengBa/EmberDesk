@@ -55,6 +55,8 @@ import {
     is_group_generating,
     resetSelectedGroup,
     select_group_chats,
+    editGroup,
+    setGroupAuthoringMembersDraft,
     regenerateGroup,
     group_generation_id,
     getGroupChat,
@@ -321,6 +323,13 @@ import { onboardingExperimentalMacroEngine } from './scripts/macros/engine/Macro
 import { compressRequest, setRequestCompressionConfig } from './scripts/request-compression.js';
 import { canJumpToSwipeForMessage, canOpenSwipePickerForMessage, initSwipePicker } from './scripts/swipe-picker.js';
 import {
+    applyCharacterAuthoringDraftToCreateState,
+    createCharacterAuthoringDraft,
+    createCharacterAuthoringDraftFromCreateState,
+    createCharacterAuthoringSaveModel,
+    getCharacterAuthoringDirtyFields,
+} from './scripts/character-authoring.js';
+import {
     mountWorkspacePanelHost,
     createWorkspacePanelActionBridge,
     createWorkspacePanelStateChangeHandler,
@@ -379,6 +388,8 @@ export function getWorkspaceReactFeatures() {
             worldInfo: false,
             backgroundLibrary: false,
             extensionsHost: false,
+            characterAuthoring: false,
+            groupAuthoring: false,
         },
         reactShell: {
             strict: false,
@@ -417,6 +428,8 @@ const WORLD_INFO_REACT_HOST_ID = 'emberdesk-react-world-info-panel-host';
 const BACKGROUND_LIBRARY_REACT_HOST_ID = 'emberdesk-react-background-library-panel-host';
 const EXTENSIONS_HOST_REACT_HOST_ID = 'emberdesk-react-extensions-host-panel-host';
 const MAIN_CHAT_MESSAGE_LIST_REACT_HOST_ID = 'emberdesk-react-main-chat-message-list-host';
+const CHARACTER_AUTHORING_REACT_HOST_ID = 'emberdesk-react-character-authoring-panel-host';
+const GROUP_AUTHORING_REACT_HOST_ID = 'emberdesk-react-group-authoring-panel-host';
 const WORKSPACE_SHELL_TAKEOVER_MARKER_ID = 'emberdesk-react-shell-takeover-foundation';
 const WORKSPACE_SHELL_CHROME_HOST_ID = 'emberdesk-react-workspace-shell-chrome-host';
 const LEGACY_WORKSPACE_CHROME_SELECTOR = '#top-bar, #ai-config-button > .drawer-toggle, #advanced-formatting-button > .drawer-toggle, #user-settings-button > .drawer-toggle, .drawer-opener[data-target="rightNavHolder"], .drawer-opener[data-target="extensions-settings-button"]';
@@ -720,20 +733,26 @@ async function openWorkspaceShellCharacterLibrary() {
     return createWorkspaceShellPanelResult('characterLibrary', isReactCharacterLibraryPanelEnabled());
 }
 
-function openWorkspaceShellGroupChats() {
+async function openWorkspaceShellGroupChats() {
     openWorkspaceShellDrawerImmediate('right-nav-panel');
     selected_button = 'group_chats';
     setMenuType('group_chats');
     selectRightMenuImmediate('rm_group_chats_block');
-    return createWorkspaceShellPanelResult('groupChats', { kind: 'groupChats', mounted: false, status: 'success' });
+    return createWorkspaceShellPanelResult('groupChats', await mountReactGroupAuthoringPanel());
 }
 
-function openWorkspaceShellCharacterAuthoring() {
+async function openWorkspaceShellCharacterAuthoring() {
     openWorkspaceShellDrawerImmediate('right-nav-panel');
-    selected_button = this_chid !== undefined || selected_group ? 'character_edit' : 'create';
-    setMenuType(selected_button === 'character_edit' ? 'character_edit' : 'create');
+    const hasSelectedCharacter = this_chid !== undefined && characters[this_chid];
+    selected_button = hasSelectedCharacter ? 'character_edit' : 'create';
+    setMenuType(hasSelectedCharacter ? 'character_edit' : 'create');
+    if (hasSelectedCharacter) {
+        select_selected_character(this_chid, { switchMenu: false });
+    } else {
+        select_rm_create({ switchMenu: false });
+    }
     selectRightMenuImmediate('rm_ch_create_block');
-    return createWorkspaceShellPanelResult('characterAuthoring', { kind: 'characterAuthoring', mounted: false, status: 'success' });
+    return createWorkspaceShellPanelResult('characterAuthoring', await mountReactCharacterAuthoringPanel());
 }
 
 function getWorkspaceShellChromeBridge() {
@@ -1319,6 +1338,328 @@ function ensureWorldInfoReactHost() {
     }
 
     return host;
+}
+
+function ensureCharacterAuthoringReactHost() {
+    const characterPanel = document.getElementById('rm_ch_create_block');
+    if (!characterPanel) {
+        return null;
+    }
+
+    let host = document.getElementById(CHARACTER_AUTHORING_REACT_HOST_ID);
+    if (host) {
+        return host;
+    }
+
+    host = document.createElement('div');
+    host.id = CHARACTER_AUTHORING_REACT_HOST_ID;
+    host.className = 'emberdesk-react-authoring-panel-host emberdesk-react-character-authoring-panel-host';
+    characterPanel.prepend(host);
+    return host;
+}
+
+function getCurrentCharacterAuthoringMode() {
+    return $('#form_create').attr('actiontype') === 'editcharacter' ? 'edit' : 'create';
+}
+
+function getCurrentCharacterAuthoringSource() {
+    return getCurrentCharacterAuthoringMode() === 'edit' && this_chid !== undefined && characters[this_chid]
+        ? characters[this_chid]
+        : null;
+}
+
+function hideLegacyCharacterAuthoringEditor(hidden) {
+    const form = document.getElementById('form_create');
+    if (!(form instanceof HTMLElement)) {
+        return;
+    }
+
+    form.hidden = hidden;
+    form.setAttribute('aria-hidden', hidden ? 'true' : 'false');
+    form.dataset.legacyCharacterAuthoringHiddenByReact = hidden ? 'true' : 'false';
+}
+
+function getCharacterAuthoringReactBridgeState() {
+    const mode = getCurrentCharacterAuthoringMode();
+    const sourceCharacter = getCurrentCharacterAuthoringSource();
+    const draft = mode === 'edit'
+        ? createCharacterAuthoringDraft(sourceCharacter ?? {}, { mode })
+        : createCharacterAuthoringDraftFromCreateState(create_save, { mode });
+    const title = draft.name.trim() || String($('#character_popup-button-h3').text() || '').trim();
+    const baselineDraft = mode === 'edit'
+        ? createCharacterAuthoringDraft(sourceCharacter ?? {}, { mode })
+        : createCharacterAuthoringDraftFromCreateState(create_save, { mode });
+
+    return {
+        mode,
+        title: title || (mode === 'edit' ? 'Character Authoring' : 'New Character'),
+        subtitle: 'Character draft',
+        dirty: getCharacterAuthoringDirtyFields(baselineDraft, draft).length > 0,
+        draft,
+        unsupportedFields: Array.isArray(draft.unsupportedFields) ? [...draft.unsupportedFields] : [],
+    };
+}
+
+function setAuthoringInputValue(selector, value) {
+    const element = $(selector);
+    element.val(value ?? '');
+    element.trigger('input');
+}
+
+function applyCharacterAuthoringSaveModel(saveModel = {}, { submit = true } = {}) {
+    const fields = saveModel.fields || {};
+    const extensions = saveModel.extensions || {};
+    setAuthoringInputValue('#character_name_pole', fields.name);
+    setAuthoringInputValue('#avatar_url_pole', fields.avatar);
+    setAuthoringInputValue('#description_textarea', fields.description);
+    setAuthoringInputValue('#personality_textarea', fields.personality);
+    setAuthoringInputValue('#scenario_pole', fields.scenario);
+    setAuthoringInputValue('#firstmessage_textarea', fields.first_mes);
+    setAuthoringInputValue('#mes_example_textarea', fields.mes_example);
+    setAuthoringInputValue('#creator_notes_textarea', fields.creator_notes);
+    setAuthoringInputValue('#system_prompt_textarea', fields.system_prompt);
+    setAuthoringInputValue('#post_history_instructions_textarea', fields.post_history_instructions);
+    setAuthoringInputValue('#creator_textarea', fields.creator);
+    setAuthoringInputValue('#character_version_textarea', fields.character_version);
+    setAuthoringInputValue('#tags_textarea', Array.isArray(fields.tags) ? fields.tags.join(', ') : '');
+    setAuthoringInputValue('#talkativeness_slider', fields.talkativeness);
+    setAuthoringInputValue('#depth_prompt_prompt', extensions.depth_prompt?.prompt);
+    setAuthoringInputValue('#depth_prompt_depth', extensions.depth_prompt?.depth);
+    setAuthoringInputValue('#depth_prompt_role', extensions.depth_prompt?.role);
+    updateFavButtonState(Boolean(fields.fav));
+    create_save.world = String(extensions.world || '');
+    create_save.alternate_greetings = Array.isArray(fields.alternate_greetings) ? [...fields.alternate_greetings] : [];
+    create_save.extensions = {
+        ...(create_save.extensions && typeof create_save.extensions === 'object' ? create_save.extensions : {}),
+        world: String(extensions.world || ''),
+        depth_prompt: extensions.depth_prompt || {},
+    };
+
+    if (submit) {
+        $('#create_button').trigger('click');
+    }
+}
+
+async function saveCharacterAuthoringFromPayload(saveModel = {}) {
+    applyCharacterAuthoringSaveModel(saveModel, { submit: true });
+    return false;
+}
+
+async function reopenCharacterAuthoringAfterLegacyPopup() {
+    await mountReactCharacterAuthoringPanel();
+}
+
+function queueReactCharacterAuthoringRemount() {
+    if (!getWorkspaceReactFeatures()?.reactPanels?.characterAuthoring) {
+        return;
+    }
+
+    window.setTimeout(() => {
+        void mountReactCharacterAuthoringPanel();
+    }, 0);
+}
+
+function queueReactGroupAuthoringRemount() {
+    if (!getWorkspaceReactFeatures()?.reactPanels?.groupAuthoring) {
+        return;
+    }
+
+    window.setTimeout(() => {
+        void mountReactGroupAuthoringPanel();
+    }, 0);
+}
+
+eventSource.on(event_types.CHARACTER_EDITOR_OPENED, () => {
+    queueReactCharacterAuthoringRemount();
+});
+
+eventSource.on('groupSelected', () => {
+    queueReactGroupAuthoringRemount();
+});
+
+function getCharacterAuthoringReactBridge() {
+    return createWorkspacePanelActionBridge({
+        async dispatchAction(action, payload = {}) {
+            switch (action) {
+                case 'saveCharacterAuthoring':
+                    return await saveCharacterAuthoringFromPayload(payload);
+                case 'cancelAuthoring':
+                    if (getCurrentCharacterAuthoringMode() === 'edit' && this_chid !== undefined) {
+                        select_selected_character(this_chid, { switchMenu: false });
+                    } else {
+                        select_rm_create({ switchMenu: false });
+                    }
+                    return false;
+                case 'deleteAuthoring':
+                    $('#delete_button').trigger('click');
+                    return false;
+                case 'duplicateAuthoring':
+                    $('#dupe_button').trigger('click');
+                    return false;
+                case 'exportAuthoring':
+                    applyCharacterAuthoringSaveModel(payload, { submit: false });
+                    $('#export_button').trigger('click');
+                    return false;
+                case 'openWorldInfo':
+                    applyCharacterAuthoringSaveModel(payload, { submit: false });
+                    hideLegacyCharacterAuthoringEditor(false);
+                    await openCharacterWorldPopup();
+                    hideLegacyCharacterAuthoringEditor(true);
+                    await reopenCharacterAuthoringAfterLegacyPopup();
+                    return false;
+                case 'openAlternateGreetings':
+                    applyCharacterAuthoringSaveModel(payload, { submit: false });
+                    hideLegacyCharacterAuthoringEditor(false);
+                    await openAlternateGreetings();
+                    hideLegacyCharacterAuthoringEditor(true);
+                    await reopenCharacterAuthoringAfterLegacyPopup();
+                    return false;
+                default:
+                    console.warn('Unknown React character authoring action', action);
+            }
+        },
+        shouldRemount(actionResult) {
+            return actionResult !== false;
+        },
+        remount: () => {
+            hideLegacyCharacterAuthoringEditor(true);
+            void mountReactCharacterAuthoringPanel();
+        },
+    });
+}
+
+async function mountReactCharacterAuthoringPanel() {
+    const result = await mountWorkspacePanelHost({
+        kind: 'characterAuthoring',
+        ensureContainer: ensureCharacterAuthoringReactHost,
+        getState: () => getCharacterAuthoringReactBridgeState(),
+        bridge: getCharacterAuthoringReactBridge(),
+        features: getWorkspaceReactFeatures(),
+        onDisabled() {
+            hideLegacyCharacterAuthoringEditor(false);
+        },
+    });
+
+    hideLegacyCharacterAuthoringEditor(Boolean(result?.mounted));
+    return result;
+}
+
+function ensureGroupAuthoringReactHost() {
+    const groupPanel = document.getElementById('rm_group_chats_block');
+    if (!groupPanel) {
+        return null;
+    }
+
+    let host = document.getElementById(GROUP_AUTHORING_REACT_HOST_ID);
+    if (host) {
+        return host;
+    }
+
+    host = document.createElement('div');
+    host.id = GROUP_AUTHORING_REACT_HOST_ID;
+    host.className = 'emberdesk-react-authoring-panel-host emberdesk-react-group-authoring-panel-host';
+    groupPanel.prepend(host);
+    return host;
+}
+
+function getGroupAuthoringReactBridgeState() {
+    const title = String($('#rm_group_chat_name').val() || '').trim();
+    const group = selected_group ? groups.find(x => x.id == selected_group) : null;
+    const memberIds = Array.isArray(group?.members) ? [...group.members] : [];
+    const candidates = characters
+        .filter(character => character?.avatar && !memberIds.includes(character.avatar))
+        .slice(0, 12)
+        .map(character => ({
+            id: character.avatar,
+            label: character.name || character.avatar,
+        }));
+    return {
+        mode: selected_group ? 'edit' : 'create',
+        title: title || (selected_group ? 'Group Authoring' : 'New Group'),
+        subtitle: 'Group draft',
+        dirty: false,
+        draft: {
+            id: selected_group || '',
+            name: title,
+            avatar_url: String($('#group_avatar_preview img').attr('src') || group?.avatar_url || ''),
+            members: memberIds,
+            disabled_members: Array.isArray(group?.disabled_members) ? [...group.disabled_members] : [],
+            fav: Boolean(group?.fav),
+            allow_self_responses: Boolean($('#rm_group_allow_self_responses').prop('checked')),
+            hideMutedSprites: Boolean($('#rm_group_hidemutedsprites').prop('checked')),
+            activation_strategy: Number($('#rm_group_activation_strategy').val()),
+            generation_mode: Number($('#rm_group_generation_mode').val()),
+            auto_mode_delay: Number($('#rm_group_automode_delay').val()),
+            generation_mode_join_prefix: String($('#rm_group_generation_mode_join_prefix').val() || ''),
+            generation_mode_join_suffix: String($('#rm_group_generation_mode_join_suffix').val() || ''),
+        },
+        candidates,
+        unsupportedFields: [],
+    };
+}
+
+function applyGroupAuthoringSaveModel(saveModel = {}) {
+    setAuthoringInputValue('#rm_group_chat_name', saveModel.name);
+    $('#rm_group_allow_self_responses').prop('checked', Boolean(saveModel.allow_self_responses)).trigger('input');
+    $('#rm_group_hidemutedsprites').prop('checked', Boolean(saveModel.hideMutedSprites)).trigger('input');
+    $('#rm_group_activation_strategy').val(String(saveModel.activation_strategy ?? 0)).trigger('change');
+    $('#rm_group_generation_mode').val(String(saveModel.generation_mode ?? 0)).trigger('change');
+    setAuthoringInputValue('#rm_group_automode_delay', saveModel.auto_mode_delay);
+    setAuthoringInputValue('#rm_group_generation_mode_join_prefix', saveModel.generation_mode_join_prefix);
+    setAuthoringInputValue('#rm_group_generation_mode_join_suffix', saveModel.generation_mode_join_suffix);
+    if (Array.isArray(saveModel.members)) {
+        setGroupAuthoringMembersDraft(saveModel.members, selected_group);
+    }
+
+    if (selected_group) {
+        const group = groups.find(x => x.id == selected_group);
+        if (!group) {
+            return;
+        }
+
+        group.name = String(saveModel.name || group.name || '');
+        group.avatar_url = String(saveModel.avatar_url || group.avatar_url || '');
+        group.allow_self_responses = Boolean(saveModel.allow_self_responses);
+        group.hideMutedSprites = Boolean(saveModel.hideMutedSprites);
+        group.activation_strategy = Number(saveModel.activation_strategy ?? group.activation_strategy ?? 0);
+        group.generation_mode = Number(saveModel.generation_mode ?? group.generation_mode ?? 0);
+        group.auto_mode_delay = Number(saveModel.auto_mode_delay ?? group.auto_mode_delay ?? 5);
+        group.generation_mode_join_prefix = String(saveModel.generation_mode_join_prefix || '');
+        group.generation_mode_join_suffix = String(saveModel.generation_mode_join_suffix || '');
+        group.fav = Boolean(saveModel.fav);
+        group.disabled_members = Array.isArray(saveModel.disabled_members) ? [...saveModel.disabled_members] : [];
+        return editGroup(selected_group, true, false);
+    }
+
+    $('#rm_group_submit').trigger('click');
+}
+
+function getGroupAuthoringReactBridge() {
+    return createWorkspacePanelActionBridge({
+        dispatchAction(action, payload = {}) {
+            switch (action) {
+                case 'saveGroupAuthoring':
+                    return applyGroupAuthoringSaveModel(payload);
+                case 'cancelAuthoring':
+                    return openWorkspaceShellGroupChats();
+                case 'deleteAuthoring':
+                    return $('#rm_group_delete').trigger('click');
+                default:
+                    console.warn('Unknown React group authoring action', action);
+            }
+        },
+        remount: () => mountReactGroupAuthoringPanel(),
+    });
+}
+
+async function mountReactGroupAuthoringPanel() {
+    return mountWorkspacePanelHost({
+        kind: 'groupAuthoring',
+        ensureContainer: ensureGroupAuthoringReactHost,
+        getState: () => getGroupAuthoringReactBridgeState(),
+        bridge: getGroupAuthoringReactBridge(),
+        features: getWorkspaceReactFeatures(),
+    });
 }
 
 function getWorldInfoReactWorldNames(editorSelector) {

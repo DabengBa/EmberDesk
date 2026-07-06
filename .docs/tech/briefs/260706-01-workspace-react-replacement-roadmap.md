@@ -34,18 +34,22 @@ last_updated: 2026-07-06
 ### Domain 2: legacy drawer 先进入统一控制，再做 React 内容替换
 
 - **User expectation:** AI Config、Advanced Formatting、User Settings、Group Chats 等仍未纳入新架构的面板，需要逐步进入 shell/dock owner，而不是继续由 legacy button 独立控制。
-- **Current status:** planned by spec set `260706-02`。
+- **Current status:** delivered on 2026-07-06 by spec set `260706-02`。
+- **Delivery status:** AI Config、Advanced Formatting、User Settings fallback、Group Chats 已进入 registry-backed shell control，same-entry open/close/reopen 和 legacy value preservation 有 focused unit/E2E proof。
 - **Change history:**
   - 2026-07-06: 把“控制面纳入”与“内容 React 化”拆开，降低一次性替换风险。
-- **Implementation traceability:** `.docs/specs/260706-02-legacy-panel-control-cutover/spec.md`。
+  - 2026-07-06: `260706-02` 已交付并归档；长期事实已移入 `.docs/db/features/next-workspace-shell.md`、`.docs/db/pages/chat-workspace.md`、`.docs/db/pages/api-configuration.md`、`.docs/db/pages/settings.md`、`.docs/PROJECT_HISTORY.md` 和 `.docs/tech/briefs/260706-02-legacy-panel-control-cutover.md`。
+- **Implementation traceability:** `app/workspace-panels.tsx`, `public/script.js`, `tests/react-workspace-panels-helpers.test.js`, `tests/chat-workspace-structure.test.js`, `tests/workspace-shell-panel-navigation.e2e.js`, `.docs/tech/briefs/260706-02-legacy-panel-control-cutover.md`; archival commit `bfc11a447 docs(workspace): stamp panel registry wrap-up trace`.
 
 ### Domain 3: 高风险 authoring 面板必须作为真实替换切片
 
 - **User expectation:** 角色创建/编辑、群组创建/编辑不能只做 shell 按钮代理；需要最终变成 React owner，同时保留角色列表、selector、扩展和文件写入兼容。
-- **Current status:** planned by spec set `260706-03`。
+- **Current status:** delivered on 2026-07-06 by spec set `260706-03`。
+- **Delivery status:** Character Authoring 与 Group Authoring 现在在原有右侧 drawer host 内由 guarded React authoring surface 作为正常可见 owner，legacy save/delete/export/world-info seam 与角色列表、群组文件、扩展兼容边界保持不变。
 - **Change history:**
   - 2026-07-06: 把 Character / Group authoring 设为单独规格，避免混入普通 drawer 控制迁移。
-- **Implementation traceability:** `.docs/specs/260706-03-character-group-authoring-replacement/spec.md`。
+  - 2026-07-06: `260706-03` 已交付并进入 wrap-up；长期事实已移入 `.docs/db/features/character-library-panel.md`、`.docs/db/features/group-authoring.md`、`.docs/db/pages/chat-workspace.md`、`.docs/db/terms/character-card.md`、`.docs/db/features/next-workspace-shell.md`、`.docs/project-overview.md`、`.docs/tech/workspace-shell-panel-dock-coordination.md`、`.docs/PROJECT_HISTORY.md` 和 `.docs/tech/briefs/260706-03-character-group-authoring-replacement.md`。
+- **Implementation traceability:** `public/scripts/character-authoring.js`, `public/scripts/group-authoring.js`, `public/scripts/group-chats.js`, `public/script.js`, `app/workspace-panels.tsx`, `tests/character-authoring-facade.test.js`, `tests/group-authoring-facade.test.js`, `tests/react-workspace-panels-helpers.test.js`, `tests/character-group-authoring.e2e.js`, `.docs/tech/briefs/260706-03-character-group-authoring-replacement.md`.
 
 ### Domain 4: 已有 React islands 需要从 action-host 深化为 content owner
 

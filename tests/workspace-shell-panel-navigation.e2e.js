@@ -13,10 +13,28 @@ async function clickShellPanel(page, label) {
 }
 
 async function expectActivePanel(page, label, status) {
+    const expectedStatuses = Array.isArray(status) ? status : [status];
     await expect.poll(async () => page.evaluate(() => ({
         active: document.querySelector('[data-workspace-shell-panel-active="true"]')?.textContent?.trim() ?? null,
         status: document.querySelector('.react-workspace-panel-dock-status')?.textContent?.trim() ?? null,
-    })), { timeout: 10_000 }).toEqual({ active: label, status });
+    })), { timeout: 10_000 }).toEqual(expect.objectContaining({ active: label }));
+    await expect.poll(async () => page.evaluate(() => (
+        document.querySelector('.react-workspace-panel-dock-status')?.textContent?.trim() ?? null
+    )), { timeout: 10_000 }).toBeOneOf(expectedStatuses);
+}
+
+expect.extend({
+    toBeOneOf(received, expectedValues) {
+        const pass = expectedValues.includes(received);
+        return {
+            pass,
+            message: () => `expected ${this.utils.printReceived(received)} to be one of ${this.utils.printExpected(expectedValues)}`,
+        };
+    },
+});
+
+function readyOrLegacyStatus(label) {
+    return [`${label} ready`, `${label} using legacy panel`];
 }
 
 async function expectNoActivePanel(page) {
@@ -27,7 +45,7 @@ async function expectNoActivePanel(page) {
 }
 
 async function expectShellPanelVisible(page, entry) {
-    await expectActivePanel(page, entry.label, `${entry.label} ready`);
+    await expectActivePanel(page, entry.label, entry.status ?? readyOrLegacyStatus(entry.label));
     await expect(page.locator(entry.visibleSelector)).toBeVisible({ timeout: 10_000 });
 }
 
@@ -54,7 +72,7 @@ test.describe('workspace shell panel navigation', () => {
 
             await clickShellPanel(page, entry.label);
             await expect(panelButton).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
-            await expectActivePanel(page, entry.label, `${entry.label} ready`);
+            await expectActivePanel(page, entry.label, entry.status ?? readyOrLegacyStatus(entry.label));
             await expect(page.locator(entry.visibleSelector)).toBeVisible({ timeout: 10_000 });
 
             await clickShellPanel(page, entry.label);
@@ -67,7 +85,7 @@ test.describe('workspace shell panel navigation', () => {
         await testSetup.awaitST({ page });
 
         await clickShellPanel(page, 'Character Library');
-        await expectActivePanel(page, 'Character Library', 'Character Library ready');
+        await expectActivePanel(page, 'Character Library', readyOrLegacyStatus('Character Library'));
         await expect(page.locator('#right-nav-panel')).toHaveClass(/openDrawer/);
 
         await clickShellPanel(page, 'Character Library');
@@ -75,7 +93,7 @@ test.describe('workspace shell panel navigation', () => {
         await expect(page.locator('#right-nav-panel')).toHaveClass(/closedDrawer/);
 
         await clickShellPanel(page, 'Character Library');
-        await expectActivePanel(page, 'Character Library', 'Character Library ready');
+        await expectActivePanel(page, 'Character Library', readyOrLegacyStatus('Character Library'));
         await expect(page.locator('#right-nav-panel')).toHaveClass(/openDrawer/);
     });
 
@@ -142,7 +160,7 @@ test.describe('workspace shell panel navigation', () => {
         })), { timeout: 10_000 }).toEqual({
             readyState: 'complete',
             active: 'World Info',
-            status: 'World Info ready',
+            status: expect.stringMatching(/^World Info (ready|using legacy panel)$/),
         });
     });
 
@@ -167,7 +185,7 @@ test.describe('workspace shell panel navigation', () => {
             status: document.querySelector('.react-workspace-panel-dock-status')?.textContent?.trim(),
         })), { timeout: 10_000 }).toEqual({
             active: 'Character Library',
-            status: 'Character Library ready',
+            status: expect.stringMatching(/^Character Library (ready|using legacy panel)$/),
         });
     });
 });

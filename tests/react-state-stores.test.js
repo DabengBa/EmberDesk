@@ -12,6 +12,7 @@ import {
     resetWorkspacePanelStore,
     subscribeWorkspacePanelDock,
     subscribeWorkspacePanel,
+    WORKSPACE_PANEL_KINDS,
     WORKSPACE_PANEL_DOCK_KINDS,
 } from '../app/stores/workspace-panel-store.js';
 import {
@@ -23,6 +24,15 @@ import {
 
 describe('React state stores', () => {
     test('declares every primary workspace shell panel as a dock kind', () => {
+        expect(WORKSPACE_PANEL_KINDS).toEqual([
+            'worldInfo',
+            'backgroundLibrary',
+            'extensionsHost',
+            'mainChatMessageList',
+            'characterAuthoring',
+            'groupAuthoring',
+        ]);
+
         expect(WORKSPACE_PANEL_DOCK_KINDS).toEqual([
             'aiConfig',
             'advancedFormatting',

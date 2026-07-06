@@ -15,6 +15,8 @@ const workspacePanelFlagEnvKeys = [
     'EMBERDESK_FEATURES_REACT_PANELS_WORLDINFO',
     'EMBERDESK_FEATURES_REACT_PANELS_BACKGROUNDLIBRARY',
     'EMBERDESK_FEATURES_REACT_PANELS_EXTENSIONSHOST',
+    'EMBERDESK_FEATURES_REACT_PANELS_CHARACTERAUTHORING',
+    'EMBERDESK_FEATURES_REACT_PANELS_GROUPAUTHORING',
 ];
 const shouldBuildCharacterLibraryPanel = process.env.EMBERDESK_FEATURES_REACT_PANELS_CHARACTERLIBRARY === 'true';
 const shouldBuildWorkspacePanels = workspacePanelFlagEnvKeys.some((envKey) => process.env[envKey] === 'true');

@@ -24,7 +24,6 @@ Completed Phase 0, Phase 1, Phase 2, Phase 3, Phase 3B, Phase 4, Phase 5, and Ph
 | Folder | Spec set | Purpose |
 |---|---|---|
 | [260706-02-legacy-panel-control-cutover](260706-02-legacy-panel-control-cutover/spec.md) | Workspace React Replacement Roadmap | Bring legacy-hosted drawers such as AI Config, Advanced Formatting, Settings fallback, and Group Chats under the React shell/dock control plane. |
-| [260706-03-character-group-authoring-replacement](260706-03-character-group-authoring-replacement/spec.md) | Workspace React Replacement Roadmap | Replace Character and Group authoring surfaces with React owners while preserving file-backed data and compatibility selectors. |
 | [260706-04-supporting-panel-content-replacement](260706-04-supporting-panel-content-replacement/spec.md) | Workspace React Replacement Roadmap | Deepen World Info, Backgrounds, and Extensions from action-host islands into content owners with protected compatibility slots. |
 | [260706-05-legacy-cutover-and-deletion-gates](260706-05-legacy-cutover-and-deletion-gates/spec.md) | Workspace React Replacement Roadmap | Decide deletion, freeze, or compatibility-facade status for remaining legacy owners after replacement slices land. |
 

@@ -31,6 +31,8 @@ beforeAll(() => {
         '      worldInfo: false',
         '      backgroundLibrary: false',
         '      extensionsHost: false',
+        '      characterAuthoring: false',
+        '      groupAuthoring: false',
         '    shell:',
         '      takeover: false',
         '',
@@ -44,7 +46,10 @@ afterEach(() => {
     delete process.env.EMBERDESK_FEATURES_REACT_PANELS_WORLDINFO;
     delete process.env.EMBERDESK_FEATURES_REACT_PANELS_BACKGROUNDLIBRARY;
     delete process.env.EMBERDESK_FEATURES_REACT_PANELS_EXTENSIONSHOST;
+    delete process.env.EMBERDESK_FEATURES_REACT_PANELS_CHARACTERAUTHORING;
+    delete process.env.EMBERDESK_FEATURES_REACT_PANELS_GROUPAUTHORING;
     delete process.env.EMBERDESK_FEATURES_REACT_SHELL_TAKEOVER;
+    delete process.env.EMBERDESK_FEATURES_REACT_SHELL_STRICT;
 });
 
 describe('workspace React panel flags', () => {
@@ -61,6 +66,8 @@ describe('workspace React panel flags', () => {
                 worldInfo: false,
                 backgroundLibrary: false,
                 extensionsHost: false,
+                characterAuthoring: false,
+                groupAuthoring: false,
             },
             reactShell: {
                 strict: false,
@@ -73,6 +80,8 @@ describe('workspace React panel flags', () => {
         process.env.EMBERDESK_FEATURES_REACT_PANELS_WORLDINFO = 'true';
         process.env.EMBERDESK_FEATURES_REACT_PANELS_BACKGROUNDLIBRARY = 'true';
         process.env.EMBERDESK_FEATURES_REACT_PANELS_EXTENSIONSHOST = 'true';
+        process.env.EMBERDESK_FEATURES_REACT_PANELS_CHARACTERAUTHORING = 'true';
+        process.env.EMBERDESK_FEATURES_REACT_PANELS_GROUPAUTHORING = 'true';
 
         expect(featureBootstrapModule.getWorkspaceReactFeatures()).toEqual({
             reactPages: {
@@ -84,6 +93,8 @@ describe('workspace React panel flags', () => {
                 worldInfo: true,
                 backgroundLibrary: true,
                 extensionsHost: true,
+                characterAuthoring: true,
+                groupAuthoring: true,
             },
             reactShell: {
                 strict: true,
@@ -128,6 +139,8 @@ describe('workspace React panel flags', () => {
                 worldInfo: true,
                 backgroundLibrary: true,
                 extensionsHost: true,
+                characterAuthoring: true,
+                groupAuthoring: true,
                 unsafe: '<script>alert(1)</script>&',
             },
             reactPages: {
@@ -146,6 +159,8 @@ describe('workspace React panel flags', () => {
         expect(html).toContain('"worldInfo":true');
         expect(html).toContain('"backgroundLibrary":true');
         expect(html).toContain('"extensionsHost":true');
+        expect(html).toContain('"characterAuthoring":true');
+        expect(html).toContain('"groupAuthoring":true');
         expect(html).toContain('\\u003cscript');
         expect(html).toContain('\\u0026');
         expect(html).not.toContain('<script>alert(1)</script>&');
@@ -162,6 +177,8 @@ describe('workspace React panel flags', () => {
         expect(configSource).toContain('worldInfo: false');
         expect(configSource).toContain('backgroundLibrary: false');
         expect(configSource).toContain('extensionsHost: false');
+        expect(configSource).toContain('characterAuthoring: false');
+        expect(configSource).toContain('groupAuthoring: false');
         expect(packageSource).toContain('"build:react:workspace-panels": "vite build --mode workspace-panels"');
         expect(viteSource).toContain('const isWorkspacePanelsBuild = mode === \'workspace-panels\';');
         expect(viteSource).toContain('entry: path.resolve(process.cwd(), \'app/workspace-panels.tsx\')');
@@ -170,14 +187,20 @@ describe('workspace React panel flags', () => {
 
     test('prebuilds flagged React panel bundles before Playwright starts the server', () => {
         const playwrightSource = read('tests/playwright.config.js');
+        const seedSource = read('scripts/seed-dev-environment.mjs');
 
         expect(playwrightSource).toContain('const workspacePanelFlagEnvKeys = [');
         expect(playwrightSource).toContain('EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST');
         expect(playwrightSource).toContain('EMBERDESK_FEATURES_REACT_PANELS_WORLDINFO');
         expect(playwrightSource).toContain('EMBERDESK_FEATURES_REACT_PANELS_BACKGROUNDLIBRARY');
         expect(playwrightSource).toContain('EMBERDESK_FEATURES_REACT_PANELS_EXTENSIONSHOST');
+        expect(playwrightSource).toContain('EMBERDESK_FEATURES_REACT_PANELS_CHARACTERAUTHORING');
+        expect(playwrightSource).toContain('EMBERDESK_FEATURES_REACT_PANELS_GROUPAUTHORING');
         expect(playwrightSource).toContain('shouldBuildCharacterLibraryPanel ? \'bun run build:react:character-library\' : null');
         expect(playwrightSource).toContain('shouldBuildWorkspacePanels ? \'bun run build:react:workspace-panels\' : null');
         expect(playwrightSource).toContain('command: webServerCommand');
+        expect(seedSource).toContain('EMBERDESK_FEATURES_REACT_SHELL_TAKEOVER');
+        expect(seedSource).toContain('EMBERDESK_FEATURES_REACT_SHELL_STRICT');
+        expect(seedSource).toContain('shell:');
     });
 });

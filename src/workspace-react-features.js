@@ -23,9 +23,17 @@ export function isReactExtensionsHostPanelEnabled() {
     return isReactWorkspacePanelEnabled('extensionsHost');
 }
 
+export function isReactCharacterAuthoringPanelEnabled() {
+    return isReactWorkspacePanelEnabled('characterAuthoring');
+}
+
+export function isReactGroupAuthoringPanelEnabled() {
+    return isReactWorkspacePanelEnabled('groupAuthoring');
+}
+
 /**
  * Resolve the feature payload that the legacy workspace shell can read at startup.
- * @returns {{reactPages: {settings: boolean}, reactPanels: {characterLibrary: boolean, mainChatMessageList: boolean, worldInfo: boolean, backgroundLibrary: boolean, extensionsHost: boolean}, reactShell: {takeover: boolean, strict: boolean}}}
+ * @returns {{reactPages: {settings: boolean}, reactPanels: {characterLibrary: boolean, mainChatMessageList: boolean, worldInfo: boolean, backgroundLibrary: boolean, extensionsHost: boolean, characterAuthoring: boolean, groupAuthoring: boolean}, reactShell: {takeover: boolean, strict: boolean}}}
  */
 export function getWorkspaceReactFeatures() {
     return {
@@ -38,6 +46,8 @@ export function getWorkspaceReactFeatures() {
             worldInfo: isReactWorldInfoPanelEnabled(),
             backgroundLibrary: isReactBackgroundLibraryPanelEnabled(),
             extensionsHost: isReactExtensionsHostPanelEnabled(),
+            characterAuthoring: isReactCharacterAuthoringPanelEnabled(),
+            groupAuthoring: isReactGroupAuthoringPanelEnabled(),
         },
         reactShell: {
             strict: isReactShellTakeoverStrictModeEnabled(),
@@ -48,7 +58,7 @@ export function getWorkspaceReactFeatures() {
 
 /**
  * Serialize the workspace feature payload for inline HTML bootstrapping.
- * @param {{reactPages?: {settings?: boolean}, reactPanels: {characterLibrary: boolean, mainChatMessageList?: boolean, worldInfo?: boolean, backgroundLibrary?: boolean, extensionsHost?: boolean}, reactShell?: {strict?: boolean, takeover?: boolean}}} workspaceReactFeatures
+ * @param {{reactPages?: {settings?: boolean}, reactPanels: {characterLibrary: boolean, mainChatMessageList?: boolean, worldInfo?: boolean, backgroundLibrary?: boolean, extensionsHost?: boolean, characterAuthoring?: boolean, groupAuthoring?: boolean}, reactShell?: {strict?: boolean, takeover?: boolean}}} workspaceReactFeatures
  * @returns {string}
  */
 export function serializeWorkspaceReactFeatures(workspaceReactFeatures) {
@@ -60,7 +70,7 @@ export function serializeWorkspaceReactFeatures(workspaceReactFeatures) {
 
 /**
  * Build an inline script that exposes workspace React features to the legacy shell.
- * @param {{reactPages?: {settings?: boolean}, reactPanels: {characterLibrary: boolean, mainChatMessageList?: boolean, worldInfo?: boolean, backgroundLibrary?: boolean, extensionsHost?: boolean}, reactShell?: {strict?: boolean, takeover?: boolean}}} workspaceReactFeatures
+ * @param {{reactPages?: {settings?: boolean}, reactPanels: {characterLibrary: boolean, mainChatMessageList?: boolean, worldInfo?: boolean, backgroundLibrary?: boolean, extensionsHost?: boolean, characterAuthoring?: boolean, groupAuthoring?: boolean}, reactShell?: {strict?: boolean, takeover?: boolean}}} workspaceReactFeatures
  * @returns {string}
  */
 export function buildWorkspaceReactFeaturesScript(workspaceReactFeatures) {
@@ -71,7 +81,7 @@ export function buildWorkspaceReactFeaturesScript(workspaceReactFeatures) {
 /**
  * Inject the workspace React feature payload into the workspace HTML shell.
  * @param {string} html
- * @param {{reactPages?: {settings?: boolean}, reactPanels: {characterLibrary: boolean, mainChatMessageList?: boolean, worldInfo?: boolean, backgroundLibrary?: boolean, extensionsHost?: boolean}, reactShell?: {strict?: boolean, takeover?: boolean}}} workspaceReactFeatures
+ * @param {{reactPages?: {settings?: boolean}, reactPanels: {characterLibrary: boolean, mainChatMessageList?: boolean, worldInfo?: boolean, backgroundLibrary?: boolean, extensionsHost?: boolean, characterAuthoring?: boolean, groupAuthoring?: boolean}, reactShell?: {strict?: boolean, takeover?: boolean}}} workspaceReactFeatures
  * @returns {string}
  */
 export function injectWorkspaceReactFeatures(html, workspaceReactFeatures = getWorkspaceReactFeatures()) {

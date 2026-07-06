@@ -3,7 +3,7 @@ id: page.chat_workspace
 type: page
 name: Chat Workspace
 route: /
-related: [page.login, page.settings, feature.startup_bootstrap, feature.next_workspace_shell, feature.character_library_panel, feature.chat_message_rendering, feature.chat_message_actions, feature.chat_generation_auto_recovery, feature.character_export, feature.character_delete, feature.world_info_panel, feature.background_library_panel, feature.extension_panel_open, term.character_card, term.shared_browser_library]
+related: [page.login, page.settings, feature.startup_bootstrap, feature.next_workspace_shell, feature.character_library_panel, feature.group_authoring, feature.chat_message_rendering, feature.chat_message_actions, feature.chat_generation_auto_recovery, feature.character_export, feature.character_delete, feature.world_info_panel, feature.background_library_panel, feature.extension_panel_open, term.character_card, term.shared_browser_library]
 ---
 
 # Page: Chat Workspace
@@ -29,6 +29,7 @@ This page exists so a user can run their daily LLM workflow from one browser sur
 - `feature.startup_bootstrap`: the visible shell-loading experience between opening the URL and reaching a usable workspace.
 - `feature.next_workspace_shell`: the same-entry React workspace chrome that can own current context, shell status, and primary workspace navigation.
 - `feature.character_library_panel`: browsing and selecting character cards from the workspace.
+- `feature.group_authoring`: creating and editing group definitions, members, and save state from the workspace drawer.
 - `feature.chat_message_rendering`: displaying stored or finalized chat messages as readable text inside stable message rows.
 - `feature.chat_message_actions`: discovering and using actions attached to rendered chat messages.
 - `feature.chat_generation_auto_recovery`: bounded automatic retry behavior for visible main-chat generation failures.
@@ -46,6 +47,7 @@ This page exists so a user can run their daily LLM workflow from one browser sur
 !include feature.startup_bootstrap
 !include feature.next_workspace_shell
 !include feature.character_library_panel
+!include feature.group_authoring
 !include feature.chat_message_rendering
 !include feature.chat_message_actions
 !include feature.chat_generation_auto_recovery
@@ -75,7 +77,7 @@ This page exists so a user can run their daily LLM workflow from one browser sur
 - **World Info panel state**: the World Info drawer keeps global activation controls separate from the editor selector; empty global selection and editor selection states must not leave stale entry content visible.
 - **Workspace shell successor state**: EmberDesk has reopened the shell owner boundary as a same-entry takeover path for `/`, not as a separate `/workspace-next` route. When `features.react.shell.takeover` is enabled and the React bundle mounts, the visible top workspace chrome can be React-owned while the established chat, composer, drawer content, and protected extension mount points remain in place. When the flag is off, the bundle is missing, or mount fails, the legacy chrome remains the rollback owner and diagnostics record the reason.
 - **Same-entry shell takeover state**: The takeover path publishes hidden diagnostics and a visible React chrome host in the current workspace. In explicit development, test, and CI environments, an enabled takeover should fail fast when required host, payload, bundle, or mount conditions are missing instead of silently passing through legacy fallback; an unspecified `NODE_ENV` keeps the production safety fallback behavior. In production safety paths or explicit rollback states, the existing workspace shell can remain visible so users are not stranded by a blank or broken page, while diagnostics record the failure reason.
-- **React chrome navigation state**: When the React workspace chrome is mounted, AI Config, Formatting, Character Library, World Info, Backgrounds, Extensions, Settings, Group Chats, and Character Authoring are the visible primary navigation entries. AI Config and Formatting open the existing `#left-nav-panel` and `#AdvancedFormatting` drawers without copying provider, prompt, formatting, or token values into React state. Settings opens the React [Settings](page.settings) route only when that page flag is enabled and otherwise opens the existing `#user-settings-block` drawer in this workspace. Group Chats opens the existing group-chat drawer block without changing the selected group or its member/list context, and Character Authoring opens the existing create/edit character drawer block.
+- **React chrome navigation state**: When the React workspace chrome is mounted, AI Config, Formatting, Character Library, World Info, Backgrounds, Extensions, Settings, Group Chats, and Character Authoring are the visible primary navigation entries. AI Config and Formatting open the existing `#left-nav-panel` and `#AdvancedFormatting` drawers without copying provider, prompt, formatting, or token values into React state. Settings opens the React [Settings](page.settings) route only when that page flag is enabled and otherwise opens the existing `#user-settings-block` drawer in this workspace. Group Chats and Character Authoring keep their same right-drawer entry points, but the normal visible owner for group and character create/edit fields is now the guarded React authoring surface mounted into those drawers, with the legacy forms retained only as rollback or compatibility hosts.
 - **React panel entry accessibility state**: Registry-backed entries remain role/name reachable and expose active pressed state while the active panel status remains a local shell/panel signal rather than global workspace loading.
 - **First-open panel state**: Opening World Info, Character Library, Backgrounds, or Extensions from the React chrome should succeed on the first click without freezing the visible workspace; the action should settle locally to the chosen panel instead of stalling the whole shell.
 - **Global compatibility export state**: `globalThis.SillyTavern` stays as a frozen public compatibility facade, `eventSource` / `event_types` stay as long-term supported public runtime contracts, `@sillytavern/*` stays as a frozen browser-module facade for existing extension ecosystems, `/lib.js` stays as the preferred long-term shared browser utility surface, and `__emberDeskReactCompatibilityBridge` stays internal-only.

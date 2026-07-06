@@ -6679,6 +6679,120 @@ body[data-react-workspace-shell-chrome="mounted"] #chat[data-main-chat-layout-ow
     opacity: 0.74;
 }
 
+.emberdesk-react-authoring-panel-host {
+    margin: 0 4px 10px;
+}
+
+.react-authoring-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 72%, transparent);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor) 34%, transparent);
+}
+
+.react-authoring-panel-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.react-authoring-panel-kicker,
+.react-authoring-panel-header p {
+    margin: 0;
+    color: color-mix(in srgb, var(--SmartThemeBodyColor) 72%, transparent);
+    font-size: calc(var(--mainFontSize) * 0.86);
+}
+
+.react-authoring-panel-header h3 {
+    margin: 0;
+    font-size: calc(var(--mainFontSize) * 1.08);
+}
+
+.react-authoring-panel-state,
+.react-authoring-panel-warning {
+    border-radius: 999px;
+    padding: 3px 8px;
+    font-size: calc(var(--mainFontSize) * 0.84);
+}
+
+.react-authoring-panel-state {
+    border: 1px solid color-mix(in srgb, var(--SmartThemeQuoteColor) 45%, transparent);
+    color: var(--SmartThemeQuoteColor);
+    white-space: nowrap;
+}
+
+.react-authoring-panel-warning {
+    border: 1px solid color-mix(in srgb, var(--warning) 55%, transparent);
+    color: var(--warning);
+}
+
+.react-authoring-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.react-authoring-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.react-authoring-field > span,
+.react-authoring-section-title {
+    color: color-mix(in srgb, var(--SmartThemeBodyColor) 78%, transparent);
+    font-size: calc(var(--mainFontSize) * 0.88);
+    font-weight: 600;
+}
+
+.react-authoring-field small,
+.react-authoring-members small {
+    color: var(--warning);
+}
+
+.react-authoring-members {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    border-top: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 64%, transparent);
+    padding-top: 8px;
+}
+
+.react-authoring-member-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+    gap: 5px;
+    align-items: center;
+}
+
+.react-authoring-member-row > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.react-authoring-panel-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    align-items: center;
+}
+
+.react-authoring-panel-actions .react-authoring-save {
+    border-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 65%, transparent);
+}
+
+.react-authoring-danger-zone {
+    display: flex;
+    justify-content: flex-start;
+    border-top: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 64%, transparent);
+    padding-top: 8px;
+}
+
 @media screen and (max-width: 800px) {
     .react-main-chat-local-status {
         inset-inline: 6px;
@@ -6689,6 +6803,10 @@ body[data-react-workspace-shell-chrome="mounted"] #chat[data-main-chat-layout-ow
     .react-main-chat-local-actions {
         width: 100%;
         margin-inline-start: 0;
+    }
+
+    .react-authoring-member-row {
+        grid-template-columns: minmax(0, 1fr);
     }
 
     .workspace-panel-recovery-actions {

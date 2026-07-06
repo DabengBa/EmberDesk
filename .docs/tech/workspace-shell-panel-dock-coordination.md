@@ -15,7 +15,7 @@ It owns transient dock state, status normalization, and compatibility-snapshot b
 - `app/compat/global-compatibility-bridge.js` exposes a sanitized `workspacePanelDock` snapshot for internal diagnostics and migration proof. It remains internal-only and does not replace `globalThis.SillyTavern`, `eventSource`, `event_types`, or `@sillytavern/*`.
 - Visible shell and panel status copy must use short user-facing phrases such as `opening`, `ready`, and `needs attention`. Raw status enums remain a diagnostics-only surface.
 - The dock path must fail closed. Disabled flags, missing containers, bundle-load failures, or mount failures must keep the legacy drawer surface usable and must not create empty migration hosts.
-- The dock path must not close or replace protected legacy content as incidental navigation cleanup. It coordinates panel entry state; it does not become the owner of AI configuration, formatting, settings, group-chat, authoring, World Info, background file actions, extension protocols, or Character Library data flows.
+- The dock path must not close or replace protected legacy content as incidental navigation cleanup. It coordinates panel entry state; it does not become the owner of AI configuration, formatting, settings, World Info, background file actions, extension protocols, or Character Library data flows. Character and group authoring semantics now live in the guarded React authoring panels mounted through the same drawer hosts, not in the shell registry logic.
 
 ## Core Implementation
 
@@ -26,7 +26,8 @@ It owns transient dock state, status normalization, and compatibility-snapshot b
    - `openCharacterLibrary` opens `#right-nav-panel` and returns the feature-flag result for the dedicated Character Library bundle.
    - `openWorldInfo` preloads the deferred `world-info-body` panel before opening the drawer, then returns the settled result of the guarded React mount helper.
    - `openBackgrounds` and `openExtensions` open their existing drawers and return the settled result of the guarded React mount helpers.
-   - `openAIConfig`, `openFormatting`, `openSettings`, `openGroupChats`, and `openCharacterAuthoring` open their established legacy drawers or route target and return a structured registry result without claiming content ownership.
+   - `openAIConfig`, `openFormatting`, and `openSettings` open their established legacy drawers or route target and return a structured registry result without claiming content ownership.
+   - `openGroupChats` and `openCharacterAuthoring` open their established right-drawer hosts and return the settled result of the guarded React authoring mount helpers. Those helpers fail closed to the legacy host when a flag is off, the bundle cannot mount, or the container is unavailable.
 5. `closeWorkspaceShellPanel(kind)` maps the registry kind back to the established drawer and returns whether the drawer closed, remained pinned/locked, or was already unavailable. This keeps same-entry toggle semantics truthful without letting React blindly remove legacy content.
 6. `getWorkspaceShellPanelDockState(kind)` reads the current drawer element and maps the legacy `.pinnedOpen` class to transient `locked` and `pinned` booleans. This preserves current drawer facts without promoting them into persisted shell state.
 7. `createWorkspaceShellPanelResult(kind, resultOrMounted)` merges the settled mount/fallback result with the current dock facts. For a falsey result it returns a fallback payload with reason `feature-disabled`; for a truthy boolean it returns a mounted payload.
@@ -53,6 +54,7 @@ Related semantic IDs:
 - `page.chat_workspace`
 - `feature.next_workspace_shell`
 - `feature.character_library_panel`
+- `feature.group_authoring`
 - `feature.world_info_panel`
 - `feature.background_library_panel`
 - `feature.extension_panel_open`

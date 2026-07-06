@@ -46,6 +46,8 @@ describe('React workspace panels bridge helpers', () => {
                 worldInfo: false,
                 backgroundLibrary: false,
                 extensionsHost: false,
+                characterAuthoring: false,
+                groupAuthoring: false,
             },
             reactPages: {
                 settings: false,
@@ -277,6 +279,9 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('status: normalizeWorkspacePanelDockStatus(result),');
         expect(workspacePanelSource).toContain('data-workspace-shell-panel-entry={entry.panelKind}');
         expect(workspacePanelSource).toContain('data-workspace-shell-panel-active={isPanelEntryActive ? \'true\' : \'false\'}');
+        expect(workspacePanelSource).toContain("? `${isPanelEntryActive && dockSnapshot.activePanelStatus !== 'error' ? 'Close' : 'Open'} ${entry.label}`");
+        expect(workspacePanelSource).toContain('aria-label={panelActionLabel}');
+        expect(workspacePanelSource).toContain('title={panelActionLabel}');
         expect(workspacePanelSource).toContain('aria-pressed={entry.panelKind ? isPanelEntryActive : undefined}');
         expect(workspacePanelSource).toContain('event.stopPropagation();');
         expect(workspacePanelSource).toContain("if (entry.panelKind && isPanelEntryActive && dockSnapshot.activePanelStatus !== 'error') {");
@@ -356,16 +361,64 @@ describe('React workspace panels bridge helpers', () => {
         const bridgeSource = read('public/scripts/workspace-panels-react-bridge.js');
         const workspacePanelSource = read('app/workspace-panels.tsx');
         const scriptSource = read('public/script.js');
+        const groupChatsSource = read('public/scripts/group-chats.js');
 
         expect(configSource).toContain('mainChatMessageList: false');
+        expect(configSource).toContain('characterAuthoring: false');
+        expect(configSource).toContain('groupAuthoring: false');
         expect(packageSource).toContain('"build:react:workspace-panels": "vite build --mode workspace-panels"');
         expect(seedScriptSource).toContain('EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST');
         expect(seedScriptSource).toContain("['mainChatMessageList', process.env.EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST]");
         expect(workspaceFeatureSource).toContain('mainChatMessageList: isReactMainChatMessageListPanelEnabled()');
         expect(workspaceFeatureSource).toContain('return isReactWorkspacePanelEnabled(\'mainChatMessageList\');');
         expect(bridgeSource).toContain('mainChatMessageList: false');
-        expect(workspacePanelSource).toContain('type WorkspacePanelKind = \'worldInfo\' | \'backgroundLibrary\' | \'extensionsHost\' | \'mainChatMessageList\';');
+        expect(bridgeSource).toContain('characterAuthoring: false');
+        expect(bridgeSource).toContain('groupAuthoring: false');
+        expect(workspacePanelSource).toContain('type WorkspacePanelKind = \'worldInfo\' | \'backgroundLibrary\' | \'extensionsHost\' | \'mainChatMessageList\' | \'characterAuthoring\' | \'groupAuthoring\';');
         expect(scriptSource).toContain('mainChatMessageList: false');
+        expect(scriptSource).toContain('characterAuthoring: false');
+        expect(scriptSource).toContain('groupAuthoring: false');
+    });
+
+    test('ships React authoring form fields and legacy write-through action bridge', () => {
+        const workspacePanelSource = read('app/workspace-panels.tsx');
+        const scriptSource = read('public/script.js');
+        const groupChatsSource = read('public/scripts/group-chats.js');
+
+        expect(workspacePanelSource).toContain('createCharacterAuthoringSession');
+        expect(workspacePanelSource).toContain("../public/scripts/character-authoring.js");
+        expect(workspacePanelSource).toContain('createGroupAuthoringSession');
+        expect(workspacePanelSource).toContain("../public/scripts/group-authoring.js");
+        expect(workspacePanelSource).toContain('react-authoring-field');
+        expect(workspacePanelSource).toContain('data-react-authoring-field="name"');
+        expect(workspacePanelSource).toContain('data-react-authoring-field="description"');
+        expect(workspacePanelSource).toContain('data-react-authoring-field="firstMessage"');
+        expect(workspacePanelSource).toContain('data-react-authoring-members');
+        expect(workspacePanelSource).toContain('data-react-authoring-candidates');
+        expect(workspacePanelSource).toContain('data-react-authoring-action="add-member"');
+        expect(workspacePanelSource).toContain('data-react-authoring-action="remove-member"');
+        expect(workspacePanelSource).toContain('data-react-authoring-action="move-up"');
+        expect(workspacePanelSource).toContain('data-react-authoring-action="move-down"');
+        expect(workspacePanelSource).toContain('authoringActionMutation.mutateAsync({ action: submitResult.action, payload: submitResult.payload })');
+        expect(workspacePanelSource).toContain('setAuthoringSession(kind === \'characterAuthoring\'');
+        expect(workspacePanelSource).toContain("authoringActionMutation.mutate({ action: 'cancelAuthoring'");
+        expect(workspacePanelSource).toContain('react-authoring-danger-zone');
+        expect(scriptSource).toContain("case 'saveCharacterAuthoring':");
+        expect(scriptSource).toContain("case 'saveGroupAuthoring':");
+        expect(scriptSource).toContain('function applyCharacterAuthoringSaveModel');
+        expect(scriptSource).toContain('function applyGroupAuthoringSaveModel');
+        expect(scriptSource).toContain('function queueReactCharacterAuthoringRemount()');
+        expect(scriptSource).toContain('function queueReactGroupAuthoringRemount()');
+        expect(scriptSource).toContain("eventSource.on(event_types.CHARACTER_EDITOR_OPENED, () => {");
+        expect(scriptSource).toContain('queueReactCharacterAuthoringRemount();');
+        expect(scriptSource).toContain("eventSource.on('groupSelected', () => {");
+        expect(scriptSource).toContain('queueReactGroupAuthoringRemount();');
+        expect(scriptSource).toContain('hideLegacyCharacterAuthoringEditor(Boolean(result?.mounted));');
+        expect(scriptSource.match(/openWorkspaceShellCharacterAuthoring\(\) \{[\s\S]*?\n\}/)?.[0] ?? '').toContain("select_selected_character(this_chid, { switchMenu: false });");
+        expect(scriptSource).toContain('setGroupAuthoringMembersDraft');
+        expect(groupChatsSource).toContain('export function setGroupAuthoringMembersDraft');
+        expect(scriptSource).toContain("case 'cancelAuthoring':");
+        expect(scriptSource).toContain("case 'deleteAuthoring':");
     });
 
     test('bridges an explicit quiet/background legacy owner contract through the main-chat controller shell', () => {
@@ -576,6 +629,8 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain("kind: 'backgroundLibrary'");
         expect(scriptSource).toContain("kind: 'extensionsHost'");
         expect(scriptSource).toContain("kind: 'mainChatMessageList'");
+        expect(scriptSource).toContain("kind: 'characterAuthoring'");
+        expect(scriptSource).toContain("kind: 'groupAuthoring'");
 
         expect(hostControllerSource).toContain('export async function mountWorkspacePanelHost({');
         expect(hostControllerSource).toContain('export function createWorkspacePanelActionBridge({');

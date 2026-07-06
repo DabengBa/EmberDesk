@@ -2,7 +2,7 @@
 id: feature.next_workspace_shell
 type: feature
 name: Next Workspace Shell
-related: [page.chat_workspace, feature.startup_bootstrap, feature.character_library_panel, feature.chat_message_rendering, feature.chat_message_actions, feature.chat_generation_auto_recovery, feature.world_info_panel, feature.background_library_panel, feature.extension_panel_open]
+related: [page.chat_workspace, feature.startup_bootstrap, feature.character_library_panel, feature.group_authoring, feature.chat_message_rendering, feature.chat_message_actions, feature.chat_generation_auto_recovery, feature.world_info_panel, feature.background_library_panel, feature.extension_panel_open]
 ---
 
 # Feature: Next Workspace Shell
@@ -21,7 +21,8 @@ Give users one modern, compact workspace frame for current context, shell status
 - The chrome summarizes the current context in understandable terms for no active chat, temporary Assistant chat, normal character chat, and group chat.
 - Primary entries for AI Config, Formatting, Character Library, World Info, Backgrounds, Extensions, Settings, Group Chats, and Character Authoring are reachable by role/name and route through the existing workspace behavior or the existing Settings route.
 - Settings opens the standalone React Settings route only when that page flag is enabled; otherwise it opens the existing User Settings drawer in the current workspace.
-- AI Config, Formatting, and Group Chats are shell-controlled legacy-hosted panels: the shell owns the named entry, active marker, and close/reopen signal, while provider fields, prompt/formatting fields, and group contents stay in their established workspace drawers.
+- AI Config and Formatting are shell-controlled legacy-hosted panels: the shell owns the named entry, active marker, and close/reopen signal, while provider fields and prompt/formatting fields stay in their established workspace drawers.
+- Group Chats and Character Authoring keep the same right-drawer entry points, but when their guarded authoring flags are enabled the normal visible owner inside those hosts is the React authoring surface. The shell still owns only the navigation entry, active marker, and close/reopen signal.
 - The main-chat outer layout can be React shell-owned through existing `#chat`, `#send_form`, and `#nonQRFormItems` containers so the chat canvas, composer/action rail, and local generation status feel coordinated without wrapping or moving message rows.
 - Primary entries publish a transient React dock owner state so the shell can show the active entry and local mounted/disabled/loading/empty/success/error status while the existing facades continue to own panel behavior.
 - Clicking the active entry closes that surface when the legacy owner reports that it closed; clicking it again reopens it from the same role/name entry. If the legacy owner reports a pinned or locked drawer, the shell keeps the entry active instead of showing a false inactive state while content remains visible.
@@ -61,7 +62,7 @@ Give users one modern, compact workspace frame for current context, shell status
 - Active navigation state plus the local dock/status badge are the primary "action succeeded" signals; this feature does not require an extra success toast for ordinary panel open actions.
 - The hidden same-entry takeover marker and `data-react-workspace-shell-chrome-status` support diagnostics and automated proof.
 - Main-chat layout markers such as `data-main-chat-layout-owner`, `data-main-chat-layout-status`, and `data-main-chat-local-status` support proof that React owns only the outer placement/status shell.
-- Panel dock markers such as `data-workspace-shell-panel-entry`, `data-workspace-shell-panel-active`, and `data-workspace-panel-dock-status` support proof that React owns coordination state without taking over AI configuration, formatting, settings, group-chat, authoring, World Info, Background, Extension, or character-row semantics.
+- Panel dock markers such as `data-workspace-shell-panel-entry`, `data-workspace-shell-panel-active`, and `data-workspace-panel-dock-status` support proof that React owns coordination state without taking over AI configuration, formatting, settings, World Info, Background, Extension, or character-row semantics. Character and group authoring behavior remains owned by the dedicated authoring surfaces rather than the shell registry itself.
 - Internal compatibility snapshots exported through `__emberDeskReactCompatibilityBridge.getSnapshot().workspacePanelDock` support proof that dock status, fallback reason, and transient `locked` / `pinned` facts stay aligned without turning the shell into a second panel-behavior owner.
 - Protected DOM checks for `#chat > .mes`, `#send_textarea`, `#send_but`, `#extensions_settings`, `#extensions_settings2`, and `#regex_container` are compatibility evidence.
 - `/workspace-next` must not appear as a route or fallback target for this feature.

@@ -115,6 +115,8 @@ features:
       worldInfo: false
       backgroundLibrary: false
       extensionsHost: false
+      characterAuthoring: false
+      groupAuthoring: false
     shell:
       takeover: false
 

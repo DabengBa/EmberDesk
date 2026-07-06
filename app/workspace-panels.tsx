@@ -37,8 +37,14 @@ import {
     MAIN_CHAT_VISIBLE_TRANSPORT_REASONS,
     MAIN_CHAT_VISIBLE_TRANSPORT_STATUSES,
 } from '../public/scripts/main-chat-bridge-contract.js';
+import {
+    createCharacterAuthoringSession,
+} from '../public/scripts/character-authoring.js';
+import {
+    createGroupAuthoringSession,
+} from '../public/scripts/group-authoring.js';
 
-export type WorkspacePanelKind = 'worldInfo' | 'backgroundLibrary' | 'extensionsHost' | 'mainChatMessageList';
+export type WorkspacePanelKind = 'worldInfo' | 'backgroundLibrary' | 'extensionsHost' | 'mainChatMessageList' | 'characterAuthoring' | 'groupAuthoring';
 type WorkspaceDockPanelKind =
     | 'aiConfig'
     | 'advancedFormatting'
@@ -265,6 +271,21 @@ interface MainChatMessageListWorkspacePanelState {
     regenerateButton?: HTMLElement | null;
     composerValue?: string;
     showMoreNode?: HTMLElement | null;
+}
+
+interface AuthoringWorkspacePanelState {
+    mode?: 'create' | 'edit';
+    title?: string;
+    subtitle?: string;
+    dirty?: boolean;
+    unsupportedFields?: string[];
+    draft?: Record<string, unknown>;
+    candidates?: AuthoringCandidateState[];
+}
+
+interface AuthoringCandidateState {
+    id: string;
+    label: string;
 }
 
 interface MainChatGenerationControlState {
@@ -2180,6 +2201,237 @@ function asExtensionsHostState(state: unknown): ExtensionsHostWorkspacePanelStat
     return state as ExtensionsHostWorkspacePanelState;
 }
 
+function asAuthoringState(state: unknown): AuthoringWorkspacePanelState {
+    if (!state || typeof state !== 'object') {
+        return {};
+    }
+
+    return state as AuthoringWorkspacePanelState;
+}
+
+function AuthoringWorkspacePanel({
+    kind,
+    state,
+    bridge,
+}: {
+    kind: 'characterAuthoring' | 'groupAuthoring';
+    state?: unknown;
+    bridge?: WorkspacePanelBridge;
+}) {
+    const bridgeState = asAuthoringState(state);
+    const title = bridgeState.title ?? (kind === 'characterAuthoring' ? 'Character Authoring' : 'Group Authoring');
+    const subtitle = bridgeState.subtitle ?? (kind === 'characterAuthoring'
+        ? 'React owner for character drafts'
+        : 'React owner for group drafts');
+    const unsupportedFields = Array.isArray(bridgeState.unsupportedFields) ? bridgeState.unsupportedFields : [];
+    const initialSession = useMemo(() => kind === 'characterAuthoring'
+        ? createCharacterAuthoringSession(bridgeState.draft ?? {}, { mode: bridgeState.mode ?? 'create' })
+        : createGroupAuthoringSession(bridgeState.draft ?? {}, { mode: bridgeState.mode ?? 'create' }), [bridgeState.draft, bridgeState.mode, kind]);
+    const [authoringSession, setAuthoringSession] = useState(initialSession);
+    const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+    const authoringActionMutation = useMutation({
+        mutationFn: async ({ action, payload }: { action: string; payload?: Record<string, unknown> }) => {
+            await bridge?.dispatchAction?.(action, payload);
+        },
+        retry: false,
+    });
+
+    useEffect(() => {
+        setAuthoringSession(initialSession);
+        setFieldErrors({});
+    }, [initialSession]);
+
+    const updateDraft = useCallback((patch: Record<string, unknown>) => {
+        setAuthoringSession(currentSession => currentSession.update(patch));
+        setFieldErrors({});
+    }, []);
+
+    const submitDraft = useCallback(() => {
+        const submitResult = authoringSession.submit();
+        if (!submitResult.ok) {
+            setFieldErrors(submitResult.fieldErrors);
+            return;
+        }
+
+        setFieldErrors({});
+        authoringActionMutation.mutateAsync({ action: submitResult.action, payload: submitResult.payload })
+            .then(() => {
+                setAuthoringSession(kind === 'characterAuthoring'
+                    ? createCharacterAuthoringSession(authoringSession.draft, { mode: bridgeState.mode ?? 'create' })
+                    : createGroupAuthoringSession(authoringSession.draft, { mode: bridgeState.mode ?? 'create' }));
+            })
+            .catch(() => {
+                // Mutation state carries the failed status; keep the dirty draft intact for retry.
+            });
+    }, [authoringActionMutation, authoringSession, bridgeState.mode, kind]);
+
+    const cancelDraft = useCallback(() => {
+        setAuthoringSession(currentSession => currentSession.cancel());
+        setFieldErrors({});
+        authoringActionMutation.mutate({ action: 'cancelAuthoring', payload: { kind } });
+    }, [authoringActionMutation, kind]);
+
+    const draft = authoringSession.draft as Record<string, unknown>;
+    const statusLabel = authoringActionMutation.isPending ? 'Saving' : authoringSession.dirty ? 'Unsaved' : 'Ready';
+    const nameValue = typeof draft.name === 'string' ? draft.name : '';
+    const descriptionValue = typeof draft.description === 'string' ? draft.description : '';
+    const firstMessageValue = typeof draft.firstMessage === 'string' ? draft.firstMessage : '';
+    const members = Array.isArray(draft.members) ? draft.members.filter((member): member is string => typeof member === 'string') : [];
+    const candidates = Array.isArray(bridgeState.candidates)
+        ? bridgeState.candidates.filter(candidate => candidate && typeof candidate.id === 'string' && typeof candidate.label === 'string')
+        : [];
+    const characterToolPayload = kind === 'characterAuthoring' ? authoringSession.submit() : null;
+    const characterActionPayload = characterToolPayload && characterToolPayload.ok ? characterToolPayload.payload : undefined;
+
+    return (
+        <WorkspacePanelShell
+            kind={kind}
+            title={title}
+            status="success"
+            recoveryActions={[]}
+        >
+            <section
+                className="react-authoring-panel"
+                data-doc-id={kind === 'characterAuthoring'
+                    ? 'feature.character_library_panel term.character_card page.chat_workspace'
+                    : 'feature.group_authoring page.chat_workspace'}
+                data-react-authoring-owner={kind}
+                data-react-authoring-mode={bridgeState.mode ?? 'create'}
+                data-react-authoring-dirty={authoringSession.dirty ? 'true' : 'false'}
+            >
+                <header className="react-authoring-panel-header">
+                    <div>
+                        <div className="react-authoring-panel-kicker">{bridgeState.mode === 'edit' ? 'Editing' : 'Creating'}</div>
+                        <h3>{title}</h3>
+                        <p>{subtitle}</p>
+                    </div>
+                    <span className="react-authoring-panel-state" aria-live="polite">
+                        {statusLabel}
+                    </span>
+                </header>
+                {unsupportedFields.length > 0 ? (
+                    <div className="react-authoring-panel-warning" role="status">
+                        Unsupported extension fields stay legacy-owned: {unsupportedFields.join(', ')}
+                    </div>
+                ) : null}
+                <div className="react-authoring-fields">
+                    <label className="react-authoring-field" data-react-authoring-field="name">
+                        <span>Name</span>
+                        <input
+                            className="text_pole"
+                            value={nameValue}
+                            aria-invalid={fieldErrors.name ? 'true' : 'false'}
+                            onChange={(event) => updateDraft({ name: event.target.value })}
+                        />
+                        {fieldErrors.name ? <small role="alert">{fieldErrors.name}</small> : null}
+                    </label>
+                    {kind === 'characterAuthoring' ? (
+                        <>
+                            <label className="react-authoring-field" data-react-authoring-field="description">
+                                <span>Description</span>
+                                <textarea
+                                    className="text_pole"
+                                    rows={5}
+                                    value={descriptionValue}
+                                    onChange={(event) => updateDraft({ description: event.target.value })}
+                                />
+                            </label>
+                            <label className="react-authoring-field" data-react-authoring-field="firstMessage">
+                                <span>First message</span>
+                                <textarea
+                                    className="text_pole"
+                                    rows={4}
+                                    value={firstMessageValue}
+                                    onChange={(event) => updateDraft({ firstMessage: event.target.value })}
+                                />
+                            </label>
+                        </>
+                    ) : (
+                        <section className="react-authoring-members" data-react-authoring-members>
+                            <div className="react-authoring-section-title">Members</div>
+                            {fieldErrors.members ? <small role="alert">{fieldErrors.members}</small> : null}
+                            {members.map((member, index) => (
+                                <div className="react-authoring-member-row" key={member}>
+                                    <span>{index + 1}. {member}</span>
+                                    <button
+                                        type="button"
+                                        className="menu_button"
+                                        data-react-authoring-action="remove-member"
+                                        onClick={() => setAuthoringSession(currentSession => currentSession.removeMember(member))}
+                                    >
+                                        Remove
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="menu_button"
+                                        data-react-authoring-action="move-up"
+                                        disabled={index === 0}
+                                        onClick={() => setAuthoringSession(currentSession => currentSession.moveMember(member, 'up'))}
+                                    >
+                                        Move up
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="menu_button"
+                                        data-react-authoring-action="move-down"
+                                        disabled={index === members.length - 1}
+                                        onClick={() => setAuthoringSession(currentSession => currentSession.moveMember(member, 'down'))}
+                                    >
+                                        Move down
+                                    </button>
+                                </div>
+                            ))}
+                            <div className="react-authoring-candidates" data-react-authoring-candidates>
+                                <div className="react-authoring-section-title">Add members</div>
+                                {candidates.length > 0 ? candidates.map(candidate => (
+                                    <button
+                                        key={candidate.id}
+                                        type="button"
+                                        className="menu_button react-authoring-candidate"
+                                        data-react-authoring-action="add-member"
+                                        onClick={() => setAuthoringSession(currentSession => currentSession.addMember(candidate.id))}
+                                    >
+                                        Add {candidate.label}
+                                    </button>
+                                )) : (
+                                    <small>No available candidates</small>
+                                )}
+                            </div>
+                        </section>
+                    )}
+                </div>
+                <div className="react-authoring-panel-actions" aria-label={`${title} actions`}>
+                    <button type="button" className="menu_button react-authoring-save" onClick={submitDraft}>Save</button>
+                    <button type="button" className="menu_button" onClick={cancelDraft}>Cancel</button>
+                    {kind === 'characterAuthoring' ? (
+                        <>
+                            <button
+                                type="button"
+                                className="menu_button"
+                                onClick={() => authoringActionMutation.mutate({ action: 'openWorldInfo', payload: characterActionPayload })}
+                            >
+                                World Info
+                            </button>
+                            <button
+                                type="button"
+                                className="menu_button"
+                                onClick={() => authoringActionMutation.mutate({ action: 'openAlternateGreetings', payload: characterActionPayload })}
+                            >
+                                Alternate Greetings
+                            </button>
+                            <button type="button" className="menu_button" onClick={() => authoringActionMutation.mutate({ action: 'duplicateAuthoring', payload: { kind } })}>Duplicate</button>
+                            <button type="button" className="menu_button" onClick={() => authoringActionMutation.mutate({ action: 'exportAuthoring', payload: characterActionPayload })}>Export</button>
+                        </>
+                    ) : null}
+                </div>
+                <div className="react-authoring-danger-zone">
+                    <button type="button" className="menu_button red_button" onClick={() => authoringActionMutation.mutate({ action: 'deleteAuthoring', payload: { kind } })}>Delete</button>
+                </div>
+            </section>
+        </WorkspacePanelShell>
+    );
+}
+
 function getWorldInfoPanelStatus(bridgeState: WorldInfoWorkspacePanelState): WorkspacePanelStatus {
     if (bridgeState.importBusy) {
         return 'loading';
@@ -3403,6 +3655,10 @@ function renderPanel(kind: WorkspacePanelKind, state?: unknown, bridge?: Workspa
             return <ExtensionsHostWorkspacePanel state={state} bridge={bridge} />;
         case 'mainChatMessageList':
             return <MainChatMessageListWorkspacePanel state={state} bridge={bridge} />;
+        case 'characterAuthoring':
+            return <AuthoringWorkspacePanel kind="characterAuthoring" state={state} bridge={bridge} />;
+        case 'groupAuthoring':
+            return <AuthoringWorkspacePanel kind="groupAuthoring" state={state} bridge={bridge} />;
         default:
             return <WorkspacePanelPlaceholder kind={kind} />;
     }
@@ -3656,13 +3912,17 @@ function ReactWorkspaceShellChrome({
             <nav className="react-workspace-shell-nav" aria-label="Workspace navigation">
                 {workspaceShellNavigationEntries.map(entry => {
                     const isPanelEntryActive = Boolean(entry.panelKind && dockSnapshot.activePanelKind === entry.panelKind);
+                    const panelActionLabel = entry.panelKind
+                        ? `${isPanelEntryActive && dockSnapshot.activePanelStatus !== 'error' ? 'Close' : 'Open'} ${entry.label}`
+                        : entry.label;
 
                     return (
                         <button
                             key={entry.action}
                             type="button"
                             className="react-workspace-shell-nav-button"
-                            aria-label={entry.label}
+                            aria-label={panelActionLabel}
+                            title={panelActionLabel}
                             aria-pressed={entry.panelKind ? isPanelEntryActive : undefined}
                             data-workspace-shell-panel-entry={entry.panelKind}
                             data-workspace-shell-panel-active={isPanelEntryActive ? 'true' : 'false'}

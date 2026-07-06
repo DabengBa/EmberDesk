@@ -5,6 +5,8 @@ export const WORKSPACE_PANEL_KINDS = Object.freeze([
     'backgroundLibrary',
     'extensionsHost',
     'mainChatMessageList',
+    'characterAuthoring',
+    'groupAuthoring',
 ]);
 
 export const WORKSPACE_PANEL_DOCK_KINDS = Object.freeze([

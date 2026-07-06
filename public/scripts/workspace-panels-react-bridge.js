@@ -30,6 +30,8 @@ export function getDefaultWorkspaceReactFeatures() {
             worldInfo: false,
             backgroundLibrary: false,
             extensionsHost: false,
+            characterAuthoring: false,
+            groupAuthoring: false,
         },
         reactShell: {
             strict: false,

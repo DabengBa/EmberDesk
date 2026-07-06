@@ -119,6 +119,26 @@ let fav_grp_checked = false;
 let openGroupId = null;
 let newGroupMembers = [];
 
+export function setGroupAuthoringMembersDraft(members, groupId = selected_group) {
+    const nextMembers = Array.isArray(members)
+        ? members.filter((member, index, array) => typeof member === 'string' && member && array.indexOf(member) === index)
+        : [];
+    const group = groupId ? groups.find(x => x.id == groupId) : null;
+
+    if (group) {
+        group.members = [...nextMembers];
+        group.disabled_members = Array.isArray(group.disabled_members)
+            ? group.disabled_members.filter(member => nextMembers.includes(member))
+            : [];
+    } else {
+        newGroupMembers = [...nextMembers];
+    }
+
+    printGroupMembers();
+    printGroupCandidates();
+    $('#rm_group_submit').prop('disabled', nextMembers.length === 0);
+}
+
 export const group_activation_strategy = {
     NATURAL: 0,
     LIST: 1,
