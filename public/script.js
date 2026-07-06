@@ -1440,8 +1440,50 @@ function applyCharacterAuthoringSaveModel(saveModel = {}, { submit = true } = {}
     }
 }
 
+function waitForCharacterAuthoringSaveCompletion(mode, saveModel = {}) {
+    return new Promise((resolve, reject) => {
+        const timeout = window.setTimeout(() => {
+            eventSource.removeListener(event_types.CHARACTER_EDITED, onEditSuccess);
+            window.clearInterval(createPoll);
+            reject(new Error('Timed out waiting for legacy character authoring save to complete'));
+        }, 15000);
+        const initialCharacterCount = characters.length;
+        const expectedName = String(saveModel?.fields?.name || '').trim();
+        let createPoll = null;
+
+        function finish(event) {
+            window.clearTimeout(timeout);
+            eventSource.removeListener(event_types.CHARACTER_EDITED, onEditSuccess);
+            window.clearInterval(createPoll);
+            resolve(event);
+        }
+
+        function onEditSuccess(event) {
+            finish(event);
+        }
+
+        if (mode === 'edit') {
+            eventSource.once(event_types.CHARACTER_EDITED, onEditSuccess);
+            return;
+        }
+
+        createPoll = window.setInterval(() => {
+            const selectedCharacter = this_chid !== undefined ? characters[this_chid] : null;
+            const createdCharacter = selectedCharacter && characters.length >= initialCharacterCount
+                ? selectedCharacter
+                : characters.slice(initialCharacterCount).find(character => character?.name === expectedName);
+            if (createdCharacter?.avatar && (!expectedName || createdCharacter.name === expectedName)) {
+                finish({ detail: { character: createdCharacter } });
+            }
+        }, 100);
+    });
+}
+
 async function saveCharacterAuthoringFromPayload(saveModel = {}) {
+    const mode = getCurrentCharacterAuthoringMode();
+    const saveCompletion = waitForCharacterAuthoringSaveCompletion(mode, saveModel);
     applyCharacterAuthoringSaveModel(saveModel, { submit: true });
+    await saveCompletion;
     return false;
 }
 
@@ -1562,6 +1604,24 @@ function ensureGroupAuthoringReactHost() {
     return host;
 }
 
+function hideLegacyGroupAuthoringEditor(hidden) {
+    const groupPanel = document.getElementById('rm_group_chats_block');
+    const host = document.getElementById(GROUP_AUTHORING_REACT_HOST_ID);
+    if (!(groupPanel instanceof HTMLElement)) {
+        return;
+    }
+
+    Array.from(groupPanel.children).forEach(child => {
+        if (!(child instanceof HTMLElement) || child === host) {
+            return;
+        }
+
+        child.hidden = hidden;
+        child.setAttribute('aria-hidden', hidden ? 'true' : 'false');
+        child.dataset.legacyGroupAuthoringHiddenByReact = hidden ? 'true' : 'false';
+    });
+}
+
 function getGroupAuthoringReactBridgeState() {
     const title = String($('#rm_group_chat_name').val() || '').trim();
     const group = selected_group ? groups.find(x => x.id == selected_group) : null;
@@ -1641,25 +1701,37 @@ function getGroupAuthoringReactBridge() {
                 case 'saveGroupAuthoring':
                     return applyGroupAuthoringSaveModel(payload);
                 case 'cancelAuthoring':
+                    hideLegacyGroupAuthoringEditor(false);
                     return openWorkspaceShellGroupChats();
                 case 'deleteAuthoring':
-                    return $('#rm_group_delete').trigger('click');
+                    hideLegacyGroupAuthoringEditor(false);
+                    $('#rm_group_delete').trigger('click');
+                    return false;
                 default:
                     console.warn('Unknown React group authoring action', action);
             }
+        },
+        shouldRemount(actionResult, action) {
+            return action !== 'cancelAuthoring' && action !== 'deleteAuthoring';
         },
         remount: () => mountReactGroupAuthoringPanel(),
     });
 }
 
 async function mountReactGroupAuthoringPanel() {
-    return mountWorkspacePanelHost({
+    const result = await mountWorkspacePanelHost({
         kind: 'groupAuthoring',
         ensureContainer: ensureGroupAuthoringReactHost,
         getState: () => getGroupAuthoringReactBridgeState(),
         bridge: getGroupAuthoringReactBridge(),
         features: getWorkspaceReactFeatures(),
+        onDisabled() {
+            hideLegacyGroupAuthoringEditor(false);
+        },
     });
+
+    hideLegacyGroupAuthoringEditor(Boolean(result?.mounted));
+    return result;
 }
 
 function getWorldInfoReactWorldNames(editorSelector) {

@@ -24,12 +24,45 @@ async function openGroupSelectionFromCharacterLibrary(page) {
     await expect(page.locator('#rm_print_characters_block .group_select[data-grid]').first()).toBeVisible({ timeout: 10_000 });
 }
 
+async function expectLegacyGroupAuthoringHidden(page) {
+    await expect.poll(async () => page.locator('#rm_group_chats_block > :not(.emberdesk-react-group-authoring-panel-host)').evaluateAll(elements => (
+        elements.length > 0 && elements.every(element => element.hidden && element.getAttribute('aria-hidden') === 'true')
+    )), { timeout: 5_000 }).toBe(true);
+}
+
+async function expectActionsWithinViewport(page, panel) {
+    const box = await panel.locator('.react-authoring-panel-actions').boundingBox();
+    const viewport = page.viewportSize();
+    expect(box).not.toBeNull();
+    expect(viewport).not.toBeNull();
+    expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+}
+
 async function memberNameAt(memberRows, index) {
     const text = ((await memberRows.nth(index).locator('span').textContent()) || '').trim();
     return text.replace(/^\d+\.\s*/, '');
 }
 
 test.describe('character and group authoring', () => {
+    test('create-mode authoring hides destructive delete actions', async ({ page }) => {
+        await testSetup.awaitST({ page });
+
+        await openShellPanel(page, 'Character Authoring');
+        const characterCreatePanel = page.locator('[data-react-authoring-owner="characterAuthoring"]');
+        await expect(characterCreatePanel).toBeVisible({ timeout: 10_000 });
+        await expect(characterCreatePanel).toHaveAttribute('data-react-authoring-mode', 'create');
+        await expect(characterCreatePanel.getByRole('button', { name: /Delete/ })).toHaveCount(0);
+        await expect(page.locator('#form_create')).toBeHidden();
+
+        await openGroupChats(page);
+        const groupCreatePanel = page.locator('[data-react-authoring-owner="groupAuthoring"]');
+        await expect(groupCreatePanel).toBeVisible({ timeout: 10_000 });
+        await expect(groupCreatePanel).toHaveAttribute('data-react-authoring-mode', 'create');
+        await expect(groupCreatePanel.getByRole('button', { name: /Delete/ })).toHaveCount(0);
+        await expectLegacyGroupAuthoringHidden(page);
+        await expectActionsWithinViewport(page, groupCreatePanel);
+    });
+
     test('character authoring validates locally, preserves cancel, saves edits, and keeps legacy tool routes reachable', async ({ page }) => {
         await testSetup.awaitST({ page });
 
@@ -43,6 +76,8 @@ test.describe('character and group authoring', () => {
         const authoringPanel = page.locator('[data-react-authoring-owner="characterAuthoring"]');
         await expect(authoringPanel).toBeVisible({ timeout: 10_000 });
         await expect(authoringPanel).toHaveAttribute('data-react-authoring-mode', 'edit');
+        await expect(authoringPanel.locator('.react-authoring-danger-zone').getByRole('button', { name: /Delete/ })).toBeVisible();
+        await expect(authoringPanel.locator('.react-authoring-panel-actions').getByRole('button', { name: /Delete/ })).toHaveCount(0);
 
         const nameInput = authoringPanel.locator('[data-react-authoring-field="name"] input');
         const descriptionInput = authoringPanel.locator('[data-react-authoring-field="description"] textarea');
@@ -111,6 +146,9 @@ test.describe('character and group authoring', () => {
         const authoringPanel = page.locator('[data-react-authoring-owner="groupAuthoring"]');
         await expect(authoringPanel).toBeVisible({ timeout: 10_000 });
         await expect(authoringPanel).toHaveAttribute('data-react-authoring-mode', 'edit');
+        await expect(authoringPanel.locator('.react-authoring-danger-zone').getByRole('button', { name: /Delete/ })).toBeVisible();
+        await expect(authoringPanel.locator('.react-authoring-panel-actions').getByRole('button', { name: /Delete/ })).toHaveCount(0);
+        await expectLegacyGroupAuthoringHidden(page);
 
         const nameInput = authoringPanel.locator('[data-react-authoring-field="name"] input');
         const originalName = await nameInput.inputValue();
@@ -122,7 +160,7 @@ test.describe('character and group authoring', () => {
         const firstMemberBefore = await memberNameAt(memberRows, 0);
         const secondMemberBefore = await memberNameAt(memberRows, 1);
 
-        await memberRows.nth(1).getByRole('button', { name: 'Move up' }).click();
+        await memberRows.nth(1).getByRole('button', { name: /Move .* up/ }).click();
         await expect.poll(async () => memberNameAt(memberRows, 0), { timeout: 5_000 }).toBe(secondMemberBefore);
         await expect.poll(async () => memberNameAt(memberRows, 1), { timeout: 5_000 }).toBe(firstMemberBefore);
 

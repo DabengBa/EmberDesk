@@ -2256,9 +2256,9 @@ function AuthoringWorkspacePanel({
         setFieldErrors({});
         authoringActionMutation.mutateAsync({ action: submitResult.action, payload: submitResult.payload })
             .then(() => {
-                setAuthoringSession(kind === 'characterAuthoring'
-                    ? createCharacterAuthoringSession(authoringSession.draft, { mode: bridgeState.mode ?? 'create' })
-                    : createGroupAuthoringSession(authoringSession.draft, { mode: bridgeState.mode ?? 'create' }));
+                setAuthoringSession(currentSession => kind === 'characterAuthoring'
+                    ? createCharacterAuthoringSession(currentSession.draft, { mode: bridgeState.mode ?? 'create' })
+                    : createGroupAuthoringSession(currentSession.draft, { mode: bridgeState.mode ?? 'create' }));
             })
             .catch(() => {
                 // Mutation state carries the failed status; keep the dirty draft intact for retry.
@@ -2282,13 +2282,14 @@ function AuthoringWorkspacePanel({
         : [];
     const characterToolPayload = kind === 'characterAuthoring' ? authoringSession.submit() : null;
     const characterActionPayload = characterToolPayload && characterToolPayload.ok ? characterToolPayload.payload : undefined;
+    const isCreateMode = (bridgeState.mode ?? 'create') === 'create';
+    const isActionPending = authoringActionMutation.isPending;
 
     return (
         <WorkspacePanelShell
             kind={kind}
             title={title}
-            status="success"
-            recoveryActions={[]}
+            status={authoringActionMutation.isError ? 'error' : 'success'}
         >
             <section
                 className="react-authoring-panel"
@@ -2311,7 +2312,7 @@ function AuthoringWorkspacePanel({
                 </header>
                 {unsupportedFields.length > 0 ? (
                     <div className="react-authoring-panel-warning" role="status">
-                        Unsupported extension fields stay legacy-owned: {unsupportedFields.join(', ')}
+                        Additional extension fields still use the legacy editor: {unsupportedFields.join(', ')}
                     </div>
                 ) : null}
                 <div className="react-authoring-fields">
@@ -2357,6 +2358,7 @@ function AuthoringWorkspacePanel({
                                         type="button"
                                         className="menu_button"
                                         data-react-authoring-action="remove-member"
+                                        aria-label={`Remove ${member}`}
                                         onClick={() => setAuthoringSession(currentSession => currentSession.removeMember(member))}
                                     >
                                         Remove
@@ -2365,6 +2367,7 @@ function AuthoringWorkspacePanel({
                                         type="button"
                                         className="menu_button"
                                         data-react-authoring-action="move-up"
+                                        aria-label={`Move ${member} up`}
                                         disabled={index === 0}
                                         onClick={() => setAuthoringSession(currentSession => currentSession.moveMember(member, 'up'))}
                                     >
@@ -2374,6 +2377,7 @@ function AuthoringWorkspacePanel({
                                         type="button"
                                         className="menu_button"
                                         data-react-authoring-action="move-down"
+                                        aria-label={`Move ${member} down`}
                                         disabled={index === members.length - 1}
                                         onClick={() => setAuthoringSession(currentSession => currentSession.moveMember(member, 'down'))}
                                     >
@@ -2401,32 +2405,36 @@ function AuthoringWorkspacePanel({
                     )}
                 </div>
                 <div className="react-authoring-panel-actions" aria-label={`${title} actions`}>
-                    <button type="button" className="menu_button react-authoring-save" onClick={submitDraft}>Save</button>
-                    <button type="button" className="menu_button" onClick={cancelDraft}>Cancel</button>
+                    <button type="button" className="menu_button react-authoring-save" disabled={isActionPending} onClick={submitDraft}>Save</button>
+                    <button type="button" className="menu_button react-authoring-secondary-action" disabled={isActionPending} onClick={cancelDraft}>Cancel</button>
                     {kind === 'characterAuthoring' ? (
                         <>
                             <button
                                 type="button"
-                                className="menu_button"
+                                className="menu_button react-authoring-tool-action"
+                                disabled={isActionPending}
                                 onClick={() => authoringActionMutation.mutate({ action: 'openWorldInfo', payload: characterActionPayload })}
                             >
                                 World Info
                             </button>
                             <button
                                 type="button"
-                                className="menu_button"
+                                className="menu_button react-authoring-tool-action"
+                                disabled={isActionPending}
                                 onClick={() => authoringActionMutation.mutate({ action: 'openAlternateGreetings', payload: characterActionPayload })}
                             >
                                 Alternate Greetings
                             </button>
-                            <button type="button" className="menu_button" onClick={() => authoringActionMutation.mutate({ action: 'duplicateAuthoring', payload: { kind } })}>Duplicate</button>
-                            <button type="button" className="menu_button" onClick={() => authoringActionMutation.mutate({ action: 'exportAuthoring', payload: characterActionPayload })}>Export</button>
+                            <button type="button" className="menu_button react-authoring-tool-action" disabled={isActionPending} onClick={() => authoringActionMutation.mutate({ action: 'duplicateAuthoring', payload: { kind } })}>Duplicate</button>
+                            <button type="button" className="menu_button react-authoring-tool-action" disabled={isActionPending} onClick={() => authoringActionMutation.mutate({ action: 'exportAuthoring', payload: characterActionPayload })}>Export</button>
                         </>
                     ) : null}
                 </div>
-                <div className="react-authoring-danger-zone">
-                    <button type="button" className="menu_button red_button" onClick={() => authoringActionMutation.mutate({ action: 'deleteAuthoring', payload: { kind } })}>Delete</button>
-                </div>
+                {!isCreateMode ? (
+                    <div className="react-authoring-danger-zone">
+                        <button type="button" className="menu_button red_button" disabled={isActionPending} onClick={() => authoringActionMutation.mutate({ action: 'deleteAuthoring', payload: { kind } })}>Delete</button>
+                    </div>
+                ) : null}
             </section>
         </WorkspacePanelShell>
     );

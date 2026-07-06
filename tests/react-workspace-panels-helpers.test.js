@@ -399,14 +399,39 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('data-react-authoring-action="remove-member"');
         expect(workspacePanelSource).toContain('data-react-authoring-action="move-up"');
         expect(workspacePanelSource).toContain('data-react-authoring-action="move-down"');
+        expect(workspacePanelSource).toContain('aria-label={`Remove ${member}`}');
+        expect(workspacePanelSource).toContain('aria-label={`Move ${member} up`}');
+        expect(workspacePanelSource).toContain('aria-label={`Move ${member} down`}');
         expect(workspacePanelSource).toContain('authoringActionMutation.mutateAsync({ action: submitResult.action, payload: submitResult.payload })');
-        expect(workspacePanelSource).toContain('setAuthoringSession(kind === \'characterAuthoring\'');
+        expect(workspacePanelSource).toContain('setAuthoringSession(currentSession => kind === \'characterAuthoring\'');
+        expect(workspacePanelSource).toContain("status={authoringActionMutation.isError ? 'error' : 'success'}");
+        expect(workspacePanelSource).toContain("const isCreateMode = (bridgeState.mode ?? 'create') === 'create';");
+        expect(workspacePanelSource).toContain('const isActionPending = authoringActionMutation.isPending;');
         expect(workspacePanelSource).toContain("authoringActionMutation.mutate({ action: 'cancelAuthoring'");
+        expect(workspacePanelSource).not.toContain("id: 'retry-authoring-save'");
+        expect(workspacePanelSource).not.toContain('actions={shellActions}');
+        expect(workspacePanelSource).not.toContain('recoveryActions={[]}');
+        expect(workspacePanelSource).toContain('react-authoring-secondary-action');
+        expect(workspacePanelSource).toContain('react-authoring-tool-action');
         expect(workspacePanelSource).toContain('react-authoring-danger-zone');
+        expect(workspacePanelSource).toContain('className="react-authoring-panel-warning" role="status"');
+        expect(workspacePanelSource).toContain('Additional extension fields still use the legacy editor:');
+        expect(workspacePanelSource).toContain('disabled={isActionPending}');
+        expect(workspacePanelSource).toContain('{!isCreateMode ? (');
         expect(scriptSource).toContain("case 'saveCharacterAuthoring':");
         expect(scriptSource).toContain("case 'saveGroupAuthoring':");
         expect(scriptSource).toContain('function applyCharacterAuthoringSaveModel');
+        expect(scriptSource).toContain('function waitForCharacterAuthoringSaveCompletion(mode, saveModel = {})');
+        expect(scriptSource).toContain('eventSource.once(event_types.CHARACTER_EDITED, onEditSuccess);');
+        expect(scriptSource).toContain('characters.slice(initialCharacterCount).find(character => character?.name === expectedName);');
+        const characterSaveCompletionSource = scriptSource.match(/function waitForCharacterAuthoringSaveCompletion\(mode, saveModel = \{}\) \{[\s\S]*?\n\}/)?.[0] ?? '';
+        expect(characterSaveCompletionSource).not.toBe('');
+        expect(characterSaveCompletionSource).not.toContain('CHARACTER_EDITOR_OPENED');
+        expect(scriptSource).toContain('await saveCompletion;');
         expect(scriptSource).toContain('function applyGroupAuthoringSaveModel');
+        expect(scriptSource).toContain('function hideLegacyGroupAuthoringEditor(hidden)');
+        expect(scriptSource).toContain('hideLegacyGroupAuthoringEditor(Boolean(result?.mounted));');
+        expect(scriptSource).toContain('hideLegacyGroupAuthoringEditor(false);');
         expect(scriptSource).toContain('function queueReactCharacterAuthoringRemount()');
         expect(scriptSource).toContain('function queueReactGroupAuthoringRemount()');
         expect(scriptSource).toContain("eventSource.on(event_types.CHARACTER_EDITOR_OPENED, () => {");
@@ -417,8 +442,33 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource.match(/openWorkspaceShellCharacterAuthoring\(\) \{[\s\S]*?\n\}/)?.[0] ?? '').toContain("select_selected_character(this_chid, { switchMenu: false });");
         expect(scriptSource).toContain('setGroupAuthoringMembersDraft');
         expect(groupChatsSource).toContain('export function setGroupAuthoringMembersDraft');
-        expect(scriptSource).toContain("case 'cancelAuthoring':");
+        const groupAuthoringBridgeSource = scriptSource.match(/function getGroupAuthoringReactBridge\(\) \{[\s\S]*?\n\}/)?.[0] ?? '';
+        expect(groupAuthoringBridgeSource).not.toBe('');
+        expect(groupAuthoringBridgeSource).toContain("case 'cancelAuthoring':");
+        expect(groupAuthoringBridgeSource).toContain('hideLegacyGroupAuthoringEditor(false);');
+        expect(groupAuthoringBridgeSource).toContain('return openWorkspaceShellGroupChats();');
+        expect(groupAuthoringBridgeSource).toContain("return action !== 'cancelAuthoring' && action !== 'deleteAuthoring';");
+        expect(groupAuthoringBridgeSource).toContain("return false;");
         expect(scriptSource).toContain("case 'deleteAuthoring':");
+    });
+
+    test('keeps authoring action hierarchy and narrow member rows visible in CSS', () => {
+        const styleSource = read('public/style.css');
+
+        expect(styleSource).toContain('.react-authoring-panel-actions .react-authoring-save');
+        expect(styleSource).toContain('.react-authoring-panel-actions .react-authoring-secondary-action');
+        expect(styleSource).toContain('.react-authoring-panel-actions .react-authoring-tool-action');
+        expect(styleSource).toContain('.react-authoring-candidates');
+        expect(styleSource).toContain('grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));');
+        expect(styleSource).toContain('max-height: min(220px, 34dvh);');
+        expect(styleSource).toContain('max-height: min(180px, 28dvh);');
+        expect(styleSource).toContain('filter: grayscale(0.35);');
+        expect(styleSource).toContain('position: sticky;');
+        expect(styleSource).toContain('bottom: 0;');
+        expect(styleSource).toContain('.react-authoring-member-row:first-of-type');
+        expect(styleSource).toContain('.react-authoring-member-row .menu_button');
+        expect(styleSource).toContain('min-height: 38px;');
+        expect(styleSource).toContain('width: 100%;');
     });
 
     test('bridges an explicit quiet/background legacy owner contract through the main-chat controller shell', () => {

@@ -1,76 +1,89 @@
-# Supporting Panel Content Replacement
+# Retire Authoring Replacement With Full Honors
 
 ## 意图与核心流程
 
-本规格把已存在的 World Info、Backgrounds、Extensions React action-host islands 深化为真实内容 owner，逐步减少对 legacy DOM click/facade 的依赖。
+本规格收口 `260706-03-character-group-authoring-replacement` 之后的 authoring replacement 尾项：把已经迁入 React 的 Character Authoring 与 Group Authoring 体验从“可用替换”提升为默认可交付状态，并给 legacy authoring host 一个明确、体面的退场边界。
 
-主路径是：用户打开 World Info、Backgrounds 或 Extensions；React panel 直接渲染主要列表、筛选、编辑和动作结果；legacy owner 只保留为兼容 fallback 或受保护扩展挂载点。
+主路径是：用户打开角色创建/编辑或群组创建/编辑；React authoring panel 是唯一可见编辑 owner；legacy form 仅作为 rollback / compatibility host 和存储写入桥；用户不会同时看到两个可编辑 authoring surface。
+
+本规格原名为 Supporting Panel Content Replacement，但本轮实际变更聚焦 authoring replacement honor pass。World Info、Backgrounds、Extensions 的真实内容 owner 深化仍保留在后续 supporting-panel cutover 中，不能和本轮 authoring 收口混作一个交付边界。
 
 ## 范围 / 不做范围
 
 本次做：
 
-- World Info：React owner 接管 world selector、entry list、search/sort、entry create/edit form、import/export/refresh 的主要可见 surface；legacy regex/prompt scan/converter 语义保留为后台 service/facade。
-- Backgrounds：React owner 接管 background gallery、filter/sort、upload/select/lock/unlock/auto/refresh 可见 surface；legacy file API 和 thumbnail route 保留。
-- Extensions：React owner 接管 extension host chrome、installed extension list/status、manage/install/update controls、Extras API connection controls；protected extension content mount points 保留在 documented legacy slots。
-- 每个 panel 都要定义 fallback boundary：flag off、missing bundle、action failure、extension unsafe state。
+- Character Authoring：保存后等待 legacy 成功事件再复位 React dirty state，避免“UI 已 ready 但 legacy 仍在保存”的错觉。
+- Character / Group Authoring：create mode 不显示 Delete；edit mode 才显示独立 danger zone。
+- Group Authoring：React 挂载成功时隐藏 legacy group form 兄弟节点，flag off / bundle 缺失 / mount 失败时恢复 legacy form。
+- Group Authoring：Cancel 不再把 Group Chats 入口重开成另一个 owner，而是保留本地安全取消语义并避免 remount loop。
+- Authoring action hierarchy：Save 是唯一主动作；Cancel 是次动作；character tools 是低权重工具动作；Delete 只在 edit mode 的危险区显示。
+- Authoring narrow layout：成员行在窄屏变为单列，动作区 sticky，保证 Save/Cancel/成员排序按钮仍可触达。
+- Accessibility：成员 Remove / Move up / Move down 保留可见文案，同时用成员名扩展 accessible name，避免重复按钮对辅助技术不可区分。
+- Semantic docs：更新 `feature.group_authoring` 的真实 owner 与兼容边界。
 
 本次不做：
 
-- 不删除 `#extensions_settings`、`#extensions_settings2`、`#regex_container`、`#extensionsMenuButton`、`#extensionsMenu`。
-- 不重写 third-party extension runtime、regex engine、slash command parser。
-- 不改变 background file storage 或 world info storage schema。
-- 不改变 prompt injection semantics。
+- 不删除 legacy character/group authoring DOM。
+- 不迁移 avatar、tags、generation strategy、group toggles 等尚未具备 React dedicated controls 的字段。
+- 不改变角色卡文件格式、群组存储格式、legacy save/delete/export API 或后端 endpoint。
+- 不推进 World Info、Backgrounds、Extensions 主要内容 owner；这些仍属后续 supporting-panel replacement。
 
 ## 边界规则 / 验收
 
-- World Info React list 中创建、编辑、保存、删除 entry 后，legacy prompt scan 和刷新后数据必须一致。
-- Backgrounds React gallery 中上传、选择、lock/unlock、auto 后，当前背景、chat背景和刷新后状态必须一致。
-- Extensions React host 中 manage/install/update/connect 操作后，protected mount points 必须仍存在，JS-Slash-Runner 兼容测试必须通过。
-- 每个 panel 的 loading/empty/success/error 状态必须局部显示，不得阻塞 chat workspace。
-- 如果 React content owner 不能安全接管某个子区域，必须显式标记为 compatibility slot，不得复制 DOM 后让两个 owner 同时写同一区域。
+- Create mode 中 Character Authoring 和 Group Authoring 都不得显示 Delete。
+- Edit mode 中 Delete 必须与 Save/Cancel 分区显示，不能出现在主保存行。
+- React group authoring 挂载成功后，legacy group form 不能同时可见或可编辑；React disabled/fallback 时 legacy form 必须恢复。
+- Character authoring save 必须等 legacy 成功事件后才清理 React dirty state；失败时 draft 必须保留并提供 retry。
+- Group member reorder 必须有非拖拽路径，按钮名要能区分具体成员。
+- 窄屏抽屉中 Save/Cancel 与成员操作不能被挤出可达区域。
 
 ## 架构 / 约束
 
-- 本规格依赖 `260706-01` 完成。
-- React content owner 可使用 TanStack Query / TanStack Form / Zod，但不得新增 dependency。
-- `public/scripts/world-info.js`、`public/scripts/backgrounds.js`、`public/scripts/extensions.js` 可以被收敛成 service/facade，但 public compatibility exports 不能无证据删除。
-- Extensions 的任何可见迁移必须通过 `bun run test:compat`，并继承 JS-Slash-Runner hard gate。
-- 旧 DOM slots 可以保留为 `LegacySlotHost`，但必须有明确 owner 注释和测试。
+- 本规格依赖 `260706-03` 的 Character / Group Authoring React owner 基线。
+- `public/script.js` 仍是 legacy authoring write-through 与 drawer integration owner。
+- `app/workspace-panels.tsx` 只能拥有可见 React authoring state、field validation、action hierarchy 和 local mutation state。
+- 不能新增 dependency。
+- legacy DOM 可以保留，但 visible owner 必须单一，且 fallback 必须失败闭合。
 
 ## 数据 / 集成
 
-- World Info 使用现有 world info data 和 endpoints。
-- Backgrounds 使用现有 backgrounds endpoints、thumbnail route 和 settings。
-- Extensions 使用现有 extension discovery、manifest、install/update/delete 和 Extras API state。
+- Character authoring 使用现有 character save/edit/export/delete path。
+- Group authoring 使用现有 group create/edit/delete path 和 member draft bridge。
 - 不新增持久 schema。
-- 如果新增 facade API，必须同时提供 unit tests 和 fallback behavior。
+- 不新增 workspace preference。
+- 只新增或收紧 React-to-legacy bridge behavior、CSS states、tests 和 docs。
+
+## Grill 自问自答 / 联网校验
+
+- 问：Delete 是否应该和 Save/Cancel 同一动作行？答：不应该。NN/g 对 consequential options 的研究建议把确认性动作与破坏性动作拉开距离，并使用冗余视觉信号降低误触风险；这支持独立 danger zone。Reference: https://www.nngroup.com/articles/proximity-consequential-options/
+- 问：Create mode 是否应该显示 Delete 作为 disabled/备用动作？答：不应该。创建中没有已存在对象可删，显示 Delete 只会增加认知噪音；本轮改为仅 edit mode 呈现。
+- 问：短按钮文案是否足够区分多个 member row 的 Move up / Move down？答：视觉上保留短文案以维持密度，但 accessible name 必须包含成员名。W3C APG/WCAG techniques 允许 `aria-label` 为按钮提供明确 accessible name；本轮用成员名消除重复按钮歧义。References: https://www.w3.org/WAI/ARIA/apg/patterns/button/ and https://www.w3.org/WAI/WCAG21/Techniques/aria/ARIA14
+- 问：保存按钮是否可以在 legacy save 未完成前显示 Ready？答：不可以。用户信任的是可见保存状态而不是 bridge 调用返回；本轮 Character Authoring 等待 legacy success event 后再重置 session。
+- 问：隐藏 legacy group form 是否太激进？答：不激进。React 与 legacy 同时可编辑同一数据才是高风险；隐藏只发生在 React mount 成功后，fallback 路径恢复 legacy form，符合单 owner 规则。
 
 ## 验证
 
-- `bun run --cwd tests test:unit -- world-info-card-rendering.test.js react-workspace-panels-helpers.test.js --runInBand`
-- `bun run test:compat`
-- World Info E2E：create/edit/save/delete/import/export/refresh。
-- Backgrounds E2E：upload/select/lock/unlock/auto/refresh。
-- Extensions E2E 或 compatibility proof：protected mount points、manage/install/update/connect、JS-Slash-Runner gate。
+- `bun run --cwd tests test:unit -- react-workspace-panels-helpers.test.js --runInBand`
+- `bun run build:react:workspace-panels`
+- `bun run --cwd tests test:e2e -- character-group-authoring.e2e.js`
+- UX walkthrough：fresh context 下打开 Character Authoring 与 Group Chats，视觉检查 create mode、action hierarchy、窄屏可达性和 fallback/legacy-owner 不重叠。
+- UX walkthrough 结论：Group Authoring create mode 的候选成员列表曾把 Save/Cancel 推出首屏；本轮已改为受限高度紧凑网格，并通过桌面与移动截图确认主动作可见。
+- `bun run docs:check`
 - `bun run build:react:workspace-panels`
 
 ## Doc ID 契约
 
-- `feature.world_info_panel`：更新 React content owner 与 compatibility slot。
-- `feature.background_library_panel`：更新 React gallery/action owner。
-- `feature.extension_panel_open`：更新 React host owner 与 protected mount slots。
-- `page.chat_workspace`：更新 supporting-panel migration state。
+- `feature.group_authoring`：更新 React visible owner、legacy compatibility host、action hierarchy、create/edit Delete 规则。
+- `feature.character_library_panel`：如本轮代码行为改变角色 authoring 用户契约，再更新 character authoring owner/bridge 边界。
+- `page.chat_workspace`：如 authoring owner 状态描述过期，再更新 workspace authoring state。
 
 ## 参考资料
 
-- `.docs/db/features/world-info-panel.md`
-- `.docs/db/features/background-library-panel.md`
-- `.docs/db/features/extension-panel-open.md`
+- `.docs/tech/briefs/260706-03-character-group-authoring-replacement.md`
+- `.docs/db/features/group-authoring.md`
+- `.docs/db/features/character-library-panel.md`
 - `.docs/tech/third-party-extension-compatibility.md`
-- `.docs/tech/world-info-shell-context.md`
-- `public/scripts/world-info.js`
-- `public/scripts/backgrounds.js`
-- `public/scripts/extensions.js`
 - `app/workspace-panels.tsx`
-- Inference: 当前 action-host island 已证明 shell/action routing 可行，但真实替换必须把主要 list/form/gallery owner 迁到 React。
+- `public/script.js`
+- `public/style.css`
+- Inference: 当前 React authoring owner 已经可替代 legacy visible form，本轮 honor pass 必须消除双 owner、错误状态过早成功、危险动作混排和窄屏可达性问题。

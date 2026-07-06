@@ -19,9 +19,10 @@ Let users manage group identity, members, ordering, and save state from one comp
 
 - The Group Chats workspace entry stays inside [Chat Workspace](page.chat_workspace); when the guarded authoring flag is enabled, the normal visible owner for group create/edit fields is the React Group Authoring panel mounted in the existing right drawer.
 - The legacy group form remains only as a rollback or compatibility host. EmberDesk must not leave users with two simultaneously editable group owners.
-- The authoring surface shows current group values for name, avatar, member list, generation strategy, and related toggles when editing an existing group.
+- The default React authoring surface shows current group name and members when editing an existing group. Avatar, tag, generation-strategy, and related toggle controls stay on the legacy compatibility host until a later cutover gives them dedicated React controls.
 - Member management must stay possible without drag-and-drop alone. Users can move members up or down through explicit controls and immediately see the new order.
 - Save is the primary action, Cancel is the safe exit, and Delete remains visually separated as a danger action instead of sitting in the main save row.
+- In create mode, the add-member candidate list stays compact enough that Save and Cancel remain visible in the right drawer on desktop and mobile-width layouts.
 - Saving continues to use the established file-backed group path and refreshes the current workspace state without changing the underlying group storage format.
 - Refreshing the page and reopening the same group must show the saved name and member order.
 - If the guarded React authoring path is disabled or the bundle cannot mount, the existing group editor remains usable from the same entry instead of leaving an empty migration host.
@@ -42,7 +43,7 @@ Let users manage group identity, members, ordering, and save state from one comp
 
 ## Feature-Specific Evidence
 
-- Visible group name, member rows, move-up and move-down controls, save/cancel/delete actions, and post-reload persistence are the primary evidence.
+- Visible group name, member rows, compact add-member candidates, move-up and move-down controls, save/cancel/delete actions, hidden legacy-owner state while React is mounted, and post-reload persistence are the primary evidence.
 - The React owner marker for the authoring panel and the preserved right-drawer entry are evidence that the migration stayed same-entry.
 - Compatibility evidence includes reuse of the established group file-backed save path and preservation of current group selection behavior after save.
 
@@ -51,6 +52,7 @@ Let users manage group identity, members, ordering, and save state from one comp
 - Group Chats opens an empty migration host when the legacy editor would have been usable.
 - The member order changes visually but is lost after save or reload.
 - Save, Cancel, and Delete appear with the same weight so the danger action is easy to trigger accidentally.
+- Add-member candidates push Save and Cancel out of the visible drawer area in create mode.
 - Editing a group leaves both React and legacy group owners visible and editable at the same time.
 
 ## Boundaries

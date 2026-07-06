@@ -51,6 +51,7 @@ last_updated: 2026-07-06
 - Change history:
   - 2026-07-06: Created the brief from the approved authoring replacement intent so the React owner migration could be delivered without losing the user’s compatibility and UX constraints.
   - 2026-07-06: Delivered the React-owned character/group authoring shell, legacy write-through bridges, remount recovery after legacy popup flows, semantic doc updates, and browser/compatibility proof; final review closed with no confirmed findings.
+  - 2026-07-06: Closed the honor-pass follow-up by hiding the legacy group authoring form whenever the React owner mounts, removing create-mode Delete actions, separating edit-mode Delete into a danger zone, waiting for legacy character save completion before clearing dirty state, giving member row actions member-specific accessible names, and constraining group add-member candidates so Save/Cancel remain reachable in desktop and mobile drawer walkthroughs.
 
 ## Confirmed Design Defaults
 
