@@ -44,6 +44,7 @@ This page lets an authenticated user edit the main Sprint 3 settings slice from 
 
 - **React route state**: `/settings` serves the React shell only when `features.react.pages.settings` is enabled and the React build exists.
 - **Fallback state**: if the flag is off or the React build is missing, `/settings` redirects to [Chat Workspace](page.chat_workspace) so the legacy settings surfaces remain available.
+- **Workspace shell fallback entry state**: from the same-entry React workspace chrome, the Settings entry navigates to `/settings` only when this React route is enabled; otherwise it opens the existing User Settings drawer in [Chat Workspace](page.chat_workspace) and participates in the same active-entry close/reopen behavior as other shell-controlled legacy panels.
 - **Auth state**: unauthenticated users are redirected to the login page before seeing settings.
 - **Dirty state**: the save button is disabled on a freshly loaded form and becomes available only after the user changes a React-owned field.
 - **Save state**: saving submits the complete settings object but only rewrites fields listed in the React-owned coverage ledger.
@@ -56,4 +57,5 @@ This page lets an authenticated user edit the main Sprint 3 settings slice from 
 
 - `/settings` is a standalone route for authenticated users.
 - When React settings is unavailable, users continue from [Chat Workspace](page.chat_workspace).
+- From the React workspace chrome, the Settings entry uses this route only when available and otherwise stays in the workspace drawer fallback.
 - Legacy provider and credential surfaces remain reachable through [API Configuration](page.api_configuration).

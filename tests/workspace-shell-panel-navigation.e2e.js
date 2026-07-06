@@ -26,6 +26,11 @@ async function expectNoActivePanel(page) {
     })), { timeout: 10_000 }).toEqual({ activeCount: 0, status: null });
 }
 
+async function expectShellPanelVisible(page, entry) {
+    await expectActivePanel(page, entry.label, `${entry.label} ready`);
+    await expect(page.locator(entry.visibleSelector)).toBeVisible({ timeout: 10_000 });
+}
+
 test.describe('workspace shell panel navigation', () => {
     test('all registry entries expose unified pressed state and short ready status', async ({ page }) => {
         await testSetup.awaitST({ page });
@@ -72,6 +77,56 @@ test.describe('workspace shell panel navigation', () => {
         await clickShellPanel(page, 'Character Library');
         await expectActivePanel(page, 'Character Library', 'Character Library ready');
         await expect(page.locator('#right-nav-panel')).toHaveClass(/openDrawer/);
+    });
+
+    test('legacy-hosted panel entries close and reopen from the same shell button', async ({ page }) => {
+        await testSetup.awaitST({ page });
+
+        const legacyHostedEntries = [
+            { label: 'AI Config', visibleSelector: '#left-nav-panel.openDrawer' },
+            { label: 'Formatting', visibleSelector: '#AdvancedFormatting.openDrawer' },
+            { label: 'Settings', visibleSelector: '#user-settings-block.openDrawer' },
+            { label: 'Group Chats', visibleSelector: '#right-nav-panel.openDrawer #rm_group_chats_block' },
+        ];
+
+        for (const entry of legacyHostedEntries) {
+            const panelButton = page.locator('.react-workspace-shell-nav-button').filter({ hasText: entry.label });
+
+            await clickShellPanel(page, entry.label);
+            await expect(panelButton).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
+            await expectShellPanelVisible(page, entry);
+
+            await clickShellPanel(page, entry.label);
+            await expect(panelButton).toHaveAttribute('aria-pressed', 'false', { timeout: 10_000 });
+            await expectNoActivePanel(page);
+
+            await clickShellPanel(page, entry.label);
+            await expect(panelButton).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
+            await expectShellPanelVisible(page, entry);
+        }
+    });
+
+    test('legacy-hosted panel switching preserves legacy form values', async ({ page }) => {
+        await testSetup.awaitST({ page });
+
+        await openShellPanel(page, 'AI Config');
+        await page.locator('#openai_max_context').fill('12');
+        await page.locator('#openai_max_tokens').fill('3');
+
+        await openShellPanel(page, 'Formatting');
+        await page.locator('#context_story_string').fill('Shell keeps context story string');
+        await page.locator('#custom_stopping_strings').fill('["shell-stop"]');
+
+        await openShellPanel(page, 'Group Chats');
+        await expect(page.locator('#right-nav-panel.openDrawer #rm_group_chats_block')).toBeVisible({ timeout: 10_000 });
+
+        await openShellPanel(page, 'AI Config');
+        await expect(page.locator('#openai_max_context')).toHaveValue('12');
+        await expect(page.locator('#openai_max_tokens')).toHaveValue('3');
+
+        await openShellPanel(page, 'Formatting');
+        await expect(page.locator('#context_story_string')).toHaveValue('Shell keeps context story string');
+        await expect(page.locator('#custom_stopping_strings')).toHaveValue('["shell-stop"]');
     });
 
     test('panel entries stay responsive when switching from character library to world info immediately', async ({ page }) => {

@@ -239,7 +239,20 @@ describe('React workspace panels bridge helpers', () => {
 
     test('coordinates React shell panel entries with transient dock state and legacy fallback results', () => {
         const scriptSource = read('public/script.js');
+        const workspacePanelStoreSource = read('app/stores/workspace-panel-store.js');
         const workspacePanelSource = read('app/workspace-panels.tsx');
+
+        [
+            ['aiConfig', 'AI Config', 'openAIConfig'],
+            ['advancedFormatting', 'Formatting', 'openFormatting'],
+            ['settings', 'Settings', 'openSettings'],
+            ['groupChats', 'Group Chats', 'openGroupChats'],
+        ].forEach(([panelKind, label, action]) => {
+            expect(workspacePanelStoreSource).toContain(`'${panelKind}',`);
+            expect(workspacePanelSource).toContain(`{ action: '${action}'`);
+            expect(workspacePanelSource).toContain(`label: '${label}'`);
+            expect(workspacePanelSource).toContain(`panelKind: '${panelKind}'`);
+        });
 
         expect(workspacePanelSource).toContain('recordWorkspacePanelDockIntent,');
         expect(workspacePanelSource).toContain('recordWorkspacePanelDockClose,');
@@ -287,6 +300,11 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('function openWorkspaceShellDrawerImmediate(drawerId)');
         expect(scriptSource).toContain('function closeWorkspaceShellDrawer(drawerId)');
         expect(scriptSource).toContain('function closeWorkspaceShellPanel(kind)');
+        expect(scriptSource).toContain('function getWorkspaceShellPanelDrawerId(kind)');
+        expect(scriptSource).toContain("aiConfig: 'left-nav-panel'");
+        expect(scriptSource).toContain("advancedFormatting: 'AdvancedFormatting'");
+        expect(scriptSource).toContain("settings: 'user-settings-block'");
+        expect(scriptSource).toContain("groupChats: 'right-nav-panel'");
         expect(scriptSource).toContain('function selectRightMenuImmediate(selectedMenuId)');
         expect(scriptSource).toContain('async function openWorkspaceShellCharacterLibrary()');
         expect(scriptSource).toContain("openWorkspaceShellDrawerImmediate('right-nav-panel');");
@@ -310,6 +328,18 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain("return createWorkspaceShellPanelResult('worldInfo', await mountReactWorldInfoPanel());");
         expect(scriptSource).toContain("return createWorkspaceShellPanelResult('backgroundLibrary', await mountReactBackgroundLibraryPanel());");
         expect(scriptSource).toContain("return createWorkspaceShellPanelResult('extensionsHost', await mountReactExtensionsHostPanel());");
+        expect(scriptSource).toContain("case 'openAIConfig':\n                    await openWorkspaceShellDrawer('left-nav-panel');");
+        expect(scriptSource).toContain("return createWorkspaceShellPanelResult('aiConfig', { kind: 'aiConfig', mounted: false, status: 'success' });");
+        expect(scriptSource).toContain("case 'openFormatting':\n                    await openWorkspaceShellDrawer('AdvancedFormatting');");
+        expect(scriptSource).toContain("return createWorkspaceShellPanelResult('advancedFormatting', { kind: 'advancedFormatting', mounted: false, status: 'success' });");
+        expect(scriptSource).toContain("await openWorkspaceShellDrawer('user-settings-block');");
+        expect(scriptSource).toContain("return createWorkspaceShellPanelResult('settings', { kind: 'settings', mounted: false, status: 'success' });");
+        const openSettingsBranch = scriptSource.match(/case 'openSettings':[\s\S]*?case 'openGroupChats':/)?.[0] ?? '';
+        expect(openSettingsBranch).toContain('if (getWorkspaceReactFeatures()?.reactPages?.settings)');
+        expect(openSettingsBranch).toContain("window.location.assign('/settings');");
+        expect(openSettingsBranch.indexOf("window.location.assign('/settings');")).toBeLessThan(openSettingsBranch.indexOf("await openWorkspaceShellDrawer('user-settings-block');"));
+        expect(scriptSource).toContain("case 'openGroupChats':\n                    return openWorkspaceShellGroupChats();");
+        expect(scriptSource.match(/openWorkspaceShellGroupChats\(\) \{[\s\S]*?\n\}/)?.[0] ?? '').not.toContain("$('#rm_button_group_chats').trigger('click');");
 
         const styleSource = read('public/style.css');
         expect(styleSource).toContain('.react-workspace-shell-nav-button[data-workspace-shell-panel-active="true"]');

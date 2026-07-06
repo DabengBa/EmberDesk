@@ -49,11 +49,13 @@ This page exists so a user can configure how EmberDesk connects to an LLM API pr
 - **Legacy settings**: old `proxies[]` and `selected_proxy` fields in settings files are silently ignored on load and dropped on next save; legacy main API values such as `kobold`, `koboldhorde`, `novel`, `poe`, and `textgenerationwebui` are redirected to the OpenAI chat-completion path during settings load.
 - **Fallback provider state**: the optional fallback provider lives in the same drawer, persists as ordinary settings plus a dedicated server-side secret, preserves the entered fallback key when save fails, stays independent from connection profile capture/apply behavior, and keeps its advanced fields visually collapsed until the fallback toggle is enabled.
 - **React settings overlap**: when `/settings` is available, users can edit the Sprint 3 React-owned provider slice there; this drawer still owns service-account JSON, connection-profile capture/apply behavior, deeper provider profile details, and any provider fields not listed in the React settings coverage ledger.
+- **Workspace shell entry state**: when the React workspace chrome is mounted, its AI Config entry opens and closes this existing drawer from the shell navigation. The shell does not take ownership of provider secrets, custom base URL fields, connection profiles, API key placeholders, or unsaved values inside the drawer.
 - **Vertex AI boundary**: React `/settings` owns Vertex AI Express metadata and the Vertex API-key secret state; full Service Account JSON remains in this legacy drawer.
 - **Legacy provider compatibility**: users who already had Google Vertex AI selected through the legacy drawer can open React [Settings](page.settings) and see it as Google with Vertex AI enabled, then save without silently downgrading it to normal Google.
 
 ## Navigation
 
 - This drawer is accessed from the [Chat Workspace](page.chat_workspace) sidebar.
+- On builds with the same-entry React chrome enabled, the drawer is also reachable through the shell's AI Config entry and follows the shell's active-entry close/reopen behavior.
 - Connection profiles can be switched without leaving the page.
 - Users may use [Settings](page.settings) for the migrated standalone provider slice when the React settings feature flag and build are available.
