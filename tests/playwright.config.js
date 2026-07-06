@@ -1,6 +1,12 @@
 import { fileURLToPath } from 'node:url';
 
 import { defineConfig } from '@playwright/test';
+import {
+    applyWorkspaceReactPlaywrightFlagDefaults,
+    hasEnabledWorkspaceReactPlaywrightFlag,
+    shouldBuildCharacterLibraryPanel,
+    shouldBuildWorkspacePanels,
+} from './helpers/workspace-react-playwright-flags.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${process.env.PLAYWRIGHT_PORT ?? '8000'}`;
@@ -10,19 +16,13 @@ const configPath = process.env.PLAYWRIGHT_CONFIG_PATH ?? '.tmp/playwright-e2e-co
 const testUser = process.env.PLAYWRIGHT_USER ?? 'playwright-e2e';
 const testPassword = process.env.PLAYWRIGHT_PASSWORD ?? 'playwright';
 const chromeExecutablePath = process.env.PLAYWRIGHT_CHROME_EXECUTABLE || undefined;
-const workspacePanelFlagEnvKeys = [
-    'EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST',
-    'EMBERDESK_FEATURES_REACT_PANELS_WORLDINFO',
-    'EMBERDESK_FEATURES_REACT_PANELS_BACKGROUNDLIBRARY',
-    'EMBERDESK_FEATURES_REACT_PANELS_EXTENSIONSHOST',
-    'EMBERDESK_FEATURES_REACT_PANELS_CHARACTERAUTHORING',
-    'EMBERDESK_FEATURES_REACT_PANELS_GROUPAUTHORING',
-];
-const shouldBuildCharacterLibraryPanel = process.env.EMBERDESK_FEATURES_REACT_PANELS_CHARACTERLIBRARY === 'true';
-const shouldBuildWorkspacePanels = workspacePanelFlagEnvKeys.some((envKey) => process.env[envKey] === 'true');
+applyWorkspaceReactPlaywrightFlagDefaults(process.env, process.argv);
+const shouldReuseExistingServer = !hasEnabledWorkspaceReactPlaywrightFlag(process.env)
+    && !process.env.CI
+    && process.env.PLAYWRIGHT_REUSE_SERVER !== '0';
 const webServerCommand = [
-    shouldBuildCharacterLibraryPanel ? 'bun run build:react:character-library' : null,
-    shouldBuildWorkspacePanels ? 'bun run build:react:workspace-panels' : null,
+    shouldBuildCharacterLibraryPanel(process.env) ? 'bun run build:react:character-library' : null,
+    shouldBuildWorkspacePanels(process.env) ? 'bun run build:react:workspace-panels' : null,
     `node scripts/seed-dev-environment.mjs --data-root "${dataRoot}" --config "${configPath}" --user-handle "${testUser}" --user-password "${testPassword}"`,
     `node server.js --configPath "${configPath}" --port ${port}`,
 ].filter(Boolean).join(' && ');
@@ -35,7 +35,7 @@ export default defineConfig({
         command: webServerCommand,
         cwd: repoRoot,
         url: baseURL,
-        reuseExistingServer: !process.env.CI && process.env.PLAYWRIGHT_REUSE_SERVER !== '0',
+        reuseExistingServer: shouldReuseExistingServer,
         timeout: 120_000,
     },
     use: {

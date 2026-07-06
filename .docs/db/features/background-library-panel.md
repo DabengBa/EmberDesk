@@ -22,6 +22,7 @@ Let workspace users inspect, select, and refresh chat backgrounds without making
 - A user-requested refresh must eventually show the newest known background state, including the case where refresh is requested while the current load is still finishing.
 - When the guarded React host is enabled, it owns the visible background status, filters, sort controls, global/chat galleries, rows, and action entry points; if that host is unavailable, the same workspace entry remains usable through the documented fallback surface.
 - When the same-entry React shell is enabled, its Backgrounds entry owns only the transient active-panel/dock state and mounted or fallback status; background selection, lock/unlock, upload, folder, thumbnail, refresh, and slash-compatible behavior remain owned by the background facade.
+- The panel should not surface internal migration verdict vocabulary. User-facing feedback stays on gallery/loading/error/action results.
 - Background selection, lock/unlock, folder drill-in, upload, auto-background, and slash-compatible background actions must keep the same visible results across the normal host and fallback surface.
 
 ## Semantic Interaction IDs

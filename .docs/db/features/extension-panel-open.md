@@ -22,6 +22,7 @@ Let users open the extensions surface from the main workspace while deferred ext
 - If loading fails, the surface replaces indefinite loading with a local retry affordance.
 - When the guarded React host is enabled, it may own visible notify, Manage, Install, Extras API, loader, and protected-mount readiness controls while preserving the established extension content locations.
 - When the same-entry React shell is enabled, its Extensions entry owns only the transient active-panel/dock state and mounted or fallback status; protected mount points, wand menu entries, regex settings, third-party extension mounting, and `@sillytavern/*` compatibility remain owned by the established extension surfaces.
+- The visible Extensions surface should not present internal cutover verdict labels. Protected compatibility boundaries are a maintainer concern, not end-user copy.
 - If the guarded host is disabled or cannot mount, the same workspace entry remains usable through the documented fallback surface.
 - ES-module extensions can depend on [Shared Browser Library](term.shared_browser_library) for documented common browser utilities, but this feature does not redefine extension-specific behavior.
 

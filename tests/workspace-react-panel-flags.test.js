@@ -4,6 +4,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setConfigFilePath } from '../src/util.js';
+import {
+    applyWorkspaceReactPlaywrightFlagDefaults,
+    hasEnabledWorkspaceReactPlaywrightFlag,
+    shouldBuildCharacterLibraryPanel,
+    shouldBuildWorkspacePanels,
+} from './helpers/workspace-react-playwright-flags.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -185,20 +191,67 @@ describe('workspace React panel flags', () => {
         expect(viteSource).toContain('fileName: () => \'assets/workspace-panels.js\'');
     });
 
-    test('prebuilds flagged React panel bundles before Playwright starts the server', () => {
-        const playwrightSource = read('tests/playwright.config.js');
+    test('enables workspace React proof flags for full-suite and targeted Playwright runs', () => {
+        const fullSuiteEnv = {};
+        const fullSuiteResult = applyWorkspaceReactPlaywrightFlagDefaults(fullSuiteEnv, ['playwright', 'test']);
+
+        expect(fullSuiteResult).toEqual({
+            authoringProofEnabled: true,
+            shellProofEnabled: true,
+        });
+        expect(fullSuiteEnv).toMatchObject({
+            EMBERDESK_FEATURES_REACT_SHELL_TAKEOVER: 'true',
+            EMBERDESK_FEATURES_REACT_PANELS_CHARACTERLIBRARY: 'true',
+            EMBERDESK_FEATURES_REACT_PANELS_WORLDINFO: 'true',
+            EMBERDESK_FEATURES_REACT_PANELS_BACKGROUNDLIBRARY: 'true',
+            EMBERDESK_FEATURES_REACT_PANELS_EXTENSIONSHOST: 'true',
+            EMBERDESK_FEATURES_REACT_PANELS_CHARACTERAUTHORING: 'true',
+            EMBERDESK_FEATURES_REACT_PANELS_GROUPAUTHORING: 'true',
+        });
+
+        const shellSpecEnv = {};
+        const shellSpecResult = applyWorkspaceReactPlaywrightFlagDefaults(shellSpecEnv, [
+            'playwright',
+            'test',
+            'workspace-shell-panel-navigation.e2e.js',
+        ]);
+
+        expect(shellSpecResult).toEqual({
+            authoringProofEnabled: false,
+            shellProofEnabled: true,
+        });
+        expect(shellSpecEnv.EMBERDESK_FEATURES_REACT_SHELL_TAKEOVER).toBe('true');
+        expect(shellSpecEnv.EMBERDESK_FEATURES_REACT_PANELS_CHARACTERAUTHORING).toBeUndefined();
+
+        const unrelatedSpecEnv = {};
+        const unrelatedSpecResult = applyWorkspaceReactPlaywrightFlagDefaults(unrelatedSpecEnv, [
+            'playwright',
+            'test',
+            'login.e2e.js',
+        ]);
+
+        expect(unrelatedSpecResult).toEqual({
+            authoringProofEnabled: false,
+            shellProofEnabled: false,
+        });
+        expect(unrelatedSpecEnv).toEqual({});
+    });
+
+    test('builds React bundles before starting Playwright servers that need workspace React flags', () => {
+        const characterLibraryEnv = {
+            EMBERDESK_FEATURES_REACT_PANELS_CHARACTERLIBRARY: 'true',
+        };
+        const shellEnv = {
+            EMBERDESK_FEATURES_REACT_SHELL_TAKEOVER: 'true',
+        };
         const seedSource = read('scripts/seed-dev-environment.mjs');
 
-        expect(playwrightSource).toContain('const workspacePanelFlagEnvKeys = [');
-        expect(playwrightSource).toContain('EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST');
-        expect(playwrightSource).toContain('EMBERDESK_FEATURES_REACT_PANELS_WORLDINFO');
-        expect(playwrightSource).toContain('EMBERDESK_FEATURES_REACT_PANELS_BACKGROUNDLIBRARY');
-        expect(playwrightSource).toContain('EMBERDESK_FEATURES_REACT_PANELS_EXTENSIONSHOST');
-        expect(playwrightSource).toContain('EMBERDESK_FEATURES_REACT_PANELS_CHARACTERAUTHORING');
-        expect(playwrightSource).toContain('EMBERDESK_FEATURES_REACT_PANELS_GROUPAUTHORING');
-        expect(playwrightSource).toContain('shouldBuildCharacterLibraryPanel ? \'bun run build:react:character-library\' : null');
-        expect(playwrightSource).toContain('shouldBuildWorkspacePanels ? \'bun run build:react:workspace-panels\' : null');
-        expect(playwrightSource).toContain('command: webServerCommand');
+        expect(shouldBuildCharacterLibraryPanel(characterLibraryEnv)).toBe(true);
+        expect(shouldBuildWorkspacePanels(characterLibraryEnv)).toBe(true);
+        expect(shouldBuildCharacterLibraryPanel(shellEnv)).toBe(false);
+        expect(shouldBuildWorkspacePanels(shellEnv)).toBe(true);
+        expect(hasEnabledWorkspaceReactPlaywrightFlag(shellEnv)).toBe(true);
+        expect(hasEnabledWorkspaceReactPlaywrightFlag({})).toBe(false);
         expect(seedSource).toContain('EMBERDESK_FEATURES_REACT_SHELL_TAKEOVER');
         expect(seedSource).toContain('EMBERDESK_FEATURES_REACT_SHELL_STRICT');
         expect(seedSource).toContain('shell:');

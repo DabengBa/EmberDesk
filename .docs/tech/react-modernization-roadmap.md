@@ -216,10 +216,10 @@ bun run docs:check
 | `quiet` / background generation transport | `Phase 4A` 补齐能力，`Phase 7 Sprint 5` 完成 full owner cutover | 与标准 visible direct-chat 分开处理；只有在 background / quiet 行为、provider side effects 和 recovery 语义有独立 proof 后才能迁入 React owner；最终 fallback 退出归 Phase 7。 |
 | legacy `messageFormatting()` / rich media / file / LaTeX / code-block formatter owner | `Phase 4B` 抽取 renderer contract，`Phase 7 Sprint 6` 完成 full owner cutover | 当前 Phase 3B 复用 legacy formatted DOM；Phase 4B 先抽取 formatter contract 并保护扩展挂钩，Phase 7 再切 React renderer full owner。 |
 | legacy `chat_truncation` / `#show_more_messages` load-more 算法 | `Phase 4B` 抽取 windowing contract，`Phase 7 Sprint 6` 完成 full owner cutover | 当前 React 只做 headless measurement / restore；Phase 4B 先证明 long-chat performance 和 compatibility，Phase 7 再移除 legacy load-more owner。 |
-| `globalThis.SillyTavern`、`eventSource`、`event_types`、jQuery globals | Phase 4 / Phase 6 建兼容层，`Phase 7 Sprint 7` 审核是否可退出 | 通过 Zustand stores 和兼容层逐步收口；兼容 exports 在 Phase 6 维护期内保留，Phase 7 只能在常用扩展验证和废弃周期完成后决定删除、冻结或长期保留。 |
-| third-party extension API、mount compatibility、migration guide | Phase 4 / Phase 6 建桥和维护，`Phase 7 Sprint 4 / Sprint 7` 完成 owner/fallback 退出判断 | Phase 4 建兼容桥和迁移指南，Phase 6 维护废弃警告、社区迁移和常用扩展验证；Extensions Host full owner cutover 不得先于这些证据完成。 |
+| `globalThis.SillyTavern`、`eventSource`、`event_types`、jQuery globals | Phase 4 / Phase 6 建兼容层，Phase 7 已完成 closeout | 当前结论已关闭为 ledger/ADR 策略：`globalThis.SillyTavern` 与 `eventSource` / `event_types` 不再是默认 deletion candidates；未来若要缩窄，必须新开 spec/ADR。 |
+| third-party extension API、mount compatibility、migration guide | Phase 4 / Phase 6 建桥和维护，Phase 7 已完成 owner/fallback closeout | Extensions Host 的可见宿主已切换，但 protected mount points 和扩展兼容面已转入 freeze-supported / compatibility-facade policy，而不是继续作为未判定旧债。 |
 | Express route owner / typed API / derived-cache ORM | Phase 5（Sprint 1-3 已完成） | Hono 已完成一个 Express-hosted route-island proof；Drizzle 当前不采用；Express 继续保留为 runtime owner。 |
-| 移除 guarded island fallback 或切 full SPA workspace | `Phase 7: Full owner cutover and legacy fallback retirement` | 不再悬空为泛化 Future；Phase 7 各 sprint 逐面移除 fallback，full SPA workspace shell 仍必须有 ADR，证明扩展兼容、性能和 rollback 策略。 |
+| 移除 guarded island fallback 或切 full SPA workspace | Phase 7 已完成 closeout | 当前不保留一个开放式“继续删 fallback”待办；具体 surface 以 `legacy-cutover-ledger.md` 为准，separate-route/full SPA shell 需要未来新 spec/ADR。 |
 
 ---
 
@@ -316,13 +316,13 @@ bun run docs:check
 
 ---
 
-### Phase 7: Full owner cutover and legacy fallback retirement（4-6 个月，ADR-gated）
+### Phase 7: Full owner cutover and legacy fallback retirement（已关闭，进入兼容维护）
 
-**目标**：在 Phase 1-6 的 React islands、visible owners、Zustand/global bridge、typed API、extension compatibility 证据齐备后，逐面完成 full owner cutover，移除或冻结 legacy owner / guarded fallback / build-missing fallback，而不是继续保留双 owner。
+**结果**：Phase 7 已按 surface 完成 cutover 判定。当前不再把所有保留的 legacy 路径统称为“以后再删”，而是按实际证据分流为 documented compatibility facade、freeze-supported surface 或 blocked deletion candidate。维护者应以后续 ledger 为准，而不是把本节当作待办池。
 
-📋 **详细规范**：[Phase 7 README](../specs/react-phase7-full-owner-cutover/README.md)
+📋 **持久入口**：[Legacy Cutover Ledger](legacy-cutover-ledger.md)
 
-**进入条件**：
+**当时进入条件**：
 - Phase 1-3B 对应 surface 的 guarded island / visible owner 已开启并通过回归门。
 - Phase 4A / 4B 对 main-chat transport、formatter、windowing 的 excluded paths 已完成独立 spec 和 proof。
 - Phase 5 对需要 typed API / route owner 的 surface 已完成 route parity、middleware-order proof 和 rollback plan。
@@ -345,7 +345,7 @@ bun run docs:check
 - ✅ [Sprint 7: Workspace shell and global compatibility retirement decision](../specs/react-phase7-full-owner-cutover/phase7-sprint7-workspace-shell-global-compatibility-decision.md)（已交付）
   当前 roadmap 的关闭结论是不推进 separate-route/full SPA shell；2026-07-01 successor 已把当前 `/` 重新打开为 same-entry React shell takeover path。该 successor 允许 React chrome/layout 接管外层可见框架，但 legacy drawer contents、message rows、extension mount points、slash/regex/event surfaces 和 rollback substrate 仍保留。`globalThis.SillyTavern` 与 `@sillytavern/*` 被冻结为 documented public compatibility facades，`eventSource` / `event_types` 保持长期支持，`__emberDeskReactCompatibilityBridge` 明确 internal-only。
 
-**Full owner cutover 验证门**：
+**关闭后验证门**：
 ```bash
 bun run build:lib
 bun run build:react
@@ -359,10 +359,11 @@ bun run perf:interaction
 bun run docs:check
 ```
 
-**退出条件**：
+**关闭后策略**：
 - 每个 migrated surface 只有一个明确 runtime owner；legacy owner 若保留，必须是 documented compatibility facade，而不是可竞争的第二实现。
-- Guarded fallback、build-missing fallback 和 legacy DOM bridge 要么删除，要么在 ADR 中冻结为长期兼容策略并有测试覆盖。
-- 所有语义 Doc ID、tech docs、logic-description docs、PROJECT_HISTORY 和 ADR 都反映最终 owner split。
+- Guarded fallback、build-missing fallback 和 legacy DOM bridge 不再默认视为待删项；它们要么已经删除，要么已经在 ADR 或 ledger 中冻结/分级。
+- 所有语义 Doc ID、tech docs、logic-description docs、PROJECT_HISTORY 和 ADR 都应反映最终 owner split。
+- 任何未来想重开 same-entry shell replacement、删除公共 globals/events/import aliases、或缩窄 protected extension/renderer contracts 的工作，都必须新开 spec 和 ADR，不能复用本阶段“顺手继续清理”的名义推进。
 
 ---
 
@@ -418,11 +419,11 @@ bun run docs:check
    - 理由：route-island proof 不等于 whole-runtime parity；当前宿主链仍承载生产关键边界
    - 权衡：保留成熟宿主与回滚确定性 vs. 持续承受双栈渐进现代化成本
 
-5. **ADR-AAAA: Phase 7 full owner cutover / guarded fallback retirement**
-   - 决策：逐 surface 判断是否删除 guarded island fallback、build-missing fallback、legacy DOM bridge，或冻结为长期 compatibility facade；full SPA workspace shell 也必须在此 ADR 家族下决策
-   - 理由：只有当扩展兼容、性能、路由、rollback、用户数据安全和对应 Phase 7 sprint checklist 均有证明时才允许推进
-   - 权衡：更少 legacy 复杂度和更清晰 owner split vs. 更高上线、扩展破坏和回滚成本
-   - 覆盖：Character Library、World Info、Background Library、Extensions Host、main-chat transport、main-chat renderer/windowing、workspace shell/global compatibility exports 必须分别有 ADR 或 ADR update
+5. **Phase 7 closeout policy**
+   - 决策：本阶段的最终判定由 [ADR-0007](../adr/0007-react-page-islands-with-legacy-fallbacks.md) 的后续更新加上 [Legacy Cutover Ledger](legacy-cutover-ledger.md) 共同承接，不再保留占位 ADR。
+   - 理由：当前仓库已经有被持续更新的 owner/fallback ADR 边界，缺的不是再起一份空壳 ADR，而是把每个 surface 的最终 verdict 写成 durable policy。
+   - 权衡：少一份空洞流程文档，换取更清晰的 surface-by-surface closeout；代价是后续变更必须按具体 surface 重开 spec/ADR，而不是回到一个泛化 Phase 7 待办。
+   - 覆盖：Character Library、World Info、Background Library、Extensions Host、main-chat transport、main-chat renderer/windowing、workspace shell/global compatibility exports 的最终 verdict 见 ledger 与 ADR-0007 updates。
 
 6. **ADR-BBBB: Canonical storage 变更**
    - 决策：是否让 SQLite / ORM 从 derived cache 进入用户数据正本路径
