@@ -23,10 +23,10 @@ Completed Phase 0, Phase 1, Phase 2, Phase 3, Phase 3B, Phase 4, Phase 5, and Ph
 
 | Folder | Spec set | Purpose |
 |---|---|---|
-| [260701-02-react-workspace-chrome](260701-02-react-workspace-chrome/spec.md) | Next Workspace Shell | Future same-entry React chrome takeover for current `/`. |
-| [260701-03-panel-dock-and-drawer-coordination](260701-03-panel-dock-and-drawer-coordination/spec.md) | Next Workspace Shell | Future React shell ownership for panel dock and drawer coordination. |
-| [260701-04-main-chat-layout-and-composer-shell](260701-04-main-chat-layout-and-composer-shell/spec.md) | Next Workspace Shell | Future React shell ownership for main-chat layout and composer shell. |
-| [260701-05-responsive-and-recovery-hardening](260701-05-responsive-and-recovery-hardening/spec.md) | Next Workspace Shell | Future responsive behavior and local recovery hardening. |
+| [260706-02-legacy-panel-control-cutover](260706-02-legacy-panel-control-cutover/spec.md) | Workspace React Replacement Roadmap | Bring legacy-hosted drawers such as AI Config, Advanced Formatting, Settings fallback, and Group Chats under the React shell/dock control plane. |
+| [260706-03-character-group-authoring-replacement](260706-03-character-group-authoring-replacement/spec.md) | Workspace React Replacement Roadmap | Replace Character and Group authoring surfaces with React owners while preserving file-backed data and compatibility selectors. |
+| [260706-04-supporting-panel-content-replacement](260706-04-supporting-panel-content-replacement/spec.md) | Workspace React Replacement Roadmap | Deepen World Info, Backgrounds, and Extensions from action-host islands into content owners with protected compatibility slots. |
+| [260706-05-legacy-cutover-and-deletion-gates](260706-05-legacy-cutover-and-deletion-gates/spec.md) | Workspace React Replacement Roadmap | Decide deletion, freeze, or compatibility-facade status for remaining legacy owners after replacement slices land. |
 
 ## Maintenance Rule
 

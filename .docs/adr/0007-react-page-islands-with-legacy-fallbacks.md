@@ -84,6 +84,12 @@ Consequences:
 - Current drawer `pinnedOpen` facts are copied into transient `locked` / `pinned` metadata for compatibility snapshots and focused proof, but the visible shell chrome only shows active-panel and dock-status feedback; it does not render separate pinned/locked badges.
 - `__emberDeskReactCompatibilityBridge` may expose the sanitized `workspacePanelDock` snapshot for internal diagnostics and migration proof, but it remains internal-only and does not replace the documented public compatibility surfaces.
 
+2026-07-06 Workspace panel owner registry update:
+
+- The same-entry React workspace chrome now treats AI Config, Formatting, Character Library, World Info, Backgrounds, Extensions, Settings, Group Chats, and Character Authoring as registry-backed panel entries. This widens the control plane without claiming that every panel's content has already moved to React.
+- Same-entry toggle semantics are part of the boundary: clicking the active entry asks the legacy owner to close and only clears active shell state after the close result arrives. Pinned or locked drawers keep the shell entry active because the user-visible content remains open.
+- The registry keeps owner/fallback coordination in `app/workspace-panels.tsx`, `app/stores/workspace-panel-store.js`, and `public/script.js`; panel-specific semantics, protected DOM, public compatibility exports, and later content replacement remain governed by their own specs and docs.
+
 2026-07-06 Browser walkthrough hardening update:
 
 - The same-entry shell now treats first-open panel safety as part of the boundary contract: shell-driven panel actions wait one macrotask before entering legacy drawer listeners, and World Info preloads its deferred `world-info-body` panel before the drawer opens so first-click shell opens do not freeze the visible workspace.

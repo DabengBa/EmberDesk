@@ -20,7 +20,7 @@ function read(relativePath) {
 }
 
 describe('character library React panel scaffold', () => {
-    test('ships a standalone React panel bundle with Query and Virtual wiring', () => {
+    test('ships a standalone React panel bundle with virtualized legacy rows', () => {
         const packageSource = read('package.json');
         const viteSource = read('vite.config.ts');
         const panelEntrySource = read('app/character-library-panel.tsx');
@@ -33,15 +33,14 @@ describe('character library React panel scaffold', () => {
         expect(viteSource).toContain('entry: path.resolve(process.cwd(), \'app/character-library-panel.tsx\')');
         expect(viteSource).toContain('fileName: () => \'assets/character-library-panel.js\'');
         expect(viteSource).toContain('emptyOutDir: false');
-        expect(panelEntrySource).toContain('import { QueryClient, QueryClientProvider } from \'@tanstack/react-query\';');
         expect(panelEntrySource).toContain('export function mountCharacterLibraryToolbar(');
         expect(panelEntrySource).toContain('export function updateCharacterLibraryToolbar(');
         expect(panelEntrySource).toContain('export function mountCharacterLibraryPanel(');
         expect(panelEntrySource).toContain('export function updateCharacterLibraryPanel(');
         expect(panelSource).toContain('import { useVirtualizer } from \'@tanstack/react-virtual\';');
-        expect(panelSource).toContain('import { useQuery } from \'@tanstack/react-query\';');
-        expect(panelSource).toContain('queryKey: [\'character-library\', \'all\']');
-        expect(panelSource).toContain('lastSyncedCharactersDataUpdatedAtRef');
+        expect(panelSource).not.toContain('import { useQuery } from \'@tanstack/react-query\';');
+        expect(panelSource).not.toContain('refetchOnMount');
+        expect(panelSource).not.toContain('syncCharactersFromQuery');
         expect(panelSource).toContain('count: state.pageEntities.length');
         expect(panelSource).toContain('getScrollElement: () => scrollElementRef.current');
         expect(toolbarSource).toContain('import { useForm } from \'@tanstack/react-form\';');
@@ -77,6 +76,8 @@ describe('character library React panel scaffold', () => {
 
         expect(scriptSource).toContain('globalThis.__emberDeskCharacterLibraryPanelBridge');
         expect(scriptSource).toContain('/react/login/assets/character-library-panel.js');
+        expect(scriptSource).toContain('function getReactCharacterLibraryPanelAssetPath()');
+        expect(scriptSource).toContain('import(getReactCharacterLibraryPanelAssetPath())');
         expect(scriptSource).toContain('const characterLibraryToolbarState = {');
         expect(scriptSource).toContain('updateCharacterLibraryToolbarOwnerState({ searchQuery });');
         expect(scriptSource).toContain('updateCharacterLibraryToolbarOwnerState({ sortValue: getSelectedCharacterLibrarySortValue() });');

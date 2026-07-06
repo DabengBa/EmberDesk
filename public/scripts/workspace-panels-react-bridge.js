@@ -12,6 +12,12 @@ import {
 } from './workspace-shell-takeover-contract.js';
 
 export const REACT_WORKSPACE_PANELS_ASSET_PATH = '/react/login/assets/workspace-panels.js';
+const REACT_WORKSPACE_PANELS_ASSET_CACHE_KEY = Date.now().toString(36);
+
+export function getReactWorkspacePanelsAssetPath() {
+    const cacheKey = globalThis.__emberDeskReactWorkspacePanelsAssetCacheKey ??= REACT_WORKSPACE_PANELS_ASSET_CACHE_KEY;
+    return `${REACT_WORKSPACE_PANELS_ASSET_PATH}?v=${encodeURIComponent(String(cacheKey))}`;
+}
 
 export function getDefaultWorkspaceReactFeatures() {
     return {
@@ -41,7 +47,7 @@ export function createWorkspacePanelsModuleLoader(importModule = assetPath => im
 
     return function loadWorkspacePanelsModule() {
         if (!modulePromise) {
-            modulePromise = importModule(REACT_WORKSPACE_PANELS_ASSET_PATH).catch(error => {
+            modulePromise = importModule(getReactWorkspacePanelsAssetPath()).catch(error => {
                 modulePromise = null;
                 throw error;
             });

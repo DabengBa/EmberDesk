@@ -14,6 +14,7 @@ import {
 import {
     getWorkspacePanelDockSnapshot,
     recordWorkspacePanelDockIntent,
+    recordWorkspacePanelDockClose,
     recordWorkspacePanelDockResult,
     recordWorkspacePanelMount,
     recordWorkspacePanelUnmount,
@@ -38,7 +39,16 @@ import {
 } from '../public/scripts/main-chat-bridge-contract.js';
 
 export type WorkspacePanelKind = 'worldInfo' | 'backgroundLibrary' | 'extensionsHost' | 'mainChatMessageList';
-type WorkspaceDockPanelKind = 'characterLibrary' | 'worldInfo' | 'backgroundLibrary' | 'extensionsHost';
+type WorkspaceDockPanelKind =
+    | 'aiConfig'
+    | 'advancedFormatting'
+    | 'characterLibrary'
+    | 'worldInfo'
+    | 'backgroundLibrary'
+    | 'extensionsHost'
+    | 'settings'
+    | 'groupChats'
+    | 'characterAuthoring';
 
 interface WorkspacePanelMount {
     root: Root;
@@ -3410,13 +3420,15 @@ function WorkspacePanelRoot({ kind, bridge }: { kind: WorkspacePanelKind; bridge
 }
 
 const workspaceShellNavigationEntries: WorkspaceShellNavigationEntry[] = [
-    { action: 'openAIConfig', icon: 'fa-sliders', label: 'AI Config' },
-    { action: 'openFormatting', icon: 'fa-font', label: 'Formatting' },
+    { action: 'openAIConfig', icon: 'fa-sliders', label: 'AI Config', panelKind: 'aiConfig' },
+    { action: 'openFormatting', icon: 'fa-font', label: 'Formatting', panelKind: 'advancedFormatting' },
     { action: 'openCharacterLibrary', icon: 'fa-address-book', label: 'Character Library', panelKind: 'characterLibrary' },
     { action: 'openWorldInfo', icon: 'fa-book-atlas', label: 'World Info', panelKind: 'worldInfo' },
     { action: 'openBackgrounds', icon: 'fa-image', label: 'Backgrounds', panelKind: 'backgroundLibrary' },
     { action: 'openExtensions', icon: 'fa-cubes', label: 'Extensions', panelKind: 'extensionsHost' },
-    { action: 'openSettings', icon: 'fa-gear', label: 'Settings' },
+    { action: 'openSettings', icon: 'fa-gear', label: 'Settings', panelKind: 'settings' },
+    { action: 'openGroupChats', icon: 'fa-users', label: 'Group Chats', panelKind: 'groupChats' },
+    { action: 'openCharacterAuthoring', icon: 'fa-user-pen', label: 'Character Authoring', panelKind: 'characterAuthoring' },
 ];
 
 function asWorkspacePanelDockDispatchResult(result: unknown): WorkspacePanelDockDispatchResult {
@@ -3462,6 +3474,10 @@ function normalizeWorkspacePanelDockStatus(result: unknown) {
 
 function getWorkspacePanelDockKindLabel(kind: WorkspaceDockPanelKind) {
     switch (kind) {
+        case 'aiConfig':
+            return 'AI Config';
+        case 'advancedFormatting':
+            return 'Formatting';
         case 'characterLibrary':
             return 'Character Library';
         case 'worldInfo':
@@ -3470,6 +3486,12 @@ function getWorkspacePanelDockKindLabel(kind: WorkspaceDockPanelKind) {
             return 'Backgrounds';
         case 'extensionsHost':
             return 'Extensions';
+        case 'settings':
+            return 'Settings';
+        case 'groupChats':
+            return 'Group Chats';
+        case 'characterAuthoring':
+            return 'Character Authoring';
         default:
             return 'Workspace panel';
     }
@@ -3585,6 +3607,35 @@ function ReactWorkspaceShellChrome({
         }
     }, [bridge]);
 
+    const closePanel = useCallback(async (entry: WorkspaceShellNavigationEntry) => {
+        if (!entry.panelKind) {
+            return;
+        }
+
+        const dispatchSequence = panelDispatchSequenceRef.current + 1;
+        panelDispatchSequenceRef.current = dispatchSequence;
+        try {
+            const result = await bridge?.dispatchAction?.('closeWorkspacePanel', { kind: entry.panelKind });
+            if (panelDispatchSequenceRef.current !== dispatchSequence) {
+                return;
+            }
+            recordWorkspacePanelDockClose(entry.panelKind, {
+                locked: Boolean(asWorkspacePanelDockDispatchResult(result).locked),
+                pinned: Boolean(asWorkspacePanelDockDispatchResult(result).pinned),
+                status: normalizeWorkspacePanelDockStatus(result),
+            });
+        } catch (error) {
+            if (panelDispatchSequenceRef.current !== dispatchSequence) {
+                return;
+            }
+            recordWorkspacePanelDockResult(entry.panelKind, {
+                fallbackReason: 'close-failed',
+                status: 'error',
+            });
+            console.warn('React workspace shell panel close failed.', error);
+        }
+    }, [bridge]);
+
     return (
         <header
             className="react-workspace-shell-chrome"
@@ -3618,7 +3669,15 @@ function ReactWorkspaceShellChrome({
                             onClick={(event) => {
                                 event.preventDefault();
                                 event.stopPropagation();
-                                void dispatchAction(entry);
+                                if (entry.panelKind && isPanelEntryActive && dockSnapshot.activePanelStatus !== 'error') {
+                                    window.setTimeout(() => {
+                                        void closePanel(entry);
+                                    }, 0);
+                                    return;
+                                }
+                                window.setTimeout(() => {
+                                    void dispatchAction(entry);
+                                }, 0);
                             }}
                         >
                             <i className={`fa-solid ${entry.icon}`} aria-hidden="true" />

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { LegacyElementHost } from './LegacyElementHost';
 
@@ -34,9 +33,6 @@ export interface CharacterLibraryPanelBridge {
     createBackBlockElement?(): HTMLElement | Promise<HTMLElement | null> | null;
     createEmptyElement?(): HTMLElement | Promise<HTMLElement | null> | null;
     createHiddenElement?(hiddenCount: number): HTMLElement | Promise<HTMLElement | null> | null;
-    getAllCharacters?(): Array<Record<string, unknown>>;
-    fetchAllCharacters?(): Promise<Array<Record<string, unknown>>>;
-    syncCharactersFromQuery?(characters: Array<Record<string, unknown>>): Promise<void> | void;
 }
 
 interface LegacyEntityRowProps {
@@ -54,39 +50,9 @@ function LegacyEntityRow({ bridge, entity }: LegacyEntityRowProps) {
 
 export function CharacterLibraryPanel({ bridge, state }: { bridge: CharacterLibraryPanelBridge; state: CharacterLibraryPanelState; }) {
     const scrollElementRef = useRef<HTMLElement | null>(state.scrollElement);
-    const lastSyncedCharactersDataUpdatedAtRef = useRef<number | null>(null);
-
     useEffect(() => {
         scrollElementRef.current = state.scrollElement;
     }, [state.scrollElement]);
-
-    const {
-        data: charactersData,
-        dataUpdatedAt: charactersDataUpdatedAt,
-    } = useQuery({
-        queryKey: ['character-library', 'all'],
-        queryFn: async () => {
-            return await bridge.fetchAllCharacters?.() ?? bridge.getAllCharacters?.() ?? [];
-        },
-        initialData: () => bridge.getAllCharacters?.() ?? [],
-        retry: false,
-        staleTime: 30000,
-        refetchOnMount: 'always',
-        refetchOnWindowFocus: false,
-    });
-
-    useEffect(() => {
-        if (!charactersData) {
-            return;
-        }
-
-        if (lastSyncedCharactersDataUpdatedAtRef.current === charactersDataUpdatedAt) {
-            return;
-        }
-
-        lastSyncedCharactersDataUpdatedAtRef.current = charactersDataUpdatedAt;
-        void bridge.syncCharactersFromQuery?.(charactersData);
-    }, [bridge, charactersData, charactersDataUpdatedAt]);
 
     const estimatedRowHeight = state.estimatedRowHeight ?? 112;
     const virtualizer = useVirtualizer({

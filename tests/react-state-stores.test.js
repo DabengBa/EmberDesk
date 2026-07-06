@@ -4,6 +4,7 @@ import {
     getWorkspacePanelDockSnapshot,
     getWorkspacePanelSnapshot,
     recordWorkspacePanelDockIntent,
+    recordWorkspacePanelDockClose,
     recordWorkspacePanelDockResult,
     recordWorkspacePanelMount,
     recordWorkspacePanelUnmount,
@@ -11,6 +12,7 @@ import {
     resetWorkspacePanelStore,
     subscribeWorkspacePanelDock,
     subscribeWorkspacePanel,
+    WORKSPACE_PANEL_DOCK_KINDS,
 } from '../app/stores/workspace-panel-store.js';
 import {
     getMainChatObservationSnapshot,
@@ -20,6 +22,20 @@ import {
 } from '../app/stores/main-chat-observation-store.js';
 
 describe('React state stores', () => {
+    test('declares every primary workspace shell panel as a dock kind', () => {
+        expect(WORKSPACE_PANEL_DOCK_KINDS).toEqual([
+            'aiConfig',
+            'advancedFormatting',
+            'characterLibrary',
+            'worldInfo',
+            'backgroundLibrary',
+            'extensionsHost',
+            'settings',
+            'groupChats',
+            'characterAuthoring',
+        ]);
+    });
+
     test('records workspace panel lifecycle without requiring DOM globals', () => {
         resetWorkspacePanelStore();
         const listener = jest.fn();
@@ -172,6 +188,46 @@ describe('React state stores', () => {
             pinnedPanelKinds: [],
         });
     });
+
+    test('clears active dock state when closing the active panel', () => {
+        resetWorkspacePanelStore();
+
+        recordWorkspacePanelDockResult('characterLibrary', {
+            status: 'success',
+        });
+        recordWorkspacePanelDockClose('characterLibrary');
+
+        expect(getWorkspacePanelDockSnapshot()).toMatchObject({
+            activePanelKind: null,
+            activePanelStatus: 'idle',
+            fallbackReason: null,
+            openPanelKinds: [],
+        });
+    });
+
+    test('keeps active dock state when close result reports a pinned panel stayed visible', () => {
+        resetWorkspacePanelStore();
+
+        recordWorkspacePanelDockResult('characterLibrary', {
+            locked: true,
+            pinned: true,
+            status: 'success',
+        });
+        recordWorkspacePanelDockClose('characterLibrary', {
+            locked: true,
+            pinned: true,
+            status: 'success',
+        });
+
+        expect(getWorkspacePanelDockSnapshot()).toMatchObject({
+            activePanelKind: 'characterLibrary',
+            activePanelStatus: 'success',
+            lockedPanelKinds: ['characterLibrary'],
+            openPanelKinds: ['characterLibrary'],
+            pinnedPanelKinds: ['characterLibrary'],
+        });
+    });
+
 
     test('records sanitized main-chat observation snapshots and resets safely', () => {
         resetMainChatObservationStore();

@@ -8,10 +8,15 @@ export const WORKSPACE_PANEL_KINDS = Object.freeze([
 ]);
 
 export const WORKSPACE_PANEL_DOCK_KINDS = Object.freeze([
+    'aiConfig',
+    'advancedFormatting',
     'characterLibrary',
     'worldInfo',
     'backgroundLibrary',
     'extensionsHost',
+    'settings',
+    'groupChats',
+    'characterAuthoring',
 ]);
 
 const SUPPORTED_PANEL_KINDS = new Set(WORKSPACE_PANEL_KINDS);
@@ -202,6 +207,35 @@ export function recordWorkspacePanelDockResult(kind, result = {}) {
         pinned: result.pinned,
         status: result.status ?? 'success',
     });
+}
+
+/**
+ * @param {string} kind
+ * @param {{locked?: boolean, pinned?: boolean, status?: string}} [result]
+ */
+export function recordWorkspacePanelDockClose(kind, result = {}) {
+    assertWorkspacePanelDockKind(kind);
+    const shouldStayOpen = result.locked === true || result.pinned === true;
+    if (shouldStayOpen) {
+        setWorkspacePanelDockSnapshot(kind, {
+            fallbackReason: null,
+            locked: result.locked,
+            pinned: result.pinned,
+            status: result.status ?? 'success',
+        });
+        return;
+    }
+
+    workspacePanelStore.setState(currentState => ({
+        dock: {
+            ...currentState.dock,
+            activePanelKind: currentState.dock.activePanelKind === kind ? null : currentState.dock.activePanelKind,
+            activePanelStatus: currentState.dock.activePanelKind === kind ? 'idle' : currentState.dock.activePanelStatus,
+            fallbackReason: currentState.dock.activePanelKind === kind ? null : currentState.dock.fallbackReason,
+            openPanelKinds: currentState.dock.openPanelKinds.filter(panelKind => panelKind !== kind),
+            updatedAt: Date.now(),
+        },
+    }));
 }
 
 export function subscribeWorkspacePanel(kind, listener) {

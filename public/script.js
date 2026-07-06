@@ -426,6 +426,7 @@ const mainChatRichBodySnapshotSchema = MAIN_CHAT_RICH_BODY_SNAPSHOT_SCHEMA;
 const mainChatMessageActionSnapshotSchema = MAIN_CHAT_MESSAGE_ACTION_SNAPSHOT_SCHEMA;
 const STREAMING_TRANSPORT_TERMINAL_PHASES = new Set(['stopped', 'completed', 'error']);
 const REACT_CHARACTER_LIBRARY_PANEL_ASSET_PATH = '/react/login/assets/character-library-panel.js';
+const REACT_CHARACTER_LIBRARY_PANEL_ASSET_CACHE_KEY = Date.now().toString(36);
 const REACT_CHARACTER_LIBRARY_TOOLBAR_HOST_ID = 'emberdesk-react-character-library-toolbar';
 let reactCharacterLibraryPanelModulePromise = null;
 let reactCharacterLibraryPanelMounted = false;
@@ -444,6 +445,11 @@ let mainChatMessageListBridgeBodyObserver = null;
 let mainChatMessageActionsController = null;
 let mainChatMessageListPendingRestoreChatId = null;
 let mainChatMessageRenderGeneration = 0;
+
+function getReactCharacterLibraryPanelAssetPath() {
+    const cacheKey = globalThis.__emberDeskReactCharacterLibraryPanelAssetCacheKey ??= REACT_CHARACTER_LIBRARY_PANEL_ASSET_CACHE_KEY;
+    return `${REACT_CHARACTER_LIBRARY_PANEL_ASSET_PATH}?v=${encodeURIComponent(String(cacheKey))}`;
+}
 
 export function publishWorkspaceShellTakeoverDiagnostic({
     strict,
@@ -571,6 +577,71 @@ async function openWorkspaceShellDrawer(drawerId) {
     }
 }
 
+function closeWorkspaceShellDrawer(drawerId) {
+    const drawer = document.getElementById(drawerId);
+    const drawerRoot = drawer?.closest('.drawer');
+    const drawerIcon = drawerRoot?.querySelector('.drawer-icon');
+    if (!(drawer instanceof HTMLElement) || drawer.classList.contains('pinnedOpen')) {
+        return false;
+    }
+
+    drawer.classList.remove('openDrawer');
+    drawer.classList.add('closedDrawer');
+    drawerIcon?.classList.remove('openIcon');
+    drawerIcon?.classList.add('closedIcon');
+    return true;
+}
+
+function openWorkspaceShellDrawerImmediate(drawerId) {
+    const drawer = document.getElementById(drawerId);
+    const drawerRoot = drawer?.closest('.drawer');
+    const drawerIcon = drawerRoot?.querySelector('.drawer-icon');
+    if (!(drawer instanceof HTMLElement)) {
+        return;
+    }
+
+    document.querySelectorAll('.openDrawer:not(.pinnedOpen)').forEach(openDrawer => {
+        if (openDrawer !== drawer) {
+            openDrawer.classList.remove('openDrawer');
+            openDrawer.classList.add('closedDrawer');
+        }
+    });
+    document.querySelectorAll('.openIcon:not(.drawerPinnedOpen)').forEach(openIcon => {
+        if (openIcon !== drawerIcon) {
+            openIcon.classList.remove('openIcon');
+            openIcon.classList.add('closedIcon');
+        }
+    });
+
+    drawer.classList.add('openDrawer');
+    drawer.classList.remove('closedDrawer');
+    drawerIcon?.classList.add('openIcon');
+    drawerIcon?.classList.remove('closedIcon');
+}
+
+function selectRightMenuImmediate(selectedMenuId) {
+    const normalizedMenuId = String(selectedMenuId ?? '').replace('#', '');
+    const displayModes = {
+        rm_group_chats_block: 'flex',
+        rm_api_block: 'grid',
+        rm_characters_block: 'flex',
+    };
+
+    $('#result_info').toggle(normalizedMenuId === 'rm_ch_create_block');
+    document.querySelectorAll('#right-nav-panel .right_menu').forEach(menu => {
+        if (!(menu instanceof HTMLElement)) {
+            return;
+        }
+
+        if (normalizedMenuId === menu.id) {
+            menu.style.display = displayModes[menu.id] ?? 'block';
+            menu.style.opacity = '1';
+        } else {
+            menu.style.display = 'none';
+        }
+    });
+}
+
 async function ensureWorkspaceShellDeferredPanel(panelId) {
     try {
         await ensurePanel(panelId);
@@ -584,18 +655,42 @@ function waitForWorkspaceShellPanelOpenTask() {
 }
 
 function getWorkspaceShellPanelDockState(kind) {
-    const drawerId = {
-        characterLibrary: 'right-nav-panel',
-        worldInfo: 'WorldInfo',
-        backgroundLibrary: 'Backgrounds',
-        extensionsHost: 'rm_extensions_block',
-    }[kind];
+    const drawerId = getWorkspaceShellPanelDrawerId(kind);
     const drawer = drawerId ? document.getElementById(drawerId) : null;
     const pinned = drawer?.classList.contains('pinnedOpen') === true;
 
     return {
         locked: pinned,
         pinned,
+    };
+}
+
+function getWorkspaceShellPanelDrawerId(kind) {
+    return {
+        aiConfig: 'left-nav-panel',
+        advancedFormatting: 'AdvancedFormatting',
+        characterLibrary: 'right-nav-panel',
+        worldInfo: 'WorldInfo',
+        backgroundLibrary: 'Backgrounds',
+        extensionsHost: 'rm_extensions_block',
+        settings: 'user-settings-block',
+        groupChats: 'right-nav-panel',
+        characterAuthoring: 'right-nav-panel',
+    }[kind];
+}
+
+function closeWorkspaceShellPanel(kind) {
+    const drawerId = getWorkspaceShellPanelDrawerId(kind);
+    const beforeCloseDockState = getWorkspaceShellPanelDockState(kind);
+    const closed = drawerId ? closeWorkspaceShellDrawer(drawerId) : false;
+    const afterCloseDockState = getWorkspaceShellPanelDockState(kind);
+    const stillOpen = !closed && (beforeCloseDockState.pinned || afterCloseDockState.pinned);
+    return {
+        kind,
+        locked: stillOpen ? afterCloseDockState.locked : false,
+        mounted: false,
+        pinned: stillOpen ? afterCloseDockState.pinned : false,
+        status: stillOpen ? 'mounted' : closed ? 'closed' : 'idle',
     };
 }
 
@@ -614,39 +709,74 @@ function createWorkspaceShellPanelResult(kind, resultOrMounted) {
         : { kind, locked: dockState.locked, mounted: false, pinned: dockState.pinned, reason: 'feature-disabled', status: 'fallback' };
 }
 
+async function openWorkspaceShellCharacterLibrary() {
+    openWorkspaceShellDrawerImmediate('right-nav-panel');
+    if (menu_type !== 'characters') {
+        selected_button = 'characters';
+        setMenuType('characters');
+        selectRightMenuImmediate('rm_characters_block');
+    }
+
+    return createWorkspaceShellPanelResult('characterLibrary', isReactCharacterLibraryPanelEnabled());
+}
+
+function openWorkspaceShellGroupChats() {
+    openWorkspaceShellDrawerImmediate('right-nav-panel');
+    selected_button = 'group_chats';
+    setMenuType('group_chats');
+    selectRightMenuImmediate('rm_group_chats_block');
+    return createWorkspaceShellPanelResult('groupChats', { kind: 'groupChats', mounted: false, status: 'success' });
+}
+
+function openWorkspaceShellCharacterAuthoring() {
+    openWorkspaceShellDrawerImmediate('right-nav-panel');
+    selected_button = this_chid !== undefined || selected_group ? 'character_edit' : 'create';
+    setMenuType(selected_button === 'character_edit' ? 'character_edit' : 'create');
+    selectRightMenuImmediate('rm_ch_create_block');
+    return createWorkspaceShellPanelResult('characterAuthoring', { kind: 'characterAuthoring', mounted: false, status: 'success' });
+}
+
 function getWorkspaceShellChromeBridge() {
     return {
-        async dispatchAction(action) {
+        async dispatchAction(action, payload = {}) {
             await waitForWorkspaceShellPanelOpenTask();
 
             switch (action) {
                 case 'openAIConfig':
                     await openWorkspaceShellDrawer('left-nav-panel');
-                    return;
+                    return createWorkspaceShellPanelResult('aiConfig', { kind: 'aiConfig', mounted: false, status: 'success' });
                 case 'openFormatting':
                     await openWorkspaceShellDrawer('AdvancedFormatting');
-                    return;
+                    return createWorkspaceShellPanelResult('advancedFormatting', { kind: 'advancedFormatting', mounted: false, status: 'success' });
                 case 'openCharacterLibrary':
-                    await openWorkspaceShellDrawer('right-nav-panel');
-                    $('#rm_button_characters').trigger('click');
-                    return createWorkspaceShellPanelResult('characterLibrary', isReactCharacterLibraryPanelEnabled());
+                    return openWorkspaceShellCharacterLibrary();
                 case 'openWorldInfo':
                     await ensureWorkspaceShellDeferredPanel('world-info-body');
                     await openWorkspaceShellDrawer('WorldInfo');
+                    await waitForWorkspaceShellPanelOpenTask();
                     return createWorkspaceShellPanelResult('worldInfo', await mountReactWorldInfoPanel());
                 case 'openBackgrounds':
                     await openWorkspaceShellDrawer('Backgrounds');
+                    await waitForWorkspaceShellPanelOpenTask();
                     return createWorkspaceShellPanelResult('backgroundLibrary', await mountReactBackgroundLibraryPanel());
                 case 'openExtensions':
                     await openWorkspaceShellDrawer('rm_extensions_block');
+                    await waitForWorkspaceShellPanelOpenTask();
                     return createWorkspaceShellPanelResult('extensionsHost', await mountReactExtensionsHostPanel());
+                case 'closeWorkspacePanel':
+                    return closeWorkspaceShellPanel(payload?.kind);
                 case 'openSettings':
                     if (getWorkspaceReactFeatures()?.reactPages?.settings) {
                         window.location.assign('/settings');
+                        return createWorkspaceShellPanelResult('settings', { kind: 'settings', mounted: false, status: 'success' });
                     } else {
                         await openWorkspaceShellDrawer('user-settings-block');
                     }
-                    return;
+                    return createWorkspaceShellPanelResult('settings', { kind: 'settings', mounted: false, status: 'success' });
+                case 'openGroupChats':
+                    return openWorkspaceShellGroupChats();
+                case 'openCharacterAuthoring':
+                    return openWorkspaceShellCharacterAuthoring();
                 default:
                     console.warn('Unknown React workspace shell chrome action', action);
             }
@@ -1830,8 +1960,7 @@ function getMainChatMessageListReactBridge() {
             const normalizedMessageId = Number.isInteger(messageId) && messageId >= 0 ? messageId : undefined;
             switch (action) {
                 case 'openCharacterLibrary':
-                    await openWorkspaceShellDrawer('right-nav-panel');
-                    $('#rm_button_characters').trigger('click');
+                    await openWorkspaceShellCharacterLibrary();
                     break;
                 case 'loadMoreUntilMessage': {
                     const anchorMessageId = String(payload?.anchorMessageId ?? '');
@@ -2266,15 +2395,6 @@ function getReactCharacterLibraryPanelBridge() {
         async createHiddenElement(hiddenCount) {
             return (await getHiddenBlock(hiddenCount))[0] ?? null;
         },
-        getAllCharacters() {
-            return characters.map(character => structuredClone(character));
-        },
-        fetchAllCharacters() {
-            return fetchAllCharactersDataOnly();
-        },
-        async syncCharactersFromQuery(queryCharacters) {
-            await syncCharactersFromQuery(queryCharacters);
-        },
         clickLegacyAction(actionId) {
             document.getElementById(actionId)?.click();
         },
@@ -2323,7 +2443,7 @@ function getReactCharacterLibraryPanelBridge() {
 
 async function loadReactCharacterLibraryPanelModule() {
     if (!reactCharacterLibraryPanelModulePromise) {
-        reactCharacterLibraryPanelModulePromise = import(REACT_CHARACTER_LIBRARY_PANEL_ASSET_PATH).catch(error => {
+        reactCharacterLibraryPanelModulePromise = import(getReactCharacterLibraryPanelAssetPath()).catch(error => {
             reactCharacterLibraryPanelModulePromise = null;
             throw error;
         });
@@ -2824,8 +2944,7 @@ function startDeferredStartupTasks() {
  */
 function _replayWorldInfoSettings() {
     initWorldInfo();
-    rehydrateWorldInfoPanel();
-    void mountReactWorldInfoPanel();
+    rehydrateWorldInfoPanel({ resetEmptyEditor: false });
     void mountReactMainChatMessageListPanel();
 }
 

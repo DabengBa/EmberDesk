@@ -242,6 +242,7 @@ describe('React workspace panels bridge helpers', () => {
         const workspacePanelSource = read('app/workspace-panels.tsx');
 
         expect(workspacePanelSource).toContain('recordWorkspacePanelDockIntent,');
+        expect(workspacePanelSource).toContain('recordWorkspacePanelDockClose,');
         expect(workspacePanelSource).toContain('recordWorkspacePanelDockResult,');
         expect(workspacePanelSource).toContain('getWorkspacePanelDockSnapshot,');
         expect(workspacePanelSource).toContain('subscribeWorkspacePanelDock,');
@@ -265,10 +266,13 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('data-workspace-shell-panel-active={isPanelEntryActive ? \'true\' : \'false\'}');
         expect(workspacePanelSource).toContain('aria-pressed={entry.panelKind ? isPanelEntryActive : undefined}');
         expect(workspacePanelSource).toContain('event.stopPropagation();');
+        expect(workspacePanelSource).toContain("if (entry.panelKind && isPanelEntryActive && dockSnapshot.activePanelStatus !== 'error') {");
+        expect(workspacePanelSource).toContain("void closePanel(entry);");
+        expect(workspacePanelSource).toContain("window.setTimeout(() => {\n                                    void dispatchAction(entry);\n                                }, 0);");
         expect(workspacePanelSource).toContain('data-workspace-panel-dock-status={dockSnapshot.activePanelStatus}');
         expect(workspacePanelSource).toContain('getWorkspacePanelDockKindLabel(dockSnapshot.activePanelKind)');
         expect(workspacePanelSource).toContain('getWorkspacePanelDockStatusLabel(dockSnapshot.activePanelStatus)');
-        expect(scriptSource).toContain('async dispatchAction(action) {\n            await waitForWorkspaceShellPanelOpenTask();');
+        expect(scriptSource).toContain('async dispatchAction(action, payload = {}) {\n            await waitForWorkspaceShellPanelOpenTask();');
         expect(scriptSource).toContain("case 'openCharacterLibrary':");
         expect(workspacePanelSource).toContain("panelKind: 'characterLibrary'");
         expect(scriptSource).toContain("case 'openWorldInfo':");
@@ -277,6 +281,22 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain("await ensureWorkspaceShellDeferredPanel('world-info-body');");
         expect(scriptSource.indexOf('await waitForWorkspaceShellPanelOpenTask();')).toBeLessThan(scriptSource.indexOf("await ensureWorkspaceShellDeferredPanel('world-info-body');"));
         expect(scriptSource.indexOf("await ensureWorkspaceShellDeferredPanel('world-info-body');")).toBeLessThan(scriptSource.indexOf("await openWorkspaceShellDrawer('WorldInfo');"));
+        expect(scriptSource.indexOf("await openWorkspaceShellDrawer('WorldInfo');")).toBeLessThan(scriptSource.indexOf("return createWorkspaceShellPanelResult('worldInfo', await mountReactWorldInfoPanel());"));
+        expect(scriptSource.indexOf("await openWorkspaceShellDrawer('Backgrounds');")).toBeLessThan(scriptSource.indexOf("return createWorkspaceShellPanelResult('backgroundLibrary', await mountReactBackgroundLibraryPanel());"));
+        expect(scriptSource.indexOf("await openWorkspaceShellDrawer('rm_extensions_block');")).toBeLessThan(scriptSource.indexOf("return createWorkspaceShellPanelResult('extensionsHost', await mountReactExtensionsHostPanel());"));
+        expect(scriptSource).toContain('function openWorkspaceShellDrawerImmediate(drawerId)');
+        expect(scriptSource).toContain('function closeWorkspaceShellDrawer(drawerId)');
+        expect(scriptSource).toContain('function closeWorkspaceShellPanel(kind)');
+        expect(scriptSource).toContain('function selectRightMenuImmediate(selectedMenuId)');
+        expect(scriptSource).toContain('async function openWorkspaceShellCharacterLibrary()');
+        expect(scriptSource).toContain("openWorkspaceShellDrawerImmediate('right-nav-panel');");
+        expect(scriptSource).toContain("if (menu_type !== 'characters') {\n        selected_button = 'characters';\n        setMenuType('characters');\n        selectRightMenuImmediate('rm_characters_block');");
+        expect(scriptSource.match(/openWorkspaceShellCharacterLibrary\(\) \{[\s\S]*?\n\}/)?.[0] ?? '').not.toContain("$('#rm_button_characters').trigger('click');");
+        expect(scriptSource.match(/openWorkspaceShellCharacterLibrary\(\) \{[\s\S]*?\n\}/)?.[0] ?? '').not.toContain("openWorkspaceShellDrawer('right-nav-panel')");
+        expect(scriptSource.match(/openWorkspaceShellCharacterLibrary\(\) \{[\s\S]*?\n\}/)?.[0] ?? '').not.toContain('printCharacters(');
+        expect(scriptSource).toContain("case 'openCharacterLibrary':\n                    return openWorkspaceShellCharacterLibrary();");
+        expect(scriptSource).toContain("case 'closeWorkspacePanel':\n                    return closeWorkspaceShellPanel(payload?.kind);");
+        expect(scriptSource).toContain("case 'openCharacterLibrary':\n                    await openWorkspaceShellCharacterLibrary();");
         expect(workspacePanelSource).toContain("panelKind: 'worldInfo'");
         expect(scriptSource).toContain("case 'openBackgrounds':");
         expect(workspacePanelSource).toContain("panelKind: 'backgroundLibrary'");
@@ -351,7 +371,7 @@ describe('React workspace panels bridge helpers', () => {
         await expect(loadModule()).resolves.toBe(importedModule);
         await expect(loadModule()).resolves.toBe(importedModule);
         expect(importModule).toHaveBeenCalledTimes(1);
-        expect(importModule).toHaveBeenCalledWith(REACT_WORKSPACE_PANELS_ASSET_PATH);
+        expect(importModule).toHaveBeenCalledWith(expect.stringMatching(/^\/react\/login\/assets\/workspace-panels\.js\?v=.+/));
 
         const failingLoader = createWorkspacePanelsModuleLoader(importModule);
         await expect(failingLoader()).rejects.toThrow('missing bundle');
@@ -576,6 +596,10 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('kind: \'worldInfo\'');
         expect(scriptSource).toContain('getState: () => getWorldInfoReactBridgeState()');
         expect(scriptSource).toContain('void mountReactWorldInfoPanel();');
+        const worldInfoReplayHook = scriptSource.match(/function _replayWorldInfoSettings\(\) \{[\s\S]*?\n\}/)?.[0] ?? '';
+        expect(worldInfoReplayHook).toContain('initWorldInfo();');
+        expect(worldInfoReplayHook).toContain('rehydrateWorldInfoPanel({ resetEmptyEditor: false });');
+        expect(worldInfoReplayHook).not.toContain('mountReactWorldInfoPanel();');
         expect(scriptSource).not.toContain('mountReactWorkspacePanel({\n        kind: \'worldInfo\',\n        container: document.getElementById(\'world_popup\')');
 
         expect(workspacePanelSource).toContain('function WorldInfoWorkspacePanel');

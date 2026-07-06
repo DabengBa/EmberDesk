@@ -1610,12 +1610,12 @@ function ensureWorldInfoRuntimeInitialized() {
     worldInfoRuntimeInitialized = true;
 }
 
-export function rehydrateWorldInfoPanel() {
+export function rehydrateWorldInfoPanel({ resetEmptyEditor = true } = {}) {
     syncWorldInfoSettingsUi({ syncGlobalSelect: false });
     const selectedName = String($('#world_editor_select').find(':selected').text() ?? '');
     if (selectedName && Array.isArray(world_names) && world_names.includes(selectedName)) {
         void showWorldEditor(selectedName);
-    } else {
+    } else if (resetEmptyEditor) {
         void hideWorldEditor();
     }
 }

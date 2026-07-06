@@ -202,6 +202,8 @@ describe('world info card rendering', () => {
         expect(rehydrateSource).toContain('syncWorldInfoSettingsUi({ syncGlobalSelect: false });');
         expect(rehydrateSource).toContain('Array.isArray(world_names) && world_names.includes(selectedName)');
         expect(rehydrateSource).toContain('void showWorldEditor(selectedName);');
+        expect(rehydrateSource).toContain('resetEmptyEditor = true');
+        expect(rehydrateSource).toContain('} else if (resetEmptyEditor) {');
         expect(rehydrateSource).toContain('void hideWorldEditor();');
     });
 
