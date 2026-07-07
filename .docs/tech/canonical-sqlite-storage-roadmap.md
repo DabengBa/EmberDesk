@@ -91,11 +91,12 @@ Acceptance:
 Current delivered foundation:
 
 - `src/canonical-sqlite.js` now exists as the canonical DB manager.
+- `src/canonical-sqlite-migrations.js` now exists as the migration runner for canonical schema history and phase-one schema bootstrap.
 - `src/storage-feature-flags.js` now exposes the current storage flag snapshot for this slice.
 - `USER_DIRECTORY_TEMPLATE` and `getUserDirectories(handle)` now include per-user `storage`.
 - `default/config.yaml` now declares `features.storage.canonicalSqlite.*` with default `false`.
-- Focused proof currently lives in `tests/canonical-sqlite.test.js`, `tests/user-directories.test.js`, and `tests/derived-cache-sqlite.test.js`.
-- Runtime authority is still file-backed because no migration, import, read cutover, or write cutover has landed yet.
+- Focused proof currently lives in `tests/canonical-sqlite-migrations.test.js`, `tests/canonical-sqlite.test.js`, `tests/user-directories.test.js`, and `tests/derived-cache-sqlite.test.js`.
+- Runtime authority is still file-backed because migration/import/read/write cutover has not landed yet, but the schema journal plus phase-one table bootstrap contract is now in place.
 
 ### Phase 2: DB-First Reads
 
@@ -188,6 +189,7 @@ Acceptance:
 3. `migration runner`
    - Depends on canonical manager.
    - Owns `schema_migrations`, ordered SQL application, idempotency, and migration errors.
+   - Current status: delivered in `src/canonical-sqlite-migrations.js` with focused tests.
 
 4. `character store schema`
    - Depends on migration runner.

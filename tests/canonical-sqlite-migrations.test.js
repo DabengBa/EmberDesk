@@ -1,0 +1,368 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+import { afterEach, describe, expect, jest, test } from '@jest/globals';
+
+import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
+import {
+    CanonicalMigrationBlockedError,
+    CANONICAL_SQLITE_MIGRATIONS,
+    getCanonicalMigrationStatus,
+    runCanonicalMigrations,
+} from '../src/canonical-sqlite-migrations.js';
+
+const tempRoots = [];
+const managers = [];
+
+function makeRoot() {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-canonical-migrations-'));
+    tempRoots.push(root);
+    return root;
+}
+
+function createDirectories(root) {
+    return {
+        root,
+        storage: path.join(root, 'storage'),
+    };
+}
+
+function createLogger() {
+    return {
+        info: jest.fn(),
+        warn: jest.fn(),
+    };
+}
+
+function createManager(options = {}) {
+    const manager = createCanonicalSqliteManager({
+        logger: createLogger(),
+        ...options,
+    });
+    managers.push(manager);
+    return manager;
+}
+
+afterEach(() => {
+    for (const manager of managers.splice(0, managers.length)) {
+        manager.dispose();
+    }
+    for (const root of tempRoots.splice(0, tempRoots.length)) {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+describe('canonical sqlite migrations', () => {
+    test('exports an ordered migration catalog with the phase-one schema contract', () => {
+        expect(CANONICAL_SQLITE_MIGRATIONS).toEqual(expect.arrayContaining([
+            expect.objectContaining({ version: 1, name: expect.any(String), sql: expect.any(String) }),
+        ]));
+        expect(CANONICAL_SQLITE_MIGRATIONS.map(x => x.version)).toEqual([1]);
+        expect(CANONICAL_SQLITE_MIGRATIONS[0].sql).toContain('CREATE TABLE IF NOT EXISTS characters');
+        expect(CANONICAL_SQLITE_MIGRATIONS[0].sql).toContain('CREATE TABLE IF NOT EXISTS character_chat_stats');
+        expect(CANONICAL_SQLITE_MIGRATIONS[0].sql).toContain('CREATE TABLE IF NOT EXISTS projection_repairs');
+    });
+
+    test('bootstraps the canonical schema and reports applied versions', () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+
+        const status = runCanonicalMigrations(db, { nowMs: 1735689600000 });
+
+        expect(status).toEqual(expect.objectContaining({
+            ok: true,
+            blockedReason: null,
+            currentVersion: 1,
+            targetVersion: 1,
+            appliedVersions: [1],
+        }));
+        expect(db.prepare('SELECT name FROM sqlite_master WHERE type = ? AND name = ?').get('table', 'schema_migrations')).toBeTruthy();
+        expect(db.prepare('SELECT name FROM sqlite_master WHERE type = ? AND name = ?').get('table', 'characters')).toBeTruthy();
+        expect(db.prepare('SELECT name FROM sqlite_master WHERE type = ? AND name = ?').get('table', 'character_chat_stats')).toBeTruthy();
+        expect(db.prepare('SELECT name FROM sqlite_master WHERE type = ? AND name = ?').get('table', 'projection_repairs')).toBeTruthy();
+        expect(db.prepare('SELECT version, name, applied_at_ms FROM schema_migrations').all()).toEqual([
+            {
+                version: 1,
+                name: CANONICAL_SQLITE_MIGRATIONS[0].name,
+                applied_at_ms: 1735689600000,
+            },
+        ]);
+    });
+
+    test('runs idempotently without duplicating rows or schema records', () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+
+        const first = runCanonicalMigrations(db, { nowMs: 1735689600000 });
+        db.prepare(`
+            INSERT INTO characters (
+                id, avatar_filename, internal_name, display_name, card_json, shallow_json,
+                world_name, created_at_ms, updated_at_ms, deleted_at_ms
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+            'char-1',
+            'alpha.png',
+            'Alpha',
+            'Alpha',
+            '{"name":"Alpha"}',
+            '{"name":"Alpha"}',
+            '',
+            1,
+            1,
+            null,
+        );
+
+        const second = runCanonicalMigrations(db, { nowMs: 1735689609999 });
+
+        expect(first.appliedVersions).toEqual([1]);
+        expect(second).toEqual(expect.objectContaining({
+            ok: true,
+            blockedReason: null,
+            currentVersion: 1,
+            targetVersion: 1,
+            appliedVersions: [],
+        }));
+        expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get().count).toBe(1);
+        expect(db.prepare('SELECT COUNT(*) AS count FROM characters').get().count).toBe(1);
+        expect(db.prepare('SELECT avatar_filename FROM characters WHERE id = ?').get('char-1').avatar_filename).toBe('alpha.png');
+    });
+
+    test('reports a clear blocker and keeps the database file when a migration fails', () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        const dbPath = path.join(directories.storage, 'emberdesk.sqlite');
+
+        const status = runCanonicalMigrations(db, {
+            nowMs: 1735689600000,
+            migrations: [{
+                version: 1,
+                name: 'broken_schema',
+                sql: 'CREATE TABLE bad (;',
+            }],
+            strict: false,
+        });
+
+        expect(status).toEqual(expect.objectContaining({
+            ok: false,
+            currentVersion: 0,
+            targetVersion: 1,
+            failedVersion: 1,
+            failedName: 'broken_schema',
+            blockedReason: expect.stringContaining('broken_schema'),
+        }));
+        expect(fs.existsSync(dbPath)).toBe(true);
+        expect(db.prepare('SELECT name FROM sqlite_master WHERE type = ? AND name = ?').get('table', 'schema_migrations')).toBeTruthy();
+        expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get().count).toBe(0);
+    });
+
+    test('throws in strict mode and exposes the blocker to the canonical manager contract', () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+
+        expect(() => runCanonicalMigrations(db, {
+            nowMs: 1735689600000,
+            migrations: [{
+                version: 1,
+                name: 'broken_schema',
+                sql: 'CREATE TABLE bad (;',
+            }],
+            strict: true,
+        })).toThrow(CanonicalMigrationBlockedError);
+
+        const status = getCanonicalMigrationStatus(db, {
+            migrations: [{
+                version: 1,
+                name: 'broken_schema',
+                sql: 'CREATE TABLE bad (;',
+            }],
+            strict: false,
+        });
+
+        expect(manager.getStatus({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+            migrationBlockedReason: status.blockedReason,
+        })).toEqual(expect.objectContaining({
+            disabledReason: 'migration_blocked',
+            migrationBlockedReason: status.blockedReason,
+            open: true,
+        }));
+    });
+
+    test('blocks when the database schema version is newer than the supported target', () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+
+        db.exec(`
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                version INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                applied_at_ms INTEGER NOT NULL
+            );
+        `);
+        db.prepare(`
+            INSERT INTO schema_migrations (version, name, applied_at_ms)
+            VALUES (?, ?, ?)
+        `).run(99, 'future_schema', 1735689600000);
+
+        const status = runCanonicalMigrations(db, {
+            migrations: [{
+                version: 1,
+                name: 'phase_one_character_metadata_and_chat_stats',
+                sql: 'CREATE TABLE IF NOT EXISTS safe_table (id TEXT PRIMARY KEY);',
+            }],
+            strict: false,
+        });
+
+        expect(status).toEqual(expect.objectContaining({
+            ok: false,
+            currentVersion: 99,
+            targetVersion: 1,
+            blockedReason: expect.stringContaining('newer than supported target 1'),
+        }));
+    });
+
+    test('blocks when applied migration versions are non-contiguous within the current catalog', () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+
+        db.exec(`
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                version INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                applied_at_ms INTEGER NOT NULL
+            );
+        `);
+        db.prepare(`
+            INSERT INTO schema_migrations (version, name, applied_at_ms)
+            VALUES (?, ?, ?)
+        `).run(2, 'second_step_without_first', 1735689600000);
+
+        const migrations = [
+            {
+                version: 1,
+                name: 'first_step',
+                sql: 'CREATE TABLE IF NOT EXISTS first_step_table (id TEXT PRIMARY KEY);',
+            },
+            {
+                version: 2,
+                name: 'second_step_without_first',
+                sql: 'CREATE TABLE IF NOT EXISTS second_step_table (id TEXT PRIMARY KEY);',
+            },
+        ];
+
+        const status = runCanonicalMigrations(db, { migrations, strict: false });
+
+        expect(status).toEqual(expect.objectContaining({
+            ok: false,
+            currentVersion: 2,
+            targetVersion: 2,
+            appliedVersions: [2],
+            blockedReason: expect.stringContaining('diverges at position 1'),
+        }));
+        expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get().count).toBe(1);
+    });
+
+    test('blocks when an applied migration name does not match the current catalog', () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+
+        runCanonicalMigrations(db, { nowMs: 1735689600000 });
+        db.prepare('UPDATE schema_migrations SET name = ? WHERE version = ?').run('renamed_phase_one', 1);
+
+        const status = getCanonicalMigrationStatus(db);
+
+        expect(status).toEqual(expect.objectContaining({
+            ok: false,
+            currentVersion: 1,
+            targetVersion: 1,
+            appliedVersions: [1],
+            blockedReason: expect.stringContaining('expected name'),
+        }));
+    });
+
+    test('clears a remembered blocker after a later successful migration run', () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+
+        const failed = runCanonicalMigrations(db, {
+            nowMs: 1735689600000,
+            migrations: [{
+                version: 1,
+                name: 'broken_schema',
+                sql: 'CREATE TABLE bad (;',
+            }],
+            strict: false,
+        });
+        expect(failed.ok).toBe(false);
+
+        const recovered = runCanonicalMigrations(db, {
+            nowMs: 1735689601234,
+        });
+
+        expect(recovered).toEqual(expect.objectContaining({
+            ok: true,
+            blockedReason: null,
+            currentVersion: 1,
+            targetVersion: 1,
+            appliedVersions: [1],
+        }));
+        expect(getCanonicalMigrationStatus(db)).toEqual(expect.objectContaining({
+            ok: true,
+            blockedReason: null,
+            currentVersion: 1,
+            targetVersion: 1,
+            appliedVersions: [1],
+        }));
+    });
+});

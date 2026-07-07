@@ -35,13 +35,14 @@ EmberDesk 目前通过 file-backed canonical storage 保持可移植性和 Silly
   - 2026-07-07: 预研结论是不把 `_cache/character-index.sqlite` 或 `DiskCache` 原地升级为 canonical storage，而是新增 canonical SQLite store。
   - 2026-07-07: ADR-0011 已接受 canonical per-user SQLite storage direction，并新增 canonical SQLite storage roadmap 作为阶段和 rollout 合同。
   - 2026-07-07: Phase 0/Phase 1 foundation 已开始落地：新增 `src/canonical-sqlite.js`、`src/storage-feature-flags.js`、per-user `storage` 目录和 focused fail-closed tests，但运行时 authority 仍未切换。
+  - 2026-07-07: 已实现 `src/canonical-sqlite-migrations.js`，把 canonical schema journal、phase-one schema bootstrap、migration blocker contract 和 focused tests 落到代码。
 - Implementation traceability:
   - Accepted ADR: `.docs/adr/0011-canonical-per-user-sqlite-storage.md`
   - Roadmap: `.docs/tech/canonical-sqlite-storage-roadmap.md`
   - Current code seams: `src/endpoints/character-read-service.js`, `src/endpoints/character-write-service.js`, `src/endpoints/chats.js`, `src/endpoints/character-index.js`
-  - Foundation code: `src/canonical-sqlite.js`, `src/storage-feature-flags.js`, `src/user-directories.js`, `default/config.yaml`
-  - Focused proof: `tests/canonical-sqlite.test.js`, `tests/user-directories.test.js`, `tests/derived-cache-sqlite.test.js`
-  - Delivery status: research complete; canonical store-manager foundation delivered, authority cutover not started.
+  - Foundation code: `src/canonical-sqlite.js`, `src/canonical-sqlite-migrations.js`, `src/storage-feature-flags.js`, `src/user-directories.js`, `default/config.yaml`
+  - Focused proof: `tests/canonical-sqlite-migrations.test.js`, `tests/canonical-sqlite.test.js`, `tests/user-directories.test.js`, `tests/derived-cache-sqlite.test.js`
+  - Delivery status: research complete; canonical store-manager foundation and migration runner delivered, authority cutover not started.
 
 Current repo facts:
 
@@ -121,10 +122,11 @@ This is the narrowest slice with real payoff because it removes hot-path scans f
   - 2026-07-07: 预研建议先用 canonical SQLite + explicit migration table，不把 derived-cache helper 复用于 canonical storage。
   - 2026-07-07: 预研建议 Phase 1 不默认引入 ORM；在 Phase 2 前单独做 ORM gate。
   - 2026-07-07: 已实现 dedicated canonical manager 与 default-off storage flags，为 migration runner、shadow import 和 read/write cutover 提供前置 runtime contract。
+  - 2026-07-07: 已实现 explicit migration runner，提供 `schema_migrations`、phase-one schema bootstrap、forward-only idempotent execution 和 fail-closed blocked status。
 - Implementation traceability:
-  - New module candidates: `src/canonical-sqlite.js`, `src/endpoints/character-store.js`, `src/endpoints/character-store-migrations.js`
-  - Delivered module: `src/canonical-sqlite.js`
-  - Delivery status: manager foundation delivered; migration runner and store schema still pending.
+  - New module candidates: `src/endpoints/character-store.js`, `src/endpoints/character-store-migrations.js`
+  - Delivered modules: `src/canonical-sqlite.js`, `src/canonical-sqlite-migrations.js`
+  - Delivery status: manager foundation and migration runner delivered; shadow import, audit, and authority cutover still pending.
 
 Proposed storage layout:
 
