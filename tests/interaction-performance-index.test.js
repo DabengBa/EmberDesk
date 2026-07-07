@@ -42,17 +42,21 @@ function makeDirectories(prefix) {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
     const characters = path.join(root, 'characters');
     const chats = path.join(root, 'chats');
+    const groupChats = path.join(root, 'group chats');
+    const backups = path.join(root, 'backups');
     const worlds = path.join(root, 'worlds');
     const thumbnailsAvatar = path.join(root, 'thumbnails', 'avatar');
     const thumbnailsPersona = path.join(root, 'thumbnails', 'persona');
     const thumbnailsBg = path.join(root, 'thumbnails', 'bg');
     fs.mkdirSync(characters, { recursive: true });
     fs.mkdirSync(chats, { recursive: true });
+    fs.mkdirSync(groupChats, { recursive: true });
+    fs.mkdirSync(backups, { recursive: true });
     fs.mkdirSync(worlds, { recursive: true });
     fs.mkdirSync(thumbnailsAvatar, { recursive: true });
     fs.mkdirSync(thumbnailsPersona, { recursive: true });
     fs.mkdirSync(thumbnailsBg, { recursive: true });
-    return { root, characters, chats, worlds, thumbnailsAvatar, thumbnailsPersona, thumbnailsBg };
+    return { root, characters, chats, groupChats, backups, worlds, thumbnailsAvatar, thumbnailsPersona, thumbnailsBg };
 }
 
 /**
@@ -157,6 +161,30 @@ function openCanonicalDbForTests(directories, handle = 'default-user') {
     });
     runCanonicalMigrations(db, { strict: true, nowMs: 1735689600000 });
     return { manager, db };
+}
+
+function seedCanonicalCharacterForTests(db, avatarFilename = 'alpha.png') {
+    db.prepare(`
+        INSERT INTO characters (
+            id, avatar_filename, internal_name, display_name, card_json, shallow_json, world_name, created_at_ms, updated_at_ms, deleted_at_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+        `char-${path.parse(avatarFilename).name}`,
+        avatarFilename,
+        path.parse(avatarFilename).name,
+        path.parse(avatarFilename).name,
+        JSON.stringify({ avatar: avatarFilename, name: path.parse(avatarFilename).name, data: { extensions: { world: '' } } }),
+        JSON.stringify({ avatar: avatarFilename, name: path.parse(avatarFilename).name }),
+        '',
+        1,
+        2,
+        null,
+    );
+    db.prepare(`
+        INSERT INTO character_chat_stats (
+            character_id, chat_count, chat_size_bytes, date_last_chat_ms, stats_updated_at_ms
+        ) VALUES (?, ?, ?, ?, ?)
+    `).run(`char-${path.parse(avatarFilename).name}`, 0, 0, 0, 0);
 }
 
 /**
@@ -459,6 +487,19 @@ function getCharactersCreateRouteHandler() {
 }
 
 /**
+ * @param {string} routePath
+ * @returns {(request: any, response: any) => Promise<void>}
+ */
+function getChatsRouteHandler(routePath) {
+    const layer = chatsRouter.stack.find(entry => entry.route?.path === routePath);
+    if (!layer?.route?.stack?.length) {
+        throw new Error(`Could not locate /api/chats${routePath} route handler`);
+    }
+
+    return layer.route.stack[layer.route.stack.length - 1].handle;
+}
+
+/**
  * @param {{ root: string, characters: string, chats: string }} directories
  * @param {string} avatar
  * @returns {Promise<ReturnType<typeof createMockResponse>>}
@@ -677,18 +718,119 @@ async function invokeCharacterCreate(directories, name, { file } = {}) {
     return response;
 }
 
+async function invokeChatSave(directories, avatar, fileName, chat) {
+    const handler = getChatsRouteHandler('/save');
+    const request = {
+        body: {
+            avatar_url: avatar,
+            file_name: fileName,
+            chat,
+            force: true,
+        },
+        user: { directories, profile: { handle: `chat-test-${path.basename(directories.root)}` } },
+    };
+    const response = createMockResponse();
+    jest.useFakeTimers();
+    try {
+        await handler(request, response);
+        jest.runAllTimers();
+        jest.clearAllTimers();
+    } finally {
+        jest.useRealTimers();
+    }
+    return response;
+}
+
+async function invokeChatDelete(directories, avatar, chatfile) {
+    const handler = getChatsRouteHandler('/delete');
+    const request = {
+        body: {
+            avatar_url: avatar,
+            chatfile,
+        },
+        user: { directories, profile: { handle: 'default-user' } },
+    };
+    const response = createMockResponse();
+    jest.useFakeTimers();
+    try {
+        await handler(request, response);
+        jest.runAllTimers();
+        jest.clearAllTimers();
+    } finally {
+        jest.useRealTimers();
+    }
+    return response;
+}
+
+async function invokeChatRename(directories, avatar, originalFile, renamedFile) {
+    const handler = getChatsRouteHandler('/rename');
+    const request = {
+        body: {
+            avatar_url: avatar,
+            original_file: originalFile,
+            renamed_file: renamedFile,
+            is_group: false,
+        },
+        user: { directories, profile: { handle: 'default-user' } },
+    };
+    const response = createMockResponse();
+    await handler(request, response);
+    return response;
+}
+
+async function invokeChatImport(directories, avatar, file, format = 'jsonl') {
+    const handler = getChatsRouteHandler('/import');
+    const request = {
+        body: {
+            file_type: format,
+            avatar_url: avatar,
+            character_name: path.parse(avatar).name,
+            user_name: 'User',
+        },
+        file,
+        user: { directories, profile: { handle: 'default-user' } },
+    };
+    const response = createMockResponse();
+    await handler(request, response);
+    return response;
+}
+
+async function invokeGroupChatSave(directories, id, chat) {
+    const handler = getChatsRouteHandler('/group/save');
+    const request = {
+        body: {
+            id,
+            chat,
+            force: true,
+        },
+        user: { directories, profile: { handle: `chat-test-${path.basename(directories.root)}` } },
+    };
+    const response = createMockResponse();
+    jest.useFakeTimers();
+    try {
+        await handler(request, response);
+        jest.runAllTimers();
+        jest.clearAllTimers();
+    } finally {
+        jest.useRealTimers();
+    }
+    return response;
+}
+
 const tempRoots = [];
 let sharedDataRoot = '';
 const DEFAULT_AVATAR_BUFFER = fs.readFileSync(new URL('../public/img/ai4.png', import.meta.url));
 const sharedGlobal = global;
 let diskCache;
 let charactersRouter;
+let chatsRouter;
 
 beforeAll(async () => {
     sharedDataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-character-route-cache-'));
     sharedGlobal.DATA_ROOT = sharedDataRoot;
     setConfigFilePath(fileURLToPath(new URL('../default/config.yaml', import.meta.url)));
     ({ diskCache, router: charactersRouter } = await import('../src/endpoints/characters.js'));
+    ({ router: chatsRouter } = await import('../src/endpoints/chats.js'));
 });
 
 afterEach(() => {
@@ -1310,7 +1452,10 @@ describe('character index', () => {
         const directories = makeDirectories('emberdesk-character-canonical-route-');
         tempRoots.push(directories.root);
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SHADOWIMPORT = 'true';
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_CHATSTATS = 'true';
 
         const { manager, db } = openCanonicalDbForTests(directories);
         try {
@@ -1358,11 +1503,197 @@ describe('character index', () => {
         }
     });
 
+    test('updates canonical chat stats after saving a character chat when chat stats are enabled', async () => {
+        const directories = makeDirectories('emberdesk-chat-stats-route-');
+        tempRoots.push(directories.root);
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SHADOWIMPORT = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_CHATSTATS = 'true';
+
+        const { manager, db } = openCanonicalDbForTests(directories);
+        try {
+            seedCanonicalCharacterForTests(db, 'alpha.png');
+            persistCanonicalAuditStatus(db, {
+                ok: true,
+                handle: 'default-user',
+                hasDrift: false,
+                blocking: false,
+                entries: [],
+            }, { auditedAtMs: 1735689602000 });
+
+            const response = await invokeChatSave(directories, 'alpha.png', 'first', [
+                { name: 'Alpha', mes: 'hello' },
+                { name: 'User', mes: 'world' },
+            ]);
+
+            expect(response.statusCode).toBe(200);
+            expect(response.body).toEqual({ ok: true });
+            const stats = db.prepare('SELECT chat_count, chat_size_bytes, date_last_chat_ms, stats_updated_at_ms FROM character_chat_stats WHERE character_id = ?').get('char-alpha');
+            const chatPath = path.join(directories.chats, 'alpha', 'first.jsonl');
+            const fileStat = fs.statSync(chatPath);
+            expect(stats).toEqual({
+                chat_count: 1,
+                chat_size_bytes: fileStat.size,
+                date_last_chat_ms: fileStat.mtimeMs,
+                stats_updated_at_ms: expect.any(Number),
+            });
+            expect(stats.stats_updated_at_ms).toBeGreaterThan(0);
+            const readResponse = await invokeCharactersAll(directories);
+            expect(readResponse.statusCode).toBe(200);
+            expect(readResponse.body).toEqual([
+                expect.objectContaining({
+                    avatar: 'alpha.png',
+                    chat_size: fileStat.size,
+                    date_last_chat: fileStat.mtimeMs,
+                }),
+            ]);
+        } finally {
+            manager.dispose();
+        }
+    });
+
+    test('updates canonical chat stats after deleting a character chat when chat stats are enabled', async () => {
+        const directories = makeDirectories('emberdesk-chat-stats-route-');
+        tempRoots.push(directories.root);
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SHADOWIMPORT = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_CHATSTATS = 'true';
+
+        const { manager, db } = openCanonicalDbForTests(directories);
+        try {
+            seedCanonicalCharacterForTests(db, 'alpha.png');
+            writeChatFile(directories.root, 'alpha.png', 'first.jsonl', '{"name":"Alpha"}');
+            db.prepare('UPDATE character_chat_stats SET chat_count = ?, chat_size_bytes = ?, date_last_chat_ms = ?, stats_updated_at_ms = ? WHERE character_id = ?')
+                .run(1, 16, 100, 101, 'char-alpha');
+
+            const response = await invokeChatDelete(directories, 'alpha.png', 'first');
+
+            expect(response.statusCode).toBe(200);
+            expect(response.body).toEqual({ ok: true });
+            const stats = db.prepare('SELECT chat_count, chat_size_bytes, date_last_chat_ms, stats_updated_at_ms FROM character_chat_stats WHERE character_id = ?').get('char-alpha');
+            expect(stats).toEqual({
+                chat_count: 0,
+                chat_size_bytes: 0,
+                date_last_chat_ms: 0,
+                stats_updated_at_ms: expect.any(Number),
+            });
+            expect(stats.stats_updated_at_ms).toBeGreaterThan(101);
+        } finally {
+            manager.dispose();
+        }
+    });
+
+    test('updates canonical chat stats after renaming a character chat when chat stats are enabled', async () => {
+        const directories = makeDirectories('emberdesk-chat-stats-route-');
+        tempRoots.push(directories.root);
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SHADOWIMPORT = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_CHATSTATS = 'true';
+
+        const { manager, db } = openCanonicalDbForTests(directories);
+        try {
+            seedCanonicalCharacterForTests(db, 'alpha.png');
+            writeChatFile(directories.root, 'alpha.png', 'first.jsonl', '{"name":"Alpha"}');
+
+            const response = await invokeChatRename(directories, 'alpha.png', 'first.jsonl', 'renamed.jsonl');
+
+            expect(response.statusCode).toBe(200);
+            expect(response.body).toEqual({ ok: true, sanitizedFileName: 'renamed' });
+            expect(fs.existsSync(path.join(directories.chats, 'alpha', 'first.jsonl'))).toBe(false);
+            const renamedPath = path.join(directories.chats, 'alpha', 'renamed.jsonl');
+            const fileStat = fs.statSync(renamedPath);
+            const stats = db.prepare('SELECT chat_count, chat_size_bytes, date_last_chat_ms, stats_updated_at_ms FROM character_chat_stats WHERE character_id = ?').get('char-alpha');
+            expect(stats).toEqual({
+                chat_count: 1,
+                chat_size_bytes: fileStat.size,
+                date_last_chat_ms: fileStat.mtimeMs,
+                stats_updated_at_ms: expect.any(Number),
+            });
+            expect(stats.stats_updated_at_ms).toBeGreaterThan(0);
+        } finally {
+            manager.dispose();
+        }
+    });
+
+    test('updates canonical chat stats after importing a character chat when chat stats are enabled', async () => {
+        const directories = makeDirectories('emberdesk-chat-stats-route-');
+        tempRoots.push(directories.root);
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SHADOWIMPORT = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_CHATSTATS = 'true';
+
+        const uploadDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-chat-import-upload-'));
+        tempRoots.push(uploadDirectory);
+        const uploadFile = { destination: uploadDirectory, filename: 'import.jsonl' };
+        const uploadPath = path.join(uploadFile.destination, uploadFile.filename);
+        fs.writeFileSync(uploadPath, '{"user_name":"User"}\n{"name":"Alpha","mes":"hello"}', 'utf8');
+        fs.mkdirSync(path.join(directories.chats, 'alpha'), { recursive: true });
+
+        const { manager, db } = openCanonicalDbForTests(directories);
+        try {
+            seedCanonicalCharacterForTests(db, 'alpha.png');
+
+            const response = await invokeChatImport(directories, 'alpha.png', uploadFile);
+
+            expect(response.statusCode).toBe(200);
+            expect(response.body).toEqual({ res: true, fileNames: expect.any(Array) });
+            const stats = db.prepare('SELECT chat_count, chat_size_bytes, date_last_chat_ms, stats_updated_at_ms FROM character_chat_stats WHERE character_id = ?').get('char-alpha');
+            expect(stats.chat_count).toBe(1);
+            expect(stats.chat_size_bytes).toBeGreaterThan(0);
+            expect(stats.date_last_chat_ms).toBeGreaterThan(0);
+            expect(stats.stats_updated_at_ms).toBeGreaterThan(0);
+        } finally {
+            manager.dispose();
+        }
+    });
+
+    test('does not update character chat stats after saving a group chat', async () => {
+        const directories = makeDirectories('emberdesk-chat-stats-route-');
+        tempRoots.push(directories.root);
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SHADOWIMPORT = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_CHATSTATS = 'true';
+
+        const { manager, db } = openCanonicalDbForTests(directories);
+        try {
+            seedCanonicalCharacterForTests(db, 'alpha.png');
+
+            const response = await invokeGroupChatSave(directories, 'group-1', [
+                { name: 'Alpha', mes: 'hello group' },
+            ]);
+
+            expect(response.statusCode).toBe(200);
+            expect(response.body).toEqual({ ok: true });
+            const stats = db.prepare('SELECT chat_count, chat_size_bytes, date_last_chat_ms, stats_updated_at_ms FROM character_chat_stats WHERE character_id = ?').get('char-alpha');
+            expect(stats).toEqual({
+                chat_count: 0,
+                chat_size_bytes: 0,
+                date_last_chat_ms: 0,
+                stats_updated_at_ms: 0,
+            });
+        } finally {
+            manager.dispose();
+        }
+    });
+
     test('serves /api/characters/get from canonical sqlite when the compatibility PNG is missing', async () => {
         const directories = makeDirectories('emberdesk-character-canonical-route-');
         tempRoots.push(directories.root);
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SHADOWIMPORT = 'true';
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_CHATSTATS = 'true';
 
         const { manager, db } = openCanonicalDbForTests(directories);
         try {
@@ -1635,6 +1966,7 @@ describe('character index', () => {
         const directories = makeDirectories('emberdesk-character-canonical-route-');
         tempRoots.push(directories.root);
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SHADOWIMPORT = 'true';
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = 'true';
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES = 'true';
 
@@ -1686,6 +2018,7 @@ describe('character index', () => {
         const directories = makeDirectories('emberdesk-character-canonical-route-');
         tempRoots.push(directories.root);
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SHADOWIMPORT = 'true';
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = 'true';
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES = 'true';
 
@@ -1754,6 +2087,7 @@ describe('character index', () => {
         const directories = makeDirectories('emberdesk-character-canonical-route-');
         tempRoots.push(directories.root);
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SHADOWIMPORT = 'true';
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = 'true';
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES = 'true';
 
@@ -1806,6 +2140,7 @@ describe('character index', () => {
         const directories = makeDirectories('emberdesk-character-canonical-route-');
         tempRoots.push(directories.root);
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SHADOWIMPORT = 'true';
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = 'true';
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES = 'true';
 
@@ -1882,6 +2217,7 @@ describe('character index', () => {
         const directories = makeDirectories('emberdesk-character-canonical-route-');
         tempRoots.push(directories.root);
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SHADOWIMPORT = 'true';
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = 'true';
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES = 'true';
 
@@ -2003,6 +2339,7 @@ describe('character index', () => {
         const directories = makeDirectories('emberdesk-character-canonical-route-');
         tempRoots.push(directories.root);
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SHADOWIMPORT = 'true';
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = 'true';
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES = 'true';
 

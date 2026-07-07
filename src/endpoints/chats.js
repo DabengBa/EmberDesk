@@ -23,6 +23,7 @@ import {
     isPathUnderParent,
 } from '../util.js';
 import { isCharacterIndexSupported, markCharacterChatStatsDirty } from './character-index.js';
+import { calculateCharacterChatStats, getCharacterChatDirectory } from './character-file-snapshot.js';
 import {
     CHAT_IMPORT_ERROR_KINDS,
     CHAT_IMPORT_UPLOAD_CLEANUP,
@@ -34,7 +35,8 @@ import {
     searchChatPayload,
 } from './chat-route-service.js';
 import { getCanonicalSqliteFeatureFlags } from '../storage-feature-flags.js';
-import { getCanonicalStorageStatus, openCanonicalDatabase } from '../canonical-sqlite.js';
+import { getCanonicalStorageStatus, openCanonicalDatabase, withCanonicalTransaction } from '../canonical-sqlite.js';
+import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
 import { invalidateCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
 
 const isBackupEnabled = !!getConfigValue('backups.chat.enabled', true, 'boolean');
@@ -55,6 +57,12 @@ function markCharacterChatStatsDirtySafe(handle, directories, avatar, operation)
         return;
     }
 
+    const featureFlags = getCanonicalSqliteFeatureFlags();
+    if (featureFlags.enabled && featureFlags.chatStats) {
+        updateCanonicalCharacterChatStats(handle, directories, avatar, operation, featureFlags);
+        return;
+    }
+
     if (isCharacterIndexSupported()) {
         try {
             markCharacterChatStatsDirty(directories.root, avatar);
@@ -64,7 +72,6 @@ function markCharacterChatStatsDirtySafe(handle, directories, avatar, operation)
     }
 
     try {
-        const featureFlags = getCanonicalSqliteFeatureFlags();
         if (!featureFlags.enabled) {
             return;
         }
@@ -87,6 +94,67 @@ function markCharacterChatStatsDirtySafe(handle, directories, avatar, operation)
     } catch (error) {
         console.warn(`Canonical audit invalidation skipped after ${operation} for ${avatar}:`, error);
     }
+}
+
+function createCanonicalChatStatsError(reason, operation, avatar) {
+    const error = new Error(`Canonical chat stats update failed after ${operation} for ${avatar}: ${reason}`);
+    error.name = 'CanonicalChatStatsUpdateError';
+    error.reason = reason;
+    return error;
+}
+
+function updateCanonicalCharacterChatStats(handle, directories, avatar, operation, featureFlags) {
+    const storageStatus = getCanonicalStorageStatus({ handle, directories, featureFlags });
+    if (!storageStatus.supported || storageStatus.disabledReason === 'migration_blocked') {
+        throw createCanonicalChatStatsError(storageStatus.disabledReason ?? 'canonical_runtime_unsupported', operation, avatar);
+    }
+
+    const db = openCanonicalDatabase({ handle, directories, featureFlags });
+    if (!db) {
+        throw createCanonicalChatStatsError('canonical_db_unavailable', operation, avatar);
+    }
+
+    const migrationStatus = runCanonicalMigrations(db, { strict: !!featureFlags.strict });
+    if (!migrationStatus.ok) {
+        throw createCanonicalChatStatsError('canonical_migration_blocked', operation, avatar);
+    }
+
+    const stats = calculateCharacterChatStats(getCharacterChatDirectory(directories, avatar));
+    const nowMs = Date.now();
+    const result = withCanonicalTransaction(db, txnDb => txnDb.prepare(`
+        INSERT INTO character_chat_stats (
+            character_id,
+            chat_count,
+            chat_size_bytes,
+            date_last_chat_ms,
+            stats_updated_at_ms
+        )
+        SELECT
+            characters.id,
+            ?,
+            ?,
+            ?,
+            ?
+        FROM characters
+        WHERE characters.avatar_filename = ?
+            AND characters.deleted_at_ms IS NULL
+        ON CONFLICT(character_id) DO UPDATE SET
+            chat_count = excluded.chat_count,
+            chat_size_bytes = excluded.chat_size_bytes,
+            date_last_chat_ms = excluded.date_last_chat_ms,
+            stats_updated_at_ms = excluded.stats_updated_at_ms
+    `).run(
+        stats.chatCount,
+        stats.chatSize,
+        stats.dateLastChat,
+        nowMs,
+        avatar,
+    ));
+
+    if (result.changes < 1) {
+        throw createCanonicalChatStatsError('canonical_character_missing', operation, avatar);
+    }
+
 }
 
 function warnAboutChatImportFailure(importPlan) {

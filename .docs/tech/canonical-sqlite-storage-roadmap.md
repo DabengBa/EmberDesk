@@ -181,9 +181,11 @@ Acceptance:
 
 Current delivered foundation:
 
+- `src/endpoints/chats.js` now updates canonical `character_chat_stats` directly after successful character chat save, rename, delete, and import side effects when `features.storage.canonicalSqlite.chatStats=true`.
+- Group chat save/import/delete paths remain outside character chat stats authority, and chat message bodies continue to use JSONL files.
 - `src/endpoints/character-store.js` and `src/endpoints/character-read-service.js` now treat canonical chat stats as a separate runtime boundary: canonical reads only inject `chat_size` / `date_last_chat` when `features.storage.canonicalSqlite.chatStats=true`.
 - `src/canonical-sqlite-operator.js` and `scripts/canonical-sqlite-repair.mjs` now provide an explicit `rebuild-chat-stats` operator path for the current slice.
-- Focused proof currently lives in `tests/character-read-service.test.js`, `tests/canonical-sqlite-operator.test.js`, and `tests/canonical-sqlite-cli.test.js`.
+- Focused proof currently lives in `tests/interaction-performance-index.test.js`, `tests/character-read-service.test.js`, `tests/canonical-sqlite-operator.test.js`, `tests/canonical-sqlite-cli.test.js`, and `tests/chat-route-service.test.js`.
 
 ### Phase 5: Derived Index Retirement Or Reclassification
 
@@ -252,7 +254,7 @@ Acceptance:
 10. `chat stats authority`
    - Depends on store schema and selected write-side integration.
    - Maintains stats on chat save/rename/delete/import.
-   - Current status: partially delivered as an explicit flag boundary plus operator rebuild flow; route-level canonical chat-stat ownership is still Phase 4 follow-up work.
+   - Current status: delivered for character chats behind `features.storage.canonicalSqlite.chatStats`; chat save/rename/delete/import now update canonical stats directly, group chats remain excluded, and `rebuild-chat-stats` remains the repair path for external file drift.
 
 11. `derived index retirement`
     - Depends on DB read/write/stats proof.
