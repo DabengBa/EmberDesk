@@ -29,7 +29,7 @@ EmberDesk 目前通过 file-backed canonical storage 保持可移植性和 Silly
 ### Domain: canonical SQLite boundary
 
 - User expectation: SQLite 可以成为 approved slice 的权威数据源，但现有兼容性不能先被破坏。
-- Current status: accepted direction via ADR-0011; recommended as a new canonical per-user SQLite store outside `_cache`.
+- Current status: accepted direction via ADR-0011; delivered for the approved character metadata plus chat-stats slice as a canonical per-user SQLite store outside `_cache`.
 - Change history:
   - 2026-07-07: 用户确认接受“文件不再是唯一权威源”，且不再保留 out-of-band 文件编辑自动成为权威数据的语义。
   - 2026-07-07: 预研结论是不把 `_cache/character-index.sqlite` 或 `DiskCache` 原地升级为 canonical storage，而是新增 canonical SQLite store。
@@ -43,7 +43,8 @@ EmberDesk 目前通过 file-backed canonical storage 保持可移植性和 Silly
   - Current code seams: `src/endpoints/character-read-service.js`, `src/endpoints/character-write-service.js`, `src/endpoints/chats.js`, `src/endpoints/character-index.js`, `src/validation-gate-selector.js`
   - Foundation code: `src/canonical-sqlite.js`, `src/canonical-sqlite-migrations.js`, `src/storage-feature-flags.js`, `src/user-directories.js`, `default/config.yaml`
   - Focused proof: `tests/canonical-sqlite-migrations.test.js`, `tests/canonical-sqlite.test.js`, `tests/user-directories.test.js`, `tests/derived-cache-sqlite.test.js`, `tests/character-read-service.test.js`, `tests/validation-gate-selector.test.js`
-  - Delivery status: accepted direction delivered for the approved character-metadata slice; canonical store-manager foundation, migration runner, shadow import/audit, DB-first reads, DB-first writes/projection, and the Phase 5 derived-index reclassification are now implemented behind rollout flags without promoting `_cache/character-index.sqlite` to canonical storage. Character chat-stats authority remains tracked by the separate `260707-08` follow-up brief and code path.
+  - 2026-07-07: 已交付 Phase 4 chat-stats authority；`src/endpoints/chats.js`、`src/endpoints/character-read-service.js`、`src/canonical-sqlite-operator.js` 与 `scripts/canonical-sqlite-repair.mjs` 现在把 character chat stats 作为 approved slice 的一部分维护，而不是留给后续分支继续定义。
+  - Delivery status: accepted direction delivered for the approved slice; canonical store-manager foundation, migration runner, shadow import/audit, DB-first reads, DB-first writes/projection, chat-stats authority, and the current Phase 5 derived-index reclassification are implemented behind rollout flags without promoting `_cache/character-index.sqlite` to canonical storage.
 
 Current repo facts:
 
@@ -76,14 +77,14 @@ Recommended product model:
 ### Domain: first migration slice
 
 - User expectation: 第一阶段先做 character metadata + chat stats，World Info 视情况加入。
-- Current status: recommended first slice defined.
+- Current status: approved first slice delivered for character metadata plus chat stats; full World Info and chat bodies remain outside the slice.
 - Change history:
   - 2026-07-07: 预研将 full World Info entries、chat message bodies、group chat bodies、secrets/settings/vectors/assets/personas/backgrounds 排除出第一阶段。
 - Implementation traceability:
-  - Read path candidate: `character-read-service.js`
-  - Write path candidate: `character-write-service.js`
-  - Chat stats candidate: `chats.js`
-  - Delivery status: research only.
+  - Read path owner: `src/endpoints/character-read-service.js`
+  - Write path owner: `src/endpoints/character-write-service.js`
+  - Chat stats owner: `src/endpoints/chats.js`
+  - Delivery status: delivered for the approved slice with chat stats kept in canonical SQLite behind `features.storage.canonicalSqlite.chatStats`.
 
 Recommended first-slice scope:
 
@@ -118,7 +119,7 @@ This is the narrowest slice with real payoff because it removes hot-path scans f
 ### Domain: proposed storage and migration shape
 
 - User expectation: 允许正式 migration system；合适时可以引入 ORM。
-- Current status: recommended storage layout and phased migration strategy defined.
+- Current status: recommended storage layout and phased migration strategy were accepted and delivered for the approved slice; remaining work is limited to later expansion or eventual legacy-index retirement decisions.
 - Change history:
   - 2026-07-07: 预研建议先用 canonical SQLite + explicit migration table，不把 derived-cache helper 复用于 canonical storage。
   - 2026-07-07: 预研建议 Phase 1 不默认引入 ORM；在 Phase 2 前单独做 ORM gate。
@@ -133,7 +134,7 @@ This is the narrowest slice with real payoff because it removes hot-path scans f
   - New module candidates: `src/endpoints/character-store-migrations.js`
   - Delivered modules: `src/canonical-sqlite.js`, `src/canonical-sqlite-migrations.js`, `src/canonical-sqlite-shadow-import.js`, `src/endpoints/character-file-snapshot.js`, `src/endpoints/character-store.js`, `src/endpoints/character-write-service.js`, `src/validation-gate-selector.js`
   - Focused proof: `tests/canonical-sqlite-shadow-import.test.js`, `tests/canonical-sqlite-migrations.test.js`, `tests/character-read-service.test.js`, `tests/character-write-service.test.js`, `tests/worldinfo-delete-cascade.test.js`, `tests/third-party-extension-compatibility.test.js`, `tests/canonical-sqlite.test.js`, `tests/validation-gate-selector.test.js`
-  - Delivery status: manager foundation, migration runner, Phase 1 shadow import/audit, Phase 2 DB-first reads, Phase 3 DB-first writes/projection, and the current Phase 5 derived-index reclassification are delivered for the approved slice. The chat-stats-authority rollout remains separately tracked by the `260707-08` follow-up brief and its owning runtime/tests.
+  - Delivery status: manager foundation, migration runner, Phase 1 shadow import/audit, Phase 2 DB-first reads, Phase 3 DB-first writes/projection, Phase 4 chat-stats authority, and the current Phase 5 derived-index reclassification are delivered for the approved slice.
   - Commit traceability: earlier foundation archival remains recorded by wrap-up commit `feat(storage): teach canonical shadow imports to testify before cutover`; the Phase 5 reclassification is archived by this wrap-up commit.
 
 Proposed storage layout:
@@ -376,7 +377,7 @@ bun run test:compat
 
 Current slice status:
 
-ADR-0011, the canonical SQLite storage roadmap, and the requested Phase 0-5 decomposition for the approved character-metadata slice are now delivered across focused specs and wrap-ups. Character chat-stats authority remains tracked by the separate `260707-08` follow-up brief.
+ADR-0011, the canonical SQLite storage roadmap, and the requested Phase 0-5 decomposition for the approved character-metadata plus chat-stats slice are now delivered across focused specs, owning docs, and wrap-ups.
 
 ADR-0011 changes only the old "file-backed is the canonical model" rule for approved slices, not the whole portability and compatibility strategy.
 
