@@ -60,6 +60,7 @@ At minimum, implementation must provide:
 - shadow import/audit before DB-first reads
 - feature-flagged read and write cutover
 - compatibility projection for PNG card and JSONL-adjacent surfaces
+- once DB-first reads are enabled for an approved slice, `_cache/character-index.sqlite` must not revive as a read-authority fallback for `/api/characters/*`; the read path may use compatibility files for recovery, but the derived sidecar stays disposable acceleration only
 - repair tooling for DB/file projection drift
 - operator-visible rollback blocker reporting before any claim that file-backed fallback is safe again
 - focused tests for migration idempotency, route response parity, chat-stat updates, and rollback

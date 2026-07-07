@@ -579,6 +579,56 @@ describe('character read service', () => {
         expect(dependencies.warn).toHaveBeenCalledWith('Canonical character row missing for alpha.png; falling back to file-backed read.');
     });
 
+    test('does not revive the derived character index after a canonical /get miss', async () => {
+        const directories = makeDirectories();
+        writeAvatar(directories, 'alpha.png');
+        const livePayload = { avatar: 'alpha.png', name: 'Live Alpha', json_data: '{}' };
+
+        const dependencies = createDependencies({
+            isCharacterIndexSupported: jest.fn(() => true),
+            getFreshIndexedCharacterFullPayload: jest.fn(() => ({ avatar: 'alpha.png', name: 'Indexed Alpha' })),
+            getCanonicalSqliteFeatureFlags: jest.fn(() => ({
+                enabled: true,
+                shadowImport: true,
+                reads: true,
+                writes: true,
+                chatStats: true,
+                strict: false,
+            })),
+            getCanonicalStorageStatus: jest.fn(() => ({
+                enabled: true,
+                strict: false,
+                supported: true,
+                disabledReason: null,
+                lastAction: 'idle',
+                lastError: null,
+            })),
+            openCanonicalDatabase: jest.fn(() => ({ kind: 'db' })),
+            getCanonicalCharacter: jest.fn(() => null),
+            processCharacter: jest.fn(async () => livePayload),
+        });
+
+        const result = await readCharacterFullPayload({
+            handle: 'alice',
+            directories,
+            avatarUrl: 'alpha.png',
+            dependencies,
+        });
+
+        expect(result).toEqual({
+            status: 'found',
+            result: {
+                mode: 'snapshot',
+                data: livePayload,
+            },
+            interactionPath: 'characters_get:filesystem',
+            latencyHint: 'slow',
+            fallbackReason: 'canonical_db_row_missing',
+        });
+        expect(dependencies.getFreshIndexedCharacterFullPayload).not.toHaveBeenCalled();
+        expect(dependencies.upsertCharacterIndexEntry).not.toHaveBeenCalled();
+    });
+
     test('rejects instead of silently falling back when strict canonical reads are blocked by audit drift', async () => {
         const directories = makeDirectories();
         writeAvatar(directories, 'alpha.png');
@@ -616,6 +666,121 @@ describe('character read service', () => {
         })).rejects.toThrow('audit_drift_blocked');
 
         expect(dependencies.processCharacter).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        {
+            name: 'unsupported runtime before the canonical DB opens',
+            expectedFallbackReason: 'canonical_runtime_unsupported',
+            overrides: {
+                getCanonicalStorageStatus: jest.fn(() => ({
+                    enabled: true,
+                    strict: false,
+                    supported: false,
+                    disabledReason: 'unsupported',
+                    lastAction: 'disabled',
+                    lastError: null,
+                })),
+            },
+        },
+        {
+            name: 'storage status blocked before opening the canonical DB',
+            expectedFallbackReason: 'canonical_migration_blocked',
+            overrides: {
+                getCanonicalStorageStatus: jest.fn(() => ({
+                    enabled: true,
+                    strict: false,
+                    supported: true,
+                    disabledReason: 'migration_blocked',
+                    lastAction: 'disabled',
+                    lastError: null,
+                })),
+            },
+        },
+        {
+            name: 'canonical DB unavailable after reads were requested',
+            expectedFallbackReason: 'canonical_db_unavailable',
+            overrides: {
+                openCanonicalDatabase: jest.fn(() => null),
+            },
+        },
+        {
+            name: 'canonical migrations blocked after opening the DB',
+            expectedFallbackReason: 'canonical_migration_blocked',
+            overrides: {
+                openCanonicalDatabase: jest.fn(() => ({ kind: 'db' })),
+                runCanonicalMigrations: jest.fn(() => ({
+                    ok: false,
+                    currentVersion: 1,
+                    targetVersion: 2,
+                })),
+            },
+        },
+    ])('keeps the derived index retired when canonical reads hit $name', async ({ expectedFallbackReason, overrides }) => {
+        const directories = makeDirectories();
+        writeAvatar(directories, 'alpha.png');
+        const livePayload = { avatar: 'alpha.png', name: 'Live Alpha', json_data: '{}' };
+
+        const dependencies = createDependencies({
+            isCharacterIndexSupported: jest.fn(() => true),
+            listIndexedCharacterPayloads: jest.fn(async () => [{ avatar: 'alpha.png', name: 'Indexed Alpha' }]),
+            getFreshIndexedCharacterFullPayload: jest.fn(() => ({ avatar: 'alpha.png', name: 'Indexed Alpha' })),
+            getCanonicalSqliteFeatureFlags: jest.fn(() => ({
+                enabled: true,
+                shadowImport: true,
+                reads: true,
+                writes: true,
+                chatStats: true,
+                strict: false,
+            })),
+            getCanonicalStorageStatus: jest.fn(() => ({
+                enabled: true,
+                strict: false,
+                supported: true,
+                disabledReason: null,
+                lastAction: 'idle',
+                lastError: null,
+            })),
+            openCanonicalDatabase: jest.fn(() => ({ kind: 'db' })),
+            processCharacter: jest.fn(async () => livePayload),
+            ...overrides,
+        });
+
+        const listResult = await readCharacterListPayload({
+            handle: 'alice',
+            directories,
+            shallow: false,
+            dependencies,
+        });
+        const getResult = await readCharacterFullPayload({
+            handle: 'alice',
+            directories,
+            avatarUrl: 'alpha.png',
+            dependencies,
+        });
+
+        expect(listResult).toEqual({
+            result: {
+                mode: 'snapshot',
+                data: [livePayload],
+            },
+            interactionPath: 'characters_all:filesystem',
+            latencyHint: 'slow',
+            fallbackReason: expectedFallbackReason,
+        });
+        expect(getResult).toEqual({
+            status: 'found',
+            result: {
+                mode: 'snapshot',
+                data: livePayload,
+            },
+            interactionPath: 'characters_get:filesystem',
+            latencyHint: 'slow',
+            fallbackReason: expectedFallbackReason,
+        });
+        expect(dependencies.listIndexedCharacterPayloads).not.toHaveBeenCalled();
+        expect(dependencies.getFreshIndexedCharacterFullPayload).not.toHaveBeenCalled();
+        expect(dependencies.upsertCharacterIndexEntry).not.toHaveBeenCalled();
     });
 
     test('falls back explicitly when canonical reads are enabled but no persisted audit has run yet', async () => {
@@ -664,6 +829,60 @@ describe('character read service', () => {
             latencyHint: 'slow',
             fallbackReason: 'audit_not_run',
         });
+        expect(dependencies.listIndexedCharacterPayloads).not.toHaveBeenCalled();
+    });
+
+    test('skips the derived character index entirely when canonical reads are blocked', async () => {
+        const directories = makeDirectories();
+        writeAvatar(directories, 'alpha.png');
+
+        const dependencies = createDependencies({
+            isCharacterIndexSupported: jest.fn(() => true),
+            listIndexedCharacterPayloads: jest.fn(async () => [
+                { avatar: 'alpha.png', name: 'Indexed Alpha' },
+            ]),
+            getCanonicalSqliteFeatureFlags: jest.fn(() => ({
+                enabled: true,
+                shadowImport: true,
+                reads: true,
+                writes: true,
+                chatStats: true,
+                strict: false,
+            })),
+            getCanonicalStorageStatus: jest.fn(() => ({
+                enabled: true,
+                strict: false,
+                supported: true,
+                disabledReason: null,
+                lastAction: 'idle',
+                lastError: null,
+            })),
+            openCanonicalDatabase: jest.fn(() => ({ kind: 'db' })),
+            getCanonicalAuditStatus: jest.fn(() => ({
+                ok: false,
+                blocking: true,
+                reason: 'audit_not_run',
+                status: 'missing',
+            })),
+        });
+
+        const result = await readCharacterListPayload({
+            handle: 'alice',
+            directories,
+            shallow: false,
+            dependencies,
+        });
+
+        expect(result).toEqual({
+            result: {
+                mode: 'snapshot',
+                data: [{ avatar: 'alpha.png', name: 'Full alpha.png', json_data: 'json:alpha.png' }],
+            },
+            interactionPath: 'characters_all:filesystem',
+            latencyHint: 'slow',
+            fallbackReason: 'audit_not_run',
+        });
+        expect(dependencies.listIndexedCharacterPayloads).not.toHaveBeenCalled();
     });
 
     test('falls back to filesystem /get when index lookup throws', async () => {

@@ -30,6 +30,8 @@ The goal of this slice is narrow:
 - keep the indexed fast path self-healing when derived rows or SQLite state become inconsistent
 - add a reproducible local A/B runner that can prove whether the current SQLite slice is helping enough to justify its maintenance cost
 
+This tech note now describes the legacy compatibility read path and its derived acceleration. When canonical DB-first reads are enabled for character metadata, `src/endpoints/character-read-service.js` bypasses `_cache/character-index.sqlite` and falls back directly to compatibility files if canonical rows are unavailable.
+
 Separate from the SQLite slice, EmberDesk now also applies a short browser cache policy on non-Firefox `/thumbnail` responses:
 
 - `Cache-Control: private, max-age=3600, must-revalidate`
@@ -93,7 +95,7 @@ Separate from the single-card write service, EmberDesk now also routes `POST /ap
 
 ## Architecture And Constraints
 
-- Canonical user data remains file-backed:
+- Legacy compatibility files remain:
   - character cards in `data/<user>/characters/*.png`
   - chats in `data/<user>/chats/**`
 - The SQLite file is derived state only:
@@ -101,7 +103,7 @@ Separate from the single-card write service, EmberDesk now also routes `POST /ap
 - The first slice preserves both existing `/api/characters/all` payload modes:
   - full objects when `performance.lazyLoadCharacters=false`
   - shallow rows when `performance.lazyLoadCharacters=true`
-- `POST /api/characters/get` stays file-authoritative, but no longer has to reparse the PNG on every steady-state request.
+- `POST /api/characters/get` stays file-authoritative for the legacy compatibility path, but no longer has to reparse the PNG on every steady-state request.
   - when the indexed `full_json` row is present, the source PNG stat still matches, and related derived inputs are still valid, the route can return that cached payload directly
   - when the row is missing, stale, unreadable, or a linked dependency such as legacy world-info source data no longer matches, the route falls back to the existing file-backed parser and refreshes the row opportunistically
 - The new index does not replace the existing `DiskCache`.
@@ -207,7 +209,7 @@ So the precise answer is:
 
 ### `/api/characters/all` fast path
 
-`src/endpoints/characters.js` now routes `POST /api/characters/all` through `src/endpoints/character-read-service.js`. The read service coordinates the index-first path when runtime support exists, and the Express route unwraps the internal snapshot envelope before sending the unchanged array response.
+`src/endpoints/characters.js` now routes `POST /api/characters/all` through `src/endpoints/character-read-service.js`. For the legacy compatibility read path, the service coordinates the index-first path when runtime support exists, and the Express route unwraps the internal snapshot envelope before sending the unchanged array response. When canonical DB-first reads are requested, the same service bypasses the derived sidecar entirely and either serves canonical rows or falls back directly to compatibility files.
 
 Build source for each row:
 
@@ -255,9 +257,11 @@ That envelope is not part of the HTTP JSON contract. Route handlers unwrap `resu
 
 The service accepts future read context fields for `filter` and `pagination`, but this delivered slice intentionally ignores them. Those fields exist only to keep the boundary ready for later character-library search, filtering, virtual scrolling, command-palette, or optimistic-update slices without bypassing the read service.
 
+In canonical DB-first read mode, the service now uses the derived character index as neither a canonical source nor a fallback authority. If canonical rows are blocked, missing, or stale, recovery is direct compatibility-file fallback.
+
 ### `/api/characters/get` index-first path
 
-`src/endpoints/characters.js` now routes `POST /api/characters/get` through `src/endpoints/character-read-service.js`, which preserves the narrower safe reuse path:
+`src/endpoints/characters.js` now routes `POST /api/characters/get` through `src/endpoints/character-read-service.js`. In legacy compatibility mode, it preserves the narrower safe index-reuse path:
 
 1. validate the avatar path
 2. confirm the PNG still exists
@@ -286,6 +290,8 @@ This keeps the route file-authoritative:
 - only row-read / structural SQLite failures reset the cached DB handle; non-DB dependency failures such as world-file lookup problems degrade through fallback without wiping the whole derived index
 - in interaction perf mode, `/get` also emits path and route-duration headers so the runner can verify it really exercised the indexed or filesystem path it claims to compare
 
+When canonical DB-first reads are requested, the service does not revive this index after a canonical miss. The recovery path is direct compatibility-file fallback so canonical mode never gains a second hidden authority lane.
+
 ### Interaction A/B runner
 
 `scripts/interaction-performance-runner.mjs` is the reproducible benchmark entry point for this slice.
@@ -296,7 +302,7 @@ Core design:
 - seeds deterministic character PNGs and chat files
 - keeps user auth simple by staying in the default single-user mode
 - uses `public/perf-harness.html` as an inert same-origin page so benchmark requests do not accidentally boot the full app and prewarm `/api/characters/all`
-- alternates SQLite `force_on` and `force_off` variants across pair runs
+- alternates SQLite `force_on` and `force_off` variants across pair runs for the legacy derived-index path
 - validates route-path headers before accepting a sample
 - rejects pair summaries when on/off payloads are not semantically equivalent
 
@@ -342,7 +348,7 @@ Artifact contract:
 - schema version and reset count
 - fallback or disabled reason such as `force_off`, `unsupported`, or `reset_threshold_exceeded`
 
-This derived-cache observability section intentionally omits `dbPath`, data-root paths, usernames, character filenames, and other user-specific filesystem details. Other report sections still include synthetic benchmark payload summaries, such as sample avatar names, for parity debugging. For character route scenarios, the runner reads the sidecar runtime status from a perf-only `X-EmberDesk-Character-Index-Status` response header emitted only when `EMBERDESK_INTERACTION_PERF_MODE=1`; the header keeps `open` as sidecar runtime state, while `indexedPathObserved` records whether the sampled request used an indexed path. This is diagnostic evidence only; it does not add a health endpoint and does not change `/api/characters/all` or `/api/characters/get` response bodies.
+This derived-cache observability section intentionally omits `dbPath`, data-root paths, usernames, character filenames, and other user-specific filesystem details. Other report sections still include synthetic benchmark payload summaries, such as sample avatar names, for parity debugging. For character route scenarios, the runner reads the sidecar runtime status from a perf-only `X-EmberDesk-Character-Index-Status` response header emitted only when `EMBERDESK_INTERACTION_PERF_MODE=1`; the header keeps `open` as sidecar runtime state, while `indexedPathObserved` records whether the sampled request used an indexed path. In canonical DB-first read mode, `indexedPathObserved=false` is expected because the service no longer consults the sidecar. This is diagnostic evidence only; it does not add a health endpoint and does not change `/api/characters/all` or `/api/characters/get` response bodies.
 
 Raw runner artifacts are local evidence and are not committed by default. Durable docs should record the command, runtime, scenario set, warnings, and the local artifact path used during the delivery.
 

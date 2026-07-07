@@ -132,6 +132,16 @@ describe('validation gate selector', () => {
         expect(commands).toContain('bun run --cwd tests test:unit -- canonical-sqlite-cli.test.js canonical-sqlite-operator.test.js canonical-sqlite-rollout-contract.test.js canonical-sqlite-shadow-import.test.js character-read-service.test.js character-write-service.test.js --runInBand');
     });
 
+    test('selects the derived-cache gate for owning tech docs and retirement wording', () => {
+        const commands = commandsFor([
+            '.docs/tech/derived-cache-sqlite.md',
+            '.docs/tech/interaction-performance-indexing.md',
+            'derived index retirement',
+        ]);
+
+        expect(commands).toContain('bun run --cwd tests test:unit -- derived-cache-sqlite.test.js character-read-service.test.js interaction-performance-index.test.js --runInBand');
+    });
+
     test('formats an empty advisory result defensively', () => {
         const formatted = formatValidationGateSelection();
 

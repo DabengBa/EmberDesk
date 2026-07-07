@@ -129,6 +129,7 @@ Current delivered foundation:
 
 - `src/endpoints/character-store.js` now reconstructs `/api/characters/all`, `/api/characters/list`, and `/api/characters/get` payloads from canonical `characters` plus `character_chat_stats` rows while preserving existing avatar-filename identity and route payload shape.
 - `src/endpoints/character-read-service.js` now gates DB-first reads on the persisted canonical audit summary instead of inferring audit success from schema version parity.
+- Once canonical reads are requested, `src/endpoints/character-read-service.js` now falls back directly to compatibility files when canonical rows are blocked or missing instead of reviving `_cache/character-index.sqlite` as a second authority path.
 - `src/canonical-sqlite-migrations.js` phase-one schema now includes `canonical_audit_state` for the persisted audit gate contract.
 - `src/canonical-sqlite-shadow-import.js` now persists clean vs blocked audit summaries after successful audit runs, and `getPersistedCanonicalAuditStatus()` now fails closed as `audit_not_run` until that summary exists.
 - `src/endpoints/characters.js` and `src/endpoints/chats.js` now invalidate the persisted canonical audit state after successful file-backed character or chat mutations so DB-first reads cannot continue serving stale canonical rows after normal runtime writes.
@@ -178,7 +179,6 @@ Acceptance:
 - Stats updates are transactional with the route side effect where practical.
 - Rebuild command can reconcile from JSONL files without changing message bodies.
 - Existing chat export behavior remains unchanged.
-
 Current delivered foundation:
 
 - `src/endpoints/chats.js` now updates canonical `character_chat_stats` directly after successful character chat save, rename, delete, and import side effects when `features.storage.canonicalSqlite.chatStats=true`.
@@ -204,6 +204,12 @@ Acceptance:
 - Derived caches are either disabled for this path or documented as non-canonical acceleration.
 - Deleting `_cache/character-index.sqlite` cannot lose user data.
 - Docs and validation commands reflect the final ownership.
+
+Current delivered foundation:
+
+- `src/endpoints/character-read-service.js` now skips `_cache/character-index.sqlite` whenever canonical DB-first reads are requested, so the derived sidecar no longer re-enters `/api/characters/all`, `/list`, or `/get` as a canonical-fallback read path.
+- The remaining character-index role is a disposable legacy-mode accelerator plus interaction-performance observability surface for the compatibility read path.
+- The next remaining Phase 5 question is whether EmberDesk still wants to keep that legacy-mode accelerator at all once canonical read-mode performance evidence is strong enough.
 
 ## Task Breakdown And Dependencies
 

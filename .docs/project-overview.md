@@ -20,7 +20,7 @@ It is not optimized for users who want a managed cloud product or a minimal one-
 
 1. Simplify before extending.
 2. Prefer observable performance wins over architectural novelty.
-3. Keep canonical user data portable; file-backed storage remains the default, while approved hot-path slices may use per-user canonical SQLite when an ADR defines migration, projection, and rollback rules.
+3. Keep canonical user data portable; legacy compatibility mode remains file-backed, while approved slices may switch to per-user canonical SQLite under explicit migration, projection, repair, and rollback rules.
 4. Modernize in slices that preserve existing behavior and upgrade safety.
 5. Treat documentation and measurement as part of product quality, not afterthoughts.
 
@@ -100,7 +100,7 @@ Current derived-cache scope is intentionally narrow:
 - `DiskCache` accelerates repeated PNG-to-JSON extraction
 - `src/derived-cache-sqlite.js` owns shared SQLite derived-cache lifecycle for sidecars that remain rebuildable from canonical files (see [derived-cache-sqlite](tech/derived-cache-sqlite.md))
 - `src/canonical-sqlite.js` owns the separate durable-manager contract for future canonical slices and intentionally does not share reset/delete semantics with the derived helper
-- the SQLite character index accelerates the character-library list API and safe steady-state single-character full reads
+- the SQLite character index accelerates only the legacy file-backed character-library list/get path; once canonical DB-first reads are requested, EmberDesk no longer revives the sidecar as a fallback authority for `/api/characters/*`
   - single-character indexed reuse still revalidates source PNG metadata, linked legacy world-info dependencies, and chat-derived aggregates before treating cached payloads as reusable
 - this derived slice remains separate from the future canonical SQLite store and must not be promoted in place to authority
 - the accepted canonical SQLite roadmap starts with character metadata and chat stats only; chat message bodies, full World Info entries, settings, secrets, vectors, assets, personas, backgrounds, and extension storage remain outside that first slice

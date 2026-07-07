@@ -37,7 +37,7 @@ Example:
 node scripts/validation-gate-selector.mjs scripts/canonical-sqlite-repair.mjs .docs/db/pages/chat-workspace.md
 ```
 
-The output lists advisory gates such as the canonical-storage rollout proof lane and `bun run docs:check`, including reason and source references.
+The output lists advisory gates such as the canonical-storage rollout proof lane and `bun run docs:check`, including reason and source references. Owning tech docs like `.docs/tech/derived-cache-sqlite.md` and `.docs/tech/interaction-performance-indexing.md` resolve to the same derived-cache gate.
 
 ## Validation
 

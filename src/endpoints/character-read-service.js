@@ -66,11 +66,21 @@ function getCanonicalReadState(handle, directories, dependencies) {
     };
 
     if (!featureFlags.enabled) {
-        return { enabled: false, strict: !!featureFlags.strict, fallbackReason: 'canonical_storage_disabled' };
+        return {
+            enabled: false,
+            strict: !!featureFlags.strict,
+            readsRequested: false,
+            fallbackReason: 'canonical_storage_disabled',
+        };
     }
 
     if (!featureFlags.reads) {
-        return { enabled: false, strict: !!featureFlags.strict, fallbackReason: 'canonical_reads_disabled' };
+        return {
+            enabled: false,
+            strict: !!featureFlags.strict,
+            readsRequested: false,
+            fallbackReason: 'canonical_reads_disabled',
+        };
     }
 
     const storageStatus = dependencies.getCanonicalStorageStatus?.({
@@ -83,11 +93,21 @@ function getCanonicalReadState(handle, directories, dependencies) {
     };
 
     if (!storageStatus.supported) {
-        return { enabled: false, strict: !!featureFlags.strict, fallbackReason: 'canonical_runtime_unsupported' };
+        return {
+            enabled: false,
+            strict: !!featureFlags.strict,
+            readsRequested: true,
+            fallbackReason: 'canonical_runtime_unsupported',
+        };
     }
 
     if (storageStatus.disabledReason === 'migration_blocked') {
-        return { enabled: false, strict: !!featureFlags.strict, fallbackReason: 'canonical_migration_blocked' };
+        return {
+            enabled: false,
+            strict: !!featureFlags.strict,
+            readsRequested: true,
+            fallbackReason: 'canonical_migration_blocked',
+        };
     }
 
     const db = dependencies.openCanonicalDatabase?.({
@@ -96,14 +116,24 @@ function getCanonicalReadState(handle, directories, dependencies) {
         featureFlags,
     });
     if (!db) {
-        return { enabled: false, strict: !!featureFlags.strict, fallbackReason: 'canonical_db_unavailable' };
+        return {
+            enabled: false,
+            strict: !!featureFlags.strict,
+            readsRequested: true,
+            fallbackReason: 'canonical_db_unavailable',
+        };
     }
 
     const migrationStatus = dependencies.runCanonicalMigrations?.(db, {
         strict: !!featureFlags.strict,
     }) ?? { ok: true, currentVersion: 0, targetVersion: 0 };
     if (!migrationStatus.ok) {
-        return { enabled: false, strict: !!featureFlags.strict, fallbackReason: 'canonical_migration_blocked' };
+        return {
+            enabled: false,
+            strict: !!featureFlags.strict,
+            readsRequested: true,
+            fallbackReason: 'canonical_migration_blocked',
+        };
     }
 
     const auditStatus = dependencies.getCanonicalAuditStatus?.({
@@ -115,6 +145,7 @@ function getCanonicalReadState(handle, directories, dependencies) {
         return {
             enabled: false,
             strict: !!featureFlags.strict,
+            readsRequested: true,
             fallbackReason: auditStatus.reason ?? 'audit_drift_blocked',
         };
     }
@@ -122,6 +153,7 @@ function getCanonicalReadState(handle, directories, dependencies) {
     return {
         enabled: true,
         strict: !!featureFlags.strict,
+        readsRequested: true,
         fallbackReason: null,
         includeChatStats: !!featureFlags.chatStats,
         db,
@@ -134,6 +166,14 @@ function maybeThrowCanonicalFallback(canonicalState) {
     }
 
     throw new CanonicalReadBlockedError(canonicalState.fallbackReason);
+}
+
+function shouldUseDerivedCharacterIndex(canonicalState, dependencies) {
+    if (canonicalState.readsRequested) {
+        return false;
+    }
+
+    return dependencies.isCharacterIndexSupported();
 }
 
 /**
@@ -173,7 +213,7 @@ export async function readCharacterListPayload({
 
     maybeThrowCanonicalFallback(canonicalState);
 
-    if (dependencies.isCharacterIndexSupported()) {
+    if (shouldUseDerivedCharacterIndex(canonicalState, dependencies)) {
         try {
             const avatarFiles = listAvatarFiles(directories.characters, { sorted: true });
             const data = await dependencies.listIndexedCharacterPayloads({
@@ -243,7 +283,7 @@ export async function readCharacterSummaryPayload({
 
     maybeThrowCanonicalFallback(canonicalState);
 
-    if (dependencies.isCharacterIndexSupported()) {
+    if (shouldUseDerivedCharacterIndex(canonicalState, dependencies)) {
         try {
             const avatarFiles = listAvatarFiles(directories.characters, { sorted: true });
             const data = await dependencies.listIndexedCharacterPayloads({
@@ -323,7 +363,7 @@ export async function readCharacterFullPayload({
         throw error;
     }
 
-    if (dependencies.isCharacterIndexSupported()) {
+    if (shouldUseDerivedCharacterIndex(canonicalState, dependencies)) {
         try {
             const indexedPayload = dependencies.getFreshIndexedCharacterFullPayload(
                 directories.root,
@@ -346,9 +386,9 @@ export async function readCharacterFullPayload({
     }
 
     const data = await dependencies.processCharacter(avatarUrl, directories, { shallow: false });
-    const latencyHint = dependencies.isCharacterIndexSupported() ? 'fast' : 'slow';
+    const latencyHint = shouldUseDerivedCharacterIndex(canonicalState, dependencies) ? 'fast' : 'slow';
 
-    if (dependencies.isCharacterIndexSupported() && data?.name) {
+    if (shouldUseDerivedCharacterIndex(canonicalState, dependencies) && data?.name) {
         try {
             fileStat = dependencies.statCharacterFile(filePath);
             dependencies.upsertCharacterIndexEntry(directories.root, avatarUrl, {

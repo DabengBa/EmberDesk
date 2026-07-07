@@ -22,14 +22,17 @@ As of [ADR-0009](../adr/0009-derived-cache-sqlite-drizzle-decision.md), EmberDes
 
 ## Derived Cache Contract
 
-Canonical user data remains file-backed. SQLite sidecars are rebuildable acceleration artifacts under `_cache`.
+SQLite sidecars under `_cache` are rebuildable acceleration artifacts. They are never the canonical storage location for approved canonical SQLite slices.
 
 For the current character sidecar:
 
-- canonical character cards remain `data/<user>/characters/*.png`
-- canonical chats remain `data/<user>/chats/**`
+- legacy compatibility character cards remain `data/<user>/characters/*.png`
+- legacy compatibility chats remain `data/<user>/chats/**`
 - the derived SQLite file remains `<user root>/_cache/character-index.sqlite`
 - deleting or rebuilding the SQLite file must not lose user data
+- once canonical DB-first reads are enabled for character metadata, `/api/characters/all`, `/list`, and `/get` no longer use this sidecar as a fallback authority path
+
+In the legacy compatibility mode, those character-card and chat files remain the authoritative input for rebuilding this sidecar.
 
 Future sidecars must follow the same rule: the source files are authoritative, and the SQLite file can be deleted and rebuilt from those files.
 
@@ -112,7 +115,7 @@ PRAGMA temp_store = MEMORY;
 
 Structural SQLite failures reset the cached handle. Corrupt database files encountered during open are removed along with their `-wal` and `-shm` files, then rebuilt from the owner-provided schema hooks.
 
-Each sidecar state tracks reset count. After the reset threshold is reached, the helper disables that sidecar for the current process and owner modules fall back to their filesystem path. This avoids repeated reopen/reset loops against a broken derived cache.
+Each sidecar state tracks reset count. After the reset threshold is reached, the helper disables that sidecar for the current process and owner modules fall back to their compatibility-file path for legacy-mode reads. This avoids repeated reopen/reset loops against a broken derived cache.
 
 The disabled state is process-local and does not write to canonical user data.
 
@@ -131,4 +134,4 @@ bun run --cwd tests test:unit -- derived-cache-sqlite.test.js --runInBand
 bun run --cwd tests test:unit -- interaction-performance-index.test.js --runInBand
 ```
 
-The first command proves helper lifecycle behavior independently. The second command proves the character index still preserves the existing file-backed fallback and API behavior after delegation to the helper.
+The first command proves helper lifecycle behavior independently. The second command proves the character index still preserves the legacy-mode compatibility fallback and stays out of the canonical DB-first read path.
