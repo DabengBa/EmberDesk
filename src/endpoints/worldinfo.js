@@ -37,26 +37,33 @@ export function readWorldInfoFile(directories, worldInfoName, allowDummy) {
 }
 
 /**
- * Finds character cards whose World Info binding matches the given name by
- * scanning the compatibility PNG files directly.
+ * Scans compatibility PNG cards and returns their current World Info bindings.
  *
  * @param {import('../users.js').UserDirectoryList} directories User directories
- * @param {string} worldName World Info name to match
- * @returns {Array<{ avatar: string, name: string }>} Characters bound to this world
+ * @returns {{
+ *   worldNameToCharacters: Map<string, Array<{ avatar: string, name: string }>>,
+ *   avatarToWorldName: Map<string, string>,
+ * }} Characters grouped by bound world plus a direct avatar lookup map
  */
-export function findCharactersBoundToWorldFromFiles(directories, worldName) {
-    if (!directories?.characters || !worldName) {
-        return [];
+export function scanCharacterWorldBindingsFromFiles(directories) {
+    const emptyResult = {
+        worldNameToCharacters: new Map(),
+        avatarToWorldName: new Map(),
+    };
+
+    if (!directories?.characters) {
+        return emptyResult;
     }
 
     let files = [];
     try {
         files = fs.readdirSync(directories.characters, { withFileTypes: true });
     } catch {
-        return [];
+        return emptyResult;
     }
 
-    const boundCharacters = [];
+    const worldNameToCharacters = new Map();
+    const avatarToWorldName = new Map();
     for (const file of files) {
         if (!file.isFile() || path.extname(file.name).toLowerCase() !== '.png') {
             continue;
@@ -67,18 +74,42 @@ export function findCharactersBoundToWorldFromFiles(directories, worldName) {
             const imageBuffer = fs.readFileSync(path.join(directories.characters, avatar));
             const card = JSON.parse(read(imageBuffer));
             const boundWorld = card?.data?.extensions?.world ?? card?.world;
-            if (boundWorld === worldName) {
-                boundCharacters.push({
+            if (typeof boundWorld === 'string' && boundWorld.trim()) {
+                const characterInfo = {
                     avatar,
                     name: card?.data?.name ?? card?.name ?? avatar,
-                });
+                };
+                avatarToWorldName.set(avatar, boundWorld);
+                if (!worldNameToCharacters.has(boundWorld)) {
+                    worldNameToCharacters.set(boundWorld, []);
+                }
+                worldNameToCharacters.get(boundWorld).push(characterInfo);
             }
         } catch {
             // Skip unreadable character cards. Delete preflight must remain best-effort.
         }
     }
 
-    return boundCharacters;
+    return {
+        worldNameToCharacters,
+        avatarToWorldName,
+    };
+}
+
+/**
+ * Finds character cards whose World Info binding matches the given name by
+ * scanning the compatibility PNG files directly.
+ *
+ * @param {import('../users.js').UserDirectoryList} directories User directories
+ * @param {string} worldName World Info name to match
+ * @returns {Array<{ avatar: string, name: string }>} Characters bound to this world
+ */
+export function findCharactersBoundToWorldFromFiles(directories, worldName) {
+    if (!worldName) {
+        return [];
+    }
+
+    return scanCharacterWorldBindingsFromFiles(directories).worldNameToCharacters.get(worldName) ?? [];
 }
 
 export const router = express.Router();

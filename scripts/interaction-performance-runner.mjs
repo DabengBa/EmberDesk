@@ -18,7 +18,6 @@ import {
     validateInteractionPath,
 } from '../src/interaction-performance-report.js';
 import { write as writeCharacterCardPngData } from '../src/character-card-parser.js';
-import { getCharacterIndexStatus } from '../src/endpoints/character-index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -392,36 +391,19 @@ async function runScenarioVariant({ scenarioName, variant, variantRoot, port, me
 }
 
 function collectCharacterIndexStatus({ userRoot, variant, samples }) {
-    const previousMode = process.env.EMBERDESK_CHARACTER_INDEX_MODE;
-    process.env.EMBERDESK_CHARACTER_INDEX_MODE = variant === 'sqlite_on' ? 'force_on' : 'force_off';
+    void userRoot;
+    void variant;
 
-    try {
-        const observedIndexedPath = samples.some(sample => String(sample.path ?? '').includes(':indexed'));
-        const sampledStatus = samples.find(sample => sample.characterIndexStatus)?.characterIndexStatus ?? null;
-        if (sampledStatus) {
-            return {
-                ...sampledStatus,
-                indexedPathObserved: observedIndexedPath,
-            };
-        }
-
-        const status = getCharacterIndexStatus(userRoot);
-        return {
-            mode: status.mode,
-            supported: status.supported,
-            open: status.open,
-            schemaVersion: status.schemaVersion,
-            resetCount: status.resetCount,
-            disabledReason: status.disabledReason,
-            indexedPathObserved: observedIndexedPath,
-        };
-    } finally {
-        if (previousMode === undefined) {
-            delete process.env.EMBERDESK_CHARACTER_INDEX_MODE;
-        } else {
-            process.env.EMBERDESK_CHARACTER_INDEX_MODE = previousMode;
-        }
+    const observedIndexedPath = samples.some(sample => String(sample.path ?? '').includes(':indexed'));
+    const sampledStatus = samples.find(sample => sample.characterIndexStatus)?.characterIndexStatus ?? null;
+    if (!sampledStatus) {
+        return null;
     }
+
+    return {
+        ...sampledStatus,
+        indexedPathObserved: observedIndexedPath,
+    };
 }
 
 async function captureScenarioMeasurements({ scenarioName, variant, url, screenshotRoot, measuredRepeats, targetAvatar }) {

@@ -107,6 +107,33 @@ describe('world info delete cascade', () => {
         })]);
     });
 
+    test('reports bound characters from legacy card.world bindings without the index sidecar', async () => {
+        const legacyPath = path.join(directories.characters, 'legacy.png');
+        const legacyImage = Buffer.from('legacy png bytes');
+        fs.writeFileSync(legacyPath, legacyImage);
+        fs.writeFileSync(path.join(directories.worlds, 'Lorebook.json'), JSON.stringify({ entries: { one: {} } }));
+
+        readCharacterCardMock.mockImplementation((buffer) => {
+            if (buffer.equals(legacyImage)) {
+                return JSON.stringify({ name: 'Legacy Hero', world: 'Lorebook' });
+            }
+            throw new Error('unexpected image buffer');
+        });
+
+        const response = await invokeDeletePreflight({
+            body: { name: 'Lorebook' },
+            user: { directories },
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.body.worldInfos).toEqual([expect.objectContaining({
+            name: 'Lorebook',
+            entryCount: 1,
+            boundCharacters: [{ avatar: 'legacy.png', name: 'Legacy Hero' }],
+            deleteCandidateAvatars: [],
+        })]);
+    });
+
     test('clears character world references by scanning PNG snapshots without invalidating the index row', async () => {
         const avatar = 'alpha.png';
         const characterPath = path.join(directories.characters, avatar);

@@ -254,8 +254,8 @@ Phase 1 result:
 | Performance change | Startup or interaction performance runner with scenario evidence |
 | Semantic docs | `bun run docs:check` or `bun run docs:build` |
 | Character route helper/service | Focused helper/route tests plus interaction-performance index tests if list/get/index behavior changes |
-| Character mutation side effects | Thumbnail write-time pregeneration tests and character-index refresh/delete proof |
-| Chat route helper/service | Focused chat endpoint/import/backup-helper tests plus interaction-performance index tests when chat aggregate dirty marking changes |
+| Character mutation side effects | Thumbnail write-time pregeneration tests and interaction-performance index proof that character mutations do not recreate or refresh the retired character-index sidecar |
+| Chat route helper/service | Focused chat endpoint/import/backup-helper tests plus interaction-performance index tests when chat aggregate authority or canonical audit invalidation changes |
 | World-info conversion or editor UI | Pure helper tests for conversions; `world-info-card-rendering.test.js` and Playwright for visible editor behavior |
 | OpenAI/provider capability or request semantics | `openai-segmented-controls.test.js`, provider/backend tests such as `chat-completions-google.test.js`, and source-backed provider docs for API syntax changes |
 

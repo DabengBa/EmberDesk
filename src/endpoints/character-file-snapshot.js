@@ -68,7 +68,7 @@ export function getCharacterSnapshotWorldMetadata(directories, fullPayload) {
     try {
         rawCard = JSON.parse(fullPayload.json_data);
     } catch (error) {
-        console.warn(`Character index world metadata skipped for ${fullPayload.avatar ?? '(unknown avatar)'}:`, error);
+        console.warn(`Character file snapshot world metadata skipped for ${fullPayload.avatar ?? '(unknown avatar)'}:`, error);
         return {
             sourceWorldName,
             sourceWorldMtimeMs,
@@ -94,7 +94,7 @@ export function getCharacterSnapshotWorldMetadata(directories, fullPayload) {
             sourceWorldSize = worldStat.size;
         } catch (error) {
             if (error?.code !== 'ENOENT') {
-                console.warn(`Character index world metadata skipped for ${fullPayload.avatar ?? '(unknown avatar)'}:`, error);
+                console.warn(`Character file snapshot world metadata skipped for ${fullPayload.avatar ?? '(unknown avatar)'}:`, error);
             }
         }
     }
@@ -189,7 +189,7 @@ export async function buildCharacterFileSnapshotRow({
     });
 
     if (!fullPayload?.name) {
-        throw new Error(`Could not build character index row for ${avatar}`);
+        throw new Error(`Could not build character file snapshot row for ${avatar}`);
     }
 
     const filePath = path.join(directories.characters, avatar);

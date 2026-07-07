@@ -19,7 +19,7 @@ import { default as validateAvatarUrlMiddleware, getFileNameValidationFunction, 
 import { deepMerge, humanizedDateTime, tryParse, MemoryLimitedMap, getConfigValue, mutateJsonString, clientRelativePath, getUniqueName, sanitizeSafeCharacterReplacements } from '../util.js';
 import { TavernCardValidator } from '../validator/TavernCardValidator.js';
 import { parse, read, write } from '../character-card-parser.js';
-import { findCharactersBoundToWorldFromFiles, readWorldInfoFile } from './worldinfo.js';
+import { findCharactersBoundToWorldFromFiles, readWorldInfoFile, scanCharacterWorldBindingsFromFiles } from './worldinfo.js';
 import { calculateDataSize, processUnsetSentinels, toShallow, unsetPrivateFields } from './character-card-helpers.js';
 import {
     processCharacterFileSnapshot,
@@ -1665,27 +1665,19 @@ router.post('/delete-preflight', async function (request, response) {
 
         const directories = request.user.directories;
         const worldNameToAvatars = new Map();
+        const { worldNameToCharacters, avatarToWorldName } = scanCharacterWorldBindingsFromFiles(directories);
 
-        // Read each character to extract extensions.world
         for (const avatar of avatars) {
             const safeName = sanitize(avatar);
             if (!safeName || safeName !== avatar) continue;
-            const charPath = path.join(directories.characters, avatar);
-            if (!fs.existsSync(charPath)) continue;
 
-            try {
-                const rawData = await readCharacterData(charPath);
-                const charData = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
-                const worldName = charData?.data?.extensions?.world;
-                if (worldName && typeof worldName === 'string' && worldName.trim()) {
-                    if (!worldNameToAvatars.has(worldName)) {
-                        worldNameToAvatars.set(worldName, []);
-                    }
-                    worldNameToAvatars.get(worldName).push(avatar);
-                }
-            } catch {
-                // Skip characters that can't be read
+            const worldName = avatarToWorldName.get(avatar);
+            if (!worldName) continue;
+
+            if (!worldNameToAvatars.has(worldName)) {
+                worldNameToAvatars.set(worldName, []);
             }
+            worldNameToAvatars.get(worldName).push(avatar);
         }
 
         if (worldNameToAvatars.size === 0) {
@@ -1707,7 +1699,7 @@ router.post('/delete-preflight', async function (request, response) {
                 // If we can't parse, still show with 0 entries
             }
 
-            const boundCharacters = findCharactersBoundToWorldFromFiles(directories, worldName);
+            const boundCharacters = worldNameToCharacters.get(worldName) ?? findCharactersBoundToWorldFromFiles(directories, worldName);
 
             worldInfos.push({
                 name: worldName,

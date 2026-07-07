@@ -876,6 +876,30 @@ describe('character index', () => {
         expect(response.body).toEqual({ error: 'Too many avatars requested.' });
     });
 
+    test('reports legacy world bindings during delete preflight without creating the retired sidecar', async () => {
+        const directories = makeDirectories('emberdesk-character-delete-preflight-');
+        tempRoots.push(directories.root);
+        writeLegacyCharacterCardFile(directories, 'legacy.png', 'Legacy Hero', 'lorebook');
+        writeWorldInfoFile(directories, 'lorebook', {
+            entries: {
+                one: { key: ['hero'], content: 'lore' },
+            },
+        });
+
+        const response = await invokeCharactersDeletePreflight(directories, ['legacy.png']);
+
+        expect(response.statusCode).toBe(200);
+        expect(response.body).toEqual({
+            worldInfos: [{
+                name: 'lorebook',
+                entryCount: 1,
+                boundCharacters: [{ avatar: 'legacy.png', name: 'Legacy Hero' }],
+                deleteCandidateAvatars: ['legacy.png'],
+            }],
+        });
+        expectNoCharacterIndexSidecar(directories);
+    });
+
     test('rebuilds a missing index and serves both full and shallow payload modes from the same rows', async () => {
         const directories = makeDirectories('emberdesk-character-index-');
         tempRoots.push(directories.root);
