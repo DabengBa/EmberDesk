@@ -24,6 +24,12 @@ Future implementation candidates:
 - `scripts/canonical-sqlite-audit.mjs`
 - `scripts/canonical-sqlite-repair.mjs`
 
+Delivered Phase 1 tech docs:
+
+- `canonical-sqlite-store-manager.md`
+- `canonical-sqlite-migration-runner.md`
+- `canonical-sqlite-shadow-import-audit.md`
+
 ## Architecture And Constraints
 
 ADR-0011 accepts canonical per-user SQLite storage for selected slices. The first approved slice is character metadata plus character chat stats.
@@ -92,11 +98,14 @@ Current delivered foundation:
 
 - `src/canonical-sqlite.js` now exists as the canonical DB manager.
 - `src/canonical-sqlite-migrations.js` now exists as the migration runner for canonical schema history and phase-one schema bootstrap.
+- `src/canonical-sqlite-shadow-import.js` now exists as the Phase 1 shadow import/audit owner for character metadata and chat stats.
+- `src/endpoints/character-file-snapshot.js` now exists as the shared file-backed snapshot helper reused by both the existing character read/index path and canonical shadow import.
 - `src/storage-feature-flags.js` now exposes the current storage flag snapshot for this slice.
 - `USER_DIRECTORY_TEMPLATE` and `getUserDirectories(handle)` now include per-user `storage`.
 - `default/config.yaml` now declares `features.storage.canonicalSqlite.*` with default `false`.
-- Focused proof currently lives in `tests/canonical-sqlite-migrations.test.js`, `tests/canonical-sqlite.test.js`, `tests/user-directories.test.js`, and `tests/derived-cache-sqlite.test.js`.
+- Focused proof currently lives in `tests/canonical-sqlite-shadow-import.test.js`, `tests/canonical-sqlite-migrations.test.js`, `tests/canonical-sqlite.test.js`, `tests/user-directories.test.js`, `tests/derived-cache-sqlite.test.js`, `tests/character-read-service.test.js`, and `tests/interaction-performance-index.test.js`.
 - Runtime authority is still file-backed because migration/import/read/write cutover has not landed yet, but the schema journal plus phase-one table bootstrap contract is now in place.
+- Shadow import now preserves stable canonical character IDs across repeat imports, keeps source files untouched, and fails audit closed with explicit schema-readiness reasons before any read cutover.
 
 ### Phase 2: DB-First Reads
 
@@ -198,10 +207,12 @@ Acceptance:
 5. `shadow import`
    - Depends on schema.
    - Reads existing PNG cards and chat directories; writes DB rows only.
+   - Current status: delivered in `src/canonical-sqlite-shadow-import.js` with focused import/idempotency tests.
 
 6. `audit report`
    - Depends on shadow import.
    - Compares DB state and file projections; records drift without changing either side.
+   - Current status: delivered in `src/canonical-sqlite-shadow-import.js` with explicit `migration_not_applied` / `migration_blocked` fail-closed status and machine-readable drift output.
 
 7. `read service cutover`
    - Depends on audit passing and read flag.

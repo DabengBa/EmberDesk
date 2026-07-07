@@ -21,6 +21,12 @@ import { parse, read, write } from '../character-card-parser.js';
 import { readWorldInfoFile } from './worldinfo.js';
 import { calculateDataSize, processUnsetSentinels, toShallow, unsetPrivateFields } from './character-card-helpers.js';
 import {
+    buildCharacterFileSnapshotRow,
+    getCharacterSnapshotWorldMetadata,
+    processCharacterFileSnapshot,
+    statCharacterSnapshotFile,
+} from './character-file-snapshot.js';
+import {
     readCharacterFullPayload,
     readCharacterListPayload,
     readCharacterSummaryPayload,
@@ -412,142 +418,22 @@ async function tryReadImage(imgPath, crop) {
     }
 }
 
-/**
- * calculateChatSize - Calculates the total chat size for a given character.
- *
- * @param  {string} charDir The directory where the chats are stored.
- * @return { {chatSize: number, dateLastChat: number} }         The total chat size.
- */
-const calculateChatSize = (charDir) => {
-    let chatSize = 0;
-    let dateLastChat = 0;
-
-    if (fs.existsSync(charDir)) {
-        const chats = fs.readdirSync(charDir);
-        if (Array.isArray(chats) && chats.length) {
-            for (const chat of chats) {
-                const chatStat = fs.statSync(path.join(charDir, chat));
-                chatSize += chatStat.size;
-                dateLastChat = Math.max(dateLastChat, chatStat.mtimeMs);
-            }
-        }
-    }
-
-    return { chatSize, dateLastChat };
-};
-
-/**
- * processCharacter - Process a given character, read its data and calculate its statistics.
- *
- * @param  {string} item The name of the character.
- * @param  {import('../users.js').UserDirectoryList} directories User directories
- * @param  {object} options Options for the character processing
- * @param  {boolean} options.shallow If true, only return the core character's metadata
- * @return {Promise<object>}     A Promise that resolves when the character processing is done.
- */
 const processCharacter = async (item, directories, { shallow }) => {
-    try {
-        const imgFile = path.join(directories.characters, item);
-        const imgData = await readCharacterData(imgFile);
-        if (imgData === undefined) throw new Error('Failed to read character file');
-
-        let jsonObject = getCharaCardV2(JSON.parse(imgData), directories, false);
-        jsonObject.avatar = item;
-        const character = jsonObject;
-        character.json_data = imgData;
-        const charStat = fs.statSync(path.join(directories.characters, item));
-        character.date_added = charStat.ctimeMs;
-        character.create_date = jsonObject.create_date || new Date(Math.round(charStat.ctimeMs)).toISOString();
-        const chatsDirectory = path.join(directories.chats, item.replace('.png', ''));
-
-        const { chatSize, dateLastChat } = calculateChatSize(chatsDirectory);
-        character.chat_size = chatSize;
-        character.date_last_chat = dateLastChat;
-        character.data_size = calculateDataSize(jsonObject?.data);
-        return shallow ? toShallow(character) : character;
-    } catch (err) {
-        console.error(`Could not process character: ${item}`);
-
-        if (err instanceof SyntaxError) {
-            console.error(`${item} does not contain a valid JSON object.`);
-        } else {
-            console.error('An unexpected error occurred: ', err);
-        }
-
-        return {
-            date_added: 0,
-            date_last_chat: 0,
-            chat_size: 0,
-        };
-    }
+    const character = await processCharacterFileSnapshot({
+        avatar: item,
+        directories,
+        readCharacterData,
+        getCharaCardV2,
+    });
+    return shallow ? toShallow(character) : character;
 };
 
-/**
- * @param {import('../users.js').UserDirectoryList} directories
- * @param {object} fullPayload
- * @returns {{
- *   sourceWorldName: string,
- *   sourceWorldMtimeMs: number,
- *   sourceWorldSize: number,
- * }}
- */
 function getCharacterIndexWorldMetadata(directories, fullPayload) {
-    let sourceWorldName = '';
-    let sourceWorldMtimeMs = -1;
-    let sourceWorldSize = -1;
-    let rawCard;
-
-    try {
-        rawCard = JSON.parse(fullPayload.json_data);
-    } catch (error) {
-        console.warn(`Character index world metadata skipped for ${fullPayload.avatar ?? '(unknown avatar)'}:`, error);
-        return {
-            sourceWorldName,
-            sourceWorldMtimeMs,
-            sourceWorldSize,
-        };
-    }
-
-    if (!rawCard?.spec && typeof rawCard?.world === 'string' && rawCard.world) {
-        sourceWorldName = sanitize(rawCard.world);
-        if (!sourceWorldName) {
-            return {
-                sourceWorldName: '',
-                sourceWorldMtimeMs,
-                sourceWorldSize,
-            };
-        }
-
-        try {
-            const worldFileName = `${sourceWorldName}.json`;
-            const worldFilePath = path.join(directories.worlds, worldFileName);
-            const worldStat = fs.statSync(worldFilePath);
-            sourceWorldMtimeMs = worldStat.mtimeMs;
-            sourceWorldSize = worldStat.size;
-        } catch (error) {
-            if (error?.code !== 'ENOENT') {
-                console.warn(`Character index world metadata skipped for ${fullPayload.avatar ?? '(unknown avatar)'}:`, error);
-            }
-        }
-    }
-
-    return {
-        sourceWorldName,
-        sourceWorldMtimeMs,
-        sourceWorldSize,
-    };
+    return getCharacterSnapshotWorldMetadata(directories, fullPayload);
 }
 
-/**
- * @param {string} filePath
- * @returns {{ mtimeMs: number, size: number }}
- */
 function statCharacterFile(filePath) {
-    const fileStat = fs.statSync(filePath);
-    return {
-        mtimeMs: fileStat.mtimeMs,
-        size: fileStat.size,
-    };
+    return statCharacterSnapshotFile(filePath);
 }
 
 /**
@@ -565,24 +451,12 @@ function statCharacterFile(filePath) {
  * }>}
  */
 async function buildCharacterIndexRow(directories, avatar) {
-    const fullPayload = await processCharacter(avatar, directories, { shallow: false });
-
-    if (!fullPayload?.name) {
-        throw new Error(`Could not build character index row for ${avatar}`);
-    }
-
-    const filePath = path.join(directories.characters, avatar);
-    const stat = statCharacterFile(filePath);
-    const worldMetadata = getCharacterIndexWorldMetadata(directories, fullPayload);
-
-    return {
+    return buildCharacterFileSnapshotRow({
         avatar,
-        fullPayload,
-        shallowPayload: toShallow(fullPayload),
-        sourceMtimeMs: stat.mtimeMs,
-        sourceSize: stat.size,
-        ...worldMetadata,
-    };
+        directories,
+        readCharacterData,
+        getCharaCardV2,
+    });
 }
 
 /**

@@ -123,10 +123,13 @@ This is the narrowest slice with real payoff because it removes hot-path scans f
   - 2026-07-07: 预研建议 Phase 1 不默认引入 ORM；在 Phase 2 前单独做 ORM gate。
   - 2026-07-07: 已实现 dedicated canonical manager 与 default-off storage flags，为 migration runner、shadow import 和 read/write cutover 提供前置 runtime contract。
   - 2026-07-07: 已实现 explicit migration runner，提供 `schema_migrations`、phase-one schema bootstrap、forward-only idempotent execution 和 fail-closed blocked status。
+  - 2026-07-07: 已实现 Phase 1 shadow import and audit，复用现有 file-backed character snapshot 语义导入 `characters` 与 `character_chat_stats`，并在 schema 未就绪或 drift 存在时 fail-closed。
 - Implementation traceability:
   - New module candidates: `src/endpoints/character-store.js`, `src/endpoints/character-store-migrations.js`
-  - Delivered modules: `src/canonical-sqlite.js`, `src/canonical-sqlite-migrations.js`
-  - Delivery status: manager foundation and migration runner delivered; shadow import, audit, and authority cutover still pending.
+  - Delivered modules: `src/canonical-sqlite.js`, `src/canonical-sqlite-migrations.js`, `src/canonical-sqlite-shadow-import.js`, `src/endpoints/character-file-snapshot.js`
+  - Focused proof: `tests/canonical-sqlite-shadow-import.test.js`, `tests/character-read-service.test.js`, `tests/interaction-performance-index.test.js`
+  - Delivery status: manager foundation, migration runner, and Phase 1 shadow import/audit delivered; authority cutover still pending.
+  - Commit traceability: wrap-up commit `feat(storage): teach canonical shadow imports to testify before cutover`
 
 Proposed storage layout:
 
@@ -365,7 +368,7 @@ bun run test:compat
 
 Recommended next deliverable:
 
-ADR-0011 and the canonical SQLite storage roadmap are now in place. The next implementation deliverable is Phase 1: shadow import and audit. Do not start with DB-first writes.
+ADR-0011, the canonical SQLite storage roadmap, and Phase 1 shadow import/audit are now in place. The next implementation deliverable is Phase 2: DB-first reads behind the canonical storage read flag. Do not start with DB-first writes before the read cutover proof exists.
 
 ADR-0011 explicitly changes only the old "file-backed is the canonical model" rule for approved slices, not the whole portability and compatibility strategy.
 
