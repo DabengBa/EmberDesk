@@ -39,7 +39,7 @@ It is not optimized for users who want a managed cloud product or a minimal one-
 - Main-chat React boundary: the guarded `mainChatMessageList` island now owns the visible composer, slash-status shell, safe row/action shell, and the standard OpenAI direct-chat visible transport path (`submitComposer`, `continueLast`, regenerate/retry, and swipe). The React controller also owns reading-position restore plus the row/windowing decision surface, while excluded non-OpenAI/group/dry-run/nested-visible requests, quiet/background helper requests, unsafe or extension-mutated rows, and the actual legacy `showMoreMessages()` execution path remain explicit compatibility owners or facades inside the same shell.
 - World Info facade boundary: `public/scripts/world-info.js` remains the World Info compatibility facade, while `public/scripts/world-info-shell-context.js` provides a narrow internal shell-context seam for startup-safe access to shell-owned state and `eventSource` methods.
 - Storage authority boundary: [ADR-0011](adr/0011-canonical-per-user-sqlite-storage.md) accepts per-user canonical SQLite for approved slices, starting with character metadata and character chat stats, while derived caches remain disposable and compatibility files remain projection/import/export surfaces until a later explicit retirement decision. The executable phase plan lives in [canonical-sqlite-storage-roadmap](tech/canonical-sqlite-storage-roadmap.md).
-- Canonical storage foundation: EmberDesk now includes a dedicated canonical SQLite manager at `src/canonical-sqlite.js`, a migration runner at `src/canonical-sqlite-migrations.js`, a Phase 1 shadow import/audit owner at `src/canonical-sqlite-shadow-import.js`, per-user `storage` directories under `DATA_ROOT/<handle>/storage`, and declared `features.storage.canonicalSqlite.*` rollout flags. This foundation is fail-closed and does not yet change runtime authority; character cards and chats remain file-backed until later phases land.
+- Canonical storage foundation: EmberDesk now includes a dedicated canonical SQLite manager at `src/canonical-sqlite.js`, a migration runner at `src/canonical-sqlite-migrations.js`, a Phase 1 shadow import/audit owner at `src/canonical-sqlite-shadow-import.js`, a canonical query helper at `src/endpoints/character-store.js`, per-user `storage` directories under `DATA_ROOT/<handle>/storage`, and declared `features.storage.canonicalSqlite.*` rollout flags. This foundation is fail-closed: DB-first character reads now exist behind flags after a persisted audit summary passes, and Phase 3 character mutation routes can commit canonical SQLite first behind the write flag while still projecting PNG/avatar/chat-directory compatibility surfaces.
 
 Current architectural boundaries:
 
@@ -61,8 +61,9 @@ Key module structure:
 - `server-main.js` — boot pipeline coordinator with six sequenced phases (see [server-startup-orchestration](tech/server-startup-orchestration.md))
 - `server-startup.js` — transport layer: IP detection, HTTP/HTTPS creation, listen failure handling
 - `canonical-sqlite.js` — fail-closed per-user canonical SQLite manager for future approved storage slices; currently provides path resolution, lifecycle, PRAGMA, transaction, and status reporting only
-- `canonical-sqlite-migrations.js` — canonical schema journal and migration runner for future approved storage slices; currently provides ordered schema bootstrap, idempotent version application, and blocked-status reporting only
-- `canonical-sqlite-shadow-import.js` — Phase 1 shadow import and audit seam for character metadata plus character chat stats; currently imports/audits canonical rows without changing route authority
+- `canonical-sqlite-migrations.js` — canonical schema journal and migration runner for approved storage slices; currently bootstraps the Phase 1/2/3 schema, including the persisted audit-state table needed by read/write cutover
+- `canonical-sqlite-shadow-import.js` — Phase 1 shadow import and audit seam for character metadata plus character chat stats; now also persists the fail-closed audit summary consumed by Phase 2 read cutover
+- `src/endpoints/character-store.js` — canonical character row helper that reconstructs route-compatible read payloads and now also normalizes DB-backed character metadata writes
 - `public/lib.js` — browser shared-library boundary for first-party modules and extensions; it preserves both source imports and bundled `/lib.js` output (see [frontend-shared-library-boundary](tech/frontend-shared-library-boundary.md) and [ADR-0006](adr/0006-preserve-dual-libjs-source-and-bundled-boundary.md))
 
 The project still carries substantial upstream SillyTavern structure. EmberDesk is in a transition stage, not a clean-room rewrite.
@@ -89,8 +90,10 @@ EmberDesk currently provides:
 
 Current derived-cache scope is intentionally narrow:
 
-- current runtime character cards and chats remain file-backed until ADR-0011 implementation phases explicitly cut over an approved slice
-- the canonical SQLite foundation now exists behind default-off flags and per-user `storage/emberdesk.sqlite`, and it now supports shadow import plus drift audit for character metadata/chat stats, but no route currently treats it as the steady-state authority
+- character metadata now has two gated authority modes under ADR-0011: the default file-backed mode and the feature-flagged canonical SQLite mode for approved read/write slices
+- the canonical SQLite foundation now exists behind default-off flags and per-user `storage/emberdesk.sqlite`, and it now supports shadow import, persisted drift-audit gating, DB-first character reads for `/api/characters/all`, `/list`, and `/get`, plus DB-first character mutation writes when the corresponding read/write flags are enabled and the latest audit summary is clean
+- file-backed character and chat mutations invalidate the persisted audit summary so stale canonical rows cannot remain the steady-state read authority after runtime writes that still bypass DB-first write cutover
+- DB-first character writes preserve PNG/avatar/chat-directory compatibility projection and record durable repair intents when projection fails after the canonical commit
 - `DiskCache` accelerates repeated PNG-to-JSON extraction
 - `src/derived-cache-sqlite.js` owns shared SQLite derived-cache lifecycle for sidecars that remain rebuildable from canonical files (see [derived-cache-sqlite](tech/derived-cache-sqlite.md))
 - `src/canonical-sqlite.js` owns the separate durable-manager contract for future canonical slices and intentionally does not share reset/delete semantics with the derived helper

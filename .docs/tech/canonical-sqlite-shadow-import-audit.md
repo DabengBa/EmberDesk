@@ -18,6 +18,7 @@ This slice owns:
 - per-avatar import result classification (`imported`, `updated`, `unchanged`, `error`)
 - machine-readable audit entries for DB/file drift
 - fail-closed audit gating when canonical migrations are missing or blocked
+- persisted audit-summary state that later DB-first reads can consume as a fail-closed gate
 
 This slice does not own:
 
@@ -82,6 +83,7 @@ The canonical `characters.id` contract is now internal and stable across repeat 
   - chat-stat drift
 - returns machine-readable entries with `handle`, `avatar_filename`, `character_id`, `status`, `drift_types`, `details`, and `audited_at_ms`
 - marks the audit result as `blocking` whenever drift or audit errors exist
+- persists the latest clean-vs-blocked audit summary into canonical SQLite only after migrations are ready, so later read cutover can distinguish `audit_not_run` from a passed audit without re-reading the filesystem on every request
 
 ## Related Semantic IDs And Code Binding Points
 
@@ -109,6 +111,7 @@ Relevant notes:
 - `stats_updated_at_ms` is intentionally treated as a write-time clock, not a content field, so repeated imports with unchanged files remain `unchanged`
 - chat stats now use the shared chat-directory helper so import parity matches the existing file-backed behavior even for odd avatar basenames containing `.png`
 - canonical shadow state remains separate from `_cache/character-index.sqlite`; no derived-cache reset/delete semantics are reused
+- current runtime character/chat mutations now invalidate the persisted audit summary so a previously clean audit cannot keep future DB-first reads serving stale canonical rows after normal file-backed writes
 
 ## Validation
 
@@ -127,6 +130,7 @@ What the tests currently prove:
 - per-avatar failures do not clear earlier imported rows
 - audit reports missing-row, payload, world-binding, and chat-stat drift in machine-readable form
 - audit fails closed with explicit schema-readiness reasons when migrations are blocked or not yet applied
+- persisted audit state remains `audit_not_run` until migrations are ready and a real audit has completed, which keeps later read cutover fail-closed by default
 - shared snapshot reuse preserved the existing file-backed read/index behavior after the refactor
 
 ## Boundaries

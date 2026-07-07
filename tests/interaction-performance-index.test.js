@@ -18,9 +18,13 @@ import {
     markCharacterChatStatsDirty,
     resetCharacterIndexDatabase,
 } from '../src/endpoints/character-index.js';
-import { write as writeCharacterCardPngData } from '../src/character-card-parser.js';
+import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
+import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import { persistCanonicalAuditStatus, runCanonicalShadowImport } from '../src/canonical-sqlite-shadow-import.js';
+import { parse as parseCharacterCard, write as writeCharacterCardPngData } from '../src/character-card-parser.js';
 import encodePngChunks from '../src/png/encode.js';
 import { setConfigFilePath } from '../src/util.js';
+import { buildCharacterFileSnapshotRow } from '../src/endpoints/character-file-snapshot.js';
 import {
     getCharacterDeleteCandidates,
     shouldRefreshCharacterAfterEdit,
@@ -39,10 +43,16 @@ function makeDirectories(prefix) {
     const characters = path.join(root, 'characters');
     const chats = path.join(root, 'chats');
     const worlds = path.join(root, 'worlds');
+    const thumbnailsAvatar = path.join(root, 'thumbnails', 'avatar');
+    const thumbnailsPersona = path.join(root, 'thumbnails', 'persona');
+    const thumbnailsBg = path.join(root, 'thumbnails', 'bg');
     fs.mkdirSync(characters, { recursive: true });
     fs.mkdirSync(chats, { recursive: true });
     fs.mkdirSync(worlds, { recursive: true });
-    return { root, characters, chats, worlds };
+    fs.mkdirSync(thumbnailsAvatar, { recursive: true });
+    fs.mkdirSync(thumbnailsPersona, { recursive: true });
+    fs.mkdirSync(thumbnailsBg, { recursive: true });
+    return { root, characters, chats, worlds, thumbnailsAvatar, thumbnailsPersona, thumbnailsBg };
 }
 
 /**
@@ -136,6 +146,17 @@ function writeChatFile(root, avatar, fileName, contents) {
     const chatDirectory = path.join(root, 'chats', path.parse(avatar).name);
     fs.mkdirSync(chatDirectory, { recursive: true });
     fs.writeFileSync(path.join(chatDirectory, fileName), contents, 'utf8');
+}
+
+function openCanonicalDbForTests(directories, handle = 'default-user') {
+    const manager = createCanonicalSqliteManager();
+    const db = manager.open({
+        handle,
+        directories,
+        featureFlags: { enabled: true, strict: true },
+    });
+    runCanonicalMigrations(db, { strict: true, nowMs: 1735689600000 });
+    return { manager, db };
 }
 
 /**
@@ -354,6 +375,90 @@ function getCharactersDeletePreflightRouteHandler() {
 }
 
 /**
+ * @returns {(request: any, response: any) => Promise<void>}
+ */
+function getCharactersEditAttributeRouteHandler() {
+    const layer = charactersRouter.stack.find(entry => entry.route?.path === '/edit-attribute');
+    if (!layer?.route?.stack?.length) {
+        throw new Error('Could not locate /api/characters/edit-attribute route handler');
+    }
+
+    return layer.route.stack[layer.route.stack.length - 1].handle;
+}
+
+/**
+ * @returns {(request: any, response: any) => Promise<void>}
+ */
+function getCharactersDuplicateRouteHandler() {
+    const layer = charactersRouter.stack.find(entry => entry.route?.path === '/duplicate');
+    if (!layer?.route?.stack?.length) {
+        throw new Error('Could not locate /api/characters/duplicate route handler');
+    }
+
+    return layer.route.stack[layer.route.stack.length - 1].handle;
+}
+
+/**
+ * @returns {(request: any, response: any) => Promise<void>}
+ */
+function getCharactersDeleteRouteHandler() {
+    const layer = charactersRouter.stack.find(entry => entry.route?.path === '/delete');
+    if (!layer?.route?.stack?.length) {
+        throw new Error('Could not locate /api/characters/delete route handler');
+    }
+
+    return layer.route.stack[layer.route.stack.length - 1].handle;
+}
+
+/**
+ * @returns {(request: any, response: any) => Promise<void>}
+ */
+function getCharactersMergeAttributesRouteHandler() {
+    const layer = charactersRouter.stack.find(entry => entry.route?.path === '/merge-attributes');
+    if (!layer?.route?.stack?.length) {
+        throw new Error('Could not locate /api/characters/merge-attributes route handler');
+    }
+
+    return layer.route.stack[layer.route.stack.length - 1].handle;
+}
+
+/**
+ * @returns {(request: any, response: any) => Promise<void>}
+ */
+function getCharactersEditAvatarRouteHandler() {
+    const layer = charactersRouter.stack.find(entry => entry.route?.path === '/edit-avatar');
+    if (!layer?.route?.stack?.length) {
+        throw new Error('Could not locate /api/characters/edit-avatar route handler');
+    }
+
+    return layer.route.stack[layer.route.stack.length - 1].handle;
+}
+
+/**
+ * @returns {(request: any, response: any) => Promise<void>}
+ */
+function getCharactersImportRouteHandler() {
+    const layer = charactersRouter.stack.find(entry => entry.route?.path === '/import');
+    if (!layer?.route?.stack?.length) {
+        throw new Error('Could not locate /api/characters/import route handler');
+    }
+
+    return layer.route.stack[layer.route.stack.length - 1].handle;
+}
+
+/**
+ * @returns {(request: any, response: any) => Promise<void>}
+ */
+function getCharactersCreateRouteHandler() {
+    const layer = charactersRouter.stack.find(entry => entry.route?.path === '/create');
+    if (!layer?.route?.stack?.length) {
+        throw new Error('Could not locate /api/characters/create route handler');
+    }
+
+    return layer.route.stack[layer.route.stack.length - 1].handle;
+}
+
+/**
  * @param {{ root: string, characters: string, chats: string }} directories
  * @param {string} avatar
  * @returns {Promise<ReturnType<typeof createMockResponse>>}
@@ -362,7 +467,7 @@ async function invokeCharacterGet(directories, avatar) {
     const handler = getCharacterRouteHandler();
     const request = {
         body: { avatar_url: avatar },
-        user: { directories },
+        user: { directories, profile: { handle: 'default-user' } },
     };
     const response = createMockResponse();
     await handler(request, response);
@@ -376,7 +481,7 @@ async function invokeCharacterGet(directories, avatar) {
 async function invokeCharactersList(directories) {
     const handler = getCharactersListRouteHandler();
     const request = {
-        user: { directories },
+        user: { directories, profile: { handle: 'default-user' } },
     };
     const response = createMockResponse();
     await handler(request, response);
@@ -390,7 +495,7 @@ async function invokeCharactersList(directories) {
 async function invokeCharactersAll(directories) {
     const handler = getCharactersAllRouteHandler();
     const request = {
-        user: { directories },
+        user: { directories, profile: { handle: 'default-user' } },
     };
     const response = createMockResponse();
     await handler(request, response);
@@ -406,7 +511,166 @@ async function invokeCharactersDeletePreflight(directories, avatars) {
     const handler = getCharactersDeletePreflightRouteHandler();
     const request = {
         body: { avatars },
-        user: { directories },
+        user: { directories, profile: { handle: 'default-user' } },
+    };
+    const response = createMockResponse();
+    await handler(request, response);
+    return response;
+}
+
+/**
+ * @param {{ root: string, characters: string, chats: string }} directories
+ * @param {string} avatar
+ * @param {string} field
+ * @param {any} value
+ * @returns {Promise<ReturnType<typeof createMockResponse>>}
+ */
+async function invokeCharacterEditAttribute(directories, avatar, field, value) {
+    const handler = getCharactersEditAttributeRouteHandler();
+    const request = {
+        body: {
+            avatar_url: avatar,
+            ch_name: path.parse(avatar).name,
+            field,
+            value,
+        },
+        user: { directories, profile: { handle: 'default-user' } },
+    };
+    const response = createMockResponse();
+    await handler(request, response);
+    return response;
+}
+
+/**
+ * @param {{ root: string, characters: string, chats: string }} directories
+ * @param {string} avatar
+ * @returns {Promise<ReturnType<typeof createMockResponse>>}
+ */
+async function invokeCharacterDuplicate(directories, avatar) {
+    const handler = getCharactersDuplicateRouteHandler();
+    const request = {
+        body: { avatar_url: avatar },
+        user: { directories, profile: { handle: 'default-user' } },
+    };
+    const response = createMockResponse();
+    await handler(request, response);
+    return response;
+}
+
+/**
+ * @param {{ root: string, characters: string, chats: string }} directories
+ * @param {string} avatar
+ * @param {{ deleteChats?: boolean }} [options]
+ * @returns {Promise<ReturnType<typeof createMockResponse>>}
+ */
+async function invokeCharacterDelete(directories, avatar, options = {}) {
+    const handler = getCharactersDeleteRouteHandler();
+    const request = {
+        body: {
+            avatar_url: avatar,
+            delete_chats: options.deleteChats ?? false,
+        },
+        user: { directories, profile: { handle: 'default-user' } },
+    };
+    const response = createMockResponse();
+    await handler(request, response);
+    return response;
+}
+
+/**
+ * @param {{ root: string, characters: string, chats: string }} directories
+ * @param {string} avatar
+ * @param {object} patch
+ * @returns {Promise<ReturnType<typeof createMockResponse>>}
+ */
+async function invokeCharacterMergeAttributes(directories, avatar, patch) {
+    const handler = getCharactersMergeAttributesRouteHandler();
+    const request = {
+        body: {
+            avatar,
+            ...patch,
+        },
+        user: { directories, profile: { handle: 'default-user' } },
+    };
+    const response = createMockResponse();
+    await handler(request, response);
+    return response;
+}
+
+/**
+ * @param {{ root: string, characters: string, chats: string }} directories
+ * @param {{ destination: string, filename: string }} file
+ * @param {string} fileType
+ * @returns {Promise<ReturnType<typeof createMockResponse>>}
+ */
+async function invokeCharacterImport(directories, file, fileType) {
+    const handler = getCharactersImportRouteHandler();
+    const request = {
+        body: {
+            file_type: fileType,
+        },
+        file,
+        user: { directories, profile: { handle: 'default-user' } },
+    };
+    const response = createMockResponse();
+    await handler(request, response);
+    return response;
+}
+
+/**
+ * @param {{ root: string, characters: string, chats: string }} directories
+ * @param {{ destination: string, filename: string }} file
+ * @param {string} avatar
+ * @returns {Promise<ReturnType<typeof createMockResponse>>}
+ */
+async function invokeCharacterEditAvatar(directories, file, avatar) {
+    const handler = getCharactersEditAvatarRouteHandler();
+    const request = {
+        body: {
+            avatar_url: avatar,
+        },
+        file,
+        query: {},
+        user: { directories, profile: { handle: 'default-user' } },
+    };
+    const response = createMockResponse();
+    await handler(request, response);
+    return response;
+}
+
+/**
+ * @param {{ root: string, characters: string, chats: string }} directories
+ * @param {string} name
+ * @returns {Promise<ReturnType<typeof createMockResponse>>}
+ */
+async function invokeCharacterCreate(directories, name, { file } = {}) {
+    const handler = getCharactersCreateRouteHandler();
+    const request = {
+        body: {
+            ch_name: name,
+            description: `Description ${name}`,
+            personality: `Personality ${name}`,
+            scenario: `Scenario ${name}`,
+            first_mes: `First ${name}`,
+            mes_example: `Example ${name}`,
+            creator_notes: `Creator notes ${name}`,
+            system_prompt: '',
+            post_history_instructions: '',
+            tags: '',
+            creator: 'tester',
+            talkativeness: 0.5,
+            fav: false,
+            world: '',
+            depth_prompt_prompt: '',
+            depth_prompt_depth: 4,
+            depth_prompt_role: 'system',
+            alternate_greetings: [],
+            group_only_greetings: [],
+            extensions: '{}',
+        },
+        file: file ?? null,
+        query: {},
+        user: { directories, profile: { handle: 'default-user' } },
     };
     const response = createMockResponse();
     await handler(request, response);
@@ -432,6 +696,12 @@ afterEach(() => {
     diskCache?.dispose();
     delete process.env.EMBERDESK_CHARACTER_INDEX_MODE;
     delete process.env.EMBERDESK_INTERACTION_PERF_MODE;
+    delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED;
+    delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SHADOWIMPORT;
+    delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS;
+    delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES;
+    delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_CHATSTATS;
+    delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_STRICT;
 
     for (const root of tempRoots.splice(0, tempRoots.length)) {
         fs.rmSync(root, { recursive: true, force: true });
@@ -1034,6 +1304,760 @@ describe('character index', () => {
 
         expect(refreshedResponse.statusCode).toBe(200);
         expect(refreshedResponse.body[0].data.character_book.entries[0].content).toBe('new lore');
+    });
+
+    test('serves /api/characters/all from canonical sqlite when canonical read flags are enabled', async () => {
+        const directories = makeDirectories('emberdesk-character-canonical-route-');
+        tempRoots.push(directories.root);
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = 'true';
+
+        const { manager, db } = openCanonicalDbForTests(directories);
+        try {
+            db.prepare(`
+                INSERT INTO characters (
+                    id, avatar_filename, internal_name, display_name, card_json, shallow_json, world_name, created_at_ms, updated_at_ms, deleted_at_ms
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+                'char-alpha',
+                'alpha.png',
+                'alpha',
+                'Alpha',
+                JSON.stringify({ avatar: 'alpha.png', name: 'Alpha', json_data: '{}', data: { extensions: { world: '' } } }),
+                JSON.stringify({ avatar: 'alpha.png', name: 'Alpha' }),
+                '',
+                1,
+                2,
+                null,
+            );
+            db.prepare(`
+                INSERT INTO character_chat_stats (
+                    character_id, chat_count, chat_size_bytes, date_last_chat_ms, stats_updated_at_ms
+                ) VALUES (?, ?, ?, ?, ?)
+            `).run('char-alpha', 1, 42, 99, 100);
+            persistCanonicalAuditStatus(db, {
+                ok: true,
+                handle: 'default-user',
+                hasDrift: false,
+                blocking: false,
+                entries: [],
+            }, { auditedAtMs: 1735689602000 });
+
+            const response = await invokeCharactersAll(directories);
+            expect(response.statusCode).toBe(200);
+            expect(response.body).toEqual([
+                expect.objectContaining({
+                    avatar: 'alpha.png',
+                    name: 'Alpha',
+                    chat_size: 42,
+                    date_last_chat: 99,
+                }),
+            ]);
+        } finally {
+            manager.dispose();
+        }
+    });
+
+    test('serves /api/characters/get from canonical sqlite when the compatibility PNG is missing', async () => {
+        const directories = makeDirectories('emberdesk-character-canonical-route-');
+        tempRoots.push(directories.root);
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = 'true';
+
+        const { manager, db } = openCanonicalDbForTests(directories);
+        try {
+            db.prepare(`
+                INSERT INTO characters (
+                    id, avatar_filename, internal_name, display_name, card_json, shallow_json, world_name, created_at_ms, updated_at_ms, deleted_at_ms
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+                'char-alpha',
+                'alpha.png',
+                'alpha',
+                'Alpha',
+                JSON.stringify({ avatar: 'alpha.png', name: 'Alpha', json_data: '{}', data: { extensions: { world: '' } } }),
+                JSON.stringify({ avatar: 'alpha.png', name: 'Alpha' }),
+                '',
+                1,
+                2,
+                null,
+            );
+            db.prepare(`
+                INSERT INTO character_chat_stats (
+                    character_id, chat_count, chat_size_bytes, date_last_chat_ms, stats_updated_at_ms
+                ) VALUES (?, ?, ?, ?, ?)
+            `).run('char-alpha', 1, 42, 99, 100);
+            persistCanonicalAuditStatus(db, {
+                ok: true,
+                handle: 'default-user',
+                hasDrift: false,
+                blocking: false,
+                entries: [],
+            }, { auditedAtMs: 1735689602000 });
+
+            const response = await invokeCharacterGet(directories, 'alpha.png');
+            expect(response.statusCode).toBe(200);
+            expect(response.body).toEqual(expect.objectContaining({
+                avatar: 'alpha.png',
+                name: 'Alpha',
+                chat_size: 42,
+                date_last_chat: 99,
+            }));
+        } finally {
+            manager.dispose();
+        }
+    });
+
+    test('serves a full character payload after shadow import populates canonical sqlite from a real PNG card', async () => {
+        const directories = makeDirectories('emberdesk-character-canonical-route-');
+        tempRoots.push(directories.root);
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SHADOWIMPORT = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = 'true';
+
+        writeCharacterCardFile(directories, 'alpha.png', 'Alpha Shadow');
+
+        const manager = createCanonicalSqliteManager();
+        try {
+            const importResult = await runCanonicalShadowImport({
+                handle: 'default-user',
+                directories,
+                featureFlags: { enabled: true, shadowImport: true, strict: true },
+                manager,
+                buildSnapshotRow: (avatar, currentDirectories) => buildCharacterFileSnapshotRow({
+                    avatar,
+                    directories: currentDirectories,
+                    readCharacterData: async filePath => parseCharacterCard(filePath, 'png'),
+                    getCharaCardV2: value => ({
+                        ...value,
+                        name: value.data?.name ?? value.name,
+                        description: value.data?.description ?? value.description ?? '',
+                        personality: value.data?.personality ?? value.personality ?? '',
+                        scenario: value.data?.scenario ?? value.scenario ?? '',
+                        first_mes: value.data?.first_mes ?? value.first_mes ?? '',
+                        mes_example: value.data?.mes_example ?? value.mes_example ?? '',
+                        creatorcomment: value.data?.creator_notes ?? value.creatorcomment ?? '',
+                        talkativeness: value.data?.extensions?.talkativeness ?? value.talkativeness ?? 0.5,
+                        fav: value.data?.extensions?.fav ?? value.fav ?? false,
+                        tags: value.data?.tags ?? value.tags ?? [],
+                    }),
+                }),
+                nowMs: 1735689600000,
+            });
+
+            expect(importResult.ok).toBe(true);
+
+            const db = manager.open({
+                handle: 'default-user',
+                directories,
+                featureFlags: { enabled: true, strict: true },
+            });
+            persistCanonicalAuditStatus(db, {
+                ok: true,
+                handle: 'default-user',
+                hasDrift: false,
+                blocking: false,
+                entries: [],
+            }, { auditedAtMs: 1735689602000 });
+
+            const response = await invokeCharacterGet(directories, 'alpha.png');
+            expect(response.statusCode).toBe(200);
+            expect(response.body).toEqual(expect.objectContaining({
+                avatar: 'alpha.png',
+                name: 'Alpha Shadow',
+            }));
+            expect(response.body.json_data).toContain('Alpha Shadow');
+            expect(response.body.data).toEqual(expect.objectContaining({
+                name: 'Alpha Shadow',
+                description: 'Description Alpha Shadow',
+            }));
+        } finally {
+            manager.dispose();
+        }
+    });
+
+    test('falls back to the file-backed route when canonical reads are enabled but no persisted audit has run', async () => {
+        const directories = makeDirectories('emberdesk-character-canonical-route-');
+        tempRoots.push(directories.root);
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = 'true';
+
+        writeLegacyCharacterCardFile(directories, 'legacy.png', 'Legacy Hero');
+
+        const { manager, db } = openCanonicalDbForTests(directories);
+        try {
+            db.prepare(`
+                INSERT INTO characters (
+                    id, avatar_filename, internal_name, display_name, card_json, shallow_json, world_name, created_at_ms, updated_at_ms, deleted_at_ms
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+                'char-legacy',
+                'legacy.png',
+                'legacy',
+                'Canonical Legacy',
+                JSON.stringify({ avatar: 'legacy.png', name: 'Canonical Legacy', json_data: '{}', data: { extensions: { world: '' } } }),
+                JSON.stringify({ avatar: 'legacy.png', name: 'Canonical Legacy' }),
+                '',
+                1,
+                2,
+                null,
+            );
+
+            const response = await invokeCharactersAll(directories);
+            expect(response.statusCode).toBe(200);
+            expect(response.body).toEqual([
+                expect.objectContaining({
+                    avatar: 'legacy.png',
+                    name: 'Legacy Hero',
+                }),
+            ]);
+        } finally {
+            manager.dispose();
+        }
+    });
+
+    test('invalidates a previously clean canonical audit after file-backed character edits so later reads fall back', async () => {
+        const directories = makeDirectories('emberdesk-character-canonical-route-');
+        tempRoots.push(directories.root);
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = 'true';
+
+        writeCharacterCardFile(directories, 'alpha.png', 'Live Alpha');
+
+        const { manager, db } = openCanonicalDbForTests(directories);
+        try {
+            db.prepare(`
+                INSERT INTO characters (
+                    id, avatar_filename, internal_name, display_name, card_json, shallow_json, world_name, created_at_ms, updated_at_ms, deleted_at_ms
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+                'char-alpha',
+                'alpha.png',
+                'alpha',
+                'Alpha',
+                JSON.stringify({ avatar: 'alpha.png', name: 'Canonical Alpha', json_data: '{}', data: { extensions: { world: '' } } }),
+                JSON.stringify({ avatar: 'alpha.png', name: 'Canonical Alpha' }),
+                '',
+                1,
+                2,
+                null,
+            );
+            persistCanonicalAuditStatus(db, {
+                ok: true,
+                handle: 'default-user',
+                hasDrift: false,
+                blocking: false,
+                entries: [],
+            }, { auditedAtMs: 1735689602000 });
+
+            const initialResponse = await invokeCharacterGet(directories, 'alpha.png');
+            expect(initialResponse.statusCode).toBe(200);
+            expect(initialResponse.body.name).toBe('Canonical Alpha');
+
+            const editResponse = await invokeCharacterEditAttribute(directories, 'alpha.png', 'description', 'Edited description');
+            expect(editResponse.statusCode).toBe(200);
+
+            const fallbackResponse = await invokeCharacterGet(directories, 'alpha.png');
+            expect(fallbackResponse.statusCode).toBe(200);
+            expect(fallbackResponse.body.name).toBe('Live Alpha');
+            expect(fallbackResponse.body.description).toBe('Edited description');
+        } finally {
+            manager.dispose();
+        }
+    });
+
+    test('invalidates a previously clean canonical audit after duplicate creates a new file-backed character', async () => {
+        const directories = makeDirectories('emberdesk-character-canonical-route-');
+        tempRoots.push(directories.root);
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = 'true';
+
+        writeCharacterCardFile(directories, 'alpha.png', 'Live Alpha');
+
+        const { manager, db } = openCanonicalDbForTests(directories);
+        try {
+            db.prepare(`
+                INSERT INTO characters (
+                    id, avatar_filename, internal_name, display_name, card_json, shallow_json, world_name, created_at_ms, updated_at_ms, deleted_at_ms
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+                'char-alpha',
+                'alpha.png',
+                'alpha',
+                'Alpha',
+                JSON.stringify({ avatar: 'alpha.png', name: 'Canonical Alpha', json_data: '{}', data: { extensions: { world: '' } } }),
+                JSON.stringify({ avatar: 'alpha.png', name: 'Canonical Alpha' }),
+                '',
+                1,
+                2,
+                null,
+            );
+            persistCanonicalAuditStatus(db, {
+                ok: true,
+                handle: 'default-user',
+                hasDrift: false,
+                blocking: false,
+                entries: [],
+            }, { auditedAtMs: 1735689602000 });
+
+            const initialResponse = await invokeCharactersAll(directories);
+            expect(initialResponse.statusCode).toBe(200);
+            expect(initialResponse.body).toEqual([
+                expect.objectContaining({
+                    avatar: 'alpha.png',
+                    name: 'Canonical Alpha',
+                }),
+            ]);
+
+            const duplicateResponse = await invokeCharacterDuplicate(directories, 'alpha.png');
+            expect(duplicateResponse.statusCode).toBe(200);
+            expect(duplicateResponse.body).toEqual({ path: 'alpha_1.png' });
+
+            const fallbackResponse = await invokeCharactersAll(directories);
+            expect(fallbackResponse.statusCode).toBe(200);
+            expect(fallbackResponse.body).toEqual(expect.arrayContaining([
+                expect.objectContaining({
+                    avatar: 'alpha.png',
+                    name: 'Live Alpha',
+                }),
+                expect.objectContaining({
+                    avatar: 'alpha_1.png',
+                    name: 'Live Alpha',
+                }),
+            ]));
+            expect(fallbackResponse.body).toHaveLength(2);
+        } finally {
+            manager.dispose();
+        }
+    });
+
+    test('updates the canonical row during edit-attribute when canonical writes are enabled', async () => {
+        const directories = makeDirectories('emberdesk-character-canonical-route-');
+        tempRoots.push(directories.root);
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES = 'true';
+
+        writeCharacterCardFile(directories, 'alpha.png', 'Live Alpha');
+
+        const { manager, db } = openCanonicalDbForTests(directories);
+        try {
+            db.prepare(`
+                INSERT INTO characters (
+                    id, avatar_filename, internal_name, display_name, card_json, shallow_json, world_name, created_at_ms, updated_at_ms, deleted_at_ms
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+                'char-alpha',
+                'alpha.png',
+                'alpha',
+                'Canonical Alpha',
+                JSON.stringify({ avatar: 'alpha.png', name: 'Canonical Alpha', description: 'Before', json_data: '{}', data: { extensions: { world: '' }, description: 'Before' } }),
+                JSON.stringify({ avatar: 'alpha.png', name: 'Canonical Alpha', description: 'Before' }),
+                '',
+                1,
+                2,
+                null,
+            );
+            persistCanonicalAuditStatus(db, {
+                ok: true,
+                handle: 'default-user',
+                hasDrift: false,
+                blocking: false,
+                entries: [],
+            }, { auditedAtMs: 1735689602000 });
+
+            const editResponse = await invokeCharacterEditAttribute(directories, 'alpha.png', 'description', 'Edited description');
+            expect(editResponse.statusCode).toBe(200);
+
+            const row = db.prepare('SELECT card_json FROM characters WHERE avatar_filename = ?').get('alpha.png');
+            const card = JSON.parse(row.card_json);
+            expect(card.description).toBe('Edited description');
+            expect(card.data.description).toBe('Edited description');
+
+            const readResponse = await invokeCharacterGet(directories, 'alpha.png');
+            expect(readResponse.statusCode).toBe(200);
+            expect(readResponse.body.description).toBe('Edited description');
+        } finally {
+            manager.dispose();
+        }
+    });
+
+    test('writes a duplicated character into canonical sqlite when canonical writes are enabled', async () => {
+        const directories = makeDirectories('emberdesk-character-canonical-route-');
+        tempRoots.push(directories.root);
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES = 'true';
+
+        writeCharacterCardFile(directories, 'alpha.png', 'Live Alpha');
+
+        const { manager, db } = openCanonicalDbForTests(directories);
+        try {
+            db.prepare(`
+                INSERT INTO characters (
+                    id, avatar_filename, internal_name, display_name, card_json, shallow_json, world_name, created_at_ms, updated_at_ms, deleted_at_ms
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+                'char-alpha',
+                'alpha.png',
+                'alpha',
+                'Canonical Alpha',
+                JSON.stringify({ avatar: 'alpha.png', name: 'Canonical Alpha', json_data: '{}', data: { extensions: { world: '' } } }),
+                JSON.stringify({ avatar: 'alpha.png', name: 'Canonical Alpha' }),
+                '',
+                1,
+                2,
+                null,
+            );
+            persistCanonicalAuditStatus(db, {
+                ok: true,
+                handle: 'default-user',
+                hasDrift: false,
+                blocking: false,
+                entries: [],
+            }, { auditedAtMs: 1735689602000 });
+
+            const duplicateResponse = await invokeCharacterDuplicate(directories, 'alpha.png');
+            expect(duplicateResponse.statusCode).toBe(200);
+            expect(duplicateResponse.body).toEqual({ path: 'alpha_1.png' });
+
+            const duplicateRow = db.prepare(`
+                SELECT avatar_filename, card_json, deleted_at_ms
+                FROM characters
+                WHERE avatar_filename = ?
+            `).get('alpha_1.png');
+            expect(duplicateRow).toEqual(expect.objectContaining({
+                avatar_filename: 'alpha_1.png',
+                deleted_at_ms: null,
+            }));
+            expect(JSON.parse(duplicateRow.card_json)).toEqual(expect.objectContaining({
+                avatar: 'alpha_1.png',
+                data: expect.objectContaining({
+                    name: 'Live Alpha',
+                }),
+            }));
+
+            const readResponse = await invokeCharacterGet(directories, 'alpha_1.png');
+            expect(readResponse.statusCode).toBe(200);
+            expect(readResponse.body).toEqual(expect.objectContaining({
+                avatar: 'alpha_1.png',
+                data: expect.objectContaining({
+                    name: 'Live Alpha',
+                }),
+            }));
+        } finally {
+            manager.dispose();
+        }
+    });
+
+    test('updates the canonical row during single merge-attributes when canonical writes are enabled', async () => {
+        const directories = makeDirectories('emberdesk-character-canonical-route-');
+        tempRoots.push(directories.root);
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES = 'true';
+
+        writeCharacterCardFile(directories, 'alpha.png', 'Live Alpha');
+
+        const { manager, db } = openCanonicalDbForTests(directories);
+        try {
+            db.prepare(`
+                INSERT INTO characters (
+                    id, avatar_filename, internal_name, display_name, card_json, shallow_json, world_name, created_at_ms, updated_at_ms, deleted_at_ms
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+                'char-alpha',
+                'alpha.png',
+                'alpha',
+                'Canonical Alpha',
+                JSON.stringify({ avatar: 'alpha.png', name: 'Canonical Alpha', description: 'Before', json_data: '{}', data: { name: 'Canonical Alpha', extensions: { world: '' }, description: 'Before' } }),
+                JSON.stringify({ avatar: 'alpha.png', name: 'Canonical Alpha', description: 'Before' }),
+                '',
+                1,
+                2,
+                null,
+            );
+            persistCanonicalAuditStatus(db, {
+                ok: true,
+                handle: 'default-user',
+                hasDrift: false,
+                blocking: false,
+                entries: [],
+            }, { auditedAtMs: 1735689602000 });
+
+            const mergeResponse = await invokeCharacterMergeAttributes(directories, 'alpha.png', {
+                description: 'Merged description',
+            });
+            expect(mergeResponse.statusCode).toBe(200);
+
+            const row = db.prepare('SELECT card_json FROM characters WHERE avatar_filename = ?').get('alpha.png');
+            const card = JSON.parse(row.card_json);
+            expect(card.description).toBe('Merged description');
+
+            const readResponse = await invokeCharacterGet(directories, 'alpha.png');
+            expect(readResponse.statusCode).toBe(200);
+            expect(readResponse.body.description).toBe('Merged description');
+        } finally {
+            manager.dispose();
+        }
+    });
+
+    test('writes imported png characters into canonical sqlite when canonical writes are enabled', async () => {
+        const directories = makeDirectories('emberdesk-character-canonical-route-');
+        tempRoots.push(directories.root);
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES = 'true';
+
+        const uploadPath = path.join(directories.root, 'import.png');
+        const importPayload = JSON.stringify({
+            spec: 'chara_card_v3',
+            spec_version: '3.0',
+            data: {
+                name: 'Imported Alpha',
+                description: 'Imported description',
+                personality: '',
+                scenario: '',
+                first_mes: '',
+                mes_example: '',
+                creator_notes: '',
+                tags: [],
+                creator: 'tester',
+                character_version: '2.0',
+                extensions: {
+                    talkativeness: 0.5,
+                    fav: false,
+                    world: '',
+                },
+            },
+        });
+        fs.writeFileSync(uploadPath, writeCharacterCardPngData(DEFAULT_AVATAR_BUFFER, importPayload));
+
+        const { manager, db } = openCanonicalDbForTests(directories);
+        try {
+            persistCanonicalAuditStatus(db, {
+                ok: true,
+                handle: 'default-user',
+                hasDrift: false,
+                blocking: false,
+                entries: [],
+            }, { auditedAtMs: 1735689602000 });
+
+            const importResponse = await invokeCharacterImport(directories, {
+                destination: directories.root,
+                filename: 'import.png',
+            }, 'png');
+            expect(importResponse.statusCode).toBe(200);
+            expect(importResponse.body).toEqual({ file_name: 'Imported Alpha' });
+
+            const row = db.prepare(`
+                SELECT avatar_filename, card_json
+                FROM characters
+                WHERE avatar_filename = ?
+            `).get('Imported Alpha.png');
+            expect(row).toEqual(expect.objectContaining({
+                avatar_filename: 'Imported Alpha.png',
+            }));
+            expect(JSON.parse(row.card_json)).toEqual(expect.objectContaining({
+                avatar: 'Imported Alpha.png',
+                data: expect.objectContaining({
+                    name: 'Imported Alpha',
+                }),
+            }));
+
+            const readResponse = await invokeCharacterGet(directories, 'Imported Alpha.png');
+            expect(readResponse.statusCode).toBe(200);
+            expect(readResponse.body).toEqual(expect.objectContaining({
+                avatar: 'Imported Alpha.png',
+                data: expect.objectContaining({
+                    name: 'Imported Alpha',
+                }),
+            }));
+        } finally {
+            manager.dispose();
+        }
+    });
+
+    test('updates the canonical row during edit-avatar when canonical writes are enabled', async () => {
+        const directories = makeDirectories('emberdesk-character-canonical-route-');
+        tempRoots.push(directories.root);
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES = 'true';
+
+        writeCharacterCardFile(directories, 'alpha.png', 'Live Alpha');
+        const uploadPath = path.join(directories.root, 'avatar.tmp');
+        fs.writeFileSync(uploadPath, DEFAULT_AVATAR_BUFFER);
+
+        const { manager, db } = openCanonicalDbForTests(directories);
+        try {
+            db.prepare(`
+                INSERT INTO characters (
+                    id, avatar_filename, internal_name, display_name, card_json, shallow_json, world_name, created_at_ms, updated_at_ms, deleted_at_ms
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+                'char-alpha',
+                'alpha.png',
+                'alpha',
+                'Canonical Alpha',
+                JSON.stringify({ avatar: 'alpha.png', name: 'Canonical Alpha', json_data: '{}', data: { name: 'Canonical Alpha', extensions: { world: '' } } }),
+                JSON.stringify({ avatar: 'alpha.png', name: 'Canonical Alpha' }),
+                '',
+                1,
+                2,
+                null,
+            );
+            persistCanonicalAuditStatus(db, {
+                ok: true,
+                handle: 'default-user',
+                hasDrift: false,
+                blocking: false,
+                entries: [],
+            }, { auditedAtMs: 1735689602000 });
+
+            const editResponse = await invokeCharacterEditAvatar(directories, {
+                destination: directories.root,
+                filename: 'avatar.tmp',
+            }, 'alpha.png');
+            expect(editResponse.statusCode).toBe(200);
+
+            const row = db.prepare('SELECT card_json FROM characters WHERE avatar_filename = ?').get('alpha.png');
+            expect(JSON.parse(row.card_json)).toEqual(expect.objectContaining({
+                avatar: 'alpha.png',
+            }));
+
+            const readResponse = await invokeCharacterGet(directories, 'alpha.png');
+            expect(readResponse.statusCode).toBe(200);
+            expect(readResponse.body).toEqual(expect.objectContaining({
+                avatar: 'alpha.png',
+            }));
+        } finally {
+            manager.dispose();
+        }
+    });
+
+    test('keeps canonical reads available after a successful DB-first create projection and writes the new row to canonical sqlite', async () => {
+        const directories = makeDirectories('emberdesk-character-canonical-route-');
+        tempRoots.push(directories.root);
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SHADOWIMPORT = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES = 'true';
+
+        const uploadPath = path.join(directories.root, 'upload.tmp');
+        fs.writeFileSync(uploadPath, DEFAULT_AVATAR_BUFFER);
+
+        const { manager, db } = openCanonicalDbForTests(directories);
+        try {
+            persistCanonicalAuditStatus(db, {
+                ok: true,
+                handle: 'default-user',
+                hasDrift: false,
+                blocking: false,
+                entries: [],
+            }, { auditedAtMs: 1735689602000 });
+
+            const createResponse = await invokeCharacterCreate(directories, 'Created Canonical', {
+                file: { destination: directories.root, filename: 'upload.tmp' },
+            });
+            expect(createResponse.statusCode).toBe(200);
+            expect(createResponse.body).toBe('Created Canonical.png');
+
+            const createdRow = db.prepare(`
+                SELECT avatar_filename, display_name, card_json, shallow_json
+                FROM characters
+                WHERE avatar_filename = ?
+            `).get('Created Canonical.png');
+            expect(createdRow).toEqual(expect.objectContaining({
+                avatar_filename: 'Created Canonical.png',
+                display_name: 'Created Canonical',
+            }));
+            expect(JSON.parse(createdRow.card_json)).toEqual(expect.objectContaining({
+                avatar: 'Created Canonical.png',
+                name: 'Created Canonical',
+            }));
+
+            const auditStatus = db.prepare(`
+                SELECT status, reason, blocking
+                FROM canonical_audit_state
+                WHERE audit_scope = ?
+            `).get('character_metadata_and_chat_stats');
+            expect(auditStatus).toEqual(expect.objectContaining({
+                status: 'clean',
+                reason: null,
+                blocking: 0,
+            }));
+
+            const readResponse = await invokeCharacterGet(directories, 'Created Canonical.png');
+            expect(readResponse.statusCode).toBe(200);
+            expect(readResponse.body).toEqual(expect.objectContaining({
+                avatar: 'Created Canonical.png',
+                name: 'Created Canonical',
+            }));
+        } finally {
+            manager.dispose();
+        }
+    });
+
+    test('marks the canonical row deleted and keeps DB-first reads authoritative after a successful delete projection', async () => {
+        const directories = makeDirectories('emberdesk-character-canonical-route-');
+        tempRoots.push(directories.root);
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES = 'true';
+
+        writeCharacterCardFile(directories, 'alpha.png', 'Live Alpha');
+
+        const { manager, db } = openCanonicalDbForTests(directories);
+        try {
+            db.prepare(`
+                INSERT INTO characters (
+                    id, avatar_filename, internal_name, display_name, card_json, shallow_json, world_name, created_at_ms, updated_at_ms, deleted_at_ms
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+                'char-alpha',
+                'alpha.png',
+                'alpha',
+                'Canonical Alpha',
+                JSON.stringify({ avatar: 'alpha.png', name: 'Canonical Alpha', json_data: '{}', data: { extensions: { world: '' } } }),
+                JSON.stringify({ avatar: 'alpha.png', name: 'Canonical Alpha' }),
+                '',
+                1,
+                2,
+                null,
+            );
+            persistCanonicalAuditStatus(db, {
+                ok: true,
+                handle: 'default-user',
+                hasDrift: false,
+                blocking: false,
+                entries: [],
+            }, { auditedAtMs: 1735689602000 });
+
+            const initialResponse = await invokeCharacterGet(directories, 'alpha.png');
+            expect(initialResponse.statusCode).toBe(200);
+            expect(initialResponse.body.name).toBe('Canonical Alpha');
+
+            const deleteResponse = await invokeCharacterDelete(directories, 'alpha.png');
+            expect(deleteResponse.statusCode).toBe(200);
+            expect(fs.existsSync(path.join(directories.characters, 'alpha.png'))).toBe(false);
+
+            const deletedRow = db.prepare(`
+                SELECT deleted_at_ms
+                FROM characters
+                WHERE avatar_filename = ?
+            `).get('alpha.png');
+            expect(Number(deletedRow.deleted_at_ms)).toBeGreaterThan(0);
+
+            const readResponse = await invokeCharacterGet(directories, 'alpha.png');
+            expect(readResponse.statusCode).toBe(404);
+
+            const listResponse = await invokeCharactersAll(directories);
+            expect(listResponse.statusCode).toBe(200);
+            expect(listResponse.body).toEqual([]);
+        } finally {
+            manager.dispose();
+        }
     });
 
     test('stores sanitized world names in the index for legacy world-linked cards', async () => {

@@ -63,6 +63,23 @@ export const CANONICAL_SQLITE_MIGRATIONS = Object.freeze([
         name: 'phase_one_character_metadata_and_chat_stats',
         sql: INITIAL_PHASE_ONE_SCHEMA_SQL,
     }),
+    Object.freeze({
+        version: 2,
+        name: 'canonical_audit_state',
+        sql: `
+            CREATE TABLE IF NOT EXISTS canonical_audit_state (
+                audit_scope TEXT PRIMARY KEY,
+                status TEXT NOT NULL,
+                reason TEXT,
+                blocking INTEGER NOT NULL DEFAULT 1,
+                drift_count INTEGER NOT NULL DEFAULT 0,
+                error_count INTEGER NOT NULL DEFAULT 0,
+                entry_count INTEGER NOT NULL DEFAULT 0,
+                audited_at_ms INTEGER NOT NULL,
+                details_json TEXT NOT NULL DEFAULT '{}'
+            );
+        `,
+    }),
 ]);
 
 export class CanonicalMigrationBlockedError extends Error {

@@ -124,11 +124,14 @@ This is the narrowest slice with real payoff because it removes hot-path scans f
   - 2026-07-07: 已实现 dedicated canonical manager 与 default-off storage flags，为 migration runner、shadow import 和 read/write cutover 提供前置 runtime contract。
   - 2026-07-07: 已实现 explicit migration runner，提供 `schema_migrations`、phase-one schema bootstrap、forward-only idempotent execution 和 fail-closed blocked status。
   - 2026-07-07: 已实现 Phase 1 shadow import and audit，复用现有 file-backed character snapshot 语义导入 `characters` 与 `character_chat_stats`，并在 schema 未就绪或 drift 存在时 fail-closed。
+  - 2026-07-07: 已实现 Phase 2 DB-first reads，`/api/characters/all`、`/list`、`/get` 现可在 read flag 开启且 persisted audit summary 通过后优先读取 canonical SQLite。
+  - 2026-07-07: 已实现 Phase 3 DB-first writes and compatibility projection，`/create`、`/edit`、`/rename`、`/edit-avatar`、`/edit-attribute`、`/merge-attributes`、`/delete`、`/duplicate`、`/import` 现可在 write flag 开启时先提交 canonical SQLite，再投影 PNG / avatar identity / chat-directory side effects。
+  - 2026-07-07: 为避免 stale canonical reads，当前 file-backed character/chat 变更会立即把 persisted canonical audit state 标记为 stale；而 DB-first write 成功路径会保留 canonical authority，并把 projection failure 记录到 `projection_repairs` 而不是把文件重新视为 truth。
 - Implementation traceability:
-  - New module candidates: `src/endpoints/character-store.js`, `src/endpoints/character-store-migrations.js`
-  - Delivered modules: `src/canonical-sqlite.js`, `src/canonical-sqlite-migrations.js`, `src/canonical-sqlite-shadow-import.js`, `src/endpoints/character-file-snapshot.js`
-  - Focused proof: `tests/canonical-sqlite-shadow-import.test.js`, `tests/character-read-service.test.js`, `tests/interaction-performance-index.test.js`
-  - Delivery status: manager foundation, migration runner, and Phase 1 shadow import/audit delivered; authority cutover still pending.
+  - New module candidates: `src/endpoints/character-store-migrations.js`
+  - Delivered modules: `src/canonical-sqlite.js`, `src/canonical-sqlite-migrations.js`, `src/canonical-sqlite-shadow-import.js`, `src/endpoints/character-file-snapshot.js`, `src/endpoints/character-store.js`, `src/endpoints/character-write-service.js`
+  - Focused proof: `tests/canonical-sqlite-shadow-import.test.js`, `tests/canonical-sqlite-migrations.test.js`, `tests/character-read-service.test.js`, `tests/character-write-service.test.js`, `tests/interaction-performance-index.test.js`, `tests/worldinfo-delete-cascade.test.js`, `tests/third-party-extension-compatibility.test.js`, `tests/canonical-sqlite.test.js`
+  - Delivery status: manager foundation, migration runner, Phase 1 shadow import/audit, Phase 2 DB-first reads, and Phase 3 DB-first writes/projection delivered; canonical chat-stats authority and derived-index retirement still pending.
   - Commit traceability: wrap-up commit `feat(storage): teach canonical shadow imports to testify before cutover`
 
 Proposed storage layout:

@@ -33,6 +33,9 @@ import {
     readRecentChatPayload,
     searchChatPayload,
 } from './chat-route-service.js';
+import { getCanonicalSqliteFeatureFlags } from '../storage-feature-flags.js';
+import { getCanonicalStorageStatus, openCanonicalDatabase } from '../canonical-sqlite.js';
+import { invalidateCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
 
 const isBackupEnabled = !!getConfigValue('backups.chat.enabled', true, 'boolean');
 const maxTotalChatBackups = Number(getConfigValue('backups.chat.maxTotalBackups', -1, 'number'));
@@ -47,15 +50,42 @@ export const CHAT_BACKUPS_PREFIX = 'chat_';
  * @param {string} operation
  * @returns {void}
  */
-function markCharacterChatStatsDirtySafe(directories, avatar, operation) {
-    if (!avatar || !isCharacterIndexSupported()) {
+function markCharacterChatStatsDirtySafe(handle, directories, avatar, operation) {
+    if (!avatar) {
         return;
     }
 
+    if (isCharacterIndexSupported()) {
+        try {
+            markCharacterChatStatsDirty(directories.root, avatar);
+        } catch (error) {
+            console.warn(`Character index chat-stat invalidation skipped after ${operation} for ${avatar}:`, error);
+        }
+    }
+
     try {
-        markCharacterChatStatsDirty(directories.root, avatar);
+        const featureFlags = getCanonicalSqliteFeatureFlags();
+        if (!featureFlags.enabled) {
+            return;
+        }
+
+        const storageStatus = getCanonicalStorageStatus({ handle, directories, featureFlags });
+        if (!storageStatus.supported || storageStatus.disabledReason === 'migration_blocked') {
+            return;
+        }
+
+        const db = openCanonicalDatabase({ handle, directories, featureFlags });
+        if (!db) {
+            return;
+        }
+
+        invalidateCanonicalAuditStatus(db, {
+            handle,
+            reason: 'audit_stale_after_chat_stats_change',
+            source: `${operation}:${avatar}`,
+        });
     } catch (error) {
-        console.warn(`Character index chat-stat invalidation skipped after ${operation} for ${avatar}:`, error);
+        console.warn(`Canonical audit invalidation skipped after ${operation} for ${avatar}:`, error);
     }
 }
 
@@ -329,7 +359,7 @@ export async function trySaveChat(chatData, filePath, skipIntegrityCheck = false
 
 router.post('/save', validateAvatarUrlMiddleware, async function (request, response) {
     try {
-        const handle = request.user.profile.handle;
+        const handle = request.user.profile?.handle ?? null;
         const cardName = String(request.body.avatar_url).replace('.png', '');
         const chatData = request.body.chat;
         const chatFileName = `${String(request.body.file_name)}.jsonl`;
@@ -341,7 +371,7 @@ router.post('/save', validateAvatarUrlMiddleware, async function (request, respo
         if (Array.isArray(chatData)) {
             await trySaveChat(chatData, chatFilePath, request.body.force, handle, cardName, request.user.directories.backups);
             applyInteractionPerfChatTimestamp(chatFilePath);
-            markCharacterChatStatsDirtySafe(request.user.directories, request.body.avatar_url, 'chat save');
+            markCharacterChatStatsDirtySafe(handle, request.user.directories, request.body.avatar_url, 'chat save');
             return response.send({ ok: true });
         } else {
             return response.status(400).send({ error: 'The request\'s body.chat is not an array.' });
@@ -432,7 +462,7 @@ router.post('/rename', validateAvatarUrlMiddleware, async function (request, res
         fs.unlinkSync(pathToOriginalFile);
         console.info('Successfully renamed chat file.');
         if (!request.body.is_group) {
-            markCharacterChatStatsDirtySafe(request.user.directories, request.body.avatar_url, 'chat rename');
+            markCharacterChatStatsDirtySafe(request.user.profile?.handle ?? null, request.user.directories, request.body.avatar_url, 'chat rename');
         }
         return response.send({ ok: true, sanitizedFileName });
     } catch (error) {
@@ -455,7 +485,7 @@ router.post('/delete', validateAvatarUrlMiddleware, function (request, response)
         }
         //Return success if the file was deleted.
         if (tryDeleteFile(chatFilePath)) {
-            markCharacterChatStatsDirtySafe(request.user.directories, request.body.avatar_url, 'chat delete');
+            markCharacterChatStatsDirtySafe(request.user.profile?.handle ?? null, request.user.directories, request.body.avatar_url, 'chat delete');
             return response.send({ ok: true });
         } else {
             console.error('The chat file was not deleted.');
@@ -609,7 +639,7 @@ router.post('/import', validateAvatarUrlMiddleware, function (request, response)
         }
 
         if (importPlan.shouldMarkChatStatsDirty) {
-            markCharacterChatStatsDirtySafe(request.user.directories, request.body.avatar_url, 'chat import');
+            markCharacterChatStatsDirtySafe(request.user.profile?.handle ?? null, request.user.directories, request.body.avatar_url, 'chat import');
         }
 
         return response.send({ res: true, fileNames });
@@ -676,7 +706,7 @@ router.post('/group/save', async function (request, response) {
         }
 
         const id = request.body.id;
-        const handle = request.user.profile.handle;
+        const handle = request.user.profile?.handle ?? null;
         const chatFilePath = path.join(request.user.directories.groupChats, sanitize(`${id}.jsonl`));
         const chatData = request.body.chat;
 

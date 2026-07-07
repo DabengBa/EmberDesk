@@ -1,6 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+class CanonicalReadBlockedError extends Error {
+    constructor(reason) {
+        super(reason);
+        this.name = 'CanonicalReadBlockedError';
+        this.reason = reason;
+    }
+}
+
 /**
  * @typedef {{ query?: string, tags?: string[], sort?: string }} CharacterReadFilter
  * @typedef {{ offset?: number, limit?: number }} CharacterReadPagination
@@ -44,6 +52,83 @@ async function readCharactersFromFiles(directories, shallow, dependencies) {
     return (await Promise.all(processingPromises)).filter(character => character.name);
 }
 
+function getCanonicalReadState(handle, directories, dependencies) {
+    const featureFlags = dependencies.getCanonicalSqliteFeatureFlags?.() ?? {
+        enabled: false,
+        reads: false,
+        strict: false,
+    };
+
+    if (!featureFlags.enabled) {
+        return { enabled: false, strict: !!featureFlags.strict, fallbackReason: 'canonical_storage_disabled' };
+    }
+
+    if (!featureFlags.reads) {
+        return { enabled: false, strict: !!featureFlags.strict, fallbackReason: 'canonical_reads_disabled' };
+    }
+
+    const storageStatus = dependencies.getCanonicalStorageStatus?.({
+        handle,
+        directories,
+        featureFlags,
+    }) ?? {
+        supported: true,
+        disabledReason: null,
+    };
+
+    if (!storageStatus.supported) {
+        return { enabled: false, strict: !!featureFlags.strict, fallbackReason: 'canonical_runtime_unsupported' };
+    }
+
+    if (storageStatus.disabledReason === 'migration_blocked') {
+        return { enabled: false, strict: !!featureFlags.strict, fallbackReason: 'canonical_migration_blocked' };
+    }
+
+    const db = dependencies.openCanonicalDatabase?.({
+        handle,
+        directories,
+        featureFlags,
+    });
+    if (!db) {
+        return { enabled: false, strict: !!featureFlags.strict, fallbackReason: 'canonical_db_unavailable' };
+    }
+
+    const migrationStatus = dependencies.runCanonicalMigrations?.(db, {
+        strict: !!featureFlags.strict,
+    }) ?? { ok: true, currentVersion: 0, targetVersion: 0 };
+    if (!migrationStatus.ok) {
+        return { enabled: false, strict: !!featureFlags.strict, fallbackReason: 'canonical_migration_blocked' };
+    }
+
+    const auditStatus = dependencies.getCanonicalAuditStatus?.({
+        handle,
+        directories,
+        db,
+    }) ?? { ok: true, blocking: false, reason: null };
+    if (auditStatus.blocking) {
+        return {
+            enabled: false,
+            strict: !!featureFlags.strict,
+            fallbackReason: auditStatus.reason ?? 'audit_drift_blocked',
+        };
+    }
+
+    return {
+        enabled: true,
+        strict: !!featureFlags.strict,
+        fallbackReason: null,
+        db,
+    };
+}
+
+function maybeThrowCanonicalFallback(canonicalState) {
+    if (canonicalState.enabled || !canonicalState.strict) {
+        return;
+    }
+
+    throw new CanonicalReadBlockedError(canonicalState.fallbackReason);
+}
+
 /**
  * Reads the character list payload used by `/api/characters/all`.
  *
@@ -59,12 +144,27 @@ async function readCharactersFromFiles(directories, shallow, dependencies) {
  * @returns {Promise<{ result: { mode: 'snapshot', data: object[] }, interactionPath: string, latencyHint: CharacterReadLatencyHint }>}
  */
 export async function readCharacterListPayload({
+    handle = null,
     directories,
     shallow,
     filter: _filter,
     pagination: _pagination,
     dependencies,
 }) {
+    const canonicalState = getCanonicalReadState(handle, directories, dependencies);
+    if (canonicalState.enabled) {
+        const data = await dependencies.listCanonicalCharacters(canonicalState.db, {
+            useShallowPayload: shallow,
+        });
+
+        return wrapSnapshot(data, {
+            interactionPath: 'characters_all:canonical',
+            latencyHint: 'instant',
+        });
+    }
+
+    maybeThrowCanonicalFallback(canonicalState);
+
     if (dependencies.isCharacterIndexSupported()) {
         try {
             const avatarFiles = listAvatarFiles(directories.characters, { sorted: true });
@@ -83,18 +183,24 @@ export async function readCharacterListPayload({
         } catch (error) {
             dependencies.warn('Falling back to filesystem-backed character list after index read failure:', error);
             const data = await readCharactersFromFiles(directories, shallow, dependencies);
-            return wrapSnapshot(data, {
-                interactionPath: 'characters_all:filesystem',
-                latencyHint: 'slow',
-            });
+            return {
+                ...wrapSnapshot(data, {
+                    interactionPath: 'characters_all:filesystem',
+                    latencyHint: 'slow',
+                }),
+                ...(canonicalState.fallbackReason ? { fallbackReason: canonicalState.fallbackReason } : {}),
+            };
         }
     }
 
     const data = await readCharactersFromFiles(directories, shallow, dependencies);
-    return wrapSnapshot(data, {
+    return {
+        ...wrapSnapshot(data, {
         interactionPath: 'characters_all:filesystem',
         latencyHint: 'slow',
-    });
+        }),
+        ...(canonicalState.fallbackReason ? { fallbackReason: canonicalState.fallbackReason } : {}),
+    };
 }
 
 /**
@@ -111,11 +217,25 @@ export async function readCharacterListPayload({
  * @returns {Promise<{ result: { mode: 'snapshot', data: object[] }, latencyHint: CharacterReadLatencyHint }>}
  */
 export async function readCharacterSummaryPayload({
+    handle = null,
     directories,
     filter: _filter,
     pagination: _pagination,
     dependencies,
 }) {
+    const canonicalState = getCanonicalReadState(handle, directories, dependencies);
+    if (canonicalState.enabled) {
+        const data = await dependencies.listCanonicalCharacters(canonicalState.db, {
+            useShallowPayload: true,
+        });
+
+        return wrapSnapshot(data, {
+            latencyHint: 'instant',
+        });
+    }
+
+    maybeThrowCanonicalFallback(canonicalState);
+
     if (dependencies.isCharacterIndexSupported()) {
         try {
             const avatarFiles = listAvatarFiles(directories.characters, { sorted: true });
@@ -154,10 +274,28 @@ export async function readCharacterSummaryPayload({
  * }>}
  */
 export async function readCharacterFullPayload({
+    handle = null,
     directories,
     avatarUrl,
     dependencies,
 }) {
+    const canonicalState = getCanonicalReadState(handle, directories, dependencies);
+    if (canonicalState.enabled) {
+        const data = await dependencies.getCanonicalCharacter(canonicalState.db, avatarUrl);
+        if (data) {
+            return {
+                status: 'found',
+                result: { mode: 'snapshot', data },
+                interactionPath: 'characters_get:canonical',
+                latencyHint: 'instant',
+            };
+        }
+
+        dependencies.warn?.(`Canonical character row missing for ${avatarUrl}; falling back to file-backed read.`);
+    } else {
+        maybeThrowCanonicalFallback(canonicalState);
+    }
+
     const filePath = path.join(directories.characters, avatarUrl);
     let fileStat;
     try {

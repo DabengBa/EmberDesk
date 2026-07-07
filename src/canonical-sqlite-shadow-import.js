@@ -7,6 +7,7 @@ import {
     calculateCharacterChatStats,
     getCharacterChatDirectory,
 } from './endpoints/character-file-snapshot.js';
+import { normalizeCanonicalCharacterPayload } from './endpoints/character-store.js';
 import { uuidv4 } from './util.js';
 
 function listCharacterAvatarFiles(directories) {
@@ -22,15 +23,17 @@ function normalizeWorldName(snapshotRow) {
 function buildCanonicalCharacterRecord(snapshotRow, existingId = null) {
     const avatarFilename = snapshotRow.avatar;
     const internalName = path.parse(avatarFilename).name;
+    const normalizedFullPayload = normalizeCanonicalCharacterPayload(snapshotRow.fullPayload);
+    const normalizedShallowPayload = normalizeCanonicalCharacterPayload(snapshotRow.shallowPayload);
     return {
         id: existingId ?? uuidv4(),
         avatar_filename: avatarFilename,
         internal_name: internalName,
-        display_name: String(snapshotRow.fullPayload.name),
-        card_json: String(snapshotRow.fullPayload.json_data),
-        shallow_json: JSON.stringify(snapshotRow.shallowPayload),
-        world_name: normalizeWorldName(snapshotRow),
-        created_at_ms: Number(snapshotRow.fullPayload.date_added ?? snapshotRow.sourceMtimeMs ?? 0),
+        display_name: String(normalizedFullPayload.name),
+        card_json: JSON.stringify(normalizedFullPayload),
+        shallow_json: JSON.stringify(normalizedShallowPayload),
+        world_name: normalizeWorldName({ fullPayload: normalizedFullPayload }),
+        created_at_ms: Number(normalizedFullPayload.date_added ?? snapshotRow.sourceMtimeMs ?? 0),
         updated_at_ms: Number(snapshotRow.sourceMtimeMs ?? 0),
         deleted_at_ms: null,
     };
@@ -183,6 +186,160 @@ function buildAuditEntry({ handle, avatarFilename, characterId, status, driftTyp
         details,
         audited_at_ms: auditedAtMs,
     };
+}
+
+function countEntriesByStatus(entries, status) {
+    return entries.filter(entry => entry.status === status).length;
+}
+
+function normalizePersistedAuditState(row) {
+    if (!row) {
+        return {
+            ok: false,
+            blocking: true,
+            reason: 'audit_not_run',
+            status: 'missing',
+            driftCount: 0,
+            errorCount: 0,
+            entryCount: 0,
+            auditedAtMs: null,
+            details: {},
+        };
+    }
+
+    let details = {};
+    try {
+        details = JSON.parse(String(row.details_json ?? '{}'));
+    } catch {
+        details = {};
+    }
+
+    return {
+        ok: !Boolean(row.blocking),
+        blocking: Boolean(row.blocking),
+        reason: row.reason ? String(row.reason) : null,
+        status: String(row.status),
+        driftCount: Number(row.drift_count ?? 0),
+        errorCount: Number(row.error_count ?? 0),
+        entryCount: Number(row.entry_count ?? 0),
+        auditedAtMs: Number(row.audited_at_ms ?? 0),
+        details,
+    };
+}
+
+export function getPersistedCanonicalAuditStatus(db, { scope = 'character_metadata_and_chat_stats' } = {}) {
+    let row = null;
+    try {
+        row = db.prepare(`
+            SELECT
+                audit_scope,
+                status,
+                reason,
+                blocking,
+                drift_count,
+                error_count,
+                entry_count,
+                audited_at_ms,
+                details_json
+            FROM canonical_audit_state
+            WHERE audit_scope = ?
+        `).get(scope);
+    } catch (error) {
+        if (String(error?.message ?? '').includes('no such table: canonical_audit_state')) {
+            return normalizePersistedAuditState(null);
+        }
+        throw error;
+    }
+
+    return normalizePersistedAuditState(row);
+}
+
+export function persistCanonicalAuditStatus(db, auditResult, { scope = 'character_metadata_and_chat_stats', auditedAtMs = Date.now() } = {}) {
+    const driftCount = countEntriesByStatus(auditResult.entries ?? [], 'drift');
+    const errorCount = countEntriesByStatus(auditResult.entries ?? [], 'error');
+    const persistedState = {
+        status: auditResult.blocking ? 'drift' : 'clean',
+        reason: auditResult.blocking ? (auditResult.reason ?? 'audit_drift_blocked') : null,
+        blocking: auditResult.blocking ? 1 : 0,
+        driftCount,
+        errorCount,
+        entryCount: Array.isArray(auditResult.entries) ? auditResult.entries.length : 0,
+        auditedAtMs,
+        details: {
+            handle: auditResult.handle ?? null,
+            migrationStatus: auditResult.migrationStatus ?? null,
+            hasDrift: !!auditResult.hasDrift,
+        },
+    };
+
+    withCanonicalTransaction(db, txnDb => {
+        txnDb.prepare(`
+            INSERT INTO canonical_audit_state (
+                audit_scope,
+                status,
+                reason,
+                blocking,
+                drift_count,
+                error_count,
+                entry_count,
+                audited_at_ms,
+                details_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(audit_scope) DO UPDATE SET
+                status = excluded.status,
+                reason = excluded.reason,
+                blocking = excluded.blocking,
+                drift_count = excluded.drift_count,
+                error_count = excluded.error_count,
+                entry_count = excluded.entry_count,
+                audited_at_ms = excluded.audited_at_ms,
+                details_json = excluded.details_json
+        `).run(
+            scope,
+            persistedState.status,
+            persistedState.reason,
+            persistedState.blocking,
+            persistedState.driftCount,
+            persistedState.errorCount,
+            persistedState.entryCount,
+            persistedState.auditedAtMs,
+            JSON.stringify(persistedState.details),
+        );
+    });
+
+    return {
+        ok: !Boolean(persistedState.blocking),
+        blocking: Boolean(persistedState.blocking),
+        reason: persistedState.reason,
+        status: persistedState.status,
+        driftCount: persistedState.driftCount,
+        errorCount: persistedState.errorCount,
+        entryCount: persistedState.entryCount,
+        auditedAtMs: persistedState.auditedAtMs,
+        details: persistedState.details,
+    };
+}
+
+export function invalidateCanonicalAuditStatus(db, {
+    scope = 'character_metadata_and_chat_stats',
+    auditedAtMs = Date.now(),
+    reason = 'projection_stale',
+    source = null,
+    handle = null,
+} = {}) {
+    return persistCanonicalAuditStatus(db, {
+        ok: false,
+        handle,
+        hasDrift: false,
+        blocking: true,
+        reason,
+        migrationStatus: null,
+        entries: [],
+        invalidatedBy: source,
+    }, {
+        scope,
+        auditedAtMs,
+    });
 }
 
 export async function runCanonicalShadowImport({
@@ -413,11 +570,14 @@ export async function auditCanonicalShadowImport({
     }
 
     const hasDrift = entries.some(entry => entry.status === 'drift' || entry.status === 'error');
-    return {
+    const result = {
         ok: !hasDrift,
         handle,
         hasDrift,
         blocking: hasDrift,
+        ...(hasDrift ? { reason: 'audit_drift_blocked' } : {}),
         entries,
     };
+    persistCanonicalAuditStatus(db, result, { auditedAtMs });
+    return result;
 }

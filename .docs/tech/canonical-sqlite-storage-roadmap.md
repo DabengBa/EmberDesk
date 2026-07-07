@@ -18,7 +18,6 @@ Primary current files:
 
 Future implementation candidates:
 
-- `src/canonical-sqlite-migrations.js`
 - `src/endpoints/character-store.js`
 - `src/endpoints/character-store-migrations.js`
 - `scripts/canonical-sqlite-audit.mjs`
@@ -129,6 +128,15 @@ Acceptance:
 - Fallback is observable in logs/test hooks, not silent ambiguity.
 - Derived `_cache/character-index.sqlite` is not treated as canonical fallback.
 
+Current delivered foundation:
+
+- `src/endpoints/character-store.js` now reconstructs `/api/characters/all`, `/api/characters/list`, and `/api/characters/get` payloads from canonical `characters` plus `character_chat_stats` rows while preserving existing avatar-filename identity and route payload shape.
+- `src/endpoints/character-read-service.js` now gates DB-first reads on the persisted canonical audit summary instead of inferring audit success from schema version parity.
+- `src/canonical-sqlite-migrations.js` phase-one schema now includes `canonical_audit_state` for the persisted audit gate contract.
+- `src/canonical-sqlite-shadow-import.js` now persists clean vs blocked audit summaries after successful audit runs, and `getPersistedCanonicalAuditStatus()` now fails closed as `audit_not_run` until that summary exists.
+- `src/endpoints/characters.js` and `src/endpoints/chats.js` now invalidate the persisted canonical audit state after successful file-backed character or chat mutations so DB-first reads cannot continue serving stale canonical rows after normal runtime writes.
+- Route-level proof currently lives in `tests/character-read-service.test.js` and `tests/interaction-performance-index.test.js`, including canonical `/all` and `/get` reads, `audit_not_run` fallback, strict-mode failure, and stale-audit invalidation after file-backed character edits.
+
 ### Phase 3: DB-First Writes And Projection
 
 Goal: make character mutation routes write canonical SQLite first, then project compatibility files.
@@ -146,6 +154,14 @@ Acceptance:
 - Projection failure returns explicit error state and records repair intent.
 - Flag rollback can return reads to file-backed mode only if audit confirms projected files are complete enough for rollback.
 - Destructive actions preserve existing confirmation and cascade behavior.
+
+Current delivered foundation:
+
+- `src/endpoints/character-write-service.js` now coordinates canonical-first create/edit/rename/delete flows, preserves compatibility projection behavior, and records `projection_repairs` instead of silently restoring file authority after DB-committed projection failures.
+- `src/endpoints/characters.js` now routes `/create`, `/edit`, `/rename`, `/edit-avatar`, `/edit-attribute`, `/merge-attributes`, `/delete`, `/duplicate`, and `/import` through the same DB-first write seam when `features.storage.canonicalSqlite.writes=true` and the persisted audit gate is clean.
+- `src/endpoints/character-store.js` now normalizes canonical row writes so shadow import, DB-first reads, and DB-first writes persist the same route-compatible payload shape.
+- `src/canonical-sqlite-migrations.js` now carries a dedicated `canonical_audit_state` migration so pre-existing Phase 1 databases can upgrade cleanly before persisted audit gating or write cutover runs.
+- Write-path proof currently lives in `tests/character-write-service.test.js`, `tests/interaction-performance-index.test.js`, `tests/worldinfo-delete-cascade.test.js`, and `tests/third-party-extension-compatibility.test.js`, including explicit projection-failure repair intent, route-level DB-first mutations, delete/world preflight preservation, and compatibility-surface coverage.
 
 ### Phase 4: Chat Stats Authority
 
@@ -212,11 +228,12 @@ Acceptance:
 6. `audit report`
    - Depends on shadow import.
    - Compares DB state and file projections; records drift without changing either side.
-   - Current status: delivered in `src/canonical-sqlite-shadow-import.js` with explicit `migration_not_applied` / `migration_blocked` fail-closed status and machine-readable drift output.
+   - Current status: delivered in `src/canonical-sqlite-shadow-import.js` with explicit `migration_not_applied` / `migration_blocked` fail-closed status, machine-readable drift output, and a persisted audit-summary gate for later read cutover.
 
 7. `read service cutover`
    - Depends on audit passing and read flag.
    - Switches character read service to DB-first with parity tests.
+   - Current status: delivered for `/api/characters/all`, `/api/characters/list`, and `/api/characters/get` in `src/endpoints/character-read-service.js`, backed by `src/endpoints/character-store.js`, with explicit fallback reasons and stale-audit invalidation on current file-backed mutation paths.
 
 8. `write projection`
    - Depends on read cutover confidence.

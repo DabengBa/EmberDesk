@@ -1,5 +1,7 @@
 import path from 'node:path';
 
+import sanitize from 'sanitize-filename';
+
 function getDirectories({ request, directories }) {
     return directories ?? request.user.directories;
 }
@@ -75,6 +77,45 @@ function writeFailedResult(avatarName) {
     return failureResult('write_failed', 'Error: failed to write character data', avatarName);
 }
 
+function getProjectionWriteOptions(canonicalResult, extraOptions = undefined) {
+    return {
+        ...(extraOptions ?? {}),
+        ...(canonicalResult.authorityCommitted ? { skipCanonicalAuditInvalidation: true } : {}),
+    };
+}
+
+function projectionFailedResult(avatarName, repairKey) {
+    return {
+        ok: false,
+        reason: 'projection_failed',
+        message: 'Error: character data committed to canonical storage but compatibility projection failed',
+        avatarName,
+        repairKey,
+        authorityCommitted: true,
+    };
+}
+
+function deleteFailedResult(avatarName) {
+    return failureResult('delete_failed', 'Error: failed to delete character data', avatarName);
+}
+
+async function maybeCommitCanonicalWrite(dependencies, operation, payload) {
+    if (typeof dependencies.performCanonicalWrite !== 'function') {
+        return { enabled: false, authorityCommitted: false, repairKey: null };
+    }
+
+    const result = await dependencies.performCanonicalWrite(operation, payload);
+    return result ?? { enabled: false, authorityCommitted: false, repairKey: null };
+}
+
+async function maybeRecordProjectionRepair(dependencies, repair) {
+    if (typeof dependencies.recordProjectionRepair !== 'function') {
+        return;
+    }
+
+    await dependencies.recordProjectionRepair(repair);
+}
+
 function createPreparedCharacterData(body, directories, dependencies) {
     const commandBody = {
         ...body,
@@ -140,6 +181,8 @@ async function createPreparedRenameData(body, directories, request, dependencies
  * @param {object} [options.body]
  * @param {{ destination: string, filename: string }} [options.uploadFile]
  * @param {{ destination: string, filename: string }} [options.file]
+ * @param {string|Buffer} [options.sourceImage]
+ * @param {boolean} [options.ensureChatsDirectory]
  * @param {object} [options.crop]
  * @param {object} options.dependencies
  * @returns {Promise<{ ok: boolean, avatarName?: string, internalName?: string, reason?: string, message?: string }>}
@@ -152,6 +195,8 @@ export async function createCharacterCard({
     characterData,
     file = null,
     uploadFile = null,
+    sourceImage = undefined,
+    ensureChatsDirectory = true,
     crop = undefined,
     dependencies,
 }) {
@@ -162,18 +207,45 @@ export async function createCharacterCard({
     const avatarName = getAvatarName(prepared.internalName);
     const chatsPath = joinPath(dependencies, userDirectories.chats, prepared.internalName);
     const uploadPath = getUploadPath(file ?? uploadFile, dependencies);
-    const inputFile = uploadPath ?? dependencies.defaultAvatarPath;
+    const inputFile = sourceImage ?? uploadPath ?? dependencies.defaultAvatarPath;
 
-    if (!exists(dependencies, chatsPath)) {
+    if (ensureChatsDirectory && !exists(dependencies, chatsPath)) {
         makeDirectory(dependencies, chatsPath);
     }
 
-    const result = await dependencies.writeCharacterData(inputFile, prepared.characterData, prepared.internalName, request, crop);
+    const canonicalResult = await maybeCommitCanonicalWrite(dependencies, 'create', {
+        avatarName,
+        internalName: prepared.internalName,
+        characterData: prepared.characterData,
+        directories: userDirectories,
+        request,
+    });
+
+    const result = await dependencies.writeCharacterData(
+        inputFile,
+        prepared.characterData,
+        prepared.internalName,
+        request,
+        crop,
+        getProjectionWriteOptions(canonicalResult),
+    );
     if (uploadPath) {
         unlinkFile(dependencies, uploadPath);
     }
 
     if (!result) {
+        if (canonicalResult.authorityCommitted) {
+            await maybeRecordProjectionRepair(dependencies, {
+                repairKey: canonicalResult.repairKey,
+                repairType: 'character_projection',
+                avatarName,
+                operation: 'create',
+                reason: 'projection_failed',
+                directories: userDirectories,
+                handle: request.user.profile?.handle ?? null,
+            });
+            return projectionFailedResult(avatarName, canonicalResult.repairKey);
+        }
         return writeFailedResult(avatarName);
     }
 
@@ -215,6 +287,15 @@ export async function editCharacterCard({
         : { avatarUrl, targetFile, characterData };
     const uploadPath = getUploadPath(file ?? uploadFile, dependencies);
 
+    const canonicalResult = await maybeCommitCanonicalWrite(dependencies, 'edit', {
+        avatarName: prepared.avatarUrl,
+        internalName: prepared.targetFile,
+        characterData: prepared.characterData,
+        directories: userDirectories,
+        request,
+        response,
+    });
+
     if (!uploadPath) {
         const avatarPath = joinPath(dependencies, userDirectories.characters, prepared.avatarUrl);
         if (!exists(dependencies, avatarPath)) {
@@ -230,15 +311,46 @@ export async function editCharacterCard({
             prepared.targetFile,
             request,
             undefined,
-            { shouldRegenerateThumbnail: false },
+            getProjectionWriteOptions(canonicalResult, { shouldRegenerateThumbnail: false }),
         );
         if (!result) {
+            if (canonicalResult.authorityCommitted) {
+                await maybeRecordProjectionRepair(dependencies, {
+                    repairKey: canonicalResult.repairKey,
+                    repairType: 'character_projection',
+                    avatarName: prepared.avatarUrl,
+                    operation: 'edit',
+                    reason: 'projection_failed',
+                    directories: userDirectories,
+                    handle: request.user.profile?.handle ?? null,
+                });
+                return projectionFailedResult(prepared.avatarUrl, canonicalResult.repairKey);
+            }
             return writeFailedResult(prepared.avatarUrl);
         }
     } else {
-        const result = await dependencies.writeCharacterData(uploadPath, prepared.characterData, prepared.targetFile, request, crop);
+        const result = await dependencies.writeCharacterData(
+            uploadPath,
+            prepared.characterData,
+            prepared.targetFile,
+            request,
+            crop,
+            getProjectionWriteOptions(canonicalResult),
+        );
         unlinkFile(dependencies, uploadPath);
         if (!result) {
+            if (canonicalResult.authorityCommitted) {
+                await maybeRecordProjectionRepair(dependencies, {
+                    repairKey: canonicalResult.repairKey,
+                    repairType: 'character_projection',
+                    avatarName: prepared.avatarUrl,
+                    operation: 'edit',
+                    reason: 'projection_failed',
+                    directories: userDirectories,
+                    handle: request.user.profile?.handle ?? null,
+                });
+                return projectionFailedResult(prepared.avatarUrl, canonicalResult.repairKey);
+            }
             return writeFailedResult(prepared.avatarUrl);
         }
 
@@ -286,8 +398,37 @@ export async function renameCharacterCard(options) {
     const oldChatsPath = joinPath(dependencies, directories.chats, oldInternalName);
     const newChatsPath = joinPath(dependencies, directories.chats, newInternalName);
 
-    const result = await dependencies.writeCharacterData(oldAvatarPath, characterData, newInternalName, request);
+    const canonicalResult = await maybeCommitCanonicalWrite(dependencies, 'rename', {
+        oldAvatarName,
+        oldInternalName,
+        newAvatarName,
+        newInternalName,
+        characterData,
+        directories,
+        request,
+    });
+
+    const result = await dependencies.writeCharacterData(
+        oldAvatarPath,
+        characterData,
+        newInternalName,
+        request,
+        undefined,
+        getProjectionWriteOptions(canonicalResult),
+    );
     if (!result) {
+        if (canonicalResult.authorityCommitted) {
+            await maybeRecordProjectionRepair(dependencies, {
+                repairKey: canonicalResult.repairKey,
+                repairType: 'character_projection',
+                avatarName: newAvatarName,
+                operation: 'rename',
+                reason: 'projection_failed',
+                directories,
+                handle: request.user.profile?.handle ?? null,
+            });
+            return projectionFailedResult(newAvatarName, canonicalResult.repairKey);
+        }
         return writeFailedResult(newAvatarName);
     }
 
@@ -300,4 +441,75 @@ export async function renameCharacterCard(options) {
     dependencies.deleteCharacterIndexEntry(directories, oldAvatarName, 'rename');
     await dependencies.refreshCharacterIndexEntry(directories, newAvatarName, 'rename');
     return okResult(newAvatarName);
+}
+
+/**
+ * @param {object} options
+ * @param {import('../users.js').UserDirectoryList} [options.directories]
+ * @param {string} [options.avatarName]
+ * @param {import('express').Request} options.request
+ * @param {boolean} [options.deleteChats]
+ * @param {object} options.dependencies
+ * @returns {Promise<{ ok: boolean, avatarName?: string, reason?: string, message?: string, authorityCommitted?: boolean, repairKey?: string, avatarPath?: string }>}
+ */
+export async function deleteCharacterCard({
+    request,
+    directories,
+    avatarName = null,
+    deleteChats = false,
+    dependencies,
+}) {
+    const userDirectories = getDirectories({ request, directories });
+    const targetAvatarName = avatarName ?? request.body?.avatar_url;
+    const avatarPath = joinPath(dependencies, userDirectories.characters, targetAvatarName);
+
+    if (!exists(dependencies, avatarPath)) {
+        return {
+            ...failureResult('missing_avatar', 'Error: character file does not exist', targetAvatarName),
+            avatarPath,
+        };
+    }
+
+    const canonicalResult = await maybeCommitCanonicalWrite(dependencies, 'delete', {
+        avatarName: targetAvatarName,
+        directories: userDirectories,
+        request,
+    });
+
+    try {
+        unlinkFile(dependencies, avatarPath);
+        dependencies.invalidateThumbnail?.(userDirectories, 'avatar', targetAvatarName);
+
+        if (deleteChats) {
+            const chatsDirectoryName = sanitize(targetAvatarName.replace(/\.png$/i, ''));
+            const chatsPath = joinPath(dependencies, userDirectories.chats, chatsDirectoryName);
+            await dependencies.removeDirectory(chatsPath);
+        }
+    } catch (error) {
+        if (canonicalResult.authorityCommitted) {
+            await maybeRecordProjectionRepair(dependencies, {
+                repairKey: canonicalResult.repairKey,
+                repairType: 'character_projection',
+                avatarName: targetAvatarName,
+                operation: 'delete',
+                reason: 'projection_failed',
+                directories: userDirectories,
+                handle: request.user.profile?.handle ?? null,
+            });
+            return projectionFailedResult(targetAvatarName, canonicalResult.repairKey);
+        }
+
+        return deleteFailedResult(targetAvatarName);
+    }
+
+    if (!canonicalResult.authorityCommitted) {
+        dependencies.invalidateCanonicalAudit?.(
+            request.user.profile?.handle ?? null,
+            userDirectories,
+            `character_delete:${targetAvatarName}`,
+        );
+    }
+
+    dependencies.deleteCharacterIndexEntry(userDirectories, targetAvatarName, 'delete');
+    return okResult(targetAvatarName);
 }

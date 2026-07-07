@@ -2,6 +2,7 @@ import { describe, expect, jest, test } from '@jest/globals';
 
 import {
     createCharacterCard,
+    deleteCharacterCard,
     editCharacterCard,
     renameCharacterCard,
 } from '../src/endpoints/character-write-service.js';
@@ -19,6 +20,9 @@ function makeDependencies({
     existingPaths = [],
     writeResult = true,
     rawCharacterData = '{"name":"Old","data":{"name":"Old"}}',
+    canonicalResult = null,
+    repairResult = { ok: true },
+    includeCanonicalSeam = true,
 } = {}) {
     const calls = [];
     const existing = new Set(existingPaths);
@@ -57,8 +61,21 @@ function makeDependencies({
         }),
         refreshCharacterIndexEntry: jest.fn(async (_directories, avatar, operation) => calls.push(['refresh-index', avatar, operation])),
         deleteCharacterIndexEntry: jest.fn((_directories, avatar, operation) => calls.push(['delete-index', avatar, operation])),
+        invalidateCanonicalAudit: jest.fn((handle, directories, source) => calls.push(['invalidate-audit', handle, directories, source])),
+        invalidateThumbnail: jest.fn((directories, type, avatar) => calls.push(['invalidate-thumb', type, avatar])),
         bustCache: jest.fn(() => calls.push(['cache-bust'])),
     };
+
+    if (includeCanonicalSeam) {
+        dependencies.performCanonicalWrite = jest.fn(async (operation, payload) => {
+            calls.push(['canonical-write', operation, payload]);
+            return canonicalResult;
+        });
+        dependencies.recordProjectionRepair = jest.fn(async repair => {
+            calls.push(['repair', repair]);
+            return repairResult;
+        });
+    }
 
     return { calls, dependencies };
 }
@@ -70,7 +87,7 @@ describe('character write service', () => {
             chats: 'user/chats',
         };
         const request = makeRequest(directories);
-        const { calls, dependencies } = makeDependencies();
+        const { calls, dependencies } = makeDependencies({ includeCanonicalSeam: false });
 
         const result = await createCharacterCard({
             request,
@@ -86,7 +103,44 @@ describe('character write service', () => {
         expect(dependencies.formatCharacterData).toHaveBeenCalledWith({ ch_name: 'Tester' }, directories);
         expect(calls).toEqual([
             ['mkdir', 'user/chats/Tester'],
-            ['write', 'default-avatar.png', '{"name":"Tester"}', 'Tester', undefined, undefined],
+            ['write', 'default-avatar.png', '{"name":"Tester"}', 'Tester', undefined, {}],
+            ['refresh-index', 'Tester.png', 'create'],
+        ]);
+    });
+
+    test('uses canonical authority first for create when the write seam is enabled', async () => {
+        const directories = {
+            characters: 'user/characters',
+            chats: 'user/chats',
+        };
+        const request = makeRequest(directories);
+        const { calls, dependencies } = makeDependencies({
+            canonicalResult: {
+                enabled: true,
+                authorityCommitted: true,
+                repairKey: 'repair:create:Tester.png',
+            },
+        });
+
+        const result = await createCharacterCard({
+            request,
+            body: { ch_name: 'Tester' },
+            dependencies,
+        });
+
+        expect(result).toEqual({
+            ok: true,
+            avatarName: 'Tester.png',
+            internalName: 'Tester',
+        });
+        expect(calls).toEqual([
+            ['mkdir', 'user/chats/Tester'],
+            ['canonical-write', 'create', expect.objectContaining({
+                avatarName: 'Tester.png',
+                internalName: 'Tester',
+                characterData: '{"name":"Tester"}',
+            })],
+            ['write', 'default-avatar.png', '{"name":"Tester"}', 'Tester', undefined, { skipCanonicalAuditInvalidation: true }],
             ['refresh-index', 'Tester.png', 'create'],
         ]);
     });
@@ -99,6 +153,7 @@ describe('character write service', () => {
         const request = makeRequest(directories);
         const { calls, dependencies } = makeDependencies({
             existingPaths: ['user/chats/Uploaded'],
+            includeCanonicalSeam: false,
         });
         const crop = { x: 1, y: 2, width: 3, height: 4 };
 
@@ -112,7 +167,7 @@ describe('character write service', () => {
 
         expect(result).toMatchObject({ ok: true, avatarName: 'Uploaded.png' });
         expect(calls).toEqual([
-            ['write', 'tmp/upload.tmp', '{"name":"Uploaded"}', 'Uploaded', crop, undefined],
+            ['write', 'tmp/upload.tmp', '{"name":"Uploaded"}', 'Uploaded', crop, {}],
             ['unlink', 'tmp/upload.tmp'],
             ['refresh-index', 'Uploaded.png', 'create'],
         ]);
@@ -124,7 +179,7 @@ describe('character write service', () => {
             chats: 'user/chats',
         };
         const request = makeRequest(directories);
-        const { calls, dependencies } = makeDependencies({ writeResult: false });
+        const { calls, dependencies } = makeDependencies({ writeResult: false, includeCanonicalSeam: false });
 
         const result = await createCharacterCard({
             request,
@@ -140,7 +195,53 @@ describe('character write service', () => {
         });
         expect(calls).toEqual([
             ['mkdir', 'user/chats/Broken'],
-            ['write', 'default-avatar.png', '{"name":"Broken"}', 'Broken', undefined, undefined],
+            ['write', 'default-avatar.png', '{"name":"Broken"}', 'Broken', undefined, {}],
+        ]);
+    });
+
+    test('records a repair intent instead of treating files as authority when create projection fails after canonical commit', async () => {
+        const directories = {
+            characters: 'user/characters',
+            chats: 'user/chats',
+        };
+        const request = makeRequest(directories);
+        const { calls, dependencies } = makeDependencies({
+            writeResult: false,
+            canonicalResult: {
+                enabled: true,
+                authorityCommitted: true,
+                repairKey: 'repair:create:Broken.png',
+            },
+        });
+
+        const result = await createCharacterCard({
+            request,
+            body: { ch_name: 'Broken' },
+            dependencies,
+        });
+
+        expect(result).toEqual({
+            ok: false,
+            reason: 'projection_failed',
+            message: 'Error: character data committed to canonical storage but compatibility projection failed',
+            avatarName: 'Broken.png',
+            repairKey: 'repair:create:Broken.png',
+            authorityCommitted: true,
+        });
+        expect(calls).toEqual([
+            ['mkdir', 'user/chats/Broken'],
+            ['canonical-write', 'create', expect.objectContaining({
+                avatarName: 'Broken.png',
+                internalName: 'Broken',
+            })],
+            ['write', 'default-avatar.png', '{"name":"Broken"}', 'Broken', undefined, { skipCanonicalAuditInvalidation: true }],
+            ['repair', expect.objectContaining({
+                repairKey: 'repair:create:Broken.png',
+                repairType: 'character_projection',
+                avatarName: 'Broken.png',
+                reason: 'projection_failed',
+                operation: 'create',
+            })],
         ]);
     });
 
@@ -152,6 +253,7 @@ describe('character write service', () => {
         const request = makeRequest(directories);
         const { calls, dependencies } = makeDependencies({
             existingPaths: ['user/characters/Tester.png'],
+            includeCanonicalSeam: false,
         });
 
         const result = await editCharacterCard({
@@ -182,6 +284,39 @@ describe('character write service', () => {
         ]);
     });
 
+    test('uses canonical authority first for edit when the write seam is enabled', async () => {
+        const directories = {
+            characters: 'user/characters',
+            chats: 'user/chats',
+        };
+        const request = makeRequest(directories);
+        const { calls, dependencies } = makeDependencies({
+            existingPaths: ['user/characters/Tester.png'],
+            canonicalResult: {
+                enabled: true,
+                authorityCommitted: true,
+                repairKey: 'repair:edit:Tester.png',
+            },
+        });
+
+        const result = await editCharacterCard({
+            request,
+            body: {
+                avatar_url: 'Tester.png',
+                ch_name: 'Tester',
+                chat: 'existing-chat',
+                create_date: '2026-06-09T00:00:00.000Z',
+            },
+            dependencies,
+        });
+
+        expect(result).toEqual({ ok: true, avatarName: 'Tester.png' });
+        expect(calls[0]).toEqual(['canonical-write', 'edit', expect.objectContaining({
+            avatarName: 'Tester.png',
+            internalName: 'Tester',
+        })]);
+    });
+
     test('edits a replacement avatar by cleaning up upload, busting cache, then refreshing the index', async () => {
         const directories = {
             characters: 'user/characters',
@@ -190,7 +325,7 @@ describe('character write service', () => {
         const request = makeRequest(directories);
         const response = {};
         const crop = { want_resize: true };
-        const { calls, dependencies } = makeDependencies();
+        const { calls, dependencies } = makeDependencies({ includeCanonicalSeam: false });
 
         const result = await editCharacterCard({
             request,
@@ -210,7 +345,7 @@ describe('character write service', () => {
         });
         expect(dependencies.bustCache).toHaveBeenCalledWith(request, response);
         expect(calls).toEqual([
-            ['write', 'tmp/avatar.tmp', '{"name":"Tester"}', 'Tester', crop, undefined],
+            ['write', 'tmp/avatar.tmp', '{"name":"Tester"}', 'Tester', crop, {}],
             ['unlink', 'tmp/avatar.tmp'],
             ['cache-bust'],
             ['refresh-index', 'Tester.png', 'edit'],
@@ -225,6 +360,7 @@ describe('character write service', () => {
         const request = makeRequest(directories);
         const { calls, dependencies } = makeDependencies({
             existingPaths: ['user/chats/Old'],
+            includeCanonicalSeam: false,
         });
 
         const result = await renameCharacterCard({
@@ -244,13 +380,46 @@ describe('character write service', () => {
             ['read', 'user/characters/Old.png'],
             ['set', 'data.name', 'New'],
             ['set', 'name', 'New'],
-            ['write', 'user/characters/Old.png', '{"name":"New","data":{"name":"New"}}', 'New', undefined, undefined],
+            ['write', 'user/characters/Old.png', '{"name":"New","data":{"name":"New"}}', 'New', undefined, {}],
             ['copy', 'user/chats/Old', 'user/chats/New'],
             ['remove-dir', 'user/chats/Old'],
             ['unlink', 'user/characters/Old.png'],
             ['delete-index', 'Old.png', 'rename'],
             ['refresh-index', 'New.png', 'rename'],
         ]);
+    });
+
+    test('uses canonical authority first for rename when the write seam is enabled', async () => {
+        const directories = {
+            characters: 'user/characters',
+            chats: 'user/chats',
+        };
+        const request = makeRequest(directories);
+        const { calls, dependencies } = makeDependencies({
+            existingPaths: ['user/chats/Old'],
+            canonicalResult: {
+                enabled: true,
+                authorityCommitted: true,
+                repairKey: 'repair:rename:New.png',
+            },
+        });
+
+        const result = await renameCharacterCard({
+            request,
+            body: {
+                avatar_url: 'Old.png',
+                new_name: 'New',
+            },
+            dependencies,
+        });
+
+        expect(result).toEqual({ ok: true, avatarName: 'New.png' });
+        expect(calls).toContainEqual(['canonical-write', 'rename', expect.objectContaining({
+            oldAvatarName: 'Old.png',
+            newAvatarName: 'New.png',
+            oldInternalName: 'Old',
+            newInternalName: 'New',
+        })]);
     });
 
     test('does not copy chats, delete the old avatar, or refresh indexes when rename write fails', async () => {
@@ -262,6 +431,7 @@ describe('character write service', () => {
         const { calls, dependencies } = makeDependencies({
             existingPaths: ['user/chats/Old'],
             writeResult: false,
+            includeCanonicalSeam: false,
         });
 
         const result = await renameCharacterCard({
@@ -283,7 +453,105 @@ describe('character write service', () => {
             ['read', 'user/characters/Old.png'],
             ['set', 'data.name', 'New'],
             ['set', 'name', 'New'],
-            ['write', 'user/characters/Old.png', '{"name":"New","data":{"name":"New"}}', 'New', undefined, undefined],
+            ['write', 'user/characters/Old.png', '{"name":"New","data":{"name":"New"}}', 'New', undefined, {}],
         ]);
+    });
+
+    test('deletes the compatibility file, invalidates audit, and drops the index row when canonical writes are disabled', async () => {
+        const directories = {
+            characters: 'user/characters',
+            chats: 'user/chats',
+        };
+        const request = makeRequest(directories);
+        const { calls, dependencies } = makeDependencies({
+            existingPaths: ['user/characters/Tester.png'],
+            includeCanonicalSeam: false,
+        });
+
+        const result = await deleteCharacterCard({
+            request,
+            avatarName: 'Tester.png',
+            deleteChats: false,
+            dependencies,
+        });
+
+        expect(result).toEqual({ ok: true, avatarName: 'Tester.png' });
+        expect(calls).toEqual([
+            ['unlink', 'user/characters/Tester.png'],
+            ['invalidate-thumb', 'avatar', 'Tester.png'],
+            ['invalidate-audit', 'default-user', directories, 'character_delete:Tester.png'],
+            ['delete-index', 'Tester.png', 'delete'],
+        ]);
+    });
+
+    test('uses canonical authority first for delete when the write seam is enabled', async () => {
+        const directories = {
+            characters: 'user/characters',
+            chats: 'user/chats',
+        };
+        const request = makeRequest(directories);
+        const { calls, dependencies } = makeDependencies({
+            existingPaths: ['user/characters/Tester.png'],
+            canonicalResult: {
+                enabled: true,
+                authorityCommitted: true,
+                repairKey: 'repair:delete:Tester.png',
+            },
+        });
+
+        const result = await deleteCharacterCard({
+            request,
+            avatarName: 'Tester.png',
+            deleteChats: false,
+            dependencies,
+        });
+
+        expect(result).toEqual({ ok: true, avatarName: 'Tester.png' });
+        expect(calls[0]).toEqual(['canonical-write', 'delete', expect.objectContaining({
+            avatarName: 'Tester.png',
+        })]);
+        expect(calls).not.toContainEqual(['invalidate-audit', 'default-user', directories, 'character_delete:Tester.png']);
+    });
+
+    test('records a repair intent when delete projection fails after canonical commit', async () => {
+        const directories = {
+            characters: 'user/characters',
+            chats: 'user/chats',
+        };
+        const request = makeRequest(directories);
+        const { calls, dependencies } = makeDependencies({
+            existingPaths: ['user/characters/Tester.png'],
+            canonicalResult: {
+                enabled: true,
+                authorityCommitted: true,
+                repairKey: 'repair:delete:Tester.png',
+            },
+        });
+        dependencies.unlinkFile.mockImplementation(() => {
+            throw new Error('unlink failed');
+        });
+
+        const result = await deleteCharacterCard({
+            request,
+            avatarName: 'Tester.png',
+            deleteChats: true,
+            dependencies,
+        });
+
+        expect(result).toEqual({
+            ok: false,
+            reason: 'projection_failed',
+            message: 'Error: character data committed to canonical storage but compatibility projection failed',
+            avatarName: 'Tester.png',
+            repairKey: 'repair:delete:Tester.png',
+            authorityCommitted: true,
+        });
+        expect(calls).toContainEqual(['repair', expect.objectContaining({
+            repairKey: 'repair:delete:Tester.png',
+            repairType: 'character_projection',
+            avatarName: 'Tester.png',
+            operation: 'delete',
+        })]);
+        expect(calls).not.toContainEqual(['delete-index', 'Tester.png', 'delete']);
     });
 });

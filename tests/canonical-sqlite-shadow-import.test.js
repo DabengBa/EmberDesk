@@ -5,8 +5,11 @@ import path from 'node:path';
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
 import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
+import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import {
     auditCanonicalShadowImport,
+    getPersistedCanonicalAuditStatus,
+    persistCanonicalAuditStatus,
     runCanonicalShadowImport,
 } from '../src/canonical-sqlite-shadow-import.js';
 import { buildCharacterFileSnapshotRow } from '../src/endpoints/character-file-snapshot.js';
@@ -448,6 +451,108 @@ describe('canonical sqlite shadow import', () => {
                 drift_types: expect.arrayContaining(['world_binding_mismatch']),
             }),
         ]));
+
+        expect(getPersistedCanonicalAuditStatus(db)).toEqual(expect.objectContaining({
+            ok: false,
+            blocking: true,
+            reason: 'audit_drift_blocked',
+            status: 'drift',
+            driftCount: 4,
+            errorCount: 0,
+            entryCount: 4,
+            auditedAtMs: 1735689601234,
+        }));
+    });
+
+    test('persists a clean audit status that later read cutovers can consume', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const buildSnapshotRow = createSnapshotBuilder();
+
+        writeCharacterFile(directories, 'alpha.png', {
+            name: 'Alpha',
+            chat: 'Alpha - chat',
+            fav: false,
+            tags: [],
+            data: { name: 'Alpha', extensions: { fav: false, world: '' }, tags: [] },
+        });
+
+        await runCanonicalShadowImport({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, shadowImport: true, strict: false },
+            manager,
+            buildSnapshotRow,
+            nowMs: 1735689600000,
+        });
+
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+
+        const audit = await auditCanonicalShadowImport({
+            handle: 'alice',
+            directories,
+            db,
+            buildSnapshotRow,
+            auditedAtMs: 1735689604321,
+        });
+
+        expect(audit).toEqual(expect.objectContaining({
+            ok: true,
+            hasDrift: false,
+            blocking: false,
+        }));
+        expect(getPersistedCanonicalAuditStatus(db)).toEqual(expect.objectContaining({
+            ok: true,
+            blocking: false,
+            reason: null,
+            status: 'clean',
+            driftCount: 0,
+            errorCount: 0,
+            entryCount: 1,
+            auditedAtMs: 1735689604321,
+        }));
+    });
+
+    test('reports audit_not_run until a persisted audit status exists', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        runCanonicalMigrations(db, { nowMs: 1735689600000 });
+
+        expect(getPersistedCanonicalAuditStatus(db)).toEqual(expect.objectContaining({
+            ok: false,
+            blocking: true,
+            reason: 'audit_not_run',
+            status: 'missing',
+            auditedAtMs: null,
+            entryCount: 0,
+        }));
+
+        const persisted = persistCanonicalAuditStatus(db, {
+            ok: true,
+            handle: 'alice',
+            hasDrift: false,
+            blocking: false,
+            entries: [],
+        }, { auditedAtMs: 1735689605555 });
+
+        expect(persisted).toEqual(expect.objectContaining({
+            ok: true,
+            blocking: false,
+            reason: null,
+            status: 'clean',
+            auditedAtMs: 1735689605555,
+        }));
     });
 
     test('stays inert when the shadow-import flag is disabled', async () => {
@@ -549,8 +654,14 @@ describe('canonical sqlite shadow import', () => {
             migrationStatus: expect.objectContaining({
                 ok: true,
                 currentVersion: 0,
-                targetVersion: 1,
+                targetVersion: 2,
             }),
+        }));
+        expect(getPersistedCanonicalAuditStatus(db)).toEqual(expect.objectContaining({
+            ok: false,
+            blocking: true,
+            reason: 'audit_not_run',
+            status: 'missing',
         }));
     });
 });
