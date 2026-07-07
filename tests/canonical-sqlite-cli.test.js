@@ -1,0 +1,167 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
+import { afterEach, describe, expect, test } from '@jest/globals';
+
+import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
+import { runCanonicalShadowImport } from '../src/canonical-sqlite-shadow-import.js';
+import { recordProjectionRepair } from '../src/endpoints/character-store.js';
+import { buildCharacterFileSnapshotRow } from '../src/endpoints/character-file-snapshot.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const repoRoot = path.resolve(__dirname, '..');
+
+const tempRoots = [];
+const managers = [];
+
+function makeRoot() {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-canonical-cli-'));
+    tempRoots.push(root);
+    return root;
+}
+
+function createDirectories(root) {
+    const directories = {
+        root,
+        storage: path.join(root, 'storage'),
+        characters: path.join(root, 'characters'),
+        chats: path.join(root, 'chats'),
+        worlds: path.join(root, 'worlds'),
+    };
+    for (const directory of Object.values(directories)) {
+        if (directory !== root) {
+            fs.mkdirSync(directory, { recursive: true });
+        }
+    }
+    return directories;
+}
+
+function createManager() {
+    const manager = createCanonicalSqliteManager({ logger: { info() {}, warn() {} } });
+    managers.push(manager);
+    return manager;
+}
+
+function writeCharacterFile(directories, avatar, payload) {
+    fs.writeFileSync(path.join(directories.characters, avatar), JSON.stringify(payload), 'utf8');
+}
+
+function createSnapshotBuilder() {
+    return (avatar, directories) => buildCharacterFileSnapshotRow({
+        avatar,
+        directories,
+        readCharacterData: async filePath => fs.readFileSync(filePath, 'utf8'),
+        getCharaCardV2: jsonObject => jsonObject,
+    });
+}
+
+afterEach(() => {
+    for (const manager of managers.splice(0, managers.length)) {
+        manager.dispose();
+    }
+    for (const root of tempRoots.splice(0, tempRoots.length)) {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+describe('canonical sqlite CLI scripts', () => {
+    test('print help output for audit and repair scripts', () => {
+        const auditHelp = execFileSync('node', ['scripts/canonical-sqlite-audit.mjs', '--help'], {
+            cwd: repoRoot,
+            encoding: 'utf8',
+        });
+        const repairHelp = execFileSync('node', ['scripts/canonical-sqlite-repair.mjs', '--help'], {
+            cwd: repoRoot,
+            encoding: 'utf8',
+        });
+
+        expect(auditHelp).toContain('Usage: node scripts/canonical-sqlite-audit.mjs');
+        expect(repairHelp).toContain('Usage: node scripts/canonical-sqlite-repair.mjs');
+        expect(repairHelp).toContain('list-repairs');
+    });
+
+    test('lists repairs and replays projection from the repair CLI', async () => {
+        const dataRoot = makeRoot();
+        const directories = createDirectories(path.join(dataRoot, 'alice'));
+        const manager = createManager();
+        const buildSnapshotRow = createSnapshotBuilder();
+
+        writeCharacterFile(directories, 'alpha.png', {
+            name: 'Alpha',
+            chat: 'Alpha - chat',
+            fav: false,
+            tags: [],
+            data: { name: 'Alpha', extensions: { fav: false, world: '' }, tags: [] },
+        });
+
+        await runCanonicalShadowImport({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, shadowImport: true, strict: false },
+            manager,
+            buildSnapshotRow,
+            nowMs: 1735689600000,
+        });
+
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+
+        fs.rmSync(path.join(directories.characters, 'alpha.png'));
+        recordProjectionRepair(db, {
+            repairKey: 'repair:create:alpha.png',
+            repairType: 'character_projection',
+            avatarFilename: 'alpha.png',
+            reason: 'projection_failed',
+            details: { operation: 'create', sourceImage: 'default-avatar.png' },
+            nowMs: 1735689601111,
+        });
+
+        const listOutput = execFileSync('node', [
+            'scripts/canonical-sqlite-repair.mjs',
+            'list-repairs',
+            '--data-root', dataRoot,
+            '--handle', 'alice',
+            '--json',
+        ], {
+            cwd: repoRoot,
+            encoding: 'utf8',
+        });
+
+        expect(JSON.parse(listOutput)).toEqual([
+            expect.objectContaining({
+                repairKey: 'repair:create:alpha.png',
+                avatarFilename: 'alpha.png',
+            }),
+        ]);
+
+        const repairOutput = execFileSync('node', [
+            'scripts/canonical-sqlite-repair.mjs',
+            'repair-projection',
+            '--data-root', dataRoot,
+            '--handle', 'alice',
+            '--repair-key', 'repair:create:alpha.png',
+            '--json',
+        ], {
+            cwd: repoRoot,
+            encoding: 'utf8',
+        });
+
+        expect(JSON.parse(repairOutput)).toEqual(expect.objectContaining({
+            ok: true,
+            results: [
+                expect.objectContaining({
+                    repairKey: 'repair:create:alpha.png',
+                    status: 'repaired',
+                }),
+            ],
+        }));
+        expect(fs.existsSync(path.join(directories.characters, 'alpha.png'))).toBe(true);
+    });
+});

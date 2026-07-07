@@ -32,17 +32,25 @@ function applyCanonicalChatStats(payload, row) {
     return payload;
 }
 
-function mapCanonicalRowToPayload(row, useShallowPayload) {
+function clearCanonicalChatStats(payload) {
+    payload.chat_size = 0;
+    payload.date_last_chat = 0;
+    return payload;
+}
+
+function mapCanonicalRowToPayload(row, useShallowPayload, options = {}) {
     const rawPayload = useShallowPayload
         ? parseRequiredJson(row.shallow_json, 'shallow_json')
         : parseRequiredJson(row.card_json, 'card_json');
     const payload = cloneCanonicalPayload(rawPayload);
 
     payload.avatar = row.avatar_filename;
-    return applyCanonicalChatStats(payload, row);
+    return options.includeChatStats === false
+        ? clearCanonicalChatStats(payload)
+        : applyCanonicalChatStats(payload, row);
 }
 
-export function listCanonicalCharacters(db, { useShallowPayload }) {
+export function listCanonicalCharacters(db, { useShallowPayload, includeChatStats = true }) {
     const rows = db.prepare(`
         SELECT
             characters.avatar_filename,
@@ -57,10 +65,10 @@ export function listCanonicalCharacters(db, { useShallowPayload }) {
         ORDER BY characters.avatar_filename COLLATE NOCASE ASC
     `).all();
 
-    return rows.map(row => mapCanonicalRowToPayload(row, useShallowPayload));
+    return rows.map(row => mapCanonicalRowToPayload(row, useShallowPayload, { includeChatStats }));
 }
 
-export function getCanonicalCharacter(db, avatarFilename) {
+export function getCanonicalCharacter(db, avatarFilename, { includeChatStats = true } = {}) {
     const row = db.prepare(`
         SELECT
             characters.avatar_filename,
@@ -79,7 +87,7 @@ export function getCanonicalCharacter(db, avatarFilename) {
         return null;
     }
 
-    return mapCanonicalRowToPayload(row, false);
+    return mapCanonicalRowToPayload(row, false, { includeChatStats });
 }
 
 export function upsertCanonicalCharacter(db, {
@@ -218,5 +226,23 @@ export function recordProjectionRepair(db, {
         JSON.stringify(details),
         Number(nowMs),
         Number(nowMs),
+    );
+}
+
+export function resolveProjectionRepair(db, {
+    repairKey,
+    resolvedAtMs = Date.now(),
+}) {
+    return db.prepare(`
+        UPDATE projection_repairs
+        SET resolved_at_ms = ?,
+            updated_at_ms = ?,
+            last_attempt_at_ms = ?
+        WHERE repair_key = ?
+    `).run(
+        Number(resolvedAtMs),
+        Number(resolvedAtMs),
+        Number(resolvedAtMs),
+        repairKey,
     );
 }

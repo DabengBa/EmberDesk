@@ -7,6 +7,7 @@ import {
     calculateCharacterChatStats,
     getCharacterChatDirectory,
 } from './endpoints/character-file-snapshot.js';
+import { listOpenProjectionRepairs } from './canonical-sqlite-rollout-contract.js';
 import { normalizeCanonicalCharacterPayload } from './endpoints/character-store.js';
 import { uuidv4 } from './util.js';
 
@@ -73,6 +74,29 @@ function getStoredCanonicalRow(db, avatarFilename) {
             ON character_chat_stats.character_id = characters.id
         WHERE characters.avatar_filename = ?
     `).get(avatarFilename);
+}
+
+function listCanonicalRows(db) {
+    return db.prepare(`
+        SELECT
+            characters.id,
+            characters.avatar_filename,
+            characters.internal_name,
+            characters.display_name,
+            characters.card_json,
+            characters.shallow_json,
+            characters.world_name,
+            characters.created_at_ms,
+            characters.updated_at_ms,
+            characters.deleted_at_ms,
+            character_chat_stats.chat_count,
+            character_chat_stats.chat_size_bytes,
+            character_chat_stats.date_last_chat_ms,
+            character_chat_stats.stats_updated_at_ms
+        FROM characters
+        LEFT JOIN character_chat_stats
+            ON character_chat_stats.character_id = characters.id
+    `).all();
 }
 
 function isSameCharacterRecord(storedRow, nextCharacterRecord) {
@@ -473,8 +497,10 @@ export async function auditCanonicalShadowImport({
     }
 
     const entries = [];
+    const avatarFiles = listCharacterAvatarFiles(directories);
+    const avatarFileSet = new Set(avatarFiles);
 
-    for (const avatarFilename of listCharacterAvatarFiles(directories)) {
+    for (const avatarFilename of avatarFiles) {
         const storedRow = getStoredCanonicalRow(db, avatarFilename);
         try {
             const snapshotRow = await buildSnapshotRow(avatarFilename, directories);
@@ -501,6 +527,14 @@ export async function auditCanonicalShadowImport({
             const details = {};
 
             if (!isSameCharacterRecord(storedRow, characterRecord)) {
+                if (storedRow.deleted_at_ms != null) {
+                    driftTypes.push('deleted_projection_still_present');
+                    details.deleted_projection = {
+                        deleted_at_ms: Number(storedRow.deleted_at_ms),
+                        avatar_filename: storedRow.avatar_filename,
+                    };
+                }
+
                 if (storedRow.card_json !== characterRecord.card_json || storedRow.shallow_json !== characterRecord.shallow_json) {
                     driftTypes.push('payload_mismatch');
                     details.payload = {
@@ -567,6 +601,42 @@ export async function auditCanonicalShadowImport({
                 auditedAtMs,
             }));
         }
+    }
+
+    for (const storedRow of listCanonicalRows(db)) {
+        const avatarFilename = String(storedRow.avatar_filename ?? '');
+        if (!avatarFilename || avatarFileSet.has(avatarFilename)) {
+            continue;
+        }
+
+        entries.push(buildAuditEntry({
+            handle,
+            avatarFilename,
+            characterId: storedRow.id ? String(storedRow.id) : null,
+            status: 'drift',
+            driftTypes: [storedRow.deleted_at_ms == null ? 'missing_projection_file' : 'deleted_db_row_without_projection_cleanup'],
+            details: {
+                deleted_at_ms: storedRow.deleted_at_ms == null ? null : Number(storedRow.deleted_at_ms),
+            },
+            auditedAtMs,
+        }));
+    }
+
+    for (const repair of listOpenProjectionRepairs(db)) {
+        entries.push(buildAuditEntry({
+            handle,
+            avatarFilename: repair.avatarFilename,
+            characterId: repair.characterId,
+            status: 'drift',
+            driftTypes: ['open_projection_repair'],
+            details: {
+                repairKey: repair.repairKey,
+                repairType: repair.repairType,
+                repairReason: repair.reason,
+                repairDetails: repair.details,
+            },
+            auditedAtMs,
+        }));
     }
 
     const hasDrift = entries.some(entry => entry.status === 'drift' || entry.status === 'error');

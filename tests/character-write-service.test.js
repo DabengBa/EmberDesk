@@ -241,8 +241,32 @@ describe('character write service', () => {
                 avatarName: 'Broken.png',
                 reason: 'projection_failed',
                 operation: 'create',
+                details: expect.objectContaining({
+                    internalName: 'Broken',
+                    chatsDirectoryName: 'Broken',
+                    sourceImage: 'default-avatar.png',
+                }),
             })],
         ]);
+    });
+
+    test('does not silently fall back to file writes when canonical authority blocks in strict mode', async () => {
+        const directories = {
+            characters: 'user/characters',
+            chats: 'user/chats',
+        };
+        const request = makeRequest(directories);
+        const error = new Error('Canonical write blocked: projection_repair_pending');
+        const { dependencies } = makeDependencies();
+        dependencies.performCanonicalWrite.mockRejectedValue(error);
+
+        await expect(createCharacterCard({
+            request,
+            body: { ch_name: 'Blocked' },
+            dependencies,
+        })).rejects.toThrow('Canonical write blocked: projection_repair_pending');
+
+        expect(dependencies.writeCharacterData).not.toHaveBeenCalled();
     });
 
     test('edits card data without replacing the avatar or regenerating thumbnails', async () => {
@@ -551,7 +575,58 @@ describe('character write service', () => {
             repairType: 'character_projection',
             avatarName: 'Tester.png',
             operation: 'delete',
+            details: expect.objectContaining({
+                avatarName: 'Tester.png',
+                deleteChats: true,
+                chatsDirectoryName: 'Tester',
+                sourceAvatarPath: 'user/characters/Tester.png',
+            }),
         })]);
         expect(calls).not.toContainEqual(['delete-index', 'Tester.png', 'delete']);
+    });
+
+    test('records rename repair metadata that is sufficient for projection replay', async () => {
+        const directories = {
+            characters: 'user/characters',
+            chats: 'user/chats',
+        };
+        const request = makeRequest(directories);
+        const { calls, dependencies } = makeDependencies({
+            existingPaths: ['user/chats/Old'],
+            writeResult: false,
+            canonicalResult: {
+                enabled: true,
+                authorityCommitted: true,
+                repairKey: 'repair:rename:New.png',
+            },
+        });
+
+        const result = await renameCharacterCard({
+            request,
+            body: {
+                avatar_url: 'Old.png',
+                new_name: 'New',
+            },
+            dependencies,
+        });
+
+        expect(result).toEqual(expect.objectContaining({
+            ok: false,
+            reason: 'projection_failed',
+            avatarName: 'New.png',
+        }));
+        expect(calls).toContainEqual(['repair', expect.objectContaining({
+            repairKey: 'repair:rename:New.png',
+            operation: 'rename',
+            details: expect.objectContaining({
+                oldAvatarName: 'Old.png',
+                newAvatarName: 'New.png',
+                oldInternalName: 'Old',
+                newInternalName: 'New',
+                oldChatsPath: 'user/chats/Old',
+                newChatsPath: 'user/chats/New',
+                sourceImage: 'user/characters/Old.png',
+            }),
+        })]);
     });
 });

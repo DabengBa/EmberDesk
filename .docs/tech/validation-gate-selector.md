@@ -20,6 +20,7 @@ The first selector slice covers these high-risk surfaces:
 
 | Surface | Command | Requirement | Rule sources |
 |---|---|---|---|
+| Canonical SQLite repair tooling, rollout contract, rollback blockers, DB-first authority seams | `bun run --cwd tests test:unit -- canonical-sqlite-cli.test.js canonical-sqlite-operator.test.js canonical-sqlite-rollout-contract.test.js canonical-sqlite-shadow-import.test.js character-read-service.test.js character-write-service.test.js --runInBand` | required | `ADR-0011`, `canonical-sqlite-storage-roadmap.md`, `260707-07 canonical-sqlite repair/rollout spec` |
 | Frontend compatibility, regex, slash commands, extension surfaces | `bun run test:compat` | required | `AGENTS.md`, `third-party-extension-compatibility.md`, `bun-workflow.md` |
 | React workspace panels | `bun run --cwd tests test:unit -- react-workspace-panels-helpers.test.js workspace-react-panel-flags.test.js --runInBand` | required | `react-modernization-roadmap.md`, `bun-workflow.md`, `third-party-extension-compatibility.md` |
 | React workspace panel bundle | `bun run build:react:workspace-panels` | optional | `bun-workflow.md`, `package.json`, `tests/playwright.config.js` |
@@ -33,10 +34,10 @@ The first selector slice covers these high-risk surfaces:
 Example:
 
 ```bash
-node scripts/validation-gate-selector.mjs public/scripts/slash-commands.js .docs/db/pages/chat-workspace.md
+node scripts/validation-gate-selector.mjs scripts/canonical-sqlite-repair.mjs .docs/db/pages/chat-workspace.md
 ```
 
-The output lists advisory gates such as `bun run test:compat` and `bun run docs:check`, including reason and source references.
+The output lists advisory gates such as the canonical-storage rollout proof lane and `bun run docs:check`, including reason and source references.
 
 ## Validation
 

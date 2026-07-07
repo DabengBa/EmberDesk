@@ -21,6 +21,7 @@ describe('validation gate selector', () => {
         const result = selectValidationGates([
             'public/scripts/slash-commands.js',
             'src/endpoints/characters.js',
+            'src/canonical-sqlite-operator.js',
             'src/command-line.js',
             'src/user-auth.js',
             'src/derived-cache-sqlite.js',
@@ -32,6 +33,11 @@ describe('validation gate selector', () => {
 
         expect(result.advisoryOnly).toBe(true);
         expect(result.commands).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                command: 'bun run --cwd tests test:unit -- canonical-sqlite-cli.test.js canonical-sqlite-operator.test.js canonical-sqlite-rollout-contract.test.js canonical-sqlite-shadow-import.test.js character-read-service.test.js character-write-service.test.js --runInBand',
+                required: true,
+                sources: expect.arrayContaining(['.docs/adr/0011-canonical-per-user-sqlite-storage.md']),
+            }),
             expect.objectContaining({
                 command: 'bun run test:compat',
                 required: true,
@@ -107,14 +113,23 @@ describe('validation gate selector', () => {
 
     test('formats deterministic advisory output for CLI use', () => {
         const formatted = formatValidationGateSelection(selectValidationGates([
-            'public/scripts/slash-commands.js',
+            'scripts/canonical-sqlite-repair.mjs',
             '.docs/db/features/startup-bootstrap.md',
         ]));
 
         expect(formatted).toContain('Validation Gate Selector (advisory-only)');
-        expect(formatted).toContain('[required] bun run test:compat');
+        expect(formatted).toContain('[required] bun run --cwd tests test:unit -- canonical-sqlite-cli.test.js canonical-sqlite-operator.test.js canonical-sqlite-rollout-contract.test.js canonical-sqlite-shadow-import.test.js character-read-service.test.js character-write-service.test.js --runInBand');
         expect(formatted).toContain('[required] bun run docs:check');
         expect(formatted).toContain('final diff review may add or remove validation');
+    });
+
+    test('selects the canonical rollout gate for repair tooling surfaces', () => {
+        const commands = commandsFor([
+            'src/canonical-sqlite-rollout-contract.js',
+            'scripts/canonical-sqlite-repair.mjs',
+        ]);
+
+        expect(commands).toContain('bun run --cwd tests test:unit -- canonical-sqlite-cli.test.js canonical-sqlite-operator.test.js canonical-sqlite-rollout-contract.test.js canonical-sqlite-shadow-import.test.js character-read-service.test.js character-write-service.test.js --runInBand');
     });
 
     test('formats an empty advisory result defensively', () => {

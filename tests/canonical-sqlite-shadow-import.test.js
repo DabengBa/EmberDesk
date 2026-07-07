@@ -9,9 +9,11 @@ import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import {
     auditCanonicalShadowImport,
     getPersistedCanonicalAuditStatus,
+    invalidateCanonicalAuditStatus,
     persistCanonicalAuditStatus,
     runCanonicalShadowImport,
 } from '../src/canonical-sqlite-shadow-import.js';
+import { recordProjectionRepair } from '../src/endpoints/character-store.js';
 import { buildCharacterFileSnapshotRow } from '../src/endpoints/character-file-snapshot.js';
 
 const tempRoots = [];
@@ -462,6 +464,160 @@ describe('canonical sqlite shadow import', () => {
             entryCount: 4,
             auditedAtMs: 1735689601234,
         }));
+    });
+
+    test('treats soft-deleted canonical rows with live projection files as blocking drift', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const buildSnapshotRow = createSnapshotBuilder();
+
+        writeCharacterFile(directories, 'alpha.png', {
+            name: 'Alpha',
+            chat: 'Alpha - chat',
+            fav: false,
+            tags: [],
+            data: { name: 'Alpha', extensions: { fav: false, world: '' }, tags: [] },
+        });
+
+        await runCanonicalShadowImport({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, shadowImport: true, strict: false },
+            manager,
+            buildSnapshotRow,
+            nowMs: 1735689600000,
+        });
+
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        db.prepare('UPDATE characters SET deleted_at_ms = ?, updated_at_ms = ? WHERE avatar_filename = ?').run(1735689609999, 1735689609999, 'alpha.png');
+
+        const audit = await auditCanonicalShadowImport({
+            handle: 'alice',
+            directories,
+            db,
+            buildSnapshotRow,
+            auditedAtMs: 1735689611111,
+        });
+
+        expect(audit.entries).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                avatar_filename: 'alpha.png',
+                status: 'drift',
+                drift_types: expect.arrayContaining(['deleted_projection_still_present']),
+            }),
+        ]));
+    });
+
+    test('treats canonical rows without projection files as blocking drift', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const buildSnapshotRow = createSnapshotBuilder();
+
+        writeCharacterFile(directories, 'alpha.png', {
+            name: 'Alpha',
+            chat: 'Alpha - chat',
+            fav: false,
+            tags: [],
+            data: { name: 'Alpha', extensions: { fav: false, world: '' }, tags: [] },
+        });
+
+        await runCanonicalShadowImport({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, shadowImport: true, strict: false },
+            manager,
+            buildSnapshotRow,
+            nowMs: 1735689600000,
+        });
+
+        fs.rmSync(path.join(directories.characters, 'alpha.png'));
+
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+
+        const audit = await auditCanonicalShadowImport({
+            handle: 'alice',
+            directories,
+            db,
+            buildSnapshotRow,
+            auditedAtMs: 1735689612222,
+        });
+
+        expect(audit.entries).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                avatar_filename: 'alpha.png',
+                status: 'drift',
+                drift_types: expect.arrayContaining(['missing_projection_file']),
+            }),
+        ]));
+    });
+
+    test('treats open projection repairs as blocking audit drift', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const buildSnapshotRow = createSnapshotBuilder();
+
+        writeCharacterFile(directories, 'alpha.png', {
+            name: 'Alpha',
+            chat: 'Alpha - chat',
+            fav: false,
+            tags: [],
+            data: { name: 'Alpha', extensions: { fav: false, world: '' }, tags: [] },
+        });
+
+        await runCanonicalShadowImport({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, shadowImport: true, strict: false },
+            manager,
+            buildSnapshotRow,
+            nowMs: 1735689600000,
+        });
+
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        recordProjectionRepair(db, {
+            repairKey: 'repair:create:alpha.png',
+            repairType: 'character_projection',
+            avatarFilename: 'alpha.png',
+            reason: 'projection_failed',
+            details: { operation: 'create' },
+            nowMs: 1735689613333,
+        });
+        invalidateCanonicalAuditStatus(db, {
+            handle: 'alice',
+            reason: 'projection_repair_pending',
+            source: 'test',
+        });
+
+        const audit = await auditCanonicalShadowImport({
+            handle: 'alice',
+            directories,
+            db,
+            buildSnapshotRow,
+            auditedAtMs: 1735689614444,
+        });
+
+        expect(audit.entries).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                avatar_filename: 'alpha.png',
+                status: 'drift',
+                drift_types: expect.arrayContaining(['open_projection_repair']),
+            }),
+        ]));
     });
 
     test('persists a clean audit status that later read cutovers can consume', async () => {

@@ -36,6 +36,7 @@ import { getCanonicalSqliteFeatureFlags } from '../storage-feature-flags.js';
 import { getCanonicalStorageStatus, openCanonicalDatabase, withCanonicalTransaction } from '../canonical-sqlite.js';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
 import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
+import { buildCanonicalRollbackBlockers, getCanonicalFlagContractStatus } from '../canonical-sqlite-rollout-contract.js';
 import { getCanonicalCharacter, listCanonicalCharacters } from './character-store.js';
 import {
     markCanonicalCharacterDeleted,
@@ -374,6 +375,13 @@ function invalidateCanonicalCharacterAuditSafe(handle, directories, source) {
     }
 }
 
+function createCanonicalWriteBlockedError(reason) {
+    const error = new Error(`Canonical write blocked: ${reason}`);
+    error.name = 'CanonicalWriteBlockedError';
+    error.reason = reason;
+    return error;
+}
+
 /**
  * Starts thumbnail pregeneration without blocking the caller.
  * @param {import('../users.js').UserDirectoryList} directories
@@ -555,10 +563,21 @@ function createCharacterWriteDependencies({ bustCache = null } = {}) {
                 return { enabled: false, authorityCommitted: false, repairKey: null };
             }
 
+            const flagContract = getCanonicalFlagContractStatus(featureFlags);
+            if (!flagContract.ok) {
+                if (featureFlags.strict) {
+                    throw createCanonicalWriteBlockedError(flagContract.blockingReason);
+                }
+                return { enabled: false, authorityCommitted: false, repairKey: null, blockedReason: flagContract.blockingReason };
+            }
+
             const handle = payload.request?.user?.profile?.handle ?? null;
             const directories = payload.directories;
             const storageStatus = getCanonicalStorageStatus({ handle, directories, featureFlags });
             if (!storageStatus.supported || storageStatus.disabledReason === 'migration_blocked') {
+                if (featureFlags.strict) {
+                    throw createCanonicalWriteBlockedError(storageStatus.disabledReason ?? 'canonical_runtime_blocked');
+                }
                 return { enabled: false, authorityCommitted: false, repairKey: null };
             }
 
@@ -569,12 +588,25 @@ function createCharacterWriteDependencies({ bustCache = null } = {}) {
 
             const migrationStatus = runCanonicalMigrations(db, { strict: !!featureFlags.strict });
             if (!migrationStatus.ok) {
+                if (featureFlags.strict) {
+                    throw createCanonicalWriteBlockedError('canonical_migration_blocked');
+                }
                 return { enabled: false, authorityCommitted: false, repairKey: null };
             }
 
             const auditStatus = getPersistedCanonicalAuditStatus(db);
-            if (auditStatus.blocking) {
-                return { enabled: false, authorityCommitted: false, repairKey: null };
+            const rollbackBlockers = buildCanonicalRollbackBlockers({
+                db,
+                featureFlags,
+                persistedAuditStatus: auditStatus,
+                phase: featureFlags.chatStats ? 'chatStats' : 'writes',
+            });
+            if (!rollbackBlockers.ok) {
+                const blockedReason = rollbackBlockers.blockers[0]?.code ?? auditStatus.reason ?? 'canonical_write_blocked';
+                if (featureFlags.strict) {
+                    throw createCanonicalWriteBlockedError(blockedReason);
+                }
+                return { enabled: false, authorityCommitted: false, repairKey: null, blockedReason };
             }
 
             const nowMs = Date.now();
@@ -661,7 +693,14 @@ function createCharacterWriteDependencies({ bustCache = null } = {}) {
                 reason: repair.reason,
                 details: {
                     operation: repair.operation,
+                    ...(repair.details ?? {}),
                 },
+            });
+
+            invalidateCanonicalAuditStatus(db, {
+                handle,
+                reason: 'projection_repair_pending',
+                source: `projection_repair:${repair.operation}`,
             });
 
             return { ok: true };

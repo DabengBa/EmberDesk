@@ -116,6 +116,10 @@ async function maybeRecordProjectionRepair(dependencies, repair) {
     await dependencies.recordProjectionRepair(repair);
 }
 
+function buildProjectionRepairDetails(baseDetails = {}) {
+    return Object.fromEntries(Object.entries(baseDetails).filter(([, value]) => value !== undefined));
+}
+
 function createPreparedCharacterData(body, directories, dependencies) {
     const commandBody = {
         ...body,
@@ -243,6 +247,11 @@ export async function createCharacterCard({
                 reason: 'projection_failed',
                 directories: userDirectories,
                 handle: request.user.profile?.handle ?? null,
+                details: buildProjectionRepairDetails({
+                    internalName: prepared.internalName,
+                    sourceImage: typeof inputFile === 'string' ? inputFile : 'buffer',
+                    chatsDirectoryName: prepared.internalName,
+                }),
             });
             return projectionFailedResult(avatarName, canonicalResult.repairKey);
         }
@@ -323,6 +332,11 @@ export async function editCharacterCard({
                     reason: 'projection_failed',
                     directories: userDirectories,
                     handle: request.user.profile?.handle ?? null,
+                    details: buildProjectionRepairDetails({
+                        internalName: prepared.targetFile,
+                        sourceAvatarName: prepared.avatarUrl,
+                        sourceImage: avatarPath,
+                    }),
                 });
                 return projectionFailedResult(prepared.avatarUrl, canonicalResult.repairKey);
             }
@@ -348,6 +362,11 @@ export async function editCharacterCard({
                     reason: 'projection_failed',
                     directories: userDirectories,
                     handle: request.user.profile?.handle ?? null,
+                    details: buildProjectionRepairDetails({
+                        internalName: prepared.targetFile,
+                        sourceAvatarName: prepared.avatarUrl,
+                        sourceImage: uploadPath,
+                    }),
                 });
                 return projectionFailedResult(prepared.avatarUrl, canonicalResult.repairKey);
             }
@@ -426,6 +445,15 @@ export async function renameCharacterCard(options) {
                 reason: 'projection_failed',
                 directories,
                 handle: request.user.profile?.handle ?? null,
+                details: buildProjectionRepairDetails({
+                    oldAvatarName,
+                    newAvatarName,
+                    oldInternalName,
+                    newInternalName,
+                    oldChatsPath,
+                    newChatsPath,
+                    sourceImage: oldAvatarPath,
+                }),
             });
             return projectionFailedResult(newAvatarName, canonicalResult.repairKey);
         }
@@ -495,6 +523,12 @@ export async function deleteCharacterCard({
                 reason: 'projection_failed',
                 directories: userDirectories,
                 handle: request.user.profile?.handle ?? null,
+                details: buildProjectionRepairDetails({
+                    avatarName: targetAvatarName,
+                    deleteChats,
+                    sourceAvatarPath: avatarPath,
+                    chatsDirectoryName: sanitize(targetAvatarName.replace(/\.png$/i, '')),
+                }),
             });
             return projectionFailedResult(targetAvatarName, canonicalResult.repairKey);
         }

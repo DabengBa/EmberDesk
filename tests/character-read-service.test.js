@@ -150,6 +150,7 @@ describe('character read service', () => {
             { kind: 'db' },
             expect.objectContaining({
                 useShallowPayload: true,
+                includeChatStats: false,
             }),
         );
         expect(dependencies.processCharacter).not.toHaveBeenCalled();
@@ -287,8 +288,54 @@ describe('character read service', () => {
                 data: [{ avatar: 'alpha.png', name: 'Shallow alpha.png', json_data: undefined }],
             },
             latencyHint: 'slow',
+            fallbackReason: 'canonical_storage_disabled',
         });
         expect(dependencies.processCharacter).toHaveBeenCalledWith('alpha.png', directories, { shallow: true });
+    });
+
+    test('includes explicit fallback reason for /list filesystem fallback when canonical reads are blocked', async () => {
+        const directories = makeDirectories();
+        writeAvatar(directories, 'alpha.png');
+
+        const dependencies = createDependencies({
+            getCanonicalSqliteFeatureFlags: jest.fn(() => ({
+                enabled: true,
+                shadowImport: true,
+                reads: true,
+                writes: false,
+                chatStats: false,
+                strict: false,
+            })),
+            getCanonicalStorageStatus: jest.fn(() => ({
+                enabled: true,
+                strict: false,
+                supported: true,
+                disabledReason: null,
+                lastAction: 'idle',
+                lastError: null,
+            })),
+            openCanonicalDatabase: jest.fn(() => ({ kind: 'db' })),
+            getCanonicalAuditStatus: jest.fn(() => ({
+                ok: false,
+                blocking: true,
+                reason: 'audit_not_run',
+            })),
+        });
+
+        const result = await readCharacterSummaryPayload({
+            handle: 'alice',
+            directories,
+            dependencies,
+        });
+
+        expect(result).toEqual({
+            result: {
+                mode: 'snapshot',
+                data: [{ avatar: 'alpha.png', name: 'Shallow alpha.png', json_data: undefined }],
+            },
+            latencyHint: 'slow',
+            fallbackReason: 'audit_not_run',
+        });
     });
 
     test('reads /list shallow summaries through the index', async () => {
@@ -358,6 +405,7 @@ describe('character read service', () => {
                 data: [{ avatar: 'alpha.png', name: 'Summary alpha.png' }],
             },
             latencyHint: 'slow',
+            fallbackReason: 'canonical_storage_disabled',
         });
         expect(dependencies.warn).toHaveBeenCalledWith(
             'Falling back to filesystem-backed character summary list after index read failure:',
@@ -389,6 +437,7 @@ describe('character read service', () => {
             },
             interactionPath: 'characters_get:indexed',
             latencyHint: 'instant',
+            fallbackReason: 'canonical_storage_disabled',
         });
         expect(dependencies.processCharacter).not.toHaveBeenCalled();
     });
@@ -435,6 +484,52 @@ describe('character read service', () => {
             latencyHint: 'instant',
         });
         expect(dependencies.processCharacter).not.toHaveBeenCalled();
+        expect(dependencies.getCanonicalCharacter).toHaveBeenCalledWith({ kind: 'db' }, 'alpha.png', {
+            includeChatStats: false,
+        });
+    });
+
+    test('drops canonical chat stats from DB-first reads until the chatStats flag is enabled', async () => {
+        const directories = makeDirectories();
+        const canonicalPayload = { avatar: 'alpha.png', name: 'Alpha', chat_size: 99, date_last_chat: 111 };
+
+        const dependencies = createDependencies({
+            getCanonicalSqliteFeatureFlags: jest.fn(() => ({
+                enabled: true,
+                shadowImport: true,
+                reads: true,
+                writes: true,
+                chatStats: false,
+                strict: false,
+            })),
+            getCanonicalStorageStatus: jest.fn(() => ({
+                enabled: true,
+                strict: false,
+                supported: true,
+                disabledReason: null,
+                lastAction: 'idle',
+                lastError: null,
+            })),
+            openCanonicalDatabase: jest.fn(() => ({ kind: 'db' })),
+            listCanonicalCharacters: jest.fn(async () => [{ ...canonicalPayload, chat_size: 0, date_last_chat: 0 }]),
+            getCanonicalCharacter: jest.fn(async () => ({ ...canonicalPayload, chat_size: 0, date_last_chat: 0 })),
+        });
+
+        const listResult = await readCharacterListPayload({
+            handle: 'alice',
+            directories,
+            shallow: false,
+            dependencies,
+        });
+        const getResult = await readCharacterFullPayload({
+            handle: 'alice',
+            directories,
+            avatarUrl: 'alpha.png',
+            dependencies,
+        });
+
+        expect(listResult.result.data[0]).toEqual({ avatar: 'alpha.png', name: 'Alpha', chat_size: 0, date_last_chat: 0 });
+        expect(getResult.result.data).toEqual({ avatar: 'alpha.png', name: 'Alpha', chat_size: 0, date_last_chat: 0 });
     });
 
     test('warns and falls back when canonical /get misses the avatar row', async () => {
@@ -479,6 +574,7 @@ describe('character read service', () => {
             },
             interactionPath: 'characters_get:filesystem',
             latencyHint: 'slow',
+            fallbackReason: 'canonical_db_row_missing',
         });
         expect(dependencies.warn).toHaveBeenCalledWith('Canonical character row missing for alpha.png; falling back to file-backed read.');
     });
@@ -597,6 +693,7 @@ describe('character read service', () => {
             },
             interactionPath: 'characters_get:filesystem',
             latencyHint: 'fast',
+            fallbackReason: 'canonical_storage_disabled',
         });
         expect(dependencies.warn).toHaveBeenCalledWith(
             'Character index lookup skipped for alpha.png:',
@@ -630,6 +727,7 @@ describe('character read service', () => {
             },
             interactionPath: 'characters_get:filesystem',
             latencyHint: 'fast',
+            fallbackReason: 'canonical_storage_disabled',
         });
         expect(dependencies.upsertCharacterIndexEntry).toHaveBeenCalledWith(directories.root, 'alpha.png', expect.objectContaining({
             avatar: 'alpha.png',
@@ -685,6 +783,7 @@ describe('character read service', () => {
             },
             interactionPath: 'characters_get:filesystem',
             latencyHint: 'fast',
+            fallbackReason: 'canonical_storage_disabled',
         });
         expect(dependencies.warn).toHaveBeenCalledWith(
             'Character index refresh skipped after get for alpha.png:',
@@ -706,6 +805,7 @@ describe('character read service', () => {
             status: 'not_found',
             interactionPath: 'characters_get:filesystem',
             latencyHint: 'instant',
+            fallbackReason: 'canonical_storage_disabled',
         });
         expect(dependencies.processCharacter).not.toHaveBeenCalled();
     });

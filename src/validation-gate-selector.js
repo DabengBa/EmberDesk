@@ -128,6 +128,36 @@ const RULES = [
         },
     },
     {
+        id: 'canonical-storage-rollout',
+        required: true,
+        command: 'bun run --cwd tests test:unit -- canonical-sqlite-cli.test.js canonical-sqlite-operator.test.js canonical-sqlite-rollout-contract.test.js canonical-sqlite-shadow-import.test.js character-read-service.test.js character-write-service.test.js --runInBand',
+        reason: 'Canonical SQLite repair tooling, rollout contract, rollback blockers, or DB-first storage authority changed.',
+        sources: [
+            '.docs/adr/0011-canonical-per-user-sqlite-storage.md',
+            '.docs/tech/canonical-sqlite-storage-roadmap.md',
+            '.docs/specs/260707-07-canonical-sqlite-repair-rollout-contract/spec.md',
+        ],
+        matches(input) {
+            return matchesAny(input, [
+                /^src\/canonical-sqlite(?:-|\.js)/,
+                /^src\/canonical-sqlite-rollout-contract\.js$/,
+                /^src\/canonical-sqlite-operator\.js$/,
+                /^src\/storage-feature-flags\.js$/,
+                /^src\/endpoints\/character-read-service\.js$/,
+                /^src\/endpoints\/character-write-service\.js$/,
+                /^src\/endpoints\/character-store\.js$/,
+                /^src\/endpoints\/characters\.js$/,
+                /^scripts\/canonical-sqlite-(?:audit|repair)\.mjs$/,
+                /^tests\/canonical-sqlite-(?:cli|operator|rollout-contract|shadow-import|migrations|test)\.test\.js$/,
+                /^tests\/character-read-service\.test\.js$/,
+                /^tests\/character-write-service\.test\.js$/,
+                /^\.docs\/tech\/canonical-sqlite-storage-roadmap\.md$/,
+                /^\.docs\/adr\/0011-canonical-per-user-sqlite-storage\.md$/,
+                /^(canonical sqlite|canonical storage|repair tooling|repair tool|rollout contract|rollback blocker|projection repair|shadow import|db-first reads|db-first writes)$/i,
+            ]);
+        },
+    },
+    {
         id: 'derived-cache',
         required: true,
         command: 'bun run --cwd tests test:unit -- derived-cache-sqlite.test.js character-read-service.test.js interaction-performance-index.test.js --runInBand',

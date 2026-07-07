@@ -30,6 +30,12 @@ function wrapSnapshot(data, { interactionPath, latencyHint }) {
     };
 }
 
+function maybeAttachFallbackReason(result, fallbackReason) {
+    return fallbackReason
+        ? { ...result, fallbackReason }
+        : result;
+}
+
 /**
  * @param {string} charactersDirectory
  * @param {{ sorted?: boolean }} [options]
@@ -117,6 +123,7 @@ function getCanonicalReadState(handle, directories, dependencies) {
         enabled: true,
         strict: !!featureFlags.strict,
         fallbackReason: null,
+        includeChatStats: !!featureFlags.chatStats,
         db,
     };
 }
@@ -155,6 +162,7 @@ export async function readCharacterListPayload({
     if (canonicalState.enabled) {
         const data = await dependencies.listCanonicalCharacters(canonicalState.db, {
             useShallowPayload: shallow,
+            includeChatStats: canonicalState.includeChatStats,
         });
 
         return wrapSnapshot(data, {
@@ -183,24 +191,22 @@ export async function readCharacterListPayload({
         } catch (error) {
             dependencies.warn('Falling back to filesystem-backed character list after index read failure:', error);
             const data = await readCharactersFromFiles(directories, shallow, dependencies);
-            return {
+            return maybeAttachFallbackReason({
                 ...wrapSnapshot(data, {
                     interactionPath: 'characters_all:filesystem',
                     latencyHint: 'slow',
                 }),
-                ...(canonicalState.fallbackReason ? { fallbackReason: canonicalState.fallbackReason } : {}),
-            };
+            }, canonicalState.fallbackReason);
         }
     }
 
     const data = await readCharactersFromFiles(directories, shallow, dependencies);
-    return {
+    return maybeAttachFallbackReason({
         ...wrapSnapshot(data, {
         interactionPath: 'characters_all:filesystem',
         latencyHint: 'slow',
         }),
-        ...(canonicalState.fallbackReason ? { fallbackReason: canonicalState.fallbackReason } : {}),
-    };
+    }, canonicalState.fallbackReason);
 }
 
 /**
@@ -227,6 +233,7 @@ export async function readCharacterSummaryPayload({
     if (canonicalState.enabled) {
         const data = await dependencies.listCanonicalCharacters(canonicalState.db, {
             useShallowPayload: true,
+            includeChatStats: canonicalState.includeChatStats,
         });
 
         return wrapSnapshot(data, {
@@ -251,12 +258,12 @@ export async function readCharacterSummaryPayload({
         } catch (error) {
             dependencies.warn('Falling back to filesystem-backed character summary list after index read failure:', error);
             const data = await readCharactersFromFiles(directories, true, dependencies);
-            return wrapSnapshot(data, { latencyHint: 'slow' });
+            return maybeAttachFallbackReason(wrapSnapshot(data, { latencyHint: 'slow' }), canonicalState.fallbackReason);
         }
     }
 
     const data = await readCharactersFromFiles(directories, true, dependencies);
-    return wrapSnapshot(data, { latencyHint: 'slow' });
+    return maybeAttachFallbackReason(wrapSnapshot(data, { latencyHint: 'slow' }), canonicalState.fallbackReason);
 }
 
 /**
@@ -280,8 +287,11 @@ export async function readCharacterFullPayload({
     dependencies,
 }) {
     const canonicalState = getCanonicalReadState(handle, directories, dependencies);
+    let fallbackReason = canonicalState.fallbackReason;
     if (canonicalState.enabled) {
-        const data = await dependencies.getCanonicalCharacter(canonicalState.db, avatarUrl);
+        const data = await dependencies.getCanonicalCharacter(canonicalState.db, avatarUrl, {
+            includeChatStats: canonicalState.includeChatStats,
+        });
         if (data) {
             return {
                 status: 'found',
@@ -292,6 +302,7 @@ export async function readCharacterFullPayload({
         }
 
         dependencies.warn?.(`Canonical character row missing for ${avatarUrl}; falling back to file-backed read.`);
+        fallbackReason = 'canonical_db_row_missing';
     } else {
         maybeThrowCanonicalFallback(canonicalState);
     }
@@ -306,6 +317,7 @@ export async function readCharacterFullPayload({
                 status: 'not_found',
                 interactionPath: 'characters_get:filesystem',
                 latencyHint: 'instant',
+                ...(fallbackReason ? { fallbackReason } : {}),
             };
         }
         throw error;
@@ -321,12 +333,12 @@ export async function readCharacterFullPayload({
             );
 
             if (indexedPayload) {
-                return {
+                return maybeAttachFallbackReason({
                     status: 'found',
                     result: { mode: 'snapshot', data: indexedPayload },
                     interactionPath: 'characters_get:indexed',
                     latencyHint: 'instant',
-                };
+                }, fallbackReason);
             }
         } catch (error) {
             dependencies.warn(`Character index lookup skipped for ${avatarUrl}:`, error);
@@ -354,10 +366,10 @@ export async function readCharacterFullPayload({
         }
     }
 
-    return {
+    return maybeAttachFallbackReason({
         status: 'found',
         result: { mode: 'snapshot', data },
         interactionPath: 'characters_get:filesystem',
         latencyHint,
-    };
+    }, fallbackReason);
 }

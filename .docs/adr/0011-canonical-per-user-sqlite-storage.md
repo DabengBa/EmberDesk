@@ -61,6 +61,7 @@ At minimum, implementation must provide:
 - feature-flagged read and write cutover
 - compatibility projection for PNG card and JSONL-adjacent surfaces
 - repair tooling for DB/file projection drift
+- operator-visible rollback blocker reporting before any claim that file-backed fallback is safe again
 - focused tests for migration idempotency, route response parity, chat-stat updates, and rollback
 - docs updates when a slice changes user-visible storage or operator behavior
 
@@ -77,5 +78,9 @@ At minimum, implementation must provide:
 - `tests/canonical-sqlite.test.js`
 - `src/endpoints/character-read-service.js`
 - `src/endpoints/character-write-service.js`
+- `src/canonical-sqlite-rollout-contract.js`
+- `src/canonical-sqlite-operator.js`
+- `scripts/canonical-sqlite-audit.mjs`
+- `scripts/canonical-sqlite-repair.mjs`
 - `src/endpoints/chats.js`
 - `src/endpoints/character-index.js`

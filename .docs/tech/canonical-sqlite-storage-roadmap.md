@@ -18,10 +18,7 @@ Primary current files:
 
 Future implementation candidates:
 
-- `src/endpoints/character-store.js`
 - `src/endpoints/character-store-migrations.js`
-- `scripts/canonical-sqlite-audit.mjs`
-- `scripts/canonical-sqlite-repair.mjs`
 
 Delivered Phase 1 tech docs:
 
@@ -160,8 +157,9 @@ Current delivered foundation:
 - `src/endpoints/character-write-service.js` now coordinates canonical-first create/edit/rename/delete flows, preserves compatibility projection behavior, and records `projection_repairs` instead of silently restoring file authority after DB-committed projection failures.
 - `src/endpoints/characters.js` now routes `/create`, `/edit`, `/rename`, `/edit-avatar`, `/edit-attribute`, `/merge-attributes`, `/delete`, `/duplicate`, and `/import` through the same DB-first write seam when `features.storage.canonicalSqlite.writes=true` and the persisted audit gate is clean.
 - `src/endpoints/character-store.js` now normalizes canonical row writes so shadow import, DB-first reads, and DB-first writes persist the same route-compatible payload shape.
+- `src/canonical-sqlite-rollout-contract.js` now centralizes legal flag combinations, unresolved repair visibility, and rollback-blocker derivation for the current slice instead of scattering those checks across route code.
 - `src/canonical-sqlite-migrations.js` now carries a dedicated `canonical_audit_state` migration so pre-existing Phase 1 databases can upgrade cleanly before persisted audit gating or write cutover runs.
-- Write-path proof currently lives in `tests/character-write-service.test.js`, `tests/interaction-performance-index.test.js`, `tests/worldinfo-delete-cascade.test.js`, and `tests/third-party-extension-compatibility.test.js`, including explicit projection-failure repair intent, route-level DB-first mutations, delete/world preflight preservation, and compatibility-surface coverage.
+- Write-path proof currently lives in `tests/character-write-service.test.js`, `tests/canonical-sqlite-rollout-contract.test.js`, `tests/canonical-sqlite-shadow-import.test.js`, `tests/interaction-performance-index.test.js`, `tests/worldinfo-delete-cascade.test.js`, and `tests/third-party-extension-compatibility.test.js`, including explicit projection-failure repair intent, strict write-blocking, rollback blocker derivation, delete/world preflight preservation, and compatibility-surface coverage.
 
 ### Phase 4: Chat Stats Authority
 
@@ -180,6 +178,12 @@ Acceptance:
 - Stats updates are transactional with the route side effect where practical.
 - Rebuild command can reconcile from JSONL files without changing message bodies.
 - Existing chat export behavior remains unchanged.
+
+Current delivered foundation:
+
+- `src/endpoints/character-store.js` and `src/endpoints/character-read-service.js` now treat canonical chat stats as a separate runtime boundary: canonical reads only inject `chat_size` / `date_last_chat` when `features.storage.canonicalSqlite.chatStats=true`.
+- `src/canonical-sqlite-operator.js` and `scripts/canonical-sqlite-repair.mjs` now provide an explicit `rebuild-chat-stats` operator path for the current slice.
+- Focused proof currently lives in `tests/character-read-service.test.js`, `tests/canonical-sqlite-operator.test.js`, and `tests/canonical-sqlite-cli.test.js`.
 
 ### Phase 5: Derived Index Retirement Or Reclassification
 
@@ -238,14 +242,17 @@ Acceptance:
 8. `write projection`
    - Depends on read cutover confidence.
    - Updates DB first, then projects compatibility files.
+   - Current status: delivered for current character mutation routes, with strict blocker propagation and enriched repair metadata for projection replay.
 
 9. `repair tooling`
    - Depends on write projection.
    - Replays projection, rebuilds stats, and reports unrepairable drift.
+   - Current status: delivered for the first slice via `src/canonical-sqlite-operator.js`, `scripts/canonical-sqlite-audit.mjs`, and `scripts/canonical-sqlite-repair.mjs`.
 
 10. `chat stats authority`
-    - Depends on store schema and selected write-side integration.
-    - Maintains stats on chat save/rename/delete/import.
+   - Depends on store schema and selected write-side integration.
+   - Maintains stats on chat save/rename/delete/import.
+   - Current status: partially delivered as an explicit flag boundary plus operator rebuild flow; route-level canonical chat-stat ownership is still Phase 4 follow-up work.
 
 11. `derived index retirement`
     - Depends on DB read/write/stats proof.
@@ -272,8 +279,8 @@ Rollback rules:
 
 - Phase 1 rollback: disable flags; DB files may remain unused. No file rewrite is needed.
 - Phase 2 rollback: disable `reads`; routes return to file-backed reads. DB remains available for audit.
-- Phase 3 rollback: disable `writes` only after audit confirms projected files include all DB-committed changes needed by file-backed mode.
-- Phase 4 rollback: disable `chatStats`; rebuild or mark derived stats dirty before trusting file-backed scans.
+- Phase 3 rollback: disable `writes` only after the persisted audit summary is clean and `projection_repairs` has no unresolved rows for the current slice.
+- Phase 4 rollback: disable `chatStats` only after rebuilding canonical chat stats for comparison or explicitly returning file-backed stats paths to a dirty/rescan-required state.
 - Phase 5 rollback: only possible if the derived index path has not been deleted or if DB-first reads have equivalent file-backed recovery proof.
 
 Fail-closed rules:
@@ -281,7 +288,8 @@ Fail-closed rules:
 - Unsupported `node:sqlite` disables canonical mode unless `strict` is enabled, in which case startup/test should fail.
 - Failed migrations disable canonical reads/writes for that user and surface an operator-visible reason.
 - Audit drift blocks read/write cutover unless explicitly overridden in test-only strict fixtures.
-- Projection failure records repair intent and must not silently treat projected files as canonical.
+- Illegal flag combinations (`enabled -> shadowImport -> reads -> writes -> chatStats`) are blocked by the rollout contract instead of being treated as best-effort opt-ins.
+- Projection failure records repair intent, invalidates the persisted audit gate, and must not silently treat projected files as canonical.
 
 ## Related Semantic IDs And Code Binding Points
 
@@ -312,7 +320,13 @@ bun run docs:check
 Phase 1 focused tests:
 
 ```bash
-bun run --cwd tests test:unit -- character-read-service.test.js character-write-service.test.js chat-route-service.test.js --runInBand
+bun run --cwd tests test:unit -- canonical-sqlite-rollout-contract.test.js canonical-sqlite-shadow-import.test.js character-read-service.test.js character-write-service.test.js --runInBand
+```
+
+Operator tooling and rollout-contract proof:
+
+```bash
+bun run --cwd tests test:unit -- canonical-sqlite-cli.test.js canonical-sqlite-operator.test.js validation-gate-selector.test.js --runInBand
 ```
 
 Derived-cache guard tests while both paths coexist:
