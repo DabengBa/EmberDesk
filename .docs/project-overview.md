@@ -20,7 +20,7 @@ It is not optimized for users who want a managed cloud product or a minimal one-
 
 1. Simplify before extending.
 2. Prefer observable performance wins over architectural novelty.
-3. Keep canonical user data portable and file-backed unless there is a strong reason to change it.
+3. Keep canonical user data portable; file-backed storage remains the default, while approved hot-path slices may use per-user canonical SQLite when an ADR defines migration, projection, and rollback rules.
 4. Modernize in slices that preserve existing behavior and upgrade safety.
 5. Treat documentation and measurement as part of product quality, not afterthoughts.
 
@@ -38,6 +38,8 @@ It is not optimized for users who want a managed cloud product or a minimal one-
 - Legacy cutover policy: EmberDesk no longer treats every remaining legacy path as vague pending deletion. The current durable policy lives in [.docs/tech/legacy-cutover-ledger.md](tech/legacy-cutover-ledger.md): each retained surface is explicitly classified as a compatibility facade, a freeze-supported boundary, or a blocked deletion candidate.
 - Main-chat React boundary: the guarded `mainChatMessageList` island now owns the visible composer, slash-status shell, safe row/action shell, and the standard OpenAI direct-chat visible transport path (`submitComposer`, `continueLast`, regenerate/retry, and swipe). The React controller also owns reading-position restore plus the row/windowing decision surface, while excluded non-OpenAI/group/dry-run/nested-visible requests, quiet/background helper requests, unsafe or extension-mutated rows, and the actual legacy `showMoreMessages()` execution path remain explicit compatibility owners or facades inside the same shell.
 - World Info facade boundary: `public/scripts/world-info.js` remains the World Info compatibility facade, while `public/scripts/world-info-shell-context.js` provides a narrow internal shell-context seam for startup-safe access to shell-owned state and `eventSource` methods.
+- Storage authority boundary: [ADR-0011](adr/0011-canonical-per-user-sqlite-storage.md) accepts per-user canonical SQLite for approved slices, starting with character metadata and character chat stats, while derived caches remain disposable and compatibility files remain projection/import/export surfaces until a later explicit retirement decision. The executable phase plan lives in [canonical-sqlite-storage-roadmap](tech/canonical-sqlite-storage-roadmap.md).
+- Canonical storage foundation: EmberDesk now includes a dedicated canonical SQLite manager at `src/canonical-sqlite.js`, per-user `storage` directories under `DATA_ROOT/<handle>/storage`, and declared `features.storage.canonicalSqlite.*` rollout flags. This foundation is fail-closed and does not yet change runtime authority; character cards and chats remain file-backed until later phases land.
 
 Current architectural boundaries:
 
@@ -58,6 +60,7 @@ Key module structure:
   - `plugin-updater.js` — standalone git auto-update for repo-backed plugins
 - `server-main.js` — boot pipeline coordinator with six sequenced phases (see [server-startup-orchestration](tech/server-startup-orchestration.md))
 - `server-startup.js` — transport layer: IP detection, HTTP/HTTPS creation, listen failure handling
+- `canonical-sqlite.js` — fail-closed per-user canonical SQLite manager for future approved storage slices; currently provides path resolution, lifecycle, PRAGMA, transaction, and status reporting only
 - `public/lib.js` — browser shared-library boundary for first-party modules and extensions; it preserves both source imports and bundled `/lib.js` output (see [frontend-shared-library-boundary](tech/frontend-shared-library-boundary.md) and [ADR-0006](adr/0006-preserve-dual-libjs-source-and-bundled-boundary.md))
 
 The project still carries substantial upstream SillyTavern structure. EmberDesk is in a transition stage, not a clean-room rewrite.
@@ -84,19 +87,22 @@ EmberDesk currently provides:
 
 Current derived-cache scope is intentionally narrow:
 
-- canonical character cards and chats remain file-backed
+- current runtime character cards and chats remain file-backed until ADR-0011 implementation phases explicitly cut over an approved slice
+- the canonical SQLite foundation now exists behind default-off flags and per-user `storage/emberdesk.sqlite`, but no route currently treats it as the steady-state authority
 - `DiskCache` accelerates repeated PNG-to-JSON extraction
 - `src/derived-cache-sqlite.js` owns shared SQLite derived-cache lifecycle for sidecars that remain rebuildable from canonical files (see [derived-cache-sqlite](tech/derived-cache-sqlite.md))
+- `src/canonical-sqlite.js` owns the separate durable-manager contract for future canonical slices and intentionally does not share reset/delete semantics with the derived helper
 - the SQLite character index accelerates the character-library list API and safe steady-state single-character full reads
   - single-character indexed reuse still revalidates source PNG metadata, linked legacy world-info dependencies, and chat-derived aggregates before treating cached payloads as reusable
-- this slice does not introduce a database-first source of truth for chats, world info, or general workspace state
+- this derived slice remains separate from the future canonical SQLite store and must not be promoted in place to authority
+- the accepted canonical SQLite roadmap starts with character metadata and chat stats only; chat message bodies, full World Info entries, settings, secrets, vectors, assets, personas, backgrounds, and extension storage remain outside that first slice
 
 ## Explicit Exclusions
 
 EmberDesk does not currently aim to:
 
 - replace the current workspace with a separate full SPA route; modernization continues through same-entry React ownership inside `/` while compatibility substrate remains available until focused proof retires it
-- replace canonical character/chat files with a database-first product model
+- replace all user-data files with a database-first product model in one move; canonical SQLite is limited to ADR-approved slices with compatibility projection and rollback proof
 - provide a hosted SaaS control plane
 - treat every upstream SillyTavern feature as mandatory to preserve forever
 
@@ -107,8 +113,8 @@ EmberDesk does not currently aim to:
 - Separate user-facing product semantics from implementation notes.
 - Keep `/lib.js` compatibility decisions centralized in `public/lib.js` and its boundary tests.
 - Validate performance claims with repeatable tooling and browser evidence.
-- Do not let internal caches or indexes become the canonical user-data source by accident.
-- Keep derived caches scoped to proven hot paths; do not broaden them into general persistence without clear user-visible ROI.
+- Do not let internal caches or indexes become canonical user-data sources by accident; canonical SQLite stores must live outside `_cache` and have explicit migration, audit, projection, and repair contracts.
+- Keep derived caches scoped to proven hot paths; do not broaden them into general persistence without an accepted ADR.
 - Treat client-side derived lists as disposable views over canonical files; after destructive actions, stale delayed responses must not restore removed rows.
 - Keep compatibility-facing character row selectors and accessibility state synchronized when list rows are reused instead of re-rendered.
 - Treat main-chat message rows, send-form controls, `eventSource` / `event_types`, and slash-command surfaces as protected compatibility points; add focused browser and compatibility proof before changing rendering or streaming behavior.
@@ -118,4 +124,4 @@ EmberDesk does not currently aim to:
 
 ## One-Line Summary
 
-EmberDesk is a self-hosted, browser-based LLM workspace that is being simplified, optimized, and incrementally modernized without abandoning the existing file-backed product model.
+EmberDesk is a self-hosted, browser-based LLM workspace that is being simplified, optimized, and incrementally modernized while preserving portable local data and compatibility-first migration paths.

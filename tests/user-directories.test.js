@@ -22,6 +22,7 @@ describe('getUserDirectories', () => {
         expect(dirs).toHaveProperty('avatars');
         expect(dirs).toHaveProperty('backups');
         expect(dirs).toHaveProperty('sysprompt');
+        expect(dirs).toHaveProperty('storage');
     });
 
     test('all paths are under DATA_ROOT/<handle>/', () => {
@@ -34,6 +35,11 @@ describe('getUserDirectories', () => {
     test('root directory is DATA_ROOT/<handle>/', () => {
         const dirs = getUserDirectories('alice');
         expect(dirs.root).toBe(path.join('/tmp/test-data', 'alice', ''));
+    });
+
+    test('storage directory is DATA_ROOT/<handle>/storage', () => {
+        const dirs = getUserDirectories('alice');
+        expect(dirs.storage).toBe(path.join('/tmp/test-data', 'alice', 'storage'));
     });
 
     test('second call returns cached object (same reference)', () => {

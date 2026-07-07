@@ -47,6 +47,7 @@ const DIRECTORIES_CACHE = new Map();
  * @property {string} backups - The directory where the backups are stored
  * @property {string} sysprompt - The directory where the system prompt data is stored
  * @property {string} reasoning - The directory where the reasoning templates are stored
+ * @property {string} storage - The directory where the durable canonical storage files are stored
  */
 
 /**

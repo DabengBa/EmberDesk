@@ -104,6 +104,14 @@ enableUserAccounts: true
 # Enable discreet login mode: hides user list on the login screen
 enableDiscreetLogin: false
 features:
+  storage:
+    canonicalSqlite:
+      enabled: false
+      shadowImport: false
+      reads: false
+      writes: false
+      chatStats: false
+      strict: false
   react:
     pages:
       login: true
