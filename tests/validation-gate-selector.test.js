@@ -59,7 +59,7 @@ describe('validation gate selector', () => {
                 sources: expect.arrayContaining(['.docs/adr/0003-user-account-module-split.md']),
             }),
             expect.objectContaining({
-                command: 'bun run --cwd tests test:unit -- derived-cache-sqlite.test.js character-read-service.test.js interaction-performance-index.test.js --runInBand',
+                command: 'bun run --cwd tests test:unit -- derived-cache-sqlite.test.js interaction-performance-index.test.js --runInBand',
                 required: true,
                 sources: expect.arrayContaining(['.docs/adr/0009-derived-cache-sqlite-drizzle-decision.md']),
             }),
@@ -139,7 +139,7 @@ describe('validation gate selector', () => {
             'derived index retirement',
         ]);
 
-        expect(commands).toContain('bun run --cwd tests test:unit -- derived-cache-sqlite.test.js character-read-service.test.js interaction-performance-index.test.js --runInBand');
+        expect(commands).toContain('bun run --cwd tests test:unit -- derived-cache-sqlite.test.js interaction-performance-index.test.js --runInBand');
     });
 
     test('formats an empty advisory result defensively', () => {

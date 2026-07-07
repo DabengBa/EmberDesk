@@ -258,7 +258,6 @@ export async function createCharacterCard({
         return writeFailedResult(avatarName);
     }
 
-    await dependencies.refreshCharacterIndexEntry(userDirectories, avatarName, 'create');
     return okResult(avatarName, { internalName: prepared.internalName });
 }
 
@@ -376,7 +375,6 @@ export async function editCharacterCard({
         dependencies.bustCache?.(request, response);
     }
 
-    await dependencies.refreshCharacterIndexEntry(userDirectories, prepared.avatarUrl, 'edit');
     return okResult(prepared.avatarUrl);
 }
 
@@ -466,8 +464,6 @@ export async function renameCharacterCard(options) {
     }
 
     unlinkFile(dependencies, oldAvatarPath);
-    dependencies.deleteCharacterIndexEntry(directories, oldAvatarName, 'rename');
-    await dependencies.refreshCharacterIndexEntry(directories, newAvatarName, 'rename');
     return okResult(newAvatarName);
 }
 
@@ -544,6 +540,5 @@ export async function deleteCharacterCard({
         );
     }
 
-    dependencies.deleteCharacterIndexEntry(userDirectories, targetAvatarName, 'delete');
     return okResult(targetAvatarName);
 }

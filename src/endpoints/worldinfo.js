@@ -7,7 +7,6 @@ import _ from 'lodash';
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import { tryParse } from '../util.js';
 import { invalidateDirectory } from './settings-cache.js';
-import { deleteCharacterIndexEntry, findCharactersBoundToWorld, isCharacterIndexSupported } from './character-index.js';
 import { read, write } from '../character-card-parser.js';
 
 /**
@@ -35,6 +34,51 @@ export function readWorldInfoFile(directories, worldInfoName, allowDummy) {
     const worldInfoText = fs.readFileSync(pathToWorldInfo, 'utf8');
     const worldInfo = JSON.parse(worldInfoText);
     return worldInfo;
+}
+
+/**
+ * Finds character cards whose World Info binding matches the given name by
+ * scanning the compatibility PNG files directly.
+ *
+ * @param {import('../users.js').UserDirectoryList} directories User directories
+ * @param {string} worldName World Info name to match
+ * @returns {Array<{ avatar: string, name: string }>} Characters bound to this world
+ */
+export function findCharactersBoundToWorldFromFiles(directories, worldName) {
+    if (!directories?.characters || !worldName) {
+        return [];
+    }
+
+    let files = [];
+    try {
+        files = fs.readdirSync(directories.characters, { withFileTypes: true });
+    } catch {
+        return [];
+    }
+
+    const boundCharacters = [];
+    for (const file of files) {
+        if (!file.isFile() || path.extname(file.name).toLowerCase() !== '.png') {
+            continue;
+        }
+
+        try {
+            const avatar = file.name;
+            const imageBuffer = fs.readFileSync(path.join(directories.characters, avatar));
+            const card = JSON.parse(read(imageBuffer));
+            const boundWorld = card?.data?.extensions?.world ?? card?.world;
+            if (boundWorld === worldName) {
+                boundCharacters.push({
+                    avatar,
+                    name: card?.data?.name ?? card?.name ?? avatar,
+                });
+            }
+        } catch {
+            // Skip unreadable character cards. Delete preflight must remain best-effort.
+        }
+    }
+
+    return boundCharacters;
 }
 
 export const router = express.Router();
@@ -104,14 +148,7 @@ router.post('/delete-preflight', (request, response) => {
             // If we can't parse, still show with 0 entries
         }
 
-        let boundCharacters = [];
-        if (isCharacterIndexSupported()) {
-            try {
-                boundCharacters = findCharactersBoundToWorld(directories.root, worldName);
-            } catch {
-                // Fallback: only show the world itself
-            }
-        }
+        const boundCharacters = findCharactersBoundToWorldFromFiles(directories, worldName);
 
         return response.send({
             worldInfos: [{
@@ -221,33 +258,28 @@ router.post('/delete-cascade', async (request, response) => {
         for (const worldName of worlds) {
             if (typeof worldName !== 'string' || !worldName.trim()) continue;
 
-            if (clearReferences && isCharacterIndexSupported()) {
-                try {
-                    const boundCharacters = findCharactersBoundToWorld(directories.root, worldName);
-                    for (const { avatar } of boundCharacters) {
-                        const charPath = path.join(directories.characters, avatar);
-                        if (!fs.existsSync(charPath)) continue;
+            if (clearReferences) {
+                const boundCharacters = findCharactersBoundToWorldFromFiles(directories, worldName);
+                for (const { avatar } of boundCharacters) {
+                    const charPath = path.join(directories.characters, avatar);
+                    if (!fs.existsSync(charPath)) continue;
 
-                        try {
-                            const imageBuffer = fs.readFileSync(charPath);
-                            const jsonString = read(imageBuffer);
-                            const card = JSON.parse(jsonString);
-                            if (card?.data?.extensions?.world === worldName) {
+                    try {
+                        const imageBuffer = fs.readFileSync(charPath);
+                        const jsonString = read(imageBuffer);
+                        const card = JSON.parse(jsonString);
+                        if ((card?.data?.extensions?.world ?? card?.world) === worldName) {
+                            if (card?.data?.extensions) {
                                 card.data.extensions.world = '';
-                                const newBuffer = write(imageBuffer, JSON.stringify(card));
-                                writeFileAtomicSync(charPath, newBuffer);
-                                try {
-                                    deleteCharacterIndexEntry(directories.root, avatar);
-                                } catch (error) {
-                                    console.warn(`Character index delete skipped after world cascade for ${avatar}:`, error);
-                                }
+                            } else {
+                                card.world = '';
                             }
-                        } catch {
-                            // Skip characters that can't be updated
+                            const newBuffer = write(imageBuffer, JSON.stringify(card));
+                            writeFileAtomicSync(charPath, newBuffer);
                         }
+                    } catch {
+                        // Skip characters that can't be updated
                     }
-                } catch {
-                    // If index lookup fails, still delete the world file
                 }
             }
 

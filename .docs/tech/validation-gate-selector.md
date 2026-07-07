@@ -27,7 +27,7 @@ The first selector slice covers these high-risk surfaces:
 | Express route/order | `bun run --cwd tests test:unit -- express5-route-compatibility.test.js --runInBand` | required | `AGENTS.md`, `ADR-0010`, `ADR-0008` |
 | Startup/config | `bun run --cwd tests test:unit -- command-line.test.js startup-critical-path.test.js startup-loader.test.js --runInBand` | required | `AGENTS.md`, `config-resolution.md`, `modernization-roadmap.md`, `ADR-0002` |
 | User auth/storage/directories/migrations | `bun run --cwd tests test:unit -- user-auth.test.js user-storage.test.js user-directories.test.js user-migrations.test.js --runInBand` | required | `AGENTS.md`, `ADR-0003` |
-| Derived cache / character index | `bun run --cwd tests test:unit -- derived-cache-sqlite.test.js character-read-service.test.js interaction-performance-index.test.js --runInBand` | required | `ADR-0009`, `derived-cache-sqlite.md`, `interaction-performance-indexing.md` |
+| Derived cache / retired character index helper | `bun run --cwd tests test:unit -- derived-cache-sqlite.test.js interaction-performance-index.test.js --runInBand` | required | `ADR-0009`, `derived-cache-sqlite.md`, `interaction-performance-indexing.md` |
 | Shared `/lib.js` | `bun run --cwd tests test:unit -- frontend-shared-library-boundary.test.js --runInBand` | required | `frontend-shared-library-boundary.md`, `bun-workflow.md` |
 | Semantic docs database | `bun run docs:check` | required | `AGENTS.md`, `.docs/db/scripts/doc-compiler.js`, `modernization-roadmap.md` |
 
@@ -37,7 +37,7 @@ Example:
 node scripts/validation-gate-selector.mjs scripts/canonical-sqlite-repair.mjs .docs/db/pages/chat-workspace.md
 ```
 
-The output lists advisory gates such as the canonical-storage rollout proof lane and `bun run docs:check`, including reason and source references. Owning tech docs like `.docs/tech/derived-cache-sqlite.md` and `.docs/tech/interaction-performance-indexing.md` resolve to the same derived-cache gate.
+The output lists advisory gates such as the canonical-storage rollout proof lane and `bun run docs:check`, including reason and source references. Owning tech docs like `.docs/tech/derived-cache-sqlite.md` and `.docs/tech/interaction-performance-indexing.md` resolve to the derived-cache helper gate. Current character read authority changes resolve through the canonical-storage route/service gates, not through a required sidecar availability gate.
 
 ## Validation
 

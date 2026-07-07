@@ -14,6 +14,7 @@ Current owning flow:
 - [World Info Shell Context Processing Flow](world_info_shell_context_processing_flow.md)
 - [Main Chat Generation Control Bridge Processing Flow](main_chat_generation_control_bridge_processing_flow.md)
 - [Main Chat Message Actions Bridge Processing Flow](main_chat_message_actions_bridge_processing_flow.md)
+- [Canonical Chat Stats Authority Processing Flow](canonical_chat_stats_authority_processing_flow.md)
 
 ## Per-Output Field Lineage
 
@@ -75,6 +76,11 @@ Current owning flow:
 | `mainChatMessageActionSnapshots` | direct-child `#chat > .mes[mesid]` rows, their `[role="button"]` descendants, `.mes_buttons`, and `expand_message_actions` state | Build DOM-derived per-row action snapshots, keep only currently present DOM action names, and tier them through the shared `MESSAGE_ACTION_TIERS` source | Rows without `mesid` or `.mes_buttons` emit no snapshot; unknown/generic classes and duplicate buttons are ignored |
 | `mainChatMessageActionSnapshot.expanded` | `expand_message_actions`, `.extraMesButtons.visible`, and `.extraMesButtonsHint` display state | Report `true` when the legacy row is already in an expanded-actions state | Missing protected controls leave the snapshot at the safe observed value or suppress the snapshot entirely |
 | `mainChatMessageActionsHiddenMarker` | Zod-validated action snapshot plus a connected `#chat > .mes[mesid]` row that still contains `.mes_buttons`, `.extraMesButtonsHint`, and `.extraMesButtons` | Append one hidden owner marker with row, expanded, and tier metadata under `.mes_buttons` without changing visible action ownership | Validation failure, row identity mismatch, detached rows, or missing protected targets emit no marker and leave the legacy row untouched |
+| `fileBackedChatStatsFallback` | mutation avatar plus current JSONL chat files | Keep file-backed summary recovery available through read-time JSONL scanning instead of a derived character-index dirty mark | Missing avatar skips the maintenance path; fallback visibility depends on compatibility files remaining readable |
+| `canonicalChatStatsUpsert` | current JSONL chat files, canonical storage status, live canonical character row, and feature flags | Recompute `chatCount`, `chatSize`, and `dateLastChat` from disk, then upsert `character_chat_stats` inside a canonical transaction | Unsupported runtime, migration-blocked DB, missing DB, or missing canonical character row raise a named sync failure instead of inventing stats |
+| `canonicalAuditInvalidation` | mutation path result plus canonical storage availability | Use `audit_stale_after_chat_stats_change` when storage is enabled but chat-stats authority is off, `audit_stale_after_chat_stats_sync_failure` when canonical chat-stats sync fails, and `audit_stale_after_chat_stats_rebuild` after operator rebuild | Disabled or unavailable canonical storage skips invalidation; sync failure keeps the file-backed mutation result and leaves canonical reads blocked until re-audit |
+| `canonicalReadChatStatsAuthority` | canonical read flag, chat-stats flag, runtime support, DB availability, and persisted audit summary | Permit DB-backed `chat_size` / `date_last_chat` only when reads are enabled, chat-stats authority is enabled, and the persisted audit summary is clean | Any blocking reason returns visible chat-summary ownership to file-backed reads, which recompute from JSONL compatibility files |
+| `chatStatsRebuildResult` | live canonical characters, optional requested avatars, and current JSONL chat directories | Recompute per-avatar stats from disk and report the rebuilt rows after one canonical transaction | Missing requested avatars simply rebuild nothing; the repair path still invalidates the persisted audit summary for later re-audit |
 
 ## Maintenance Constraints
 
@@ -86,5 +92,6 @@ Current owning flow:
 - Keep World Info shell-context rows aligned with `world_info_shell_context_processing_flow.md` and `world_info_shell_context_sandbox_proof.py`.
 - Keep main-chat generation-control rows aligned with `main_chat_generation_control_bridge_processing_flow.md` and `main_chat_generation_control_bridge_sandbox_proof.py`.
 - Keep main-chat message-action rows aligned with `main_chat_message_actions_bridge_processing_flow.md` and `main_chat_message_actions_bridge_sandbox_proof.py`.
+- Keep canonical chat-stats authority rows aligned with `canonical_chat_stats_authority_processing_flow.md` and `canonical_chat_stats_authority_sandbox_proof.py`.
 - Add a new row when a documentation proof script starts producing a new named output.
 - Do not use this file as a second implementation guide; detailed processing rules belong in the owning flow doc.

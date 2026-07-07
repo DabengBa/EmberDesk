@@ -2,11 +2,11 @@
 
 ## Module Responsibility
 
-This document covers the first delivered slice of EmberDesk's interaction-performance work for the character list hot path.
+This document covers EmberDesk's historical interaction-performance work for the character list hot path and the current retired state of the legacy character-index sidecar.
 
 Primary files:
 
-- `src/endpoints/character-index.js`
+- `src/endpoints/character-index.js` (retired from normal runtime; retained as historical/helper-level proof)
 - `src/derived-cache-sqlite.js`
 - `src/endpoints/character-read-service.js`
 - `src/endpoints/character-write-service.js`
@@ -20,17 +20,25 @@ Primary files:
 - `public/perf-harness.html`
 - `scripts/interaction-performance-runner.mjs`
 
-The goal of this slice is narrow:
+Current status:
+
+- normal runtime no longer opens, refreshes, dirty-marks, deletes, or reports `_cache/character-index.sqlite`
+- `POST /api/characters/all`, `/list`, and `/get` read from canonical SQLite when the canonical flags and audit gate allow it, otherwise they fall back directly to compatibility files
+- character write/import/chat and World Info delete-preflight/cascade paths no longer use `character-index.js` as an accelerator, dependency scanner, or second authority lane
+- deleting `<user root>/_cache/character-index.sqlite` cannot lose user data and should not affect normal character-library behavior
+- `src/endpoints/character-index.js` remains only as a retired helper surface for historical tests and interaction-performance report compatibility until a later cleanup deletes or archives it
+
+The historical interaction-performance slice originally aimed to:
 
 - avoid reparsing every character PNG and rescanning every chat directory on each `POST /api/characters/all`
-- reuse a fresh per-character cached `full_json` on `POST /api/characters/get` when the indexed row still matches the source PNG
+- reuse a fresh per-character cached `full_json` on `POST /api/characters/get` when the indexed row still matched the source PNG
 - keep canonical character and chat files on disk
 - reduce the visible lag after character deletion by removing the success-path full character-list refetch
 - reduce avoidable full-list redraws during ordinary character-library page changes when the next visible page can be reconciled safely
-- keep the indexed fast path self-healing when derived rows or SQLite state become inconsistent
+- keep the indexed fast path self-healing when derived rows or SQLite state became inconsistent
 - add a reproducible local A/B runner that can prove whether the current SQLite slice is helping enough to justify its maintenance cost
 
-This tech note now describes the legacy compatibility read path and its derived acceleration. When canonical DB-first reads are enabled for character metadata, `src/endpoints/character-read-service.js` bypasses `_cache/character-index.sqlite` and falls back directly to compatibility files if canonical rows are unavailable.
+This tech note now treats the index details below as historical/helper-level context. Current runtime ownership lives in `src/endpoints/character-read-service.js`, `src/endpoints/character-write-service.js`, `src/endpoints/character-import-service.js`, `src/endpoints/chats.js`, and `src/endpoints/worldinfo.js`, none of which use `_cache/character-index.sqlite` as a normal path.
 
 Separate from the SQLite slice, EmberDesk now also applies a short browser cache policy on non-Firefox `/thumbnail` responses:
 
@@ -82,52 +90,51 @@ Separate from SQLite, thumbnail HTTP caching, lazy image fetch behavior, placeho
 
 Separate from the read-side character route service, EmberDesk now also routes single-card character writes through `src/endpoints/character-write-service.js`:
 
-- `/api/characters/create` delegates canonical card formatting, target avatar naming, chats-directory creation, optional upload cleanup, and post-write character-index refresh to `createCharacterCard`
-- `/api/characters/edit` delegates metadata-only writes with `shouldRegenerateThumbnail: false`, replacement-avatar upload cleanup, cache busting, and post-write character-index refresh to `editCharacterCard`
-- the related single-card `/api/characters/rename` path delegates old-card read/update, chats-directory copy/remove, old avatar deletion, old index deletion, and new index refresh to `renameCharacterCard`
+- `/api/characters/create` delegates canonical card formatting, target avatar naming, chats-directory creation, and optional upload cleanup to `createCharacterCard`
+- `/api/characters/edit` delegates metadata-only writes with `shouldRegenerateThumbnail: false`, replacement-avatar upload cleanup, and cache busting to `editCharacterCard`
+- the related single-card `/api/characters/rename` path delegates old-card read/update, chats-directory copy/remove, and old avatar deletion to `renameCharacterCard`
 - routes keep request validation and legacy HTTP response mapping; the service owns write-side effect ordering through explicit dependencies that are covered by `tests/character-write-service.test.js`
 
 Separate from the single-card write service, EmberDesk now also routes `POST /api/characters/import` through `src/endpoints/character-import-service.js`:
 
 - the route still owns request/file validation, upload cleanup, and HTTP `{ file_name }` / `400 { error: true }` response mapping
-- the import coordinator now owns format dispatch across PNG / JSON / YAML / CHARX / BYAF inputs, empty-result normalization, and post-import `refreshCharacterIndexEntrySafe(..., 'import')`
-- the coordinator keeps imported cards file-backed and only refreshes the derived index after canonical import success
+- the import coordinator now owns format dispatch across PNG / JSON / YAML / CHARX / BYAF inputs and empty-result normalization
+- the coordinator keeps imported cards file-backed or canonical-projected according to the active storage flags without refreshing the retired derived index
 
 ## Architecture And Constraints
 
 - Legacy compatibility files remain:
   - character cards in `data/<user>/characters/*.png`
   - chats in `data/<user>/chats/**`
-- The SQLite file is derived state only:
+- The retired SQLite file is derived state only:
   - `<user root>/_cache/character-index.sqlite`
 - The first slice preserves both existing `/api/characters/all` payload modes:
   - full objects when `performance.lazyLoadCharacters=false`
   - shallow rows when `performance.lazyLoadCharacters=true`
-- `POST /api/characters/get` stays file-authoritative for the legacy compatibility path, but no longer has to reparse the PNG on every steady-state request.
-  - when the indexed `full_json` row is present, the source PNG stat still matches, and related derived inputs are still valid, the route can return that cached payload directly
-  - when the row is missing, stale, unreadable, or a linked dependency such as legacy world-info source data no longer matches, the route falls back to the existing file-backed parser and refreshes the row opportunistically
-- The new index does not replace the existing `DiskCache`.
+- `POST /api/characters/get` stays file-compatible for fallback reads and no longer consults `_cache/character-index.sqlite`.
+  - when canonical DB-first reads are enabled and audit-clean, the route can read canonical rows
+  - when canonical rows are blocked, missing, stale, or disabled, the route falls back directly to compatibility files
+- The retired index does not replace the existing `DiskCache`.
   - `DiskCache` still accelerates PNG-to-JSON extraction through `readCharacterData()`
-  - the SQLite sidecar accelerates the character-list path and safe single-character steady-state reads
-- The indexed fast path is optional at runtime.
-  - when the active Node runtime exposes `node:sqlite`, EmberDesk enables the derived character index
-  - when `node:sqlite` is unavailable, EmberDesk falls back to the previous filesystem-backed `/api/characters/all` path
-- Benchmarking must compare both paths in the same runtime.
-  - the measurement runner uses `EMBERDESK_CHARACTER_INDEX_MODE=force_on|force_off`
-  - `force_off` disables the SQLite fast path without changing the Node build
+- no normal character route now uses the SQLite sidecar as an accelerator or fallback
+- The indexed fast path is retired at runtime.
+  - `node:sqlite` availability can still matter for canonical SQLite and helper-level tests
+  - it no longer decides whether character reads take an indexed sidecar path
+- Historical benchmarking compared indexed and filesystem paths in the same runtime.
+  - the measurement runner can still use `EMBERDESK_CHARACTER_INDEX_MODE=force_on|force_off` for helper/report compatibility
+  - `force_off` disables the historical SQLite fast path without changing the Node build
   - `force_on` still requires actual `node:sqlite` support; it is not a fake mock path
 - Chat save stays lightweight.
-  - chat mutations mark character chat aggregates dirty
-  - they do not rebuild the full indexed row on every save
-- Derived index failures should degrade safely.
-  - one corrupt indexed row must not break the whole character list
-  - structural DB failures should reset the cached connection so the next request can rebuild derived state
+  - when the canonical chat-stats flag is enabled, character chat mutations update `character_chat_stats`
+  - file-backed chat mutations still invalidate canonical audit state as needed
+  - no chat route dirty-marks the retired character-index sidecar
+- Historical helper failures are isolated to helper-level tests or perf-report compatibility and should not affect normal character-list availability.
 
 ## Core Implementation
 
-### Character index storage
+### Retired character index storage
 
-`src/endpoints/character-index.js` owns a per-user SQLite sidecar with:
+`src/endpoints/character-index.js` still contains the historical per-user SQLite sidecar implementation with:
 
 - `meta`
   - `schema_version`
@@ -142,11 +149,11 @@ Separate from the single-card write service, EmberDesk now also routes `POST /ap
   - `source_world_size`
   - `chat_stats_dirty`
 
-The module:
+The retired helper module:
 
 - delegates `node:sqlite` feature detection to `src/derived-cache-sqlite.js`
 - delegates cached `DatabaseSync` handle lifecycle to `src/derived-cache-sqlite.js`
-- closes cached handles during server shutdown through the helper
+- exposes disposal helpers for tests, but `src/server-main.js` no longer opens, logs, or disposes character-index databases during normal startup/shutdown
 - resets cached handles through the helper when structural index operations fail
 - recreates derived rows when:
   - the row is missing
@@ -158,13 +165,13 @@ The module:
 - skips and cleans up corrupt payload rows instead of failing the entire request
 - sorts final rows in JavaScript with `Intl.Collator` instead of relying on SQLite `COLLATE NOCASE`
 
-### What is actually cached
+### Historical cached payloads
 
-The SQLite sidecar caches per-character derived payloads for `POST /api/characters/all`.
+The retired SQLite sidecar historically cached per-character derived payloads for `POST /api/characters/all`.
 
-Shared SQLite lifecycle details live in [Derived Cache SQLite Helper](derived-cache-sqlite.md). The helper owns feature detection, PRAGMA setup, cached handle lifecycle, schema-version reset plumbing, status reporting, and reset-count circuit breaking. `character-index.js` remains the owner of character schema, payloads, freshness checks, and fallback rules.
+Shared SQLite lifecycle details live in [Derived Cache SQLite Helper](derived-cache-sqlite.md). The helper owns feature detection, PRAGMA setup, cached handle lifecycle, schema-version reset plumbing, status reporting, and reset-count circuit breaking. `character-index.js` remains the owner of the retired helper schema, payloads, freshness checks, and fallback rules used by historical proof.
 
-Per [ADR-0009](../adr/0009-derived-cache-sqlite-drizzle-decision.md), this sidecar remains on the handwritten `node:sqlite` path. Drizzle was reviewed and rejected for the current derived-cache scope because it does not yet show net value over the existing rebuildable-sidecar design.
+Per [ADR-0009](../adr/0009-derived-cache-sqlite-drizzle-decision.md), this sidecar used the handwritten `node:sqlite` path. Drizzle was reviewed and rejected for that derived-cache scope; the decision remains historical context rather than a reason to keep the sidecar in normal runtime.
 
 It is not just a tiny row index with avatar and title fields.
 
@@ -204,12 +211,13 @@ What this slice does not cache in SQLite:
 
 So the precise answer is:
 
-- by usage scope, mostly yes: this index exists for character-list responses and now also for safe single-character full-payload reuse
-- by stored content, no: it stores both the full `/api/characters/all` payload and the shallow payload for each character, not only a few visible list columns
+- historically, by usage scope, it existed for character-list responses and safe single-character full-payload reuse
+- historically, by stored content, it stored both the full `/api/characters/all` payload and the shallow payload for each character, not only a few visible list columns
+- currently, it is retired from normal runtime and should not be treated as an active response source
 
-### `/api/characters/all` fast path
+### Current `/api/characters/all` path
 
-`src/endpoints/characters.js` now routes `POST /api/characters/all` through `src/endpoints/character-read-service.js`. For the legacy compatibility read path, the service coordinates the index-first path when runtime support exists, and the Express route unwraps the internal snapshot envelope before sending the unchanged array response. When canonical DB-first reads are requested, the same service bypasses the derived sidecar entirely and either serves canonical rows or falls back directly to compatibility files.
+`src/endpoints/characters.js` routes `POST /api/characters/all` through `src/endpoints/character-read-service.js`. The service now returns canonical rows when the canonical read gate is available and audit-clean, otherwise it falls back directly to compatibility files. It does not call the retired derived sidecar in either mode, and the Express route unwraps the internal snapshot envelope before sending the unchanged array response.
 
 Build source for each row:
 
@@ -217,16 +225,15 @@ Build source for each row:
 2. `toShallow(fullPayload)`
 3. source file stat (`mtimeMs`, `size`)
 
-The indexed response can therefore satisfy either existing list mode directly from cached derived JSON:
+The current response still satisfies both existing list modes:
 
-- full mode returns cached `full_json`
-- lazy/shallow mode returns cached `shallow_json`
+- full mode returns full route-compatible character objects
+- lazy/shallow mode returns shallow route-compatible rows
 
 Failure behavior:
 
-- if indexed read or rebuild fails, the route logs the failure and falls back to the previous filesystem scan
-- this keeps the page usable even when the derived DB is unavailable or corrupted
-- if the failure indicates a broken cached DB handle or missing structural state, the next indexed request can reopen and rebuild instead of staying stuck in permanent fallback
+- if canonical read is unavailable, blocked, or stale, the route falls back to compatibility files
+- this keeps the page usable even when canonical storage is unavailable, while retired sidecar availability is irrelevant to route success
 - in interaction perf mode, the route also emits:
   - `X-EmberDesk-Interaction-Path`
   - `Server-Timing: route;dur=...`
@@ -243,7 +250,7 @@ Failure behavior:
 The service is route-adjacent instead of storage-owned:
 
 - `characters.js` still owns Express routes, middleware, status mapping, JSON response bodies, and `applyInteractionPerfHeaders()`
-- `character-index.js` still owns SQLite schema, freshness checks, row rebuilds, reset behavior, and derived-cache lifecycle calls
+- `character-index.js` no longer participates in this service boundary during normal runtime
 - `processCharacter()` and card conversion remain in the character endpoint boundary instead of moving into the service
 
 The service returns an internal result envelope such as:
@@ -259,38 +266,25 @@ The service accepts future read context fields for `filter` and `pagination`, bu
 
 In canonical DB-first read mode, the service now uses the derived character index as neither a canonical source nor a fallback authority. If canonical rows are blocked, missing, or stale, recovery is direct compatibility-file fallback.
 
-### `/api/characters/get` index-first path
+### Current `/api/characters/get` path
 
-`src/endpoints/characters.js` now routes `POST /api/characters/get` through `src/endpoints/character-read-service.js`. In legacy compatibility mode, it preserves the narrower safe index-reuse path:
+`src/endpoints/characters.js` routes `POST /api/characters/get` through `src/endpoints/character-read-service.js`. The current compatibility fallback is direct file-backed parsing:
 
 1. validate the avatar path
 2. confirm the PNG still exists
 3. read the current file stat once
-4. ask the index for a fresh `full_json` row for that exact avatar
-5. return the cached payload only when:
-   - the row exists
-   - `source_mtime_ms` matches the current PNG `mtime`
-   - `source_size` matches the current PNG size
-   - current chat-directory aggregates still match the cached `chat_size` and `date_last_chat`
-   - for legacy cards that derive `data.character_book` from an external world-info file, the cached row still matches the linked world file stat
-   - if that linked world file was already absent when the row was last rebuilt, the cached "no linked world book available" state is still reusable until the file reappears
-   - the cached payload parses successfully
-6. otherwise, fall back to `processCharacter(..., { shallow: false })`
-7. after a successful file-backed rebuild, re-stat the source PNG and refresh the indexed row opportunistically with the current file metadata
+4. read canonical rows when DB-first reads are enabled and audit-clean, or call `processCharacter(..., { shallow: false })` directly when fallback is required
+5. return the route-compatible payload without refreshing or upserting `_cache/character-index.sqlite`
 
 This keeps the route file-authoritative:
 
 - missing files still return `404`
-- stale or corrupt rows never override the canonical PNG-backed read
-- out-of-band chat cleanup can still be reflected because `/get` recomputes chat aggregates before returning a cached row
-- legacy world-linked cards revalidate the linked world-info file before reusing cached `full_json`
-- when a previously linked world-info file is deleted, the first fallback rebuild updates the cached row to the new "world book unavailable" state so later steady-state reads do not keep reparsing the PNG unnecessarily
-- `/get` fallback writes index metadata from a fresh post-parse file stat so the cached row does not end up with "new payload, old stat" skew when the PNG changes mid-request
-- the index can speed up repeated steady-state full-character reads without becoming a second source of truth
-- only row-read / structural SQLite failures reset the cached DB handle; non-DB dependency failures such as world-file lookup problems degrade through fallback without wiping the whole derived index
-- in interaction perf mode, `/get` also emits path and route-duration headers so the runner can verify it really exercised the indexed or filesystem path it claims to compare
+- stale or corrupt sidecar rows cannot override the canonical or PNG-backed read because the route never consults them
+- out-of-band chat cleanup is represented through canonical chat stats when enabled, or through direct compatibility-file fallback and repair tooling when not
+- legacy world-linked cards are read from the compatibility file path during fallback instead of reusing cached `full_json`
+- in interaction perf mode, `/get` emits path and route-duration headers so the runner can verify it exercised the canonical or filesystem path it claims to compare
 
-When canonical DB-first reads are requested, the service does not revive this index after a canonical miss. The recovery path is direct compatibility-file fallback so canonical mode never gains a second hidden authority lane.
+The service does not revive the retired index after a canonical miss. The recovery path is direct compatibility-file fallback so canonical mode never gains a second hidden authority lane.
 
 ### Interaction A/B runner
 
@@ -302,7 +296,7 @@ Core design:
 - seeds deterministic character PNGs and chat files
 - keeps user auth simple by staying in the default single-user mode
 - uses `public/perf-harness.html` as an inert same-origin page so benchmark requests do not accidentally boot the full app and prewarm `/api/characters/all`
-- alternates SQLite `force_on` and `force_off` variants across pair runs for the legacy derived-index path
+- preserves historical `force_on` and `force_off` variants only for helper/report compatibility; normal route samples should observe canonical or filesystem paths, not indexed route paths
 - validates route-path headers before accepting a sample
 - rejects pair summaries when on/off payloads are not semantically equivalent
 
@@ -340,7 +334,7 @@ Artifact contract:
 - `artifacts/interaction-perf/<timestamp>/config.json`
 - scenario screenshots
 
-`report.json` now includes a `derivedCache` section, and `report.md` renders the same information under "Derived Cache Observability". The section records sanitized character-index sidecar status per scenario variant:
+`report.json` can include a `derivedCache` section, and `report.md` renders the same information under "Derived Cache Observability". The section is retained for historical sidecar observability and records sanitized character-index sidecar status when helper-level status is collected:
 
 - variant name such as `sqlite_on` or `sqlite_off`
 - mode such as `force_on`, `force_off`, or `auto`
@@ -348,7 +342,7 @@ Artifact contract:
 - schema version and reset count
 - fallback or disabled reason such as `force_off`, `unsupported`, or `reset_threshold_exceeded`
 
-This derived-cache observability section intentionally omits `dbPath`, data-root paths, usernames, character filenames, and other user-specific filesystem details. Other report sections still include synthetic benchmark payload summaries, such as sample avatar names, for parity debugging. For character route scenarios, the runner reads the sidecar runtime status from a perf-only `X-EmberDesk-Character-Index-Status` response header emitted only when `EMBERDESK_INTERACTION_PERF_MODE=1`; the header keeps `open` as sidecar runtime state, while `indexedPathObserved` records whether the sampled request used an indexed path. In canonical DB-first read mode, `indexedPathObserved=false` is expected because the service no longer consults the sidecar. This is diagnostic evidence only; it does not add a health endpoint and does not change `/api/characters/all` or `/api/characters/get` response bodies.
+This derived-cache observability section intentionally omits `dbPath`, data-root paths, usernames, character filenames, and other user-specific filesystem details. Other report sections still include synthetic benchmark payload summaries, such as sample avatar names, for parity debugging. Character routes no longer emit `X-EmberDesk-Character-Index-Status`; the runner can still collect helper-level status directly for retired-sidecar report compatibility, while `indexedPathObserved=false` is expected for normal route samples because the service no longer consults the sidecar. This is diagnostic evidence only; it does not add a health endpoint and does not change `/api/characters/all` or `/api/characters/get` response bodies.
 
 Raw runner artifacts are local evidence and are not committed by default. Durable docs should record the command, runtime, scenario set, warnings, and the local artifact path used during the delivery.
 
@@ -375,7 +369,7 @@ On the 2026-06-05 Node.js 26.3.0 proof run, all eight scenarios produced `validP
 
 ### Mutation consistency
 
-Character mutations in `src/endpoints/characters.js` now refresh or delete indexed rows after successful canonical file changes:
+Character mutations in `src/endpoints/characters.js` no longer refresh or delete indexed rows after successful canonical or compatibility file changes. The affected normal runtime paths are:
 
 - create
 - rename
@@ -387,22 +381,18 @@ Character mutations in `src/endpoints/characters.js` now refresh or delete index
 - import
 - duplicate
 
-Bulk `merge-attributes` refreshes all successfully updated avatars after the batch finishes.
+Bulk `merge-attributes` updates the affected cards without issuing sidecar rebuild work.
 
-Bulk refreshes now run with a bounded concurrency limit so derived-row rebuild pressure stays aligned with the surrounding bulk-update path.
-
-Character-chat mutations in `src/endpoints/chats.js` now mark chat-derived aggregates dirty after successful:
+Character-chat mutations in `src/endpoints/chats.js` no longer mark sidecar chat-derived aggregates dirty after successful:
 
 - save
 - rename
 - delete
 - import
 
-This keeps `chat_size` and `date_last_chat` accurate on the next list read without making autosave synchronous-and-heavy.
+Canonical chat-stats mode updates `character_chat_stats` directly for character chats. Compatibility fallback stays file-backed, and external drift is repaired through the canonical operator path rather than by dirty-marking `_cache/character-index.sqlite`.
 
-Import now normalizes the avatar name before refreshing the derived row, so imported cards consistently update the index even when the internal file name comes back without `.png`.
-
-This import refresh now happens through the route-adjacent coordinator instead of the route body itself, so the import side-effect order is testable without turning the derived index into a new source of truth.
+Import still normalizes route results and compatibility filenames, but it does not refresh the retired derived row.
 
 ### Delete-flow UI update
 
@@ -510,8 +500,8 @@ Stability-sensitive binding points:
 - `POST /api/chats/delete`
 - `POST /api/chats/import`
 - `performance.lazyLoadCharacters`
-- `<user root>/_cache/character-index.sqlite`
-- `SCHEMA_VERSION` in `src/endpoints/character-index.js`
+- `<user root>/_cache/character-index.sqlite` as retired disposable state
+- `SCHEMA_VERSION` in `src/endpoints/character-index.js` for helper-level historical proof only
 - `removeCharactersFromState()` in `public/scripts/character-list-state.js`
 - `shouldRefreshCharacterAfterEdit()` in `public/scripts/character-list-state.js`
 - `syncBulkSelectionDomState()` in `public/scripts/character-list-state.js`
@@ -531,18 +521,14 @@ Current client-side state rules are documented in [Character List State Processi
 
 ## Performance And Caching
 
-- Steady-state character-list reads no longer require one `processCharacter()` call per avatar when the runtime index is available and rows are clean.
-- Chat-directory aggregate recomputation is deferred until the next character-list read after a relevant chat mutation.
-- Dirty chat-stat refresh now uses the cached JSON payloads instead of reparsing the source PNG again.
-- The feature keeps two distinct caches with different responsibilities:
-  - `DiskCache` for PNG card extraction
-  - SQLite sidecar for precomputed `/api/characters/all` payloads plus safe `/api/characters/get` full-payload reuse
+- Steady-state character-list reads now rely on canonical SQLite when enabled and audit-clean, or direct compatibility-file fallback when not.
+- Chat-directory aggregate behavior is owned by canonical chat stats when the flag is enabled; the retired sidecar no longer dirty-marks or refreshes chat-derived list fields.
+- The feature keeps `DiskCache` for PNG card extraction. `_cache/character-index.sqlite` is retired from normal runtime and should not be counted as an active performance dependency.
 - Delete success avoids one extra `/api/characters/all` network roundtrip. In ordinary unfiltered single-delete cases it also avoids a full client-side list rebuild, while complex states still pay the existing full-refresh cost for correctness.
-- Corrupt derived rows are pruned opportunistically so steady-state reads can self-heal instead of degrading the whole list path.
+- Corrupt retired sidecar rows are irrelevant to normal route availability because current routes do not read them.
 - The benchmark results should be interpreted per scenario, not as one global “SQLite is faster” claim.
-  - first build can be materially slower because it pays index creation cost
-  - warm list reads are the main gain surface
-  - warm `/get` gains are smaller because the route still validates file-backed freshness
+  - historical first indexed builds could be materially slower because they paid index creation cost
+  - current normal route samples should focus on canonical-vs-filesystem behavior rather than indexed-vs-filesystem behavior
 - Delete-flow measurements now need two readings, not one:
   - pre-delete safety-path cost, which this slice reduced by suppressing welcome-screen hydration while still preserving the lightweight `CHAT_CHANGED` cleanup callback path
   - post-delete UI completion cost, which can still dominate large-profile reruns because `removeCharacterFromUI()` keeps its later refresh and `CHAT_CHANGED` work

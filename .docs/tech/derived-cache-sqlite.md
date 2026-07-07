@@ -2,7 +2,7 @@
 
 ## Module Responsibility
 
-`src/derived-cache-sqlite.js` owns the shared lifecycle for SQLite files that are derived from canonical filesystem data. Project-level cache boundaries are summarized in [project-overview](../project-overview.md), and the current character-index integration is described in [interaction-performance-indexing](interaction-performance-indexing.md).
+`src/derived-cache-sqlite.js` owns the shared lifecycle for SQLite files that are derived from canonical filesystem data. Project-level cache boundaries are summarized in [project-overview](../project-overview.md), and the retired character-index history is described in [interaction-performance-indexing](interaction-performance-indexing.md).
 
 The helper is infrastructure only. It owns:
 
@@ -18,27 +18,29 @@ The helper is infrastructure only. It owns:
 
 The helper does not own business rules. Entity modules continue to own their schema, payloads, freshness keys, invalidation rules, and filesystem fallback behavior.
 
-As of [ADR-0009](../adr/0009-derived-cache-sqlite-drizzle-decision.md), EmberDesk explicitly does not adopt Drizzle for this slice. The current handwritten `node:sqlite` helper remains the accepted fit because it already covers the derived-cache lifecycle and fallback contract without adding an ORM layer.
+As of [ADR-0009](../adr/0009-derived-cache-sqlite-drizzle-decision.md), EmberDesk explicitly did not adopt Drizzle for the character-index derived-cache slice. That decision remains useful historical context for helper-level maintenance, but the character-index sidecar is no longer part of normal runtime operation.
 
 ## Derived Cache Contract
 
 SQLite sidecars under `_cache` are rebuildable acceleration artifacts. They are never the canonical storage location for approved canonical SQLite slices.
 
-For the current character sidecar:
+For the retired character sidecar:
 
 - legacy compatibility character cards remain `data/<user>/characters/*.png`
 - legacy compatibility chats remain `data/<user>/chats/**`
 - the derived SQLite file remains `<user root>/_cache/character-index.sqlite`
 - deleting or rebuilding the SQLite file must not lose user data
-- once canonical DB-first reads are enabled for character metadata, `/api/characters/all`, `/list`, and `/get` no longer use this sidecar as a fallback authority path
+- `/api/characters/all`, `/list`, and `/get` no longer use this sidecar as a normal accelerator or fallback authority path
 
-In the legacy compatibility mode, those character-card and chat files remain the authoritative input for rebuilding this sidecar.
+Historically, legacy compatibility character-card and chat files were the authoritative input for rebuilding this sidecar. Current normal routes read canonical SQLite when enabled and audit-clean, or direct compatibility files when fallback is required.
 
 Future sidecars must follow the same rule: the source files are authoritative, and the SQLite file can be deleted and rebuilt from those files.
 
 ## Current Integration
 
-`src/endpoints/character-index.js` uses the helper for:
+There is currently no normal-runtime character route owner for `_cache/character-index.sqlite`. `src/endpoints/character-index.js` remains as a retired helper module and may use this helper when historical tests or interaction-performance report compatibility exercise it.
+
+That retired helper uses the lifecycle helper for:
 
 - opening the per-user `character-index.sqlite`
 - applying the shared PRAGMA baseline
@@ -48,7 +50,7 @@ Future sidecars must follow the same rule: the source files are authoritative, a
 - reset count and circuit-breaker state
 - status reporting
 
-`character-index.js` still owns:
+`character-index.js` still owns the retired helper's:
 
 - the `characters` table schema
 - `full_json` and `shallow_json`
@@ -56,7 +58,7 @@ Future sidecars must follow the same rule: the source files are authoritative, a
 - linked world-info stat freshness
 - `chat_stats_dirty`
 - corrupt JSON row cleanup
-- character-list and single-character payload APIs
+- historical character-list and single-character payload APIs
 
 ## Operator Signals
 
@@ -72,7 +74,7 @@ The helper emits structured `console.info` records with:
 
 `action` values include:
 
-- `available` for startup mode/status logging
+- `available` for explicit helper status logging
 - `opened` when an existing compatible sidecar opens
 - `migrated` when schema version setup/reset runs
 - `disabled` when mode or circuit breaker disables a sidecar
@@ -84,9 +86,9 @@ The helper emits structured `console.info` records with:
 - `unsupported`
 - `reset_threshold_exceeded`
 
-`src/server-main.js` logs the parsed character-index mode during startup without opening any user-root SQLite file.
+`src/server-main.js` no longer logs character-index startup status or disposes character-index databases during normal shutdown.
 
-Code can query status through the sidecar wrapper exported by `src/endpoints/character-index.js`, which delegates to the helper and reports:
+Tests and diagnostic tooling can query status through the retired sidecar wrapper exported by `src/endpoints/character-index.js`, which delegates to the helper and reports:
 
 - `supported`
 - `mode`
@@ -96,7 +98,7 @@ Code can query status through the sidecar wrapper exported by `src/endpoints/cha
 - `resetCount`
 - `disabledReason`
 
-There is no HTTP health/status endpoint for this slice. If an operator UI or `/health` response needs this data later, it should call the existing read-only status function through a separately designed API boundary.
+There is no HTTP health/status endpoint for this slice, and character routes no longer emit character-index status headers. If an operator UI or `/health` response needs derived-cache status later, it needs a separately designed API boundary rather than reviving the retired character-index route dependency.
 
 ## SQLite Baseline
 
@@ -115,7 +117,7 @@ PRAGMA temp_store = MEMORY;
 
 Structural SQLite failures reset the cached handle. Corrupt database files encountered during open are removed along with their `-wal` and `-shm` files, then rebuilt from the owner-provided schema hooks.
 
-Each sidecar state tracks reset count. After the reset threshold is reached, the helper disables that sidecar for the current process and owner modules fall back to their compatibility-file path for legacy-mode reads. This avoids repeated reopen/reset loops against a broken derived cache.
+Each sidecar state tracks reset count. After the reset threshold is reached, the helper disables that sidecar for the current process. Historical owner modules fell back to compatibility-file reads; current character routes already bypass the retired sidecar, so helper disablement should not affect normal character-library availability.
 
 The disabled state is process-local and does not write to canonical user data.
 
@@ -130,8 +132,7 @@ SQLite WAL supports concurrent readers, but multiple EmberDesk writer processes 
 Primary proof:
 
 ```bash
-bun run --cwd tests test:unit -- derived-cache-sqlite.test.js --runInBand
-bun run --cwd tests test:unit -- interaction-performance-index.test.js --runInBand
+bun run --cwd tests test:unit -- derived-cache-sqlite.test.js interaction-performance-index.test.js --runInBand
 ```
 
-The first command proves helper lifecycle behavior independently. The second command proves the character index still preserves the legacy-mode compatibility fallback and stays out of the canonical DB-first read path.
+This command proves helper lifecycle behavior independently and keeps historical character-index coverage explicit while route-level tests prove normal runtime ignores the retired sidecar.

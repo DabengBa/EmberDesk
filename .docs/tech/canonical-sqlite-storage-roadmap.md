@@ -11,7 +11,7 @@ Primary current files:
 - `src/endpoints/character-read-service.js`
 - `src/endpoints/character-write-service.js`
 - `src/endpoints/chats.js`
-- `src/endpoints/character-index.js`
+- `src/endpoints/character-index.js` (retired helper; no normal runtime ownership)
 - `src/derived-cache-sqlite.js`
 - `src/users.js`
 - `src/user-directories.js`
@@ -30,10 +30,16 @@ Delivered Phase 1 tech docs:
 
 ADR-0011 accepts canonical per-user SQLite storage for selected slices. The first approved slice is character metadata plus character chat stats.
 
+That first approved slice is now delivered, and the legacy-mode accelerator around `_cache/character-index.sqlite` has been retired from normal runtime. The remaining roadmap proceeds in this order:
+
+1. deliver full World Info canonical migration
+2. migrate the remaining structured user-data slices: settings, secrets, vectors, assets, personas, backgrounds, and extension storage
+3. migrate chat message bodies
+
 The canonical DB must be separate from derived caches:
 
 - canonical candidate: `DATA_ROOT/<handle>/storage/emberdesk.sqlite`
-- derived sidecar: `DATA_ROOT/<handle>/_cache/character-index.sqlite`
+- retired derived sidecar: `DATA_ROOT/<handle>/_cache/character-index.sqlite`
 - disk extraction cache: `DiskCache`
 
 Do not place canonical data under `_cache`. Do not reuse `src/derived-cache-sqlite.js` as the canonical DB manager because its reset, corrupt-file removal, circuit-breaker, and fallback semantics are intentionally designed for rebuildable sidecars.
@@ -95,7 +101,7 @@ Current delivered foundation:
 - `src/canonical-sqlite.js` now exists as the canonical DB manager.
 - `src/canonical-sqlite-migrations.js` now exists as the migration runner for canonical schema history and phase-one schema bootstrap.
 - `src/canonical-sqlite-shadow-import.js` now exists as the Phase 1 shadow import/audit owner for character metadata and chat stats.
-- `src/endpoints/character-file-snapshot.js` now exists as the shared file-backed snapshot helper reused by both the existing character read/index path and canonical shadow import.
+- `src/endpoints/character-file-snapshot.js` now exists as the shared file-backed snapshot helper reused by direct compatibility-file reads and canonical shadow import.
 - `src/storage-feature-flags.js` now exposes the current storage flag snapshot for this slice.
 - `USER_DIRECTORY_TEMPLATE` and `getUserDirectories(handle)` now include per-user `storage`.
 - `default/config.yaml` now declares `features.storage.canonicalSqlite.*` with default `false`.
@@ -196,7 +202,7 @@ Deliverables:
 - Decision to delete, disable, or reclassify `_cache/character-index.sqlite`.
 - Updated interaction performance docs and validation gate selector.
 - Removal or rename of stale "character index is the normal list fast path" wording.
-- Performance comparison showing DB-first reads meet or exceed current derived-index behavior for target workloads.
+- Focused route proof showing character reads fall back to canonical SQLite or compatibility files without requiring the retired derived sidecar; future performance work should optimize canonical queries rather than restore `_cache/character-index.sqlite`.
 
 Acceptance:
 
@@ -207,9 +213,63 @@ Acceptance:
 
 Current delivered foundation:
 
-- `src/endpoints/character-read-service.js` now skips `_cache/character-index.sqlite` whenever canonical DB-first reads are requested, so the derived sidecar no longer re-enters `/api/characters/all`, `/list`, or `/get` as a canonical-fallback read path.
-- The remaining character-index role is a disposable legacy-mode accelerator plus interaction-performance observability surface for the compatibility read path.
-- The next remaining Phase 5 question is whether EmberDesk still wants to keep that legacy-mode accelerator at all once canonical read-mode performance evidence is strong enough.
+- `src/endpoints/character-read-service.js` now skips `_cache/character-index.sqlite` in canonical DB-first mode and in compatibility fallback mode, so `/api/characters/all`, `/list`, and `/get` never take a normal indexed path.
+- Character create/edit/import/delete, chat save/rename/delete/import, and World Info delete-preflight/cascade no longer refresh, delete, dirty-mark, or query `_cache/character-index.sqlite`.
+- `src/server-main.js` no longer logs or disposes character-index sidecar state during normal startup/shutdown.
+- `src/endpoints/character-index.js` remains only as a retired helper for historical tests and interaction-performance report compatibility until a later cleanup deletes or archives it.
+- Validation and docs now treat `derived-cache-sqlite.test.js` plus `interaction-performance-index.test.js` as helper/historical proof, not as a required sidecar availability gate.
+
+## Next Work After The First Approved Slice
+
+The first approved slice is no longer the active planning question. Follow-on work now proceeds in the order below.
+
+### 1. Full World Info Canonical Migration
+
+Goal: move full World Info authority into canonical SQLite rather than stopping at character-to-world binding metadata.
+
+Required outcomes:
+
+- canonical schema and projection rules for full World Info entries
+- preserved prompt activation, regex placement, converter/import-export semantics, and delete-cascade behavior
+- compatibility-safe read/write integration for the current World Info owners and protected extension surfaces
+
+Dependencies and constraints:
+
+- starts after legacy-mode accelerator retirement
+- requires a dedicated spec and, if the trade-off surface changes materially, a dedicated ADR or ADR update before runtime cutover
+- must keep `public/scripts/world-info.js`, existing semantic surfaces, and extension-visible behavior compatible until an explicit retirement decision says otherwise
+
+### 2. Remaining Structured User-Data Slices
+
+Goal: broaden canonical SQLite beyond the first slice and World Info into the remaining structured user-data areas: settings, secrets, vectors, assets, personas, backgrounds, and extension storage.
+
+Required outcomes:
+
+- per-domain storage contracts and migration boundaries instead of one monolithic catch-all rewrite
+- explicit authority, import/export, repair, and rollback rules for each domain
+- operator-visible rollout sequencing so one domain can fail closed without corrupting another
+
+Dependencies and constraints:
+
+- starts after full World Info canonical migration establishes the next broad compatibility pattern
+- each domain needs its own spec-level acceptance and validation surface even if multiple domains eventually share the same DB file
+- secrets and extension storage must preserve current security and compatibility guarantees instead of being folded into a generic table design
+
+### 3. Chat Message Bodies
+
+Goal: migrate chat message bodies from JSONL files into canonical SQLite only after the structured-slice work above is stable.
+
+Required outcomes:
+
+- canonical message-body schema, import path, projection/export policy, and repair tooling
+- preserved chat export expectations and clear operator workflows for external file drift or archival
+- explicit performance and durability proof for large-chat workloads before file-backed message bodies stop being the primary storage shape
+
+Dependencies and constraints:
+
+- starts after the remaining structured user-data slices above
+- must not be treated as a small extension of chat-stats authority; message bodies are a separate migration surface with higher volume and stronger durability expectations
+- requires its own spec and validation plan before runtime cutover
 
 ## Task Breakdown And Dependencies
 
@@ -262,9 +322,22 @@ Current delivered foundation:
    - Maintains stats on chat save/rename/delete/import.
    - Current status: delivered for character chats behind `features.storage.canonicalSqlite.chatStats`; chat save/rename/delete/import now update canonical stats directly, group chats remain excluded, and `rebuild-chat-stats` remains the repair path for external file drift.
 
-11. `derived index retirement`
+11. `legacy-mode accelerator retirement`
     - Depends on DB read/write/stats proof.
-    - Removes or reclassifies the old character-index sidecar path.
+    - Removes the remaining old character-index sidecar path from normal runtime operation.
+    - Current status: delivered; normal character reads/writes/chat mutations/World Info delete flows no longer open, refresh, dirty-mark, or query `_cache/character-index.sqlite`.
+
+12. `full World Info canonical migration`
+    - Depends on legacy-mode accelerator retirement.
+    - Moves full World Info entries into canonical SQLite with compatibility-safe prompt, regex, import/export, and delete-cascade behavior.
+
+13. `remaining structured user-data slices`
+    - Depends on full World Info canonical migration.
+    - Covers settings, secrets, vectors, assets, personas, backgrounds, and extension storage as separately validated domains.
+
+14. `chat message bodies`
+    - Depends on the remaining structured user-data slices.
+    - Moves chat message bodies into canonical SQLite only after higher-risk structured-slice and compatibility groundwork is complete.
 
 ## Feature Flag And Rollback Contract
 
@@ -315,7 +388,7 @@ Code binding points:
 - `character-read-service.js` owns character read coordination.
 - `character-write-service.js` owns core character write sequencing.
 - `chats.js` owns chat save/rename/delete/import route side effects.
-- `character-index.js` remains derived until Phase 5 retires or reclassifies it.
+- `character-index.js` is retired from normal runtime and remains only as a historical/helper-level proof surface.
 
 ## Validation
 
@@ -337,7 +410,7 @@ Operator tooling and rollout-contract proof:
 bun run --cwd tests test:unit -- canonical-sqlite-cli.test.js canonical-sqlite-operator.test.js validation-gate-selector.test.js --runInBand
 ```
 
-Derived-cache guard tests while both paths coexist:
+Derived-cache helper and retired sidecar proof:
 
 ```bash
 bun run --cwd tests test:unit -- derived-cache-sqlite.test.js interaction-performance-index.test.js --runInBand

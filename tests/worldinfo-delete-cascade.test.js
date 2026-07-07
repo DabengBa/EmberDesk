@@ -3,17 +3,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const findCharactersBoundToWorldMock = jest.fn();
-const deleteCharacterIndexEntryMock = jest.fn();
 const readCharacterCardMock = jest.fn();
 const writeCharacterCardMock = jest.fn();
 const invalidateDirectoryMock = jest.fn();
-
-jest.unstable_mockModule('../src/endpoints/character-index.js', () => ({
-    deleteCharacterIndexEntry: deleteCharacterIndexEntryMock,
-    findCharactersBoundToWorld: findCharactersBoundToWorldMock,
-    isCharacterIndexSupported: () => true,
-}));
 
 jest.unstable_mockModule('../src/character-card-parser.js', () => ({
     read: readCharacterCardMock,
@@ -47,6 +39,17 @@ async function invokeDeleteCascade(request) {
     return response;
 }
 
+async function invokeDeletePreflight(request) {
+    const layer = router.stack.find(entry => entry.route?.path === '/delete-preflight' && entry.route.methods?.post);
+    if (!layer) {
+        throw new Error('Route not found: POST /delete-preflight');
+    }
+
+    const response = createResponse();
+    await layer.route.stack[0].handle(request, response);
+    return response;
+}
+
 describe('world info delete cascade', () => {
     let root;
     let directories;
@@ -61,8 +64,6 @@ describe('world info delete cascade', () => {
         fs.mkdirSync(directories.characters, { recursive: true });
         fs.mkdirSync(directories.worlds, { recursive: true });
 
-        findCharactersBoundToWorldMock.mockReset();
-        deleteCharacterIndexEntryMock.mockReset();
         readCharacterCardMock.mockReset();
         writeCharacterCardMock.mockReset();
         invalidateDirectoryMock.mockReset();
@@ -72,7 +73,41 @@ describe('world info delete cascade', () => {
         fs.rmSync(root, { recursive: true, force: true });
     });
 
-    test('clears character world references from one PNG snapshot and invalidates the index row', async () => {
+    test('reports bound characters by scanning character PNG snapshots without the index sidecar', async () => {
+        const alphaPath = path.join(directories.characters, 'alpha.png');
+        const betaPath = path.join(directories.characters, 'beta.png');
+        const worldPath = path.join(directories.worlds, 'OldWorld.json');
+        const alphaImage = Buffer.from('alpha png bytes');
+        const betaImage = Buffer.from('beta png bytes');
+        fs.writeFileSync(alphaPath, alphaImage);
+        fs.writeFileSync(betaPath, betaImage);
+        fs.writeFileSync(worldPath, JSON.stringify({ entries: { one: {} } }));
+
+        readCharacterCardMock.mockImplementation((buffer) => {
+            if (buffer.equals(alphaImage)) {
+                return JSON.stringify({ data: { name: 'Alpha', extensions: { world: 'OldWorld' } } });
+            }
+            if (buffer.equals(betaImage)) {
+                return JSON.stringify({ data: { name: 'Beta', extensions: { world: '' } } });
+            }
+            throw new Error('unexpected image buffer');
+        });
+
+        const response = await invokeDeletePreflight({
+            body: { name: 'OldWorld' },
+            user: { directories },
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.body.worldInfos).toEqual([expect.objectContaining({
+            name: 'OldWorld',
+            entryCount: 1,
+            boundCharacters: [{ avatar: 'alpha.png', name: 'Alpha' }],
+            deleteCandidateAvatars: [],
+        })]);
+    });
+
+    test('clears character world references by scanning PNG snapshots without invalidating the index row', async () => {
         const avatar = 'alpha.png';
         const characterPath = path.join(directories.characters, avatar);
         const worldPath = path.join(directories.worlds, 'OldWorld.json');
@@ -81,9 +116,9 @@ describe('world info delete cascade', () => {
         fs.writeFileSync(characterPath, originalImage);
         fs.writeFileSync(worldPath, '{}');
 
-        findCharactersBoundToWorldMock.mockReturnValue([{ avatar }]);
         readCharacterCardMock.mockReturnValue(JSON.stringify({
             data: {
+                name: 'Alpha',
                 extensions: {
                     world: 'OldWorld',
                 },
@@ -103,13 +138,13 @@ describe('world info delete cascade', () => {
         expect(readCharacterCardMock).toHaveBeenCalledWith(originalImage);
         expect(writeCharacterCardMock).toHaveBeenCalledWith(originalImage, JSON.stringify({
             data: {
+                name: 'Alpha',
                 extensions: {
                     world: '',
                 },
             },
         }));
         expect(fs.readFileSync(characterPath)).toEqual(rewrittenImage);
-        expect(deleteCharacterIndexEntryMock).toHaveBeenCalledWith(root, avatar);
         expect(fs.existsSync(worldPath)).toBe(false);
         expect(invalidateDirectoryMock).toHaveBeenCalledWith(directories.worlds);
     });

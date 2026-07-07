@@ -168,14 +168,6 @@ function maybeThrowCanonicalFallback(canonicalState) {
     throw new CanonicalReadBlockedError(canonicalState.fallbackReason);
 }
 
-function shouldUseDerivedCharacterIndex(canonicalState, dependencies) {
-    if (canonicalState.readsRequested) {
-        return false;
-    }
-
-    return dependencies.isCharacterIndexSupported();
-}
-
 /**
  * Reads the character list payload used by `/api/characters/all`.
  *
@@ -212,33 +204,6 @@ export async function readCharacterListPayload({
     }
 
     maybeThrowCanonicalFallback(canonicalState);
-
-    if (shouldUseDerivedCharacterIndex(canonicalState, dependencies)) {
-        try {
-            const avatarFiles = listAvatarFiles(directories.characters, { sorted: true });
-            const data = await dependencies.listIndexedCharacterPayloads({
-                userRoot: directories.root,
-                directories,
-                avatarFiles,
-                useShallowPayload: shallow,
-                buildRow: avatar => dependencies.buildCharacterIndexRow(directories, avatar),
-            });
-
-            return wrapSnapshot(data, {
-                interactionPath: 'characters_all:indexed',
-                latencyHint: 'instant',
-            });
-        } catch (error) {
-            dependencies.warn('Falling back to filesystem-backed character list after index read failure:', error);
-            const data = await readCharactersFromFiles(directories, shallow, dependencies);
-            return maybeAttachFallbackReason({
-                ...wrapSnapshot(data, {
-                    interactionPath: 'characters_all:filesystem',
-                    latencyHint: 'slow',
-                }),
-            }, canonicalState.fallbackReason);
-        }
-    }
 
     const data = await readCharactersFromFiles(directories, shallow, dependencies);
     return maybeAttachFallbackReason({
@@ -282,25 +247,6 @@ export async function readCharacterSummaryPayload({
     }
 
     maybeThrowCanonicalFallback(canonicalState);
-
-    if (shouldUseDerivedCharacterIndex(canonicalState, dependencies)) {
-        try {
-            const avatarFiles = listAvatarFiles(directories.characters, { sorted: true });
-            const data = await dependencies.listIndexedCharacterPayloads({
-                userRoot: directories.root,
-                directories,
-                avatarFiles,
-                useShallowPayload: true,
-                buildRow: avatar => dependencies.buildCharacterIndexRow(directories, avatar),
-            });
-
-            return wrapSnapshot(data, { latencyHint: 'instant' });
-        } catch (error) {
-            dependencies.warn('Falling back to filesystem-backed character summary list after index read failure:', error);
-            const data = await readCharactersFromFiles(directories, true, dependencies);
-            return maybeAttachFallbackReason(wrapSnapshot(data, { latencyHint: 'slow' }), canonicalState.fallbackReason);
-        }
-    }
 
     const data = await readCharactersFromFiles(directories, true, dependencies);
     return maybeAttachFallbackReason(wrapSnapshot(data, { latencyHint: 'slow' }), canonicalState.fallbackReason);
@@ -363,53 +309,12 @@ export async function readCharacterFullPayload({
         throw error;
     }
 
-    if (shouldUseDerivedCharacterIndex(canonicalState, dependencies)) {
-        try {
-            const indexedPayload = dependencies.getFreshIndexedCharacterFullPayload(
-                directories.root,
-                directories,
-                avatarUrl,
-                fileStat,
-            );
-
-            if (indexedPayload) {
-                return maybeAttachFallbackReason({
-                    status: 'found',
-                    result: { mode: 'snapshot', data: indexedPayload },
-                    interactionPath: 'characters_get:indexed',
-                    latencyHint: 'instant',
-                }, fallbackReason);
-            }
-        } catch (error) {
-            dependencies.warn(`Character index lookup skipped for ${avatarUrl}:`, error);
-        }
-    }
-
     const data = await dependencies.processCharacter(avatarUrl, directories, { shallow: false });
-    const latencyHint = shouldUseDerivedCharacterIndex(canonicalState, dependencies) ? 'fast' : 'slow';
-
-    if (shouldUseDerivedCharacterIndex(canonicalState, dependencies) && data?.name) {
-        try {
-            fileStat = dependencies.statCharacterFile(filePath);
-            dependencies.upsertCharacterIndexEntry(directories.root, avatarUrl, {
-                avatar: avatarUrl,
-                fullPayload: data,
-                shallowPayload: dependencies.toShallow(data),
-                sourceMtimeMs: fileStat.mtimeMs,
-                sourceSize: fileStat.size,
-                ...dependencies.getCharacterIndexWorldMetadata(directories, data),
-            });
-        } catch (error) {
-            if (error?.code !== 'ENOENT') {
-                dependencies.warn(`Character index refresh skipped after get for ${avatarUrl}:`, error);
-            }
-        }
-    }
 
     return maybeAttachFallbackReason({
         status: 'found',
         result: { mode: 'snapshot', data },
         interactionPath: 'characters_get:filesystem',
-        latencyHint,
+        latencyHint: 'slow',
     }, fallbackReason);
 }

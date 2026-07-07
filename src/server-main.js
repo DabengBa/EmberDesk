@@ -85,7 +85,6 @@ import { checkForNewContent } from './endpoints/content-manager.js';
 import { init as settingsInit } from './endpoints/settings.js';
 import { redirectDeprecatedEndpoints, ServerStartup, setupPrivateEndpoints, setupPublicEndpoints } from './server-startup.js';
 import { diskCache } from './endpoints/characters.js';
-import { disposeCharacterIndexDatabases, logCharacterIndexStartupStatus } from './endpoints/character-index.js';
 import { migrateFlatSecrets } from './endpoints/secrets.js';
 import { migrateGroupChatsMetadataFormat } from './endpoints/groups.js';
 import { createServerStartupProfiler } from './server-startup-profiler.js';
@@ -326,8 +325,6 @@ async function collectCleanupResources() {
     }
     console.log();
 
-    logCharacterIndexStartupStatus();
-
     const directories = await startupProfiler.measure('getUserDirectoriesList', () => getUserDirectoriesList());
     await startupProfiler.measure('migrateGroupChatsMetadataFormat', () => migrateGroupChatsMetadataFormat(directories));
     await startupProfiler.measure('checkForNewContent', () => checkForNewContent(directories));
@@ -526,7 +523,6 @@ function createCleanupHandler(resources) {
             await resources.cleanupPlugins();
         }
         resources.diskCache.dispose();
-        disposeCharacterIndexDatabases();
         setWindowTitle(resources.consoleTitle);
         process.exit();
     };

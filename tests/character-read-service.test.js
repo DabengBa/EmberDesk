@@ -190,10 +190,10 @@ describe('character read service', () => {
         });
     });
 
-    test('reads /all through the index and returns an internal snapshot envelope', async () => {
+    test('reads /all from filesystem even when the retired index is supported', async () => {
         const directories = makeDirectories();
-        writeAvatar(directories, 'beta.png');
         writeAvatar(directories, 'alpha.png');
+        writeAvatar(directories, 'beta.png');
         fs.writeFileSync(path.join(directories.characters, 'notes.txt'), 'ignore', 'utf8');
 
         const dependencies = createDependencies({
@@ -216,24 +216,19 @@ describe('character read service', () => {
             result: {
                 mode: 'snapshot',
                 data: [
-                    { avatar: 'alpha.png', name: 'Alpha' },
-                    { avatar: 'beta.png', name: 'Beta' },
+                    { avatar: 'alpha.png', name: 'Shallow alpha.png', json_data: undefined },
+                    { avatar: 'beta.png', name: 'Shallow beta.png', json_data: undefined },
                 ],
             },
-            interactionPath: 'characters_all:indexed',
-            latencyHint: 'instant',
+            interactionPath: 'characters_all:filesystem',
+            latencyHint: 'slow',
+            fallbackReason: 'canonical_storage_disabled',
         });
-        expect(dependencies.listIndexedCharacterPayloads).toHaveBeenCalledWith(expect.objectContaining({
-            userRoot: directories.root,
-            directories,
-            avatarFiles: ['alpha.png', 'beta.png'],
-            useShallowPayload: true,
-            buildRow: expect.any(Function),
-        }));
-        expect(dependencies.processCharacter).not.toHaveBeenCalled();
+        expect(dependencies.listIndexedCharacterPayloads).not.toHaveBeenCalled();
+        expect(dependencies.processCharacter).toHaveBeenCalledTimes(2);
     });
 
-    test('falls back to filesystem snapshot when indexed /all read fails', async () => {
+    test('does not consult the retired index or warn when /all can read compatibility files', async () => {
         const directories = makeDirectories();
         writeAvatar(directories, 'alpha.png');
         writeAvatar(directories, 'broken.png');
@@ -263,10 +258,8 @@ describe('character read service', () => {
             latencyHint: 'slow',
             fallbackReason: 'canonical_storage_disabled',
         });
-        expect(dependencies.warn).toHaveBeenCalledWith(
-            'Falling back to filesystem-backed character list after index read failure:',
-            expect.any(Error),
-        );
+        expect(dependencies.listIndexedCharacterPayloads).not.toHaveBeenCalled();
+        expect(dependencies.warn).not.toHaveBeenCalled();
     });
 
     test('reads /list as shallow summary and keeps future context no-op', async () => {
@@ -338,10 +331,10 @@ describe('character read service', () => {
         });
     });
 
-    test('reads /list shallow summaries through the index', async () => {
+    test('reads /list summaries from filesystem even when the retired index is supported', async () => {
         const directories = makeDirectories();
-        writeAvatar(directories, 'beta.png');
         writeAvatar(directories, 'alpha.png');
+        writeAvatar(directories, 'beta.png');
         fs.writeFileSync(path.join(directories.characters, 'notes.txt'), 'ignore', 'utf8');
 
         const dependencies = createDependencies({
@@ -363,23 +356,18 @@ describe('character read service', () => {
             result: {
                 mode: 'snapshot',
                 data: [
-                    { avatar: 'alpha.png', name: 'Alpha' },
-                    { avatar: 'beta.png', name: 'Beta' },
+                    { avatar: 'alpha.png', name: 'Shallow alpha.png', json_data: undefined },
+                    { avatar: 'beta.png', name: 'Shallow beta.png', json_data: undefined },
                 ],
             },
-            latencyHint: 'instant',
+            latencyHint: 'slow',
+            fallbackReason: 'canonical_storage_disabled',
         });
-        expect(dependencies.listIndexedCharacterPayloads).toHaveBeenCalledWith(expect.objectContaining({
-            userRoot: directories.root,
-            directories,
-            avatarFiles: ['alpha.png', 'beta.png'],
-            useShallowPayload: true,
-            buildRow: expect.any(Function),
-        }));
-        expect(dependencies.processCharacter).not.toHaveBeenCalled();
+        expect(dependencies.listIndexedCharacterPayloads).not.toHaveBeenCalled();
+        expect(dependencies.processCharacter).toHaveBeenCalledTimes(2);
     });
 
-    test('falls back to filesystem summaries when indexed /list read fails', async () => {
+    test('does not consult the retired index or warn when /list can read compatibility files', async () => {
         const directories = makeDirectories();
         writeAvatar(directories, 'alpha.png');
         writeAvatar(directories, 'broken.png');
@@ -407,20 +395,20 @@ describe('character read service', () => {
             latencyHint: 'slow',
             fallbackReason: 'canonical_storage_disabled',
         });
-        expect(dependencies.warn).toHaveBeenCalledWith(
-            'Falling back to filesystem-backed character summary list after index read failure:',
-            expect.any(Error),
-        );
+        expect(dependencies.listIndexedCharacterPayloads).not.toHaveBeenCalled();
+        expect(dependencies.warn).not.toHaveBeenCalled();
     });
 
-    test('serves /get from a fresh indexed full payload', async () => {
+    test('serves /get from filesystem even when the retired index has a fresh payload', async () => {
         const directories = makeDirectories();
         writeAvatar(directories, 'alpha.png');
         const indexedPayload = { avatar: 'alpha.png', name: 'Indexed Alpha' };
+        const livePayload = { avatar: 'alpha.png', name: 'Live Alpha', json_data: '{}' };
 
         const dependencies = createDependencies({
             isCharacterIndexSupported: jest.fn(() => true),
             getFreshIndexedCharacterFullPayload: jest.fn(() => indexedPayload),
+            processCharacter: jest.fn(async () => livePayload),
         });
 
         const result = await readCharacterFullPayload({
@@ -433,13 +421,14 @@ describe('character read service', () => {
             status: 'found',
             result: {
                 mode: 'snapshot',
-                data: indexedPayload,
+                data: livePayload,
             },
-            interactionPath: 'characters_get:indexed',
-            latencyHint: 'instant',
+            interactionPath: 'characters_get:filesystem',
+            latencyHint: 'slow',
             fallbackReason: 'canonical_storage_disabled',
         });
-        expect(dependencies.processCharacter).not.toHaveBeenCalled();
+        expect(dependencies.getFreshIndexedCharacterFullPayload).not.toHaveBeenCalled();
+        expect(dependencies.upsertCharacterIndexEntry).not.toHaveBeenCalled();
     });
 
     test('serves /get from canonical sqlite even when the compatibility file is missing', async () => {
@@ -885,7 +874,7 @@ describe('character read service', () => {
         expect(dependencies.listIndexedCharacterPayloads).not.toHaveBeenCalled();
     });
 
-    test('falls back to filesystem /get when index lookup throws', async () => {
+    test('ignores retired index lookup failures during filesystem /get', async () => {
         const directories = makeDirectories();
         writeAvatar(directories, 'alpha.png');
         const livePayload = { avatar: 'alpha.png', name: 'Live Alpha', json_data: '{}' };
@@ -911,17 +900,15 @@ describe('character read service', () => {
                 data: livePayload,
             },
             interactionPath: 'characters_get:filesystem',
-            latencyHint: 'fast',
+            latencyHint: 'slow',
             fallbackReason: 'canonical_storage_disabled',
         });
-        expect(dependencies.warn).toHaveBeenCalledWith(
-            'Character index lookup skipped for alpha.png:',
-            expect.any(Error),
-        );
-        expect(dependencies.upsertCharacterIndexEntry).toHaveBeenCalled();
+        expect(dependencies.getFreshIndexedCharacterFullPayload).not.toHaveBeenCalled();
+        expect(dependencies.upsertCharacterIndexEntry).not.toHaveBeenCalled();
+        expect(dependencies.warn).not.toHaveBeenCalled();
     });
 
-    test('falls back to filesystem /get and refreshes the index row', async () => {
+    test('falls back to filesystem /get without refreshing the retired index row', async () => {
         const directories = makeDirectories();
         writeAvatar(directories, 'alpha.png');
         const livePayload = { avatar: 'alpha.png', name: 'Live Alpha', json_data: '{}' };
@@ -945,14 +932,11 @@ describe('character read service', () => {
                 data: livePayload,
             },
             interactionPath: 'characters_get:filesystem',
-            latencyHint: 'fast',
+            latencyHint: 'slow',
             fallbackReason: 'canonical_storage_disabled',
         });
-        expect(dependencies.upsertCharacterIndexEntry).toHaveBeenCalledWith(directories.root, 'alpha.png', expect.objectContaining({
-            avatar: 'alpha.png',
-            fullPayload: livePayload,
-            shallowPayload: { avatar: 'alpha.png', name: 'Live Alpha' },
-        }));
+        expect(dependencies.getFreshIndexedCharacterFullPayload).not.toHaveBeenCalled();
+        expect(dependencies.upsertCharacterIndexEntry).not.toHaveBeenCalled();
     });
 
     test('does not hide non-missing stat errors during /get', async () => {
@@ -974,7 +958,7 @@ describe('character read service', () => {
         expect(dependencies.warn).not.toHaveBeenCalled();
     });
 
-    test('keeps filesystem /get response when index refresh throws', async () => {
+    test('keeps filesystem /get response without touching retired index refresh', async () => {
         const directories = makeDirectories();
         writeAvatar(directories, 'alpha.png');
         const livePayload = { avatar: 'alpha.png', name: 'Live Alpha', json_data: '{}' };
@@ -1001,13 +985,12 @@ describe('character read service', () => {
                 data: livePayload,
             },
             interactionPath: 'characters_get:filesystem',
-            latencyHint: 'fast',
+            latencyHint: 'slow',
             fallbackReason: 'canonical_storage_disabled',
         });
-        expect(dependencies.warn).toHaveBeenCalledWith(
-            'Character index refresh skipped after get for alpha.png:',
-            expect.any(Error),
-        );
+        expect(dependencies.getFreshIndexedCharacterFullPayload).not.toHaveBeenCalled();
+        expect(dependencies.upsertCharacterIndexEntry).not.toHaveBeenCalled();
+        expect(dependencies.warn).not.toHaveBeenCalled();
     });
 
     test('reports missing avatar as not_found without reparsing', async () => {

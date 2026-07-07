@@ -160,8 +160,8 @@ const RULES = [
     {
         id: 'derived-cache',
         required: true,
-        command: 'bun run --cwd tests test:unit -- derived-cache-sqlite.test.js character-read-service.test.js interaction-performance-index.test.js --runInBand',
-        reason: 'Derived SQLite sidecar, legacy-mode character index acceleration, or interaction performance cache path changed.',
+        command: 'bun run --cwd tests test:unit -- derived-cache-sqlite.test.js interaction-performance-index.test.js --runInBand',
+        reason: 'Derived SQLite helper, retired character-index helper, or historical interaction performance cache proof changed.',
         sources: [
             '.docs/adr/0009-derived-cache-sqlite-drizzle-decision.md',
             '.docs/tech/derived-cache-sqlite.md',
@@ -171,7 +171,6 @@ const RULES = [
             return matchesAny(input, [
                 /^src\/derived-cache-sqlite\.js$/,
                 /^src\/endpoints\/character-index\.js$/,
-                /^src\/endpoints\/character-read-service\.js$/,
                 /^scripts\/interaction-performance-runner\.mjs$/,
                 /^\.docs\/tech\/derived-cache-sqlite\.md$/,
                 /^\.docs\/tech\/interaction-performance-indexing\.md$/,

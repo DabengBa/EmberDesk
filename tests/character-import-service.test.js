@@ -3,11 +3,8 @@ import { describe, expect, jest, test } from '@jest/globals';
 import { createCharacterImportCoordinator } from '../src/endpoints/character-import-service.js';
 
 describe('character import service', () => {
-    test('dispatches supported formats through the matching importer and refreshes the derived index after success', async () => {
+    test('dispatches supported formats through the matching importer without touching the derived index', async () => {
         const order = [];
-        const refreshCharacterIndexEntry = jest.fn(async () => {
-            order.push('refresh:index');
-        });
         const importFromPng = jest.fn(async (uploadPath, { request, response }, preservedFileName) => {
             order.push('import:png');
             expect(uploadPath).toBe('/tmp/upload.png');
@@ -22,7 +19,6 @@ describe('character import service', () => {
             importFromPng,
             importFromCharX: jest.fn(),
             importFromByaf: jest.fn(),
-            refreshCharacterIndexEntry,
         });
 
         await expect(importCharacterUpload({
@@ -37,8 +33,7 @@ describe('character import service', () => {
             avatarName: 'Preserved.png',
         });
 
-        expect(order).toEqual(['import:png', 'refresh:index']);
-        expect(refreshCharacterIndexEntry).toHaveBeenCalledWith({ characters: '/chars' }, 'Preserved.png', 'import');
+        expect(order).toEqual(['import:png']);
     });
 
     test('rejects unsupported import formats before any importer or derived cache side effect runs', async () => {
@@ -48,7 +43,6 @@ describe('character import service', () => {
             importFromPng: jest.fn(),
             importFromCharX: jest.fn(),
             importFromByaf: jest.fn(),
-            refreshCharacterIndexEntry: jest.fn(),
         });
 
         await expect(importCharacterUpload({
@@ -61,14 +55,12 @@ describe('character import service', () => {
     });
 
     test('preserves route-level failure mapping by returning a failed result when the importer produces no canonical file', async () => {
-        const refreshCharacterIndexEntry = jest.fn();
         const importCharacterUpload = createCharacterImportCoordinator({
             importFromYaml: jest.fn(async () => ''),
             importFromJson: jest.fn(),
             importFromPng: jest.fn(),
             importFromCharX: jest.fn(),
             importFromByaf: jest.fn(),
-            refreshCharacterIndexEntry,
         });
 
         await expect(importCharacterUpload({
@@ -81,7 +73,5 @@ describe('character import service', () => {
             ok: false,
             reason: 'import_failed',
         });
-
-        expect(refreshCharacterIndexEntry).not.toHaveBeenCalled();
     });
 });

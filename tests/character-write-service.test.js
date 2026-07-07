@@ -59,8 +59,6 @@ function makeDependencies({
             }
             current[path.at(-1)] = value;
         }),
-        refreshCharacterIndexEntry: jest.fn(async (_directories, avatar, operation) => calls.push(['refresh-index', avatar, operation])),
-        deleteCharacterIndexEntry: jest.fn((_directories, avatar, operation) => calls.push(['delete-index', avatar, operation])),
         invalidateCanonicalAudit: jest.fn((handle, directories, source) => calls.push(['invalidate-audit', handle, directories, source])),
         invalidateThumbnail: jest.fn((directories, type, avatar) => calls.push(['invalidate-thumb', type, avatar])),
         bustCache: jest.fn(() => calls.push(['cache-bust'])),
@@ -81,7 +79,7 @@ function makeDependencies({
 }
 
 describe('character write service', () => {
-    test('creates a default-avatar character card and refreshes the index after the write', async () => {
+    test('creates a default-avatar character card without touching the retired index', async () => {
         const directories = {
             characters: 'user/characters',
             chats: 'user/chats',
@@ -104,7 +102,6 @@ describe('character write service', () => {
         expect(calls).toEqual([
             ['mkdir', 'user/chats/Tester'],
             ['write', 'default-avatar.png', '{"name":"Tester"}', 'Tester', undefined, {}],
-            ['refresh-index', 'Tester.png', 'create'],
         ]);
     });
 
@@ -141,11 +138,10 @@ describe('character write service', () => {
                 characterData: '{"name":"Tester"}',
             })],
             ['write', 'default-avatar.png', '{"name":"Tester"}', 'Tester', undefined, { skipCanonicalAuditInvalidation: true }],
-            ['refresh-index', 'Tester.png', 'create'],
         ]);
     });
 
-    test('creates an uploaded-avatar character card, cleans up the upload, then refreshes the index', async () => {
+    test('creates an uploaded-avatar character card and cleans up the upload without touching the retired index', async () => {
         const directories = {
             characters: 'user/characters',
             chats: 'user/chats',
@@ -169,7 +165,6 @@ describe('character write service', () => {
         expect(calls).toEqual([
             ['write', 'tmp/upload.tmp', '{"name":"Uploaded"}', 'Uploaded', crop, {}],
             ['unlink', 'tmp/upload.tmp'],
-            ['refresh-index', 'Uploaded.png', 'create'],
         ]);
     });
 
@@ -304,7 +299,6 @@ describe('character write service', () => {
                 undefined,
                 { shouldRegenerateThumbnail: false },
             ],
-            ['refresh-index', 'Tester.png', 'edit'],
         ]);
     });
 
@@ -341,7 +335,7 @@ describe('character write service', () => {
         })]);
     });
 
-    test('edits a replacement avatar by cleaning up upload, busting cache, then refreshing the index', async () => {
+    test('edits a replacement avatar by cleaning up upload and busting cache without touching the retired index', async () => {
         const directories = {
             characters: 'user/characters',
             chats: 'user/chats',
@@ -372,11 +366,10 @@ describe('character write service', () => {
             ['write', 'tmp/avatar.tmp', '{"name":"Tester"}', 'Tester', crop, {}],
             ['unlink', 'tmp/avatar.tmp'],
             ['cache-bust'],
-            ['refresh-index', 'Tester.png', 'edit'],
         ]);
     });
 
-    test('renames a card by deleting the old file and index row before refreshing the new row', async () => {
+    test('renames a card by deleting the old file without touching the retired index', async () => {
         const directories = {
             characters: 'user/characters',
             chats: 'user/chats',
@@ -408,8 +401,6 @@ describe('character write service', () => {
             ['copy', 'user/chats/Old', 'user/chats/New'],
             ['remove-dir', 'user/chats/Old'],
             ['unlink', 'user/characters/Old.png'],
-            ['delete-index', 'Old.png', 'rename'],
-            ['refresh-index', 'New.png', 'rename'],
         ]);
     });
 
@@ -446,7 +437,7 @@ describe('character write service', () => {
         })]);
     });
 
-    test('does not copy chats, delete the old avatar, or refresh indexes when rename write fails', async () => {
+    test('does not copy chats or delete the old avatar when rename write fails', async () => {
         const directories = {
             characters: 'user/characters',
             chats: 'user/chats',
@@ -481,7 +472,7 @@ describe('character write service', () => {
         ]);
     });
 
-    test('deletes the compatibility file, invalidates audit, and drops the index row when canonical writes are disabled', async () => {
+    test('deletes the compatibility file and invalidates audit without touching the retired index when canonical writes are disabled', async () => {
         const directories = {
             characters: 'user/characters',
             chats: 'user/chats',
@@ -504,7 +495,6 @@ describe('character write service', () => {
             ['unlink', 'user/characters/Tester.png'],
             ['invalidate-thumb', 'avatar', 'Tester.png'],
             ['invalidate-audit', 'default-user', directories, 'character_delete:Tester.png'],
-            ['delete-index', 'Tester.png', 'delete'],
         ]);
     });
 
@@ -582,7 +572,6 @@ describe('character write service', () => {
                 sourceAvatarPath: 'user/characters/Tester.png',
             }),
         })]);
-        expect(calls).not.toContainEqual(['delete-index', 'Tester.png', 'delete']);
     });
 
     test('records rename repair metadata that is sufficient for projection replay', async () => {

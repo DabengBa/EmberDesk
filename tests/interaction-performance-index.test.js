@@ -20,7 +20,11 @@ import {
 } from '../src/endpoints/character-index.js';
 import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
-import { persistCanonicalAuditStatus, runCanonicalShadowImport } from '../src/canonical-sqlite-shadow-import.js';
+import {
+    getPersistedCanonicalAuditStatus,
+    persistCanonicalAuditStatus,
+    runCanonicalShadowImport,
+} from '../src/canonical-sqlite-shadow-import.js';
 import { parse as parseCharacterCard, write as writeCharacterCardPngData } from '../src/character-card-parser.js';
 import encodePngChunks from '../src/png/encode.js';
 import { setConfigFilePath } from '../src/util.js';
@@ -285,6 +289,10 @@ function createBuildRow(buildLog, options = {}) {
 async function openRawIndexDatabase(userRoot) {
     const { DatabaseSync } = await import('node:sqlite');
     return new DatabaseSync(getCharacterIndexPath(userRoot));
+}
+
+function expectNoCharacterIndexSidecar(directories) {
+    expect(fs.existsSync(getCharacterIndexPath(directories.root))).toBe(false);
 }
 
 /**
@@ -1194,10 +1202,10 @@ describe('character index', () => {
         expect(shouldRefreshCharacterAfterEdit(characters, 'alpha.png')).toBe(true);
     });
 
-    test('serves /api/characters/get from a fresh indexed full payload without reparsing the avatar file', async () => {
+    test('ignores an existing legacy sidecar row when serving /api/characters/get', async () => {
         const directories = makeDirectories('emberdesk-character-index-route-');
         tempRoots.push(directories.root);
-        writeAvatarFile(directories, 'alpha.png', 'not-a-real-png');
+        writeCharacterCardFile(directories, 'alpha.png', 'Alpha Live');
 
         await listIndexedCharacterPayloads({
             userRoot: directories.root,
@@ -1212,51 +1220,34 @@ describe('character index', () => {
         expect(response.statusCode).toBe(200);
         expect(response.body).toEqual(expect.objectContaining({
             avatar: 'alpha.png',
-            name: 'Full alpha',
-            json_data: 'json:alpha',
+            name: 'Alpha Live',
         }));
         expectNoCharacterReadEnvelope(response.body);
     });
 
-    test('refreshes dirty chat stats before serving /api/characters/get from a fresh indexed row', async () => {
+    test('keeps file-backed chat stats fresh without dirty-marking the legacy sidecar', async () => {
         const directories = makeDirectories('emberdesk-character-index-route-');
         tempRoots.push(directories.root);
-        writeAvatarFile(directories, 'alpha.png', 'not-a-real-png');
-
-        await listIndexedCharacterPayloads({
-            userRoot: directories.root,
-            directories,
-            avatarFiles: ['alpha.png'],
-            useShallowPayload: false,
-            buildRow: createBuildRow([]),
-        });
+        writeCharacterCardFile(directories, 'alpha.png', 'Alpha Live');
 
         writeChatFile(directories.root, 'alpha.png', 'alpha.jsonl', 'hello');
-        markCharacterChatStatsDirty(directories.root, 'alpha.png');
 
         const response = await invokeCharacterGet(directories, 'alpha.png');
 
         expect(response.statusCode).toBe(200);
         expect(response.body).toEqual(expect.objectContaining({
             avatar: 'alpha.png',
-            name: 'Full alpha',
+            name: 'Alpha Live',
             chat_size: 5,
         }));
+        expectNoCharacterIndexSidecar(directories);
     });
 
-    test('recomputes chat stats before serving /api/characters/get after out-of-band chat cleanup', async () => {
+    test('recomputes file-backed chat stats after out-of-band chat cleanup without the legacy sidecar', async () => {
         const directories = makeDirectories('emberdesk-character-index-route-');
         tempRoots.push(directories.root);
-        writeAvatarFile(directories, 'alpha.png', 'not-a-real-png');
+        writeCharacterCardFile(directories, 'alpha.png', 'Alpha Live');
         writeChatFile(directories.root, 'alpha.png', 'alpha.jsonl', 'hello');
-
-        await listIndexedCharacterPayloads({
-            userRoot: directories.root,
-            directories,
-            avatarFiles: ['alpha.png'],
-            useShallowPayload: false,
-            buildRow: createBuildRow([]),
-        });
 
         fs.rmSync(path.join(directories.chats, 'alpha'), { recursive: true, force: true });
 
@@ -1265,24 +1256,14 @@ describe('character index', () => {
         expect(response.statusCode).toBe(200);
         expect(response.body).toEqual(expect.objectContaining({
             avatar: 'alpha.png',
-            name: 'Full alpha',
+            name: 'Alpha Live',
             chat_size: 0,
             date_last_chat: 0,
         }));
-
-        const database = await openRawIndexDatabase(directories.root);
-        try {
-            const row = database.prepare('SELECT full_json FROM characters WHERE avatar = ?').get('alpha.png');
-            expect(JSON.parse(row.full_json)).toEqual(expect.objectContaining({
-                chat_size: 0,
-                date_last_chat: 0,
-            }));
-        } finally {
-            database.close();
-        }
+        expectNoCharacterIndexSidecar(directories);
     });
 
-    test('falls back to file-backed rebuild for /api/characters/get when the indexed row is stale', async () => {
+    test('does not refresh a stale legacy sidecar row during /api/characters/get', async () => {
         const directories = makeDirectories('emberdesk-character-index-route-');
         tempRoots.push(directories.root);
         writeAvatarFile(directories, 'alpha.png', 'stale-row-seed');
@@ -1311,14 +1292,14 @@ describe('character index', () => {
             const row = database.prepare('SELECT full_json FROM characters WHERE avatar = ?').get('alpha.png');
             expect(JSON.parse(row.full_json)).toEqual(expect.objectContaining({
                 avatar: 'alpha.png',
-                name: 'Alpha Live',
+                name: 'Full alpha',
             }));
         } finally {
             database.close();
         }
     });
 
-    test('falls back to file-backed rebuild for /api/characters/get when the indexed full payload is corrupt', async () => {
+    test('ignores a corrupt legacy sidecar payload during /api/characters/get', async () => {
         const directories = makeDirectories('emberdesk-character-index-route-');
         tempRoots.push(directories.root);
         writeCharacterCardFile(directories, 'alpha.png', 'Alpha Live');
@@ -1352,10 +1333,7 @@ describe('character index', () => {
             const verificationDb = await openRawIndexDatabase(directories.root);
             try {
                 const row = verificationDb.prepare('SELECT full_json FROM characters WHERE avatar = ?').get('alpha.png');
-                expect(JSON.parse(row.full_json)).toEqual(expect.objectContaining({
-                    avatar: 'alpha.png',
-                    name: 'Alpha Live',
-                }));
+                expect(row.full_json).toBe('not-json');
             } finally {
                 verificationDb.close();
             }
@@ -1406,7 +1384,7 @@ describe('character index', () => {
         expect(refreshedResponse.body.data.character_book.entries[0].content).toBe('new lore');
     });
 
-    test('rebuilds indexed /api/characters/all full rows when legacy world info changes', async () => {
+    test('refreshes file-backed /api/characters/all full rows when legacy world info changes', async () => {
         const directories = makeDirectories('emberdesk-character-index-route-');
         tempRoots.push(directories.root);
         writeLegacyCharacterCardFile(directories, 'legacy.png', 'Legacy Hero', 'lorebook');
@@ -1549,6 +1527,94 @@ describe('character index', () => {
                     date_last_chat: fileStat.mtimeMs,
                 }),
             ]);
+        } finally {
+            manager.dispose();
+        }
+    });
+
+    test('keeps file-backed character list chat stats fresh when canonical chat stats are enabled before canonical reads', async () => {
+        const directories = makeDirectories('emberdesk-chat-stats-route-');
+        tempRoots.push(directories.root);
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_CHATSTATS = 'true';
+        writeCharacterCardFile(directories, 'alpha.png', 'Alpha Live');
+
+        const { manager, db } = openCanonicalDbForTests(directories);
+        try {
+            seedCanonicalCharacterForTests(db, 'alpha.png');
+
+            const initialListResponse = await invokeCharactersAll(directories);
+            expect(initialListResponse.statusCode).toBe(200);
+            expect(initialListResponse.body).toEqual([
+                expect.objectContaining({
+                    avatar: 'alpha.png',
+                    chat_size: 0,
+                    date_last_chat: 0,
+                }),
+            ]);
+
+            const saveResponse = await invokeChatSave(directories, 'alpha.png', 'first', [
+                { name: 'Alpha', mes: 'hello' },
+                { name: 'User', mes: 'world' },
+            ]);
+
+            expect(saveResponse.statusCode).toBe(200);
+            expect(saveResponse.body).toEqual({ ok: true });
+
+            const refreshedListResponse = await invokeCharactersAll(directories);
+            expect(refreshedListResponse.statusCode).toBe(200);
+            expect(refreshedListResponse.body).toEqual([
+                expect.objectContaining({
+                    avatar: 'alpha.png',
+                    chat_size: expect.any(Number),
+                    date_last_chat: expect.any(Number),
+                }),
+            ]);
+            expect(refreshedListResponse.body[0].chat_size).toBeGreaterThan(0);
+            expect(refreshedListResponse.body[0].date_last_chat).toBeGreaterThan(0);
+        } finally {
+            manager.dispose();
+        }
+    });
+
+    test('keeps chat save successful and stales canonical audit when canonical chat stats cannot find a live character row', async () => {
+        const directories = makeDirectories('emberdesk-chat-stats-route-');
+        tempRoots.push(directories.root);
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_CHATSTATS = 'true';
+        writeCharacterCardFile(directories, 'alpha.png', 'Alpha Live');
+
+        const { manager, db } = openCanonicalDbForTests(directories);
+        try {
+            const saveResponse = await invokeChatSave(directories, 'alpha.png', 'first', [
+                { name: 'Alpha', mes: 'hello' },
+                { name: 'User', mes: 'world' },
+            ]);
+
+            expect(saveResponse.statusCode).toBe(200);
+            expect(saveResponse.body).toEqual({ ok: true });
+
+            const refreshedListResponse = await invokeCharactersAll(directories);
+            expect(refreshedListResponse.statusCode).toBe(200);
+            expect(refreshedListResponse.body).toEqual([
+                expect.objectContaining({
+                    avatar: 'alpha.png',
+                    chat_size: expect.any(Number),
+                    date_last_chat: expect.any(Number),
+                }),
+            ]);
+            expect(refreshedListResponse.body[0].chat_size).toBeGreaterThan(0);
+            expect(refreshedListResponse.body[0].date_last_chat).toBeGreaterThan(0);
+
+            expect(getPersistedCanonicalAuditStatus(db)).toEqual(expect.objectContaining({
+                ok: false,
+                blocking: true,
+                status: 'drift',
+                reason: 'audit_stale_after_chat_stats_sync_failure',
+                details: expect.objectContaining({
+                    handle: `chat-test-${path.basename(directories.root)}`,
+                }),
+            }));
         } finally {
             manager.dispose();
         }
@@ -2397,7 +2463,7 @@ describe('character index', () => {
         }
     });
 
-    test('stores sanitized world names in the index for legacy world-linked cards', async () => {
+    test('uses sanitized world names for legacy world-linked cards without creating the sidecar', async () => {
         const directories = makeDirectories('emberdesk-character-index-route-');
         tempRoots.push(directories.root);
         const rawWorldName = '../lorebook';
@@ -2421,18 +2487,10 @@ describe('character index', () => {
         const response = await invokeCharacterGet(directories, 'legacy.png');
         expect(response.statusCode).toBe(200);
         expect(response.body.data.character_book.entries[0].content).toBe('safe lore');
-
-        const database = await openRawIndexDatabase(directories.root);
-        try {
-            const row = database.prepare('SELECT source_world_name FROM characters WHERE avatar = ?').get('legacy.png');
-            expect(row.source_world_name).toBe(sanitizedWorldName);
-            expect(row.source_world_name).not.toBe(rawWorldName);
-        } finally {
-            database.close();
-        }
+        expectNoCharacterIndexSidecar(directories);
     });
 
-    test('serves a cached legacy world-linked card after the referenced world info file is deleted and rebuilds when it reappears', async () => {
+    test('reflects legacy world-linked card changes from files when the referenced world info file is deleted and restored', async () => {
         const directories = makeDirectories('emberdesk-character-index-route-');
         tempRoots.push(directories.root);
         writeLegacyCharacterCardFile(directories, 'legacy.png', 'Legacy Hero', 'lorebook');
@@ -2460,18 +2518,6 @@ describe('character index', () => {
         expect(deletedWorldResponse.statusCode).toBe(200);
         expect(deletedWorldResponse.body.data.character_book).toBeUndefined();
 
-        const cachedPayload = getFreshIndexedCharacterFullPayload(
-            directories.root,
-            directories,
-            'legacy.png',
-            fs.statSync(path.join(directories.characters, 'legacy.png')),
-        );
-        expect(cachedPayload).toEqual(expect.objectContaining({
-            avatar: 'legacy.png',
-            name: 'Legacy Hero',
-        }));
-        expect(cachedPayload.data.character_book).toBeUndefined();
-
         writeWorldInfoFile(directories, 'lorebook', {
             entries: {
                 1: {
@@ -2489,9 +2535,10 @@ describe('character index', () => {
         const restoredWorldResponse = await invokeCharacterGet(directories, 'legacy.png');
         expect(restoredWorldResponse.statusCode).toBe(200);
         expect(restoredWorldResponse.body.data.character_book.entries[0].content).toBe('restored lore');
+        expectNoCharacterIndexSidecar(directories);
     });
 
-    test('resets a broken fast-path lookup after a non-SyntaxError index failure', async () => {
+    test('ignores a broken retired sidecar during /api/characters/get', async () => {
         const directories = makeDirectories('emberdesk-character-index-route-');
         tempRoots.push(directories.root);
         writeCharacterCardFile(directories, 'alpha.png', 'Alpha Live');
@@ -2499,6 +2546,14 @@ describe('character index', () => {
         const initialResponse = await invokeCharacterGet(directories, 'alpha.png');
         expect(initialResponse.statusCode).toBe(200);
         expect(initialResponse.body.name).toBe('Alpha Live');
+
+        await listIndexedCharacterPayloads({
+            userRoot: directories.root,
+            directories,
+            avatarFiles: ['alpha.png'],
+            useShallowPayload: false,
+            buildRow: createBuildRow([]),
+        });
 
         const database = await openRawIndexDatabase(directories.root);
         try {
@@ -2515,21 +2570,15 @@ describe('character index', () => {
             sourceStat,
         )).toThrow();
 
-        const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-
-        try {
-            const fallbackResponse = await invokeCharacterGet(directories, 'alpha.png');
-            expect(fallbackResponse.statusCode).toBe(200);
-            expect(fallbackResponse.body).toEqual(expect.objectContaining({
-                avatar: 'alpha.png',
-                name: 'Alpha Live',
-            }));
-        } finally {
-            warnSpy.mockRestore();
-        }
+        const fallbackResponse = await invokeCharacterGet(directories, 'alpha.png');
+        expect(fallbackResponse.statusCode).toBe(200);
+        expect(fallbackResponse.body).toEqual(expect.objectContaining({
+            avatar: 'alpha.png',
+            name: 'Alpha Live',
+        }));
     });
 
-    test('stores current file metadata after /api/characters/get rebuilds a file that changes mid-request', async () => {
+    test('reads the current file when /api/characters/get observes a file that changes mid-request', async () => {
         const directories = makeDirectories('emberdesk-character-index-route-');
         tempRoots.push(directories.root);
         writeCharacterCardFile(directories, 'alpha.png', 'Alpha Before');
@@ -2559,21 +2608,10 @@ describe('character index', () => {
         } finally {
             statSpy.mockRestore();
         }
-
-        const indexedPayload = getFreshIndexedCharacterFullPayload(
-            directories.root,
-            directories,
-            'alpha.png',
-            fs.statSync(filePath),
-        );
-
-        expect(indexedPayload).toEqual(expect.objectContaining({
-            avatar: 'alpha.png',
-            name: 'Alpha After Much Longer',
-        }));
+        expectNoCharacterIndexSidecar(directories);
     });
 
-    test('disables the SQLite fast path when EMBERDESK_CHARACTER_INDEX_MODE=force_off', async () => {
+    test('keeps /api/characters/get file-backed even when a retired sidecar exists', async () => {
         const directories = makeDirectories('emberdesk-character-index-route-');
         tempRoots.push(directories.root);
         writeCharacterCardFile(directories, 'alpha.png', 'Alpha Live');
@@ -2588,7 +2626,6 @@ describe('character index', () => {
 
         expect(isCharacterIndexSupported()).toBe(true);
 
-        process.env.EMBERDESK_CHARACTER_INDEX_MODE = 'force_off';
         process.env.EMBERDESK_INTERACTION_PERF_MODE = '1';
 
         const response = await invokeCharacterGet(directories, 'alpha.png');
@@ -2603,6 +2640,37 @@ describe('character index', () => {
         expect(response.headers['x-emberdesk-interaction-path']).toBe('characters_get:filesystem');
     });
 
+    test('does not create the legacy character-index sidecar after character create', async () => {
+        const directories = makeDirectories('emberdesk-character-index-route-');
+        tempRoots.push(directories.root);
+        const uploadDirectory = path.join(directories.root, 'uploads');
+        fs.mkdirSync(uploadDirectory, { recursive: true });
+        const uploadPath = path.join(uploadDirectory, 'avatar.png');
+        fs.writeFileSync(uploadPath, DEFAULT_AVATAR_BUFFER);
+
+        const response = await invokeCharacterCreate(directories, 'Sidecar Free', {
+            file: { destination: uploadDirectory, filename: 'avatar.png' },
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.body).toBe('Sidecar Free.png');
+        expectNoCharacterIndexSidecar(directories);
+    });
+
+    test('does not create or dirty-mark the legacy character-index sidecar after chat save', async () => {
+        const directories = makeDirectories('emberdesk-character-index-route-');
+        tempRoots.push(directories.root);
+        writeCharacterCardFile(directories, 'alpha.png', 'Alpha Live');
+
+        const response = await invokeChatSave(directories, 'alpha.png', 'first', [
+            { is_user: true, name: 'User', mes: 'hello' },
+            { is_user: false, name: 'Alpha Live', mes: 'world' },
+        ]);
+
+        expect(response.statusCode).toBe(200);
+        expectNoCharacterIndexSidecar(directories);
+    });
+
     test('emits interaction perf metadata for /api/characters/all', async () => {
         const directories = makeDirectories('emberdesk-character-index-route-');
         tempRoots.push(directories.root);
@@ -2615,8 +2683,7 @@ describe('character index', () => {
         expect(response.statusCode).toBe(200);
         expect(response.headers['x-emberdesk-interaction-path']).toBeDefined();
         expect(response.headers['server-timing']).toContain('route;dur=');
-        expect(response.headers['x-emberdesk-character-index-status']).toBeDefined();
-        expect(response.headers['x-emberdesk-character-index-status']).not.toContain('dbPath');
+        expect(response.headers['x-emberdesk-character-index-status']).toBeUndefined();
     });
 
     test('serves a richer shallow summary from /api/characters/list without full-only fields', async () => {
@@ -2687,7 +2754,6 @@ describe('character index', () => {
         expect(response.statusCode).toBe(200);
         expect(response.headers['x-emberdesk-interaction-path']).toBeDefined();
         expect(response.headers['server-timing']).toContain('route;dur=');
-        expect(response.headers['x-emberdesk-character-index-status']).toBeDefined();
-        expect(response.headers['x-emberdesk-character-index-status']).not.toContain('dbPath');
+        expect(response.headers['x-emberdesk-character-index-status']).toBeUndefined();
     });
 });

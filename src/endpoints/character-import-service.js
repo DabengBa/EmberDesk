@@ -5,7 +5,7 @@ function getAvatarName(fileName) {
 function normalizeImportResult(importResult) {
     if (typeof importResult === 'string') {
         return importResult
-            ? { ok: true, fileName: importResult, refreshHandled: false }
+            ? { ok: true, fileName: importResult }
             : { ok: false, reason: 'import_failed' };
     }
 
@@ -29,7 +29,6 @@ function normalizeImportResult(importResult) {
     return {
         ok: true,
         fileName,
-        refreshHandled: Boolean(importResult.refreshHandled),
     };
 }
 
@@ -54,8 +53,6 @@ export function createCharacterImportCoordinator({
     importFromPng,
     importFromCharX,
     importFromByaf,
-    refreshCharacterIndexEntry,
-    getDirectories = request => request.user.directories,
 }) {
     const importers = {
         importFromYaml,
@@ -90,15 +87,10 @@ export function createCharacterImportCoordinator({
 
         const fileName = importResult.fileName;
 
-        const avatarName = getAvatarName(fileName);
-        if (!importResult.refreshHandled) {
-            await refreshCharacterIndexEntry(getDirectories(request), avatarName, 'import');
-        }
-
         return {
             ok: true,
             fileName,
-            avatarName,
+            avatarName: getAvatarName(fileName),
         };
     };
 }

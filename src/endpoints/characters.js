@@ -19,11 +19,9 @@ import { default as validateAvatarUrlMiddleware, getFileNameValidationFunction, 
 import { deepMerge, humanizedDateTime, tryParse, MemoryLimitedMap, getConfigValue, mutateJsonString, clientRelativePath, getUniqueName, sanitizeSafeCharacterReplacements } from '../util.js';
 import { TavernCardValidator } from '../validator/TavernCardValidator.js';
 import { parse, read, write } from '../character-card-parser.js';
-import { readWorldInfoFile } from './worldinfo.js';
+import { findCharactersBoundToWorldFromFiles, readWorldInfoFile } from './worldinfo.js';
 import { calculateDataSize, processUnsetSentinels, toShallow, unsetPrivateFields } from './character-card-helpers.js';
 import {
-    buildCharacterFileSnapshotRow,
-    getCharacterSnapshotWorldMetadata,
     processCharacterFileSnapshot,
     statCharacterSnapshotFile,
 } from './character-file-snapshot.js';
@@ -59,17 +57,7 @@ import { getChatInfo } from './chats.js';
 import { ByafParser } from '../byaf.js';
 import { CharXParser, persistCharXAssets } from '../charx.js';
 import cacheBuster from '../middleware/cacheBuster.js';
-import {
-    deleteCharacterIndexEntry,
-    findCharactersBoundToWorld,
-    getFreshIndexedCharacterFullPayload,
-    getCharacterIndexStatus,
-    isCharacterIndexSupported,
-    listIndexedCharacterPayloads,
-    upsertCharacterIndexEntry,
-} from './character-index.js';
 
-const CHARACTER_INDEX_REFRESH_CONCURRENCY = 10;
 const DELETE_PREFLIGHT_AVATAR_LIMIT = 500;
 
 // With 100 MB limit it would take roughly 3000 characters to reach this limit
@@ -94,17 +82,6 @@ function applyInteractionPerfHeaders(response, pathName, startedAt, directories 
     response.set('X-EmberDesk-Interaction-Path', pathName);
     response.set('Server-Timing', `route;dur=${durationMs.toFixed(1)}`);
 
-    if (directories?.root) {
-        const status = getCharacterIndexStatus(directories.root);
-        response.set('X-EmberDesk-Character-Index-Status', JSON.stringify({
-            mode: status.mode,
-            supported: status.supported,
-            open: status.open,
-            schemaVersion: status.schemaVersion,
-            resetCount: status.resetCount,
-            disabledReason: status.disabledReason,
-        }));
-    }
 }
 
 class DiskCache {
@@ -479,35 +456,8 @@ const processCharacter = async (item, directories, { shallow }) => {
     return shallow ? toShallow(character) : character;
 };
 
-function getCharacterIndexWorldMetadata(directories, fullPayload) {
-    return getCharacterSnapshotWorldMetadata(directories, fullPayload);
-}
-
 function statCharacterFile(filePath) {
     return statCharacterSnapshotFile(filePath);
-}
-
-/**
- * @param {import('../users.js').UserDirectoryList} directories
- * @param {string} avatar
- * @returns {Promise<{
- *   avatar: string,
- *   fullPayload: object,
- *   shallowPayload: object,
- *   sourceMtimeMs: number,
- *   sourceSize: number,
- *   sourceWorldName: string,
- *   sourceWorldMtimeMs: number,
- *   sourceWorldSize: number,
- * }>}
- */
-async function buildCharacterIndexRow(directories, avatar) {
-    return buildCharacterFileSnapshotRow({
-        avatar,
-        directories,
-        readCharacterData,
-        getCharaCardV2,
-    });
 }
 
 /**
@@ -515,10 +465,6 @@ async function buildCharacterIndexRow(directories, avatar) {
  */
 function createCharacterReadDependencies() {
     return {
-        isCharacterIndexSupported,
-        listIndexedCharacterPayloads,
-        getFreshIndexedCharacterFullPayload,
-        upsertCharacterIndexEntry,
         getCanonicalSqliteFeatureFlags,
         getCanonicalStorageStatus,
         openCanonicalDatabase,
@@ -527,10 +473,8 @@ function createCharacterReadDependencies() {
         listCanonicalCharacters,
         getCanonicalCharacter,
         processCharacter,
-        buildCharacterIndexRow,
         statCharacterFile,
         toShallow,
-        getCharacterIndexWorldMetadata,
         warn: console.warn,
     };
 }
@@ -552,8 +496,6 @@ function createCharacterWriteDependencies({ bustCache = null } = {}) {
         joinPath: path.join,
         parsePath: path.parse,
         writeCharacterData,
-        refreshCharacterIndexEntry: refreshCharacterIndexEntrySafe,
-        deleteCharacterIndexEntry: deleteCharacterIndexEntrySafe,
         invalidateCanonicalAudit: invalidateCanonicalCharacterAuditSafe,
         invalidateThumbnail,
         bustCache,
@@ -708,84 +650,13 @@ function createCharacterWriteDependencies({ bustCache = null } = {}) {
     };
 }
 
-/**
- * @param {import('../users.js').UserDirectoryList} directories
- * @param {string} avatar
- * @returns {Promise<void>}
- */
-async function refreshCharacterIndexEntry(directories, avatar) {
-    const row = await buildCharacterIndexRow(directories, avatar);
-    upsertCharacterIndexEntry(directories.root, avatar, row);
-}
-
-/**
- * @param {import('../users.js').UserDirectoryList} directories
- * @param {string} avatar
- * @param {string} operation
- * @returns {Promise<void>}
- */
-async function refreshCharacterIndexEntrySafe(directories, avatar, operation) {
-    if (!isCharacterIndexSupported() || !avatar) {
-        return;
-    }
-
-    try {
-        await refreshCharacterIndexEntry(directories, avatar);
-    } catch (error) {
-        console.warn(`Character index refresh skipped after ${operation} for ${avatar}:`, error);
-    }
-}
-
 const importCharacterUpload = createCharacterImportCoordinator({
     importFromYaml,
     importFromJson,
     importFromPng,
     importFromCharX,
     importFromByaf,
-    refreshCharacterIndexEntry: refreshCharacterIndexEntrySafe,
 });
-
-/**
- * @param {import('../users.js').UserDirectoryList} directories
- * @param {string[]} avatars
- * @param {string} operation
- * @returns {Promise<void>}
- */
-async function refreshCharacterIndexEntriesSafe(directories, avatars, operation) {
-    const uniqueAvatars = [...new Set(avatars.filter(Boolean))];
-    if (!uniqueAvatars.length || !isCharacterIndexSupported()) {
-        return;
-    }
-
-    for (let index = 0; index < uniqueAvatars.length; index += CHARACTER_INDEX_REFRESH_CONCURRENCY) {
-        const batch = uniqueAvatars.slice(index, index + CHARACTER_INDEX_REFRESH_CONCURRENCY);
-        const results = await Promise.allSettled(batch.map(avatar => refreshCharacterIndexEntry(directories, avatar)));
-
-        for (let batchIndex = 0; batchIndex < results.length; batchIndex++) {
-            if (results[batchIndex].status === 'rejected') {
-                console.warn(`Character index refresh skipped after ${operation} for ${batch[batchIndex]}:`, results[batchIndex].reason);
-            }
-        }
-    }
-}
-
-/**
- * @param {import('../users.js').UserDirectoryList} directories
- * @param {string} avatar
- * @param {string} operation
- * @returns {void}
- */
-function deleteCharacterIndexEntrySafe(directories, avatar, operation) {
-    if (!isCharacterIndexSupported() || !avatar) {
-        return;
-    }
-
-    try {
-        deleteCharacterIndexEntry(directories.root, avatar);
-    } catch (error) {
-        console.warn(`Character index delete skipped after ${operation} for ${avatar}:`, error);
-    }
-}
 
 /**
  * @param {import("express").Request} request
@@ -1762,8 +1633,6 @@ router.post('/merge-attributes', getFileNameValidationFunction('avatar'), async 
                 await Promise.allSettled(batch.map(processOne));
             }
 
-            await refreshCharacterIndexEntriesSafe(request.user.directories, updated, 'merge-attributes bulk');
-
             return response.send({ updated, skipped, failed });
         }
 
@@ -1773,7 +1642,6 @@ router.post('/merge-attributes', getFileNameValidationFunction('avatar'), async 
 
         const result = await mergeCharacterUpdate(avatarPath, update.avatar, update, request);
         if (result.ok) {
-            await refreshCharacterIndexEntrySafe(request.user.directories, update.avatar, 'merge-attributes');
             response.sendStatus(200);
         } else {
             console.warn(result.error);
@@ -1839,14 +1707,7 @@ router.post('/delete-preflight', async function (request, response) {
                 // If we can't parse, still show with 0 entries
             }
 
-            let boundCharacters = [];
-            if (isCharacterIndexSupported()) {
-                try {
-                    boundCharacters = findCharactersBoundToWorld(directories.root, worldName);
-                } catch {
-                    // Fallback: only show delete candidates
-                }
-            }
+            const boundCharacters = findCharactersBoundToWorldFromFiles(directories, worldName);
 
             worldInfos.push({
                 name: worldName,
