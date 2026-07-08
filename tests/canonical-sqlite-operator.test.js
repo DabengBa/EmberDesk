@@ -5,16 +5,23 @@ import path from 'node:path';
 import { afterEach, describe, expect, test } from '@jest/globals';
 
 import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
-import { runCanonicalShadowImport, getPersistedCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.js';
+import { runCanonicalShadowImport, getPersistedCanonicalAuditStatus, persistCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.js';
 import { recordProjectionRepair } from '../src/endpoints/character-store.js';
+import {
+    recordWorldInfoProjectionRepair,
+    upsertCanonicalWorldInfoBook,
+} from '../src/endpoints/world-info-store.js';
 import { buildCharacterFileSnapshotRow } from '../src/endpoints/character-file-snapshot.js';
 import {
     explainCanonicalRolloutBlockers,
     listCanonicalRepairs,
+    listCanonicalWorldInfoRepairs,
     rebuildCanonicalChatStats,
     repairCanonicalProjection,
+    repairCanonicalWorldInfoProjection,
     runCanonicalAudit,
 } from '../src/canonical-sqlite-operator.js';
+import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 
 const tempRoots = [];
 const managers = [];
@@ -206,7 +213,104 @@ describe('canonical sqlite operator helpers', () => {
         `).get('alpha.png').chat_count).toBe(2);
     });
 
-    test('explains open repair blockers for write rollback and can rerun audit on demand', async () => {
+    test('repairs a missing world info projection file from canonical data using a safe filename', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        runCanonicalMigrations(db, { nowMs: 1735689600000 });
+        upsertCanonicalWorldInfoBook(db, {
+            name: '../Lore/book',
+            payload: {
+                name: 'Canonical Lore',
+                entries: { one: { content: 'repair me' } },
+            },
+            nowMs: 1735689600000,
+        });
+        recordWorldInfoProjectionRepair(db, {
+            repairKey: 'world_info:..Lorebook:edit',
+            worldName: '../Lore/book',
+            reason: 'projection_failed',
+            details: { operation: 'edit' },
+            nowMs: 1735689601000,
+        });
+
+        const repairResult = await repairCanonicalWorldInfoProjection({
+            db,
+            directories,
+            repairKeys: ['world_info:..Lorebook:edit'],
+            nowMs: 1735689602000,
+        });
+
+        expect(repairResult).toEqual({
+            ok: true,
+            results: [{
+                repairKey: 'world_info:..Lorebook:edit',
+                status: 'repaired',
+                operation: 'edit',
+            }],
+        });
+        expect(JSON.parse(fs.readFileSync(path.join(directories.worlds, '..Lorebook.json'), 'utf8'))).toEqual({
+            name: 'Canonical Lore',
+            entries: { one: { content: 'repair me' } },
+        });
+        expect(fs.existsSync(path.join(root, 'Lore', 'book.json'))).toBe(false);
+        expect(listCanonicalWorldInfoRepairs(db)).toEqual([]);
+    });
+
+    test('repairs a failed canonical world info delete projection without requiring an active row', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        runCanonicalMigrations(db, { nowMs: 1735689600000 });
+        upsertCanonicalWorldInfoBook(db, {
+            name: 'Lorebook',
+            payload: { entries: { one: { content: 'delete me' } } },
+            nowMs: 1735689600000,
+        });
+        db.prepare(`
+            UPDATE world_books
+            SET deleted_at_ms = ?, updated_at_ms = ?
+            WHERE name = ?
+        `).run(1735689600500, 1735689600500, 'Lorebook');
+        fs.writeFileSync(path.join(directories.worlds, 'Lorebook.json'), JSON.stringify({ entries: {} }), 'utf8');
+        recordWorldInfoProjectionRepair(db, {
+            repairKey: 'world_info:Lorebook:delete',
+            worldName: 'Lorebook',
+            reason: 'projection_failed',
+            details: { operation: 'delete' },
+            nowMs: 1735689601000,
+        });
+
+        const repairResult = await repairCanonicalWorldInfoProjection({
+            db,
+            directories,
+            repairKeys: ['world_info:Lorebook:delete'],
+            nowMs: 1735689602000,
+        });
+
+        expect(repairResult).toEqual({
+            ok: true,
+            results: [{
+                repairKey: 'world_info:Lorebook:delete',
+                status: 'repaired',
+                operation: 'delete',
+            }],
+        });
+        expect(fs.existsSync(path.join(directories.worlds, 'Lorebook.json'))).toBe(false);
+        expect(listCanonicalWorldInfoRepairs(db)).toEqual([]);
+    });
+
+    test('explains open character and world info repair blockers for write rollback and can rerun audits on demand', async () => {
         const root = makeRoot();
         const directories = createDirectories(root);
         const manager = createManager();
@@ -242,6 +346,28 @@ describe('canonical sqlite operator helpers', () => {
             details: { operation: 'rename' },
             nowMs: 1735689604444,
         });
+        upsertCanonicalWorldInfoBook(db, {
+            name: 'Lorebook',
+            payload: { entries: {} },
+            nowMs: 1735689604444,
+        });
+        recordWorldInfoProjectionRepair(db, {
+            repairKey: 'world_info:Lorebook:edit',
+            worldName: 'Lorebook',
+            reason: 'projection_failed',
+            details: { operation: 'edit' },
+            nowMs: 1735689604444,
+        });
+        persistCanonicalAuditStatus(db, {
+            ok: true,
+            handle: 'alice',
+            hasDrift: false,
+            blocking: false,
+            entries: [],
+        }, {
+            scope: 'world_info',
+            auditedAtMs: 1735689605000,
+        });
 
         const blockers = explainCanonicalRolloutBlockers({
             db,
@@ -266,6 +392,7 @@ describe('canonical sqlite operator helpers', () => {
         expect(blockers.blockers).toEqual(expect.arrayContaining([
             expect.objectContaining({ code: 'audit_not_run' }),
             expect.objectContaining({ code: 'open_projection_repairs' }),
+            expect.objectContaining({ code: 'open_world_info_projection_repairs' }),
         ]));
         expect(audit.ok).toBe(false);
         expect(audit.entries).toEqual(expect.arrayContaining([

@@ -8,6 +8,159 @@ import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import { tryParse } from '../util.js';
 import { invalidateDirectory } from './settings-cache.js';
 import { read, write } from '../character-card-parser.js';
+import { canonicalSqliteManager } from '../canonical-sqlite.js';
+import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
+import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
+import { getCanonicalSqliteFeatureFlags } from '../storage-feature-flags.js';
+import { WORLD_INFO_AUDIT_SCOPE } from '../canonical-world-info-shadow-import.js';
+import {
+    getCanonicalWorldInfoBook,
+    listCanonicalWorldInfoBooks,
+    markCanonicalWorldInfoBookDeleted,
+    normalizeCanonicalWorldInfoName,
+    recordWorldInfoProjectionRepair,
+    upsertCanonicalWorldInfoBook,
+} from './world-info-store.js';
+
+function getRequestHandle(request) {
+    return request.user?.profile?.handle ?? request.user?.handle ?? 'default-user';
+}
+
+function getCanonicalWorldInfoReadState(request) {
+    const featureFlags = getCanonicalSqliteFeatureFlags();
+    if (!featureFlags.enabled) {
+        return { ok: false, reason: 'canonical_storage_disabled', featureFlags };
+    }
+    if (!featureFlags.reads) {
+        return { ok: false, reason: 'canonical_reads_disabled', featureFlags };
+    }
+
+    const db = canonicalSqliteManager.open({
+        handle: getRequestHandle(request),
+        directories: request.user.directories,
+        featureFlags: {
+            enabled: true,
+            strict: !!featureFlags.strict,
+        },
+    });
+    if (!db) {
+        return { ok: false, reason: 'canonical_storage_unavailable', featureFlags };
+    }
+
+    const migrationStatus = runCanonicalMigrations(db, {
+        strict: !!featureFlags.strict,
+    });
+    if (!migrationStatus.ok) {
+        if (featureFlags.strict) {
+            throw new Error(migrationStatus.blockedReason);
+        }
+        return { ok: false, reason: 'migration_blocked', featureFlags, migrationStatus };
+    }
+
+    const auditStatus = getPersistedCanonicalAuditStatus(db, { scope: WORLD_INFO_AUDIT_SCOPE });
+    if (auditStatus.blocking) {
+        if (featureFlags.strict) {
+            throw new Error(`Canonical World Info reads blocked: ${auditStatus.reason}`);
+        }
+        return { ok: false, reason: auditStatus.reason ?? 'world_info_audit_blocked', featureFlags, auditStatus };
+    }
+
+    return {
+        ok: true,
+        db,
+        featureFlags,
+        migrationStatus,
+        auditStatus,
+    };
+}
+
+function getCanonicalWorldInfoWriteState(request) {
+    const readState = getCanonicalWorldInfoReadState(request);
+    if (!readState.ok) {
+        return readState;
+    }
+
+    if (!readState.featureFlags.writes) {
+        return {
+            ...readState,
+            ok: false,
+            reason: 'canonical_writes_disabled',
+        };
+    }
+
+    return readState;
+}
+
+function writeWorldInfoProjectionFile(directories, worldName, payload) {
+    const filename = `${normalizeCanonicalWorldInfoName(worldName)}.json`;
+    const pathToFile = path.join(directories.worlds, filename);
+    writeFileAtomicSync(pathToFile, JSON.stringify(payload, null, 4));
+    invalidateDirectory(directories.worlds);
+}
+
+function canReadCanonicalFeatureFlags() {
+    if (globalThis.COMMAND_LINE_ARGS != null) {
+        return true;
+    }
+
+    return Object.keys(process.env).some(key => key.startsWith('EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_'));
+}
+
+function invalidateWorldInfoAuditAfterFileWrite(request, operation) {
+    if (!canReadCanonicalFeatureFlags()) {
+        return;
+    }
+
+    const featureFlags = getCanonicalSqliteFeatureFlags();
+    if (!featureFlags.enabled) {
+        return;
+    }
+
+    const db = canonicalSqliteManager.open({
+        handle: getRequestHandle(request),
+        directories: request.user.directories,
+        featureFlags: {
+            enabled: true,
+            strict: !!featureFlags.strict,
+        },
+    });
+    if (!db) {
+        return;
+    }
+
+    const migrationStatus = runCanonicalMigrations(db, {
+        strict: !!featureFlags.strict,
+    });
+    if (!migrationStatus.ok) {
+        if (featureFlags.strict) {
+            throw new Error(migrationStatus.blockedReason);
+        }
+        return;
+    }
+
+    invalidateCanonicalAuditStatus(db, {
+        scope: WORLD_INFO_AUDIT_SCOPE,
+        handle: getRequestHandle(request),
+        reason: 'audit_stale_after_world_info_file_write',
+        source: `worldinfo:${operation}`,
+    });
+}
+
+function sendWorldInfoProjectionFailure({ response, db, worldName, operation, error }) {
+    const normalizedWorldName = normalizeCanonicalWorldInfoName(worldName);
+    const repairKey = `world_info:${normalizedWorldName}:${operation}`;
+    recordWorldInfoProjectionRepair(db, {
+        repairKey,
+        worldName: normalizedWorldName,
+        reason: 'projection_failed',
+        details: { operation },
+    });
+    console.warn(`Canonical World Info ${operation} projection failed for ${normalizedWorldName}:`, error);
+    return response.status(500).send({
+        error: 'Failed to project canonical World Info file.',
+        repairKey,
+    });
+}
 
 /**
  * Reads a World Info file and returns its contents
@@ -116,6 +269,11 @@ export const router = express.Router();
 
 router.post('/list', async (request, response) => {
     try {
+        const canonicalReadState = getCanonicalWorldInfoReadState(request);
+        if (canonicalReadState.ok) {
+            return response.send(listCanonicalWorldInfoBooks(canonicalReadState.db));
+        }
+
         const data = [];
         const jsonFiles = (await fs.promises.readdir(request.user.directories.worlds, { withFileTypes: true }))
             .filter((file) => file.isFile() && path.extname(file.name).toLowerCase() === '.json')
@@ -149,6 +307,14 @@ router.post('/list', async (request, response) => {
 router.post('/get', (request, response) => {
     if (!request.body?.name) {
         return response.sendStatus(400);
+    }
+
+    const canonicalReadState = getCanonicalWorldInfoReadState(request);
+    if (canonicalReadState.ok) {
+        const canonicalBook = getCanonicalWorldInfoBook(canonicalReadState.db, request.body.name);
+        if (canonicalBook) {
+            return response.send(canonicalBook);
+        }
     }
 
     const file = readWorldInfoFile(request.user.directories, request.body.name, true);
@@ -200,9 +366,34 @@ router.post('/delete', (request, response) => {
         return response.sendStatus(400);
     }
 
-    const worldInfoName = request.body.name;
+    const worldInfoName = normalizeCanonicalWorldInfoName(request.body.name);
     const filename = sanitize(`${worldInfoName}.json`);
     const pathToWorldInfo = path.join(request.user.directories.worlds, filename);
+
+    const canonicalWriteState = getCanonicalWorldInfoWriteState(request);
+    if (canonicalWriteState.ok) {
+        markCanonicalWorldInfoBookDeleted(canonicalWriteState.db, {
+            name: worldInfoName,
+            deletedAtMs: Date.now(),
+        });
+
+        try {
+            if (fs.existsSync(pathToWorldInfo)) {
+                fs.unlinkSync(pathToWorldInfo);
+            }
+            invalidateDirectory(request.user.directories.worlds);
+        } catch (error) {
+            return sendWorldInfoProjectionFailure({
+                response,
+                db: canonicalWriteState.db,
+                worldName: worldInfoName,
+                operation: 'delete',
+                error,
+            });
+        }
+
+        return response.sendStatus(200);
+    }
 
     if (!fs.existsSync(pathToWorldInfo)) {
         throw new Error(`World info file ${filename} doesn't exist.`);
@@ -210,6 +401,7 @@ router.post('/delete', (request, response) => {
 
     fs.unlinkSync(pathToWorldInfo);
     invalidateDirectory(request.user.directories.worlds);
+    invalidateWorldInfoAuditAfterFileWrite(request, 'delete');
 
     return response.sendStatus(200);
 });
@@ -239,14 +431,39 @@ router.post('/import', (request, response) => {
     }
 
     const pathToNewFile = path.join(request.user.directories.worlds, filename);
-    const worldName = path.parse(pathToNewFile).name;
+    const worldName = normalizeCanonicalWorldInfoName(path.parse(pathToNewFile).name);
 
     if (!worldName) {
         return response.status(400).send('World file must have a name');
     }
 
+    const canonicalWriteState = getCanonicalWorldInfoWriteState(request);
+    if (canonicalWriteState.ok) {
+        const payload = JSON.parse(fileContents);
+        upsertCanonicalWorldInfoBook(canonicalWriteState.db, {
+            name: worldName,
+            payload,
+            nowMs: Date.now(),
+        });
+
+        try {
+            writeWorldInfoProjectionFile(request.user.directories, worldName, payload);
+        } catch (error) {
+            return sendWorldInfoProjectionFailure({
+                response,
+                db: canonicalWriteState.db,
+                worldName,
+                operation: 'import',
+                error,
+            });
+        }
+
+        return response.send({ name: worldName });
+    }
+
     writeFileAtomicSync(pathToNewFile, fileContents);
     invalidateDirectory(request.user.directories.worlds);
+    invalidateWorldInfoAuditAfterFileWrite(request, 'import');
     return response.send({ name: worldName });
 });
 
@@ -267,11 +484,40 @@ router.post('/edit', (request, response) => {
         return response.status(400).send('Is not a valid world info file');
     }
 
-    const filename = sanitize(`${request.body.name}.json`);
+    const worldName = normalizeCanonicalWorldInfoName(request.body.name);
+    if (!worldName) {
+        return response.status(400).send('World file must have a name');
+    }
+
+    const filename = `${worldName}.json`;
     const pathToFile = path.join(request.user.directories.worlds, filename);
+
+    const canonicalWriteState = getCanonicalWorldInfoWriteState(request);
+    if (canonicalWriteState.ok) {
+        upsertCanonicalWorldInfoBook(canonicalWriteState.db, {
+            name: worldName,
+            payload: request.body.data,
+            nowMs: Date.now(),
+        });
+
+        try {
+            writeWorldInfoProjectionFile(request.user.directories, worldName, request.body.data);
+        } catch (error) {
+            return sendWorldInfoProjectionFailure({
+                response,
+                db: canonicalWriteState.db,
+                worldName,
+                operation: 'edit',
+                error,
+            });
+        }
+
+        return response.send({ ok: true });
+    }
 
     writeFileAtomicSync(pathToFile, JSON.stringify(request.body.data, null, 4));
     invalidateDirectory(request.user.directories.worlds);
+    invalidateWorldInfoAuditAfterFileWrite(request, 'edit');
 
     return response.send({ ok: true });
 });
@@ -322,6 +568,7 @@ router.post('/delete-cascade', async (request, response) => {
         }
 
         invalidateDirectory(directories.worlds);
+        invalidateWorldInfoAuditAfterFileWrite(request, 'delete_cascade');
         return response.sendStatus(200);
     } catch (error) {
         console.error('World info cascade delete error:', error);

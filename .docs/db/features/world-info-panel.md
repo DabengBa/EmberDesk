@@ -26,6 +26,7 @@ Keep World Info/lorebook activation and editing available inside the chat worksp
 - File import accepts supported `.json`, `.lorebook`, and `.png` files through the toolbar or drop target, blocks duplicate picker starts while active, shows progress and conflict decisions, and restores normal controls after success, skip, cancellation, parse failure, or network failure.
 - The guarded React host, when enabled, may own visible selector/search/sort/action shortcuts and readiness reporting, but it remains additive and must preserve the established World Info action chain and fallback controls.
 - When the same-entry React shell is enabled, its World Info entry owns only the transient active-panel/dock state and mounted or fallback status; prompt activation, regex placement, converter/import outcomes, and world-book deletion semantics remain owned by the World Info facade.
+- When canonical SQLite World Info authority is enabled and audit-clean, the server may read and write world books through the canonical database while projecting compatible JSON files for import/export and rollback. The visible selector, editor, entry cards, prompt activation, regex placement, import/export outcome, and fallback controls remain the same user workflow.
 - The visible drawer should not expose internal cutover-governance labels. Users see World Info readiness and task results, while maintainer verdicts stay in tech docs.
 
 ## Semantic Interaction IDs
@@ -53,6 +54,7 @@ Keep World Info/lorebook activation and editing available inside the chat worksp
 - Supported file extensions, batch limits, converter results, and endpoint responses are supporting evidence only when the visible import workflow matches.
 - `public/scripts/world-info.js` helper routing and React host readiness markers support migration proof; they do not replace visible drawer behavior.
 - Browser evidence for the locked Character Management plus World Info path should show both panels visible at the same time; DOM state such as `openDrawer` / `pinnedOpen` is supporting evidence only when the visible panels match.
+- Canonical storage evidence is supporting evidence only when route payloads and visible World Info workflows remain compatible with the file-backed behavior.
 
 ## Failure Signals
 

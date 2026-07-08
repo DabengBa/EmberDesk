@@ -18,7 +18,7 @@ The new storage question is narrower: should EmberDesk allow a per-user canonica
 
 Accept per-user canonical SQLite storage as an approved architecture direction for selected slices.
 
-The first approved target is character metadata plus character chat stats. The canonical database must live outside `_cache`, for example `DATA_ROOT/<handle>/storage/emberdesk.sqlite`. Existing derived caches, including `DiskCache` and `_cache/character-index.sqlite`, must not be promoted in place to canonical storage.
+The first approved target was character metadata plus character chat stats. Later approved roadmap slices may extend the same per-user canonical SQLite store when they provide their own schema, audit, projection, repair, rollback, and compatibility proof. The canonical database must live outside `_cache`, for example `DATA_ROOT/<handle>/storage/emberdesk.sqlite`. Existing derived caches, including `DiskCache` and `_cache/character-index.sqlite`, must not be promoted in place to canonical storage.
 
 Compatibility files remain required projection/import/export surfaces until a later explicit compatibility-retirement decision. After a slice cuts over, out-of-band file edits are not automatically authoritative; they require a deliberate import, rescan, or repair path.
 
@@ -27,7 +27,7 @@ Compatibility files remain required projection/import/export surfaces until a la
 1. Large character libraries already need structured, queryable state to avoid repeated PNG parsing and chat-directory scans.
 2. Promoting `_cache/character-index.sqlite` would make a disposable recovery path unsafe; a new canonical store keeps cache failure semantics separate from data durability.
 3. Character metadata and chat stats are the smallest useful authority slice because existing read/write services already localize the route impact.
-4. Chat message bodies, full World Info, secrets, settings, vectors, assets, personas, and extension storage have broader compatibility and migration risk and are not part of this first decision.
+4. Chat message bodies, full World Info, secrets, settings, vectors, assets, personas, and extension storage have broader compatibility and migration risk and require their own roadmap/spec proof before runtime cutover.
 5. Express 5 remains the runtime owner per ADR-0010, so this storage decision must fit the existing Node/Bun/Express boundary instead of introducing a Rust/Axum/Postgres backend.
 
 ## Consequences
@@ -48,7 +48,7 @@ Neutral clarifications:
 
 - This ADR does not change the current runtime behavior by itself.
 - This ADR does not adopt Drizzle or any ORM by default.
-- This ADR does not authorize moving chat message bodies or full World Info entries into SQLite.
+- This ADR does not authorize moving every storage domain into SQLite at once; each additional domain needs its own roadmap/spec proof before runtime cutover.
 - This ADR does not weaken extension, import/export, or `/api/characters/*` compatibility contracts.
 
 ## Rollout Requirements
@@ -85,3 +85,6 @@ At minimum, implementation must provide:
 - `scripts/canonical-sqlite-repair.mjs`
 - `src/endpoints/chats.js`
 - `src/endpoints/character-index.js`
+- `src/canonical-world-info-shadow-import.js`
+- `src/endpoints/world-info-store.js`
+- `src/endpoints/worldinfo.js`

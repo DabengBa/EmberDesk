@@ -41,12 +41,15 @@ EmberDesk 已经交付 ADR-0011 首个 canonical SQLite 切片：character metad
 ### Domain: full World Info canonical migration
 
 - User expectation: 第二步迁移 full World Info authority，而不是只保留 character-to-world binding。
-- Current status: roadmap 要求在 legacy-mode accelerator 退休后启动；当前 `public/scripts/world-info.js` 仍是兼容 facade。
+- Current status: 已交付 canonical World Info authority；`public/scripts/world-info.js` 继续作为兼容 facade，运行时 authority 可在 clean `world_info` audit 与 canonical read/write flags 后切到 SQLite。
 - Change history:
   - 2026-07-08: 用户确认 full World Info canonical migration 是第二阶段。
+  - 2026-07-08: 交付第二阶段实现，新增 `world_books` / `world_book_entries` / `world_info_projection_repairs`，World Info list/get/import/edit/delete 支持 canonical SQLite authority、JSON projection repair、rollback blocker 和 operator CLI。
 - Implementation traceability:
-  - Owner candidates: `src/endpoints/worldinfo.js`, `public/scripts/world-info.js`, `public/scripts/world-info-shell-context.js`, `tests/worldinfo-delete-cascade.test.js`, `tests/world-info-converters.test.js`
-  - Delivery status: spec-ready; implementation should start only after explicit approval and delivery-workflow handoff.
+  - Code paths: `src/canonical-sqlite-migrations.js`, `src/endpoints/world-info-store.js`, `src/canonical-world-info-shadow-import.js`, `src/endpoints/worldinfo.js`, `src/canonical-sqlite-operator.js`, `scripts/canonical-sqlite-audit.mjs`, `scripts/canonical-sqlite-repair.mjs`
+  - Durable docs: `.docs/tech/canonical-sqlite-storage-roadmap.md`, `.docs/adr/0011-canonical-per-user-sqlite-storage.md`, `.docs/project-overview.md`, `.docs/PROJECT_HISTORY.md`, `.docs/db/features/world-info-panel.md`, `.docs/db/features/world-book-delete.md`, `.docs/logic-description/canonical_world_info_authority_processing_flow.md`
+  - Validation: `bun run --cwd tests test:unit -- canonical-world-info-store.test.js worldinfo-route-service.test.js canonical-sqlite-operator.test.js canonical-sqlite-cli.test.js canonical-sqlite-migrations.test.js worldinfo-delete-cascade.test.js world-info-converters.test.js world-info-import-results.test.js world-info-shell-context.test.js --runInBand`; `uv run python .docs/logic-description/canonical_world_info_authority_sandbox_proof.py`; `bun run docs:check`
+  - Delivery status: delivered in the canonical World Info authority wrap-up; final trace is the repository commit created during this delivery workflow.
 
 ### Domain: remaining structured user-data slices
 

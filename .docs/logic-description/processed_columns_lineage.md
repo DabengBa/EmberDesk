@@ -15,6 +15,7 @@ Current owning flow:
 - [Main Chat Generation Control Bridge Processing Flow](main_chat_generation_control_bridge_processing_flow.md)
 - [Main Chat Message Actions Bridge Processing Flow](main_chat_message_actions_bridge_processing_flow.md)
 - [Canonical Chat Stats Authority Processing Flow](canonical_chat_stats_authority_processing_flow.md)
+- [Canonical World Info Authority Processing Flow](canonical_world_info_authority_processing_flow.md)
 
 ## Per-Output Field Lineage
 
@@ -81,6 +82,9 @@ Current owning flow:
 | `canonicalAuditInvalidation` | mutation path result plus canonical storage availability | Use `audit_stale_after_chat_stats_change` when storage is enabled but chat-stats authority is off, `audit_stale_after_chat_stats_sync_failure` when canonical chat-stats sync fails, and `audit_stale_after_chat_stats_rebuild` after operator rebuild | Disabled or unavailable canonical storage skips invalidation; sync failure keeps the file-backed mutation result and leaves canonical reads blocked until re-audit |
 | `canonicalReadChatStatsAuthority` | canonical read flag, chat-stats flag, runtime support, DB availability, and persisted audit summary | Permit DB-backed `chat_size` / `date_last_chat` only when reads are enabled, chat-stats authority is enabled, and the persisted audit summary is clean | Any blocking reason returns visible chat-summary ownership to file-backed reads, which recompute from JSONL compatibility files |
 | `chatStatsRebuildResult` | live canonical characters, optional requested avatars, and current JSONL chat directories | Recompute per-avatar stats from disk and report the rebuilt rows after one canonical transaction | Missing requested avatars simply rebuild nothing; the repair path still invalidates the persisted audit summary for later re-audit |
+| `worldInfoAuditState` | `worlds/*.json`, canonical `world_books`, and `audit_scope = "world_info"` | Compare projection files with canonical rows and persist clean or blocking audit state for World Info read/write cutover | Missing DB rows, payload mismatches, missing JSON projections, and audit errors block DB-first authority until import, repair, or re-audit resolves them |
+| `worldInfoReadAuthority` | canonical storage flags, migration status, and persisted `world_info` audit state | Read `/api/worldinfo/list` and `/api/worldinfo/get` from canonical SQLite only when reads are enabled and audit is clean | Flag-off or blocked audit falls back to JSON files unless strict mode is enabled, in which case the route fails closed |
+| `worldInfoProjectionRepair` | canonical World Info row plus unresolved `world_info_projection_repairs` row | Recreate the compatible JSON projection from canonical payload for import/edit repairs, or remove the projected JSON file for delete repairs, then resolve the repair row | Missing canonical row blocks non-delete repair; unresolved World Info repair rows block write rollback; successful repair invalidates the `world_info` audit so rollback claims require a fresh audit |
 
 ## Maintenance Constraints
 
@@ -93,5 +97,6 @@ Current owning flow:
 - Keep main-chat generation-control rows aligned with `main_chat_generation_control_bridge_processing_flow.md` and `main_chat_generation_control_bridge_sandbox_proof.py`.
 - Keep main-chat message-action rows aligned with `main_chat_message_actions_bridge_processing_flow.md` and `main_chat_message_actions_bridge_sandbox_proof.py`.
 - Keep canonical chat-stats authority rows aligned with `canonical_chat_stats_authority_processing_flow.md` and `canonical_chat_stats_authority_sandbox_proof.py`.
+- Keep canonical World Info authority rows aligned with `canonical_world_info_authority_processing_flow.md` and `canonical_world_info_authority_sandbox_proof.py`.
 - Add a new row when a documentation proof script starts producing a new named output.
 - Do not use this file as a second implementation guide; detailed processing rules belong in the owning flow doc.

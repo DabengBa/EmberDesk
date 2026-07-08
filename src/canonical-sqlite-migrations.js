@@ -80,6 +80,66 @@ export const CANONICAL_SQLITE_MIGRATIONS = Object.freeze([
             );
         `,
     }),
+    Object.freeze({
+        version: 3,
+        name: 'world_info_authority',
+        sql: `
+            CREATE TABLE IF NOT EXISTS world_books (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                payload_json TEXT NOT NULL,
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                source_mtime_ms INTEGER NOT NULL DEFAULT 0,
+                source_size_bytes INTEGER NOT NULL DEFAULT 0,
+                created_at_ms INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL,
+                deleted_at_ms INTEGER
+            );
+
+            CREATE TABLE IF NOT EXISTS world_book_entries (
+                id TEXT PRIMARY KEY,
+                world_book_id TEXT NOT NULL REFERENCES world_books(id) ON DELETE CASCADE,
+                entry_key TEXT NOT NULL,
+                uid INTEGER,
+                key_json TEXT NOT NULL DEFAULT '[]',
+                keysecondary_json TEXT NOT NULL DEFAULT '[]',
+                content TEXT NOT NULL DEFAULT '',
+                comment TEXT NOT NULL DEFAULT '',
+                order_value INTEGER NOT NULL DEFAULT 0,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                selective INTEGER NOT NULL DEFAULT 0,
+                constant INTEGER NOT NULL DEFAULT 0,
+                position INTEGER,
+                role INTEGER,
+                probability INTEGER,
+                depth INTEGER,
+                extensions_json TEXT NOT NULL DEFAULT '{}',
+                payload_json TEXT NOT NULL DEFAULT '{}',
+                updated_at_ms INTEGER NOT NULL,
+                deleted_at_ms INTEGER,
+                UNIQUE(world_book_id, entry_key)
+            );
+
+            CREATE TABLE IF NOT EXISTS world_info_projection_repairs (
+                repair_key TEXT PRIMARY KEY,
+                world_book_id TEXT,
+                world_name TEXT NOT NULL,
+                reason TEXT NOT NULL,
+                details_json TEXT NOT NULL DEFAULT '{}',
+                created_at_ms INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL,
+                last_attempt_at_ms INTEGER,
+                resolved_at_ms INTEGER
+            );
+
+            CREATE INDEX IF NOT EXISTS world_books_name_idx
+                ON world_books (name);
+            CREATE INDEX IF NOT EXISTS world_book_entries_book_order_idx
+                ON world_book_entries (world_book_id, order_value, entry_key);
+            CREATE INDEX IF NOT EXISTS world_info_projection_repairs_open_idx
+                ON world_info_projection_repairs (resolved_at_ms, world_name);
+        `,
+    }),
 ]);
 
 export class CanonicalMigrationBlockedError extends Error {

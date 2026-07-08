@@ -221,7 +221,7 @@ Current delivered foundation:
 
 ## Next Work After The First Approved Slice
 
-The first approved slice is no longer the active planning question. Follow-on work now proceeds in the order below.
+The first approved slice and the full World Info canonical migration are no longer active planning questions. Follow-on work now proceeds in the order below.
 
 ### 1. Full World Info Canonical Migration
 
@@ -236,8 +236,19 @@ Required outcomes:
 Dependencies and constraints:
 
 - starts after legacy-mode accelerator retirement
-- requires a dedicated spec and, if the trade-off surface changes materially, a dedicated ADR or ADR update before runtime cutover
+- delivered under a dedicated spec without changing the visible World Info facade contract
 - must keep `public/scripts/world-info.js`, existing semantic surfaces, and extension-visible behavior compatible until an explicit retirement decision says otherwise
+
+Current delivered foundation:
+
+- `src/canonical-sqlite-migrations.js` now includes the `world_info_authority` migration with `world_books`, `world_book_entries`, and `world_info_projection_repairs`.
+- `src/endpoints/world-info-store.js` owns canonical World Info row normalization to projection-safe file ids, route-compatible list/get payload reconstruction, DB-first write helpers, and open projection-repair listing.
+- `src/canonical-world-info-shadow-import.js` imports existing `worlds/*.json` files idempotently, audits DB/file projection drift, and persists `canonical_audit_state` scope `world_info` as the fail-closed read/write gate.
+- `src/endpoints/worldinfo.js` now serves `/api/worldinfo/list` and `/get` from canonical SQLite when canonical read flags are enabled and the `world_info` audit is clean; it falls back to JSON files when flags are off or audit is blocked, strict mode fails closed, and mixed-mode file writes invalidate `world_info` audit state.
+- `/api/worldinfo/import`, `/edit`, and `/delete` can commit canonical SQLite first behind canonical write flags, then project compatibility JSON files; projection failure records `world_info_projection_repairs` rather than restoring JSON files as truth.
+- `src/canonical-sqlite-operator.js` can replay World Info projection repairs, resolve delete repairs without requiring a live canonical row, include `world_info_projection_repairs` in write rollback blockers, and resolve the repair row after the JSON projection state is restored.
+- `scripts/canonical-sqlite-audit.mjs --scope world_info` and `scripts/canonical-sqlite-repair.mjs audit-world-info|list-world-info-repairs|repair-world-info-projection` expose the World Info audit and repair paths to operators.
+- Existing converter/import-result, shell-context, delete-cascade, and third-party extension compatibility tests remain the proof that `public/scripts/world-info.js` and protected surfaces stay compatible.
 
 ### 2. Remaining Structured User-Data Slices
 
@@ -251,7 +262,7 @@ Required outcomes:
 
 Dependencies and constraints:
 
-- starts after full World Info canonical migration establishes the next broad compatibility pattern
+- starts after full World Info canonical migration has established the next broad compatibility pattern
 - each domain needs its own spec-level acceptance and validation surface even if multiple domains eventually share the same DB file
 - secrets and extension storage must preserve current security and compatibility guarantees instead of being folded into a generic table design
 
@@ -315,7 +326,7 @@ Dependencies and constraints:
 9. `repair tooling`
    - Depends on write projection.
    - Replays projection, rebuilds stats, and reports unrepairable drift.
-   - Current status: delivered for the first slice via `src/canonical-sqlite-operator.js`, `scripts/canonical-sqlite-audit.mjs`, and `scripts/canonical-sqlite-repair.mjs`.
+   - Current status: delivered for the first slice and full World Info via `src/canonical-sqlite-operator.js`, `scripts/canonical-sqlite-audit.mjs`, and `scripts/canonical-sqlite-repair.mjs`.
 
 10. `chat stats authority`
    - Depends on store schema and selected write-side integration.
@@ -330,6 +341,7 @@ Dependencies and constraints:
 12. `full World Info canonical migration`
     - Depends on legacy-mode accelerator retirement.
     - Moves full World Info entries into canonical SQLite with compatibility-safe prompt, regex, import/export, and delete-cascade behavior.
+    - Current status: delivered via `src/endpoints/world-info-store.js`, `src/canonical-world-info-shadow-import.js`, `src/endpoints/worldinfo.js`, World Info projection repair support in `src/canonical-sqlite-operator.js`, and World Info audit/repair commands in the canonical SQLite scripts.
 
 13. `remaining structured user-data slices`
     - Depends on full World Info canonical migration.
@@ -360,7 +372,7 @@ Rollback rules:
 
 - Phase 1 rollback: disable flags; DB files may remain unused. No file rewrite is needed.
 - Phase 2 rollback: disable `reads`; routes return to file-backed reads. DB remains available for audit.
-- Phase 3 rollback: disable `writes` only after the persisted audit summary is clean and `projection_repairs` has no unresolved rows for the current slice.
+- Phase 3 rollback: disable `writes` only after the persisted audit summary is clean and the current slice has no unresolved rows in its repair table, including `projection_repairs` for character projection and `world_info_projection_repairs` for World Info projection.
 - Phase 4 rollback: disable `chatStats` only after rebuilding canonical chat stats for comparison or explicitly returning file-backed stats paths to a dirty/rescan-required state.
 - Phase 5 rollback: only possible if the derived index path has not been deleted or if DB-first reads have equivalent file-backed recovery proof.
 
@@ -370,7 +382,7 @@ Fail-closed rules:
 - Failed migrations disable canonical reads/writes for that user and surface an operator-visible reason.
 - Audit drift blocks read/write cutover unless explicitly overridden in test-only strict fixtures.
 - Illegal flag combinations (`enabled -> shadowImport -> reads -> writes -> chatStats`) are blocked by the rollout contract instead of being treated as best-effort opt-ins.
-- Projection failure records repair intent, invalidates the persisted audit gate, and must not silently treat projected files as canonical.
+- Projection failure records repair intent, invalidates the persisted audit gate where the route has a committed canonical write, and must not silently treat projected files as canonical. Mixed-mode file-backed writes also invalidate the relevant persisted audit scope when canonical storage is enabled.
 
 ## Related Semantic IDs And Code Binding Points
 
@@ -419,6 +431,7 @@ bun run --cwd tests test:unit -- derived-cache-sqlite.test.js interaction-perfor
 Compatibility-sensitive checks when World Info binding or extension-visible character surfaces are touched:
 
 ```bash
+bun run --cwd tests test:unit -- canonical-world-info-store.test.js worldinfo-route-service.test.js canonical-sqlite-operator.test.js canonical-sqlite-cli.test.js --runInBand
 bun run --cwd tests test:unit -- worldinfo-delete-cascade.test.js world-info-shell-context.test.js --runInBand
 bun run test:compat
 ```

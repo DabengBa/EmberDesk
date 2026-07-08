@@ -8,7 +8,12 @@ import { afterEach, describe, expect, test } from '@jest/globals';
 
 import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalShadowImport } from '../src/canonical-sqlite-shadow-import.js';
+import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import { recordProjectionRepair } from '../src/endpoints/character-store.js';
+import {
+    recordWorldInfoProjectionRepair,
+    upsertCanonicalWorldInfoBook,
+} from '../src/endpoints/world-info-store.js';
 import { buildCharacterFileSnapshotRow } from '../src/endpoints/character-file-snapshot.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -80,8 +85,10 @@ describe('canonical sqlite CLI scripts', () => {
         });
 
         expect(auditHelp).toContain('Usage: node scripts/canonical-sqlite-audit.mjs');
+        expect(auditHelp).toContain('--scope <scope>');
         expect(repairHelp).toContain('Usage: node scripts/canonical-sqlite-repair.mjs');
         expect(repairHelp).toContain('list-repairs');
+        expect(repairHelp).toContain('repair-world-info-projection');
     });
 
     test('lists repairs and replays projection from the repair CLI', async () => {
@@ -163,5 +170,73 @@ describe('canonical sqlite CLI scripts', () => {
             ],
         }));
         expect(fs.existsSync(path.join(directories.characters, 'alpha.png'))).toBe(true);
+    });
+
+    test('lists and repairs world info projection repairs from the repair CLI', () => {
+        const dataRoot = makeRoot();
+        const directories = createDirectories(path.join(dataRoot, 'alice'));
+        const manager = createManager();
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        runCanonicalMigrations(db, { nowMs: 1735689600000 });
+        upsertCanonicalWorldInfoBook(db, {
+            name: 'Lorebook',
+            payload: { name: 'Lorebook', entries: { one: { content: 'cli' } } },
+            nowMs: 1735689600000,
+        });
+        recordWorldInfoProjectionRepair(db, {
+            repairKey: 'world_info:Lorebook:edit',
+            worldName: 'Lorebook',
+            reason: 'projection_failed',
+            details: { operation: 'edit' },
+            nowMs: 1735689601111,
+        });
+
+        const listOutput = execFileSync('node', [
+            'scripts/canonical-sqlite-repair.mjs',
+            'list-world-info-repairs',
+            '--data-root', dataRoot,
+            '--handle', 'alice',
+            '--json',
+        ], {
+            cwd: repoRoot,
+            encoding: 'utf8',
+        });
+
+        expect(JSON.parse(listOutput)).toEqual([
+            expect.objectContaining({
+                repairKey: 'world_info:Lorebook:edit',
+                worldName: 'Lorebook',
+            }),
+        ]);
+
+        const repairOutput = execFileSync('node', [
+            'scripts/canonical-sqlite-repair.mjs',
+            'repair-world-info-projection',
+            '--data-root', dataRoot,
+            '--handle', 'alice',
+            '--repair-key', 'world_info:Lorebook:edit',
+            '--json',
+        ], {
+            cwd: repoRoot,
+            encoding: 'utf8',
+        });
+
+        expect(JSON.parse(repairOutput)).toEqual(expect.objectContaining({
+            ok: true,
+            results: [
+                expect.objectContaining({
+                    repairKey: 'world_info:Lorebook:edit',
+                    status: 'repaired',
+                }),
+            ],
+        }));
+        expect(JSON.parse(fs.readFileSync(path.join(directories.worlds, 'Lorebook.json'), 'utf8'))).toEqual({
+            name: 'Lorebook',
+            entries: { one: { content: 'cli' } },
+        });
     });
 });

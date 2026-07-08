@@ -8,6 +8,7 @@ import { Jimp, JimpMime } from './jimp.js';
 import { serverDirectory } from './server-directory.js';
 import { withCanonicalTransaction } from './canonical-sqlite.js';
 import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus, auditCanonicalShadowImport } from './canonical-sqlite-shadow-import.js';
+import { auditCanonicalWorldInfoShadowImport, WORLD_INFO_AUDIT_SCOPE } from './canonical-world-info-shadow-import.js';
 import {
     buildCanonicalRollbackBlockers,
     listOpenProjectionRepairs,
@@ -16,6 +17,12 @@ import {
     getCanonicalCharacter,
     resolveProjectionRepair,
 } from './endpoints/character-store.js';
+import {
+    getCanonicalWorldInfoBook,
+    listOpenWorldInfoProjectionRepairs,
+    normalizeCanonicalWorldInfoName,
+    resolveWorldInfoProjectionRepair,
+} from './endpoints/world-info-store.js';
 import {
     buildCharacterFileSnapshotRow,
     calculateCharacterChatStats,
@@ -184,13 +191,34 @@ export function listCanonicalRepairs(db) {
     return listOpenProjectionRepairs(db);
 }
 
+export function listCanonicalWorldInfoRepairs(db) {
+    return listOpenWorldInfoProjectionRepairs(db);
+}
+
 export function explainCanonicalRolloutBlockers({ db, featureFlags, phase = 'writes' }) {
-    return buildCanonicalRollbackBlockers({
+    const result = buildCanonicalRollbackBlockers({
         db,
         featureFlags,
         persistedAuditStatus: getPersistedCanonicalAuditStatus(db),
         phase,
     });
+
+    if (phase === 'writes' || phase === 'chatStats') {
+        const worldInfoRepairs = listOpenWorldInfoProjectionRepairs(db);
+        if (worldInfoRepairs.length > 0) {
+            result.blockers.push({
+                code: 'open_world_info_projection_repairs',
+                severity: 'error',
+                details: {
+                    repairCount: worldInfoRepairs.length,
+                    repairKeys: worldInfoRepairs.map(repair => repair.repairKey),
+                },
+            });
+            result.ok = false;
+        }
+    }
+
+    return result;
 }
 
 export async function runCanonicalAudit({ handle, directories, db, auditedAtMs = Date.now() }) {
@@ -199,6 +227,15 @@ export async function runCanonicalAudit({ handle, directories, db, auditedAtMs =
         directories,
         db,
         buildSnapshotRow: createSnapshotBuilder(),
+        auditedAtMs,
+    });
+}
+
+export async function runCanonicalWorldInfoAudit({ handle, directories, db, auditedAtMs = Date.now() }) {
+    return auditCanonicalWorldInfoShadowImport({
+        handle,
+        directories,
+        db,
         auditedAtMs,
     });
 }
@@ -279,6 +316,92 @@ export async function repairCanonicalProjection({ db, directories, repairKeys = 
             handle: null,
             reason: 'audit_stale_after_projection_repair',
             source: 'canonical_repair:repair_projection',
+        });
+    }
+
+    return {
+        ok: results.every(result => result.status === 'repaired'),
+        results,
+    };
+}
+
+function writeWorldInfoProjectionFile({ directories, worldName, payload }) {
+    const normalizedWorldName = normalizeCanonicalWorldInfoName(worldName);
+    const outputPath = path.join(directories.worlds, `${normalizedWorldName}.json`);
+    fs.mkdirSync(directories.worlds, { recursive: true });
+    writeFileAtomicSync(outputPath, JSON.stringify(payload, null, 4));
+    return outputPath;
+}
+
+function deleteWorldInfoProjectionForRepair({ repair, directories }) {
+    const normalizedWorldName = normalizeCanonicalWorldInfoName(repair.worldName);
+    const outputPath = path.join(directories.worlds, `${normalizedWorldName}.json`);
+    fs.rmSync(outputPath, { force: true });
+}
+
+async function repairSingleWorldInfoProjection({ db, directories, repair, nowMs = Date.now() }) {
+    const operation = repair.details?.operation ?? null;
+    if (operation === 'delete') {
+        deleteWorldInfoProjectionForRepair({ repair, directories });
+        withCanonicalTransaction(db, txnDb => {
+            resolveWorldInfoProjectionRepair(txnDb, {
+                repairKey: repair.repairKey,
+                resolvedAtMs: nowMs,
+            });
+        });
+        return {
+            repairKey: repair.repairKey,
+            status: 'repaired',
+            operation,
+        };
+    }
+
+    const payload = getCanonicalWorldInfoBook(db, repair.worldName);
+    if (!payload) {
+        return {
+            repairKey: repair.repairKey,
+            status: 'blocked',
+            operation,
+            blocker: 'missing_canonical_world_info_row',
+        };
+    }
+
+    writeWorldInfoProjectionFile({
+        directories,
+        worldName: repair.worldName,
+        payload,
+    });
+
+    withCanonicalTransaction(db, txnDb => {
+        resolveWorldInfoProjectionRepair(txnDb, {
+            repairKey: repair.repairKey,
+            resolvedAtMs: nowMs,
+        });
+    });
+
+    return {
+        repairKey: repair.repairKey,
+        status: 'repaired',
+        operation,
+    };
+}
+
+export async function repairCanonicalWorldInfoProjection({ db, directories, repairKeys = null, nowMs = Date.now() }) {
+    const requested = repairKeys ? new Set(repairKeys) : null;
+    const repairs = listOpenWorldInfoProjectionRepairs(db)
+        .filter(repair => !requested || requested.has(repair.repairKey));
+    const results = [];
+
+    for (const repair of repairs) {
+        results.push(await repairSingleWorldInfoProjection({ db, directories, repair, nowMs }));
+    }
+
+    if (results.some(result => result.status === 'repaired')) {
+        invalidateCanonicalAuditStatus(db, {
+            scope: WORLD_INFO_AUDIT_SCOPE,
+            handle: null,
+            reason: 'audit_stale_after_world_info_projection_repair',
+            source: 'canonical_repair:repair_world_info_projection',
         });
     }
 

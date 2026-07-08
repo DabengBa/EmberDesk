@@ -7,9 +7,12 @@ import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import {
     explainCanonicalRolloutBlockers,
     listCanonicalRepairs,
+    listCanonicalWorldInfoRepairs,
     rebuildCanonicalChatStats,
     repairCanonicalProjection,
+    repairCanonicalWorldInfoProjection,
     runCanonicalAudit,
+    runCanonicalWorldInfoAudit,
 } from '../src/canonical-sqlite-operator.js';
 import { getUserDirectories } from '../src/user-directories.js';
 
@@ -21,8 +24,13 @@ function printUsage() {
         '',
         'Commands:',
         '  audit                Run the same read-only audit as canonical-sqlite-audit.mjs',
+        '  audit-world-info     Run the canonical World Info audit',
         '  list-repairs         List unresolved projection repairs',
+        '  list-world-info-repairs',
+        '                       List unresolved World Info projection repairs',
         '  repair-projection    Replay projection for one or more repair keys',
+        '  repair-world-info-projection',
+        '                       Replay World Info projection for one or more repair keys',
         '  rebuild-chat-stats   Rebuild canonical chat stats from JSONL chat files',
         '  explain-blockers     Summarize rollout / rollback blockers for a phase',
         '',
@@ -141,6 +149,17 @@ function formatListRepairs(repairs) {
     return `${lines.join('\n')}\n`;
 }
 
+function formatListWorldInfoRepairs(repairs) {
+    const lines = [
+        'Canonical SQLite World Info repairs',
+        `open: ${repairs.length}`,
+    ];
+    for (const repair of repairs) {
+        lines.push(`- ${repair.repairKey} | ${repair.details.operation ?? 'unknown'} | ${repair.worldName} | ${repair.reason}`);
+    }
+    return `${lines.join('\n')}\n`;
+}
+
 function formatRepairProjection(result) {
     const repaired = result.results.filter(item => item.status === 'repaired').length;
     const blocked = result.results.filter(item => item.status === 'blocked').length;
@@ -211,12 +230,28 @@ async function main() {
             result = await runCanonicalAudit({ handle: options.handle, directories, db });
             formatter = formatAudit;
             break;
+        case 'audit-world-info':
+            result = await runCanonicalWorldInfoAudit({ handle: options.handle, directories, db });
+            formatter = formatAudit;
+            break;
         case 'list-repairs':
             result = listCanonicalRepairs(db);
             formatter = formatListRepairs;
             break;
+        case 'list-world-info-repairs':
+            result = listCanonicalWorldInfoRepairs(db);
+            formatter = formatListWorldInfoRepairs;
+            break;
         case 'repair-projection':
             result = await repairCanonicalProjection({
+                db,
+                directories,
+                repairKeys: options.repairKeys.length ? options.repairKeys : null,
+            });
+            formatter = formatRepairProjection;
+            break;
+        case 'repair-world-info-projection':
+            result = await repairCanonicalWorldInfoProjection({
                 db,
                 directories,
                 repairKeys: options.repairKeys.length ? options.repairKeys : null,
@@ -243,7 +278,7 @@ async function main() {
         ? `${JSON.stringify(result, null, 2)}\n`
         : formatter(result));
 
-    if ((options.command === 'audit' || options.command === 'repair-projection' || options.command === 'explain-blockers') && result.ok === false) {
+    if ((options.command === 'audit' || options.command === 'audit-world-info' || options.command === 'repair-projection' || options.command === 'repair-world-info-projection' || options.command === 'explain-blockers') && result.ok === false) {
         process.exitCode = 1;
     }
 }

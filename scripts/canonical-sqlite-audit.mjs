@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
-import { runCanonicalAudit } from '../src/canonical-sqlite-operator.js';
+import { runCanonicalAudit, runCanonicalWorldInfoAudit } from '../src/canonical-sqlite-operator.js';
 import { getUserDirectories } from '../src/user-directories.js';
 
 const manager = createCanonicalSqliteManager({ logger: { info() {}, warn() {} } });
@@ -13,7 +13,10 @@ function printUsage() {
     process.stdout.write([
         'Usage: node scripts/canonical-sqlite-audit.mjs --data-root <path> --handle <user> [--json] [--strict]',
         '',
-        'Runs a read-only canonical SQLite audit for the current character metadata + chat stats slice.',
+        'Runs a read-only canonical SQLite audit.',
+        '',
+        'Options:',
+        '  --scope <scope>      character_metadata_and_chat_stats | world_info',
     ].join('\n'));
 }
 
@@ -23,6 +26,7 @@ function parseArgs(argv) {
         handle: null,
         json: false,
         strict: false,
+        scope: 'character_metadata_and_chat_stats',
         help: false,
     };
 
@@ -40,6 +44,9 @@ function parseArgs(argv) {
                 break;
             case '--strict':
                 options.strict = true;
+                break;
+            case '--scope':
+                options.scope = argv[++index] ?? options.scope;
                 break;
             case '--help':
             case '-h':
@@ -76,7 +83,7 @@ function formatAuditResult(result) {
     }
 
     for (const entry of result.entries) {
-        lines.push(`- ${entry.avatar_filename} | ${entry.status} | ${entry.drift_types.join(',') || 'clean'}`);
+        lines.push(`- ${entry.avatar_filename ?? entry.world_name} | ${entry.status} | ${entry.drift_types.join(',') || 'clean'}`);
     }
 
     return `${lines.join('\n')}\n`;
@@ -108,11 +115,17 @@ async function main() {
     }
 
     runCanonicalMigrations(db, { strict: options.strict });
-    const result = await runCanonicalAudit({
-        handle: options.handle,
-        directories,
-        db,
-    });
+    const result = options.scope === 'world_info'
+        ? await runCanonicalWorldInfoAudit({
+            handle: options.handle,
+            directories,
+            db,
+        })
+        : await runCanonicalAudit({
+            handle: options.handle,
+            directories,
+            db,
+        });
 
     process.stdout.write(options.json
         ? `${JSON.stringify(result, null, 2)}\n`
