@@ -342,6 +342,12 @@ function summarizeSliceStatus({
                     ...(blocker.details?.sliceKey
                         ? { sliceKey: blocker.details.sliceKey }
                         : {}),
+                    ...(blocker.details?.auditReason != null
+                        ? { auditReason: blocker.details.auditReason }
+                        : {}),
+                    ...(blocker.details?.auditBlocking != null
+                        ? { auditBlocking: !!blocker.details.auditBlocking }
+                        : {}),
                 },
             })),
         },
@@ -594,6 +600,25 @@ export async function repairCanonicalWorldInfoProjection({ db, directories, repa
     };
 }
 
+function ensureDefaultSliceRunners(registry = getDefaultCanonicalStorageSliceRegistry()) {
+    if (typeof registry.setRunners !== 'function' || typeof registry.getRunners !== 'function') {
+        return registry;
+    }
+    if (!registry.getRunners('characters')) {
+        registry.setRunners('characters', {
+            runAudit: runCanonicalAudit,
+            runRepair: repairCanonicalProjection,
+        });
+    }
+    if (!registry.getRunners('world_info')) {
+        registry.setRunners('world_info', {
+            runAudit: runCanonicalWorldInfoAudit,
+            runRepair: repairCanonicalWorldInfoProjection,
+        });
+    }
+    return registry;
+}
+
 export async function runCanonicalSliceAudit({
     sliceKey,
     handle,
@@ -602,16 +627,14 @@ export async function runCanonicalSliceAudit({
     auditedAtMs = Date.now(),
     registry = getDefaultCanonicalStorageSliceRegistry(),
 } = {}) {
-    registry.get(sliceKey);
-    if (sliceKey === 'characters') {
-        const result = await runCanonicalAudit({ handle, directories, db, auditedAtMs });
-        return { ...result, sliceKey };
+    const activeRegistry = ensureDefaultSliceRunners(registry);
+    activeRegistry.get(sliceKey);
+    const runners = activeRegistry.getRunners(sliceKey);
+    if (typeof runners?.runAudit !== 'function') {
+        throw new Error(`No audit runner registered for slice: ${sliceKey}`);
     }
-    if (sliceKey === 'world_info') {
-        const result = await runCanonicalWorldInfoAudit({ handle, directories, db, auditedAtMs });
-        return { ...result, sliceKey };
-    }
-    throw new Error(`No audit runner registered for slice: ${sliceKey}`);
+    const result = await runners.runAudit({ handle, directories, db, auditedAtMs });
+    return { ...result, sliceKey };
 }
 
 export async function runCanonicalSliceRepair({
@@ -622,14 +645,12 @@ export async function runCanonicalSliceRepair({
     nowMs = Date.now(),
     registry = getDefaultCanonicalStorageSliceRegistry(),
 } = {}) {
-    registry.get(sliceKey);
-    if (sliceKey === 'characters') {
-        const result = await repairCanonicalProjection({ db, directories, repairKeys, nowMs });
-        return { ...result, sliceKey };
+    const activeRegistry = ensureDefaultSliceRunners(registry);
+    activeRegistry.get(sliceKey);
+    const runners = activeRegistry.getRunners(sliceKey);
+    if (typeof runners?.runRepair !== 'function') {
+        throw new Error(`No repair runner registered for slice: ${sliceKey}`);
     }
-    if (sliceKey === 'world_info') {
-        const result = await repairCanonicalWorldInfoProjection({ db, directories, repairKeys, nowMs });
-        return { ...result, sliceKey };
-    }
-    throw new Error(`No repair runner registered for slice: ${sliceKey}`);
+    const result = await runners.runRepair({ db, directories, repairKeys, nowMs });
+    return { ...result, sliceKey };
 }

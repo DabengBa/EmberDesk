@@ -189,7 +189,9 @@ export function buildCanonicalSliceRollbackBlockers({
             code: resolvedAuditStatus?.reason ?? 'audit_not_run',
             severity: 'error',
             details: {
-                auditStatus: resolvedAuditStatus ?? null,
+                // Keep machine-readable summary only; never embed full audit payloads.
+                auditReason: resolvedAuditStatus?.reason ?? null,
+                auditBlocking: resolvedAuditStatus ? !!resolvedAuditStatus.blocking : true,
                 sliceKey,
             },
         });

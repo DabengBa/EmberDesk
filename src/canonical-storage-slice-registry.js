@@ -129,6 +129,8 @@ function createWorldInfoSlice() {
 export function createCanonicalStorageSliceRegistry({ registerDefaults = false } = {}) {
     /** @type {Map<string, object>} */
     const slices = new Map();
+    /** @type {Map<string, {runAudit?: Function, runRepair?: Function}>} */
+    const runners = new Map();
 
     function register(descriptor) {
         assertSliceDescriptor(descriptor);
@@ -160,12 +162,31 @@ export function createCanonicalStorageSliceRegistry({ registerDefaults = false }
         return Array.from(slices.keys());
     }
 
+    function setRunners(key, runner) {
+        if (!slices.has(key)) {
+            throw new Error(`Unknown canonical storage slice: ${key}`);
+        }
+        if (!runner || typeof runner !== 'object') {
+            throw new Error(`Canonical storage slice runners required for: ${key}`);
+        }
+        runners.set(key, {
+            runAudit: typeof runner.runAudit === 'function' ? runner.runAudit : null,
+            runRepair: typeof runner.runRepair === 'function' ? runner.runRepair : null,
+        });
+    }
+
+    function getRunners(key) {
+        return runners.get(key) ?? null;
+    }
+
     const registry = Object.freeze({
         register,
         get,
         has,
         list,
         keys,
+        setRunners,
+        getRunners,
     });
 
     if (registerDefaults) {

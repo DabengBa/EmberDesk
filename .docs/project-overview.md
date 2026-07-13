@@ -63,7 +63,7 @@ Key module structure:
 - `canonical-sqlite.js` — fail-closed per-user canonical SQLite manager for approved storage slices; provides path resolution, lifecycle, PRAGMA, transaction, and status reporting
 - `canonical-sqlite-migrations.js` — canonical schema journal and migration runner for approved storage slices; currently bootstraps the Phase 1/2/3 schema, including the persisted audit-state table needed by read/write cutover
 - `canonical-sqlite-shadow-import.js` — Phase 1 shadow import and audit seam for character metadata plus character chat stats; now also persists the fail-closed audit summary consumed by Phase 2 read cutover
-- `canonical-storage-slice-registry.js` — registered canonical storage slices (`characters`, `world_info`) with isolated audit/repair/rollback/backup capabilities
+- `canonical-storage-slice-registry.js` — registered canonical storage slices (`characters`, `world_info`) with isolated audit/repair/rollback/backup capabilities; current slices still share global storage flags until later domains register independent flag objects
 - `canonical-sqlite-rollout-contract.js` — shared flag legality and per-slice rollback-blocker builders, plus character compatibility helpers
 - `canonical-sqlite-operator.js` — multi-slice operator status, audit/repair routing, projection replay, blocker explanation, chat-stats rebuild, and backup/restore readiness reporting
 - `src/endpoints/character-store.js` — canonical character row helper that reconstructs route-compatible read payloads and now also normalizes DB-backed character metadata writes

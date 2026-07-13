@@ -106,6 +106,26 @@ function getCanonicalWorldInfoWriteState(request) {
         };
     }
 
+    const worldInfoSlice = getCanonicalStorageSlice('world_info');
+    const writeBlockers = worldInfoSlice.getRollbackBlockers({
+        db: readState.db,
+        featureFlags: readState.featureFlags,
+        phase: 'writes',
+        persistedAuditStatus: readState.auditStatus,
+    });
+    if (!writeBlockers.ok) {
+        const reason = writeBlockers.blockers[0]?.code ?? 'world_info_write_blocked';
+        if (readState.featureFlags.strict) {
+            throw new Error(`Canonical World Info writes blocked: ${reason}`);
+        }
+        return {
+            ...readState,
+            ok: false,
+            reason,
+            rollback: writeBlockers,
+        };
+    }
+
     return readState;
 }
 

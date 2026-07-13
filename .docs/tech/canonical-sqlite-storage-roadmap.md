@@ -371,7 +371,7 @@ invalidation status, not the semantic truth of source messages or files.
 
 13. `canonical storage control-plane generalization`
     - Depends on the delivered character and World Info patterns.
-    - Produces per-slice flags, audit/repair registration, rollback blockers, backup/restore
+    - Produces slice registration, audit/repair routing, rollback blockers, backup/restore
       status and operator reporting without changing new domain authority yet.
     - Current status: delivered via `src/canonical-storage-slice-registry.js`,
       generalized `src/canonical-sqlite-rollout-contract.js`,
@@ -379,6 +379,10 @@ invalidation status, not the semantic truth of source messages or files.
       CLI `status`/`--slice` in `scripts/canonical-sqlite-repair.mjs` and
       `scripts/canonical-sqlite-audit.mjs`, character/World Info adapters, and
       backup/restore readiness helpers that never auto-rewrite managed files.
+    - Flag note: character and World Info still share `features.storage.canonicalSqlite.*`
+      for compatibility. The registry contract accepts independent flag objects so later
+      slices can introduce `features.storage.canonicalSqlite.slices.<slice>.*` without
+      rewriting character/World Info branches.
 
 14. `settings document authority`
     - Depends on the generalized control plane.
@@ -432,8 +436,10 @@ The delivered character/World Info foundation retains its current compatibility 
 - `features.storage.canonicalSqlite.strict`
   - test/development gate that turns fallback into failures for proof.
 
-The control-plane stage must introduce a per-slice flag contract for all new domains, equivalent
-to `features.storage.canonicalSqlite.slices.<slice>.shadowImport|reads|writes|strict`. Exact config
+The control plane delivers the registration and legality contract for per-slice flags. Character
+and World Info keep the existing shared `features.storage.canonicalSqlite.*` flags for
+compatibility. New domains should add independent flag objects (equivalent to
+`features.storage.canonicalSqlite.slices.<slice>.shadowImport|reads|writes|strict`). Exact config
 serialization is implementation-owned, but it must satisfy these rules:
 
 - enabling one slice does not enable or block an unrelated slice

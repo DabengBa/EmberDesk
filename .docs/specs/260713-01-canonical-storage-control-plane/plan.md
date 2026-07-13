@@ -51,9 +51,13 @@ Doc IDs: none
 ## Review
 
 - [x] Review complete
+- [x] Review: R-01 Status blockers must not embed raw auditStatus objects (severity: medium; scope: operator sanitization; evidence: src/canonical-sqlite-rollout-contract.js, src/canonical-sqlite-operator.js; proof: status blockers omit raw auditStatus payloads)
+- [x] Review: R-02 World Info write path must enforce open-repair blockers on writes phase (severity: medium; scope: worldinfo write gate; evidence: src/endpoints/worldinfo.js; proof: world_info write phase is blocked by open repairs...)
+- [x] Review: R-03 Slice audit/repair routing must use registry runners not only hard-coded branches (severity: medium; scope: R6 extensibility; evidence: src/canonical-sqlite-operator.js setRunners/getRunners; proof: uses registry slice runners...)
+- [x] Review: R-04 Docs overclaimed independent per-slice config flags as already delivered (severity: low; scope: docs-drift; evidence: .docs/tech/canonical-sqlite-storage-roadmap.md, .docs/project-overview.md; proof: docs:check + wording fix)
 
 ### Review notes
-- Full focused suite: 8 suites / 77 tests passed.
-- `classify_changes.py` flagged frontend/user-surface from whole dirty worktree; this feature itself is operator/backend-only with no browser UI change. Frontend review skipped with boundary note.
-- Complexity fix applied: removed redundant full-control-plane backup readiness recompute inside per-slice status summary; top-level `backupRestore` remains the authority.
-- No confirmed high-risk correctness, security, or isolation regressions after revalidation.
+- Multi-surface coordinator review (docs/frontend, backend-core, security-isolation). Subagent tools unavailable; same surfaces executed locally.
+- Frontend: no `public/` paths in feature commit; operator/backend-only.
+- Full focused suite revalidated after fixes.
+- Rejected: absolute local managed paths in operator status (operator-only inventory, not secret content); shared global flags for character/WI (intentional compatibility, documented).

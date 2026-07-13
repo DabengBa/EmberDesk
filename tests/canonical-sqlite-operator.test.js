@@ -24,6 +24,7 @@ import {
     runCanonicalSliceAudit,
     runCanonicalSliceRepair,
 } from '../src/canonical-sqlite-operator.js';
+import { getDefaultCanonicalStorageSliceRegistry } from '../src/canonical-storage-slice-registry.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 
 const tempRoots = [];
@@ -475,6 +476,78 @@ describe('canonical sqlite operator helpers', () => {
         expect(status.backupRestore.mutatesData).toBe(false);
         expect(status.backupRestore.ready).toBe(false);
         expect(status.backupRestore.blockers.map(b => b.code)).toContain('missing_managed_file_manifest');
+        // Sanitization: never embed full auditStatus objects or repair detail payloads.
+        for (const slice of status.slices) {
+            for (const blocker of slice.rollback.blockers) {
+                expect(blocker.details).not.toHaveProperty('auditStatus');
+                expect(JSON.stringify(blocker.details)).not.toContain('should-not-appear');
+            }
+        }
+    });
+
+
+    test('status blockers omit raw auditStatus payloads', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        runCanonicalMigrations(db, { nowMs: 1735689600000 });
+
+        const status = getCanonicalStorageControlPlaneStatus({
+            handle: 'alice',
+            directories,
+            db,
+            featureFlags: {
+                enabled: true,
+                shadowImport: true,
+                reads: true,
+                writes: true,
+                chatStats: false,
+                strict: false,
+            },
+            phase: 'writes',
+        });
+
+        const characters = status.slices.find(slice => slice.key === 'characters');
+        expect(characters.rollback.ok).toBe(false);
+        expect(characters.rollback.blockers.some(b => b.code === 'audit_not_run')).toBe(true);
+        for (const blocker of characters.rollback.blockers) {
+            expect(blocker.details).not.toHaveProperty('auditStatus');
+        }
+        expect(JSON.stringify(status)).not.toContain('"auditStatus"');
+    });
+
+    test('uses registry slice runners for audit and repair routing', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        runCanonicalMigrations(db, { nowMs: 1735689600000 });
+        const registry = getDefaultCanonicalStorageSliceRegistry();
+
+        await runCanonicalSliceAudit({
+            sliceKey: 'world_info',
+            handle: 'alice',
+            directories,
+            db,
+            auditedAtMs: 1735689601111,
+        });
+
+        for (const key of ['characters', 'world_info']) {
+            const runners = registry.getRunners(key);
+            expect(runners).toEqual(expect.objectContaining({
+                runAudit: expect.any(Function),
+                runRepair: expect.any(Function),
+            }));
+        }
     });
 
     test('routes audit and repair by slice key through the control plane', async () => {

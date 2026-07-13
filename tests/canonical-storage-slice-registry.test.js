@@ -318,6 +318,41 @@ describe('canonical storage slice registry', () => {
         expect(worldWrites.blockers.map(b => b.code)).toContain('open_world_info_projection_repairs');
     });
 
+    test('world_info write phase is blocked by open repairs while reads stay clear when audit is clean', () => {
+        const { db } = openMigratedDb();
+        const worldInfo = getDefaultCanonicalStorageSliceRegistry().get('world_info');
+        persistCanonicalAuditStatus(db, {
+            ok: true,
+            handle: 'alice',
+            hasDrift: false,
+            blocking: false,
+            entries: [],
+        }, {
+            scope: worldInfo.auditScope,
+            auditedAtMs: 1735689601111,
+        });
+        recordWorldInfoProjectionRepair(db, {
+            repairKey: 'world_info:Lorebook:edit',
+            worldName: 'Lorebook',
+            reason: 'projection_failed',
+            details: { operation: 'edit' },
+            nowMs: 1735689602222,
+        });
+
+        const flags = {
+            enabled: true,
+            shadowImport: true,
+            reads: true,
+            writes: true,
+            strict: false,
+        };
+        const reads = worldInfo.getRollbackBlockers({ db, featureFlags: flags, phase: 'reads' });
+        const writes = worldInfo.getRollbackBlockers({ db, featureFlags: flags, phase: 'writes' });
+        expect(reads.ok).toBe(true);
+        expect(writes.ok).toBe(false);
+        expect(writes.blockers.map(b => b.code)).toContain('open_world_info_projection_repairs');
+    });
+
     test('reports backup readiness blockers without mutating managed files', () => {
         const { db, directories } = openMigratedDb();
         const before = fs.readdirSync(directories.characters);
