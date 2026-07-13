@@ -14,6 +14,10 @@ import {
     recordWorldInfoProjectionRepair,
     upsertCanonicalWorldInfoBook,
 } from '../src/endpoints/world-info-store.js';
+import {
+    recordSecretProjectionRepair,
+    writeCanonicalSecret,
+} from '../src/endpoints/canonical-secrets-store.js';
 import { buildCharacterFileSnapshotRow } from '../src/endpoints/character-file-snapshot.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -241,6 +245,97 @@ describe('canonical sqlite CLI scripts', () => {
             entries: { one: { content: 'cli' } },
         });
     });
+
+    test('audits, lists, and repairs secrets without serializing secret values', () => {
+        const dataRoot = makeRoot();
+        const directories = createDirectories(path.join(dataRoot, 'alice'));
+        const manager = createManager();
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        const canary = 'canonical-cli-secret-canary-do-not-leak';
+        runCanonicalMigrations(db, { nowMs: 1735689600000 });
+        writeCanonicalSecret(db, {
+            key: 'api_key_openai',
+            value: canary,
+            label: 'CLI canary',
+            id: 'cli-secret',
+            nowMs: 1735689600000,
+        });
+        recordSecretProjectionRepair(db, {
+            repairKey: 'secrets:api_key_openai:cli-secret:write',
+            key: 'api_key_openai',
+            recordId: 'cli-secret',
+            operation: 'write',
+            errorClass: 'Error',
+            nowMs: 1735689601111,
+        });
+        manager.dispose();
+
+        const listOutput = execFileSync('node', [
+            'scripts/canonical-sqlite-repair.mjs',
+            'list-secret-repairs',
+            '--data-root', dataRoot,
+            '--handle', 'alice',
+            '--json',
+        ], {
+            cwd: repoRoot,
+            encoding: 'utf8',
+        });
+
+        expect(JSON.parse(listOutput)).toEqual([
+            expect.objectContaining({
+                repairKey: 'secrets:api_key_openai:cli-secret:write',
+                key: 'api_key_openai',
+                operation: 'write',
+            }),
+        ]);
+        expect(listOutput).not.toContain(canary);
+
+        const repairOutput = execFileSync('node', [
+            'scripts/canonical-sqlite-repair.mjs',
+            'repair-secret-projection',
+            '--data-root', dataRoot,
+            '--handle', 'alice',
+            '--repair-key', 'secrets:api_key_openai:cli-secret:write',
+            '--json',
+        ], {
+            cwd: repoRoot,
+            encoding: 'utf8',
+        });
+
+        expect(JSON.parse(repairOutput)).toEqual(expect.objectContaining({
+            ok: true,
+            results: [
+                expect.objectContaining({
+                    repairKey: 'secrets:api_key_openai:cli-secret:write',
+                    status: 'repaired',
+                }),
+            ],
+        }));
+        expect(repairOutput).not.toContain(canary);
+
+        const auditOutput = execFileSync('node', [
+            'scripts/canonical-sqlite-audit.mjs',
+            '--data-root', dataRoot,
+            '--handle', 'alice',
+            '--slice', 'secrets',
+            '--json',
+        ], {
+            cwd: repoRoot,
+            encoding: 'utf8',
+        });
+
+        expect(JSON.parse(auditOutput)).toEqual(expect.objectContaining({
+            ok: true,
+            blocking: false,
+            sliceKey: 'secrets',
+        }));
+        expect(auditOutput).not.toContain(canary);
+    });
+
     test('prints sanitized multi-slice control-plane status from the repair CLI', () => {
         const dataRoot = makeRoot();
         const directories = createDirectories(path.join(dataRoot, 'alice'));
@@ -280,7 +375,7 @@ describe('canonical sqlite CLI scripts', () => {
         });
 
         const parsed = JSON.parse(output);
-        expect(parsed.slices.map(slice => slice.key)).toEqual(['characters', 'world_info', 'settings']);
+        expect(parsed.slices.map(slice => slice.key)).toEqual(['characters', 'world_info', 'settings', 'secrets']);
         expect(parsed.slices.find(slice => slice.key === 'characters').openRepairCount).toBe(1);
         expect(output).not.toContain('top-secret-value');
     });

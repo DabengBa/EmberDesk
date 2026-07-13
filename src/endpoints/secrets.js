@@ -4,6 +4,22 @@ import path from 'node:path';
 import express from 'express';
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import { color, getConfigValue, uuidv4 } from '../util.js';
+import {
+    getCanonicalSecretsReadBackend,
+    getCanonicalSecretsWriteBackend,
+    initializeCanonicalSecretsForDirectories,
+    invalidateCanonicalSecretsAfterFileWrite,
+    projectCanonicalSecretsFile,
+    recordCanonicalSecretsProjectionFailure,
+} from '../canonical-secrets-backend.js';
+import {
+    deleteCanonicalSecret,
+    getCanonicalSecret,
+    getCanonicalSecrets,
+    renameCanonicalSecret,
+    rotateCanonicalSecret,
+    writeCanonicalSecret,
+} from './canonical-secrets-store.js';
 
 export const SECRETS_FILE = 'secrets.json';
 export const SECRET_KEYS = {
@@ -147,6 +163,42 @@ export class SecretManager {
     }
 
     /**
+     * Projects the canonical secret state and records a sanitized repair on failure.
+     * @private
+     */
+    _projectCanonicalSecrets(db, { key, recordId = null, operation }) {
+        try {
+            projectCanonicalSecretsFile(this.directories, db);
+        } catch (error) {
+            recordCanonicalSecretsProjectionFailure({
+                directories: this.directories,
+                db,
+                key,
+                recordId,
+                operation,
+                error,
+            });
+            throw error;
+        }
+    }
+
+    /**
+     * Reads the active backend without changing the public SecretManager contract.
+     * @private
+     * @returns {SecretKeys}
+     */
+    _readSecrets() {
+        const backend = getCanonicalSecretsReadBackend(this.directories);
+        if (!backend) {
+            return this._readSecretsFile();
+        }
+        return /** @type {SecretKeys} */ ({
+            ...getCanonicalSecrets(backend.db),
+            [SECRET_KEYS._MIGRATED]: [],
+        });
+    }
+
+    /**
      * Deactivates all secrets for a given key
      * @private
      * @param {SecretValue[]} secretArray
@@ -198,6 +250,21 @@ export class SecretManager {
      * @returns {string} The ID of the newly created secret
      */
     writeSecret(key, value, label = 'Unlabeled') {
+        const backend = getCanonicalSecretsWriteBackend(this.directories);
+        if (backend) {
+            const id = writeCanonicalSecret(backend.db, {
+                key,
+                value,
+                label,
+            });
+            this._projectCanonicalSecrets(backend.db, {
+                key,
+                recordId: id,
+                operation: 'write',
+            });
+            return id;
+        }
+
         const secrets = this._readSecretsFile();
 
         if (!Array.isArray(secrets[key])) {
@@ -215,6 +282,7 @@ export class SecretManager {
         secrets[key].push(secret);
 
         this._writeSecretsFile(secrets);
+        invalidateCanonicalSecretsAfterFileWrite(this.directories, 'write');
         return secret.id;
     }
 
@@ -224,6 +292,19 @@ export class SecretManager {
      * @param {string?} id Secret ID to delete
      */
     deleteSecret(key, id) {
+        const backend = getCanonicalSecretsWriteBackend(this.directories);
+        if (backend) {
+            const deleted = deleteCanonicalSecret(backend.db, { key, id });
+            if (deleted) {
+                this._projectCanonicalSecrets(backend.db, {
+                    key,
+                    recordId: id,
+                    operation: 'delete',
+                });
+            }
+            return;
+        }
+
         if (!fs.existsSync(this.filePath)) {
             return;
         }
@@ -253,6 +334,7 @@ export class SecretManager {
         }
 
         this._writeSecretsFile(secrets);
+        invalidateCanonicalSecretsAfterFileWrite(this.directories, 'delete');
     }
 
     /**
@@ -262,8 +344,9 @@ export class SecretManager {
      * @returns {string} Secret value or empty string if not found
      */
     readSecret(key, id) {
-        if (!fs.existsSync(this.filePath)) {
-            return '';
+        const backend = getCanonicalSecretsReadBackend(this.directories);
+        if (backend) {
+            return getCanonicalSecret(backend.db, key, id)?.value ?? '';
         }
 
         const secrets = this._readSecretsFile();
@@ -283,6 +366,21 @@ export class SecretManager {
      * @param {string} id ID of the secret to activate
      */
     rotateSecret(key, id) {
+        const backend = getCanonicalSecretsWriteBackend(this.directories);
+        if (backend) {
+            const rotated = rotateCanonicalSecret(backend.db, { key, id });
+            if (!rotated) {
+                console.warn(`Secret with ID ${id} not found for key ${key}`);
+                return;
+            }
+            this._projectCanonicalSecrets(backend.db, {
+                key,
+                recordId: id,
+                operation: 'rotate',
+            });
+            return;
+        }
+
         if (!fs.existsSync(this.filePath)) {
             return;
         }
@@ -305,6 +403,7 @@ export class SecretManager {
         secretArray[targetIndex].active = true;
 
         this._writeSecretsFile(secrets);
+        invalidateCanonicalSecretsAfterFileWrite(this.directories, 'rotate');
     }
 
     /**
@@ -314,6 +413,21 @@ export class SecretManager {
      * @param {string} label New label for the secret
      */
     renameSecret(key, id, label) {
+        const backend = getCanonicalSecretsWriteBackend(this.directories);
+        if (backend) {
+            const renamed = renameCanonicalSecret(backend.db, { key, id, label });
+            if (!renamed) {
+                console.warn(`Secret with ID ${id} not found for key ${key}`);
+                return;
+            }
+            this._projectCanonicalSecrets(backend.db, {
+                key,
+                recordId: id,
+                operation: 'rename',
+            });
+            return;
+        }
+
         const secrets = this._readSecretsFile();
 
         if (!this._validateSecretKey(secrets, key)) {
@@ -330,6 +444,7 @@ export class SecretManager {
 
         secretArray[targetIndex].label = label;
         this._writeSecretsFile(secrets);
+        invalidateCanonicalSecretsAfterFileWrite(this.directories, 'rename');
     }
 
     /**
@@ -337,7 +452,7 @@ export class SecretManager {
      * @returns {SecretStateMap} Secret state
      */
     getSecretState() {
-        const secrets = this._readSecretsFile();
+        const secrets = this._readSecrets();
         /** @type {SecretStateMap} */
         const state = {};
 
@@ -368,7 +483,7 @@ export class SecretManager {
      * @returns {SecretKeys} All secrets
      */
     getAllSecrets() {
-        return this._readSecretsFile();
+        return this._readSecrets();
     }
 
     /**
@@ -438,6 +553,10 @@ export class SecretManager {
             this._writeSecretsFile(secrets);
             console.info(color.green('Migrated CUSTOM API key to OPENAI key.'));
         }
+    }
+
+    initializeCanonicalSecrets() {
+        return initializeCanonicalSecretsForDirectories(this.directories);
     }
 }
 
@@ -524,6 +643,7 @@ export function migrateFlatSecrets(directoriesList) {
             const manager = new SecretManager(directories);
             manager.migrateFlatSecrets();
             manager.migrateCustomToOpenAI();
+            manager.initializeCanonicalSecrets();
         } catch (error) {
             console.warn(color.red(`Failed to migrate secrets for ${directories.root}:`), error);
         }

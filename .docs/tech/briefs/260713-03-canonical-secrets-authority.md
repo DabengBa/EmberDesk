@@ -4,8 +4,7 @@ source: user
 confirmed: true
 last_updated: 2026-07-13
 feature_slug: canonical-secrets-authority
-status: active
-active_process_dir: .docs/specs/260713-03-canonical-secrets-authority
+status: delivered
 ---
 
 # Canonical Secrets Authority Intent
@@ -34,3 +33,11 @@ active_process_dir: .docs/specs/260713-03-canonical-secrets-authority
 - `public/scripts/secrets.js`
 - `.docs/tech/provider-secret-field-state.md`
 - `tests/secrets-migration.test.js`
+
+## 交付追溯
+
+- [Canonical SQLite Storage Roadmap](../canonical-sqlite-storage-roadmap.md)
+- [API Configuration](../../db/pages/api-configuration.md)
+- [Canonical Secrets Authority Processing Flow](../../logic-description/canonical_secrets_authority_processing_flow.md)
+- `src/canonical-secrets-backend.js`
+- `src/endpoints/canonical-secrets-store.js`

@@ -11,6 +11,11 @@ import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus, audit
 import { auditCanonicalWorldInfoShadowImport, WORLD_INFO_AUDIT_SCOPE } from './canonical-world-info-shadow-import.js';
 import { auditCanonicalSettingsShadowImport, SETTINGS_AUDIT_SCOPE } from './canonical-settings-shadow-import.js';
 import {
+    auditCanonicalSecretsShadowImport,
+    CANONICAL_SECRETS_AUDIT_SCOPE,
+    getCanonicalSecretsProjection,
+} from './canonical-secrets-shadow-import.js';
+import {
     buildCanonicalRollbackBlockers,
     listOpenProjectionRepairs,
 } from './canonical-sqlite-rollout-contract.js';
@@ -34,6 +39,10 @@ import {
     resolveSettingsProjectionRepair,
     getCanonicalSettingsDocument,
 } from './endpoints/settings-store.js';
+import {
+    listOpenSecretProjectionRepairs,
+    resolveSecretProjectionRepair,
+} from './endpoints/canonical-secrets-store.js';
 import {
     buildCharacterFileSnapshotRow,
     calculateCharacterChatStats,
@@ -256,6 +265,18 @@ export function explainCanonicalRolloutBlockers({
             });
             result.ok = false;
         }
+        const secretRepairs = listOpenSecretProjectionRepairs(db);
+        if (secretRepairs.length > 0) {
+            result.blockers.push({
+                code: 'open_secret_projection_repairs',
+                severity: 'error',
+                details: {
+                    repairCount: secretRepairs.length,
+                    repairKeys: secretRepairs.map(repair => repair.repairKey),
+                },
+            });
+            result.ok = false;
+        }
     }
 
     return result;
@@ -425,8 +446,6 @@ export function getCanonicalStorageControlPlaneStatus({
         ok: slices.every(slice => slice.ready),
     };
 }
-
-
 
 export async function runCanonicalAudit({ handle, directories, db, auditedAtMs = Date.now() }) {
     return auditCanonicalShadowImport({
@@ -681,6 +700,70 @@ async function repairCanonicalSettingsProjection({ db, directories, repairKeys =
     };
 }
 
+async function runCanonicalSecretsAudit({ handle, directories, db, auditedAtMs = Date.now() }) {
+    return auditCanonicalSecretsShadowImport({
+        handle,
+        directories,
+        db,
+        auditedAtMs,
+    });
+}
+
+export function listCanonicalSecretRepairs(db) {
+    return listOpenSecretProjectionRepairs(db);
+}
+
+export async function repairCanonicalSecretProjection({
+    db,
+    directories,
+    repairKeys = null,
+    nowMs = Date.now(),
+} = {}) {
+    const requested = Array.isArray(repairKeys) && repairKeys.length > 0
+        ? new Set(repairKeys.map(String))
+        : null;
+    const repairs = listOpenSecretProjectionRepairs(db)
+        .filter(repair => !requested || requested.has(repair.repairKey));
+    const results = [];
+
+    for (const repair of repairs) {
+        try {
+            const filePath = path.join(directories.root, 'secrets.json');
+            writeFileAtomicSync(filePath, JSON.stringify(getCanonicalSecretsProjection(db), null, 4), 'utf8');
+            resolveSecretProjectionRepair(db, {
+                repairKey: repair.repairKey,
+                resolvedAtMs: nowMs,
+            });
+            results.push({
+                repairKey: repair.repairKey,
+                status: 'repaired',
+                operation: repair.operation,
+            });
+        } catch (error) {
+            results.push({
+                repairKey: repair.repairKey,
+                status: 'failed',
+                operation: repair.operation,
+                errorClass: String(error?.name ?? 'Error'),
+            });
+        }
+    }
+
+    if (results.some(result => result.status === 'repaired')) {
+        invalidateCanonicalAuditStatus(db, {
+            scope: CANONICAL_SECRETS_AUDIT_SCOPE,
+            handle: null,
+            reason: 'audit_stale_after_secret_projection_repair',
+            source: 'canonical_repair:repair_secret_projection',
+        });
+    }
+
+    return {
+        ok: results.every(result => result.status === 'repaired'),
+        results,
+    };
+}
+
 function ensureDefaultSliceRunners(registry = getDefaultCanonicalStorageSliceRegistry()) {
     if (typeof registry.setRunners !== 'function' || typeof registry.getRunners !== 'function') {
         return registry;
@@ -701,6 +784,12 @@ function ensureDefaultSliceRunners(registry = getDefaultCanonicalStorageSliceReg
         registry.setRunners('settings', {
             runAudit: runCanonicalSettingsAudit,
             runRepair: repairCanonicalSettingsProjection,
+        });
+    }
+    if (!registry.getRunners('secrets')) {
+        registry.setRunners('secrets', {
+            runAudit: runCanonicalSecretsAudit,
+            runRepair: repairCanonicalSecretProjection,
         });
     }
     return registry;

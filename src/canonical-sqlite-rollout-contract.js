@@ -149,6 +149,8 @@ export function buildCanonicalSliceRollbackBlockers({
                     resolvedOpenRepairCode = 'open_world_info_projection_repairs';
                 } else if (sliceKey === 'settings') {
                     resolvedOpenRepairCode = 'open_settings_projection_repairs';
+                } else if (sliceKey === 'secrets') {
+                    resolvedOpenRepairCode = 'open_secret_projection_repairs';
                 } else {
                     resolvedOpenRepairCode = 'open_projection_repairs';
                 }

@@ -46,8 +46,9 @@ function createDirectories(root) {
             fs.mkdirSync(directory, { recursive: true });
         }
     }
-    // Settings slice manages the settings.json path under the user root.
+    // Settings and secrets slices manage compatibility files under the user root.
     fs.writeFileSync(path.join(root, 'settings.json'), '{}', 'utf8');
+    fs.writeFileSync(path.join(root, 'secrets.json'), '{}', 'utf8');
     return directories;
 }
 
@@ -82,11 +83,11 @@ afterEach(() => {
 });
 
 describe('canonical storage slice registry', () => {
-    test('registers characters, world_info, and settings slices with required capabilities', () => {
+    test('registers all delivered canonical slices with required capabilities', () => {
         const registry = getDefaultCanonicalStorageSliceRegistry();
-        expect(listCanonicalStorageSliceKeys(registry)).toEqual(['characters', 'world_info', 'settings']);
+        expect(listCanonicalStorageSliceKeys(registry)).toEqual(['characters', 'world_info', 'settings', 'secrets']);
 
-        for (const key of ['characters', 'world_info', 'settings']) {
+        for (const key of ['characters', 'world_info', 'settings', 'secrets']) {
             const slice = registry.get(key);
             expect(slice.key).toBe(key);
             expect(typeof slice.auditScope).toBe('string');

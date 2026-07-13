@@ -16,6 +16,7 @@ Current owning flow:
 - [Main Chat Message Actions Bridge Processing Flow](main_chat_message_actions_bridge_processing_flow.md)
 - [Canonical Chat Stats Authority Processing Flow](canonical_chat_stats_authority_processing_flow.md)
 - [Canonical World Info Authority Processing Flow](canonical_world_info_authority_processing_flow.md)
+- [Canonical Secrets Authority Processing Flow](canonical_secrets_authority_processing_flow.md)
 
 ## Per-Output Field Lineage
 
@@ -85,6 +86,10 @@ Current owning flow:
 | `worldInfoAuditState` | `worlds/*.json`, canonical `world_books`, and `audit_scope = "world_info"` | Compare projection files with canonical rows and persist clean or blocking audit state for World Info read/write cutover | Missing DB rows, payload mismatches, missing JSON projections, and audit errors block DB-first authority until import, repair, or re-audit resolves them |
 | `worldInfoReadAuthority` | canonical storage flags, migration status, and persisted `world_info` audit state | Read `/api/worldinfo/list` and `/api/worldinfo/get` from canonical SQLite only when reads are enabled and audit is clean | Flag-off or blocked audit falls back to JSON files unless strict mode is enabled, in which case the route fails closed |
 | `worldInfoProjectionRepair` | canonical World Info row plus unresolved `world_info_projection_repairs` row | Recreate the compatible JSON projection from canonical payload for import/edit repairs, or remove the projected JSON file for delete repairs, then resolve the repair row | Missing canonical row blocks non-delete repair; unresolved World Info repair rows block write rollback; successful repair invalidates the `world_info` audit so rollback claims require a fresh audit |
+| `canonicalSecretReadAuthority` | canonical storage flags, migration status, persisted `secrets` audit, and open repair rows | Use `secret_records` through `SecretManager` after the first clean initialization; preserve file backend when flags are off | Dirty pre-cutover audit falls back unless strict; an open projection repair keeps DB reads authoritative |
+| `canonicalSecretMutation` | key, value, label/record ID, current records, and write gate | Apply write/delete/rename/rotate in a transaction and enforce one active record per key before projection | Illegal flags, dirty audit, or open repairs block canonical writes; no endpoint or provider reads tables directly |
+| `canonicalSecretAudit` | `secrets.json`, canonical records, and open repair rows | Compare key, record ID, label, active state, counts, and SHA-256 value hashes without outputting plaintext | Invalid files expose error class only; any drift or open repair persists a blocking `secrets` audit |
+| `canonicalSecretProjectionRepair` | canonical records plus sanitized `secret_projection_repairs` row | Rebuild the full compatibility file from DB, resolve the repair, and require re-audit | Repair metadata contains identifiers, operation, error class, and time only; rollback stays blocked until audit is clean |
 
 ## Maintenance Constraints
 
@@ -98,5 +103,6 @@ Current owning flow:
 - Keep main-chat message-action rows aligned with `main_chat_message_actions_bridge_processing_flow.md` and `main_chat_message_actions_bridge_sandbox_proof.py`.
 - Keep canonical chat-stats authority rows aligned with `canonical_chat_stats_authority_processing_flow.md` and `canonical_chat_stats_authority_sandbox_proof.py`.
 - Keep canonical World Info authority rows aligned with `canonical_world_info_authority_processing_flow.md` and `canonical_world_info_authority_sandbox_proof.py`.
+- Keep canonical secrets authority rows aligned with `canonical_secrets_authority_processing_flow.md` and `canonical_secrets_authority_sandbox_proof.py`.
 - Add a new row when a documentation proof script starts producing a new named output.
 - Do not use this file as a second implementation guide; detailed processing rules belong in the owning flow doc.

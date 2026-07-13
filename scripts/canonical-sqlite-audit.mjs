@@ -16,8 +16,8 @@ function printUsage() {
         'Runs a read-only canonical SQLite audit.',
         '',
         'Options:',
-        '  --scope <scope>      character_metadata_and_chat_stats | world_info | settings',
-        '  --slice <key>        characters | world_info | settings (alias for scope)',
+        '  --scope <scope>      character_metadata_and_chat_stats | world_info | settings | secrets',
+        '  --slice <key>        characters | world_info | settings | secrets (alias for scope)',
     ].join('\n'));
 }
 
@@ -57,6 +57,8 @@ function parseArgs(argv) {
                     options.scope = 'world_info';
                 } else if (slice === 'settings') {
                     options.scope = 'settings';
+                } else if (slice === 'secrets') {
+                    options.scope = 'secrets';
                 } else if (slice) {
                     throw new Error(`Unknown slice: ${slice}`);
                 }
@@ -97,7 +99,7 @@ function formatAuditResult(result) {
     }
 
     for (const entry of result.entries) {
-        lines.push(`- ${entry.avatar_filename ?? entry.world_name} | ${entry.status} | ${entry.drift_types.join(',') || 'clean'}`);
+        lines.push(`- ${entry.avatar_filename ?? entry.world_name ?? entry.key ?? 'document'} | ${entry.status} | ${entry.drift_types.join(',') || 'clean'}`);
     }
 
     return `${lines.join('\n')}\n`;
@@ -136,9 +138,9 @@ async function main() {
             directories,
             db,
         });
-    } else if (options.scope === 'settings') {
+    } else if (options.scope === 'settings' || options.scope === 'secrets') {
         result = await runCanonicalSliceAudit({
-            sliceKey: 'settings',
+            sliceKey: options.scope,
             handle: options.handle,
             directories,
             db,

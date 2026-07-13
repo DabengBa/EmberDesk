@@ -179,6 +179,48 @@ export const CANONICAL_SQLITE_MIGRATIONS = Object.freeze([
                 ON settings_projection_repairs (resolved_at_ms, user_id);
         `,
     }),
+    Object.freeze({
+        version: 5,
+        name: 'secrets_authority',
+        sql: `
+            CREATE TABLE IF NOT EXISTS secret_records (
+                id TEXT PRIMARY KEY,
+                secret_key TEXT NOT NULL,
+                value TEXT NOT NULL,
+                label TEXT NOT NULL DEFAULT 'Unlabeled',
+                active INTEGER NOT NULL DEFAULT 0 CHECK (active IN (0, 1)),
+                created_at_ms INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL
+            );
+
+            CREATE UNIQUE INDEX IF NOT EXISTS secret_records_one_active_per_key_idx
+                ON secret_records (secret_key)
+                WHERE active = 1;
+            CREATE INDEX IF NOT EXISTS secret_records_key_idx
+                ON secret_records (secret_key, active DESC, created_at_ms ASC, id ASC);
+
+            CREATE TABLE IF NOT EXISTS secret_migration_markers (
+                marker_key TEXT PRIMARY KEY,
+                source_hash TEXT NOT NULL DEFAULT '',
+                imported_at_ms INTEGER NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS secret_projection_repairs (
+                repair_key TEXT PRIMARY KEY,
+                secret_key TEXT NOT NULL,
+                record_id TEXT,
+                operation TEXT NOT NULL,
+                error_class TEXT NOT NULL,
+                created_at_ms INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL,
+                last_attempt_at_ms INTEGER,
+                resolved_at_ms INTEGER
+            );
+
+            CREATE INDEX IF NOT EXISTS secret_projection_repairs_open_idx
+                ON secret_projection_repairs (resolved_at_ms, secret_key);
+        `,
+    }),
 ]);
 
 export class CanonicalMigrationBlockedError extends Error {

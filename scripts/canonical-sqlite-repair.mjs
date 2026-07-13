@@ -7,11 +7,13 @@ import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import {
     explainCanonicalRolloutBlockers,
     getCanonicalStorageControlPlaneStatus,
+    listCanonicalSecretRepairs,
     listCanonicalRepairs,
     listCanonicalWorldInfoRepairs,
     rebuildCanonicalChatStats,
     repairCanonicalProjection,
     repairCanonicalWorldInfoProjection,
+    repairCanonicalSecretProjection,
     runCanonicalAudit,
     runCanonicalSliceAudit,
     runCanonicalSliceRepair,
@@ -31,9 +33,12 @@ function printUsage() {
         '  list-repairs         List unresolved projection repairs',
         '  list-world-info-repairs',
         '                       List unresolved World Info projection repairs',
+        '  list-secret-repairs List unresolved secret projection repairs',
         '  repair-projection    Replay projection for one or more repair keys',
         '  repair-world-info-projection',
         '                       Replay World Info projection for one or more repair keys',
+        '  repair-secret-projection',
+        '                       Replay secret projection for one or more repair keys',
         '  rebuild-chat-stats   Rebuild canonical chat stats from JSONL chat files',
         '  explain-blockers     Summarize rollout / rollback blockers for a phase',
         '  status               Print per-slice control-plane readiness status',
@@ -42,7 +47,7 @@ function printUsage() {
         '  --repair-key <key>   Repeatable for repair-projection',
         '  --avatar <avatar>    Repeatable for rebuild-chat-stats',
         '  --phase <phase>      reads | writes | chatStats for explain-blockers/status',
-        '  --slice <key>        characters | world_info for status/audit/repair/blockers',
+        '  --slice <key>        characters | world_info | settings | secrets for status/audit/repair/blockers',
         '  --feature <k=v>      Repeatable feature flag override for explain-blockers/status',
         '  --json               Print JSON output',
         '  --strict             Open the DB in strict mode',
@@ -169,6 +174,17 @@ function formatListWorldInfoRepairs(repairs) {
     return `${lines.join('\n')}\n`;
 }
 
+function formatListSecretRepairs(repairs) {
+    const lines = [
+        'Canonical SQLite secret repairs',
+        `open: ${repairs.length}`,
+    ];
+    for (const repair of repairs) {
+        lines.push(`- ${repair.repairKey} | ${repair.operation} | ${repair.key} | ${repair.errorClass}`);
+    }
+    return `${lines.join('\n')}\n`;
+}
+
 function formatRepairProjection(result) {
     const repaired = result.results.filter(item => item.status === 'repaired').length;
     const blocked = result.results.filter(item => item.status === 'blocked').length;
@@ -267,6 +283,10 @@ async function main() {
             result = listCanonicalWorldInfoRepairs(db);
             formatter = formatListWorldInfoRepairs;
             break;
+        case 'list-secret-repairs':
+            result = listCanonicalSecretRepairs(db);
+            formatter = formatListSecretRepairs;
+            break;
         case 'repair-projection':
             result = await repairCanonicalProjection({
                 db,
@@ -277,6 +297,14 @@ async function main() {
             break;
         case 'repair-world-info-projection':
             result = await repairCanonicalWorldInfoProjection({
+                db,
+                directories,
+                repairKeys: options.repairKeys.length ? options.repairKeys : null,
+            });
+            formatter = formatRepairProjection;
+            break;
+        case 'repair-secret-projection':
+            result = await repairCanonicalSecretProjection({
                 db,
                 directories,
                 repairKeys: options.repairKeys.length ? options.repairKeys : null,
@@ -338,7 +366,7 @@ async function main() {
         : formatter(result));
 
     // status is a report command: blocked slice readiness is still a successful query.
-    if ((options.command === 'audit' || options.command === 'audit-world-info' || options.command === 'repair-projection' || options.command === 'repair-world-info-projection' || options.command === 'explain-blockers' || options.command === 'audit-slice' || options.command === 'repair-slice') && result.ok === false) {
+    if ((options.command === 'audit' || options.command === 'audit-world-info' || options.command === 'repair-projection' || options.command === 'repair-world-info-projection' || options.command === 'repair-secret-projection' || options.command === 'explain-blockers' || options.command === 'audit-slice' || options.command === 'repair-slice') && result.ok === false) {
         process.exitCode = 1;
     }
 }

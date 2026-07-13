@@ -291,7 +291,7 @@ rollback, tests, and docs before its flag can be enabled.
 |---|---|---|---|
 | 1 | `260713-01-canonical-storage-control-plane` | **Delivered:** slice registry, generic audit/repair/rollback, backup/restore readiness, operator status | Delivered canonical manager and World Info/character patterns |
 | 2 | `260713-02-canonical-settings-document-authority` | **Delivered:** settings document revision authority, shadow import/audit, DB-first get/save, projection repairs, canonical snapshots | Generic control plane |
-| 3 | `260713-03-canonical-secrets-authority` | Secret records behind `SecretManager` | Generic control plane; settings payload must not contain secrets |
+| 3 | `260713-03-canonical-secrets-authority` | **Delivered:** secret records, labels, active selection, repair and rollback behind `SecretManager` | Generic control plane; settings payload must not contain secrets |
 | 4 | `260713-04-canonical-managed-media-authority` | Backgrounds, assets, persona avatar blobs and attachment catalog | Generic control plane |
 | 5 | `260713-05-canonical-persona-authority` | Persona identity, descriptions, defaults and character/group connections | Settings document and managed media |
 | 6 | `260713-06-canonical-extension-state-authority` | Extension registry, install/update state and namespace storage | Settings document, secrets and managed files |
@@ -388,11 +388,22 @@ invalidation status, not the semantic truth of source messages or files.
     - Depends on the generalized control plane.
     - Moves `settings.json`, revisions and snapshot/restore into canonical SQLite while
       preserving the current `/api/settings/get` and `/save` payload.
+    - Current status: delivered via migration v4, `src/endpoints/settings-store.js`,
+      `src/canonical-settings-shadow-import.js`, DB-first settings routes, projection repairs,
+      snapshots, and revision conflict handling.
 
 15. `secrets authority`
     - Depends on the generalized control plane.
     - Moves secret records into canonical SQLite only through `SecretManager`; exposure and
       migration rules remain separate from settings.
+    - Current status: delivered via migration v5 `secret_records`,
+      `secret_migration_markers`, and `secret_projection_repairs`;
+      `src/canonical-secrets-shadow-import.js` performs idempotent flat/array import and
+      value-hash audit; `src/canonical-secrets-backend.js` keeps `SecretManager` DB-first
+      behind clean read/write gates; operator and CLI repair replay `secrets.json` from the
+      database without exposing values in status or repair metadata.
+    - Security note: SQLite and database backups contain the same plaintext secret values
+      previously held by `secrets.json`; this migration does not provide encryption at rest.
 
 16. `managed media authority`
     - Depends on the generalized control plane.

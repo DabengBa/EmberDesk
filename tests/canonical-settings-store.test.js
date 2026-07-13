@@ -84,7 +84,7 @@ afterEach(() => {
 
 describe('canonical settings store', () => {
     test('migration catalog includes settings document authority tables', () => {
-        expect(CANONICAL_SQLITE_MIGRATIONS.map(x => x.version)).toEqual([1, 2, 3, 4]);
+        expect(CANONICAL_SQLITE_MIGRATIONS.map(x => x.version)).toEqual([1, 2, 3, 4, 5]);
         const settingsMigration = CANONICAL_SQLITE_MIGRATIONS.find(x => x.version === 4);
         expect(settingsMigration?.name).toBe('settings_document_authority');
         expect(settingsMigration.sql).toContain('CREATE TABLE IF NOT EXISTS settings_documents');
@@ -107,15 +107,15 @@ describe('canonical settings store', () => {
 
         expect(first).toEqual(expect.objectContaining({
             ok: true,
-            currentVersion: 4,
-            targetVersion: 4,
+            currentVersion: 5,
+            targetVersion: 5,
             appliedVersions: expect.arrayContaining([4]),
         }));
         expect(second).toEqual(expect.objectContaining({
             ok: true,
             appliedVersions: [],
-            currentVersion: 4,
-            targetVersion: 4,
+            currentVersion: 5,
+            targetVersion: 5,
         }));
         expect(db.prepare('SELECT name FROM sqlite_master WHERE type = ? AND name = ?').get('table', 'settings_documents')).toBeTruthy();
         expect(db.prepare('SELECT name FROM sqlite_master WHERE type = ? AND name = ?').get('table', 'settings_snapshots')).toBeTruthy();

@@ -4,6 +4,7 @@ import { getCanonicalMigrationStatus } from './canonical-sqlite-migrations.js';
 import { getPersistedCanonicalAuditStatus } from './canonical-sqlite-shadow-import.js';
 import { WORLD_INFO_AUDIT_SCOPE } from './canonical-world-info-shadow-import.js';
 import { SETTINGS_AUDIT_SCOPE } from './canonical-settings-shadow-import.js';
+import { CANONICAL_SECRETS_AUDIT_SCOPE } from './canonical-secrets-shadow-import.js';
 import {
     buildCanonicalSliceRollbackBlockers,
     getCanonicalSliceFlagContractStatus,
@@ -12,6 +13,7 @@ import {
 } from './canonical-sqlite-rollout-contract.js';
 import { listOpenWorldInfoProjectionRepairs } from './endpoints/world-info-store.js';
 import { listOpenSettingsProjectionRepairs } from './endpoints/settings-store.js';
+import { listOpenSecretProjectionRepairs } from './endpoints/canonical-secrets-store.js';
 import { getCanonicalSqliteFeatureFlags } from './storage-feature-flags.js';
 import { SETTINGS_FILE } from './constants.js';
 
@@ -170,6 +172,46 @@ function createSettingsSlice() {
     };
 }
 
+function createSecretsSlice() {
+    return {
+        key: 'secrets',
+        auditScope: CANONICAL_SECRETS_AUDIT_SCOPE,
+        listOpenRepairs(db) {
+            return listOpenSecretProjectionRepairs(db);
+        },
+        getFeatureFlags(overrides = null) {
+            return overrides ?? getCanonicalSqliteFeatureFlags();
+        },
+        getMigrationReadiness(db) {
+            return createSharedMigrationReadiness(db);
+        },
+        getRollbackBlockers({
+            db,
+            featureFlags = null,
+            phase = 'writes',
+            persistedAuditStatus = null,
+        } = {}) {
+            return buildCanonicalSliceRollbackBlockers({
+                db,
+                sliceKey: 'secrets',
+                featureFlags: featureFlags ?? getCanonicalSqliteFeatureFlags(),
+                phase,
+                persistedAuditStatus: persistedAuditStatus
+                    ?? getPersistedCanonicalAuditStatus(db, { scope: CANONICAL_SECRETS_AUDIT_SCOPE }),
+                listOpenRepairs: listOpenSecretProjectionRepairs,
+                openRepairCode: 'open_secret_projection_repairs',
+                includeChatStatsPhase: false,
+            });
+        },
+        getBackupManagedPaths(directories) {
+            if (!directories?.root) {
+                return [];
+            }
+            return [path.join(directories.root, 'secrets.json')];
+        },
+    };
+}
+
 export function createCanonicalStorageSliceRegistry({ registerDefaults = false } = {}) {
     /** @type {Map<string, object>} */
     const slices = new Map();
@@ -237,6 +279,7 @@ export function createCanonicalStorageSliceRegistry({ registerDefaults = false }
         register(createCharacterSlice());
         register(createWorldInfoSlice());
         register(createSettingsSlice());
+        register(createSecretsSlice());
     }
 
     return registry;

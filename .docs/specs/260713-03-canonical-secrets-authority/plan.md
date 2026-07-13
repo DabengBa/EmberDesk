@@ -9,7 +9,7 @@ Doc IDs: page.api_configuration
 ## Tasks
 
 ### Task 1: 建立 secret schema、安全 shadow import 与 audit
-- [ ] **Done**
+- [x] **Done**
 - **Reqs:** R1, R3
 - **Kind:** behavior
 - **Scope:** canonical migrations, secret store/import/audit, `tests/canonical-secrets-store.test.js`
@@ -19,7 +19,7 @@ Doc IDs: page.api_configuration
 - **Evidence:** evidence/task-01.md
 
 ### Task 2: 将 SecretManager 切换为 DB-first backend
-- [ ] **Done**
+- [x] **Done**
 - **Reqs:** R2, R4, R7
 - **Kind:** behavior
 - **Scope:** `src/endpoints/secrets.js`, SecretManager backend seam, provider/secret tests
@@ -29,7 +29,7 @@ Doc IDs: page.api_configuration
 - **Evidence:** evidence/task-02.md
 
 ### Task 3: 实现 projection repair、rollback 与泄露扫描
-- [ ] **Done**
+- [x] **Done**
 - **Reqs:** R3, R5, R6
 - **Kind:** behavior
 - **Scope:** secret projection/operator path, rollout gates, security-focused tests
@@ -39,7 +39,7 @@ Doc IDs: page.api_configuration
 - **Evidence:** evidence/task-03.md
 
 ### Task 4: 更新安全与用户流程文档
-- [ ] **Done**
+- [x] **Done**
 - **Reqs:** R3, R6, R7
 - **Kind:** non-behavior
 - **Scope:** `.docs/db/pages/api-configuration.md`, `.docs/tech/provider-secret-field-state.md`, roadmap/history/logic docs
@@ -50,4 +50,7 @@ Doc IDs: page.api_configuration
 
 ## Review
 
-- [ ] Review complete
+- [x] Review: R-01 补齐 secrets CLI 的净化输出回归 (severity: low; scope: Task 3 CLI proof; evidence: `tests/canonical-sqlite-cli.test.js`; proof: `bun run --cwd tests test:unit -- canonical-sqlite-cli.test.js --runInBand --forceExit`)
+- [x] Doc ID gate: `bun run docs:build` passed; topology 30 nodes / 236 edges, no orphan nodes; `page.api_configuration` remains connected.
+- [x] Frontend contract review: classifier was triggered by API Configuration and provider-state documentation only; no browser implementation, DOM selector, or user-flow code changed. Existing masked/active/label contract and the provider field state suite remain green.
+- [x] Review complete
