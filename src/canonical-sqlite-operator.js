@@ -14,6 +14,11 @@ import {
     listOpenProjectionRepairs,
 } from './canonical-sqlite-rollout-contract.js';
 import {
+    getCanonicalBackupRestoreReadiness,
+    getDefaultCanonicalStorageSliceRegistry,
+    listCanonicalStorageSliceKeys,
+} from './canonical-storage-slice-registry.js';
+import {
     getCanonicalCharacter,
     resolveProjectionRepair,
 } from './endpoints/character-store.js';
@@ -195,7 +200,24 @@ export function listCanonicalWorldInfoRepairs(db) {
     return listOpenWorldInfoProjectionRepairs(db);
 }
 
-export function explainCanonicalRolloutBlockers({ db, featureFlags, phase = 'writes' }) {
+export function explainCanonicalRolloutBlockers({
+    db,
+    featureFlags,
+    phase = 'writes',
+    sliceKey = null,
+    registry = getDefaultCanonicalStorageSliceRegistry(),
+} = {}) {
+    if (sliceKey) {
+        const slice = registry.get(sliceKey);
+        return slice.getRollbackBlockers({
+            db,
+            featureFlags: slice.getFeatureFlags(featureFlags),
+            phase,
+        });
+    }
+
+    // Compatibility aggregate used by the existing CLI/tests: character blockers
+    // plus open world_info repairs for write-related phases.
     const result = buildCanonicalRollbackBlockers({
         db,
         featureFlags,
@@ -220,6 +242,167 @@ export function explainCanonicalRolloutBlockers({ db, featureFlags, phase = 'wri
 
     return result;
 }
+
+function sanitizeRepairKeys(repairs) {
+    return (repairs ?? []).map(repair => String(repair.repairKey));
+}
+
+function summarizeSliceStatus({
+    slice,
+    db,
+    directories,
+    featureFlags,
+    phase,
+}) {
+    const sliceFlags = slice.getFeatureFlags(featureFlags);
+    const migration = slice.getMigrationReadiness(db);
+    const audit = getPersistedCanonicalAuditStatus(db, { scope: slice.auditScope });
+    const openRepairs = slice.listOpenRepairs(db) ?? [];
+    const rollback = slice.getRollbackBlockers({
+        db,
+        featureFlags: sliceFlags,
+        phase,
+        persistedAuditStatus: audit,
+    });
+    const backupManagedPaths = slice.getBackupManagedPaths(directories);
+    // Per-slice path presence only. Full backup/restore readiness is top-level.
+    const missingPaths = backupManagedPaths.filter(managedPath => {
+        try {
+            return !fs.existsSync(managedPath);
+        } catch {
+            return true;
+        }
+    });
+    const backup = {
+        managedPathCount: backupManagedPaths.length,
+        managedPathsPresent: missingPaths.length === 0,
+        ready: missingPaths.length === 0,
+        blockers: missingPaths.map(pathValue => ({
+            code: 'missing_managed_path',
+            details: { path: pathValue, sliceKey: slice.key },
+        })),
+    };
+
+    const enabled = !!sliceFlags.enabled;
+    const ready = enabled
+        && !!migration?.ok
+        && !audit.blocking
+        && openRepairs.length === 0
+        && rollback.ok;
+
+    return {
+        key: slice.key,
+        auditScope: slice.auditScope,
+        enabled,
+        featureFlags: {
+            enabled: !!sliceFlags.enabled,
+            shadowImport: !!sliceFlags.shadowImport,
+            reads: !!sliceFlags.reads,
+            writes: !!sliceFlags.writes,
+            ...(Object.prototype.hasOwnProperty.call(sliceFlags, 'chatStats')
+                ? { chatStats: !!sliceFlags.chatStats }
+                : {}),
+            strict: !!sliceFlags.strict,
+        },
+        migration: {
+            ok: !!migration?.ok,
+            currentVersion: migration?.currentVersion ?? null,
+            targetVersion: migration?.targetVersion ?? null,
+            blockedReason: migration?.blockedReason ?? null,
+        },
+        audit: {
+            scope: slice.auditScope,
+            ok: !audit.blocking,
+            blocking: !!audit.blocking,
+            reason: audit.reason ?? null,
+            status: audit.status ?? null,
+            driftCount: audit.driftCount ?? 0,
+            errorCount: audit.errorCount ?? 0,
+            entryCount: audit.entryCount ?? 0,
+            auditedAtMs: audit.auditedAtMs ?? null,
+        },
+        openRepairCount: openRepairs.length,
+        openRepairKeys: sanitizeRepairKeys(openRepairs),
+        rollback: {
+            ok: !!rollback.ok,
+            phase: rollback.phase ?? phase,
+            blockers: (rollback.blockers ?? []).map(blocker => ({
+                code: blocker.code,
+                severity: blocker.severity ?? 'error',
+                details: {
+                    ...(blocker.details?.repairCount != null
+                        ? { repairCount: blocker.details.repairCount }
+                        : {}),
+                    ...(Array.isArray(blocker.details?.repairKeys)
+                        ? { repairKeys: blocker.details.repairKeys }
+                        : {}),
+                    ...(blocker.details?.illegalFlags
+                        ? { illegalFlags: blocker.details.illegalFlags }
+                        : {}),
+                    ...(blocker.details?.sliceKey
+                        ? { sliceKey: blocker.details.sliceKey }
+                        : {}),
+                },
+            })),
+        },
+        backup,
+        ready,
+    };
+}
+
+/**
+ * Machine-readable operator status for all registered slices.
+ * Never includes repair details, card JSON, secrets, or file bodies.
+ */
+export function getCanonicalStorageControlPlaneStatus({
+    handle,
+    directories,
+    db,
+    featureFlags = null,
+    phase = 'writes',
+    sliceKeys = null,
+    registry = getDefaultCanonicalStorageSliceRegistry(),
+    managedFileManifest = null,
+} = {}) {
+    const keys = sliceKeys?.length
+        ? sliceKeys
+        : listCanonicalStorageSliceKeys(registry);
+    const slices = keys.map(key => summarizeSliceStatus({
+        slice: registry.get(key),
+        db,
+        directories,
+        featureFlags,
+        phase,
+    }));
+
+    const backupRestore = getCanonicalBackupRestoreReadiness({
+        directories,
+        db,
+        registry,
+        managedFileManifest,
+    });
+
+    return {
+        handle: handle ?? null,
+        phase,
+        sliceKeys: keys,
+        slices,
+        backupRestore: {
+            ready: backupRestore.ready,
+            ok: backupRestore.ok,
+            mutatesData: false,
+            managedFileManifestVersion: backupRestore.managedFileManifestVersion,
+            blockers: backupRestore.blockers.map(blocker => ({
+                code: blocker.code,
+                severity: blocker.severity,
+                details: blocker.details ?? {},
+            })),
+        },
+        ok: slices.every(slice => slice.ready),
+    };
+}
+
+
 
 export async function runCanonicalAudit({ handle, directories, db, auditedAtMs = Date.now() }) {
     return auditCanonicalShadowImport({
@@ -409,4 +592,44 @@ export async function repairCanonicalWorldInfoProjection({ db, directories, repa
         ok: results.every(result => result.status === 'repaired'),
         results,
     };
+}
+
+export async function runCanonicalSliceAudit({
+    sliceKey,
+    handle,
+    directories,
+    db,
+    auditedAtMs = Date.now(),
+    registry = getDefaultCanonicalStorageSliceRegistry(),
+} = {}) {
+    registry.get(sliceKey);
+    if (sliceKey === 'characters') {
+        const result = await runCanonicalAudit({ handle, directories, db, auditedAtMs });
+        return { ...result, sliceKey };
+    }
+    if (sliceKey === 'world_info') {
+        const result = await runCanonicalWorldInfoAudit({ handle, directories, db, auditedAtMs });
+        return { ...result, sliceKey };
+    }
+    throw new Error(`No audit runner registered for slice: ${sliceKey}`);
+}
+
+export async function runCanonicalSliceRepair({
+    sliceKey,
+    db,
+    directories,
+    repairKeys = null,
+    nowMs = Date.now(),
+    registry = getDefaultCanonicalStorageSliceRegistry(),
+} = {}) {
+    registry.get(sliceKey);
+    if (sliceKey === 'characters') {
+        const result = await repairCanonicalProjection({ db, directories, repairKeys, nowMs });
+        return { ...result, sliceKey };
+    }
+    if (sliceKey === 'world_info') {
+        const result = await repairCanonicalWorldInfoProjection({ db, directories, repairKeys, nowMs });
+        return { ...result, sliceKey };
+    }
+    throw new Error(`No repair runner registered for slice: ${sliceKey}`);
 }

@@ -20,7 +20,7 @@ It is not optimized for users who want a managed cloud product or a minimal one-
 
 1. Simplify before extending.
 2. Prefer observable performance wins over architectural novelty.
-3. Keep canonical user data portable; legacy compatibility mode remains file-backed, while approved slices may switch to per-user canonical SQLite under explicit migration, projection, repair, and rollback rules.
+3. Keep canonical user data portable; the confirmed long-term direction is comprehensive per-user SQLite authority, delivered one independently gated domain at a time with explicit migration, managed-file/projection, repair, and rollback rules.
 4. Modernize in slices that preserve existing behavior and upgrade safety.
 5. Treat documentation and measurement as part of product quality, not afterthoughts.
 
@@ -38,8 +38,8 @@ It is not optimized for users who want a managed cloud product or a minimal one-
 - Legacy cutover policy: EmberDesk no longer treats every remaining legacy path as vague pending deletion. The current durable policy lives in [.docs/tech/legacy-cutover-ledger.md](tech/legacy-cutover-ledger.md): each retained surface is explicitly classified as a compatibility facade, a freeze-supported boundary, or a blocked deletion candidate.
 - Main-chat React boundary: the guarded `mainChatMessageList` island now owns the visible composer, slash-status shell, safe row/action shell, and the standard OpenAI direct-chat visible transport path (`submitComposer`, `continueLast`, regenerate/retry, and swipe). The React controller also owns reading-position restore plus the row/windowing decision surface, while excluded non-OpenAI/group/dry-run/nested-visible requests, quiet/background helper requests, unsafe or extension-mutated rows, and the actual legacy `showMoreMessages()` execution path remain explicit compatibility owners or facades inside the same shell.
 - World Info facade boundary: `public/scripts/world-info.js` remains the World Info compatibility facade, while `public/scripts/world-info-shell-context.js` provides a narrow internal shell-context seam for startup-safe access to shell-owned state and `eventSource` methods.
-- Storage authority boundary: [ADR-0011](adr/0011-canonical-per-user-sqlite-storage.md) accepts per-user canonical SQLite for approved slices. Character metadata, character chat stats, and full World Info entries now have canonical SQLite authority paths behind explicit flags and persisted audit gates, while derived caches remain disposable and compatibility files remain projection/import/export surfaces until each domain has an explicit retirement decision. The legacy character-index sidecar under `_cache` is now retired from normal runtime. The executable phase plan lives in [canonical-sqlite-storage-roadmap](tech/canonical-sqlite-storage-roadmap.md).
-- Canonical storage foundation: EmberDesk now includes a dedicated canonical SQLite manager at `src/canonical-sqlite.js`, a migration runner at `src/canonical-sqlite-migrations.js`, character and World Info shadow import/audit owners, a rollout/rollback contract helper at `src/canonical-sqlite-rollout-contract.js`, operator repair/audit helpers at `src/canonical-sqlite-operator.js`, canonical repair CLI entry points at `scripts/canonical-sqlite-audit.mjs` and `scripts/canonical-sqlite-repair.mjs`, canonical query helpers at `src/endpoints/character-store.js` and `src/endpoints/world-info-store.js`, per-user `storage` directories under `DATA_ROOT/<handle>/storage`, and declared `features.storage.canonicalSqlite.*` rollout flags. This foundation is fail-closed: DB-first character and World Info reads exist behind flags after persisted audit summaries pass, canonical write paths can commit SQLite first while projecting compatibility files, and unresolved projection repairs block rollback claims until operator tooling clears or re-audits them.
+- Storage authority boundary: [ADR-0011](adr/0011-canonical-per-user-sqlite-storage.md) provides the delivered per-user canonical SQLite foundation. Character metadata, character chat stats, and full World Info entries already have canonical authority paths; the confirmed successor direction extends authority across settings, secrets, managed media, personas, extensions, chats, and vector catalogs in eight independently gated stages. SQLite owns structured identity, relationships, lifecycle, audit status, and file references; large media, attachments, and extension Git worktrees remain database-managed files rather than mandatory BLOBs. Derived caches remain disposable and compatibility files remain projection/import/export surfaces until each domain passes its retirement gate. The executable sequence lives in [canonical-sqlite-storage-roadmap](tech/canonical-sqlite-storage-roadmap.md).
+- Canonical storage foundation: EmberDesk now includes a dedicated canonical SQLite manager at `src/canonical-sqlite.js`, a migration runner at `src/canonical-sqlite-migrations.js`, character and World Info shadow import/audit owners, a slice registry at `src/canonical-storage-slice-registry.js`, a rollout/rollback contract helper at `src/canonical-sqlite-rollout-contract.js`, multi-slice operator status/repair helpers at `src/canonical-sqlite-operator.js`, canonical repair CLI entry points at `scripts/canonical-sqlite-audit.mjs` and `scripts/canonical-sqlite-repair.mjs`, canonical query helpers at `src/endpoints/character-store.js` and `src/endpoints/world-info-store.js`, per-user `storage` directories under `DATA_ROOT/<handle>/storage`, and declared `features.storage.canonicalSqlite.*` rollout flags. This foundation is fail-closed: DB-first character and World Info reads exist behind flags after persisted audit summaries pass, canonical write paths can commit SQLite first while projecting compatibility files, and unresolved projection repairs block rollback claims until operator tooling clears or re-audits them.
 
 Current architectural boundaries:
 
@@ -63,8 +63,9 @@ Key module structure:
 - `canonical-sqlite.js` — fail-closed per-user canonical SQLite manager for approved storage slices; provides path resolution, lifecycle, PRAGMA, transaction, and status reporting
 - `canonical-sqlite-migrations.js` — canonical schema journal and migration runner for approved storage slices; currently bootstraps the Phase 1/2/3 schema, including the persisted audit-state table needed by read/write cutover
 - `canonical-sqlite-shadow-import.js` — Phase 1 shadow import and audit seam for character metadata plus character chat stats; now also persists the fail-closed audit summary consumed by Phase 2 read cutover
-- `canonical-sqlite-rollout-contract.js` — legal flag-order, unresolved-repair visibility, and rollback-blocker helper for the current canonical storage slice
-- `canonical-sqlite-operator.js` — requestless operator workflow helper for canonical audit, repair listing, projection replay, blocker explanation, and chat-stats rebuild
+- `canonical-storage-slice-registry.js` — registered canonical storage slices (`characters`, `world_info`) with isolated audit/repair/rollback/backup capabilities
+- `canonical-sqlite-rollout-contract.js` — shared flag legality and per-slice rollback-blocker builders, plus character compatibility helpers
+- `canonical-sqlite-operator.js` — multi-slice operator status, audit/repair routing, projection replay, blocker explanation, chat-stats rebuild, and backup/restore readiness reporting
 - `src/endpoints/character-store.js` — canonical character row helper that reconstructs route-compatible read payloads and now also normalizes DB-backed character metadata writes
 - `public/lib.js` — browser shared-library boundary for first-party modules and extensions; it preserves both source imports and bundled `/lib.js` output (see [frontend-shared-library-boundary](tech/frontend-shared-library-boundary.md) and [ADR-0006](adr/0006-preserve-dual-libjs-source-and-bundled-boundary.md))
 
@@ -90,7 +91,7 @@ EmberDesk currently provides:
 - focused startup and interaction performance work for daily-use paths
 - client-side character-list incremental reconcile and consistency guards so ordinary browsing and delete flows keep visible rows, pagination, selected-character navigation, temporary-chat status, and bulk-selection hooks aligned without always redrawing the whole list, while delayed edit/save responses still cannot undo confirmed deletion actions
 
-Current storage and derived-cache scope is intentionally narrow:
+Current delivered storage scope is narrow; the accepted successor roadmap is comprehensive and incremental:
 
 - character metadata now has two gated authority modes under ADR-0011: the default file-backed mode and the feature-flagged canonical SQLite mode for approved read/write slices
 - the canonical SQLite foundation now exists behind default-off flags and per-user `storage/emberdesk.sqlite`, and it now supports shadow import, persisted drift-audit gating, DB-first character reads for `/api/characters/all`, `/list`, and `/get`, DB-first World Info reads for `/api/worldinfo/list` and `/get`, DB-first character and World Info writes when the corresponding read/write flags are enabled and the latest audit summary is clean, direct canonical character chat-stat maintenance when the chat stats flag is enabled, explicit operator audit/repair workflows, and centralized rollback blocker reporting
@@ -105,14 +106,14 @@ Current storage and derived-cache scope is intentionally narrow:
 - deleting `_cache/character-index.sqlite` cannot lose user data; current character-library behavior is recovered from canonical SQLite when enabled and audit-clean, or from direct compatibility files when fallback is required.
 - `src/endpoints/character-index.js` remains only as a historical/helper-level proof surface until a later cleanup deletes or archives it.
 - this retired derived slice remains separate from the canonical SQLite store and must not be promoted in place to authority
-- the accepted canonical SQLite roadmap has delivered character metadata, chat stats, and full World Info authority slices; chat message bodies, settings, secrets, vectors, assets, personas, backgrounds, and extension storage remain outside the delivered authority set
+- character metadata, chat stats, and full World Info are delivered authority slices; the shared storage control plane is delivered for slice registration, isolation, operator status, and backup readiness; remaining active packages migrate settings, secrets, managed media, personas, extension state, chat messages, and finally vector source/chunk catalogs
 
 ## Explicit Exclusions
 
 EmberDesk does not currently aim to:
 
 - replace the current workspace with a separate full SPA route; modernization continues through same-entry React ownership inside `/` while compatibility substrate remains available until focused proof retires it
-- replace all user-data files with a database-first product model in one move; canonical SQLite is limited to ADR-approved slices with compatibility projection and rollback proof
+- replace all user-data files in one move or force large binary/Git content into SQLite BLOBs; comprehensive database authority remains staged and keeps compatibility projection, managed files, import/export, and rollback proof explicit
 - provide a hosted SaaS control plane
 - treat every upstream SillyTavern feature as mandatory to preserve forever
 

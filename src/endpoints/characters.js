@@ -34,7 +34,8 @@ import { getCanonicalSqliteFeatureFlags } from '../storage-feature-flags.js';
 import { getCanonicalStorageStatus, openCanonicalDatabase, withCanonicalTransaction } from '../canonical-sqlite.js';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
 import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
-import { buildCanonicalRollbackBlockers, getCanonicalFlagContractStatus } from '../canonical-sqlite-rollout-contract.js';
+import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
+import { getCanonicalFlagContractStatus } from '../canonical-sqlite-rollout-contract.js';
 import { getCanonicalCharacter, listCanonicalCharacters } from './character-store.js';
 import {
     markCanonicalCharacterDeleted,
@@ -469,7 +470,9 @@ function createCharacterReadDependencies() {
         getCanonicalStorageStatus,
         openCanonicalDatabase,
         runCanonicalMigrations,
-        getCanonicalAuditStatus: ({ db }) => getPersistedCanonicalAuditStatus(db),
+        getCanonicalAuditStatus: ({ db }) => getPersistedCanonicalAuditStatus(db, {
+            scope: getCanonicalStorageSlice('characters').auditScope,
+        }),
         listCanonicalCharacters,
         getCanonicalCharacter,
         processCharacter,
@@ -505,9 +508,11 @@ function createCharacterWriteDependencies({ bustCache = null } = {}) {
                 return { enabled: false, authorityCommitted: false, repairKey: null };
             }
 
-            const flagContract = getCanonicalFlagContractStatus(featureFlags);
+            const characterSlice = getCanonicalStorageSlice('characters');
+            const sliceFeatureFlags = characterSlice.getFeatureFlags(featureFlags);
+            const flagContract = getCanonicalFlagContractStatus(sliceFeatureFlags);
             if (!flagContract.ok) {
-                if (featureFlags.strict) {
+                if (sliceFeatureFlags.strict) {
                     throw createCanonicalWriteBlockedError(flagContract.blockingReason);
                 }
                 return { enabled: false, authorityCommitted: false, repairKey: null, blockedReason: flagContract.blockingReason };
@@ -515,33 +520,33 @@ function createCharacterWriteDependencies({ bustCache = null } = {}) {
 
             const handle = payload.request?.user?.profile?.handle ?? null;
             const directories = payload.directories;
-            const storageStatus = getCanonicalStorageStatus({ handle, directories, featureFlags });
+            const storageStatus = getCanonicalStorageStatus({ handle, directories, featureFlags: sliceFeatureFlags });
             if (!storageStatus.supported || storageStatus.disabledReason === 'migration_blocked') {
-                if (featureFlags.strict) {
+                if (sliceFeatureFlags.strict) {
                     throw createCanonicalWriteBlockedError(storageStatus.disabledReason ?? 'canonical_runtime_blocked');
                 }
                 return { enabled: false, authorityCommitted: false, repairKey: null };
             }
 
-            const db = openCanonicalDatabase({ handle, directories, featureFlags });
+            const db = openCanonicalDatabase({ handle, directories, featureFlags: sliceFeatureFlags });
             if (!db) {
                 return { enabled: false, authorityCommitted: false, repairKey: null };
             }
 
-            const migrationStatus = runCanonicalMigrations(db, { strict: !!featureFlags.strict });
+            const migrationStatus = runCanonicalMigrations(db, { strict: !!sliceFeatureFlags.strict });
             if (!migrationStatus.ok) {
-                if (featureFlags.strict) {
+                if (sliceFeatureFlags.strict) {
                     throw createCanonicalWriteBlockedError('canonical_migration_blocked');
                 }
                 return { enabled: false, authorityCommitted: false, repairKey: null };
             }
 
-            const auditStatus = getPersistedCanonicalAuditStatus(db);
-            const rollbackBlockers = buildCanonicalRollbackBlockers({
+            const auditStatus = getPersistedCanonicalAuditStatus(db, { scope: characterSlice.auditScope });
+            const rollbackBlockers = characterSlice.getRollbackBlockers({
                 db,
-                featureFlags,
+                featureFlags: sliceFeatureFlags,
                 persistedAuditStatus: auditStatus,
-                phase: featureFlags.chatStats ? 'chatStats' : 'writes',
+                phase: sliceFeatureFlags.chatStats ? 'chatStats' : 'writes',
             });
             if (!rollbackBlockers.ok) {
                 const blockedReason = rollbackBlockers.blockers[0]?.code ?? auditStatus.reason ?? 'canonical_write_blocked';

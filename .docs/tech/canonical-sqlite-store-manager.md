@@ -157,3 +157,16 @@ What the tests currently prove:
 - Current character list/read/write acceleration remains documented in [interaction-performance-indexing](interaction-performance-indexing.md).
 - Derived sidecar lifecycle remains documented in [derived-cache-sqlite](derived-cache-sqlite.md).
 - Phase order, feature flags, and rollback rules remain owned by [canonical-sqlite-storage-roadmap](canonical-sqlite-storage-roadmap.md).
+
+## Related Control Plane
+
+Per-user DB open/close remains owned by this manager. Slice rollout, audit/repair routing,
+operator status, and backup/restore readiness are owned by:
+
+- `src/canonical-storage-slice-registry.js`
+- `src/canonical-sqlite-rollout-contract.js`
+- `src/canonical-sqlite-operator.js`
+
+The control plane does not open databases itself; it consumes manager handles and migration
+status for registered slices.
+

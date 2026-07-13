@@ -130,7 +130,7 @@ const RULES = [
     {
         id: 'canonical-storage-rollout',
         required: true,
-        command: 'bun run --cwd tests test:unit -- canonical-sqlite-cli.test.js canonical-sqlite-operator.test.js canonical-sqlite-rollout-contract.test.js canonical-sqlite-shadow-import.test.js character-read-service.test.js character-write-service.test.js --runInBand',
+        command: 'bun run --cwd tests test:unit -- canonical-storage-slice-registry.test.js canonical-sqlite-cli.test.js canonical-sqlite-operator.test.js canonical-sqlite-rollout-contract.test.js canonical-sqlite-shadow-import.test.js character-read-service.test.js character-write-service.test.js --runInBand',
         reason: 'Canonical SQLite repair tooling, rollout contract, rollback blockers, or DB-first storage authority changed.',
         sources: [
             '.docs/adr/0011-canonical-per-user-sqlite-storage.md',
@@ -141,6 +141,7 @@ const RULES = [
             return matchesAny(input, [
                 /^src\/canonical-sqlite(?:-|\.js)/,
                 /^src\/canonical-sqlite-rollout-contract\.js$/,
+                /^src\/canonical-storage-slice-registry\.js$/,
                 /^src\/canonical-sqlite-operator\.js$/,
                 /^src\/storage-feature-flags\.js$/,
                 /^src\/endpoints\/character-read-service\.js$/,
@@ -149,6 +150,7 @@ const RULES = [
                 /^src\/endpoints\/characters\.js$/,
                 /^scripts\/canonical-sqlite-(?:audit|repair)\.mjs$/,
                 /^tests\/canonical-sqlite-(?:cli|operator|rollout-contract|shadow-import|migrations|test)\.test\.js$/,
+                /^tests\/canonical-storage-slice-registry\.test\.js$/,
                 /^tests\/character-read-service\.test\.js$/,
                 /^tests\/character-write-service\.test\.js$/,
                 /^\.docs\/tech\/canonical-sqlite-storage-roadmap\.md$/,

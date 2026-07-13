@@ -17,6 +17,7 @@ function printUsage() {
         '',
         'Options:',
         '  --scope <scope>      character_metadata_and_chat_stats | world_info',
+        '  --slice <key>        characters | world_info (alias for scope)',
     ].join('\n'));
 }
 
@@ -48,6 +49,17 @@ function parseArgs(argv) {
             case '--scope':
                 options.scope = argv[++index] ?? options.scope;
                 break;
+            case '--slice': {
+                const slice = argv[++index] ?? null;
+                if (slice === 'characters') {
+                    options.scope = 'character_metadata_and_chat_stats';
+                } else if (slice === 'world_info') {
+                    options.scope = 'world_info';
+                } else if (slice) {
+                    throw new Error(`Unknown slice: ${slice}`);
+                }
+                break;
+            }
             case '--help':
             case '-h':
                 options.help = true;

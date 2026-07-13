@@ -13,6 +13,7 @@ import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
 import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
 import { getCanonicalSqliteFeatureFlags } from '../storage-feature-flags.js';
 import { WORLD_INFO_AUDIT_SCOPE } from '../canonical-world-info-shadow-import.js';
+import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
 import {
     getCanonicalWorldInfoBook,
     listCanonicalWorldInfoBooks,
@@ -27,7 +28,8 @@ function getRequestHandle(request) {
 }
 
 function getCanonicalWorldInfoReadState(request) {
-    const featureFlags = getCanonicalSqliteFeatureFlags();
+    const worldInfoSlice = getCanonicalStorageSlice('world_info');
+    const featureFlags = worldInfoSlice.getFeatureFlags();
     if (!featureFlags.enabled) {
         return { ok: false, reason: 'canonical_storage_disabled', featureFlags };
     }
@@ -57,12 +59,27 @@ function getCanonicalWorldInfoReadState(request) {
         return { ok: false, reason: 'migration_blocked', featureFlags, migrationStatus };
     }
 
-    const auditStatus = getPersistedCanonicalAuditStatus(db, { scope: WORLD_INFO_AUDIT_SCOPE });
+    const auditStatus = getPersistedCanonicalAuditStatus(db, { scope: worldInfoSlice.auditScope });
     if (auditStatus.blocking) {
         if (featureFlags.strict) {
             throw new Error(`Canonical World Info reads blocked: ${auditStatus.reason}`);
         }
         return { ok: false, reason: auditStatus.reason ?? 'world_info_audit_blocked', featureFlags, auditStatus };
+    }
+
+    // Surface slice readiness so later routes can query blockers without coupling.
+    const rollback = worldInfoSlice.getRollbackBlockers({
+        db,
+        featureFlags,
+        phase: 'reads',
+        persistedAuditStatus: auditStatus,
+    });
+    if (!rollback.ok) {
+        const reason = rollback.blockers[0]?.code ?? auditStatus.reason ?? 'world_info_slice_blocked';
+        if (featureFlags.strict) {
+            throw new Error(`Canonical World Info reads blocked: ${reason}`);
+        }
+        return { ok: false, reason, featureFlags, auditStatus, rollback };
     }
 
     return {
@@ -71,6 +88,7 @@ function getCanonicalWorldInfoReadState(request) {
         featureFlags,
         migrationStatus,
         auditStatus,
+        sliceKey: worldInfoSlice.key,
     };
 }
 

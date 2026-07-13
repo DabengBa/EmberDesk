@@ -6,12 +6,15 @@ import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import {
     explainCanonicalRolloutBlockers,
+    getCanonicalStorageControlPlaneStatus,
     listCanonicalRepairs,
     listCanonicalWorldInfoRepairs,
     rebuildCanonicalChatStats,
     repairCanonicalProjection,
     repairCanonicalWorldInfoProjection,
     runCanonicalAudit,
+    runCanonicalSliceAudit,
+    runCanonicalSliceRepair,
     runCanonicalWorldInfoAudit,
 } from '../src/canonical-sqlite-operator.js';
 import { getUserDirectories } from '../src/user-directories.js';
@@ -33,12 +36,14 @@ function printUsage() {
         '                       Replay World Info projection for one or more repair keys',
         '  rebuild-chat-stats   Rebuild canonical chat stats from JSONL chat files',
         '  explain-blockers     Summarize rollout / rollback blockers for a phase',
+        '  status               Print per-slice control-plane readiness status',
         '',
         'Options:',
         '  --repair-key <key>   Repeatable for repair-projection',
         '  --avatar <avatar>    Repeatable for rebuild-chat-stats',
-        '  --phase <phase>      reads | writes | chatStats for explain-blockers',
-        '  --feature <k=v>      Repeatable feature flag override for explain-blockers',
+        '  --phase <phase>      reads | writes | chatStats for explain-blockers/status',
+        '  --slice <key>        characters | world_info for status/audit/repair/blockers',
+        '  --feature <k=v>      Repeatable feature flag override for explain-blockers/status',
         '  --json               Print JSON output',
         '  --strict             Open the DB in strict mode',
     ].join('\n'));
@@ -60,6 +65,7 @@ function parseArgs(argv) {
         avatars: [],
         phase: 'writes',
         featureFlags: {},
+        slice: null,
     };
 
     for (let index = 1; index < argv.length; index += 1) {
@@ -88,6 +94,9 @@ function parseArgs(argv) {
                 options.featureFlags[key] = rawValue === 'true';
                 break;
             }
+            case '--slice':
+                options.slice = argv[++index] ?? null;
+                break;
             case '--json':
                 options.json = true;
                 break;
@@ -185,6 +194,22 @@ function formatRebuild(result) {
     return `${lines.join('\n')}\n`;
 }
 
+function formatStatus(result) {
+    const lines = [
+        'Canonical SQLite control-plane status',
+        `handle: ${result.handle ?? ''}`,
+        `phase: ${result.phase}`,
+        `status: ${result.ok ? 'ready' : 'blocked'}`,
+    ];
+    for (const slice of result.slices) {
+        lines.push(`- ${slice.key} | ${slice.ready ? 'ready' : 'blocked'} | repairs=${slice.openRepairCount} | audit=${slice.audit.blocking ? 'blocking' : 'ok'}`);
+        for (const blocker of slice.rollback.blockers) {
+            lines.push(`  blocker: ${blocker.code}`);
+        }
+    }
+    return `${lines.join('\n')}\n`;
+}
+
 function formatBlockers(result) {
     const lines = [
         'Canonical SQLite blockers',
@@ -267,8 +292,42 @@ async function main() {
             formatter = formatRebuild;
             break;
         case 'explain-blockers':
-            result = explainCanonicalRolloutBlockers({ db, featureFlags, phase: options.phase });
+            result = explainCanonicalRolloutBlockers({
+                db,
+                featureFlags,
+                phase: options.phase,
+                sliceKey: options.slice,
+            });
             formatter = formatBlockers;
+            break;
+        case 'status':
+            result = getCanonicalStorageControlPlaneStatus({
+                handle: options.handle,
+                directories,
+                db,
+                featureFlags,
+                phase: options.phase,
+                sliceKeys: options.slice ? [options.slice] : null,
+            });
+            formatter = formatStatus;
+            break;
+        case 'audit-slice':
+            result = await runCanonicalSliceAudit({
+                sliceKey: options.slice ?? 'characters',
+                handle: options.handle,
+                directories,
+                db,
+            });
+            formatter = formatAudit;
+            break;
+        case 'repair-slice':
+            result = await runCanonicalSliceRepair({
+                sliceKey: options.slice ?? 'characters',
+                db,
+                directories,
+                repairKeys: options.repairKeys.length ? options.repairKeys : null,
+            });
+            formatter = formatRepairProjection;
             break;
         default:
             throw new Error(`Unknown command: ${options.command}`);
@@ -278,7 +337,8 @@ async function main() {
         ? `${JSON.stringify(result, null, 2)}\n`
         : formatter(result));
 
-    if ((options.command === 'audit' || options.command === 'audit-world-info' || options.command === 'repair-projection' || options.command === 'repair-world-info-projection' || options.command === 'explain-blockers') && result.ok === false) {
+    // status is a report command: blocked slice readiness is still a successful query.
+    if ((options.command === 'audit' || options.command === 'audit-world-info' || options.command === 'repair-projection' || options.command === 'repair-world-info-projection' || options.command === 'explain-blockers' || options.command === 'audit-slice' || options.command === 'repair-slice') && result.ok === false) {
         process.exitCode = 1;
     }
 }

@@ -89,6 +89,8 @@ describe('canonical sqlite CLI scripts', () => {
         expect(repairHelp).toContain('Usage: node scripts/canonical-sqlite-repair.mjs');
         expect(repairHelp).toContain('list-repairs');
         expect(repairHelp).toContain('repair-world-info-projection');
+        expect(repairHelp).toContain('status');
+        expect(repairHelp).toContain('--slice');
     });
 
     test('lists repairs and replays projection from the repair CLI', async () => {
@@ -239,4 +241,48 @@ describe('canonical sqlite CLI scripts', () => {
             entries: { one: { content: 'cli' } },
         });
     });
+    test('prints sanitized multi-slice control-plane status from the repair CLI', () => {
+        const dataRoot = makeRoot();
+        const directories = createDirectories(path.join(dataRoot, 'alice'));
+        const manager = createManager();
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        runCanonicalMigrations(db, { nowMs: 1735689600000 });
+        recordProjectionRepair(db, {
+            repairKey: 'repair:create:alpha.png',
+            repairType: 'character_projection',
+            avatarFilename: 'alpha.png',
+            reason: 'projection_failed',
+            details: {
+                operation: 'create',
+                secret: 'top-secret-value',
+            },
+            nowMs: 1735689601111,
+        });
+        manager.dispose();
+
+        const output = execFileSync('node', [
+            'scripts/canonical-sqlite-repair.mjs',
+            'status',
+            '--data-root', dataRoot,
+            '--handle', 'alice',
+            '--json',
+            '--feature', 'enabled=true',
+            '--feature', 'shadowImport=true',
+            '--feature', 'reads=true',
+            '--feature', 'writes=true',
+        ], {
+            cwd: repoRoot,
+            encoding: 'utf8',
+        });
+
+        const parsed = JSON.parse(output);
+        expect(parsed.slices.map(slice => slice.key)).toEqual(['characters', 'world_info']);
+        expect(parsed.slices.find(slice => slice.key === 'characters').openRepairCount).toBe(1);
+        expect(output).not.toContain('top-secret-value');
+    });
+
 });

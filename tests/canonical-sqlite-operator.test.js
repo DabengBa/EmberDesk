@@ -14,12 +14,15 @@ import {
 import { buildCharacterFileSnapshotRow } from '../src/endpoints/character-file-snapshot.js';
 import {
     explainCanonicalRolloutBlockers,
+    getCanonicalStorageControlPlaneStatus,
     listCanonicalRepairs,
     listCanonicalWorldInfoRepairs,
     rebuildCanonicalChatStats,
     repairCanonicalProjection,
     repairCanonicalWorldInfoProjection,
     runCanonicalAudit,
+    runCanonicalSliceAudit,
+    runCanonicalSliceRepair,
 } from '../src/canonical-sqlite-operator.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 
@@ -400,5 +403,125 @@ describe('canonical sqlite operator helpers', () => {
                 drift_types: expect.arrayContaining(['open_projection_repair']),
             }),
         ]));
+    });
+
+    test('aggregates per-slice control-plane status without leaking user content', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        runCanonicalMigrations(db, { nowMs: 1735689600000 });
+
+        recordProjectionRepair(db, {
+            repairKey: 'repair:create:alpha.png',
+            repairType: 'character_projection',
+            avatarFilename: 'alpha.png',
+            reason: 'projection_failed',
+            details: {
+                operation: 'create',
+                secret: 'should-not-appear',
+                cardJson: '{"name":"Alpha"}',
+            },
+            nowMs: 1735689601111,
+        });
+        persistCanonicalAuditStatus(db, {
+            ok: true,
+            handle: 'alice',
+            hasDrift: false,
+            blocking: false,
+            entries: [],
+        }, {
+            scope: 'world_info',
+            auditedAtMs: 1735689602222,
+        });
+
+        const status = getCanonicalStorageControlPlaneStatus({
+            handle: 'alice',
+            directories,
+            db,
+            featureFlags: {
+                enabled: true,
+                shadowImport: true,
+                reads: true,
+                writes: true,
+                chatStats: false,
+                strict: false,
+            },
+            phase: 'writes',
+        });
+
+        expect(status.handle).toBe('alice');
+        expect(status.slices.map(slice => slice.key)).toEqual(['characters', 'world_info']);
+
+        const characters = status.slices.find(slice => slice.key === 'characters');
+        const worldInfo = status.slices.find(slice => slice.key === 'world_info');
+
+        expect(characters.ready).toBe(false);
+        expect(characters.openRepairCount).toBe(1);
+        expect(characters.openRepairKeys).toEqual(['repair:create:alpha.png']);
+        expect(characters.rollback.ok).toBe(false);
+        expect(worldInfo.ready).toBe(true);
+        expect(worldInfo.openRepairCount).toBe(0);
+        expect(worldInfo.rollback.ok).toBe(true);
+
+        const serialized = JSON.stringify(status);
+        expect(serialized).not.toContain('should-not-appear');
+        expect(serialized).not.toContain('{"name":"Alpha"}');
+        expect(serialized).not.toContain('cardJson');
+        expect(status.backupRestore.mutatesData).toBe(false);
+        expect(status.backupRestore.ready).toBe(false);
+        expect(status.backupRestore.blockers.map(b => b.code)).toContain('missing_managed_file_manifest');
+    });
+
+    test('routes audit and repair by slice key through the control plane', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        runCanonicalMigrations(db, { nowMs: 1735689600000 });
+
+        recordWorldInfoProjectionRepair(db, {
+            repairKey: 'world_info:Lorebook:edit',
+            worldName: 'Lorebook',
+            reason: 'projection_failed',
+            details: { operation: 'edit' },
+            nowMs: 1735689601111,
+        });
+        upsertCanonicalWorldInfoBook(db, {
+            name: 'Lorebook',
+            payload: { entries: {} },
+            nowMs: 1735689601111,
+        });
+
+        const repair = await runCanonicalSliceRepair({
+            sliceKey: 'world_info',
+            db,
+            directories,
+            repairKeys: ['world_info:Lorebook:edit'],
+            nowMs: 1735689602222,
+        });
+        expect(repair.ok).toBe(true);
+        expect(repair.sliceKey).toBe('world_info');
+        expect(listCanonicalWorldInfoRepairs(db)).toEqual([]);
+
+        const audit = await runCanonicalSliceAudit({
+            sliceKey: 'world_info',
+            handle: 'alice',
+            directories,
+            db,
+            auditedAtMs: 1735689603333,
+        });
+        expect(audit.sliceKey).toBe('world_info');
+        expect(audit).toEqual(expect.objectContaining({
+            ok: expect.any(Boolean),
+        }));
     });
 });
