@@ -1,0 +1,4 @@
+contract_version = 1
+feature_slug = "canonical-extension-state-authority"
+brief = ".docs/tech/briefs/260713-06-canonical-extension-state-authority.md"
+doc_ids = ["feature.extension_panel_open", "term.shared_browser_library"]

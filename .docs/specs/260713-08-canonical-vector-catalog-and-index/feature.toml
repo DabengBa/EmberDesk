@@ -1,0 +1,4 @@
+contract_version = 1
+feature_slug = "canonical-vector-catalog-and-index"
+brief = ".docs/tech/briefs/260713-08-canonical-vector-catalog-and-index.md"
+doc_ids = ["feature.extension_panel_open", "page.chat_workspace"]

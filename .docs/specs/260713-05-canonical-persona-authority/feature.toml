@@ -1,0 +1,4 @@
+contract_version = 1
+feature_slug = "canonical-persona-authority"
+brief = ".docs/tech/briefs/260713-05-canonical-persona-authority.md"
+doc_ids = ["page.chat_workspace"]

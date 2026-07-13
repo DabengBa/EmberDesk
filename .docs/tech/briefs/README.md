@@ -22,6 +22,15 @@ Delete or avoid adding briefs that are:
 
 | Brief | Why it remains |
 |---|---|
+| `260713-01-comprehensive-database-authority-roadmap.md` | Records the confirmed comprehensive database-authority goal, the managed-file boundary, and the true dependency order across eight independent delivery specs. |
+| `260713-01-canonical-storage-control-plane.md` | Preserves the shared per-slice rollout, audit, repair, rollback, and operator-control intent. |
+| `260713-02-canonical-settings-document-authority.md` | Preserves settings document, revision, snapshot, and compatibility-payload boundaries. |
+| `260713-03-canonical-secrets-authority.md` | Preserves the independent `SecretManager`, masking, exposure, and no-false-encryption constraints. |
+| `260713-04-canonical-managed-media-authority.md` | Preserves the DB-authoritative catalog plus managed-content-file boundary for media. |
+| `260713-05-canonical-persona-authority.md` | Preserves persona normalization and the decision to leave chat-local locks with chat metadata. |
+| `260713-06-canonical-extension-state-authority.md` | Preserves extension registry/namespace ownership while retaining protected APIs and managed Git worktrees. |
+| `260713-07-canonical-chat-message-authority.md` | Preserves the full character/group chat authority goal and JSONL import/export/projection contract. |
+| `260713-08-canonical-vector-catalog-and-index.md` | Preserves the final-stage canonical source/chunk catalog and rebuildable embedding-index boundary. |
 | `260605-01-character-list-page-slice-helper.md` | Preserves the delivered boundary for the character-list page-slice helper: pure snapshot slicing moved to render-state while DOM and pagination plugin ownership stayed in `public/script.js`. |
 | `260605-02-character-route-service-extraction.md` | Preserves the user-approved route-service boundary and UX-facing constraints behind the character read-service extraction. |
 | `260605-03-character-route-performance-proof.md` | Records why the third closure slice became Node 26 route/perf/UX evidence instead of another route extraction. |
