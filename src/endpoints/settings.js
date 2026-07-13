@@ -357,11 +357,9 @@ function extractSettingsRevision(body) {
     if (body == null || typeof body !== 'object') {
         return null;
     }
+    // Protocol field only. Do not treat a document field named "revision" as authority.
     if (Object.prototype.hasOwnProperty.call(body, 'settings_revision')) {
         return body.settings_revision;
-    }
-    if (Object.prototype.hasOwnProperty.call(body, 'revision')) {
-        return body.revision;
     }
     return null;
 }
@@ -372,7 +370,6 @@ function stripSettingsRevisionFields(body) {
     }
     const clone = { ...body };
     delete clone.settings_revision;
-    delete clone.revision;
     return clone;
 }
 
@@ -464,7 +461,6 @@ router.post('/save', function (request, response) {
                 return response.status(409).send({
                     error: 'settings_revision_conflict',
                     settings_revision: saved.currentRevision,
-                    current: saved.current?.payload ?? null,
                 });
             }
 
@@ -600,9 +596,6 @@ router.post('/get', async (request, response) => {
 
 router.post('/get-snapshots', async (request, response) => {
     try {
-        const writeState = getCanonicalSettingsWriteState(request);
-        // Prefer listing DB snapshots when writes are available; still merge file backups
-        // so historical file snapshots remain visible.
         const handle = getRequestHandle(request);
         const fileSnapshots = [];
         try {
@@ -616,18 +609,18 @@ router.post('/get-snapshots', async (request, response) => {
             // backups dir may be missing
         }
 
-        if (writeState.ok || getCanonicalSettingsReadState(request).ok) {
-            const readOrWrite = writeState.ok ? writeState : getCanonicalSettingsReadState(request);
-            if (readOrWrite.ok) {
-                const dbSnaps = listSettingsSnapshots(readOrWrite.db, { userId: handle }).map(snap => ({
-                    date: snap.createdAtMs,
-                    name: `canonical:${snap.id}`,
-                    size: snap.size,
-                    source: 'canonical',
-                    source_revision: snap.sourceRevision,
-                }));
-                return response.json([...dbSnaps, ...fileSnapshots].sort((a, b) => b.date - a.date));
-            }
+        // Listing is a read operation: do not require the write gate (open repairs
+        // or writes-off must not hide readable canonical snapshots).
+        const readState = getCanonicalSettingsReadState(request);
+        if (readState.ok) {
+            const dbSnaps = listSettingsSnapshots(readState.db, { userId: handle }).map(snap => ({
+                date: snap.createdAtMs,
+                name: `canonical:${snap.id}`,
+                size: snap.size,
+                source: 'canonical',
+                source_revision: snap.sourceRevision,
+            }));
+            return response.json([...dbSnaps, ...fileSnapshots].sort((a, b) => b.date - a.date));
         }
 
         response.json(fileSnapshots.sort((a, b) => b.date - a.date));

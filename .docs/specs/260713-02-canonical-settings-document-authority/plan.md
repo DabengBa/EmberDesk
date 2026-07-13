@@ -51,4 +51,9 @@ Doc IDs: page.settings
 ## Review
 
 - [x] Review complete
-- Notes: evidence/review.md — zero confirmed fix-required findings; residual legacy no-revision LWW accepted; frontend-review N/A for material UI.
+- [x] Review: R-01 clients did not send/handle settings_revision so writes-on multi-session stayed LWW (severity: high; scope: public/script.js, app/routes/settings.tsx, app/lib/settings-helpers.js; evidence: save payloads lacked settings_revision; proof: canonical-settings-store + settings-react-route)
+- [x] Review: R-02 409 conflict returned full current settings body (severity: med; scope: src/endpoints/settings.js; evidence: conflict response current payload; proof: unit asserts no current field)
+- [x] Review: R-03 get-snapshots required write gate before listing readable DB snaps (severity: med; scope: src/endpoints/settings.js; evidence: writeState-first listing; proof: readState-first listing)
+- [x] Review: R-04 protocol accepted generic body.revision and stripped it from documents (severity: med; scope: src/endpoints/settings.js; evidence: extractSettingsRevision; proof: ignores top-level document revision test)
+
+Notes: Agent spawn/delegation tools were unavailable; coordinator ran multi-surface review (docs/frontend, backend/core, security/proof) and applied fixes. Residual: clients that still omit settings_revision remain compat LWW; forceExit open-handle from autosave throttle is pre-existing test harness noise.

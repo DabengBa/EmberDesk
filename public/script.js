@@ -3456,6 +3456,8 @@ let this_edit_mes_id = undefined;
 
 //settings
 export let settings;
+/** @type {number|null} Canonical settings document revision from last /get, when provided. */
+let settingsDocumentRevision = null;
 export let amount_gen = 80; //default max length of AI generated responses
 export let max_context = 2048;
 
@@ -11568,6 +11570,9 @@ async function applyStartupSettingsCore(data, initLoaderHandle = null) {
 
     if (settingsPlan.hasSettings && settingsPlan.settings) {
         settings = settingsPlan.settings;
+        if (Number.isFinite(Number(data?.settings_revision))) {
+            settingsDocumentRevision = Number(data.settings_revision);
+        }
         if (settings.username !== undefined && settings.username !== '') {
             name1 = settings.username;
             $('#your_name').text(name1);
@@ -11722,6 +11727,7 @@ export async function saveSettings(loopCounter = 0) {
         tag_map: tag_map,
         oai_settings: oai_settings,
         background: background_settings,
+        ...(settingsDocumentRevision != null ? { settings_revision: settingsDocumentRevision } : {}),
     };
 
     try {
@@ -11734,10 +11740,33 @@ export async function saveSettings(loopCounter = 0) {
         const result = await fetch('/api/settings/save', saveSettingsRequest);
 
         if (!result.ok) {
+            if (result.status === 409) {
+                try {
+                    const conflict = await result.json();
+                    if (Number.isFinite(Number(conflict?.settings_revision))) {
+                        settingsDocumentRevision = Number(conflict.settings_revision);
+                    }
+                } catch {
+                    // ignore parse failures
+                }
+                toastr.warning(t`Settings were updated elsewhere. Reload to pick up the latest settings before saving again.`, t`Settings conflict`);
+                throw new Error(`Failed to save settings: revision conflict`);
+            }
             throw new Error(`Failed to save settings: ${result.statusText}`);
         }
 
-        settings = payload;
+        try {
+            const saveResult = await result.json();
+            if (Number.isFinite(Number(saveResult?.settings_revision))) {
+                settingsDocumentRevision = Number(saveResult.settings_revision);
+            }
+        } catch {
+            // older file-backed responses may not be JSON objects
+        }
+
+        // Do not persist the protocol field into the in-memory settings document.
+        const { settings_revision: _settingsRevision, ...documentPayload } = payload;
+        settings = documentPayload;
         await eventSource.emit(event_types.SETTINGS_UPDATED);
     } catch (error) {
         console.error('Error saving settings:', error);

@@ -672,6 +672,7 @@ describe('canonical settings route integration', () => {
             error: 'settings_revision_conflict',
             settings_revision: 2,
         }));
+        expect(staleSave.body).not.toHaveProperty('current');
         expect(getCanonicalSettingsDocument(db, { userId: 'alice' }).payload).toEqual({
             firstRun: false,
             v: 2,
@@ -716,6 +717,44 @@ describe('canonical settings route integration', () => {
         });
         expect(listOpenSettingsProjectionRepairs(db).length).toBe(1);
     });
+    test('ignores top-level document revision field and only honors settings_revision', async () => {
+        const root = makeRoot();
+        const directories = createRouteDirectories(root);
+        writeSettingsFile(directories, { firstRun: true });
+        setCanonicalEnv({ enabled: true, reads: true, writes: true });
+        const router = await loadSettingsRouter();
+        await seedSettingsDocument(directories, { firstRun: false, v: 1 });
+
+        // A body field named revision must not act as optimistic concurrency token.
+        const byDocumentRevision = await invokeRoute(router, '/save', {
+            directories,
+            body: {
+                firstRun: false,
+                v: 2,
+                revision: 0,
+            },
+        });
+        expect(byDocumentRevision.statusCode).toBe(200);
+        expect(byDocumentRevision.body).toEqual(expect.objectContaining({
+            result: 'ok',
+            settings_revision: 2,
+        }));
+
+        const stale = await invokeRoute(router, '/save', {
+            directories,
+            body: {
+                firstRun: false,
+                v: 3,
+                settings_revision: 1,
+            },
+        });
+        expect(stale.statusCode).toBe(409);
+        expect(stale.body).toEqual({
+            error: 'settings_revision_conflict',
+            settings_revision: 2,
+        });
+    });
+
 });
 
 describe('canonical settings snapshots and rollback', () => {

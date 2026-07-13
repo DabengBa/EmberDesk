@@ -487,9 +487,13 @@ export function parseSettingsPayload(payload) {
         settings = {};
     }
 
+    const revisionRaw = payload?.settings_revision;
+    const settingsRevision = Number.isFinite(Number(revisionRaw)) ? Number(revisionRaw) : null;
+
     return {
         rawSettings,
         settings,
+        settingsRevision,
         payload,
     };
 }
@@ -513,7 +517,7 @@ export function buildSettingsFormDefaults(settings) {
     return defaults;
 }
 
-export function buildSettingsSavePayload(baseSettings, formValues) {
+export function buildSettingsSavePayload(baseSettings, formValues, { settingsRevision = null } = {}) {
     const nextSettings = structuredClone(baseSettings && typeof baseSettings === 'object' ? baseSettings : {});
 
     for (const binding of fieldBindings) {
@@ -523,6 +527,10 @@ export function buildSettingsSavePayload(baseSettings, formValues) {
             : formValue;
 
         setValueAtPath(nextSettings, binding.settingsPath, nextValue);
+    }
+
+    if (settingsRevision != null && Number.isFinite(Number(settingsRevision))) {
+        nextSettings.settings_revision = Number(settingsRevision);
     }
 
     return nextSettings;

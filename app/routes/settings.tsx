@@ -318,7 +318,9 @@ function SettingsPage() {
             }
 
             const csrfToken = await ensureCsrfToken();
-            const payload = buildSettingsSavePayload(parsedPayload.settings, values);
+            const payload = buildSettingsSavePayload(parsedPayload.settings, values, {
+                settingsRevision: parsedPayload.settingsRevision,
+            });
             const response = await fetch('/api/settings/save', {
                 method: 'POST',
                 headers: {
@@ -329,6 +331,10 @@ function SettingsPage() {
             });
 
             if (!response.ok) {
+                if (response.status === 409) {
+                    await refetchSettings();
+                    throw new MessageError('设置已被其他会话更新，已重新加载，请确认后再保存。');
+                }
                 throw new MessageError('设置保存失败。');
             }
 
