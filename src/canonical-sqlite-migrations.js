@@ -140,6 +140,45 @@ export const CANONICAL_SQLITE_MIGRATIONS = Object.freeze([
                 ON world_info_projection_repairs (resolved_at_ms, world_name);
         `,
     }),
+    Object.freeze({
+        version: 4,
+        name: 'settings_document_authority',
+        sql: `
+            CREATE TABLE IF NOT EXISTS settings_documents (
+                user_id TEXT PRIMARY KEY,
+                revision INTEGER NOT NULL,
+                payload_json TEXT NOT NULL,
+                content_hash TEXT NOT NULL,
+                updated_at_ms INTEGER NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS settings_snapshots (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                source_revision INTEGER NOT NULL,
+                payload_json TEXT NOT NULL,
+                content_hash TEXT NOT NULL,
+                name TEXT NOT NULL DEFAULT '',
+                created_at_ms INTEGER NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS settings_projection_repairs (
+                repair_key TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                reason TEXT NOT NULL,
+                details_json TEXT NOT NULL DEFAULT '{}',
+                created_at_ms INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL,
+                last_attempt_at_ms INTEGER,
+                resolved_at_ms INTEGER
+            );
+
+            CREATE INDEX IF NOT EXISTS settings_snapshots_user_created_idx
+                ON settings_snapshots (user_id, created_at_ms DESC);
+            CREATE INDEX IF NOT EXISTS settings_projection_repairs_open_idx
+                ON settings_projection_repairs (resolved_at_ms, user_id);
+        `,
+    }),
 ]);
 
 export class CanonicalMigrationBlockedError extends Error {

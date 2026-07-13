@@ -1,0 +1,4 @@
+contract_version = 1
+feature_slug = "canonical-settings-document-authority"
+brief = ".docs/tech/briefs/260713-02-canonical-settings-document-authority.md"
+doc_ids = ["page.settings"]

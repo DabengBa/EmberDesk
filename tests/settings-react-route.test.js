@@ -147,7 +147,7 @@ describe('settings React route flag', () => {
         expect(routeSource).toContain('setSaveStatus(null);');
         expect(routeSource).toContain("setSaveStatus({ kind: 'success', message: '设置已保存。' });");
         expect(routeSource).toContain('setSaveStatus({ kind:');
-        expect(routeSource).toContain('Developer diagnostics');
+        expect(routeSource).toContain('Diagnostics');
         expect(routeSource).toContain('{showDiagnostics && (');
         expect(routeSource).toContain('onClick={() => setShowDiagnostics(value => !value)}');
         expect(routeSource).not.toContain('<h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-zinc-300">Coverage</h2>');

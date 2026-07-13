@@ -280,7 +280,7 @@ describe('canonical sqlite CLI scripts', () => {
         });
 
         const parsed = JSON.parse(output);
-        expect(parsed.slices.map(slice => slice.key)).toEqual(['characters', 'world_info']);
+        expect(parsed.slices.map(slice => slice.key)).toEqual(['characters', 'world_info', 'settings']);
         expect(parsed.slices.find(slice => slice.key === 'characters').openRepairCount).toBe(1);
         expect(output).not.toContain('top-secret-value');
     });

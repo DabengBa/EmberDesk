@@ -145,9 +145,13 @@ export function buildCanonicalSliceRollbackBlockers({
             const slice = activeRegistry.get(sliceKey);
             resolvedListOpenRepairs = (database) => slice.listOpenRepairs(database);
             if (resolvedOpenRepairCode == null) {
-                resolvedOpenRepairCode = sliceKey === 'world_info'
-                    ? 'open_world_info_projection_repairs'
-                    : 'open_projection_repairs';
+                if (sliceKey === 'world_info') {
+                    resolvedOpenRepairCode = 'open_world_info_projection_repairs';
+                } else if (sliceKey === 'settings') {
+                    resolvedOpenRepairCode = 'open_settings_projection_repairs';
+                } else {
+                    resolvedOpenRepairCode = 'open_projection_repairs';
+                }
             }
             if (resolvedIncludeChatStatsPhase == null) {
                 resolvedIncludeChatStatsPhase = sliceKey === 'characters';

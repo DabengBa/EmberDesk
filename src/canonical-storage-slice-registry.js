@@ -1,7 +1,9 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import { getCanonicalMigrationStatus } from './canonical-sqlite-migrations.js';
 import { getPersistedCanonicalAuditStatus } from './canonical-sqlite-shadow-import.js';
 import { WORLD_INFO_AUDIT_SCOPE } from './canonical-world-info-shadow-import.js';
+import { SETTINGS_AUDIT_SCOPE } from './canonical-settings-shadow-import.js';
 import {
     buildCanonicalSliceRollbackBlockers,
     getCanonicalSliceFlagContractStatus,
@@ -9,7 +11,9 @@ import {
     registerDefaultCanonicalStorageSliceRegistry,
 } from './canonical-sqlite-rollout-contract.js';
 import { listOpenWorldInfoProjectionRepairs } from './endpoints/world-info-store.js';
+import { listOpenSettingsProjectionRepairs } from './endpoints/settings-store.js';
 import { getCanonicalSqliteFeatureFlags } from './storage-feature-flags.js';
+import { SETTINGS_FILE } from './constants.js';
 
 const REQUIRED_SLICE_FIELDS = Object.freeze([
     'key',
@@ -126,6 +130,46 @@ function createWorldInfoSlice() {
     };
 }
 
+function createSettingsSlice() {
+    return {
+        key: 'settings',
+        auditScope: SETTINGS_AUDIT_SCOPE,
+        listOpenRepairs(db) {
+            return listOpenSettingsProjectionRepairs(db);
+        },
+        getFeatureFlags(overrides = null) {
+            return overrides ?? getCanonicalSqliteFeatureFlags();
+        },
+        getMigrationReadiness(db) {
+            return createSharedMigrationReadiness(db);
+        },
+        getRollbackBlockers({
+            db,
+            featureFlags = null,
+            phase = 'writes',
+            persistedAuditStatus = null,
+        } = {}) {
+            return buildCanonicalSliceRollbackBlockers({
+                db,
+                sliceKey: 'settings',
+                featureFlags: featureFlags ?? getCanonicalSqliteFeatureFlags(),
+                phase,
+                persistedAuditStatus: persistedAuditStatus
+                    ?? getPersistedCanonicalAuditStatus(db, { scope: SETTINGS_AUDIT_SCOPE }),
+                listOpenRepairs: listOpenSettingsProjectionRepairs,
+                openRepairCode: 'open_settings_projection_repairs',
+                includeChatStatsPhase: false,
+            });
+        },
+        getBackupManagedPaths(directories) {
+            if (!directories?.root) {
+                return [];
+            }
+            return [path.join(directories.root, SETTINGS_FILE)];
+        },
+    };
+}
+
 export function createCanonicalStorageSliceRegistry({ registerDefaults = false } = {}) {
     /** @type {Map<string, object>} */
     const slices = new Map();
@@ -192,6 +236,7 @@ export function createCanonicalStorageSliceRegistry({ registerDefaults = false }
     if (registerDefaults) {
         register(createCharacterSlice());
         register(createWorldInfoSlice());
+        register(createSettingsSlice());
     }
 
     return registry;

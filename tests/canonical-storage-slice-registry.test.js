@@ -46,6 +46,8 @@ function createDirectories(root) {
             fs.mkdirSync(directory, { recursive: true });
         }
     }
+    // Settings slice manages the settings.json path under the user root.
+    fs.writeFileSync(path.join(root, 'settings.json'), '{}', 'utf8');
     return directories;
 }
 
@@ -80,11 +82,11 @@ afterEach(() => {
 });
 
 describe('canonical storage slice registry', () => {
-    test('registers characters and world_info slices with required capabilities', () => {
+    test('registers characters, world_info, and settings slices with required capabilities', () => {
         const registry = getDefaultCanonicalStorageSliceRegistry();
-        expect(listCanonicalStorageSliceKeys(registry)).toEqual(['characters', 'world_info']);
+        expect(listCanonicalStorageSliceKeys(registry)).toEqual(['characters', 'world_info', 'settings']);
 
-        for (const key of ['characters', 'world_info']) {
+        for (const key of ['characters', 'world_info', 'settings']) {
             const slice = registry.get(key);
             expect(slice.key).toBe(key);
             expect(typeof slice.auditScope).toBe('string');
@@ -99,8 +101,8 @@ describe('canonical storage slice registry', () => {
     test('rejects duplicate slice keys and missing required capabilities', () => {
         const registry = createCanonicalStorageSliceRegistry();
         const base = {
-            key: 'settings',
-            auditScope: 'settings',
+            key: 'vectors',
+            auditScope: 'vectors',
             listOpenRepairs: () => [],
             getFeatureFlags: () => ({ enabled: false }),
             getMigrationReadiness: () => ({ ok: true }),

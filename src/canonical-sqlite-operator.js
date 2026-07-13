@@ -9,6 +9,7 @@ import { serverDirectory } from './server-directory.js';
 import { withCanonicalTransaction } from './canonical-sqlite.js';
 import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus, auditCanonicalShadowImport } from './canonical-sqlite-shadow-import.js';
 import { auditCanonicalWorldInfoShadowImport, WORLD_INFO_AUDIT_SCOPE } from './canonical-world-info-shadow-import.js';
+import { auditCanonicalSettingsShadowImport, SETTINGS_AUDIT_SCOPE } from './canonical-settings-shadow-import.js';
 import {
     buildCanonicalRollbackBlockers,
     listOpenProjectionRepairs,
@@ -28,6 +29,11 @@ import {
     normalizeCanonicalWorldInfoName,
     resolveWorldInfoProjectionRepair,
 } from './endpoints/world-info-store.js';
+import {
+    listOpenSettingsProjectionRepairs,
+    resolveSettingsProjectionRepair,
+    getCanonicalSettingsDocument,
+} from './endpoints/settings-store.js';
 import {
     buildCharacterFileSnapshotRow,
     calculateCharacterChatStats,
@@ -234,6 +240,18 @@ export function explainCanonicalRolloutBlockers({
                 details: {
                     repairCount: worldInfoRepairs.length,
                     repairKeys: worldInfoRepairs.map(repair => repair.repairKey),
+                },
+            });
+            result.ok = false;
+        }
+        const settingsRepairs = listOpenSettingsProjectionRepairs(db);
+        if (settingsRepairs.length > 0) {
+            result.blockers.push({
+                code: 'open_settings_projection_repairs',
+                severity: 'error',
+                details: {
+                    repairCount: settingsRepairs.length,
+                    repairKeys: settingsRepairs.map(repair => repair.repairKey),
                 },
             });
             result.ok = false;
@@ -600,6 +618,69 @@ export async function repairCanonicalWorldInfoProjection({ db, directories, repa
     };
 }
 
+
+async function runCanonicalSettingsAudit({ handle, directories, db, auditedAtMs = Date.now() }) {
+    return auditCanonicalSettingsShadowImport({
+        handle,
+        directories,
+        db,
+        auditedAtMs,
+    });
+}
+
+async function repairCanonicalSettingsProjection({ db, directories, repairKeys = null, nowMs = Date.now() }) {
+    const requested = Array.isArray(repairKeys) && repairKeys.length > 0
+        ? new Set(repairKeys.map(String))
+        : null;
+    const repairs = listOpenSettingsProjectionRepairs(db)
+        .filter(repair => !requested || requested.has(repair.repairKey));
+    const results = [];
+
+    for (const repair of repairs) {
+        const document = getCanonicalSettingsDocument(db, { userId: repair.userId });
+        if (!document) {
+            results.push({
+                repairKey: repair.repairKey,
+                status: 'skipped',
+                reason: 'missing_canonical_settings_document',
+            });
+            continue;
+        }
+        try {
+            const pathToSettings = path.join(directories.root, 'settings.json');
+            writeFileAtomicSync(pathToSettings, JSON.stringify(document.payload, null, 4), 'utf8');
+            resolveSettingsProjectionRepair(db, {
+                repairKey: repair.repairKey,
+                resolvedAtMs: nowMs,
+            });
+            results.push({
+                repairKey: repair.repairKey,
+                status: 'repaired',
+            });
+        } catch (error) {
+            results.push({
+                repairKey: repair.repairKey,
+                status: 'failed',
+                error: String(error?.message ?? error ?? ''),
+            });
+        }
+    }
+
+    if (results.some(result => result.status === 'repaired')) {
+        invalidateCanonicalAuditStatus(db, {
+            scope: SETTINGS_AUDIT_SCOPE,
+            handle: null,
+            reason: 'audit_stale_after_settings_projection_repair',
+            source: 'canonical_repair:repair_settings_projection',
+        });
+    }
+
+    return {
+        ok: results.every(result => result.status === 'repaired' || result.status === 'skipped'),
+        results,
+    };
+}
+
 function ensureDefaultSliceRunners(registry = getDefaultCanonicalStorageSliceRegistry()) {
     if (typeof registry.setRunners !== 'function' || typeof registry.getRunners !== 'function') {
         return registry;
@@ -614,6 +695,12 @@ function ensureDefaultSliceRunners(registry = getDefaultCanonicalStorageSliceReg
         registry.setRunners('world_info', {
             runAudit: runCanonicalWorldInfoAudit,
             runRepair: repairCanonicalWorldInfoProjection,
+        });
+    }
+    if (!registry.getRunners('settings')) {
+        registry.setRunners('settings', {
+            runAudit: runCanonicalSettingsAudit,
+            runRepair: repairCanonicalSettingsProjection,
         });
     }
     return registry;

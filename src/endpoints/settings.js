@@ -16,6 +16,22 @@ import {
     readWorldNamesAsync,
     getCachedPayload,
 } from './settings-cache.js';
+import { canonicalSqliteManager } from '../canonical-sqlite.js';
+import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
+import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
+import { getCanonicalSqliteFeatureFlags } from '../storage-feature-flags.js';
+import { SETTINGS_AUDIT_SCOPE } from '../canonical-settings-shadow-import.js';
+import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
+import {
+    createSettingsSnapshot,
+    getCanonicalSettingsDocument,
+    getCanonicalSettingsRevision,
+    getSettingsSnapshot,
+    listSettingsSnapshots,
+    recordSettingsProjectionRepair,
+    restoreSettingsSnapshot,
+    upsertCanonicalSettingsDocument,
+} from './settings-store.js';
 
 const ENABLE_EXTENSIONS = !!getConfigValue('extensions.enabled', true, 'boolean');
 const ENABLE_EXTENSIONS_AUTO_UPDATE = !!getConfigValue('extensions.autoUpdate', true, 'boolean');
@@ -40,14 +56,24 @@ const AUTOSAVE_FUNCTIONS = new Map();
  * @returns {void}
  */
 function triggerAutoSave(handle) {
-    if (!AUTOSAVE_FUNCTIONS.has(handle)) {
-        const throttledAutoSave = _.throttle(() => backupUserSettings(handle, true), AUTOSAVE_INTERVAL);
-        AUTOSAVE_FUNCTIONS.set(handle, throttledAutoSave);
-    }
+    try {
+        if (!AUTOSAVE_FUNCTIONS.has(handle)) {
+            const throttledAutoSave = _.throttle(() => {
+                try {
+                    backupUserSettings(handle, true);
+                } catch (error) {
+                    console.error('Could not autosave settings backup', error);
+                }
+            }, AUTOSAVE_INTERVAL);
+            AUTOSAVE_FUNCTIONS.set(handle, throttledAutoSave);
+        }
 
-    const functionToCall = AUTOSAVE_FUNCTIONS.get(handle);
-    if (functionToCall && typeof functionToCall === 'function') {
-        functionToCall();
+        const functionToCall = AUTOSAVE_FUNCTIONS.get(handle);
+        if (functionToCall && typeof functionToCall === 'function') {
+            functionToCall();
+        }
+    } catch (error) {
+        console.error('Could not schedule settings autosave', error);
     }
 }
 
@@ -78,11 +104,17 @@ async function backupSettings() {
  * @param {boolean} preventDuplicates Prevent duplicate backups
  * @returns {void}
  */
-function backupUserSettings(handle, preventDuplicates) {
-    const userDirectories = getUserDirectories(handle);
+function backupUserSettings(handle, preventDuplicates, directoriesOverride = null) {
+    const userDirectories = directoriesOverride ?? getUserDirectories(handle);
 
-    if (!fs.existsSync(userDirectories.root)) {
+    if (!userDirectories?.root || !fs.existsSync(userDirectories.root)) {
         return;
+    }
+    if (!userDirectories.backups) {
+        return;
+    }
+    if (!fs.existsSync(userDirectories.backups)) {
+        fs.mkdirSync(userDirectories.backups, { recursive: true });
     }
 
     const backupFile = path.join(userDirectories.backups, `${getSettingsBackupFilePrefix(handle)}${generateTimestamp()}.json`);
@@ -146,12 +178,336 @@ function getLatestBackup(handle) {
     return path.join(userDirectories.backups, latestBackup);
 }
 
+
+function getRequestHandle(request) {
+    return request.user?.profile?.handle ?? request.user?.handle ?? 'default-user';
+}
+
+function canReadCanonicalFeatureFlags() {
+    if (globalThis.COMMAND_LINE_ARGS != null) {
+        return true;
+    }
+    return Object.keys(process.env).some(key => key.startsWith('EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_'));
+}
+
+function getCanonicalSettingsReadState(request) {
+    if (!canReadCanonicalFeatureFlags()) {
+        return { ok: false, reason: 'canonical_flags_unavailable' };
+    }
+
+    const settingsSlice = getCanonicalStorageSlice('settings');
+    const featureFlags = settingsSlice.getFeatureFlags();
+    if (!featureFlags.enabled) {
+        return { ok: false, reason: 'canonical_storage_disabled', featureFlags };
+    }
+    if (!featureFlags.reads) {
+        return { ok: false, reason: 'canonical_reads_disabled', featureFlags };
+    }
+
+    const handle = getRequestHandle(request);
+    const db = canonicalSqliteManager.open({
+        handle,
+        directories: request.user.directories,
+        featureFlags: {
+            enabled: true,
+            strict: !!featureFlags.strict,
+        },
+    });
+    if (!db) {
+        return { ok: false, reason: 'canonical_storage_unavailable', featureFlags };
+    }
+
+    const migrationStatus = runCanonicalMigrations(db, {
+        strict: !!featureFlags.strict,
+    });
+    if (!migrationStatus.ok) {
+        if (featureFlags.strict) {
+            throw new Error(migrationStatus.blockedReason);
+        }
+        return { ok: false, reason: 'migration_blocked', featureFlags, migrationStatus };
+    }
+
+    const auditStatus = getPersistedCanonicalAuditStatus(db, { scope: settingsSlice.auditScope });
+    if (auditStatus.blocking) {
+        if (featureFlags.strict) {
+            throw new Error(`Canonical settings reads blocked: ${auditStatus.reason}`);
+        }
+        return { ok: false, reason: auditStatus.reason ?? 'settings_audit_blocked', featureFlags, auditStatus };
+    }
+
+    const rollback = settingsSlice.getRollbackBlockers({
+        db,
+        featureFlags,
+        phase: 'reads',
+        persistedAuditStatus: auditStatus,
+    });
+    if (!rollback.ok) {
+        const reason = rollback.blockers[0]?.code ?? auditStatus.reason ?? 'settings_slice_blocked';
+        if (featureFlags.strict) {
+            throw new Error(`Canonical settings reads blocked: ${reason}`);
+        }
+        return { ok: false, reason, featureFlags, auditStatus, rollback };
+    }
+
+    const document = getCanonicalSettingsDocument(db, { userId: handle });
+    if (!document) {
+        return { ok: false, reason: 'settings_document_missing', featureFlags, auditStatus, db, handle };
+    }
+
+    return {
+        ok: true,
+        db,
+        handle,
+        featureFlags,
+        migrationStatus,
+        auditStatus,
+        document,
+        sliceKey: settingsSlice.key,
+    };
+}
+
+function getCanonicalSettingsWriteState(request) {
+    if (!canReadCanonicalFeatureFlags()) {
+        return { ok: false, reason: 'canonical_flags_unavailable' };
+    }
+
+    const settingsSlice = getCanonicalStorageSlice('settings');
+    const featureFlags = settingsSlice.getFeatureFlags();
+    if (!featureFlags.enabled) {
+        return { ok: false, reason: 'canonical_storage_disabled', featureFlags };
+    }
+    if (!featureFlags.writes) {
+        return { ok: false, reason: 'canonical_writes_disabled', featureFlags };
+    }
+    if (!featureFlags.reads) {
+        // Writes require the same audit gate as reads.
+        return { ok: false, reason: 'canonical_reads_disabled', featureFlags };
+    }
+
+    const handle = getRequestHandle(request);
+    const db = canonicalSqliteManager.open({
+        handle,
+        directories: request.user.directories,
+        featureFlags: {
+            enabled: true,
+            strict: !!featureFlags.strict,
+        },
+    });
+    if (!db) {
+        return { ok: false, reason: 'canonical_storage_unavailable', featureFlags };
+    }
+
+    const migrationStatus = runCanonicalMigrations(db, {
+        strict: !!featureFlags.strict,
+    });
+    if (!migrationStatus.ok) {
+        if (featureFlags.strict) {
+            throw new Error(migrationStatus.blockedReason);
+        }
+        return { ok: false, reason: 'migration_blocked', featureFlags, migrationStatus };
+    }
+
+    const auditStatus = getPersistedCanonicalAuditStatus(db, { scope: settingsSlice.auditScope });
+    if (auditStatus.blocking) {
+        if (featureFlags.strict) {
+            throw new Error(`Canonical settings writes blocked: ${auditStatus.reason}`);
+        }
+        return { ok: false, reason: auditStatus.reason ?? 'settings_audit_blocked', featureFlags, auditStatus, db, handle };
+    }
+
+    const writeBlockers = settingsSlice.getRollbackBlockers({
+        db,
+        featureFlags,
+        phase: 'writes',
+        persistedAuditStatus: auditStatus,
+    });
+    if (!writeBlockers.ok) {
+        const reason = writeBlockers.blockers[0]?.code ?? 'settings_write_blocked';
+        if (featureFlags.strict) {
+            throw new Error(`Canonical settings writes blocked: ${reason}`);
+        }
+        return {
+            ok: false,
+            reason,
+            featureFlags,
+            auditStatus,
+            rollback: writeBlockers,
+            db,
+            handle,
+        };
+    }
+
+    return {
+        ok: true,
+        db,
+        handle,
+        featureFlags,
+        migrationStatus,
+        auditStatus,
+        sliceKey: settingsSlice.key,
+    };
+}
+
+function projectSettingsJson(directories, payload) {
+    const pathToSettings = path.join(directories.root, SETTINGS_FILE);
+    writeFileAtomicSync(pathToSettings, JSON.stringify(payload, null, 4), 'utf8');
+}
+
+function extractSettingsRevision(body) {
+    if (body == null || typeof body !== 'object') {
+        return null;
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'settings_revision')) {
+        return body.settings_revision;
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'revision')) {
+        return body.revision;
+    }
+    return null;
+}
+
+function stripSettingsRevisionFields(body) {
+    if (body == null || typeof body !== 'object' || Array.isArray(body)) {
+        return body;
+    }
+    const clone = { ...body };
+    delete clone.settings_revision;
+    delete clone.revision;
+    return clone;
+}
+
+function resolveExpectedRevisionForSave({ db, handle, body }) {
+    const provided = extractSettingsRevision(body);
+    if (provided != null && provided !== '') {
+        const numeric = Number(provided);
+        if (!Number.isFinite(numeric) || numeric < 0) {
+            return { ok: false, error: 'invalid_settings_revision' };
+        }
+        return { ok: true, expectedRevision: numeric };
+    }
+
+    // Legacy clients without a revision may save only when their baseline matches
+    // the current document (compat window). We treat missing revision as "use current".
+    // If no document exists yet, expectedRevision is 0 (create).
+    const current = getCanonicalSettingsRevision(db, { userId: handle });
+    return { ok: true, expectedRevision: current };
+}
+
+function invalidateSettingsAuditAfterFileWrite(request, operation) {
+    if (!canReadCanonicalFeatureFlags()) {
+        return;
+    }
+    const featureFlags = getCanonicalSqliteFeatureFlags();
+    if (!featureFlags.enabled) {
+        return;
+    }
+
+    const handle = getRequestHandle(request);
+    const db = canonicalSqliteManager.open({
+        handle,
+        directories: request.user.directories,
+        featureFlags: {
+            enabled: true,
+            strict: !!featureFlags.strict,
+        },
+    });
+    if (!db) {
+        return;
+    }
+
+    const migrationStatus = runCanonicalMigrations(db, {
+        strict: !!featureFlags.strict,
+    });
+    if (!migrationStatus.ok) {
+        if (featureFlags.strict) {
+            throw new Error(migrationStatus.blockedReason);
+        }
+        return;
+    }
+
+    invalidateCanonicalAuditStatus(db, {
+        scope: SETTINGS_AUDIT_SCOPE,
+        handle,
+        reason: 'audit_stale_after_settings_file_write',
+        source: `settings:${operation}`,
+    });
+}
+
+
 export const router = express.Router();
 
 router.post('/save', function (request, response) {
     try {
+        const writeState = getCanonicalSettingsWriteState(request);
+        if (writeState.ok) {
+            const handle = writeState.handle;
+            const payload = stripSettingsRevisionFields(request.body);
+            if (payload == null || typeof payload !== 'object' || Array.isArray(payload)) {
+                return response.status(400).send({ error: 'settings payload must be a JSON object' });
+            }
+
+            const expected = resolveExpectedRevisionForSave({
+                db: writeState.db,
+                handle,
+                body: request.body,
+            });
+            if (!expected.ok) {
+                return response.status(400).send({ error: expected.error });
+            }
+
+            const saved = upsertCanonicalSettingsDocument(writeState.db, {
+                userId: handle,
+                payload,
+                expectedRevision: expected.expectedRevision,
+            });
+            if (!saved.ok) {
+                return response.status(409).send({
+                    error: 'settings_revision_conflict',
+                    settings_revision: saved.currentRevision,
+                    current: saved.current?.payload ?? null,
+                });
+            }
+
+            try {
+                projectSettingsJson(request.user.directories, payload);
+            } catch (projectionError) {
+                const repairKey = `settings:${handle}:projection`;
+                recordSettingsProjectionRepair(writeState.db, {
+                    repairKey,
+                    userId: handle,
+                    reason: 'projection_failed',
+                    details: {
+                        operation: 'save',
+                        message: String(projectionError?.message ?? projectionError ?? ''),
+                        revision: saved.revision,
+                    },
+                });
+                invalidateCanonicalAuditStatus(writeState.db, {
+                    scope: SETTINGS_AUDIT_SCOPE,
+                    handle,
+                    reason: 'audit_stale_after_settings_projection_failure',
+                    source: 'settings:save',
+                });
+                console.warn(`Canonical settings projection failed for ${handle}:`, projectionError);
+                return response.status(500).send({
+                    error: 'Failed to project canonical settings file.',
+                    repairKey,
+                    settings_revision: saved.revision,
+                });
+            }
+
+            triggerAutoSave(handle);
+            return response.send({
+                result: 'ok',
+                settings_revision: saved.revision,
+            });
+        }
+
+        // File-backed path (flags off or blocked). Still atomic write.
         const pathToSettings = path.join(request.user.directories.root, SETTINGS_FILE);
-        writeFileAtomicSync(pathToSettings, JSON.stringify(request.body, null, 4), 'utf8');
+        const filePayload = stripSettingsRevisionFields(request.body);
+        writeFileAtomicSync(pathToSettings, JSON.stringify(filePayload, null, 4), 'utf8');
+        invalidateSettingsAuditAfterFileWrite(request, 'save');
         triggerAutoSave(request.user.profile.handle);
         response.send({ result: 'ok' });
     } catch (err) {
@@ -163,9 +519,17 @@ router.post('/save', function (request, response) {
 // Wintermute's code
 router.post('/get', async (request, response) => {
     let settings;
+    /** @type {number|undefined} */
+    let settingsRevision;
     try {
-        const pathToSettings = path.join(request.user.directories.root, SETTINGS_FILE);
-        settings = await fs.promises.readFile(pathToSettings, 'utf8');
+        const readState = getCanonicalSettingsReadState(request);
+        if (readState.ok) {
+            settings = readState.document.payloadJson;
+            settingsRevision = readState.document.revision;
+        } else {
+            const pathToSettings = path.join(request.user.directories.root, SETTINGS_FILE);
+            settings = await fs.promises.readFile(pathToSettings, 'utf8');
+        }
     } catch {
         return response.sendStatus(500);
     }
@@ -205,6 +569,7 @@ router.post('/get', async (request, response) => {
 
     response.send({
         settings,
+        ...(settingsRevision != null ? { settings_revision: settingsRevision } : {}),
         koboldai_settings,
         koboldai_setting_names,
         textgenerationwebui_presets,
@@ -235,16 +600,37 @@ router.post('/get', async (request, response) => {
 
 router.post('/get-snapshots', async (request, response) => {
     try {
-        const snapshots = fs.readdirSync(request.user.directories.backups);
-        const userFilesPattern = getSettingsBackupFilePrefix(request.user.profile.handle);
-        const userSnapshots = snapshots.filter(x => x.startsWith(userFilesPattern));
+        const writeState = getCanonicalSettingsWriteState(request);
+        // Prefer listing DB snapshots when writes are available; still merge file backups
+        // so historical file snapshots remain visible.
+        const handle = getRequestHandle(request);
+        const fileSnapshots = [];
+        try {
+            const snapshots = fs.readdirSync(request.user.directories.backups);
+            const userFilesPattern = getSettingsBackupFilePrefix(handle);
+            for (const name of snapshots.filter(x => x.startsWith(userFilesPattern))) {
+                const stat = fs.statSync(path.join(request.user.directories.backups, name));
+                fileSnapshots.push({ date: stat.ctimeMs, name, size: stat.size, source: 'file' });
+            }
+        } catch {
+            // backups dir may be missing
+        }
 
-        const result = userSnapshots.map(x => {
-            const stat = fs.statSync(path.join(request.user.directories.backups, x));
-            return { date: stat.ctimeMs, name: x, size: stat.size };
-        });
+        if (writeState.ok || getCanonicalSettingsReadState(request).ok) {
+            const readOrWrite = writeState.ok ? writeState : getCanonicalSettingsReadState(request);
+            if (readOrWrite.ok) {
+                const dbSnaps = listSettingsSnapshots(readOrWrite.db, { userId: handle }).map(snap => ({
+                    date: snap.createdAtMs,
+                    name: `canonical:${snap.id}`,
+                    size: snap.size,
+                    source: 'canonical',
+                    source_revision: snap.sourceRevision,
+                }));
+                return response.json([...dbSnaps, ...fileSnapshots].sort((a, b) => b.date - a.date));
+            }
+        }
 
-        response.json(result);
+        response.json(fileSnapshots.sort((a, b) => b.date - a.date));
     } catch (error) {
         console.error(error);
         response.sendStatus(500);
@@ -253,21 +639,36 @@ router.post('/get-snapshots', async (request, response) => {
 
 router.post('/load-snapshot', getFileNameValidationFunction('name'), async (request, response) => {
     try {
-        const userFilesPattern = getSettingsBackupFilePrefix(request.user.profile.handle);
-
-        if (!request.body.name || !request.body.name.startsWith(userFilesPattern)) {
+        const handle = getRequestHandle(request);
+        const name = request.body?.name;
+        if (!name) {
             return response.status(400).send({ error: 'Invalid snapshot name' });
         }
 
-        const snapshotName = request.body.name;
-        const snapshotPath = path.join(request.user.directories.backups, snapshotName);
+        if (String(name).startsWith('canonical:')) {
+            const snapshotId = String(name).slice('canonical:'.length);
+            const readState = getCanonicalSettingsReadState(request);
+            if (!readState.ok) {
+                return response.sendStatus(404);
+            }
+            const snap = getSettingsSnapshot(readState.db, { userId: handle, id: snapshotId });
+            if (!snap) {
+                return response.sendStatus(404);
+            }
+            return response.send(snap.payloadJson);
+        }
 
+        const userFilesPattern = getSettingsBackupFilePrefix(handle);
+        if (!String(name).startsWith(userFilesPattern)) {
+            return response.status(400).send({ error: 'Invalid snapshot name' });
+        }
+
+        const snapshotPath = path.join(request.user.directories.backups, name);
         if (!fs.existsSync(snapshotPath)) {
             return response.sendStatus(404);
         }
 
         const content = fs.readFileSync(snapshotPath, 'utf8');
-
         response.send(content);
     } catch (error) {
         console.error(error);
@@ -277,6 +678,25 @@ router.post('/load-snapshot', getFileNameValidationFunction('name'), async (requ
 
 router.post('/make-snapshot', async (request, response) => {
     try {
+        const writeState = getCanonicalSettingsWriteState(request);
+        if (writeState.ok) {
+            createSettingsSnapshot(writeState.db, {
+                userId: writeState.handle,
+                name: `manual_${Date.now()}`,
+            });
+            // Project canonical payload first so any companion file backup matches authority.
+            try {
+                const document = getCanonicalSettingsDocument(writeState.db, { userId: writeState.handle });
+                if (document) {
+                    projectSettingsJson(request.user.directories, document.payload);
+                }
+                backupUserSettings(writeState.handle, false, request.user.directories);
+            } catch (error) {
+                console.error('Could not create file settings backup alongside canonical snapshot', error);
+            }
+            return response.sendStatus(204);
+        }
+
         backupUserSettings(request.user.profile.handle, false);
         response.sendStatus(204);
     } catch (error) {
@@ -287,23 +707,121 @@ router.post('/make-snapshot', async (request, response) => {
 
 router.post('/restore-snapshot', getFileNameValidationFunction('name'), async (request, response) => {
     try {
-        const userFilesPattern = getSettingsBackupFilePrefix(request.user.profile.handle);
-
-        if (!request.body.name || !request.body.name.startsWith(userFilesPattern)) {
+        const handle = getRequestHandle(request);
+        const name = request.body?.name;
+        if (!name) {
             return response.status(400).send({ error: 'Invalid snapshot name' });
         }
 
-        const snapshotName = request.body.name;
-        const snapshotPath = path.join(request.user.directories.backups, snapshotName);
+        if (String(name).startsWith('canonical:')) {
+            const writeState = getCanonicalSettingsWriteState(request);
+            if (!writeState.ok) {
+                return response.status(409).send({
+                    error: 'canonical_settings_restore_unavailable',
+                    reason: writeState.reason ?? null,
+                });
+            }
+            const snapshotId = String(name).slice('canonical:'.length);
+            const restored = restoreSettingsSnapshot(writeState.db, {
+                userId: handle,
+                snapshotId,
+            });
+            if (restored.notFound) {
+                return response.sendStatus(404);
+            }
+            if (!restored.ok) {
+                return response.status(409).send({
+                    error: 'settings_revision_conflict',
+                    settings_revision: restored.currentRevision,
+                });
+            }
+            try {
+                projectSettingsJson(request.user.directories, restored.payload);
+            } catch (projectionError) {
+                const repairKey = `settings:${handle}:projection`;
+                recordSettingsProjectionRepair(writeState.db, {
+                    repairKey,
+                    userId: handle,
+                    reason: 'projection_failed',
+                    details: {
+                        operation: 'restore-snapshot',
+                        message: String(projectionError?.message ?? projectionError ?? ''),
+                        revision: restored.revision,
+                    },
+                });
+                invalidateCanonicalAuditStatus(writeState.db, {
+                    scope: SETTINGS_AUDIT_SCOPE,
+                    handle,
+                    reason: 'audit_stale_after_settings_projection_failure',
+                    source: 'settings:restore-snapshot',
+                });
+                return response.status(500).send({
+                    error: 'Failed to project canonical settings file.',
+                    repairKey,
+                    settings_revision: restored.revision,
+                });
+            }
+            return response.sendStatus(204);
+        }
 
+        const userFilesPattern = getSettingsBackupFilePrefix(handle);
+        if (!String(name).startsWith(userFilesPattern)) {
+            return response.status(400).send({ error: 'Invalid snapshot name' });
+        }
+
+        const snapshotPath = path.join(request.user.directories.backups, name);
         if (!fs.existsSync(snapshotPath)) {
             return response.sendStatus(404);
+        }
+
+        const writeState = getCanonicalSettingsWriteState(request);
+        if (writeState.ok) {
+            const content = fs.readFileSync(snapshotPath, 'utf8');
+            let payload;
+            try {
+                payload = JSON.parse(content);
+            } catch {
+                return response.status(400).send({ error: 'Invalid snapshot JSON' });
+            }
+            const current = getCanonicalSettingsRevision(writeState.db, { userId: handle });
+            const restored = upsertCanonicalSettingsDocument(writeState.db, {
+                userId: handle,
+                payload,
+                expectedRevision: current,
+            });
+            if (!restored.ok) {
+                return response.status(409).send({
+                    error: 'settings_revision_conflict',
+                    settings_revision: restored.currentRevision,
+                });
+            }
+            try {
+                projectSettingsJson(request.user.directories, payload);
+            } catch (projectionError) {
+                const repairKey = `settings:${handle}:projection`;
+                recordSettingsProjectionRepair(writeState.db, {
+                    repairKey,
+                    userId: handle,
+                    reason: 'projection_failed',
+                    details: {
+                        operation: 'restore-snapshot-file',
+                        message: String(projectionError?.message ?? projectionError ?? ''),
+                        revision: restored.revision,
+                    },
+                });
+                return response.status(500).send({
+                    error: 'Failed to project canonical settings file.',
+                    repairKey,
+                    settings_revision: restored.revision,
+                });
+            }
+            return response.sendStatus(204);
         }
 
         const pathToSettings = path.join(request.user.directories.root, SETTINGS_FILE);
         fs.rmSync(pathToSettings, { force: true });
         fs.copyFileSync(snapshotPath, pathToSettings);
-
+        invalidateSettingsAuditAfterFileWrite(request, 'restore-snapshot');
         response.sendStatus(204);
     } catch (error) {
         console.error(error);

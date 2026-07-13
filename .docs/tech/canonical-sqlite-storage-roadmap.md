@@ -290,7 +290,7 @@ rollback, tests, and docs before its flag can be enabled.
 | Order | Spec | Authority outcome | True dependency |
 |---|---|---|---|
 | 1 | `260713-01-canonical-storage-control-plane` | **Delivered:** slice registry, generic audit/repair/rollback, backup/restore readiness, operator status | Delivered canonical manager and World Info/character patterns |
-| 2 | `260713-02-canonical-settings-document-authority` | Complete settings document, revision and snapshot authority | Generic control plane |
+| 2 | `260713-02-canonical-settings-document-authority` | **Delivered:** settings document revision authority, shadow import/audit, DB-first get/save, projection repairs, canonical snapshots | Generic control plane |
 | 3 | `260713-03-canonical-secrets-authority` | Secret records behind `SecretManager` | Generic control plane; settings payload must not contain secrets |
 | 4 | `260713-04-canonical-managed-media-authority` | Backgrounds, assets, persona avatar blobs and attachment catalog | Generic control plane |
 | 5 | `260713-05-canonical-persona-authority` | Persona identity, descriptions, defaults and character/group connections | Settings document and managed media |

@@ -59,3 +59,15 @@ This page lets an authenticated user edit the main Sprint 3 settings slice from 
 - When React settings is unavailable, users continue from [Chat Workspace](page.chat_workspace).
 - From the React workspace chrome, the Settings entry uses this route only when available and otherwise stays in the workspace drawer fallback.
 - Legacy provider and credential surfaces remain reachable through [API Configuration](page.api_configuration).
+
+## Canonical Settings Document Authority
+
+When `features.storage.canonicalSqlite` reads/writes are enabled and the `settings` audit scope is clean, the full settings JSON document is authoritative in per-user `storage/emberdesk.sqlite` (`settings_documents`) with a monotonic `revision`.
+
+- **Get**: `/api/settings/get` may include `settings_revision` when serving from canonical SQLite. The `settings` field remains a JSON string. Directory-derived payload fields (presets, themes, world names, etc.) stay file/directory aggregates and are not part of the settings document.
+- **Save**: `/api/settings/save` accepts `settings_revision` (or `revision`). Stale revisions return HTTP 409 with the current revision instead of last-write-wins overwrite. Legacy clients that omit revision save against the current server revision only when the compat path is available.
+- **Projection**: After a successful DB commit, the server projects `settings.json`. Projection failure keeps the DB revision, records `settings_projection_repairs`, and returns 500 with a repair key.
+- **Snapshots**: `/api/settings/make-snapshot` stores a canonical snapshot from the current revision and may also keep a file backup. Restore creates a **new** revision; the revision counter never rewinds. Open projection repairs block write rollback.
+- **Flags off**: Existing atomic `settings.json` read/write continue to work; file writes invalidate the settings audit until re-audited.
+- **Not in this authority**: secrets, and later persona/extension/media normalizations that still live nested in the document for compatibility.
+

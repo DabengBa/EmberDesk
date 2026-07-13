@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
-import { runCanonicalAudit, runCanonicalWorldInfoAudit } from '../src/canonical-sqlite-operator.js';
+import { runCanonicalAudit, runCanonicalSliceAudit, runCanonicalWorldInfoAudit } from '../src/canonical-sqlite-operator.js';
 import { getUserDirectories } from '../src/user-directories.js';
 
 const manager = createCanonicalSqliteManager({ logger: { info() {}, warn() {} } });
@@ -16,8 +16,8 @@ function printUsage() {
         'Runs a read-only canonical SQLite audit.',
         '',
         'Options:',
-        '  --scope <scope>      character_metadata_and_chat_stats | world_info',
-        '  --slice <key>        characters | world_info (alias for scope)',
+        '  --scope <scope>      character_metadata_and_chat_stats | world_info | settings',
+        '  --slice <key>        characters | world_info | settings (alias for scope)',
     ].join('\n'));
 }
 
@@ -55,6 +55,8 @@ function parseArgs(argv) {
                     options.scope = 'character_metadata_and_chat_stats';
                 } else if (slice === 'world_info') {
                     options.scope = 'world_info';
+                } else if (slice === 'settings') {
+                    options.scope = 'settings';
                 } else if (slice) {
                     throw new Error(`Unknown slice: ${slice}`);
                 }
@@ -127,17 +129,27 @@ async function main() {
     }
 
     runCanonicalMigrations(db, { strict: options.strict });
-    const result = options.scope === 'world_info'
-        ? await runCanonicalWorldInfoAudit({
-            handle: options.handle,
-            directories,
-            db,
-        })
-        : await runCanonicalAudit({
+    let result;
+    if (options.scope === 'world_info') {
+        result = await runCanonicalWorldInfoAudit({
             handle: options.handle,
             directories,
             db,
         });
+    } else if (options.scope === 'settings') {
+        result = await runCanonicalSliceAudit({
+            sliceKey: 'settings',
+            handle: options.handle,
+            directories,
+            db,
+        });
+    } else {
+        result = await runCanonicalAudit({
+            handle: options.handle,
+            directories,
+            db,
+        });
+    }
 
     process.stdout.write(options.json
         ? `${JSON.stringify(result, null, 2)}\n`
