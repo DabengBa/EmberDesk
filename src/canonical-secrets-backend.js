@@ -100,7 +100,7 @@ export function initializeCanonicalSecretsForDirectories(directories) {
 
 export function getCanonicalSecretsReadBackend(directories) {
     const state = initializeCanonicalSecrets(directories);
-    if (!state.ok || !state.featureFlags.reads) {
+    if (!state.ok) {
         return null;
     }
 
@@ -108,6 +108,10 @@ export function getCanonicalSecretsReadBackend(directories) {
     if (openRepairs.length > 0) {
         // A failed projection must not make the compatibility file authoritative again.
         return state;
+    }
+
+    if (!state.featureFlags.reads) {
+        return null;
     }
 
     const slice = getCanonicalStorageSlice('secrets');

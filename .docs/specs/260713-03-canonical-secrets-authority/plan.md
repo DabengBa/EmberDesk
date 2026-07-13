@@ -51,6 +51,9 @@ Doc IDs: page.api_configuration
 ## Review
 
 - [x] Review: R-01 补齐 secrets CLI 的净化输出回归 (severity: low; scope: Task 3 CLI proof; evidence: `tests/canonical-sqlite-cli.test.js`; proof: `bun run --cwd tests test:unit -- canonical-sqlite-cli.test.js --runInBand --forceExit`)
+- [x] Review: R-02 投影 repair 未关闭时 read flag 不得回退旧文件 (severity: high; scope: canonical authority/rollback; evidence: `src/canonical-secrets-backend.js`; proof: `canonical-secrets-store.test.js`)
+- [x] Review: R-03 重复 secret record ID 必须产生净化的 blocking import/audit 结果 (severity: medium; scope: shadow import compatibility; evidence: `src/canonical-secrets-shadow-import.js`; proof: `canonical-secrets-store.test.js`)
+- [x] Review: R-04 指定不存在的 secret repair key 必须返回失败而非静默成功 (severity: medium; scope: operator CLI; evidence: `src/canonical-sqlite-operator.js`; proof: `canonical-sqlite-cli.test.js`)
 - [x] Doc ID gate: `bun run docs:build` passed; topology 30 nodes / 236 edges, no orphan nodes; `page.api_configuration` remains connected.
 - [x] Frontend contract review: classifier was triggered by API Configuration and provider-state documentation only; no browser implementation, DOM selector, or user-flow code changed. Existing masked/active/label contract and the provider field state suite remain green.
 - [x] Review complete

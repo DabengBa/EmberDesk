@@ -294,6 +294,35 @@ describe('canonical sqlite CLI scripts', () => {
         ]);
         expect(listOutput).not.toContain(canary);
 
+        let unmatchedRepairError;
+        try {
+            execFileSync('node', [
+                'scripts/canonical-sqlite-repair.mjs',
+                'repair-secret-projection',
+                '--data-root', dataRoot,
+                '--handle', 'alice',
+                '--repair-key', 'secrets:api_key_openai:missing:write',
+                '--json',
+            ], {
+                cwd: repoRoot,
+                encoding: 'utf8',
+            });
+        } catch (error) {
+            unmatchedRepairError = error;
+        }
+        expect(unmatchedRepairError).toEqual(expect.objectContaining({
+            status: 1,
+        }));
+        expect(JSON.parse(unmatchedRepairError.stdout)).toEqual(expect.objectContaining({
+            ok: false,
+            results: [expect.objectContaining({
+                repairKey: 'secrets:api_key_openai:missing:write',
+                status: 'blocked',
+                blocker: 'repair_not_found',
+            })],
+        }));
+        expect(unmatchedRepairError.stdout).not.toContain(canary);
+
         const repairOutput = execFileSync('node', [
             'scripts/canonical-sqlite-repair.mjs',
             'repair-secret-projection',

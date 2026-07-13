@@ -722,9 +722,18 @@ export async function repairCanonicalSecretProjection({
     const requested = Array.isArray(repairKeys) && repairKeys.length > 0
         ? new Set(repairKeys.map(String))
         : null;
-    const repairs = listOpenSecretProjectionRepairs(db)
+    const openRepairs = listOpenSecretProjectionRepairs(db);
+    const repairs = openRepairs
         .filter(repair => !requested || requested.has(repair.repairKey));
-    const results = [];
+    const results = requested
+        ? Array.from(requested)
+            .filter(repairKey => !openRepairs.some(repair => repair.repairKey === repairKey))
+            .map(repairKey => ({
+                repairKey,
+                status: 'blocked',
+                blocker: 'repair_not_found',
+            }))
+        : [];
 
     for (const repair of repairs) {
         try {

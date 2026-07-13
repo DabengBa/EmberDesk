@@ -38,6 +38,18 @@ function readSecretsFile(directories) {
 
 function normalizeSecretRecords(payload, nowMs, existingByKey = {}) {
     const recordsByKey = {};
+    const seenRecordIds = new Set();
+
+    const registerRecordId = id => {
+        if (seenRecordIds.has(id)) {
+            const error = new Error('Secret record IDs must be unique.');
+            error.name = 'DuplicateSecretRecordIdError';
+            throw error;
+        }
+        seenRecordIds.add(id);
+        return id;
+    };
+
     for (const [key, value] of Object.entries(payload)) {
         if (key === MIGRATED_KEY) {
             continue;
@@ -46,7 +58,7 @@ function normalizeSecretRecords(payload, nowMs, existingByKey = {}) {
             const records = value
                 .filter(record => record && typeof record === 'object' && typeof record.value === 'string')
                 .map((record, index) => ({
-                    id: typeof record.id === 'string' && record.id ? record.id : uuidv4(),
+                    id: registerRecordId(typeof record.id === 'string' && record.id ? record.id : uuidv4()),
                     value: record.value,
                     label: typeof record.label === 'string' ? record.label : key,
                     active: Boolean(record.active),
@@ -72,7 +84,7 @@ function normalizeSecretRecords(payload, nowMs, existingByKey = {}) {
             const existing = (existingByKey[key] ?? [])
                 .find(record => record.active && record.value === value);
             recordsByKey[key] = [{
-                id: existing?.id ?? uuidv4(),
+                id: registerRecordId(existing?.id ?? uuidv4()),
                 value,
                 label: key,
                 active: true,
@@ -160,7 +172,17 @@ export function runCanonicalSecretsShadowImport({
     }
 
     const existingByKey = getCanonicalSecrets(db);
-    const recordsByKey = normalizeSecretRecords(file.payload, nowMs, existingByKey);
+    let recordsByKey;
+    try {
+        recordsByKey = normalizeSecretRecords(file.payload, nowMs, existingByKey);
+    } catch (error) {
+        return summarizeImport({
+            handle,
+            reason: 'invalid_secret_record_ids',
+            migrationStatus,
+            entries: [{ status: 'error', errorClass: error.name || 'Error' }],
+        });
+    }
     const snapshotHash = getSnapshotHash(recordsByKey);
     const marker = getSecretMigrationMarker(db);
     const entries = [];
@@ -246,62 +268,76 @@ export function auditCanonicalSecretsShadowImport({
         }));
     } else {
         const actual = getCanonicalSecrets(db);
-        const expected = normalizeSecretRecords(file.payload, auditedAtMs, actual);
-        const keys = new Set([...Object.keys(expected), ...Object.keys(actual)]);
-        for (const key of Array.from(keys).sort()) {
-            const expectedRecords = expected[key] ?? [];
-            const actualRecords = actual[key] ?? [];
-            const expectedComparable = expectedRecords.map(record => ({
-                id: record.id,
-                label: record.label,
-                active: record.active,
-                valueHash: hashCanonicalSecretValue(record.value),
-            }));
-            const actualComparable = actualRecords.map(record => ({
-                id: record.id,
-                label: record.label,
-                active: record.active,
-                valueHash: hashCanonicalSecretValue(record.value),
-            }));
-            if (JSON.stringify(expectedComparable) === JSON.stringify(actualComparable)) {
-                entries.push(buildAuditEntry({
-                    key,
-                    status: 'clean',
-                    driftTypes: [],
-                    details: {},
-                    auditedAtMs,
-                }));
-                continue;
-            }
-            const driftTypes = [];
-            if (expectedRecords.length === 0) {
-                driftTypes.push('missing_projection_records');
-            } else if (actualRecords.length === 0) {
-                driftTypes.push('missing_db_records');
-            } else {
-                if (expectedComparable.some((record, index) => record.id !== actualComparable[index]?.id)) {
-                    driftTypes.push('record_id_mismatch');
-                }
-                if (expectedComparable.some((record, index) => record.label !== actualComparable[index]?.label)) {
-                    driftTypes.push('label_mismatch');
-                }
-                if (expectedComparable.some((record, index) => record.active !== actualComparable[index]?.active)) {
-                    driftTypes.push('active_state_mismatch');
-                }
-                if (expectedComparable.some((record, index) => record.valueHash !== actualComparable[index]?.valueHash)) {
-                    driftTypes.push('value_hash_mismatch');
-                }
-            }
+        let expected = null;
+        try {
+            expected = normalizeSecretRecords(file.payload, auditedAtMs, actual);
+        } catch (error) {
             entries.push(buildAuditEntry({
-                key,
-                status: 'drift',
-                driftTypes,
-                details: {
-                    expectedRecordCount: expectedRecords.length,
-                    actualRecordCount: actualRecords.length,
-                },
+                key: null,
+                status: 'error',
+                driftTypes: ['invalid_secret_record_ids'],
+                details: { errorClass: error.name || 'Error' },
                 auditedAtMs,
             }));
+        }
+
+        if (expected) {
+            const keys = new Set([...Object.keys(expected), ...Object.keys(actual)]);
+            for (const key of Array.from(keys).sort()) {
+                const expectedRecords = expected[key] ?? [];
+                const actualRecords = actual[key] ?? [];
+                const expectedComparable = expectedRecords.map(record => ({
+                    id: record.id,
+                    label: record.label,
+                    active: record.active,
+                    valueHash: hashCanonicalSecretValue(record.value),
+                }));
+                const actualComparable = actualRecords.map(record => ({
+                    id: record.id,
+                    label: record.label,
+                    active: record.active,
+                    valueHash: hashCanonicalSecretValue(record.value),
+                }));
+                if (JSON.stringify(expectedComparable) === JSON.stringify(actualComparable)) {
+                    entries.push(buildAuditEntry({
+                        key,
+                        status: 'clean',
+                        driftTypes: [],
+                        details: {},
+                        auditedAtMs,
+                    }));
+                    continue;
+                }
+                const driftTypes = [];
+                if (expectedRecords.length === 0) {
+                    driftTypes.push('missing_projection_records');
+                } else if (actualRecords.length === 0) {
+                    driftTypes.push('missing_db_records');
+                } else {
+                    if (expectedComparable.some((record, index) => record.id !== actualComparable[index]?.id)) {
+                        driftTypes.push('record_id_mismatch');
+                    }
+                    if (expectedComparable.some((record, index) => record.label !== actualComparable[index]?.label)) {
+                        driftTypes.push('label_mismatch');
+                    }
+                    if (expectedComparable.some((record, index) => record.active !== actualComparable[index]?.active)) {
+                        driftTypes.push('active_state_mismatch');
+                    }
+                    if (expectedComparable.some((record, index) => record.valueHash !== actualComparable[index]?.valueHash)) {
+                        driftTypes.push('value_hash_mismatch');
+                    }
+                }
+                entries.push(buildAuditEntry({
+                    key,
+                    status: 'drift',
+                    driftTypes,
+                    details: {
+                        expectedRecordCount: expectedRecords.length,
+                        actualRecordCount: actualRecords.length,
+                    },
+                    auditedAtMs,
+                }));
+            }
         }
     }
 

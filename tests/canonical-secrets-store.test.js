@@ -155,6 +155,61 @@ describe('canonical secrets store', () => {
         expect(db.prepare('SELECT name FROM sqlite_master WHERE type = ? AND name = ?').get('table', 'secret_projection_repairs')).toBeTruthy();
     });
 
+    test('blocks duplicate record IDs with sanitized import and audit results', () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        writeSecretsFile(directories, {
+            api_key_openai: [{ id: 'duplicate-id', value: `${canary}-one`, label: 'One', active: true }],
+            api_key_custom: [{ id: 'duplicate-id', value: `${canary}-two`, label: 'Two', active: true }],
+        });
+
+        const importResult = runCanonicalSecretsShadowImport({
+            handle: 'alice',
+            directories,
+            featureFlags: {
+                enabled: true,
+                shadowImport: true,
+                reads: false,
+                strict: false,
+            },
+            manager,
+            nowMs: 1735689600000,
+        });
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        const auditResult = auditCanonicalSecretsShadowImport({
+            handle: 'alice',
+            directories,
+            db,
+            auditedAtMs: 1735689601000,
+        });
+
+        expect(importResult).toEqual(expect.objectContaining({
+            ok: false,
+            reason: 'invalid_secret_record_ids',
+            failedCount: 1,
+            entries: [expect.objectContaining({
+                status: 'error',
+                errorClass: 'DuplicateSecretRecordIdError',
+            })],
+        }));
+        expect(auditResult).toEqual(expect.objectContaining({
+            ok: false,
+            blocking: true,
+            reason: 'audit_drift_blocked',
+            entries: [expect.objectContaining({
+                status: 'error',
+                drift_types: ['invalid_secret_record_ids'],
+                details: { errorClass: 'DuplicateSecretRecordIdError' },
+            })],
+        }));
+        expect(JSON.stringify({ importResult, auditResult })).not.toContain(canary);
+    });
+
     test('audits DB/file drift without returning secret plaintext and persists a scoped clean status', () => {
         const root = makeRoot();
         const directories = createDirectories(root);
@@ -364,6 +419,8 @@ describe('canonical secrets store', () => {
         expect(() => secretManager.writeSecret('api_key_openai', `${canary}-blocked`, 'Blocked')).toThrow(
             /canonical secrets writes blocked/i,
         );
+        setCanonicalEnv({ reads: false, writes: false });
+        expect(secretManager.readSecret('api_key_openai')).toBe(`${canary}-committed`);
 
         fs.rmSync(secretsPath, { recursive: true, force: true });
         const repaired = await runCanonicalSliceRepair({
