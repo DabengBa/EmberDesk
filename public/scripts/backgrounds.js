@@ -1,11 +1,11 @@
 import { Fuse, localforage } from '../lib.js';
-import { characters, chat_metadata, eventSource, event_types, generateQuietPrompt, getCurrentChatId, getRequestHeaders, getThumbnailUrl, saveMetadata, saveSettingsDebounced, this_chid } from '../script.js';
-import { openThirdPartyExtensionMenu, saveMetadataDebounced } from './extensions.js';
+import { characters, chat_metadata, eventSource, event_types, generateQuietPrompt, getCurrentChatId, getRequestHeaders, getThumbnailUrl, saveMetadata, saveSettings, saveSettingsDebounced, this_chid } from '../script.js';
+import { cancelDebouncedMetadataSave, openThirdPartyExtensionMenu, saveMetadataDebounced } from './extensions.js';
 import { SlashCommand } from './slash-commands/SlashCommand.js';
 import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
 import { createSingleFlightTask } from './startup-helpers.js';
 import { replaceBackgroundPanelController } from './background-panel-controller.js';
-import { createThumbnail, flashHighlight, getBase64Async, stringFormat, debounce, setupScrollToTop, saveBase64AsFile, getFileExtension, sortIgnoreCaseAndAccents } from './utils.js';
+import { cancelDebounce, createThumbnail, flashHighlight, getBase64Async, stringFormat, debounce, setupScrollToTop, saveBase64AsFile, getFileExtension, sortIgnoreCaseAndAccents } from './utils.js';
 import { debounce_timeout } from './constants.js';
 import { t } from './i18n.js';
 import { callGenericPopup, Popup, POPUP_TYPE } from './popup.js';
@@ -533,6 +533,10 @@ async function onRenameBackgroundClick(e) {
         return;
     }
 
+    const backgroundElement = $(this).closest('.bg_example');
+    const oldUrl = backgroundElement.data('url');
+    const renamesGlobalSelection = bgNames.oldBg === background_settings.name;
+    const renamesChatSelection = oldUrl === chat_metadata[BG_METADATA_KEY];
     const data = { old_bg: bgNames.oldBg, new_bg: bgNames.newBg };
     const response = await fetch('/api/backgrounds/rename', {
         method: 'POST',
@@ -542,11 +546,37 @@ async function onRenameBackgroundClick(e) {
     });
 
     if (response.ok) {
+        const newUrl = generateUrlParameter(bgNames.newBg, false);
+        if (renamesChatSelection) {
+            saveBackgroundMetadata(newUrl);
+            $('#bg1').css('background-image', newUrl);
+            cancelDebouncedMetadataSave();
+            await saveMetadata();
+        }
+        if (renamesGlobalSelection) {
+            await setBackground(bgNames.newBg, newUrl);
+            cancelDebounce(saveSettingsDebounced);
+            await saveSettings();
+        }
         await getBackgrounds({ force: true });
         highlightNewBackground(bgNames.newBg);
     } else {
         toastr.warning('Failed to rename background');
     }
+}
+
+function getReplacementBackground(bgToDelete) {
+    const nextBackground = bgToDelete.next('.bg_example');
+    if (nextBackground.length > 0) {
+        return nextBackground;
+    }
+
+    const previousBackground = bgToDelete.prev('.bg_example');
+    if (previousBackground.length > 0) {
+        return previousBackground;
+    }
+
+    return $('#bg_menu_content .bg_example:not([custom="true"])').not(bgToDelete).first();
 }
 
 async function onDeleteBackgroundClick(e) {
@@ -574,6 +604,12 @@ async function onDeleteBackgroundClick(e) {
     const bg = bgToDelete.attr('bgfile');
 
     if (confirm) {
+        const deletesGlobalSelection = bg === background_settings.name;
+        const deletesChatSelection = url === chat_metadata[BG_METADATA_KEY];
+        const replacementBackground = deletesGlobalSelection
+            ? getReplacementBackground(bgToDelete)
+            : jQuery();
+
         // If it's not custom, it's a built-in background. Delete it from the server
         if (!isCustom) {
             await delBackground(bg);
@@ -588,21 +624,23 @@ async function onDeleteBackgroundClick(e) {
             list.splice(index, 1);
         }
 
-        if (bg === background_settings.name || url === chat_metadata[BG_METADATA_KEY]) {
-            const siblingSelector = '.bg_example';
-            const nextBg = bgToDelete.next(siblingSelector);
-            const prevBg = bgToDelete.prev(siblingSelector);
+        if (deletesChatSelection) {
+            removeBackgroundMetadata();
+        }
 
-            if (nextBg.length > 0) {
-                nextBg.trigger('click');
-            } else if (prevBg.length > 0) {
-                prevBg.trigger('click');
+        if (deletesGlobalSelection) {
+            if (replacementBackground.length > 0) {
+                const replacementFile = String(replacementBackground.attr('bgfile') || '');
+                const replacementUrl = replacementBackground.data('url');
+                await setBackground(replacementFile, replacementUrl);
             } else {
-                const anyOtherBg = $('.bg_example').not(bgToDelete).first();
-                if (anyOtherBg.length > 0) {
-                    anyOtherBg.trigger('click');
-                }
+                background_settings.name = '';
+                background_settings.url = '';
+                $('#bg1').css('background-image', 'none');
+                saveSettingsDebounced();
             }
+        } else if (deletesChatSelection) {
+            $('#bg1').css('background-image', background_settings.url || 'none');
         }
 
         // Remove from local image list so it doesn't reappear on re-render
@@ -624,10 +662,15 @@ async function onDeleteBackgroundClick(e) {
             renderFolderGrid();
         }
 
-        bgToDelete.remove();
-
-        if (url === chat_metadata[BG_METADATA_KEY]) {
-            removeBackgroundMetadata();
+        if (deletesGlobalSelection) {
+            cancelDebounce(saveSettingsDebounced);
+            await saveSettings();
+        }
+        if (deletesChatSelection) {
+            cancelDebouncedMetadataSave();
+            if (!isCustom) {
+                await saveMetadata();
+            }
         }
 
         if (isCustom) {
@@ -638,6 +681,7 @@ async function onDeleteBackgroundClick(e) {
             await saveMetadata();
         }
 
+        bgToDelete.remove();
         syncBackgroundSelectionUi();
         syncGroupSelectionUi();
     }
