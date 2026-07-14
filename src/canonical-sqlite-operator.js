@@ -11,6 +11,7 @@ import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus, audit
 import { auditCanonicalWorldInfoShadowImport, WORLD_INFO_AUDIT_SCOPE } from './canonical-world-info-shadow-import.js';
 import { auditCanonicalSettingsShadowImport, SETTINGS_AUDIT_SCOPE } from './canonical-settings-shadow-import.js';
 import { auditCanonicalManagedMediaShadowImport } from './canonical-managed-media-shadow-import.js';
+import { auditCanonicalChatShadowImport } from './canonical-chat-shadow-import.js';
 import { repairCanonicalManagedMediaProjection } from './endpoints/canonical-managed-media-write-service.js';
 import {
     auditCanonicalSecretsShadowImport,
@@ -345,6 +346,7 @@ function summarizeSliceStatus({
     return {
         key: slice.key,
         auditScope: slice.auditScope,
+        authorityMode: slice.authorityMode ?? 'cutover_capable',
         enabled,
         featureFlags: {
             enabled: !!sliceFlags.enabled,
@@ -830,6 +832,11 @@ function ensureDefaultSliceRunners(registry = getDefaultCanonicalStorageSliceReg
         registry.setRunners('managed_media', {
             runAudit: auditCanonicalManagedMediaShadowImport,
             runRepair: repairCanonicalManagedMediaProjection,
+        });
+    }
+    if (!registry.getRunners('chats')) {
+        registry.setRunners('chats', {
+            runAudit: auditCanonicalChatShadowImport,
         });
     }
     return registry;

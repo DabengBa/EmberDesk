@@ -22,6 +22,7 @@ Let users reliably read opened chat history and finalized generated messages as 
 - Stored and finalized user, assistant, character, or system messages render as readable message rows whose visible text matches the source message after normal browser whitespace handling.
 - Message text remains the primary content of each row; reasoning, media, files, bias, swipe state, and row actions may appear around it only when valid for that message.
 - Safe finalized rows may be visibly owned by the guarded React message-list path, but they must preserve the same row identity, message text shell, reasoning/media/file shells, action attachment points, and reading flow as the established surface.
+- Canonical chat foundation may retain a lossless shadow copy of the underlying JSONL payload, including unknown message fields, but it does not change the visible renderer or row owner.
 - The React shell may own the outer chat layout/status on the existing `#chat` container, but it must not insert a wrapper between `#chat` and `.mes[mesid]` rows or change row ordering as part of layout ownership.
 - Editing rows, active streaming rows, unsafe snapshot rows, and extension-mutated rows fail closed to the established legacy rendering surface rather than leaving a half-owned row.
 - Long chats may open with only the recent visible window, but users must retain the existing load-more affordance for older messages; loaded older rows stay stable without requiring a separate jump-to-newest recovery control.

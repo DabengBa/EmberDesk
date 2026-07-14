@@ -16,8 +16,8 @@ function printUsage() {
         'Runs a read-only canonical SQLite audit.',
         '',
         'Options:',
-        '  --scope <scope>      character_metadata_and_chat_stats | world_info | settings | secrets | managed_media',
-        '  --slice <key>        characters | world_info | settings | secrets | managed_media (alias for scope)',
+        '  --scope <scope>      character_metadata_and_chat_stats | world_info | settings | secrets | managed_media | chats',
+        '  --slice <key>        characters | world_info | settings | secrets | managed_media | chats (alias for scope)',
     ].join('\n'));
 }
 
@@ -61,6 +61,8 @@ function parseArgs(argv) {
                     options.scope = 'secrets';
                 } else if (slice === 'managed_media') {
                     options.scope = 'managed_media';
+                } else if (slice === 'chats') {
+                    options.scope = 'chats';
                 } else if (slice) {
                     throw new Error(`Unknown slice: ${slice}`);
                 }
@@ -134,7 +136,7 @@ async function main() {
 
     runCanonicalMigrations(db, { strict: options.strict });
     let result;
-    if (options.scope === 'world_info' || options.scope === 'settings' || options.scope === 'secrets' || options.scope === 'managed_media') {
+    if (options.scope === 'world_info' || options.scope === 'settings' || options.scope === 'secrets' || options.scope === 'managed_media' || options.scope === 'chats') {
         result = await runCanonicalSliceAudit({
             sliceKey: options.scope,
             handle: options.handle,

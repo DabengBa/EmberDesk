@@ -6,6 +6,7 @@ import { WORLD_INFO_AUDIT_SCOPE } from './canonical-world-info-shadow-import.js'
 import { SETTINGS_AUDIT_SCOPE } from './canonical-settings-shadow-import.js';
 import { CANONICAL_SECRETS_AUDIT_SCOPE } from './canonical-secrets-shadow-import.js';
 import { MANAGED_MEDIA_AUDIT_SCOPE } from './canonical-managed-media-shadow-import.js';
+import { CANONICAL_CHAT_AUDIT_SCOPE } from './canonical-chat-shadow-import.js';
 import {
     buildCanonicalSliceRollbackBlockers,
     getCanonicalSliceFlagContractStatus,
@@ -279,6 +280,33 @@ function createManagedMediaSlice() {
     };
 }
 
+function createChatsSlice() {
+    const flags = createSliceFlagCapabilities({ flagKey: 'chats' });
+    return {
+        key: 'chats',
+        ...flags,
+        auditScope: CANONICAL_CHAT_AUDIT_SCOPE,
+        authorityMode: 'shadow_only',
+        listOpenRepairs() {
+            return [];
+        },
+        getMigrationReadiness(db) {
+            return createSharedMigrationReadiness(db);
+        },
+        getRollbackBlockers() {
+            // Chat foundation does not own a read/write cutover or projection repair
+            // contract yet. Its only operator gate is a clean shadow audit.
+            return { ok: true, blockers: [] };
+        },
+        getBackupManagedPaths(directories) {
+            return [
+                directories?.chats ?? null,
+                directories?.groupChats ?? null,
+            ].filter(Boolean);
+        },
+    };
+}
+
 export function createCanonicalStorageSliceRegistry({ registerDefaults = false } = {}) {
     /** @type {Map<string, object>} */
     const slices = new Map();
@@ -348,6 +376,7 @@ export function createCanonicalStorageSliceRegistry({ registerDefaults = false }
         register(createSettingsSlice());
         register(createSecretsSlice());
         register(createManagedMediaSlice());
+        register(createChatsSlice());
     }
 
     return registry;

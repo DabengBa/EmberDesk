@@ -1,0 +1,5 @@
+contract_version = 1
+feature_slug = "canonical-chat-foundation"
+brief = ".docs/tech/briefs/260714-02-canonical-chat-foundation.md"
+doc_ids = ["page.chat_workspace", "feature.chat_message_rendering", "feature.chat_message_actions"]
+

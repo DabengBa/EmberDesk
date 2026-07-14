@@ -292,6 +292,61 @@ export const CANONICAL_SQLITE_MIGRATIONS = Object.freeze([
                 ON managed_media_repairs (resolved_at_ms, operation);
         `,
     }),
+    Object.freeze({
+        version: 7,
+        name: 'canonical_chat_foundation',
+        sql: `
+            CREATE TABLE IF NOT EXISTS chat_sessions (
+                id TEXT PRIMARY KEY,
+                owner_type TEXT NOT NULL,
+                owner_id TEXT NOT NULL,
+                source_key TEXT NOT NULL,
+                source_path TEXT NOT NULL,
+                display_name TEXT NOT NULL,
+                header_payload_json TEXT NOT NULL,
+                source_jsonl TEXT NOT NULL,
+                source_mtime_ms INTEGER NOT NULL DEFAULT 0,
+                source_size_bytes INTEGER NOT NULL DEFAULT 0,
+                created_at_ms INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL,
+                UNIQUE(owner_type, owner_id, source_key),
+                UNIQUE(owner_type, owner_id, source_path)
+            );
+
+            CREATE TABLE IF NOT EXISTS chat_messages (
+                id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+                message_order INTEGER NOT NULL,
+                identity_key TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                created_at_ms INTEGER,
+                UNIQUE(session_id, message_order),
+                UNIQUE(session_id, identity_key)
+            );
+
+            CREATE TABLE IF NOT EXISTS chat_message_swipes (
+                message_id TEXT NOT NULL REFERENCES chat_messages(id) ON DELETE CASCADE,
+                swipe_order INTEGER NOT NULL,
+                payload_json TEXT NOT NULL,
+                PRIMARY KEY (message_id, swipe_order)
+            );
+
+            CREATE TABLE IF NOT EXISTS chat_attachment_refs (
+                message_id TEXT NOT NULL REFERENCES chat_messages(id) ON DELETE CASCADE,
+                blob_id TEXT NOT NULL REFERENCES managed_blobs(id) ON DELETE RESTRICT,
+                role TEXT NOT NULL,
+                compatibility_json TEXT NOT NULL DEFAULT '{}',
+                PRIMARY KEY (message_id, blob_id, role, compatibility_json)
+            );
+
+            CREATE INDEX IF NOT EXISTS chat_sessions_owner_path_idx
+                ON chat_sessions (owner_type, owner_id, source_path);
+            CREATE INDEX IF NOT EXISTS chat_messages_session_order_idx
+                ON chat_messages (session_id, message_order);
+            CREATE INDEX IF NOT EXISTS chat_attachment_refs_blob_idx
+                ON chat_attachment_refs (blob_id);
+        `,
+    }),
 ]);
 
 export class CanonicalMigrationBlockedError extends Error {

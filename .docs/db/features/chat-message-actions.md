@@ -25,6 +25,7 @@ Let users act on an already rendered chat message through discoverable row contr
 - Danger actions keep clear accessible names and must not visually outrank normal copy/edit actions.
 - A failed generation row may expose a retry action only after [Chat Generation Auto Recovery](feature.chat_generation_auto_recovery) has exhausted automatic attempts; using it must not resubmit the already-rendered user message as a duplicate row.
 - Safe rows may show a React-owned visible action shell or the ordinary fallback shell, but the user-facing controls, mobile reachability, and compatibility hooks remain the same; unsafe or editing rows fall back cleanly.
+- Canonical chat foundation may model stored swipe and managed attachment references for audit, but it does not change action ownership, action availability, or row controls.
 - The main-chat React shell may coordinate composer/action-rail placement on the existing `#send_form` and `#nonQRFormItems` containers, but row action semantics, valid-action decisions, and compatibility hooks remain governed by the message-action surface.
 
 ## Semantic Interaction IDs

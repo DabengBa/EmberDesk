@@ -27,6 +27,7 @@ import {
 import { getDefaultCanonicalStorageSliceRegistry } from '../src/canonical-storage-slice-registry.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import { MANAGED_MEDIA_AUDIT_SCOPE } from '../src/canonical-managed-media-shadow-import.js';
+import { CANONICAL_CHAT_AUDIT_SCOPE } from '../src/canonical-chat-shadow-import.js';
 
 const tempRoots = [];
 const managers = [];
@@ -94,6 +95,56 @@ afterEach(() => {
 });
 
 describe('canonical sqlite operator helpers', () => {
+    test('reports the chat foundation as shadow-only and audits it without changing route authority', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        runCanonicalMigrations(db, { nowMs: 1735689600000 });
+
+        const audit = await runCanonicalSliceAudit({
+            sliceKey: 'chats',
+            handle: 'alice',
+            directories,
+            db,
+            auditedAtMs: 1735689600000,
+        });
+        expect(audit).toEqual(expect.objectContaining({
+            ok: true,
+            sliceKey: 'chats',
+            entries: [],
+        }));
+        expect(getPersistedCanonicalAuditStatus(db, {
+            scope: CANONICAL_CHAT_AUDIT_SCOPE,
+        })).toEqual(expect.objectContaining({
+            ok: true,
+            blocking: false,
+        }));
+
+        const status = getCanonicalStorageControlPlaneStatus({
+            handle: 'alice',
+            directories,
+            db,
+            featureFlags: {
+                enabled: true,
+                shadowImport: true,
+                reads: true,
+                writes: true,
+                strict: false,
+            },
+            sliceKeys: ['chats'],
+        });
+        expect(status.slices).toEqual([expect.objectContaining({
+            key: 'chats',
+            authorityMode: 'shadow_only',
+            ready: true,
+        })]);
+    });
+
     test('repairs a missing projection file from canonical data and resolves the repair row', async () => {
         const root = makeRoot();
         const directories = createDirectories(root);
@@ -463,7 +514,7 @@ describe('canonical sqlite operator helpers', () => {
         });
 
         expect(status.handle).toBe('alice');
-        expect(status.slices.map(slice => slice.key)).toEqual(['characters', 'world_info', 'settings', 'secrets', 'managed_media']);
+        expect(status.slices.map(slice => slice.key)).toEqual(['characters', 'world_info', 'settings', 'secrets', 'managed_media', 'chats']);
 
         const characters = status.slices.find(slice => slice.key === 'characters');
         const worldInfo = status.slices.find(slice => slice.key === 'world_info');

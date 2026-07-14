@@ -23,6 +23,7 @@ import {
 import { recordProjectionRepair } from '../src/endpoints/character-store.js';
 import { recordCanonicalManagedMediaRepair } from '../src/endpoints/canonical-managed-media-store.js';
 import { MANAGED_MEDIA_AUDIT_SCOPE } from '../src/canonical-managed-media-shadow-import.js';
+import { CANONICAL_CHAT_AUDIT_SCOPE } from '../src/canonical-chat-shadow-import.js';
 import { recordWorldInfoProjectionRepair } from '../src/endpoints/world-info-store.js';
 import { persistCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.js';
 
@@ -93,9 +94,9 @@ afterEach(() => {
 describe('canonical storage slice registry', () => {
     test('registers all delivered canonical slices with required capabilities', () => {
         const registry = getDefaultCanonicalStorageSliceRegistry();
-        expect(listCanonicalStorageSliceKeys(registry)).toEqual(['characters', 'world_info', 'settings', 'secrets', 'managed_media']);
+        expect(listCanonicalStorageSliceKeys(registry)).toEqual(['characters', 'world_info', 'settings', 'secrets', 'managed_media', 'chats']);
 
-        for (const key of ['characters', 'world_info', 'settings', 'secrets', 'managed_media']) {
+        for (const key of ['characters', 'world_info', 'settings', 'secrets', 'managed_media', 'chats']) {
             const slice = registry.get(key);
             expect(slice.key).toBe(key);
             expect(typeof slice.flagKey).toBe('string');
@@ -107,6 +108,19 @@ describe('canonical storage slice registry', () => {
             expect(typeof slice.getRollbackBlockers).toBe('function');
             expect(typeof slice.getBackupManagedPaths).toBe('function');
         }
+    });
+
+    test('registers chats as a shadow-only slice without a route cutover contract', () => {
+        const { db, directories } = openMigratedDb();
+        const chats = getDefaultCanonicalStorageSliceRegistry().get('chats');
+
+        expect(chats.auditScope).toBe(CANONICAL_CHAT_AUDIT_SCOPE);
+        expect(chats.authorityMode).toBe('shadow_only');
+        expect(chats.listOpenRepairs(db)).toEqual([]);
+        expect(chats.getBackupManagedPaths(directories)).toEqual([
+            directories.chats,
+        ]);
+        expect(chats.getRollbackBlockers({ db })).toEqual({ ok: true, blockers: [] });
     });
 
     test('keeps managed media flags, audit scope, repairs, and backup inventory independent', () => {
