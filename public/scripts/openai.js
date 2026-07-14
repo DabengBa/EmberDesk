@@ -78,9 +78,11 @@ import { accountStorage } from './util/AccountStorage.js';
 import { IGNORE_SYMBOL, MEDIA_DISPLAY, MEDIA_TYPE } from './constants.js';
 import { buildFallbackOpenAIRequestOverrides } from './chat-generation-auto-recovery.js';
 import {
+    canUseDirectProviderSecret,
     clearProviderSecretField,
     getFallbackProviderStatus,
     getUnifiedKeyFieldState,
+    resolveProviderSecretKeyForSettings,
     saveProviderSecretField,
     toggleSecretInputMask,
 } from './provider-secret-field-state.js';
@@ -3869,17 +3871,28 @@ async function onNewPresetClick() {
 function updateUnifiedKeyField() {
     const $field = $('#api_key_unified');
     const source = oai_settings.chat_completion_source;
-    const state = getUnifiedKeyFieldState({
+    const secretKey = resolveProviderSecretKeyForSettings({
         settings: oai_settings,
         source,
         secretKey: resolveSecretKey(),
+        chatCompletionSources: chat_completion_sources,
+    });
+    const state = getUnifiedKeyFieldState({
+        settings: oai_settings,
+        source,
+        secretKey,
         secretState: secret_state,
         chatCompletionSources: chat_completion_sources,
     });
+    const canManageSecret = canUseDirectProviderSecret({ settings: oai_settings, secretKey });
 
     $('body').toggleClass('vertexai-active', state.vertexAiActive);
     $field.attr('placeholder', state.placeholder);
     $field.val(state.value);
+    $('#api_key_unified_manage')
+        .attr('data-key', secretKey ?? '')
+        .data('key', secretKey ?? '')
+        .toggle(canManageSecret);
 }
 
 function updateBaseUrlStatus() {
@@ -4679,5 +4692,13 @@ export function initOpenAI() {
     $('#fallback_provider_save_key').on('click', onFallbackProviderSaveKeyClick);
     $('#fallback_provider_clear_key').on('click', onFallbackProviderClearKeyClick);
     $('#customize_additional_parameters').on('click', onCustomizeParametersClick);
+    eventSource.on(event_types.SETTINGS_LOADED, updateUnifiedKeyField);
     eventSource.on(event_types.MAIN_API_CHANGED, updateUnifiedKeyField);
+    [
+        event_types.SECRET_WRITTEN,
+        event_types.SECRET_DELETED,
+        event_types.SECRET_ROTATED,
+        event_types.SECRET_EDITED,
+    ].forEach(eventType => eventSource.on(eventType, updateUnifiedKeyField));
+    updateUnifiedKeyField();
 }

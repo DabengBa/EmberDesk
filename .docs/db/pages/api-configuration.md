@@ -18,7 +18,7 @@ This page exists so a user can configure how EmberDesk connects to an LLM API pr
 
 ## Page Structure (UI Layout)
 
-1. **Primary connection path**: Chat Completion provider selector (`OpenAI`, `Claude`, `Google`), matching provider-specific model input backed by a datalist, unified masked API key input, and optional Base URL input grouped as the first visible task path.
+1. **Primary connection path**: Chat Completion provider selector (`OpenAI`, `Claude`, `Google`), matching provider-specific model input backed by a datalist, unified masked API key input with a direct-mode credential-history manager, and optional Base URL input grouped as the first visible task path.
 2. **Fallback provider section**: optional OpenAI-compatible fallback toggle and status chip are visible by default; fallback base URL, model, secret-backed API key controls, and cost warning stay inside the same drawer but are only visually expanded when fallback is enabled.
 3. **Provider-specific section**: controls such as Vertex AI mode, credential type, region, and service account JSON shown when the selected provider needs them.
 4. **Prompt post-processing section**: collapsible selector for prompt post-processing behavior.
@@ -45,6 +45,7 @@ This page exists so a user can configure how EmberDesk connects to an LLM API pr
 - **Default state**: OpenAI is the default chat-completion provider for new installations.
 - **Proxy mode**: when a custom base URL is entered, the unified API key acts as the gateway password for all providers.
 - **Direct mode**: when the base URL is empty, the unified API key stores the current provider's secret key in the server-side secret store.
+- **Credential manager entry**: in direct mode, the key button next to the unified API key opens the current provider's credential history; it is hidden in proxy mode because that field then stores the gateway password instead of a provider secret.
 - **Provider switch**: changing the chat completion source updates the unified key field placeholder to reflect whether a saved key exists for the new provider.
 - **Credential history**: saved provider credentials keep their labels and one active selection per provider key. Adding a new credential makes it active; renaming, switching, and deleting credentials keep the same visible behavior across the legacy drawer and React Settings overlap.
 - **Secret visibility**: ordinary page state shows only masked values and saved/missing status. Full values remain unavailable unless the server explicitly allows the existing narrow exposure path.

@@ -34,6 +34,8 @@ Important constraints:
 `provider-secret-field-state.js` exports:
 
 - `getFallbackProviderStatus()`
+- `resolveProviderSecretKeyForSettings()`
+- `canUseDirectProviderSecret()`
 - `getUnifiedKeyFieldState()`
 - `saveProviderSecretField()`
 - `clearProviderSecretField()`
