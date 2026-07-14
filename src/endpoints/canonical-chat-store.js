@@ -8,6 +8,15 @@ function getSessionBySourceKey(db, { ownerType, ownerId, sourceKey }) {
     `).get(ownerType, ownerId, sourceKey) ?? null;
 }
 
+function getGroupSessionBySourceJsonl(db, { sourceJsonl }) {
+    const matches = db.prepare(`
+        SELECT *
+        FROM chat_sessions
+        WHERE owner_type = 'group' AND source_jsonl = ?
+    `).all(sourceJsonl);
+    return matches.length === 1 ? matches[0] : null;
+}
+
 export function getCanonicalChatSession(db, { ownerType, ownerId, sourcePath }) {
     return db.prepare(`
         SELECT *
@@ -18,7 +27,8 @@ export function getCanonicalChatSession(db, { ownerType, ownerId, sourcePath }) 
 
 function getExistingSession(db, record) {
     return getSessionBySourceKey(db, record)
-        ?? getCanonicalChatSession(db, record);
+        ?? getCanonicalChatSession(db, record)
+        ?? (record.ownerType === 'group' ? getGroupSessionBySourceJsonl(db, record) : null);
 }
 
 export function listCanonicalChatSessions(db) {
@@ -34,19 +44,64 @@ function extractSwipes(payload) {
     return Array.isArray(payload?.swipes) ? payload.swipes : [];
 }
 
+function getExistingMessageIds(db, sessionId) {
+    return new Map(db.prepare(`
+        SELECT id, identity_key
+        FROM chat_messages
+        WHERE session_id = ?
+    `).all(sessionId).map(message => [message.identity_key, message.id]));
+}
+
+function getAttachmentSnapshot(db, sessionId) {
+    return db.prepare(`
+        SELECT message.identity_key, reference.blob_id, reference.role, reference.compatibility_json
+        FROM chat_attachment_refs AS reference
+        JOIN chat_messages AS message ON message.id = reference.message_id
+        WHERE message.session_id = ?
+        ORDER BY message.identity_key ASC, reference.blob_id ASC, reference.role ASC, reference.compatibility_json ASC
+    `).all(sessionId);
+}
+
+function getExpectedAttachmentSnapshot(record) {
+    return record.messages.flatMap(message => message.attachments.map(attachment => ({
+        identity_key: message.identityKey,
+        blob_id: attachment.blobId,
+        role: attachment.role,
+        compatibility_json: JSON.stringify(attachment.compatibility),
+    }))).sort((left, right) => (
+        left.identity_key.localeCompare(right.identity_key)
+        || left.blob_id.localeCompare(right.blob_id)
+        || left.role.localeCompare(right.role)
+        || left.compatibility_json.localeCompare(right.compatibility_json)
+    ));
+}
+
+function hasMatchingAttachmentSnapshot(db, sessionId, record) {
+    return JSON.stringify(getAttachmentSnapshot(db, sessionId))
+        === JSON.stringify(getExpectedAttachmentSnapshot(record));
+}
+
 export function upsertCanonicalChatSession(db, record) {
     const existing = getExistingSession(db, record);
-    if (existing?.source_jsonl === record.sourceJsonl && existing.source_path === record.sourcePath) {
+    const sourceUnchanged = existing?.source_jsonl === record.sourceJsonl;
+    const attachmentSnapshotMatches = existing
+        ? hasMatchingAttachmentSnapshot(db, existing.id, record)
+        : false;
+    if (sourceUnchanged
+        && existing.source_path === record.sourcePath
+        && attachmentSnapshotMatches) {
         return { id: existing.id, status: 'unchanged' };
     }
 
     const id = existing?.id ?? record.id;
+    const existingMessageIds = existing ? getExistingMessageIds(db, id) : new Map();
     withCanonicalTransaction(db, txnDb => {
         if (existing) {
             txnDb.prepare(`
                 UPDATE chat_sessions
                 SET
                     source_key = ?,
+                    owner_id = ?,
                     source_path = ?,
                     display_name = ?,
                     header_payload_json = ?,
@@ -57,6 +112,7 @@ export function upsertCanonicalChatSession(db, record) {
                 WHERE id = ?
             `).run(
                 record.sourceKey,
+                record.ownerId,
                 record.sourcePath,
                 record.displayName,
                 record.headerPayloadJson,
@@ -98,7 +154,7 @@ export function upsertCanonicalChatSession(db, record) {
             );
         }
 
-        if (existing?.source_jsonl === record.sourceJsonl) {
+        if (sourceUnchanged && attachmentSnapshotMatches) {
             return;
         }
 
@@ -123,8 +179,9 @@ export function upsertCanonicalChatSession(db, record) {
         `);
 
         for (const message of record.messages) {
+            const messageId = existingMessageIds.get(message.identityKey) ?? message.id;
             insertMessage.run(
-                message.id,
+                messageId,
                 id,
                 message.order,
                 message.identityKey,
@@ -132,11 +189,11 @@ export function upsertCanonicalChatSession(db, record) {
                 message.createdAtMs,
             );
             for (const [swipeOrder, swipe] of extractSwipes(message.payload).entries()) {
-                insertSwipe.run(message.id, swipeOrder, JSON.stringify(swipe));
+                insertSwipe.run(messageId, swipeOrder, JSON.stringify(swipe));
             }
             for (const attachment of message.attachments) {
                 insertAttachment.run(
-                    message.id,
+                    messageId,
                     attachment.blobId,
                     attachment.role,
                     JSON.stringify(attachment.compatibility),

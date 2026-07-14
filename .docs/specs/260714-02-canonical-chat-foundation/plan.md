@@ -40,4 +40,10 @@ Doc IDs: page.chat_workspace, feature.chat_message_rendering, feature.chat_messa
 
 ## Review
 
+- [x] Review: R-01 preserve session and message IDs when a header-only update or group file rename changes the former source key (severity: high; scope: Task 1; evidence: `tests/canonical-chat-foundation.test.js`; proof: focused test passes).
+- [x] Review: R-02 refresh attachment references after managed-media availability changes, even when the JSONL snapshot itself is unchanged (severity: high; scope: Task 2; evidence: `src/endpoints/canonical-chat-store.js`; proof: focused test passes).
+- [x] Review: R-03 block audit when raw JSONL bytes change despite equivalent parsed payloads, and prove each R5 drift category (severity: medium; scope: Tasks 1 and 3; evidence: `src/canonical-chat-shadow-import.js`; proof: focused test passes).
+- [x] Review: R-04 expose an opt-in `--import-chats` maintenance path so the delivered shadow importer can populate rows before its read-only audit (severity: medium; scope: Task 3; evidence: `scripts/canonical-sqlite-audit.mjs`; proof: CLI test passes).
+- [x] Review: R-05 make invalid `--import-chats` usage recoverable with a concise error, usage text, and exit code 1 instead of a JavaScript stack trace (severity: medium; scope: Task 3; evidence: `scripts/canonical-sqlite-audit.mjs`; proof: CLI test passes).
+- Review boundary: `src/endpoints/chats.js` is outside commit `3ad6b60c0` and currently has unrelated worktree changes; this review did not alter that route surface.
 - [x] Review complete

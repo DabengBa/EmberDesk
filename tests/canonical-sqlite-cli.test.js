@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 import { afterEach, describe, expect, test } from '@jest/globals';
@@ -96,6 +96,7 @@ describe('canonical sqlite CLI scripts', () => {
 
         expect(auditHelp).toContain('Usage: node scripts/canonical-sqlite-audit.mjs');
         expect(auditHelp).toContain('--scope <scope>');
+        expect(auditHelp).toContain('--import-chats');
         expect(auditHelp).toContain('managed_media');
         expect(repairHelp).toContain('Usage: node scripts/canonical-sqlite-repair.mjs');
         expect(repairHelp).toContain('list-repairs');
@@ -138,6 +139,68 @@ describe('canonical sqlite CLI scripts', () => {
             blocking: false,
             sliceKey: 'managed_media',
         }));
+    });
+
+    test('imports chat shadow rows through the opt-in audit CLI command', () => {
+        const dataRoot = makeRoot();
+        const directories = createDirectories(path.join(dataRoot, 'alice'));
+        const chatDirectory = path.join(directories.chats, 'alice');
+        fs.mkdirSync(chatDirectory, { recursive: true });
+        fs.writeFileSync(path.join(chatDirectory, 'first.jsonl'), [
+            '{"chat_metadata":{"integrity":"stable"}}',
+            '{"name":"User","is_user":true,"mes":"Hello"}',
+        ].join('\n'), 'utf8');
+
+        const output = execFileSync('node', [
+            'scripts/canonical-sqlite-audit.mjs',
+            '--data-root', dataRoot,
+            '--handle', 'alice',
+            '--slice', 'chats',
+            '--import-chats',
+            '--json',
+        ], {
+            cwd: repoRoot,
+            encoding: 'utf8',
+        });
+
+        expect(JSON.parse(output)).toEqual(expect.objectContaining({
+            ok: true,
+            blocking: false,
+            sliceKey: 'chats',
+            chatImport: expect.objectContaining({
+                ok: true,
+                importedCount: 1,
+            }),
+        }));
+
+        const textOutput = execFileSync('node', [
+            'scripts/canonical-sqlite-audit.mjs',
+            '--data-root', dataRoot,
+            '--handle', 'alice',
+            '--slice', 'chats',
+            '--import-chats',
+        ], {
+            cwd: repoRoot,
+            encoding: 'utf8',
+        });
+        expect(textOutput).toContain('chat import: imported=0 updated=0 unchanged=1 failed=0');
+    });
+
+    test('explains how to recover when chat import is used outside the chats slice', () => {
+        const result = spawnSync('node', [
+            'scripts/canonical-sqlite-audit.mjs',
+            '--data-root', makeRoot(),
+            '--handle', 'alice',
+            '--import-chats',
+        ], {
+            cwd: repoRoot,
+            encoding: 'utf8',
+        });
+
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain('--import-chats requires --scope chats or --slice chats.');
+        expect(result.stderr).toContain('Usage: node scripts/canonical-sqlite-audit.mjs');
+        expect(result.stderr).not.toContain('at main');
     });
 
     test('lists repairs and replays projection from the repair CLI', async () => {

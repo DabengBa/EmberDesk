@@ -4,13 +4,16 @@ import path from 'node:path';
 
 import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import { runCanonicalChatShadowImport } from '../src/canonical-chat-shadow-import.js';
 import { runCanonicalAudit, runCanonicalSliceAudit } from '../src/canonical-sqlite-operator.js';
 import { getUserDirectories } from '../src/user-directories.js';
 
 const manager = createCanonicalSqliteManager({ logger: { info() {}, warn() {} } });
 
-function printUsage() {
-    process.stdout.write([
+class UsageError extends Error {}
+
+function printUsage(output = process.stdout) {
+    output.write([
         'Usage: node scripts/canonical-sqlite-audit.mjs --data-root <path> --handle <user> [--json] [--strict]',
         '',
         'Runs a read-only canonical SQLite audit.',
@@ -18,6 +21,7 @@ function printUsage() {
         'Options:',
         '  --scope <scope>      character_metadata_and_chat_stats | world_info | settings | secrets | managed_media | chats',
         '  --slice <key>        characters | world_info | settings | secrets | managed_media | chats (alias for scope)',
+        '  --import-chats       Refresh chat shadow rows before auditing the chats slice',
     ].join('\n'));
 }
 
@@ -28,6 +32,7 @@ function parseArgs(argv) {
         json: false,
         strict: false,
         scope: 'character_metadata_and_chat_stats',
+        importChats: false,
         help: false,
     };
 
@@ -64,16 +69,19 @@ function parseArgs(argv) {
                 } else if (slice === 'chats') {
                     options.scope = 'chats';
                 } else if (slice) {
-                    throw new Error(`Unknown slice: ${slice}`);
+                    throw new UsageError(`Unknown slice: ${slice}`);
                 }
                 break;
             }
+            case '--import-chats':
+                options.importChats = true;
+                break;
             case '--help':
             case '-h':
                 options.help = true;
                 break;
             default:
-                throw new Error(`Unknown argument: ${arg}`);
+                throw new UsageError(`Unknown argument: ${arg}`);
         }
     }
 
@@ -82,7 +90,7 @@ function parseArgs(argv) {
 
 function ensureRequired(options) {
     if (!options.dataRoot || !options.handle) {
-        throw new Error('Both --data-root and --handle are required.');
+        throw new UsageError('Both --data-root and --handle are required.');
     }
 }
 
@@ -100,6 +108,10 @@ function formatAuditResult(result) {
 
     if (result.reason) {
         lines.push(`reason: ${result.reason}`);
+    }
+
+    if (result.chatImport) {
+        lines.push(`chat import: imported=${result.chatImport.importedCount} updated=${result.chatImport.updatedCount} unchanged=${result.chatImport.unchangedCount} failed=${result.chatImport.failedCount}`);
     }
 
     for (const entry of result.entries) {
@@ -122,6 +134,7 @@ async function main() {
     const directories = getUserDirectories(options.handle);
     const featureFlags = {
         enabled: true,
+        shadowImport: options.importChats,
         strict: options.strict,
     };
     const db = manager.open({
@@ -135,6 +148,17 @@ async function main() {
     }
 
     runCanonicalMigrations(db, { strict: options.strict });
+    if (options.importChats && options.scope !== 'chats') {
+        throw new UsageError('--import-chats requires --scope chats or --slice chats.');
+    }
+    const chatImport = options.importChats
+        ? await runCanonicalChatShadowImport({
+            handle: options.handle,
+            directories,
+            db,
+            featureFlags,
+        })
+        : null;
     let result;
     if (options.scope === 'world_info' || options.scope === 'settings' || options.scope === 'secrets' || options.scope === 'managed_media' || options.scope === 'chats') {
         result = await runCanonicalSliceAudit({
@@ -150,6 +174,9 @@ async function main() {
             db,
         });
     }
+    if (chatImport) {
+        result = { ...result, chatImport };
+    }
 
     process.stdout.write(options.json
         ? `${JSON.stringify(result, null, 2)}\n`
@@ -160,6 +187,16 @@ async function main() {
     }
 }
 
-await main().finally(() => {
+try {
+    await main();
+} catch (error) {
+    if (error instanceof UsageError) {
+        process.stderr.write(`${error.message}\n`);
+        printUsage(process.stderr);
+        process.exitCode = 1;
+    } else {
+        throw error;
+    }
+} finally {
     manager.dispose();
-});
+}

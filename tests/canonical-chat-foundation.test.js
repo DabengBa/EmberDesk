@@ -128,6 +128,27 @@ describe('canonical chat foundation', () => {
         `).all(renamedSession.id).map(row => row.id)).toEqual(firstMessageIds);
         expect(serializeCanonicalChatSession(db, renamedSession.id)).toBe(contents);
 
+        const headerChangedContents = contents.replace('"unknown_header":"value"', '"unknown_header":"changed"');
+        fs.writeFileSync(path.join(directories.chats, 'alice', 'renamed.jsonl'), headerChangedContents, 'utf8');
+        const headerUpdated = await runCanonicalChatShadowImport({
+            handle: 'alice',
+            directories,
+            db,
+            featureFlags: { enabled: true, shadowImport: true, strict: false },
+            nowMs: 1735689603000,
+        });
+        expect(headerUpdated).toEqual(expect.objectContaining({
+            ok: true,
+            updatedCount: 1,
+        }));
+        expect(db.prepare(`
+            SELECT id
+            FROM chat_messages
+            WHERE session_id = ?
+            ORDER BY message_order ASC
+        `).all(renamedSession.id).map(row => row.id)).toEqual(firstMessageIds);
+        expect(serializeCanonicalChatSession(db, renamedSession.id)).toBe(headerChangedContents);
+
         manager.dispose();
     });
 
@@ -180,6 +201,124 @@ describe('canonical chat foundation', () => {
         manager.dispose();
     });
 
+    test('blocks audit when source JSONL bytes drift without changing parsed payloads', async () => {
+        const directories = makeDirectories();
+        const { contents, filePath } = writeCharacterChat(directories);
+        const attachmentFreeContents = contents.replace(',"file":"files/notes.txt"', '');
+        fs.writeFileSync(filePath, attachmentFreeContents, 'utf8');
+        const manager = createCanonicalSqliteManager({ logger: { info() {}, warn() {} } });
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        runCanonicalMigrations(db, { nowMs: 1735689600000 });
+
+        await runCanonicalChatShadowImport({
+            handle: 'alice',
+            directories,
+            db,
+            featureFlags: { enabled: true, shadowImport: true, strict: false },
+            nowMs: 1735689600000,
+        });
+        fs.writeFileSync(filePath, `${attachmentFreeContents.replaceAll('\n', '\r\n')}\r\n`, 'utf8');
+
+        const audit = await auditCanonicalChatShadowImport({
+            handle: 'alice',
+            directories,
+            db,
+            auditedAtMs: 1735689603000,
+        });
+        expect(audit).toEqual(expect.objectContaining({
+            ok: false,
+            blocking: true,
+        }));
+        expect(audit.entries).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                status: 'drift',
+                drift_types: ['payload_drift'],
+            }),
+        ]));
+
+        manager.dispose();
+    });
+
+    test('distinguishes every chat shadow audit drift category', async () => {
+        const directories = makeDirectories();
+        const manager = createCanonicalSqliteManager({ logger: { info() {}, warn() {} } });
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        const writeChat = (filename, header, messages) => {
+            fs.writeFileSync(
+                path.join(directories.chats, 'alice', filename),
+                [JSON.stringify(header), ...messages.map(message => JSON.stringify(message))].join('\n'),
+                'utf8',
+            );
+        };
+
+        writeChat('order.jsonl', { chat_metadata: { identity: 'order' } }, [
+            { name: 'User', mes: 'one' },
+            { name: 'Alice', mes: 'two' },
+        ]);
+        writeChat('payload.jsonl', { chat_metadata: { identity: 'payload' } }, [
+            { name: 'User', mes: 'original' },
+        ]);
+        writeChat('missing.jsonl', { chat_metadata: { identity: 'missing' } }, [
+            { name: 'User', mes: 'missing later' },
+        ]);
+        writeChat('dangling.jsonl', { chat_metadata: { identity: 'dangling' } }, [
+            { name: 'User', mes: 'attachment', extra: { file: 'files/unregistered.txt' } },
+        ]);
+        const duplicateHeader = { chat_metadata: { identity: 'duplicate' } };
+        const duplicateMessages = [{ name: 'User', mes: 'same identity' }];
+        writeChat('duplicate-a.jsonl', duplicateHeader, duplicateMessages);
+        writeChat('duplicate-b.jsonl', duplicateHeader, duplicateMessages);
+        runCanonicalMigrations(db, { nowMs: 1735689600000 });
+
+        await runCanonicalChatShadowImport({
+            handle: 'alice',
+            directories,
+            db,
+            featureFlags: { enabled: true, shadowImport: true, strict: false },
+            nowMs: 1735689600000,
+        });
+        writeChat('order.jsonl', { chat_metadata: { identity: 'order' } }, [
+            { name: 'Alice', mes: 'two' },
+            { name: 'User', mes: 'one' },
+        ]);
+        writeChat('payload.jsonl', { chat_metadata: { identity: 'payload' } }, [
+            { name: 'User', mes: 'changed' },
+        ]);
+        fs.rmSync(path.join(directories.chats, 'alice', 'missing.jsonl'));
+        writeChat('unregistered.jsonl', { chat_metadata: { identity: 'unregistered' } }, [
+            { name: 'User', mes: 'new file' },
+        ]);
+
+        const audit = await auditCanonicalChatShadowImport({
+            handle: 'alice',
+            directories,
+            db,
+            auditedAtMs: 1735689603000,
+        });
+        expect(audit).toEqual(expect.objectContaining({
+            ok: false,
+            blocking: true,
+        }));
+        expect(audit.entries.map(entry => entry.drift_types[0])).toEqual(expect.arrayContaining([
+            'duplicate_identity',
+            'order_drift',
+            'payload_drift',
+            'dangling_attachment',
+            'missing_file',
+            'unregistered_file',
+        ]));
+
+        manager.dispose();
+    });
+
     test('shadows group JSONL sessions with the same lossless contract', async () => {
         const directories = makeDirectories();
         const contents = [
@@ -211,6 +350,39 @@ describe('canonical chat foundation', () => {
         });
         expect(session).toEqual(expect.objectContaining({ owner_type: 'group' }));
         expect(serializeCanonicalChatSession(db, session.id)).toBe(contents);
+        const messageIds = db.prepare(`
+            SELECT id
+            FROM chat_messages
+            WHERE session_id = ?
+            ORDER BY message_order ASC
+        `).all(session.id).map(row => row.id);
+
+        fs.renameSync(
+            path.join(directories.groupChats, 'party.jsonl'),
+            path.join(directories.groupChats, 'renamed-party.jsonl'),
+        );
+        await expect(runCanonicalChatShadowImport({
+            handle: 'alice',
+            directories,
+            db,
+            featureFlags: { enabled: true, shadowImport: true, strict: false },
+            nowMs: 1735689601000,
+        })).resolves.toEqual(expect.objectContaining({
+            ok: true,
+            updatedCount: 1,
+        }));
+        const renamedSession = getCanonicalChatSession(db, {
+            ownerType: 'group',
+            ownerId: 'renamed-party',
+            sourcePath: 'group chats/renamed-party.jsonl',
+        });
+        expect(renamedSession.id).toBe(session.id);
+        expect(db.prepare(`
+            SELECT id
+            FROM chat_messages
+            WHERE session_id = ?
+            ORDER BY message_order ASC
+        `).all(renamedSession.id).map(row => row.id)).toEqual(messageIds);
 
         manager.dispose();
     });
@@ -225,6 +397,14 @@ describe('canonical chat foundation', () => {
             featureFlags: { enabled: true, strict: false },
         });
         runCanonicalMigrations(db, { nowMs: 1735689600000 });
+        await runCanonicalChatShadowImport({
+            handle: 'alice',
+            directories,
+            db,
+            featureFlags: { enabled: true, shadowImport: true, strict: false },
+            nowMs: 1735689600000,
+        });
+        expect(db.prepare('SELECT * FROM chat_attachment_refs').all()).toEqual([]);
         db.prepare(`
             INSERT INTO managed_blobs (
                 id, content_hash, size_bytes, media_type, relative_path,
@@ -260,13 +440,16 @@ describe('canonical chat foundation', () => {
             null,
         );
 
-        await runCanonicalChatShadowImport({
+        await expect(runCanonicalChatShadowImport({
             handle: 'alice',
             directories,
             db,
             featureFlags: { enabled: true, shadowImport: true, strict: false },
-            nowMs: 1735689600000,
-        });
+            nowMs: 1735689601000,
+        })).resolves.toEqual(expect.objectContaining({
+            ok: true,
+            updatedCount: 1,
+        }));
 
         expect(db.prepare(`
             SELECT blob_id, role, compatibility_json

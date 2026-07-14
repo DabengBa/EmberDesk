@@ -403,7 +403,9 @@ export async function auditCanonicalChatShadowImport({
             continue;
         }
         const driftType = compareMessageOrder(projection, getCanonicalChatMessagePayloads(db, stored.id));
-        if (stored.header_payload_json !== projection.headerPayloadJson || driftType) {
+        if (stored.source_jsonl !== projection.sourceJsonl
+            || stored.header_payload_json !== projection.headerPayloadJson
+            || driftType) {
             entries.push(buildAuditEntry({
                 projection,
                 stored,
