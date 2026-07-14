@@ -26,6 +26,7 @@ import {
 } from '../src/canonical-sqlite-operator.js';
 import { getDefaultCanonicalStorageSliceRegistry } from '../src/canonical-storage-slice-registry.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import { MANAGED_MEDIA_AUDIT_SCOPE } from '../src/canonical-managed-media-shadow-import.js';
 
 const tempRoots = [];
 const managers = [];
@@ -43,12 +44,18 @@ function createDirectories(root) {
         characters: path.join(root, 'characters'),
         chats: path.join(root, 'chats'),
         worlds: path.join(root, 'worlds'),
+        backgrounds: path.join(root, 'backgrounds'),
+        assets: path.join(root, 'assets'),
+        avatars: path.join(root, 'User Avatars'),
+        files: path.join(root, 'user', 'files'),
+        userImages: path.join(root, 'user', 'images'),
     };
     for (const directory of Object.values(directories)) {
         if (directory !== root) {
             fs.mkdirSync(directory, { recursive: true });
         }
     }
+    fs.mkdirSync(path.join(directories.storage, 'managed-media'), { recursive: true });
     return directories;
 }
 
@@ -456,7 +463,7 @@ describe('canonical sqlite operator helpers', () => {
         });
 
         expect(status.handle).toBe('alice');
-        expect(status.slices.map(slice => slice.key)).toEqual(['characters', 'world_info', 'settings', 'secrets']);
+        expect(status.slices.map(slice => slice.key)).toEqual(['characters', 'world_info', 'settings', 'secrets', 'managed_media']);
 
         const characters = status.slices.find(slice => slice.key === 'characters');
         const worldInfo = status.slices.find(slice => slice.key === 'world_info');
@@ -548,6 +555,57 @@ describe('canonical sqlite operator helpers', () => {
                 runRepair: expect.any(Function),
             }));
         }
+
+        expect(registry.getRunners('managed_media')).toEqual({
+            runAudit: expect.any(Function),
+            runRepair: expect.any(Function),
+        });
+    });
+
+    test('runs the managed media audit through its registered slice runner', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        runCanonicalMigrations(db, { nowMs: 1735689600000 });
+        fs.writeFileSync(path.join(directories.backgrounds, 'sky.png'), 'background', 'utf8');
+
+        const audit = await runCanonicalSliceAudit({
+            sliceKey: 'managed_media',
+            handle: 'alice',
+            directories,
+            db,
+            auditedAtMs: 1735689601111,
+        });
+
+        expect(audit).toEqual(expect.objectContaining({
+            sliceKey: 'managed_media',
+            ok: false,
+            blocking: true,
+            reason: 'audit_drift_blocked',
+        }));
+        expect(audit.entries).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                compatibility_path: 'backgrounds/sky.png',
+                drift_types: ['orphan'],
+            }),
+        ]));
+        expect(getPersistedCanonicalAuditStatus(db, { scope: MANAGED_MEDIA_AUDIT_SCOPE }))
+            .toEqual(expect.objectContaining({ blocking: true }));
+        const repair = await runCanonicalSliceRepair({
+            sliceKey: 'managed_media',
+            db,
+            directories,
+        });
+        expect(repair).toEqual(expect.objectContaining({
+            ok: true,
+            sliceKey: 'managed_media',
+            results: [],
+        }));
     });
 
     test('routes audit and repair by slice key through the control plane', async () => {

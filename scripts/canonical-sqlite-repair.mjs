@@ -8,6 +8,7 @@ import {
     explainCanonicalRolloutBlockers,
     getCanonicalStorageControlPlaneStatus,
     listCanonicalSecretRepairs,
+    listCanonicalManagedMediaRepairs,
     listCanonicalRepairs,
     listCanonicalWorldInfoRepairs,
     rebuildCanonicalChatStats,
@@ -19,6 +20,7 @@ import {
     runCanonicalSliceRepair,
     runCanonicalWorldInfoAudit,
 } from '../src/canonical-sqlite-operator.js';
+import { collectCanonicalManagedMediaGarbage } from '../src/endpoints/canonical-managed-media-write-service.js';
 import { getUserDirectories } from '../src/user-directories.js';
 
 const manager = createCanonicalSqliteManager({ logger: { info() {}, warn() {} } });
@@ -34,11 +36,16 @@ function printUsage() {
         '  list-world-info-repairs',
         '                       List unresolved World Info projection repairs',
         '  list-secret-repairs List unresolved secret projection repairs',
+        '  list-managed-media-repairs',
+        '                       List unresolved managed-media projection repairs',
         '  repair-projection    Replay projection for one or more repair keys',
         '  repair-world-info-projection',
         '                       Replay World Info projection for one or more repair keys',
         '  repair-secret-projection',
         '                       Replay secret projection for one or more repair keys',
+        '  repair-managed-media-projection',
+        '                       Replay managed-media projection for one or more repair keys',
+        '  gc-managed-media     Collect unreferenced tombstoned managed media (dry-run by default)',
         '  rebuild-chat-stats   Rebuild canonical chat stats from JSONL chat files',
         '  explain-blockers     Summarize rollout / rollback blockers for a phase',
         '  status               Print per-slice control-plane readiness status',
@@ -47,7 +54,8 @@ function printUsage() {
         '  --repair-key <key>   Repeatable for repair-projection',
         '  --avatar <avatar>    Repeatable for rebuild-chat-stats',
         '  --phase <phase>      reads | writes | chatStats for explain-blockers/status',
-        '  --slice <key>        characters | world_info | settings | secrets for status/audit/repair/blockers',
+        '  --slice <key>        characters | world_info | settings | secrets | managed_media for status/audit/repair/blockers',
+        '  --apply              Allow gc-managed-media to delete eligible managed files',
         '  --feature <k=v>      Repeatable feature flag override for explain-blockers/status',
         '  --json               Print JSON output',
         '  --strict             Open the DB in strict mode',
@@ -71,6 +79,7 @@ function parseArgs(argv) {
         phase: 'writes',
         featureFlags: {},
         slice: null,
+        apply: false,
     };
 
     for (let index = 1; index < argv.length; index += 1) {
@@ -101,6 +110,9 @@ function parseArgs(argv) {
             }
             case '--slice':
                 options.slice = argv[++index] ?? null;
+                break;
+            case '--apply':
+                options.apply = true;
                 break;
             case '--json':
                 options.json = true;
@@ -181,6 +193,30 @@ function formatListSecretRepairs(repairs) {
     ];
     for (const repair of repairs) {
         lines.push(`- ${repair.repairKey} | ${repair.operation} | ${repair.key} | ${repair.errorClass}`);
+    }
+    return `${lines.join('\n')}\n`;
+}
+
+function formatListManagedMediaRepairs(repairs) {
+    const lines = [
+        'Canonical SQLite managed media repairs',
+        `open: ${repairs.length}`,
+    ];
+    for (const repair of repairs) {
+        lines.push(`- ${repair.repairKey} | ${repair.operation} | ${repair.details.compatibilityPath ?? ''} | ${repair.reason}`);
+    }
+    return `${lines.join('\n')}\n`;
+}
+
+function formatManagedMediaGc(result) {
+    const lines = [
+        'Canonical SQLite managed media GC',
+        `mode: ${result.dryRun ? 'dry-run' : 'apply'}`,
+        `candidates: ${result.candidateCount}`,
+        `deleted: ${result.deletedCount}`,
+    ];
+    for (const candidate of result.candidates ?? []) {
+        lines.push(`- ${candidate.relativePath}`);
     }
     return `${lines.join('\n')}\n`;
 }
@@ -287,6 +323,10 @@ async function main() {
             result = listCanonicalSecretRepairs(db);
             formatter = formatListSecretRepairs;
             break;
+        case 'list-managed-media-repairs':
+            result = listCanonicalManagedMediaRepairs(db);
+            formatter = formatListManagedMediaRepairs;
+            break;
         case 'repair-projection':
             result = await repairCanonicalProjection({
                 db,
@@ -310,6 +350,24 @@ async function main() {
                 repairKeys: options.repairKeys.length ? options.repairKeys : null,
             });
             formatter = formatRepairProjection;
+            break;
+        case 'repair-managed-media-projection':
+            result = await runCanonicalSliceRepair({
+                sliceKey: 'managed_media',
+                db,
+                directories,
+                repairKeys: options.repairKeys.length ? options.repairKeys : null,
+            });
+            formatter = formatRepairProjection;
+            break;
+        case 'gc-managed-media':
+            result = await collectCanonicalManagedMediaGarbage({
+                handle: options.handle,
+                directories,
+                db,
+                dryRun: !options.apply,
+            });
+            formatter = formatManagedMediaGc;
             break;
         case 'rebuild-chat-stats':
             result = rebuildCanonicalChatStats({
@@ -366,7 +424,7 @@ async function main() {
         : formatter(result));
 
     // status is a report command: blocked slice readiness is still a successful query.
-    if ((options.command === 'audit' || options.command === 'audit-world-info' || options.command === 'repair-projection' || options.command === 'repair-world-info-projection' || options.command === 'repair-secret-projection' || options.command === 'explain-blockers' || options.command === 'audit-slice' || options.command === 'repair-slice') && result.ok === false) {
+    if ((options.command === 'audit' || options.command === 'audit-world-info' || options.command === 'repair-projection' || options.command === 'repair-world-info-projection' || options.command === 'repair-secret-projection' || options.command === 'repair-managed-media-projection' || options.command === 'gc-managed-media' || options.command === 'explain-blockers' || options.command === 'audit-slice' || options.command === 'repair-slice') && result.ok === false) {
         process.exitCode = 1;
     }
 }

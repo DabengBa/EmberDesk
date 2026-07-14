@@ -7,6 +7,11 @@ import sanitize from 'sanitize-filename';
 
 import { clientRelativePath, removeFileExtension, getImages, isPathUnderParent } from '../util.js';
 import { MEDIA_EXTENSIONS, MEDIA_REQUEST_TYPE } from '../constants.js';
+import {
+    deleteCanonicalManagedMediaReference,
+    invalidateCanonicalManagedMediaAudit,
+    writeCanonicalManagedMedia,
+} from './canonical-managed-media-write-service.js';
 
 /**
  * Ensure the directory for the provided file path exists.
@@ -24,6 +29,18 @@ function ensureDirectoryExistence(filePath) {
 }
 
 export const router = express.Router();
+
+function getRequestHandle(request) {
+    return request.user?.profile?.handle ?? request.user?.handle ?? 'default-user';
+}
+
+function invalidateManagedMediaAudit(request, reason) {
+    invalidateCanonicalManagedMediaAudit({
+        handle: getRequestHandle(request),
+        directories: request.user.directories,
+        reason,
+    });
+}
 
 /**
  * Endpoint to handle image uploads.
@@ -69,8 +86,25 @@ router.post('/upload', async (request, response) => {
 
         ensureDirectoryExistence(pathToNewFile);
         const imageBuffer = Buffer.from(image, 'base64');
-        await fs.promises.writeFile(pathToNewFile, new Uint8Array(imageBuffer));
-        response.send({ path: clientRelativePath(request.user.directories.root, pathToNewFile) });
+        const compatibilityPath = clientRelativePath(request.user.directories.root, pathToNewFile).split(path.sep).join(path.posix.sep);
+        const canonicalResult = await writeCanonicalManagedMedia({
+            handle: getRequestHandle(request),
+            directories: request.user.directories,
+            compatibilityPath,
+            ownerType: 'user_image',
+            ownerId: compatibilityPath,
+            role: 'user_image',
+            displayName: path.basename(pathToNewFile),
+            contents: imageBuffer,
+        });
+        if (canonicalResult.authorityCommitted && !canonicalResult.ok) {
+            return response.status(500).send({ error: 'Image upload committed but compatibility projection failed' });
+        }
+        if (!canonicalResult.authorityCommitted) {
+            await fs.promises.writeFile(pathToNewFile, new Uint8Array(imageBuffer));
+            invalidateManagedMediaAudit(request, `user_image_upload:${compatibilityPath}`);
+        }
+        response.send({ path: compatibilityPath });
     } catch (error) {
         console.error(error);
         response.status(500).send({ error: 'Failed to save the image' });
@@ -145,7 +179,22 @@ router.post('/delete', async (request, response) => {
             return response.status(404).send('File not found');
         }
 
+        const compatibilityPath = clientRelativePath(request.user.directories.root, pathToDelete).split(path.sep).join(path.posix.sep);
+        const canonicalResult = await deleteCanonicalManagedMediaReference({
+            handle: getRequestHandle(request),
+            directories: request.user.directories,
+            compatibilityPath,
+        });
+        if (canonicalResult.authorityCommitted) {
+            if (!canonicalResult.ok) {
+                return response.status(500).send('Image deletion committed but compatibility projection failed');
+            }
+            console.info(`Deleted image: ${request.body.path} from ${request.user.profile.handle}`);
+            return response.sendStatus(200);
+        }
+
         fs.unlinkSync(pathToDelete);
+        invalidateManagedMediaAudit(request, `user_image_delete:${compatibilityPath}`);
         console.info(`Deleted image: ${request.body.path} from ${request.user.profile.handle}`);
         return response.sendStatus(200);
     } catch (error) {

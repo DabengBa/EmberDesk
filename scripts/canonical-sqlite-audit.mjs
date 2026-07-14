@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
-import { runCanonicalAudit, runCanonicalSliceAudit, runCanonicalWorldInfoAudit } from '../src/canonical-sqlite-operator.js';
+import { runCanonicalAudit, runCanonicalSliceAudit } from '../src/canonical-sqlite-operator.js';
 import { getUserDirectories } from '../src/user-directories.js';
 
 const manager = createCanonicalSqliteManager({ logger: { info() {}, warn() {} } });
@@ -16,8 +16,8 @@ function printUsage() {
         'Runs a read-only canonical SQLite audit.',
         '',
         'Options:',
-        '  --scope <scope>      character_metadata_and_chat_stats | world_info | settings | secrets',
-        '  --slice <key>        characters | world_info | settings | secrets (alias for scope)',
+        '  --scope <scope>      character_metadata_and_chat_stats | world_info | settings | secrets | managed_media',
+        '  --slice <key>        characters | world_info | settings | secrets | managed_media (alias for scope)',
     ].join('\n'));
 }
 
@@ -59,6 +59,8 @@ function parseArgs(argv) {
                     options.scope = 'settings';
                 } else if (slice === 'secrets') {
                     options.scope = 'secrets';
+                } else if (slice === 'managed_media') {
+                    options.scope = 'managed_media';
                 } else if (slice) {
                     throw new Error(`Unknown slice: ${slice}`);
                 }
@@ -132,13 +134,7 @@ async function main() {
 
     runCanonicalMigrations(db, { strict: options.strict });
     let result;
-    if (options.scope === 'world_info') {
-        result = await runCanonicalWorldInfoAudit({
-            handle: options.handle,
-            directories,
-            db,
-        });
-    } else if (options.scope === 'settings' || options.scope === 'secrets') {
+    if (options.scope === 'world_info' || options.scope === 'settings' || options.scope === 'secrets' || options.scope === 'managed_media') {
         result = await runCanonicalSliceAudit({
             sliceKey: options.scope,
             handle: options.handle,

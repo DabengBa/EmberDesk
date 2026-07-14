@@ -8,13 +8,49 @@ import { invalidateThumbnail } from './thumbnails.js';
 import { thumbnailDimensions, readMetadataIndex, renameMetadata, removeMetadata, getOrGenerateMetadataBatch } from './image-metadata.js';
 import { getImages } from '../util.js';
 import { getFileNameValidationFunction } from '../middleware/validateFileName.js';
+import {
+    getCanonicalManagedMediaReadState,
+    listCanonicalBackgroundPayload,
+} from './canonical-managed-media-read-service.js';
+import { listCanonicalManagedMediaReferences } from './canonical-managed-media-store.js';
+import {
+    deleteCanonicalManagedMediaReference,
+    invalidateCanonicalManagedMediaAudit,
+    renameCanonicalManagedMediaReference,
+    writeCanonicalManagedMedia,
+} from './canonical-managed-media-write-service.js';
+
+function getRequestHandle(request) {
+    return request.user?.profile?.handle ?? request.user?.handle ?? 'default-user';
+}
+
+function invalidateManagedMediaAudit(request, reason) {
+    invalidateCanonicalManagedMediaAudit({
+        handle: getRequestHandle(request),
+        directories: request.user.directories,
+        reason,
+    });
+}
 
 export const router = express.Router();
 
 router.post('/all', async function (request, response) {
     try {
-        const images = getImages(request.user.directories.backgrounds);
         const config = { width: thumbnailDimensions.bg[0], height: thumbnailDimensions.bg[1] };
+        const canonicalReadState = getCanonicalManagedMediaReadState({
+            handle: getRequestHandle(request),
+            directories: request.user.directories,
+        });
+        if (canonicalReadState.ok) {
+            const relativePaths = listCanonicalManagedMediaReferences(canonicalReadState.db)
+                .filter(reference => reference.ownerType === 'background')
+                .map(reference => reference.compatibilityPath);
+            const { results: metadataMap } = await getOrGenerateMetadataBatch(request.user.directories.root, relativePaths, 'bg');
+            const payload = listCanonicalBackgroundPayload(canonicalReadState.db, { metadataByPath: metadataMap });
+            return response.json({ images: payload.images, config });
+        }
+
+        const images = getImages(request.user.directories.backgrounds);
 
         // Get metadata for all images to provide isAnimated flag to client
         const relativePaths = images.map(img => path.join('backgrounds', img));
@@ -44,6 +80,15 @@ router.post('/all', async function (request, response) {
  */
 router.post('/folders', async function (request, response) {
     try {
+        const canonicalReadState = getCanonicalManagedMediaReadState({
+            handle: getRequestHandle(request),
+            directories: request.user.directories,
+        });
+        if (canonicalReadState.ok) {
+            const payload = listCanonicalBackgroundPayload(canonicalReadState.db);
+            return response.json({ folders: payload.folders, imageFolderMap: payload.imageFolderMap });
+        }
+
         const index = await readMetadataIndex(request.user.directories.root);
         const folders = index.folders || [];
 
@@ -81,7 +126,25 @@ router.post('/delete', getFileNameValidationFunction('bg'), async function (requ
             return response.sendStatus(400);
         }
 
+        const compatibilityPath = path.posix.join('backgrounds', request.body.bg);
+        const canonicalResult = await deleteCanonicalManagedMediaReference({
+            handle: getRequestHandle(request),
+            directories: request.user.directories,
+            compatibilityPath,
+        });
+        if (canonicalResult.authorityCommitted) {
+            if (!canonicalResult.ok) {
+                return response.status(500).send({ error: 'Background deletion committed but compatibility projection failed' });
+            }
+            invalidateThumbnail(request.user.directories, 'bg', request.body.bg);
+            await removeMetadata(request.user.directories.root, compatibilityPath).catch(err => {
+                console.warn('[Backgrounds] Failed to remove metadata:', err.message);
+            });
+            return response.send('ok');
+        }
+
         fs.unlinkSync(fileName);
+        invalidateManagedMediaAudit(request, `background_delete:${request.body.bg}`);
         invalidateThumbnail(request.user.directories, 'bg', request.body.bg);
 
         // Remove metadata for deleted image
@@ -114,13 +177,32 @@ router.post('/rename', async function (request, response) {
             return response.sendStatus(400);
         }
 
+        const oldRelativePath = path.posix.join('backgrounds', request.body.old_bg);
+        const newRelativePath = path.posix.join('backgrounds', request.body.new_bg);
+        const canonicalResult = await renameCanonicalManagedMediaReference({
+            handle: getRequestHandle(request),
+            directories: request.user.directories,
+            oldCompatibilityPath: oldRelativePath,
+            newCompatibilityPath: newRelativePath,
+            displayName: request.body.new_bg,
+        });
+        if (canonicalResult.authorityCommitted) {
+            if (!canonicalResult.ok) {
+                return response.status(500).send({ error: 'Background rename committed but compatibility projection failed' });
+            }
+            invalidateThumbnail(request.user.directories, 'bg', request.body.old_bg);
+            await renameMetadata(request.user.directories.root, oldRelativePath, newRelativePath).catch(err => {
+                console.warn('[Backgrounds] Failed to rename metadata:', err.message);
+            });
+            return response.send('ok');
+        }
+
         fs.copyFileSync(oldFileName, newFileName);
         fs.unlinkSync(oldFileName);
+        invalidateManagedMediaAudit(request, `background_rename:${request.body.old_bg}`);
         invalidateThumbnail(request.user.directories, 'bg', request.body.old_bg);
 
         // Update metadata for renamed image
-        const oldRelativePath = path.join('backgrounds', request.body.old_bg);
-        const newRelativePath = path.join('backgrounds', request.body.new_bg);
         await renameMetadata(request.user.directories.root, oldRelativePath, newRelativePath).catch(err => {
             console.warn('[Backgrounds] Failed to rename metadata:', err.message);
         });
@@ -138,12 +220,29 @@ router.post('/upload', async function (request, response) {
 
         const img_path = path.join(request.file.destination, request.file.filename);
         const filename = sanitize(request.file.originalname);
-        fs.copyFileSync(img_path, path.join(request.user.directories.backgrounds, filename));
+        const relativePath = path.posix.join('backgrounds', filename);
+        const canonicalResult = await writeCanonicalManagedMedia({
+            handle: getRequestHandle(request),
+            directories: request.user.directories,
+            compatibilityPath: relativePath,
+            ownerType: 'background',
+            ownerId: relativePath,
+            role: 'background',
+            displayName: filename,
+            contents: img_path,
+        });
+        if (canonicalResult.authorityCommitted && !canonicalResult.ok) {
+            fs.unlinkSync(img_path);
+            return response.status(500).send({ error: 'Background upload committed but compatibility projection failed' });
+        }
+        if (!canonicalResult.authorityCommitted) {
+            fs.copyFileSync(img_path, path.join(request.user.directories.backgrounds, filename));
+            invalidateManagedMediaAudit(request, `background_upload:${filename}`);
+        }
         fs.unlinkSync(img_path);
         invalidateThumbnail(request.user.directories, 'bg', filename);
 
         // Generate metadata for the new image
-        const relativePath = path.join('backgrounds', filename);
         await getOrGenerateMetadataBatch(request.user.directories.root, [relativePath], 'bg').catch(err => {
             console.warn('[Backgrounds] Failed to generate metadata for upload:', err.message);
         });

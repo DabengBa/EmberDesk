@@ -17,3 +17,16 @@ export function getCanonicalSqliteFeatureFlags() {
         strict: enabled && getStorageFlag('strict'),
     };
 }
+
+export function getCanonicalManagedMediaFeatureFlags() {
+    const prefix = `${STORAGE_FLAG_PREFIX}.slices.managedMedia`;
+    const getSliceFlag = flagName => getConfigValue(`${prefix}.${flagName}`, false, 'boolean');
+
+    return {
+        enabled: getSliceFlag('enabled'),
+        shadowImport: getSliceFlag('shadowImport'),
+        reads: getSliceFlag('reads'),
+        writes: getSliceFlag('writes'),
+        strict: getSliceFlag('strict'),
+    };
+}

@@ -11,6 +11,13 @@ import writeFileAtomic from 'write-file-atomic';
 import express from 'express';
 import { Jimp } from '../jimp.js';
 import { getConfigValue, isPathUnderParent, uuidv4 } from '../util.js';
+import { getCanonicalManagedMediaReadState } from './canonical-managed-media-read-service.js';
+import { getCanonicalManagedMediaFolderState, getCanonicalManagedMediaReference } from './canonical-managed-media-store.js';
+import {
+    getCanonicalManagedMediaWriteState,
+    invalidateCanonicalManagedMediaAudit,
+    writeCanonicalManagedMediaFolderState,
+} from './canonical-managed-media-write-service.js';
 
 export const METADATA_FILE = 'image-metadata.json';
 
@@ -478,12 +485,57 @@ export async function unassignImagesFromFolder(userDataRoot, folderId, relativeP
 
 export const router = express.Router();
 
+function getRequestHandle(request) {
+    return request.user?.profile?.handle ?? request.user?.handle ?? 'default-user';
+}
+
+function invalidateManagedMediaAudit(request, reason) {
+    invalidateCanonicalManagedMediaAudit({
+        handle: getRequestHandle(request),
+        directories: request.user.directories,
+        reason,
+    });
+}
+
+async function writeCanonicalFolderState(request, mutate) {
+    const state = getCanonicalManagedMediaWriteState({
+        handle: getRequestHandle(request),
+        directories: request.user.directories,
+    });
+    if (!state.ok) {
+        return state;
+    }
+    const folderState = getCanonicalManagedMediaFolderState(state.db);
+    const value = await mutate(folderState, state.db);
+    const result = await writeCanonicalManagedMediaFolderState({
+        handle: getRequestHandle(request),
+        directories: request.user.directories,
+        folderState,
+    });
+    return { ...result, value };
+}
+
+function normalizeBackgroundFolderPath(relativePath) {
+    const normalized = String(relativePath ?? '').split(path.sep).join(path.posix.sep);
+    if (!normalized.startsWith('backgrounds/') || normalized.split('/').some(segment => segment === '..')) {
+        throw new Error(`Invalid background path: '${relativePath}'`);
+    }
+    return normalized;
+}
+
 /**
  * POST /api/image-metadata/folders/get
  * List all virtual folders.
  */
 router.post('/folders/get', async function (request, response) {
     try {
+        const canonicalState = getCanonicalManagedMediaReadState({
+            handle: getRequestHandle(request),
+            directories: request.user.directories,
+        });
+        if (canonicalState.ok) {
+            return response.json(getCanonicalManagedMediaFolderState(canonicalState.db).folders);
+        }
         const index = await readMetadataIndex(request.user.directories.root);
         return response.json(index.folders || []);
     } catch (error) {
@@ -502,7 +554,19 @@ router.post('/folders/create', async function (request, response) {
         if (!name || typeof name !== 'string') {
             return response.status(400).json({ error: '"name" is required.' });
         }
+        const canonicalResult = await writeCanonicalFolderState(request, folderState => {
+            const folder = { id: uuidv4(), name: name.trim(), thumbnailFile: '' };
+            folderState.folders.push(folder);
+            return folder;
+        });
+        if (canonicalResult.authorityCommitted) {
+            if (!canonicalResult.ok) {
+                return response.status(500).json({ error: 'Folder creation committed but metadata projection failed' });
+            }
+            return response.json(canonicalResult.value);
+        }
         const folder = await createFolder(request.user.directories.root, name.trim());
+        invalidateManagedMediaAudit(request, 'background_folder_create');
         return response.json(folder);
     } catch (error) {
         console.error('[ImageMetadata] Folder create error:', error);
@@ -520,7 +584,22 @@ router.post('/folders/set-thumbnails', async function (request, response) {
         if (!Array.isArray(updates) || updates.some(u => !u.id || typeof u.thumbnailFile !== 'string')) {
             return response.status(400).json({ error: '"updates" must be an array of {id, thumbnailFile}.' });
         }
+        const canonicalResult = await writeCanonicalFolderState(request, folderState => {
+            for (const { id, thumbnailFile } of updates) {
+                const folder = folderState.folders.find(item => item.id === id);
+                if (folder) {
+                    folder.thumbnailFile = thumbnailFile;
+                }
+            }
+        });
+        if (canonicalResult.authorityCommitted) {
+            if (!canonicalResult.ok) {
+                return response.status(500).json({ error: 'Folder thumbnail update committed but metadata projection failed' });
+            }
+            return response.json({ ok: true });
+        }
         await setFolderThumbnailsBatch(request.user.directories.root, updates);
+        invalidateManagedMediaAudit(request, 'background_folder_set_thumbnails');
         return response.json({ ok: true });
     } catch (error) {
         console.error('[ImageMetadata] Folder set-thumbnails error:', error);
@@ -538,7 +617,23 @@ router.post('/folders/update', async function (request, response) {
         if (!id || typeof id !== 'string') {
             return response.status(400).json({ error: '"id" is required.' });
         }
+        const canonicalResult = await writeCanonicalFolderState(request, folderState => {
+            const folder = folderState.folders.find(item => item.id === id);
+            if (!folder) {
+                throw new Error(`Folder '${id}' not found.`);
+            }
+            if (updates.name !== undefined) folder.name = updates.name;
+            if (updates.thumbnailFile !== undefined) folder.thumbnailFile = updates.thumbnailFile;
+            return folder;
+        });
+        if (canonicalResult.authorityCommitted) {
+            if (!canonicalResult.ok) {
+                return response.status(500).json({ error: 'Folder update committed but metadata projection failed' });
+            }
+            return response.json(canonicalResult.value);
+        }
         const folder = await updateFolder(request.user.directories.root, id, updates);
+        invalidateManagedMediaAudit(request, 'background_folder_update');
         return response.json(folder);
     } catch (error) {
         if (error.message.includes('not found')) {
@@ -559,7 +654,29 @@ router.post('/folders/delete', async function (request, response) {
         if (!id || typeof id !== 'string') {
             return response.status(400).json({ error: '"id" is required.' });
         }
+        const canonicalResult = await writeCanonicalFolderState(request, folderState => {
+            const index = folderState.folders.findIndex(folder => folder.id === id);
+            if (index === -1) {
+                throw new Error(`Folder '${id}' not found.`);
+            }
+            folderState.folders.splice(index, 1);
+            for (const [filename, folderIds] of Object.entries(folderState.imageFolderMap)) {
+                const nextFolderIds = folderIds.filter(folderId => folderId !== id);
+                if (nextFolderIds.length > 0) {
+                    folderState.imageFolderMap[filename] = nextFolderIds;
+                } else {
+                    delete folderState.imageFolderMap[filename];
+                }
+            }
+        });
+        if (canonicalResult.authorityCommitted) {
+            if (!canonicalResult.ok) {
+                return response.status(500).json({ error: 'Folder deletion committed but metadata projection failed' });
+            }
+            return response.json({ ok: true });
+        }
         await deleteFolder(request.user.directories.root, id);
+        invalidateManagedMediaAudit(request, 'background_folder_delete');
         return response.json({ ok: true });
     } catch (error) {
         if (error.message.includes('not found')) {
@@ -583,7 +700,30 @@ router.post('/folders/assign', async function (request, response) {
         if (!Array.isArray(paths)) {
             return response.status(400).json({ error: '"paths" array is required.' });
         }
+        const canonicalResult = await writeCanonicalFolderState(request, (folderState, db) => {
+            if (!folderState.folders.some(folder => folder.id === id)) {
+                throw new Error(`Folder '${id}' not found.`);
+            }
+            for (const relativePath of paths) {
+                const normalized = normalizeBackgroundFolderPath(relativePath);
+                if (!getCanonicalManagedMediaReference(db, normalized)) {
+                    continue;
+                }
+                const filename = path.posix.basename(normalized);
+                const folderIds = folderState.imageFolderMap[filename] ?? [];
+                if (!folderIds.includes(id)) {
+                    folderState.imageFolderMap[filename] = [...folderIds, id];
+                }
+            }
+        });
+        if (canonicalResult.authorityCommitted) {
+            if (!canonicalResult.ok) {
+                return response.status(500).json({ error: 'Folder assignment committed but metadata projection failed' });
+            }
+            return response.json({ ok: true });
+        }
         await assignImagesToFolder(request.user.directories.root, id, paths);
+        invalidateManagedMediaAudit(request, 'background_folder_assign');
         return response.json({ ok: true });
     } catch (error) {
         if (error.message.includes('not found')) {
@@ -607,7 +747,29 @@ router.post('/folders/unassign', async function (request, response) {
         if (!Array.isArray(paths)) {
             return response.status(400).json({ error: '"paths" array is required.' });
         }
+        const canonicalResult = await writeCanonicalFolderState(request, folderState => {
+            for (const relativePath of paths) {
+                const filename = path.posix.basename(normalizeBackgroundFolderPath(relativePath));
+                const folderIds = folderState.imageFolderMap[filename];
+                if (!folderIds) {
+                    continue;
+                }
+                const nextFolderIds = folderIds.filter(folderId => folderId !== id);
+                if (nextFolderIds.length > 0) {
+                    folderState.imageFolderMap[filename] = nextFolderIds;
+                } else {
+                    delete folderState.imageFolderMap[filename];
+                }
+            }
+        });
+        if (canonicalResult.authorityCommitted) {
+            if (!canonicalResult.ok) {
+                return response.status(500).json({ error: 'Folder unassignment committed but metadata projection failed' });
+            }
+            return response.json({ ok: true });
+        }
         await unassignImagesFromFolder(request.user.directories.root, id, paths);
+        invalidateManagedMediaAudit(request, 'background_folder_unassign');
         return response.json({ ok: true });
     } catch (error) {
         console.error('[ImageMetadata] Folder unassign error:', error);

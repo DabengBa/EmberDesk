@@ -2,10 +2,9 @@
 created: 2026-07-13
 source: user
 confirmed: true
-last_updated: 2026-07-13
+last_updated: 2026-07-14
 feature_slug: canonical-managed-media-authority
-status: active
-active_process_dir: .docs/specs/260713-04-canonical-managed-media-authority
+status: delivered
 ---
 
 # Canonical Managed Media Authority Intent
@@ -30,6 +29,9 @@ hash、metadata、folder membership、ownership 和 lifecycle；大型内容保�
 
 ## 参考资料
 
+- `.docs/tech/canonical-sqlite-storage-roadmap.md`
+- `.docs/db/features/background-library-panel.md`
+- `.docs/db/pages/chat-workspace.md`
 - `src/endpoints/assets.js`
 - `src/endpoints/backgrounds.js`
 - `src/endpoints/image-metadata.js`

@@ -24,6 +24,8 @@ Let workspace users inspect, select, and refresh chat backgrounds without making
 - When the same-entry React shell is enabled, its Backgrounds entry owns only the transient active-panel/dock state and mounted or fallback status; background selection, lock/unlock, upload, folder, thumbnail, refresh, and slash-compatible behavior remain owned by the background facade.
 - The panel should not surface internal migration verdict vocabulary. User-facing feedback stays on gallery/loading/error/action results.
 - Background selection, lock/unlock, folder drill-in, upload, auto-background, and slash-compatible background actions must keep the same visible results across the normal host and fallback surface.
+- When managed background storage is enabled and has completed its integrity check, the gallery and folders can reload from the managed catalog. The visible filenames, folder membership, gallery order, thumbnail behavior, and existing background URLs remain the same.
+- If managed storage is disabled or needs repair, the panel continues to use the existing background files. A failed projection after an accepted background action is treated as an action failure until it is repaired; it must not silently show a false-success gallery state.
 
 ## Semantic Interaction IDs
 
@@ -37,6 +39,7 @@ Let workspace users inspect, select, and refresh chat backgrounds without making
 - As a workspace user who wants to inspect backgrounds, from [Chat Workspace](page.chat_workspace) open the background library while secondary panel work is still settling; EmberDesk must show local loading or gallery feedback without blocking chat use, reopening or refreshing the page must still reach the same panel entry, and failure is a global startup block, duplicate loading surfaces, or an endless blank panel.
 - As a user who has changed background-related content, from the background library request refresh before or during an existing load; EmberDesk must show the final refreshed gallery state after pending work catches up, a later reopen must not show the stale pre-refresh list as current, and failure is a dropped refresh or a success-looking panel that still shows old content.
 - As a user on a build with the guarded background host enabled, from the host filter/sort or background action controls operate the gallery; EmberDesk must produce the same visible selection, lock, unlock, upload, auto, or refresh outcomes as the established workspace surface, flag-off or mount failure must leave the fallback panel usable, and failure is an action entry that appears available but cannot complete or hides the established background controls.
+- As a user with managed background storage enabled, upload, rename, or delete a background and refresh the panel; EmberDesk must keep the familiar filename, folder, thumbnail, and URL behavior after reload, while a storage repair condition must leave the action visibly unsuccessful rather than presenting a changed gallery as complete.
 
 ## Feature-Specific Evidence
 

@@ -70,7 +70,9 @@ async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled 
         mutateJsonString: value => value,
         clientRelativePath: (_root, inputPath) => inputPath,
         getUniqueName: (baseName) => baseName,
+        isPathUnderParent: (parent, target) => target === parent || target.startsWith(`${parent}${path.sep}`),
         sanitizeSafeCharacterReplacements: () => '_',
+        uuidv4: () => 'test-managed-media-id',
     }));
 
     jest.unstable_mockModule('../src/jimp.js', () => ({
@@ -107,6 +109,7 @@ async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled 
         AVATAR_WIDTH: 400,
         AVATAR_HEIGHT: 600,
         DEFAULT_AVATAR_PATH: path.join(repoRoot, 'public/img/ai4.png'),
+        SETTINGS_FILE: 'settings.json',
     }));
 
     jest.unstable_mockModule('../src/middleware/validateFileName.js', () => ({
@@ -123,7 +126,12 @@ async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled 
     }));
 
     jest.unstable_mockModule('../src/endpoints/worldinfo.js', () => ({
+        findCharactersBoundToWorldFromFiles: () => [],
         readWorldInfoFile: async () => ({}),
+        scanCharacterWorldBindingsFromFiles: () => ({
+            avatarToWorldName: new Map(),
+            worldNameToCharacters: new Map(),
+        }),
     }));
 
     jest.unstable_mockModule('../src/endpoints/thumbnails.js', () => ({
@@ -155,6 +163,12 @@ async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled 
 
     jest.unstable_mockModule('../src/middleware/cacheBuster.js', () => ({
         default: { bust: jest.fn() },
+    }));
+
+    jest.unstable_mockModule('../src/endpoints/canonical-managed-media-write-service.js', () => ({
+        deleteCanonicalManagedMediaReference: async () => ({ authorityCommitted: false }),
+        invalidateCanonicalManagedMediaAudit: () => false,
+        writeCanonicalManagedMedia: async () => ({ authorityCommitted: false }),
     }));
 
     jest.unstable_mockModule('../src/endpoints/character-index.js', () => ({
@@ -230,6 +244,12 @@ async function importAvatarRoutes({ generateThumbnailImpl, thumbnailsEnabled = t
 
     jest.unstable_mockModule('../src/middleware/cacheBuster.js', () => ({
         default: { bust: mockBust },
+    }));
+
+    jest.unstable_mockModule('../src/endpoints/canonical-managed-media-write-service.js', () => ({
+        deleteCanonicalManagedMediaReference: async () => ({ authorityCommitted: false }),
+        invalidateCanonicalManagedMediaAudit: () => false,
+        writeCanonicalManagedMedia: async () => ({ authorityCommitted: false }),
     }));
 
     jest.unstable_mockModule('write-file-atomic', () => ({

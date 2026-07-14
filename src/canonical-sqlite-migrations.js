@@ -221,6 +221,77 @@ export const CANONICAL_SQLITE_MIGRATIONS = Object.freeze([
                 ON secret_projection_repairs (resolved_at_ms, secret_key);
         `,
     }),
+    Object.freeze({
+        version: 6,
+        name: 'managed_media_authority',
+        sql: `
+            CREATE TABLE IF NOT EXISTS managed_blobs (
+                id TEXT PRIMARY KEY,
+                content_hash TEXT NOT NULL UNIQUE,
+                size_bytes INTEGER NOT NULL,
+                media_type TEXT NOT NULL,
+                relative_path TEXT NOT NULL,
+                lifecycle_state TEXT NOT NULL DEFAULT 'active',
+                created_at_ms INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL,
+                deleted_at_ms INTEGER
+            );
+
+            CREATE TABLE IF NOT EXISTS media_references (
+                id TEXT PRIMARY KEY,
+                blob_id TEXT NOT NULL REFERENCES managed_blobs(id) ON DELETE RESTRICT,
+                owner_type TEXT NOT NULL,
+                owner_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                display_name TEXT NOT NULL DEFAULT '',
+                compatibility_path TEXT NOT NULL UNIQUE,
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                created_at_ms INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL,
+                deleted_at_ms INTEGER
+            );
+
+            CREATE TABLE IF NOT EXISTS media_folders (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                thumbnail_file TEXT NOT NULL DEFAULT '',
+                created_at_ms INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL,
+                deleted_at_ms INTEGER
+            );
+
+            CREATE TABLE IF NOT EXISTS media_folder_memberships (
+                folder_id TEXT NOT NULL REFERENCES media_folders(id) ON DELETE CASCADE,
+                media_reference_id TEXT NOT NULL REFERENCES media_references(id) ON DELETE CASCADE,
+                created_at_ms INTEGER NOT NULL,
+                PRIMARY KEY (folder_id, media_reference_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS managed_media_repairs (
+                repair_key TEXT PRIMARY KEY,
+                blob_id TEXT REFERENCES managed_blobs(id) ON DELETE SET NULL,
+                media_reference_id TEXT REFERENCES media_references(id) ON DELETE SET NULL,
+                operation TEXT NOT NULL,
+                reason TEXT NOT NULL,
+                details_json TEXT NOT NULL DEFAULT '{}',
+                created_at_ms INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL,
+                last_attempt_at_ms INTEGER,
+                resolved_at_ms INTEGER
+            );
+
+            CREATE INDEX IF NOT EXISTS managed_blobs_lifecycle_idx
+                ON managed_blobs (lifecycle_state, deleted_at_ms);
+            CREATE INDEX IF NOT EXISTS media_references_blob_idx
+                ON media_references (blob_id, deleted_at_ms);
+            CREATE INDEX IF NOT EXISTS media_references_owner_idx
+                ON media_references (owner_type, owner_id, deleted_at_ms);
+            CREATE INDEX IF NOT EXISTS media_folder_memberships_reference_idx
+                ON media_folder_memberships (media_reference_id);
+            CREATE INDEX IF NOT EXISTS managed_media_repairs_open_idx
+                ON managed_media_repairs (resolved_at_ms, operation);
+        `,
+    }),
 ]);
 
 export class CanonicalMigrationBlockedError extends Error {

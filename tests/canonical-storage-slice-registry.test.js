@@ -21,6 +21,8 @@ import {
     getCanonicalSliceFlagContractStatus,
 } from '../src/canonical-sqlite-rollout-contract.js';
 import { recordProjectionRepair } from '../src/endpoints/character-store.js';
+import { recordCanonicalManagedMediaRepair } from '../src/endpoints/canonical-managed-media-store.js';
+import { MANAGED_MEDIA_AUDIT_SCOPE } from '../src/canonical-managed-media-shadow-import.js';
 import { recordWorldInfoProjectionRepair } from '../src/endpoints/world-info-store.js';
 import { persistCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.js';
 
@@ -40,6 +42,11 @@ function createDirectories(root) {
         characters: path.join(root, 'characters'),
         chats: path.join(root, 'chats'),
         worlds: path.join(root, 'worlds'),
+        backgrounds: path.join(root, 'backgrounds'),
+        assets: path.join(root, 'assets'),
+        avatars: path.join(root, 'User Avatars'),
+        files: path.join(root, 'user', 'files'),
+        userImages: path.join(root, 'user', 'images'),
     };
     for (const directory of Object.values(directories)) {
         if (directory !== root) {
@@ -49,6 +56,7 @@ function createDirectories(root) {
     // Settings and secrets slices manage compatibility files under the user root.
     fs.writeFileSync(path.join(root, 'settings.json'), '{}', 'utf8');
     fs.writeFileSync(path.join(root, 'secrets.json'), '{}', 'utf8');
+    fs.mkdirSync(path.join(directories.storage, 'managed-media'), { recursive: true });
     return directories;
 }
 
@@ -85,9 +93,9 @@ afterEach(() => {
 describe('canonical storage slice registry', () => {
     test('registers all delivered canonical slices with required capabilities', () => {
         const registry = getDefaultCanonicalStorageSliceRegistry();
-        expect(listCanonicalStorageSliceKeys(registry)).toEqual(['characters', 'world_info', 'settings', 'secrets']);
+        expect(listCanonicalStorageSliceKeys(registry)).toEqual(['characters', 'world_info', 'settings', 'secrets', 'managed_media']);
 
-        for (const key of ['characters', 'world_info', 'settings', 'secrets']) {
+        for (const key of ['characters', 'world_info', 'settings', 'secrets', 'managed_media']) {
             const slice = registry.get(key);
             expect(slice.key).toBe(key);
             expect(typeof slice.auditScope).toBe('string');
@@ -97,6 +105,92 @@ describe('canonical storage slice registry', () => {
             expect(typeof slice.getRollbackBlockers).toBe('function');
             expect(typeof slice.getBackupManagedPaths).toBe('function');
         }
+    });
+
+    test('keeps managed media flags, audit scope, repairs, and backup inventory independent', () => {
+        const { db, directories } = openMigratedDb();
+        const media = getDefaultCanonicalStorageSliceRegistry().get('managed_media');
+
+        expect(media.auditScope).toBe(MANAGED_MEDIA_AUDIT_SCOPE);
+        expect(media.getFeatureFlags({ managedMedia: {
+            enabled: true,
+            shadowImport: true,
+            reads: true,
+            writes: true,
+            strict: false,
+        } })).toEqual({
+            enabled: true,
+            shadowImport: true,
+            reads: true,
+            writes: true,
+            strict: false,
+        });
+        expect(media.getFeatureFlags({
+            enabled: true,
+            shadowImport: true,
+            reads: true,
+            writes: true,
+            strict: false,
+        })).toEqual({
+            enabled: false,
+            shadowImport: false,
+            reads: false,
+            writes: false,
+            strict: false,
+        });
+        expect(media.listOpenRepairs(db)).toEqual([]);
+        expect(media.getBackupManagedPaths(directories)).toEqual([
+            directories.backgrounds,
+            directories.assets,
+            directories.avatars,
+            directories.files,
+            directories.userImages,
+            path.join(directories.storage, 'managed-media'),
+        ]);
+    });
+
+    test('allows managed-media rollback only after a clean audit and blocks it when a media repair remains open', () => {
+        const { db } = openMigratedDb();
+        const media = getDefaultCanonicalStorageSliceRegistry().get('managed_media');
+        const featureFlags = {
+            enabled: true,
+            shadowImport: true,
+            reads: true,
+            writes: true,
+            strict: false,
+        };
+        const cleanAudit = {
+            ok: true,
+            blocking: false,
+            reason: null,
+        };
+
+        expect(media.getRollbackBlockers({
+            db,
+            featureFlags: { managedMedia: featureFlags },
+            phase: 'writes',
+            persistedAuditStatus: cleanAudit,
+        })).toEqual(expect.objectContaining({ ok: true, blockers: [] }));
+
+        recordCanonicalManagedMediaRepair(db, {
+            repairKey: 'managed_media:project:reference:1',
+            operation: 'project',
+            reason: 'projection_failed',
+            details: { compatibilityPath: 'backgrounds/sky.png' },
+            nowMs: 1735689601111,
+        });
+
+        expect(media.getRollbackBlockers({
+            db,
+            featureFlags: { managedMedia: featureFlags },
+            phase: 'writes',
+            persistedAuditStatus: cleanAudit,
+        })).toEqual(expect.objectContaining({
+            ok: false,
+            blockers: expect.arrayContaining([
+                expect.objectContaining({ code: 'open_managed_media_repairs' }),
+            ]),
+        }));
     });
 
     test('rejects duplicate slice keys and missing required capabilities', () => {

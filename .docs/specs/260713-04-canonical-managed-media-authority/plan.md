@@ -9,7 +9,7 @@ Doc IDs: feature.background_library_panel, page.chat_workspace
 ## Tasks
 
 ### Task 1: 建立 managed blob schema、catalog import 与 audit
-- [ ] **Done**
+- [x] **Done**
 - **Reqs:** R1, R2, R4
 - **Kind:** behavior
 - **Scope:** canonical migrations, media catalog/import/audit, `tests/canonical-managed-media-store.test.js`
@@ -19,7 +19,7 @@ Doc IDs: feature.background_library_panel, page.chat_workspace
 - **Evidence:** evidence/task-01.md
 
 ### Task 2: 切换 background 与 asset DB-first reads
-- [ ] **Done**
+- [x] **Done**
 - **Reqs:** R4, R5
 - **Kind:** behavior
 - **Scope:** `src/endpoints/backgrounds.js`, `src/endpoints/assets.js`, media resolver, frontend/thumbnail tests
@@ -29,7 +29,7 @@ Doc IDs: feature.background_library_panel, page.chat_workspace
 - **Evidence:** evidence/task-02.md
 
 ### Task 3: 实现受管 upload/import/rename/delete 与 repair
-- [ ] **Done**
+- [x] **Done**
 - **Reqs:** R3, R5, R6
 - **Kind:** behavior
 - **Scope:** media write coordinator, endpoint mutations, repair/GC operator, focused tests
@@ -39,7 +39,7 @@ Doc IDs: feature.background_library_panel, page.chat_workspace
 - **Evidence:** evidence/task-03.md
 
 ### Task 4: 完成 rollback、兼容与语义文档
-- [ ] **Done**
+- [x] **Done**
 - **Reqs:** R5, R7
 - **Kind:** behavior
 - **Scope:** rollout gates, compatibility tests, owning semantic/tech/logic docs
@@ -50,4 +50,7 @@ Doc IDs: feature.background_library_panel, page.chat_workspace
 
 ## Review
 
-- [ ] Review complete
+- [x] Review: R-01 Background folder mutations bypassed canonical authority (severity: high; scope: Task 2/3 folder ownership; evidence: `src/endpoints/image-metadata.js`; proof: `canonical-managed-media-write-service.test.js`, `canonical-managed-media-route-service.test.js`)
+- [x] Doc ID gate: `bun run docs:check` and `bun run docs:build` passed; topology has 30 nodes and 236 edges, no isolated nodes, with `feature.background_library_panel` degree 8 and `page.chat_workspace` degree 72.
+- [x] Frontend contract review: `public/scripts/backgrounds.js` retains the existing folder endpoints, request bodies, and response shapes. Route proof covers canonical folder create/assign followed by `/api/backgrounds/folders` reload; no browser UI source changed in this feature.
+- [x] Review complete

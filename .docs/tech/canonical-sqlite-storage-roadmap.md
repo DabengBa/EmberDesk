@@ -292,7 +292,7 @@ rollback, tests, and docs before its flag can be enabled.
 | 1 | `260713-01-canonical-storage-control-plane` | **Delivered:** slice registry, generic audit/repair/rollback, backup/restore readiness, operator status | Delivered canonical manager and World Info/character patterns |
 | 2 | `260713-02-canonical-settings-document-authority` | **Delivered:** settings document revision authority, shadow import/audit, DB-first get/save, projection repairs, canonical snapshots | Generic control plane |
 | 3 | `260713-03-canonical-secrets-authority` | **Delivered:** secret records, labels, active selection, repair and rollback behind `SecretManager` | Generic control plane; settings payload must not contain secrets |
-| 4 | `260713-04-canonical-managed-media-authority` | Backgrounds, assets, persona avatar blobs and attachment catalog | Generic control plane |
+| 4 | `260713-04-canonical-managed-media-authority` | **Delivered:** backgrounds, assets, persona avatars, uploads, and attachment catalog with managed content root, projection repair, and audited GC | Generic control plane |
 | 5 | `260713-05-canonical-persona-authority` | Persona identity, descriptions, defaults and character/group connections | Settings document and managed media |
 | 6 | `260713-06-canonical-extension-state-authority` | Extension registry, install/update state and namespace storage | Settings document, secrets and managed files |
 | 7 | `260713-07-canonical-chat-message-authority` | Character/group sessions, messages, swipes, metadata and attachment refs | Settings, personas and managed media |
@@ -409,6 +409,17 @@ invalidation status, not the semantic truth of source messages or files.
     - Depends on the generalized control plane.
     - Makes SQLite authoritative for blob identity, media metadata, folders and lifecycle
       while large content remains under a database-managed content root.
+    - Current status: delivered through migration v6 (`managed_blobs`, `media_references`,
+      `media_folders`, memberships, and `managed_media_repairs`),
+      `src/canonical-managed-media-shadow-import.js`,
+      `src/endpoints/canonical-managed-media-read-service.js`, and
+      `src/endpoints/canonical-managed-media-write-service.js`. The independently gated
+      `features.storage.canonicalSqlite.slices.managedMedia.*` slice shadows existing media
+      without moving it, permits DB-first background and asset reads only after a clean
+      `managed_media` audit, and writes content under
+      `storage/managed-media/<sha256>` before projecting compatible paths. Projection failures
+      remain durable repairs, reference-aware deletes tombstone final blobs, and
+      `gc-managed-media` is dry-run by default until an operator passes `--apply`.
 
 17. `persona authority`
     - Depends on settings document and managed media authority.
@@ -458,6 +469,16 @@ serialization is implementation-owned, but it must satisfy these rules:
 - `strict` converts only that slice's fallback into a proof failure
 - vector build/index flags remain separate from vector catalog authority
 - existing character/World Info installations retain compatible flag interpretation during migration
+
+Managed media uses the independent
+`features.storage.canonicalSqlite.slices.managedMedia.{enabled,shadowImport,reads,writes,strict}`
+flags. Global canonical flags do not enable this slice. Background and asset reads use the
+catalog only after its persisted audit is clean; disabled, blocked, or non-strict failed reads
+continue through existing compatible file paths. Managed writes stage content under
+`storage/managed-media/.staging`, register hash-addressed content in the database, and then
+project existing paths. Operators use `scripts/canonical-sqlite-audit.mjs --slice managed_media`,
+`scripts/canonical-sqlite-repair.mjs list-managed-media-repairs`,
+`repair-managed-media-projection`, and `gc-managed-media` (with explicit `--apply` for deletion).
 
 Rollback rules for every new slice:
 

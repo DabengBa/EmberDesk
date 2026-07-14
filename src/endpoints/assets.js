@@ -10,6 +10,15 @@ import { UNSAFE_EXTENSIONS } from '../constants.js';
 import { clientRelativePath, isValidUrl } from '../util.js';
 import { getImportDomainAllowlist } from './content-manager.js';
 import { downloadExternalAsset, validateExternalAssetUrl } from './external-content-import-service.js';
+import {
+    getCanonicalManagedMediaReadState,
+    listCanonicalAssetPayload,
+} from './canonical-managed-media-read-service.js';
+import {
+    deleteCanonicalManagedMediaReference,
+    invalidateCanonicalManagedMediaAudit,
+    writeCanonicalManagedMedia,
+} from './canonical-managed-media-write-service.js';
 
 const VALID_CATEGORIES = ['bgm', 'ambient', 'blip', 'live2d', 'vrm', 'character', 'temp'];
 
@@ -97,6 +106,18 @@ function ensureFoldersExist(directories) {
 
 export const router = express.Router();
 
+function getRequestHandle(request) {
+    return request.user?.profile?.handle ?? request.user?.handle ?? 'default-user';
+}
+
+function invalidateManagedMediaAudit(request, reason) {
+    invalidateCanonicalManagedMediaAudit({
+        handle: getRequestHandle(request),
+        directories: request.user.directories,
+        reason,
+    });
+}
+
 /**
  * HTTP POST handler function to retrieve name of all files of a given folder path.
  *
@@ -110,6 +131,14 @@ router.post('/get', async (request, response) => {
     let output = {};
 
     try {
+        const canonicalReadState = getCanonicalManagedMediaReadState({
+            handle: getRequestHandle(request),
+            directories: request.user.directories,
+        });
+        if (canonicalReadState.ok) {
+            return response.send(listCanonicalAssetPayload(canonicalReadState.db));
+        }
+
         if (fs.existsSync(folderPath) && fs.statSync(folderPath).isDirectory()) {
             ensureFoldersExist(request.user.directories);
 
@@ -175,6 +204,7 @@ router.post('/get', async (request, response) => {
         }
     } catch (err) {
         console.error(err);
+        return response.status(500).send({ error: 'Failed to fetch managed assets' });
     }
     return response.send(output);
 });
@@ -264,7 +294,25 @@ router.post('/download', async (request, response) => {
 
         // Move into asset place
         console.info('Download finished, moving file from', temp_path, 'to', file_path);
-        fs.copyFileSync(temp_path, file_path);
+        const compatibilityPath = path.posix.join('assets', category, request.body.filename);
+        const canonicalResult = await writeCanonicalManagedMedia({
+            handle: getRequestHandle(request),
+            directories: request.user.directories,
+            compatibilityPath,
+            ownerType: 'asset',
+            ownerId: compatibilityPath,
+            role: 'asset',
+            displayName: request.body.filename,
+            contents: temp_path,
+        });
+        if (canonicalResult.authorityCommitted && !canonicalResult.ok) {
+            fs.unlinkSync(temp_path);
+            return response.status(500).send({ error: 'Asset download committed but compatibility projection failed' });
+        }
+        if (!canonicalResult.authorityCommitted) {
+            fs.copyFileSync(temp_path, file_path);
+            invalidateManagedMediaAudit(request, `asset_download:${category}/${request.body.filename}`);
+        }
         fs.unlinkSync(temp_path);
         response.sendStatus(200);
     } catch (error) {
@@ -309,7 +357,22 @@ router.post('/delete', async (request, response) => {
             return response.sendStatus(400);
         }
 
+        const compatibilityPath = path.posix.join('assets', category, request.body.filename);
+        const canonicalResult = await deleteCanonicalManagedMediaReference({
+            handle: getRequestHandle(request),
+            directories: request.user.directories,
+            compatibilityPath,
+        });
+        if (canonicalResult.authorityCommitted) {
+            if (!canonicalResult.ok) {
+                return response.status(500).send({ error: 'Asset deletion committed but compatibility projection failed' });
+            }
+            console.info('Asset deleted.');
+            return response.sendStatus(200);
+        }
+
         await fs.promises.unlink(file_path);
+        invalidateManagedMediaAudit(request, `asset_delete:${category}/${request.body.filename}`);
         console.info('Asset deleted.');
         return response.sendStatus(200);
     } catch (error) {

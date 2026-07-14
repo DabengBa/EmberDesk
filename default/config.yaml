@@ -112,6 +112,13 @@ features:
       writes: false
       chatStats: false
       strict: false
+      slices:
+        managedMedia:
+          enabled: false
+          shadowImport: false
+          reads: false
+          writes: false
+          strict: false
   react:
     pages:
       login: true

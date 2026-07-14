@@ -9,6 +9,7 @@ import { afterEach, describe, expect, test } from '@jest/globals';
 import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalShadowImport } from '../src/canonical-sqlite-shadow-import.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import { runCanonicalManagedMediaShadowImport } from '../src/canonical-managed-media-shadow-import.js';
 import { recordProjectionRepair } from '../src/endpoints/character-store.js';
 import {
     recordWorldInfoProjectionRepair,
@@ -40,6 +41,11 @@ function createDirectories(root) {
         characters: path.join(root, 'characters'),
         chats: path.join(root, 'chats'),
         worlds: path.join(root, 'worlds'),
+        backgrounds: path.join(root, 'backgrounds'),
+        assets: path.join(root, 'assets'),
+        avatars: path.join(root, 'User Avatars'),
+        files: path.join(root, 'user', 'files'),
+        userImages: path.join(root, 'user', 'images'),
     };
     for (const directory of Object.values(directories)) {
         if (directory !== root) {
@@ -90,11 +96,48 @@ describe('canonical sqlite CLI scripts', () => {
 
         expect(auditHelp).toContain('Usage: node scripts/canonical-sqlite-audit.mjs');
         expect(auditHelp).toContain('--scope <scope>');
+        expect(auditHelp).toContain('managed_media');
         expect(repairHelp).toContain('Usage: node scripts/canonical-sqlite-repair.mjs');
         expect(repairHelp).toContain('list-repairs');
         expect(repairHelp).toContain('repair-world-info-projection');
+        expect(repairHelp).toContain('repair-managed-media-projection');
+        expect(repairHelp).toContain('gc-managed-media');
         expect(repairHelp).toContain('status');
         expect(repairHelp).toContain('--slice');
+    });
+
+    test('runs a clean managed media audit through the audit CLI', async () => {
+        const dataRoot = makeRoot();
+        const directories = createDirectories(path.join(dataRoot, 'alice'));
+        const manager = createManager();
+        fs.writeFileSync(path.join(directories.backgrounds, 'sky.png'), 'background', 'utf8');
+
+        const imported = await runCanonicalManagedMediaShadowImport({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, shadowImport: true, reads: false, writes: false, strict: false },
+            manager,
+            nowMs: 1735689600000,
+        });
+        expect(imported.ok).toBe(true);
+        manager.dispose();
+
+        const output = execFileSync('node', [
+            'scripts/canonical-sqlite-audit.mjs',
+            '--data-root', dataRoot,
+            '--handle', 'alice',
+            '--slice', 'managed_media',
+            '--json',
+        ], {
+            cwd: repoRoot,
+            encoding: 'utf8',
+        });
+
+        expect(JSON.parse(output)).toEqual(expect.objectContaining({
+            ok: true,
+            blocking: false,
+            sliceKey: 'managed_media',
+        }));
     });
 
     test('lists repairs and replays projection from the repair CLI', async () => {
@@ -404,7 +447,7 @@ describe('canonical sqlite CLI scripts', () => {
         });
 
         const parsed = JSON.parse(output);
-        expect(parsed.slices.map(slice => slice.key)).toEqual(['characters', 'world_info', 'settings', 'secrets']);
+        expect(parsed.slices.map(slice => slice.key)).toEqual(['characters', 'world_info', 'settings', 'secrets', 'managed_media']);
         expect(parsed.slices.find(slice => slice.key === 'characters').openRepairCount).toBe(1);
         expect(output).not.toContain('top-secret-value');
     });

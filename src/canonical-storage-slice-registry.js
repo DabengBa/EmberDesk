@@ -5,6 +5,7 @@ import { getPersistedCanonicalAuditStatus } from './canonical-sqlite-shadow-impo
 import { WORLD_INFO_AUDIT_SCOPE } from './canonical-world-info-shadow-import.js';
 import { SETTINGS_AUDIT_SCOPE } from './canonical-settings-shadow-import.js';
 import { CANONICAL_SECRETS_AUDIT_SCOPE } from './canonical-secrets-shadow-import.js';
+import { MANAGED_MEDIA_AUDIT_SCOPE } from './canonical-managed-media-shadow-import.js';
 import {
     buildCanonicalSliceRollbackBlockers,
     getCanonicalSliceFlagContractStatus,
@@ -14,7 +15,8 @@ import {
 import { listOpenWorldInfoProjectionRepairs } from './endpoints/world-info-store.js';
 import { listOpenSettingsProjectionRepairs } from './endpoints/settings-store.js';
 import { listOpenSecretProjectionRepairs } from './endpoints/canonical-secrets-store.js';
-import { getCanonicalSqliteFeatureFlags } from './storage-feature-flags.js';
+import { listOpenCanonicalManagedMediaRepairs } from './endpoints/canonical-managed-media-store.js';
+import { getCanonicalManagedMediaFeatureFlags, getCanonicalSqliteFeatureFlags } from './storage-feature-flags.js';
 import { SETTINGS_FILE } from './constants.js';
 
 const REQUIRED_SLICE_FIELDS = Object.freeze([
@@ -212,6 +214,69 @@ function createSecretsSlice() {
     };
 }
 
+function createManagedMediaSlice() {
+    return {
+        key: 'managed_media',
+        auditScope: MANAGED_MEDIA_AUDIT_SCOPE,
+        listOpenRepairs(db) {
+            return listOpenCanonicalManagedMediaRepairs(db);
+        },
+        getFeatureFlags(overrides = null) {
+            if (overrides == null) {
+                return getCanonicalManagedMediaFeatureFlags();
+            }
+            const mediaOverrides = overrides?.managedMedia ?? overrides?.managed_media ?? null;
+            if (mediaOverrides == null) {
+                return {
+                    enabled: false,
+                    shadowImport: false,
+                    reads: false,
+                    writes: false,
+                    strict: false,
+                };
+            }
+            return {
+                enabled: !!mediaOverrides.enabled,
+                shadowImport: !!mediaOverrides.shadowImport,
+                reads: !!mediaOverrides.reads,
+                writes: !!mediaOverrides.writes,
+                strict: !!mediaOverrides.strict,
+            };
+        },
+        getMigrationReadiness(db) {
+            return createSharedMigrationReadiness(db);
+        },
+        getRollbackBlockers({
+            db,
+            featureFlags = null,
+            phase = 'writes',
+            persistedAuditStatus = null,
+        } = {}) {
+            return buildCanonicalSliceRollbackBlockers({
+                db,
+                sliceKey: 'managed_media',
+                featureFlags: this.getFeatureFlags(featureFlags),
+                phase,
+                persistedAuditStatus: persistedAuditStatus
+                    ?? getPersistedCanonicalAuditStatus(db, { scope: MANAGED_MEDIA_AUDIT_SCOPE }),
+                listOpenRepairs: listOpenCanonicalManagedMediaRepairs,
+                openRepairCode: 'open_managed_media_repairs',
+                includeChatStatsPhase: false,
+            });
+        },
+        getBackupManagedPaths(directories) {
+            return [
+                directories?.backgrounds ?? null,
+                directories?.assets ?? null,
+                directories?.avatars ?? null,
+                directories?.files ?? null,
+                directories?.userImages ?? null,
+                directories?.storage ? path.join(directories.storage, 'managed-media') : null,
+            ].filter(Boolean);
+        },
+    };
+}
+
 export function createCanonicalStorageSliceRegistry({ registerDefaults = false } = {}) {
     /** @type {Map<string, object>} */
     const slices = new Map();
@@ -280,6 +345,7 @@ export function createCanonicalStorageSliceRegistry({ registerDefaults = false }
         register(createWorldInfoSlice());
         register(createSettingsSlice());
         register(createSecretsSlice());
+        register(createManagedMediaSlice());
     }
 
     return registry;

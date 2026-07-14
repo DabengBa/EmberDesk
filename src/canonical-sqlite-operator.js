@@ -10,6 +10,8 @@ import { withCanonicalTransaction } from './canonical-sqlite.js';
 import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus, auditCanonicalShadowImport } from './canonical-sqlite-shadow-import.js';
 import { auditCanonicalWorldInfoShadowImport, WORLD_INFO_AUDIT_SCOPE } from './canonical-world-info-shadow-import.js';
 import { auditCanonicalSettingsShadowImport, SETTINGS_AUDIT_SCOPE } from './canonical-settings-shadow-import.js';
+import { auditCanonicalManagedMediaShadowImport } from './canonical-managed-media-shadow-import.js';
+import { repairCanonicalManagedMediaProjection } from './endpoints/canonical-managed-media-write-service.js';
 import {
     auditCanonicalSecretsShadowImport,
     CANONICAL_SECRETS_AUDIT_SCOPE,
@@ -43,6 +45,7 @@ import {
     listOpenSecretProjectionRepairs,
     resolveSecretProjectionRepair,
 } from './endpoints/canonical-secrets-store.js';
+import { listOpenCanonicalManagedMediaRepairs } from './endpoints/canonical-managed-media-store.js';
 import {
     buildCharacterFileSnapshotRow,
     calculateCharacterChatStats,
@@ -213,6 +216,10 @@ export function listCanonicalRepairs(db) {
 
 export function listCanonicalWorldInfoRepairs(db) {
     return listOpenWorldInfoProjectionRepairs(db);
+}
+
+export function listCanonicalManagedMediaRepairs(db) {
+    return listOpenCanonicalManagedMediaRepairs(db);
 }
 
 export function explainCanonicalRolloutBlockers({
@@ -799,6 +806,12 @@ function ensureDefaultSliceRunners(registry = getDefaultCanonicalStorageSliceReg
         registry.setRunners('secrets', {
             runAudit: runCanonicalSecretsAudit,
             runRepair: repairCanonicalSecretProjection,
+        });
+    }
+    if (!registry.getRunners('managed_media')) {
+        registry.setRunners('managed_media', {
+            runAudit: auditCanonicalManagedMediaShadowImport,
+            runRepair: repairCanonicalManagedMediaProjection,
         });
     }
     return registry;
