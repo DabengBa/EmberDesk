@@ -19,7 +19,6 @@ import {
 import { canonicalSqliteManager } from '../canonical-sqlite.js';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
 import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
-import { getCanonicalSqliteFeatureFlags } from '../storage-feature-flags.js';
 import { SETTINGS_AUDIT_SCOPE } from '../canonical-settings-shadow-import.js';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
 import {
@@ -394,7 +393,7 @@ function invalidateSettingsAuditAfterFileWrite(request, operation) {
     if (!canReadCanonicalFeatureFlags()) {
         return;
     }
-    const featureFlags = getCanonicalSqliteFeatureFlags();
+    const featureFlags = getCanonicalStorageSlice('settings').getFeatureFlags();
     if (!featureFlags.enabled) {
         return;
     }

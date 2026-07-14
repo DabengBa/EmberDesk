@@ -98,9 +98,11 @@ describe('canonical storage slice registry', () => {
         for (const key of ['characters', 'world_info', 'settings', 'secrets', 'managed_media']) {
             const slice = registry.get(key);
             expect(slice.key).toBe(key);
+            expect(typeof slice.flagKey).toBe('string');
             expect(typeof slice.auditScope).toBe('string');
             expect(typeof slice.listOpenRepairs).toBe('function');
             expect(typeof slice.getFeatureFlags).toBe('function');
+            expect(typeof slice.getFeatureFlagSnapshot).toBe('function');
             expect(typeof slice.getMigrationReadiness).toBe('function');
             expect(typeof slice.getRollbackBlockers).toBe('function');
             expect(typeof slice.getBackupManagedPaths).toBe('function');
@@ -147,6 +149,60 @@ describe('canonical storage slice registry', () => {
             directories.userImages,
             path.join(directories.storage, 'managed-media'),
         ]);
+    });
+
+    test('resolves isolated slice overrides while preserving global fallback for other slices', () => {
+        const registry = getDefaultCanonicalStorageSliceRegistry();
+        const overrides = {
+            enabled: true,
+            shadowImport: true,
+            reads: true,
+            writes: true,
+            chatStats: true,
+            strict: false,
+            slices: {
+                settings: {
+                    enabled: false,
+                },
+                secrets: {
+                    enabled: true,
+                    reads: false,
+                },
+            },
+        };
+
+        expect(registry.get('characters').getFeatureFlagSnapshot(overrides)).toEqual(expect.objectContaining({
+            featureFlags: expect.objectContaining({
+                enabled: true,
+                reads: true,
+                chatStats: true,
+            }),
+            sources: expect.objectContaining({
+                enabled: 'global_override',
+            }),
+        }));
+        expect(registry.get('settings').getFeatureFlagSnapshot(overrides)).toEqual(expect.objectContaining({
+            featureFlags: expect.objectContaining({
+                enabled: false,
+                reads: false,
+            }),
+            sources: expect.objectContaining({
+                enabled: 'slice_override',
+                reads: 'disabled_by_enabled',
+            }),
+        }));
+        expect(registry.get('secrets').getFeatureFlagSnapshot(overrides)).toEqual(expect.objectContaining({
+            featureFlags: expect.objectContaining({
+                enabled: true,
+                reads: false,
+                writes: true,
+            }),
+            sources: expect.objectContaining({
+                enabled: 'slice_override',
+                reads: 'slice_override',
+                writes: 'global_override',
+            }),
+        }));
     });
 
     test('allows managed-media rollback only after a clean audit and blocks it when a media repair remains open', () => {
@@ -197,9 +253,15 @@ describe('canonical storage slice registry', () => {
         const registry = createCanonicalStorageSliceRegistry();
         const base = {
             key: 'vectors',
+            flagKey: 'vectors',
             auditScope: 'vectors',
             listOpenRepairs: () => [],
             getFeatureFlags: () => ({ enabled: false }),
+            getFeatureFlagSnapshot: () => ({
+                featureFlags: { enabled: false },
+                sources: { enabled: 'default' },
+                resolution: { ok: true, reasonCode: null },
+            }),
             getMigrationReadiness: () => ({ ok: true }),
             getRollbackBlockers: () => ({ ok: true, blockers: [] }),
             getBackupManagedPaths: () => [],

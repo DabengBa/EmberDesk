@@ -15,7 +15,6 @@ import {
     runCanonicalSecretsShadowImport,
 } from './canonical-secrets-shadow-import.js';
 import { getCanonicalStorageSlice } from './canonical-storage-slice-registry.js';
-import { getCanonicalSqliteFeatureFlags } from './storage-feature-flags.js';
 import {
     listOpenSecretProjectionRepairs,
     recordSecretProjectionRepair,
@@ -28,7 +27,7 @@ function getHandle(directories) {
 }
 
 function initializeCanonicalSecrets(directories) {
-    const featureFlags = getCanonicalSqliteFeatureFlags();
+    const featureFlags = getCanonicalStorageSlice('secrets').getFeatureFlags();
     if (!featureFlags.enabled) {
         return { ok: false, reason: 'canonical_storage_disabled', featureFlags };
     }
@@ -134,7 +133,7 @@ export function getCanonicalSecretsReadBackend(directories) {
 }
 
 export function getCanonicalSecretsWriteBackend(directories) {
-    const featureFlags = getCanonicalSqliteFeatureFlags();
+    const featureFlags = getCanonicalStorageSlice('secrets').getFeatureFlags();
     if (!featureFlags.enabled || !featureFlags.writes) {
         return null;
     }
@@ -198,7 +197,7 @@ export function recordCanonicalSecretsProjectionFailure({
 }
 
 export function invalidateCanonicalSecretsAfterFileWrite(directories, operation) {
-    const featureFlags = getCanonicalSqliteFeatureFlags();
+    const featureFlags = getCanonicalStorageSlice('secrets').getFeatureFlags();
     if (!featureFlags.enabled) {
         return;
     }

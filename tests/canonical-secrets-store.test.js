@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
 import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
-import { CANONICAL_SQLITE_MIGRATIONS, runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import { expectCanonicalDomainSchema } from './helpers/canonical-domain-schema.js';
 import {
     getCanonicalSecretRecords,
     listOpenSecretProjectionRepairs,
@@ -133,7 +134,6 @@ describe('canonical secrets store', () => {
             directories,
             featureFlags: { enabled: true, strict: false },
         });
-        expect(CANONICAL_SQLITE_MIGRATIONS.map(migration => migration.version)).toEqual([1, 2, 3, 4, 5]);
         expect(first).toEqual(expect.objectContaining({
             ok: true,
             importedCount: 2,
@@ -151,8 +151,10 @@ describe('canonical secrets store', () => {
         expect(getCanonicalSecretRecords(db, 'api_key_custom')).toEqual([
             expect.objectContaining({ label: 'api_key_custom', active: true }),
         ]);
-        expect(db.prepare('SELECT name FROM sqlite_master WHERE type = ? AND name = ?').get('table', 'secret_records')).toBeTruthy();
-        expect(db.prepare('SELECT name FROM sqlite_master WHERE type = ? AND name = ?').get('table', 'secret_projection_repairs')).toBeTruthy();
+        expectCanonicalDomainSchema(db, {
+            migrationName: 'secrets_authority',
+            tables: ['secret_records', 'secret_migration_markers', 'secret_projection_repairs'],
+        });
     });
 
     test('blocks duplicate record IDs with sanitized import and audit results', () => {

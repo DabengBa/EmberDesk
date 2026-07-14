@@ -7,6 +7,7 @@ import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
 import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { CANONICAL_SQLITE_MIGRATIONS, runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import { expectCanonicalDomainSchema } from './helpers/canonical-domain-schema.js';
 import {
     getCanonicalSettingsDocument,
     getCanonicalSettingsRevision,
@@ -84,8 +85,7 @@ afterEach(() => {
 
 describe('canonical settings store', () => {
     test('migration catalog includes settings document authority tables', () => {
-        expect(CANONICAL_SQLITE_MIGRATIONS.map(x => x.version)).toEqual([1, 2, 3, 4, 5]);
-        const settingsMigration = CANONICAL_SQLITE_MIGRATIONS.find(x => x.version === 4);
+        const settingsMigration = CANONICAL_SQLITE_MIGRATIONS.find(x => x.name === 'settings_document_authority');
         expect(settingsMigration?.name).toBe('settings_document_authority');
         expect(settingsMigration.sql).toContain('CREATE TABLE IF NOT EXISTS settings_documents');
         expect(settingsMigration.sql).toContain('CREATE TABLE IF NOT EXISTS settings_snapshots');
@@ -107,19 +107,15 @@ describe('canonical settings store', () => {
 
         expect(first).toEqual(expect.objectContaining({
             ok: true,
-            currentVersion: 5,
-            targetVersion: 5,
-            appliedVersions: expect.arrayContaining([4]),
         }));
         expect(second).toEqual(expect.objectContaining({
             ok: true,
             appliedVersions: [],
-            currentVersion: 5,
-            targetVersion: 5,
         }));
-        expect(db.prepare('SELECT name FROM sqlite_master WHERE type = ? AND name = ?').get('table', 'settings_documents')).toBeTruthy();
-        expect(db.prepare('SELECT name FROM sqlite_master WHERE type = ? AND name = ?').get('table', 'settings_snapshots')).toBeTruthy();
-        expect(db.prepare('SELECT name FROM sqlite_master WHERE type = ? AND name = ?').get('table', 'settings_projection_repairs')).toBeTruthy();
+        expectCanonicalDomainSchema(db, {
+            migrationName: 'settings_document_authority',
+            tables: ['settings_documents', 'settings_snapshots', 'settings_projection_repairs'],
+        });
     });
 
     test('round-trips a full settings document while preserving unknown nested fields', () => {

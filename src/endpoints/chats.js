@@ -33,7 +33,7 @@ import {
     readRecentChatPayload,
     searchChatPayload,
 } from './chat-route-service.js';
-import { getCanonicalSqliteFeatureFlags } from '../storage-feature-flags.js';
+import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
 import { getCanonicalStorageStatus, openCanonicalDatabase, withCanonicalTransaction } from '../canonical-sqlite.js';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
 import { invalidateCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
@@ -57,7 +57,7 @@ function syncCanonicalChatStatsAfterCharacterChatMutation(handle, directories, a
         return;
     }
 
-    const featureFlags = getCanonicalSqliteFeatureFlags();
+    const featureFlags = getCanonicalStorageSlice('characters').getFeatureFlags();
     if (featureFlags.enabled && featureFlags.chatStats) {
         try {
             updateCanonicalCharacterChatStats(handle, directories, avatar, operation, featureFlags);

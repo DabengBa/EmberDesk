@@ -11,7 +11,6 @@ import { read, write } from '../character-card-parser.js';
 import { canonicalSqliteManager } from '../canonical-sqlite.js';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
 import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
-import { getCanonicalSqliteFeatureFlags } from '../storage-feature-flags.js';
 import { WORLD_INFO_AUDIT_SCOPE } from '../canonical-world-info-shadow-import.js';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
 import {
@@ -149,7 +148,7 @@ function invalidateWorldInfoAuditAfterFileWrite(request, operation) {
         return;
     }
 
-    const featureFlags = getCanonicalSqliteFeatureFlags();
+    const featureFlags = getCanonicalStorageSlice('world_info').getFeatureFlags();
     if (!featureFlags.enabled) {
         return;
     }

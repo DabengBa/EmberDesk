@@ -300,7 +300,12 @@ function summarizeSliceStatus({
     featureFlags,
     phase,
 }) {
-    const sliceFlags = slice.getFeatureFlags(featureFlags);
+    const flagSnapshot = slice.getFeatureFlagSnapshot?.(featureFlags) ?? {
+        featureFlags: slice.getFeatureFlags(featureFlags),
+        sources: {},
+        resolution: { ok: true, reasonCode: null },
+    };
+    const sliceFlags = flagSnapshot.featureFlags;
     const migration = slice.getMigrationReadiness(db);
     const audit = getPersistedCanonicalAuditStatus(db, { scope: slice.auditScope });
     const openRepairs = slice.listOpenRepairs(db) ?? [];
@@ -331,6 +336,7 @@ function summarizeSliceStatus({
 
     const enabled = !!sliceFlags.enabled;
     const ready = enabled
+        && flagSnapshot.resolution.ok
         && !!migration?.ok
         && !audit.blocking
         && openRepairs.length === 0
@@ -349,6 +355,18 @@ function summarizeSliceStatus({
                 ? { chatStats: !!sliceFlags.chatStats }
                 : {}),
             strict: !!sliceFlags.strict,
+        },
+        flagSources: flagSnapshot.sources,
+        flagResolution: {
+            ok: !!flagSnapshot.resolution.ok,
+            reasonCode: flagSnapshot.resolution.reasonCode ?? null,
+            blockers: flagSnapshot.resolution.ok
+                ? []
+                : [{
+                    code: flagSnapshot.resolution.reasonCode ?? 'invalid_slice_flag_configuration',
+                    severity: 'error',
+                    details: { sliceKey: slice.key },
+                }],
         },
         migration: {
             ok: !!migration?.ok,

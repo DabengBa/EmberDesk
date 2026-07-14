@@ -16,14 +16,16 @@ import { listOpenWorldInfoProjectionRepairs } from './endpoints/world-info-store
 import { listOpenSettingsProjectionRepairs } from './endpoints/settings-store.js';
 import { listOpenSecretProjectionRepairs } from './endpoints/canonical-secrets-store.js';
 import { listOpenCanonicalManagedMediaRepairs } from './endpoints/canonical-managed-media-store.js';
-import { getCanonicalManagedMediaFeatureFlags, getCanonicalSqliteFeatureFlags } from './storage-feature-flags.js';
+import { getCanonicalStorageSliceFeatureFlagSnapshot } from './storage-feature-flags.js';
 import { SETTINGS_FILE } from './constants.js';
 
 const REQUIRED_SLICE_FIELDS = Object.freeze([
     'key',
+    'flagKey',
     'auditScope',
     'listOpenRepairs',
     'getFeatureFlags',
+    'getFeatureFlagSnapshot',
     'getMigrationReadiness',
     'getRollbackBlockers',
     'getBackupManagedPaths',
@@ -38,7 +40,7 @@ function assertSliceDescriptor(descriptor) {
 
     const missing = REQUIRED_SLICE_FIELDS.filter(field => {
         const value = descriptor[field];
-        if (field === 'key' || field === 'auditScope') {
+        if (field === 'key' || field === 'flagKey' || field === 'auditScope') {
             return typeof value !== 'string' || value.length === 0;
         }
         return typeof value !== 'function';
@@ -53,15 +55,37 @@ function createSharedMigrationReadiness(db) {
     return getCanonicalMigrationStatus(db);
 }
 
+function createSliceFlagCapabilities({
+    flagKey,
+    supportsChatStats = false,
+    fallbackToGlobal = true,
+}) {
+    const getFeatureFlagSnapshot = (overrides = null) => getCanonicalStorageSliceFeatureFlagSnapshot({
+        flagKey,
+        supportsChatStats,
+        fallbackToGlobal,
+        overrides,
+    });
+    return {
+        flagKey,
+        getFeatureFlagSnapshot,
+        getFeatureFlags(overrides = null) {
+            return getFeatureFlagSnapshot(overrides).featureFlags;
+        },
+    };
+}
+
 function createCharacterSlice() {
+    const flags = createSliceFlagCapabilities({
+        flagKey: 'characters',
+        supportsChatStats: true,
+    });
     return {
         key: 'characters',
+        ...flags,
         auditScope: CHARACTER_AUDIT_SCOPE,
         listOpenRepairs(db) {
             return listOpenProjectionRepairs(db);
-        },
-        getFeatureFlags(overrides = null) {
-            return overrides ?? getCanonicalSqliteFeatureFlags();
         },
         getMigrationReadiness(db) {
             return createSharedMigrationReadiness(db);
@@ -75,7 +99,7 @@ function createCharacterSlice() {
             return buildCanonicalSliceRollbackBlockers({
                 db,
                 sliceKey: 'characters',
-                featureFlags: featureFlags ?? getCanonicalSqliteFeatureFlags(),
+                featureFlags: flags.getFeatureFlags(featureFlags),
                 phase,
                 persistedAuditStatus: persistedAuditStatus
                     ?? getPersistedCanonicalAuditStatus(db, { scope: CHARACTER_AUDIT_SCOPE }),
@@ -94,16 +118,13 @@ function createCharacterSlice() {
 }
 
 function createWorldInfoSlice() {
+    const flags = createSliceFlagCapabilities({ flagKey: 'worldInfo' });
     return {
         key: 'world_info',
+        ...flags,
         auditScope: WORLD_INFO_AUDIT_SCOPE,
         listOpenRepairs(db) {
             return listOpenWorldInfoProjectionRepairs(db);
-        },
-        getFeatureFlags(overrides = null) {
-            // World Info currently shares the global canonicalSqlite flags.
-            // Later slices may provide independent flag objects.
-            return overrides ?? getCanonicalSqliteFeatureFlags();
         },
         getMigrationReadiness(db) {
             return createSharedMigrationReadiness(db);
@@ -117,7 +138,7 @@ function createWorldInfoSlice() {
             return buildCanonicalSliceRollbackBlockers({
                 db,
                 sliceKey: 'world_info',
-                featureFlags: featureFlags ?? getCanonicalSqliteFeatureFlags(),
+                featureFlags: flags.getFeatureFlags(featureFlags),
                 phase,
                 persistedAuditStatus: persistedAuditStatus
                     ?? getPersistedCanonicalAuditStatus(db, { scope: WORLD_INFO_AUDIT_SCOPE }),
@@ -135,14 +156,13 @@ function createWorldInfoSlice() {
 }
 
 function createSettingsSlice() {
+    const flags = createSliceFlagCapabilities({ flagKey: 'settings' });
     return {
         key: 'settings',
+        ...flags,
         auditScope: SETTINGS_AUDIT_SCOPE,
         listOpenRepairs(db) {
             return listOpenSettingsProjectionRepairs(db);
-        },
-        getFeatureFlags(overrides = null) {
-            return overrides ?? getCanonicalSqliteFeatureFlags();
         },
         getMigrationReadiness(db) {
             return createSharedMigrationReadiness(db);
@@ -156,7 +176,7 @@ function createSettingsSlice() {
             return buildCanonicalSliceRollbackBlockers({
                 db,
                 sliceKey: 'settings',
-                featureFlags: featureFlags ?? getCanonicalSqliteFeatureFlags(),
+                featureFlags: flags.getFeatureFlags(featureFlags),
                 phase,
                 persistedAuditStatus: persistedAuditStatus
                     ?? getPersistedCanonicalAuditStatus(db, { scope: SETTINGS_AUDIT_SCOPE }),
@@ -175,14 +195,13 @@ function createSettingsSlice() {
 }
 
 function createSecretsSlice() {
+    const flags = createSliceFlagCapabilities({ flagKey: 'secrets' });
     return {
         key: 'secrets',
+        ...flags,
         auditScope: CANONICAL_SECRETS_AUDIT_SCOPE,
         listOpenRepairs(db) {
             return listOpenSecretProjectionRepairs(db);
-        },
-        getFeatureFlags(overrides = null) {
-            return overrides ?? getCanonicalSqliteFeatureFlags();
         },
         getMigrationReadiness(db) {
             return createSharedMigrationReadiness(db);
@@ -196,7 +215,7 @@ function createSecretsSlice() {
             return buildCanonicalSliceRollbackBlockers({
                 db,
                 sliceKey: 'secrets',
-                featureFlags: featureFlags ?? getCanonicalSqliteFeatureFlags(),
+                featureFlags: flags.getFeatureFlags(featureFlags),
                 phase,
                 persistedAuditStatus: persistedAuditStatus
                     ?? getPersistedCanonicalAuditStatus(db, { scope: CANONICAL_SECRETS_AUDIT_SCOPE }),
@@ -215,33 +234,16 @@ function createSecretsSlice() {
 }
 
 function createManagedMediaSlice() {
+    const flags = createSliceFlagCapabilities({
+        flagKey: 'managedMedia',
+        fallbackToGlobal: false,
+    });
     return {
         key: 'managed_media',
+        ...flags,
         auditScope: MANAGED_MEDIA_AUDIT_SCOPE,
         listOpenRepairs(db) {
             return listOpenCanonicalManagedMediaRepairs(db);
-        },
-        getFeatureFlags(overrides = null) {
-            if (overrides == null) {
-                return getCanonicalManagedMediaFeatureFlags();
-            }
-            const mediaOverrides = overrides?.managedMedia ?? overrides?.managed_media ?? null;
-            if (mediaOverrides == null) {
-                return {
-                    enabled: false,
-                    shadowImport: false,
-                    reads: false,
-                    writes: false,
-                    strict: false,
-                };
-            }
-            return {
-                enabled: !!mediaOverrides.enabled,
-                shadowImport: !!mediaOverrides.shadowImport,
-                reads: !!mediaOverrides.reads,
-                writes: !!mediaOverrides.writes,
-                strict: !!mediaOverrides.strict,
-            };
         },
         getMigrationReadiness(db) {
             return createSharedMigrationReadiness(db);
@@ -255,7 +257,7 @@ function createManagedMediaSlice() {
             return buildCanonicalSliceRollbackBlockers({
                 db,
                 sliceKey: 'managed_media',
-                featureFlags: this.getFeatureFlags(featureFlags),
+                featureFlags: flags.getFeatureFlags(featureFlags),
                 phase,
                 persistedAuditStatus: persistedAuditStatus
                     ?? getPersistedCanonicalAuditStatus(db, { scope: MANAGED_MEDIA_AUDIT_SCOPE }),

@@ -62,7 +62,11 @@ This page lets an authenticated user edit the main Sprint 3 settings slice from 
 
 ## Canonical Settings Document Authority
 
-When `features.storage.canonicalSqlite` reads/writes are enabled and the `settings` audit scope is clean, the full settings JSON document is authoritative in per-user `storage/emberdesk.sqlite` (`settings_documents`) with a monotonic `revision`.
+When the effective Settings storage flags enable reads/writes and the `settings` audit scope is
+clean, the full settings JSON document is authoritative in per-user
+`storage/emberdesk.sqlite` (`settings_documents`) with a monotonic `revision`. Operators may keep
+the existing global storage flags or explicitly enable this settings slice; absent settings-slice
+values retain the global behavior.
 
 - **Get**: `/api/settings/get` may include `settings_revision` when serving from canonical SQLite. The `settings` field remains a JSON string. Directory-derived payload fields (presets, themes, world names, etc.) stay file/directory aggregates and are not part of the settings document.
 - **Save**: `/api/settings/save` accepts protocol field `settings_revision` only (document fields named `revision` are ignored). Stale revisions return HTTP 409 with the current `settings_revision` (no full document body). React Settings and the legacy workspace save path send the last-loaded revision and reload/warn on conflict. Clients that still omit revision use the server current revision (compat LWW) until they adopt the field.
@@ -70,4 +74,3 @@ When `features.storage.canonicalSqlite` reads/writes are enabled and the `settin
 - **Snapshots**: `/api/settings/make-snapshot` stores a canonical snapshot from the current revision and may also keep a file backup. Restore creates a **new** revision; the revision counter never rewinds. Open projection repairs block write rollback.
 - **Flags off**: Existing atomic `settings.json` read/write continue to work; file writes invalidate the settings audit until re-audited.
 - **Not in this authority**: secrets, and later persona/extension/media normalizations that still live nested in the document for compatibility.
-

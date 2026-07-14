@@ -30,11 +30,10 @@ import {
     readCharacterListPayload,
     readCharacterSummaryPayload,
 } from './character-read-service.js';
-import { getCanonicalSqliteFeatureFlags } from '../storage-feature-flags.js';
+import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
 import { getCanonicalStorageStatus, openCanonicalDatabase, withCanonicalTransaction } from '../canonical-sqlite.js';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
 import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
-import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
 import { getCanonicalFlagContractStatus } from '../canonical-sqlite-rollout-contract.js';
 import { getCanonicalCharacter, listCanonicalCharacters } from './character-store.js';
 import {
@@ -326,9 +325,13 @@ async function writeCharacterData(inputFile, data, outputFile, request, crop = u
     }
 }
 
+function getCanonicalCharacterFeatureFlags() {
+    return getCanonicalStorageSlice('characters').getFeatureFlags();
+}
+
 function invalidateCanonicalCharacterAuditSafe(handle, directories, source) {
     try {
-        const featureFlags = getCanonicalSqliteFeatureFlags();
+        const featureFlags = getCanonicalCharacterFeatureFlags();
         if (!featureFlags.enabled) {
             return;
         }
@@ -466,7 +469,7 @@ function statCharacterFile(filePath) {
  */
 function createCharacterReadDependencies() {
     return {
-        getCanonicalSqliteFeatureFlags,
+        getCanonicalSqliteFeatureFlags: getCanonicalCharacterFeatureFlags,
         getCanonicalStorageStatus,
         openCanonicalDatabase,
         runCanonicalMigrations,
@@ -503,7 +506,7 @@ function createCharacterWriteDependencies({ bustCache = null } = {}) {
         invalidateThumbnail,
         bustCache,
         performCanonicalWrite: async (operation, payload) => {
-            const featureFlags = getCanonicalSqliteFeatureFlags();
+            const featureFlags = getCanonicalCharacterFeatureFlags();
             if (!featureFlags.enabled || !featureFlags.writes) {
                 return { enabled: false, authorityCommitted: false, repairKey: null };
             }
@@ -621,7 +624,7 @@ function createCharacterWriteDependencies({ bustCache = null } = {}) {
             };
         },
         recordProjectionRepair: async repair => {
-            const featureFlags = getCanonicalSqliteFeatureFlags();
+            const featureFlags = getCanonicalCharacterFeatureFlags();
             if (!featureFlags.enabled || !featureFlags.writes) {
                 return { ok: false, skipped: true };
             }

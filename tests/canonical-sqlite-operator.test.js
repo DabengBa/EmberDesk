@@ -528,6 +528,59 @@ describe('canonical sqlite operator helpers', () => {
         expect(JSON.stringify(status)).not.toContain('"auditStatus"');
     });
 
+    test('reports each slice effective flags, sources, and isolated override blockers', () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        runCanonicalMigrations(db, { nowMs: 1735689600000 });
+
+        const status = getCanonicalStorageControlPlaneStatus({
+            handle: 'alice',
+            directories,
+            db,
+            featureFlags: {
+                enabled: true,
+                shadowImport: true,
+                reads: true,
+                writes: true,
+                chatStats: true,
+                strict: false,
+                slices: {
+                    characters: { enabled: false },
+                },
+            },
+            sliceKeys: ['characters', 'world_info'],
+        });
+
+        const characters = status.slices.find(slice => slice.key === 'characters');
+        const worldInfo = status.slices.find(slice => slice.key === 'world_info');
+        expect(characters).toEqual(expect.objectContaining({
+            featureFlags: expect.objectContaining({
+                enabled: false,
+                reads: false,
+            }),
+            flagSources: expect.objectContaining({
+                enabled: 'slice_override',
+                reads: 'disabled_by_enabled',
+            }),
+        }));
+        expect(worldInfo).toEqual(expect.objectContaining({
+            featureFlags: expect.objectContaining({
+                enabled: true,
+                reads: true,
+            }),
+            flagSources: expect.objectContaining({
+                enabled: 'global_override',
+                reads: 'global_override',
+            }),
+        }));
+    });
+
     test('uses registry slice runners for audit and repair routing', async () => {
         const root = makeRoot();
         const directories = createDirectories(root);

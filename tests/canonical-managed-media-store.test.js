@@ -6,7 +6,8 @@ import path from 'node:path';
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
 import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
-import { CANONICAL_SQLITE_MIGRATIONS, runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import { expectCanonicalDomainSchema } from './helpers/canonical-domain-schema.js';
 import {
     getCanonicalManagedMediaFolderState,
     listCanonicalManagedMediaReferences,
@@ -119,7 +120,6 @@ describe('canonical managed media catalog', () => {
             auditedAtMs: 1735689602000,
         });
 
-        expect(CANONICAL_SQLITE_MIGRATIONS.map(migration => migration.version)).toEqual([1, 2, 3, 4, 5, 6]);
         expect(first).toEqual(expect.objectContaining({
             ok: true,
             importedCount: 5,
@@ -239,12 +239,11 @@ describe('canonical managed media catalog', () => {
 
         expect(first).toEqual(expect.objectContaining({
             ok: true,
-            currentVersion: 6,
-            targetVersion: 6,
         }));
         expect(second).toEqual(expect.objectContaining({ ok: true, appliedVersions: [] }));
-        for (const table of ['managed_blobs', 'media_references', 'media_folders', 'media_folder_memberships', 'managed_media_repairs']) {
-            expect(db.prepare('SELECT name FROM sqlite_master WHERE type = ? AND name = ?').get('table', table)).toBeTruthy();
-        }
+        expectCanonicalDomainSchema(db, {
+            migrationName: 'managed_media_authority',
+            tables: ['managed_blobs', 'media_references', 'media_folders', 'media_folder_memberships', 'managed_media_repairs'],
+        });
     });
 });

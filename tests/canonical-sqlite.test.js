@@ -10,7 +10,10 @@ import {
     resolveCanonicalDatabasePath,
     withCanonicalTransaction,
 } from '../src/canonical-sqlite.js';
-import { getCanonicalSqliteFeatureFlags } from '../src/storage-feature-flags.js';
+import {
+    getCanonicalSqliteFeatureFlags,
+    getCanonicalStorageSliceFeatureFlagSnapshot,
+} from '../src/storage-feature-flags.js';
 import { setConfigFilePath } from '../src/util.js';
 
 const tempRoots = [];
@@ -78,6 +81,9 @@ afterEach(() => {
     delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES;
     delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_CHATSTATS;
     delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_STRICT;
+    delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHARACTERS_ENABLED;
+    delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHARACTERS_READS;
+    delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_SETTINGS_READS;
 });
 
 describe('canonical sqlite feature flags', () => {
@@ -106,6 +112,98 @@ describe('canonical sqlite feature flags', () => {
             chatStats: true,
             strict: true,
         });
+    });
+
+    test('resolves slice flags from explicit overrides or the compatible global fallback', () => {
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SHADOWIMPORT = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_READS = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_CHATSTATS = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_STRICT = 'true';
+
+        expect(getCanonicalStorageSliceFeatureFlagSnapshot({
+            flagKey: 'characters',
+            supportsChatStats: true,
+        })).toEqual(expect.objectContaining({
+            featureFlags: {
+                enabled: true,
+                shadowImport: true,
+                reads: true,
+                writes: true,
+                chatStats: true,
+                strict: true,
+            },
+            sources: expect.objectContaining({
+                enabled: 'global',
+                reads: 'global',
+            }),
+            resolution: {
+                ok: true,
+                reasonCode: null,
+            },
+        }));
+
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHARACTERS_ENABLED = 'false';
+        expect(getCanonicalStorageSliceFeatureFlagSnapshot({
+            flagKey: 'characters',
+            supportsChatStats: true,
+        })).toEqual(expect.objectContaining({
+            featureFlags: {
+                enabled: false,
+                shadowImport: false,
+                reads: false,
+                writes: false,
+                chatStats: false,
+                strict: false,
+            },
+            sources: expect.objectContaining({
+                enabled: 'slice',
+                reads: 'disabled_by_enabled',
+            }),
+        }));
+        expect(getCanonicalStorageSliceFeatureFlagSnapshot({
+            flagKey: 'worldInfo',
+        }).featureFlags.reads).toBe(true);
+
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHARACTERS_ENABLED = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHARACTERS_READS = 'false';
+        expect(getCanonicalStorageSliceFeatureFlagSnapshot({
+            flagKey: 'characters',
+            supportsChatStats: true,
+        })).toEqual(expect.objectContaining({
+            featureFlags: expect.objectContaining({
+                enabled: true,
+                reads: false,
+                writes: true,
+            }),
+            sources: expect.objectContaining({
+                enabled: 'slice',
+                reads: 'slice',
+                writes: 'global',
+            }),
+        }));
+    });
+
+    test('fails closed with a stable reason code for invalid explicit slice flags', () => {
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_SETTINGS_READS = 'not-a-boolean';
+
+        expect(getCanonicalStorageSliceFeatureFlagSnapshot({
+            flagKey: 'settings',
+        })).toEqual(expect.objectContaining({
+            featureFlags: {
+                enabled: false,
+                shadowImport: false,
+                reads: false,
+                writes: false,
+                strict: false,
+            },
+            resolution: {
+                ok: false,
+                reasonCode: 'invalid_slice_flag_configuration',
+            },
+        }));
     });
 });
 

@@ -11,6 +11,7 @@ import {
     getCanonicalMigrationStatus,
     runCanonicalMigrations,
 } from '../src/canonical-sqlite-migrations.js';
+import { expectCanonicalDomainSchema } from './helpers/canonical-domain-schema.js';
 
 const tempRoots = [];
 const managers = [];
@@ -495,5 +496,46 @@ describe('canonical sqlite migrations', () => {
             targetVersion: 6,
             appliedVersions: [1, 2, 3, 4, 5, 6],
         }));
+    });
+
+    test('domain schema assertions remain valid after an unrelated later migration', () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        const lastVersion = Math.max(...CANONICAL_SQLITE_MIGRATIONS.map(migration => migration.version));
+        const migrations = [
+            ...CANONICAL_SQLITE_MIGRATIONS,
+            {
+                version: lastVersion + 1,
+                name: 'unrelated_test_fixture',
+                sql: 'CREATE TABLE IF NOT EXISTS unrelated_test_fixture (id TEXT PRIMARY KEY);',
+            },
+        ];
+
+        const status = runCanonicalMigrations(db, {
+            migrations,
+            nowMs: 1735689600000,
+        });
+
+        expect(status).toEqual(expect.objectContaining({ ok: true }));
+        expectCanonicalDomainSchema(db, {
+            migrationName: 'settings_document_authority',
+            tables: ['settings_documents', 'settings_snapshots', 'settings_projection_repairs'],
+        });
+        expectCanonicalDomainSchema(db, {
+            migrationName: 'secrets_authority',
+            tables: ['secret_records', 'secret_migration_markers', 'secret_projection_repairs'],
+        });
+        expectCanonicalDomainSchema(db, {
+            migrationName: 'managed_media_authority',
+            tables: ['managed_blobs', 'media_references', 'media_folders', 'media_folder_memberships', 'managed_media_repairs'],
+        });
+        expect(db.prepare('SELECT name FROM sqlite_master WHERE type = ? AND name = ?')
+            .get('table', 'unrelated_test_fixture')).toEqual({ name: 'unrelated_test_fixture' });
     });
 });
