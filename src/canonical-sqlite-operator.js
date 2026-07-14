@@ -11,13 +11,17 @@ import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus, audit
 import { auditCanonicalWorldInfoShadowImport, WORLD_INFO_AUDIT_SCOPE } from './canonical-world-info-shadow-import.js';
 import { auditCanonicalSettingsShadowImport, SETTINGS_AUDIT_SCOPE } from './canonical-settings-shadow-import.js';
 import { auditCanonicalManagedMediaShadowImport } from './canonical-managed-media-shadow-import.js';
-import { auditCanonicalChatShadowImport } from './canonical-chat-shadow-import.js';
+import {
+    auditCanonicalChatShadowImport,
+    CANONICAL_CHAT_AUDIT_SCOPE,
+} from './canonical-chat-shadow-import.js';
 import { repairCanonicalManagedMediaProjection } from './endpoints/canonical-managed-media-write-service.js';
 import {
     auditCanonicalSecretsShadowImport,
     CANONICAL_SECRETS_AUDIT_SCOPE,
     getCanonicalSecretsProjection,
 } from './canonical-secrets-shadow-import.js';
+import { isPathUnderParent } from './util.js';
 import {
     buildCanonicalRollbackBlockers,
     listOpenProjectionRepairs,
@@ -47,6 +51,11 @@ import {
     resolveSecretProjectionRepair,
 } from './endpoints/canonical-secrets-store.js';
 import { listOpenCanonicalManagedMediaRepairs } from './endpoints/canonical-managed-media-store.js';
+import {
+    listOpenCanonicalChatProjectionRepairs,
+    resolveCanonicalChatProjectionRepair,
+    serializeCanonicalChatSession,
+} from './endpoints/canonical-chat-store.js';
 import {
     buildCharacterFileSnapshotRow,
     calculateCharacterChatStats,
@@ -221,6 +230,10 @@ export function listCanonicalWorldInfoRepairs(db) {
 
 export function listCanonicalManagedMediaRepairs(db) {
     return listOpenCanonicalManagedMediaRepairs(db);
+}
+
+export function listCanonicalChatRepairs(db) {
+    return listOpenCanonicalChatProjectionRepairs(db);
 }
 
 export function explainCanonicalRolloutBlockers({
@@ -664,6 +677,96 @@ export async function repairCanonicalWorldInfoProjection({ db, directories, repa
     };
 }
 
+function getCanonicalChatProjectionPath(directories, sourcePath) {
+    const filePath = path.resolve(directories.root, String(sourcePath));
+    if (!isPathUnderParent(directories.root, filePath)) {
+        throw new Error(`Canonical chat projection path escapes user root: ${sourcePath}`);
+    }
+    return filePath;
+}
+
+function repairSingleCanonicalChatProjection({ db, directories, repair, nowMs = Date.now() }) {
+    const operation = repair.operation;
+    try {
+        const filePath = getCanonicalChatProjectionPath(directories, repair.sourcePath);
+        if (operation === 'delete') {
+            fs.rmSync(filePath, { force: true });
+        } else {
+            if (!repair.sessionId) {
+                return {
+                    repairKey: repair.repairKey,
+                    status: 'blocked',
+                    operation,
+                    blocker: 'missing_canonical_chat_session',
+                };
+            }
+            const jsonl = serializeCanonicalChatSession(db, repair.sessionId);
+            if (jsonl === null) {
+                return {
+                    repairKey: repair.repairKey,
+                    status: 'blocked',
+                    operation,
+                    blocker: 'missing_canonical_chat_session',
+                };
+            }
+            fs.mkdirSync(path.dirname(filePath), { recursive: true });
+            writeFileAtomicSync(filePath, jsonl, 'utf8');
+
+            if (operation === 'rename' && repair.details?.previousSourcePath) {
+                const previousPath = getCanonicalChatProjectionPath(directories, repair.details.previousSourcePath);
+                if (previousPath !== filePath) {
+                    fs.rmSync(previousPath, { force: true });
+                }
+            }
+        }
+
+        resolveCanonicalChatProjectionRepair(db, {
+            repairKey: repair.repairKey,
+            resolvedAtMs: nowMs,
+        });
+        return {
+            repairKey: repair.repairKey,
+            status: 'repaired',
+            operation,
+        };
+    } catch (error) {
+        return {
+            repairKey: repair.repairKey,
+            status: 'failed',
+            operation,
+            errorClass: String(error?.name ?? 'Error'),
+        };
+    }
+}
+
+export async function repairCanonicalChatProjection({ db, directories, repairKeys = null, nowMs = Date.now() }) {
+    const requested = Array.isArray(repairKeys) && repairKeys.length > 0
+        ? new Set(repairKeys.map(String))
+        : null;
+    const repairs = listOpenCanonicalChatProjectionRepairs(db)
+        .filter(repair => !requested || requested.has(repair.repairKey));
+    const results = repairs.map(repair => repairSingleCanonicalChatProjection({
+        db,
+        directories,
+        repair,
+        nowMs,
+    }));
+
+    if (results.some(result => result.status === 'repaired')) {
+        invalidateCanonicalAuditStatus(db, {
+            scope: CANONICAL_CHAT_AUDIT_SCOPE,
+            handle: null,
+            reason: 'audit_stale_after_chat_projection_repair',
+            source: 'canonical_repair:repair_chat_projection',
+        });
+    }
+
+    return {
+        ok: results.every(result => result.status === 'repaired'),
+        results,
+    };
+}
+
 
 async function runCanonicalSettingsAudit({ handle, directories, db, auditedAtMs = Date.now() }) {
     return auditCanonicalSettingsShadowImport({
@@ -837,6 +940,7 @@ function ensureDefaultSliceRunners(registry = getDefaultCanonicalStorageSliceReg
     if (!registry.getRunners('chats')) {
         registry.setRunners('chats', {
             runAudit: auditCanonicalChatShadowImport,
+            runRepair: repairCanonicalChatProjection,
         });
     }
     return registry;

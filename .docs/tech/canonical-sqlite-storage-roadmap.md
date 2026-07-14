@@ -480,6 +480,21 @@ project existing paths. Operators use `scripts/canonical-sqlite-audit.mjs --slic
 `scripts/canonical-sqlite-repair.mjs list-managed-media-repairs`,
 `repair-managed-media-projection`, and `gc-managed-media` (with explicit `--apply` for deletion).
 
+Chats use the global-fallback
+`features.storage.canonicalSqlite.slices.chats.{enabled,shadowImport,reads,writes,strict}`
+descriptor. After a clean persisted chat audit, `reads` reconstructs the existing complete
+header-plus-message payload for character and group `/api/chats/get` and export without server
+pagination. `writes` requires `reads`, migration readiness, clean audit, and zero unresolved
+`chat_projection_repairs`; illegal or blocked canonical writes return an explicit route failure
+instead of silently falling back to JSONL authority. Save, rename, delete, and explicit import
+commit canonical rows first, then atomically project JSONL. Projection failure keeps canonical
+authority, invalidates the chat audit, and records a replayable repair. Operators can inspect and
+replay repairs through `scripts/canonical-sqlite-repair.mjs list-chat-repairs` and
+`repair-chat-projection`; repair replay invalidates the audit so a fresh audit is required before
+rollback. The importer retains stable session/message identities across repeat import and file
+rename, while external JSONL edits remain explicit import/resolve work rather than automatic
+authority replacement.
+
 Rollback rules for every new slice:
 
 - Shadow-only rollback disables that slice and leaves imported rows unused.

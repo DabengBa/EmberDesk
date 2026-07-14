@@ -36,7 +36,20 @@ import {
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
 import { getCanonicalStorageStatus, openCanonicalDatabase, withCanonicalTransaction } from '../canonical-sqlite.js';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
-import { invalidateCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
+import {
+    getPersistedCanonicalAuditStatus,
+    invalidateCanonicalAuditStatus,
+} from '../canonical-sqlite-shadow-import.js';
+import {
+    readCanonicalChatPayload,
+    serializeCanonicalChatPayload,
+} from './canonical-chat-read-service.js';
+import {
+    deleteCanonicalChat,
+    parseCanonicalChatJsonl,
+    renameCanonicalChat,
+    writeCanonicalChatPayload,
+} from './canonical-chat-write-service.js';
 
 const isBackupEnabled = !!getConfigValue('backups.chat.enabled', true, 'boolean');
 const maxTotalChatBackups = Number(getConfigValue('backups.chat.maxTotalBackups', -1, 'number'));
@@ -44,6 +57,152 @@ const throttleInterval = Number(getConfigValue('backups.chat.throttleInterval', 
 const checkIntegrity = !!getConfigValue('backups.chat.checkIntegrity', true, 'boolean');
 
 export const CHAT_BACKUPS_PREFIX = 'chat_';
+
+function getRequestHandle(request) {
+    return request.user?.profile?.handle ?? request.user?.handle ?? 'default-user';
+}
+
+function getCanonicalChatReadState(request) {
+    const chatSlice = getCanonicalStorageSlice('chats');
+    const featureFlags = chatSlice.getFeatureFlags();
+    if (!featureFlags.enabled) {
+        return { ok: false, reason: 'canonical_storage_disabled', featureFlags };
+    }
+    if (!featureFlags.reads) {
+        return { ok: false, reason: 'canonical_reads_disabled', featureFlags };
+    }
+
+    const handle = getRequestHandle(request);
+    const storageStatus = getCanonicalStorageStatus({
+        handle,
+        directories: request.user.directories,
+        featureFlags,
+    });
+    if (!storageStatus.supported || storageStatus.disabledReason === 'migration_blocked') {
+        return {
+            ok: false,
+            reason: storageStatus.disabledReason ?? 'canonical_storage_unavailable',
+            featureFlags,
+        };
+    }
+
+    const db = openCanonicalDatabase({
+        handle,
+        directories: request.user.directories,
+        featureFlags,
+    });
+    if (!db) {
+        return { ok: false, reason: 'canonical_storage_unavailable', featureFlags };
+    }
+
+    const migrationStatus = runCanonicalMigrations(db, { strict: !!featureFlags.strict });
+    if (!migrationStatus.ok) {
+        if (featureFlags.strict) {
+            throw new Error(migrationStatus.blockedReason);
+        }
+        return { ok: false, reason: 'migration_blocked', featureFlags, migrationStatus };
+    }
+
+    const auditStatus = getPersistedCanonicalAuditStatus(db, { scope: chatSlice.auditScope });
+    const rollback = chatSlice.getRollbackBlockers({
+        db,
+        featureFlags,
+        phase: 'reads',
+        persistedAuditStatus: auditStatus,
+    });
+    if (!rollback.ok) {
+        const reason = rollback.blockers[0]?.code ?? auditStatus.reason ?? 'chat_audit_blocked';
+        if (featureFlags.strict) {
+            throw new Error(`Canonical chat reads blocked: ${reason}`);
+        }
+        return { ok: false, reason, featureFlags, auditStatus, rollback };
+    }
+
+    return { ok: true, db, featureFlags, auditStatus };
+}
+
+function getCanonicalChatWriteState(request) {
+    const chatSlice = getCanonicalStorageSlice('chats');
+    const featureFlags = chatSlice.getFeatureFlags();
+    if (!featureFlags.enabled || !featureFlags.writes) {
+        return {
+            ok: false,
+            fallback: true,
+            reason: !featureFlags.enabled ? 'canonical_storage_disabled' : 'canonical_writes_disabled',
+            featureFlags,
+        };
+    }
+    if (!featureFlags.reads) {
+        return {
+            ok: false,
+            blocked: true,
+            reason: 'canonical_reads_disabled',
+            featureFlags,
+        };
+    }
+
+    const readState = getCanonicalChatReadState(request);
+    if (!readState.ok) {
+        return { ...readState, blocked: true };
+    }
+
+    const rollback = chatSlice.getRollbackBlockers({
+        db: readState.db,
+        featureFlags: readState.featureFlags,
+        phase: 'writes',
+        persistedAuditStatus: readState.auditStatus,
+    });
+    if (!rollback.ok) {
+        const reason = rollback.blockers[0]?.code ?? 'canonical_chat_write_blocked';
+        if (readState.featureFlags.strict) {
+            throw new Error(`Canonical chat writes blocked: ${reason}`);
+        }
+        return { ...readState, ok: false, blocked: true, reason, rollback };
+    }
+
+    return readState;
+}
+
+function sendCanonicalChatWriteBlocked(response, writeState) {
+    return response.status(503).send({
+        error: 'canonical_chat_write_blocked',
+        reason: writeState.reason ?? 'canonical_chat_write_blocked',
+    });
+}
+
+function getCanonicalChatLocator(directories, { ownerType, ownerId, filePath }) {
+    return {
+        ownerType,
+        ownerId,
+        sourcePath: path.relative(directories.root, filePath).split(path.sep).join('/'),
+    };
+}
+
+function readCanonicalChatRoutePayload(request, locator) {
+    const readState = getCanonicalChatReadState(request);
+    if (!readState.ok) {
+        return { active: false, payload: null };
+    }
+
+    return {
+        active: true,
+        payload: readCanonicalChatPayload(readState.db, locator),
+        db: readState.db,
+    };
+}
+
+function serializeCanonicalChatRoutePayload(request, locator) {
+    const readState = getCanonicalChatReadState(request);
+    if (!readState.ok) {
+        return { active: false, jsonl: null };
+    }
+
+    return {
+        active: true,
+        jsonl: serializeCanonicalChatPayload(readState.db, locator),
+        db: readState.db,
+    };
+}
 
 /**
  * @param {string | null} handle
@@ -416,13 +575,20 @@ class IntegrityMismatchError extends Error {
  */
 export async function trySaveChat(chatData, filePath, skipIntegrityCheck = false, handle, cardName, backupDirectory) {
     const jsonlData = chatData?.map(m => JSON.stringify(m)).join('\n');
+    await assertChatIntegrity(chatData, filePath, skipIntegrityCheck);
+    writeChatProjection(jsonlData, filePath, handle, cardName, backupDirectory);
+}
 
+export async function assertChatIntegrity(chatData, filePath, skipIntegrityCheck = false) {
     const doIntegrityCheck = (checkIntegrity && !skipIntegrityCheck);
     const chatIntegritySlug = doIntegrityCheck ? chatData?.[0]?.chat_metadata?.integrity : undefined;
 
     if (chatIntegritySlug && !await checkChatIntegrity(filePath, chatIntegritySlug)) {
         throw new IntegrityMismatchError(`Chat integrity check failed for "${filePath}". The expected integrity slug was "${chatIntegritySlug}".`);
     }
+}
+
+export function writeChatProjection(jsonlData, filePath, handle, cardName, backupDirectory) {
     tryWriteFileSync(filePath, jsonlData);
     getBackupFunction(handle)(backupDirectory, cardName, jsonlData);
 }
@@ -439,6 +605,50 @@ router.post('/save', validateAvatarUrlMiddleware, async function (request, respo
         }
 
         if (Array.isArray(chatData)) {
+            const writeState = getCanonicalChatWriteState(request);
+            if (writeState.blocked) {
+                return sendCanonicalChatWriteBlocked(response, writeState);
+            }
+            if (writeState.ok) {
+                await assertChatIntegrity(chatData, chatFilePath, request.body.force);
+                const result = writeCanonicalChatPayload({
+                    db: writeState.db,
+                    locator: getCanonicalChatLocator(request.user.directories, {
+                        ownerType: 'character',
+                        ownerId: cardName,
+                        filePath: chatFilePath,
+                    }),
+                    payload: chatData,
+                    operation: 'save',
+                    projectJsonl(jsonlData) {
+                        writeChatProjection(
+                            jsonlData,
+                            chatFilePath,
+                            handle,
+                            cardName,
+                            request.user.directories.backups,
+                        );
+                    },
+                    onProjectionFailure() {
+                        invalidateCanonicalAuditStatus(writeState.db, {
+                            scope: getCanonicalStorageSlice('chats').auditScope,
+                            handle,
+                            reason: 'audit_stale_after_chat_projection_failure',
+                            source: 'chat:save',
+                        });
+                    },
+                });
+                if (!result.ok) {
+                    return response.status(500).send({
+                        error: 'Failed to project canonical chat file.',
+                        repairKey: result.repairKey,
+                    });
+                }
+                applyInteractionPerfChatTimestamp(chatFilePath);
+                syncCanonicalChatStatsAfterCharacterChatMutation(handle, request.user.directories, request.body.avatar_url, 'chat save');
+                return response.send({ ok: true });
+            }
+
             await trySaveChat(chatData, chatFilePath, request.body.force, handle, cardName, request.user.directories.backups);
             applyInteractionPerfChatTimestamp(chatFilePath);
             syncCanonicalChatStatsAfterCharacterChatMutation(handle, request.user.directories, request.body.avatar_url, 'chat save');
@@ -483,20 +693,29 @@ router.post('/get', validateAvatarUrlMiddleware, function (request, response) {
         if (!isPathUnderParent(request.user.directories.chats, directoryPath)) {
             return response.sendStatus(400);
         }
-        const chatDirExists = fs.existsSync(directoryPath);
-
-        //if no chat dir for the character is found, make one with the character name
-        if (!chatDirExists) {
-            fs.mkdirSync(directoryPath);
-            return response.send({});
-        }
-
         if (!request.body.file_name) {
+            if (!fs.existsSync(directoryPath)) {
+                fs.mkdirSync(directoryPath);
+            }
             return response.send({});
         }
 
         const chatFileName = `${String(request.body.file_name)}.jsonl`;
         const chatFilePath = path.join(directoryPath, sanitize(chatFileName));
+        const canonical = readCanonicalChatRoutePayload(request, getCanonicalChatLocator(request.user.directories, {
+            ownerType: 'character',
+            ownerId: dirName,
+            filePath: chatFilePath,
+        }));
+        if (canonical.active) {
+            return response.send(canonical.payload ?? {});
+        }
+
+        //if no chat dir for the character is found, make one with the character name
+        if (!fs.existsSync(directoryPath)) {
+            fs.mkdirSync(directoryPath);
+            return response.send({});
+        }
 
         return response.send(getChatData(chatFilePath));
     } catch (error) {
@@ -528,6 +747,59 @@ router.post('/rename', validateAvatarUrlMiddleware, async function (request, res
             return response.status(400).send({ error: true });
         }
 
+        const writeState = getCanonicalChatWriteState(request);
+        if (writeState.blocked) {
+            return sendCanonicalChatWriteBlocked(response, writeState);
+        }
+        if (writeState.ok) {
+            const ownerType = request.body.is_group ? 'group' : 'character';
+            const originalLocator = getCanonicalChatLocator(request.user.directories, {
+                ownerType,
+                ownerId: request.body.is_group
+                    ? path.parse(sanitize(request.body.original_file)).name
+                    : String(request.body.avatar_url).replace('.png', ''),
+                filePath: pathToOriginalFile,
+            });
+            const nextLocator = getCanonicalChatLocator(request.user.directories, {
+                ownerType,
+                ownerId: request.body.is_group
+                    ? path.parse(sanitize(request.body.renamed_file)).name
+                    : String(request.body.avatar_url).replace('.png', ''),
+                filePath: pathToRenamedFile,
+            });
+            const result = renameCanonicalChat({
+                db: writeState.db,
+                locator: originalLocator,
+                nextLocator,
+                projectRename() {
+                    fs.copyFileSync(pathToOriginalFile, pathToRenamedFile);
+                    fs.unlinkSync(pathToOriginalFile);
+                },
+                onProjectionFailure() {
+                    invalidateCanonicalAuditStatus(writeState.db, {
+                        scope: getCanonicalStorageSlice('chats').auditScope,
+                        handle: getRequestHandle(request),
+                        reason: 'audit_stale_after_chat_projection_failure',
+                        source: 'chat:rename',
+                    });
+                },
+            });
+            if (!result.ok) {
+                if (!result.authorityCommitted) {
+                    return response.status(400).send({ error: true });
+                }
+                return response.status(500).send({
+                    error: true,
+                    repairKey: result.repairKey,
+                });
+            }
+            console.info('Successfully renamed canonical chat file.');
+            if (!request.body.is_group) {
+                syncCanonicalChatStatsAfterCharacterChatMutation(request.user.profile?.handle ?? null, request.user.directories, request.body.avatar_url, 'chat rename');
+            }
+            return response.send({ ok: true, sanitizedFileName });
+        }
+
         fs.copyFileSync(pathToOriginalFile, pathToRenamedFile);
         fs.unlinkSync(pathToOriginalFile);
         console.info('Successfully renamed chat file.');
@@ -552,6 +824,48 @@ router.post('/delete', validateAvatarUrlMiddleware, function (request, response)
         const chatFilePath = path.join(request.user.directories.chats, dirName, sanitize(chatFileName));
         if (!isPathUnderParent(request.user.directories.chats, chatFilePath)) {
             return response.sendStatus(400);
+        }
+        const writeState = getCanonicalChatWriteState(request);
+        if (writeState.blocked) {
+            return sendCanonicalChatWriteBlocked(response, writeState);
+        }
+        if (writeState.ok) {
+            if (!fs.existsSync(chatFilePath)) {
+                console.error('The chat file was not deleted.');
+                return response.sendStatus(400);
+            }
+            const result = deleteCanonicalChat({
+                db: writeState.db,
+                locator: getCanonicalChatLocator(request.user.directories, {
+                    ownerType: 'character',
+                    ownerId: dirName,
+                    filePath: chatFilePath,
+                }),
+                projectDelete() {
+                    if (!tryDeleteFile(chatFilePath)) {
+                        throw new Error('JSONL chat projection was not deleted.');
+                    }
+                },
+                onProjectionFailure() {
+                    invalidateCanonicalAuditStatus(writeState.db, {
+                        scope: getCanonicalStorageSlice('chats').auditScope,
+                        handle: getRequestHandle(request),
+                        reason: 'audit_stale_after_chat_projection_failure',
+                        source: 'chat:delete',
+                    });
+                },
+            });
+            if (!result.ok) {
+                if (!result.authorityCommitted) {
+                    return response.sendStatus(400);
+                }
+                return response.status(500).send({
+                    error: 'Failed to project canonical chat deletion.',
+                    repairKey: result.repairKey,
+                });
+            }
+            syncCanonicalChatStatsAfterCharacterChatMutation(request.user.profile?.handle ?? null, request.user.directories, request.body.avatar_url, 'chat delete');
+            return response.send({ ok: true });
         }
         //Return success if the file was deleted.
         if (tryDeleteFile(chatFilePath)) {
@@ -579,7 +893,14 @@ router.post('/export', validateAvatarUrlMiddleware, async function (request, res
         return response.sendStatus(400);
     }
     let exportfilename = request.body.exportfilename;
-    if (!fs.existsSync(filename)) {
+    const canonical = serializeCanonicalChatRoutePayload(request, getCanonicalChatLocator(request.user.directories, {
+        ownerType: request.body.is_group ? 'group' : 'character',
+        ownerId: request.body.is_group
+            ? path.parse(sanitize(request.body.file)).name
+            : String(request.body.avatar_url).replace('.png', ''),
+        filePath: filename,
+    }));
+    if (canonical.active && canonical.jsonl === null) {
         const errorMessage = {
             message: `Could not find JSONL file to export. Source chat file: ${filename}.`,
         };
@@ -587,52 +908,51 @@ router.post('/export', validateAvatarUrlMiddleware, async function (request, res
         return response.status(404).json(errorMessage);
     }
     try {
-        // Short path for JSONL files
-        if (request.body.format === 'jsonl') {
-            try {
-                const rawFile = fs.readFileSync(filename, 'utf8');
-                const successMessage = {
-                    message: `Chat saved to ${exportfilename}`,
-                    result: rawFile,
-                };
-
-                console.info(`Chat exported as ${exportfilename}`);
-                return response.status(200).json(successMessage);
-            } catch (err) {
-                console.error(err);
-                const errorMessage = {
-                    message: `Could not read JSONL file to export. Source chat file: ${filename}.`,
-                };
-                console.error(errorMessage.message);
-                return response.status(500).json(errorMessage);
-            }
+        const rawFile = canonical.active
+            ? canonical.jsonl
+            : fs.existsSync(filename)
+                ? fs.readFileSync(filename, 'utf8')
+                : null;
+        if (rawFile === null) {
+            const errorMessage = {
+                message: `Could not find JSONL file to export. Source chat file: ${filename}.`,
+            };
+            console.error(errorMessage.message);
+            return response.status(404).json(errorMessage);
         }
 
-        const readStream = fs.createReadStream(filename);
-        const rl = readline.createInterface({
-            input: readStream,
-        });
+        // Short path for JSONL files
+        if (request.body.format === 'jsonl') {
+            const successMessage = {
+                message: `Chat saved to ${exportfilename}`,
+                result: rawFile,
+            };
+            console.info(`Chat exported as ${exportfilename}`);
+            return response.status(200).json(successMessage);
+        }
+
         let buffer = '';
-        rl.on('line', (line) => {
+        for (const line of rawFile.split('\n')) {
+            if (!line) {
+                continue;
+            }
             const data = JSON.parse(line);
             // Skip non-printable/prompt-hidden messages
             if (data.is_system) {
-                return;
+                continue;
             }
             if (data.mes) {
                 const name = data.name;
                 const message = (data?.extra?.display_text || data?.mes || '').replace(/\r?\n/g, '\n');
                 buffer += (`${name}: ${message}\n\n`);
             }
-        });
-        rl.on('close', () => {
-            const successMessage = {
-                message: `Chat saved to ${exportfilename}`,
-                result: buffer,
-            };
-            console.info(`Chat exported as ${exportfilename}`);
-            return response.status(200).json(successMessage);
-        });
+        }
+        const successMessage = {
+            message: `Chat saved to ${exportfilename}`,
+            result: buffer,
+        };
+        console.info(`Chat exported as ${exportfilename}`);
+        return response.status(200).json(successMessage);
     } catch (err) {
         console.error('chat export failed.', err);
         return response.sendStatus(400);
@@ -650,6 +970,38 @@ router.post('/group/import', function (request, response) {
         const chatname = humanizedDateTime();
         const pathToUpload = path.join(filedata.destination, filedata.filename);
         const pathToNewFile = path.join(request.user.directories.groupChats, `${chatname}.jsonl`);
+        const writeState = getCanonicalChatWriteState(request);
+        if (writeState.blocked) {
+            return sendCanonicalChatWriteBlocked(response, writeState);
+        }
+        if (writeState.ok) {
+            const result = writeCanonicalChatPayload({
+                db: writeState.db,
+                locator: getCanonicalChatLocator(request.user.directories, {
+                    ownerType: 'group',
+                    ownerId: chatname,
+                    filePath: pathToNewFile,
+                }),
+                payload: parseCanonicalChatJsonl(fs.readFileSync(pathToUpload, 'utf8')),
+                operation: 'import',
+                projectJsonl(jsonlData) {
+                    writeFileAtomicSync(pathToNewFile, jsonlData, 'utf8');
+                },
+                onProjectionFailure() {
+                    invalidateCanonicalAuditStatus(writeState.db, {
+                        scope: getCanonicalStorageSlice('chats').auditScope,
+                        handle: getRequestHandle(request),
+                        reason: 'audit_stale_after_chat_projection_failure',
+                        source: 'chat:group-import',
+                    });
+                },
+            });
+            if (!result.ok) {
+                return response.send({ error: true, repairKey: result.repairKey });
+            }
+            fs.unlinkSync(pathToUpload);
+            return response.send({ res: chatname });
+        }
         fs.copyFileSync(pathToUpload, pathToNewFile);
         fs.unlinkSync(pathToUpload);
         return response.send({ res: chatname });
@@ -701,6 +1053,50 @@ router.post('/import', validateAvatarUrlMiddleware, function (request, response)
             return response.send({ error: true });
         }
 
+        const writeState = getCanonicalChatWriteState(request);
+        if (writeState.blocked) {
+            return sendCanonicalChatWriteBlocked(response, writeState);
+        }
+        if (writeState.ok) {
+            for (const write of importPlan.writes) {
+                const jsonlData = write.kind === 'copy-upload'
+                    ? fs.readFileSync(write.uploadPath, 'utf8')
+                    : write.contents;
+                const result = writeCanonicalChatPayload({
+                    db: writeState.db,
+                    locator: getCanonicalChatLocator(request.user.directories, {
+                        ownerType: 'character',
+                        ownerId: avatarUrl,
+                        filePath: write.filePath,
+                    }),
+                    payload: parseCanonicalChatJsonl(jsonlData),
+                    operation: 'import',
+                    projectJsonl(projectedJsonl) {
+                        writeFileAtomicSync(write.filePath, projectedJsonl, 'utf8');
+                    },
+                    onProjectionFailure() {
+                        invalidateCanonicalAuditStatus(writeState.db, {
+                            scope: getCanonicalStorageSlice('chats').auditScope,
+                            handle: getRequestHandle(request),
+                            reason: 'audit_stale_after_chat_projection_failure',
+                            source: 'chat:import',
+                        });
+                    },
+                });
+                if (!result.ok) {
+                    return response.send({ error: true, repairKey: result.repairKey });
+                }
+            }
+            fileNames.push(...importPlan.fileNames);
+            if (importPlan.uploadCleanup === CHAT_IMPORT_UPLOAD_CLEANUP.AFTER_SUCCESS) {
+                fs.unlinkSync(pathToUpload);
+            }
+            if (importPlan.shouldMarkChatStatsDirty) {
+                syncCanonicalChatStatsAfterCharacterChatMutation(request.user.profile?.handle ?? null, request.user.directories, request.body.avatar_url, 'chat import');
+            }
+            return response.send({ res: true, fileNames });
+        }
+
         writeCharacterChatImportPlan(importPlan);
         fileNames.push(...importPlan.fileNames);
 
@@ -726,6 +1122,14 @@ router.post('/group/get', (request, response) => {
 
     const id = request.body.id;
     const chatFilePath = path.join(request.user.directories.groupChats, sanitize(`${id}.jsonl`));
+    const canonical = readCanonicalChatRoutePayload(request, getCanonicalChatLocator(request.user.directories, {
+        ownerType: 'group',
+        ownerId: String(id),
+        filePath: chatFilePath,
+    }));
+    if (canonical.active) {
+        return response.send(canonical.payload ?? {});
+    }
 
     return response.send(getChatData(chatFilePath));
 });
@@ -755,6 +1159,47 @@ router.post('/group/delete', (request, response) => {
 
         const id = request.body.id;
         const chatFilePath = path.join(request.user.directories.groupChats, sanitize(`${id}.jsonl`));
+        const writeState = getCanonicalChatWriteState(request);
+        if (writeState.blocked) {
+            return sendCanonicalChatWriteBlocked(response, writeState);
+        }
+        if (writeState.ok) {
+            if (!fs.existsSync(chatFilePath)) {
+                console.error('The group chat file was not deleted.');
+                return response.sendStatus(400);
+            }
+            const result = deleteCanonicalChat({
+                db: writeState.db,
+                locator: getCanonicalChatLocator(request.user.directories, {
+                    ownerType: 'group',
+                    ownerId: String(id),
+                    filePath: chatFilePath,
+                }),
+                projectDelete() {
+                    if (!tryDeleteFile(chatFilePath)) {
+                        throw new Error('Group JSONL chat projection was not deleted.');
+                    }
+                },
+                onProjectionFailure() {
+                    invalidateCanonicalAuditStatus(writeState.db, {
+                        scope: getCanonicalStorageSlice('chats').auditScope,
+                        handle: getRequestHandle(request),
+                        reason: 'audit_stale_after_chat_projection_failure',
+                        source: 'chat:group-delete',
+                    });
+                },
+            });
+            if (!result.ok) {
+                if (!result.authorityCommitted) {
+                    return response.sendStatus(400);
+                }
+                return response.status(500).send({
+                    error: 'Failed to project canonical group chat deletion.',
+                    repairKey: result.repairKey,
+                });
+            }
+            return response.send({ ok: true });
+        }
 
         //Return success if the file was deleted.
         if (tryDeleteFile(chatFilePath)) {
@@ -781,6 +1226,48 @@ router.post('/group/save', async function (request, response) {
         const chatData = request.body.chat;
 
         if (Array.isArray(chatData)) {
+            const writeState = getCanonicalChatWriteState(request);
+            if (writeState.blocked) {
+                return sendCanonicalChatWriteBlocked(response, writeState);
+            }
+            if (writeState.ok) {
+                await assertChatIntegrity(chatData, chatFilePath, request.body.force);
+                const result = writeCanonicalChatPayload({
+                    db: writeState.db,
+                    locator: getCanonicalChatLocator(request.user.directories, {
+                        ownerType: 'group',
+                        ownerId: String(id),
+                        filePath: chatFilePath,
+                    }),
+                    payload: chatData,
+                    operation: 'save',
+                    projectJsonl(jsonlData) {
+                        writeChatProjection(
+                            jsonlData,
+                            chatFilePath,
+                            handle,
+                            String(id),
+                            request.user.directories.backups,
+                        );
+                    },
+                    onProjectionFailure() {
+                        invalidateCanonicalAuditStatus(writeState.db, {
+                            scope: getCanonicalStorageSlice('chats').auditScope,
+                            handle,
+                            reason: 'audit_stale_after_chat_projection_failure',
+                            source: 'chat:group-save',
+                        });
+                    },
+                });
+                if (!result.ok) {
+                    return response.status(500).send({
+                        error: 'Failed to project canonical chat file.',
+                        repairKey: result.repairKey,
+                    });
+                }
+                return response.send({ ok: true });
+            }
+
             await trySaveChat(chatData, chatFilePath, request.body.force, handle, String(id), request.user.directories.backups);
             return response.send({ ok: true });
         } else {

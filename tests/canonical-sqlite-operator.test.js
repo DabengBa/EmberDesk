@@ -6,6 +6,7 @@ import { afterEach, describe, expect, test } from '@jest/globals';
 
 import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalShadowImport, getPersistedCanonicalAuditStatus, persistCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.js';
+import { runCanonicalChatShadowImport } from '../src/canonical-chat-shadow-import.js';
 import { recordProjectionRepair } from '../src/endpoints/character-store.js';
 import {
     recordWorldInfoProjectionRepair,
@@ -28,6 +29,7 @@ import { getDefaultCanonicalStorageSliceRegistry } from '../src/canonical-storag
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import { MANAGED_MEDIA_AUDIT_SCOPE } from '../src/canonical-managed-media-shadow-import.js';
 import { CANONICAL_CHAT_AUDIT_SCOPE } from '../src/canonical-chat-shadow-import.js';
+import { writeCanonicalChatPayload } from '../src/endpoints/canonical-chat-write-service.js';
 
 const tempRoots = [];
 const managers = [];
@@ -95,7 +97,7 @@ afterEach(() => {
 });
 
 describe('canonical sqlite operator helpers', () => {
-    test('reports the chat foundation as shadow-only and audits it without changing route authority', async () => {
+    test('reports canonical chat authority and audits its projection without changing route payload shape', async () => {
         const root = makeRoot();
         const directories = createDirectories(root);
         const manager = createManager();
@@ -140,9 +142,70 @@ describe('canonical sqlite operator helpers', () => {
         });
         expect(status.slices).toEqual([expect.objectContaining({
             key: 'chats',
-            authorityMode: 'shadow_only',
+            authorityMode: 'canonical',
             ready: true,
         })]);
+    });
+
+    test('replays an open chat projection repair from canonical rows and resolves the repair', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        runCanonicalMigrations(db, { nowMs: 1735689600000 });
+        writeChatFile(directories, 'alice.png', 'first.jsonl', [
+            '{"chat_metadata":{"integrity":"clean"}}',
+            '{"name":"User","mes":"Before"}',
+        ].join('\n'));
+        await runCanonicalChatShadowImport({
+            handle: 'alice',
+            directories,
+            db,
+            featureFlags: { enabled: true, shadowImport: true, strict: false },
+            nowMs: 1735689600000,
+        });
+
+        const result = writeCanonicalChatPayload({
+            db,
+            locator: {
+                ownerType: 'character',
+                ownerId: 'alice',
+                sourcePath: 'chats/alice/first.jsonl',
+            },
+            payload: [
+                { chat_metadata: { integrity: 'clean', updated: true } },
+                { name: 'User', mes: 'After' },
+            ],
+            projectJsonl() {
+                throw new Error('projection unavailable');
+            },
+            nowMs: 1735689601000,
+        });
+        expect(result).toEqual(expect.objectContaining({ reason: 'projection_failed' }));
+
+        await expect(runCanonicalSliceRepair({
+            sliceKey: 'chats',
+            db,
+            directories,
+            repairKeys: [result.repairKey],
+            nowMs: 1735689602000,
+        })).resolves.toEqual(expect.objectContaining({
+            ok: true,
+            sliceKey: 'chats',
+            results: [expect.objectContaining({
+                repairKey: result.repairKey,
+                status: 'repaired',
+                operation: 'save',
+            })],
+        }));
+        expect(fs.readFileSync(path.join(directories.chats, 'alice', 'first.jsonl'), 'utf8')).toBe([
+            '{"chat_metadata":{"integrity":"clean","updated":true}}',
+            '{"name":"User","mes":"After"}',
+        ].join('\n'));
     });
 
     test('repairs a missing projection file from canonical data and resolves the repair row', async () => {
@@ -630,6 +693,57 @@ describe('canonical sqlite operator helpers', () => {
                 reads: 'global_override',
             }),
         }));
+    });
+
+    test('reports invalid slice flag configuration as an isolated resolver blocker', () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        runCanonicalMigrations(db, { nowMs: 1735689600000 });
+
+        const status = getCanonicalStorageControlPlaneStatus({
+            handle: 'alice',
+            directories,
+            db,
+            featureFlags: {
+                enabled: true,
+                shadowImport: true,
+                reads: true,
+                writes: true,
+                chatStats: true,
+                strict: false,
+                slices: {
+                    settings: { reads: 'not-a-boolean' },
+                },
+            },
+            sliceKeys: ['settings', 'secrets'],
+        });
+
+        const settings = status.slices.find(slice => slice.key === 'settings');
+        const secrets = status.slices.find(slice => slice.key === 'secrets');
+        expect(settings).toEqual(expect.objectContaining({
+            enabled: false,
+            ready: false,
+            flagResolution: {
+                ok: false,
+                reasonCode: 'invalid_slice_flag_configuration',
+                blockers: [{
+                    code: 'invalid_slice_flag_configuration',
+                    severity: 'error',
+                    details: { sliceKey: 'settings' },
+                }],
+            },
+        }));
+        expect(secrets.flagResolution).toEqual({
+            ok: true,
+            reasonCode: null,
+            blockers: [],
+        });
     });
 
     test('uses registry slice runners for audit and repair routing', async () => {

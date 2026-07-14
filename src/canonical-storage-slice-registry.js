@@ -17,6 +17,7 @@ import { listOpenWorldInfoProjectionRepairs } from './endpoints/world-info-store
 import { listOpenSettingsProjectionRepairs } from './endpoints/settings-store.js';
 import { listOpenSecretProjectionRepairs } from './endpoints/canonical-secrets-store.js';
 import { listOpenCanonicalManagedMediaRepairs } from './endpoints/canonical-managed-media-store.js';
+import { listOpenCanonicalChatProjectionRepairs } from './endpoints/canonical-chat-write-service.js';
 import { getCanonicalStorageSliceFeatureFlagSnapshot } from './storage-feature-flags.js';
 import { SETTINGS_FILE } from './constants.js';
 
@@ -286,17 +287,30 @@ function createChatsSlice() {
         key: 'chats',
         ...flags,
         auditScope: CANONICAL_CHAT_AUDIT_SCOPE,
-        authorityMode: 'shadow_only',
-        listOpenRepairs() {
-            return [];
+        authorityMode: 'canonical',
+        listOpenRepairs(db) {
+            return listOpenCanonicalChatProjectionRepairs(db);
         },
         getMigrationReadiness(db) {
             return createSharedMigrationReadiness(db);
         },
-        getRollbackBlockers() {
-            // Chat foundation does not own a read/write cutover or projection repair
-            // contract yet. Its only operator gate is a clean shadow audit.
-            return { ok: true, blockers: [] };
+        getRollbackBlockers({
+            db,
+            featureFlags = null,
+            phase = 'writes',
+            persistedAuditStatus = null,
+        } = {}) {
+            return buildCanonicalSliceRollbackBlockers({
+                db,
+                sliceKey: 'chats',
+                featureFlags: flags.getFeatureFlags(featureFlags),
+                phase,
+                persistedAuditStatus: persistedAuditStatus
+                    ?? getPersistedCanonicalAuditStatus(db, { scope: CANONICAL_CHAT_AUDIT_SCOPE }),
+                listOpenRepairs: listOpenCanonicalChatProjectionRepairs,
+                openRepairCode: 'open_chat_projection_repairs',
+                includeChatStatsPhase: false,
+            });
         },
         getBackupManagedPaths(directories) {
             return [

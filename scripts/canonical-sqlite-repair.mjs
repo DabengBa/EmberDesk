@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 
 import path from 'node:path';
+import process from 'node:process';
 
 import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import {
     explainCanonicalRolloutBlockers,
     getCanonicalStorageControlPlaneStatus,
+    listCanonicalChatRepairs,
     listCanonicalSecretRepairs,
     listCanonicalManagedMediaRepairs,
     listCanonicalRepairs,
@@ -15,6 +17,7 @@ import {
     repairCanonicalProjection,
     repairCanonicalWorldInfoProjection,
     repairCanonicalSecretProjection,
+    repairCanonicalChatProjection,
     runCanonicalAudit,
     runCanonicalSliceAudit,
     runCanonicalSliceRepair,
@@ -38,6 +41,7 @@ function printUsage() {
         '  list-secret-repairs List unresolved secret projection repairs',
         '  list-managed-media-repairs',
         '                       List unresolved managed-media projection repairs',
+        '  list-chat-repairs  List unresolved canonical chat projection repairs',
         '  repair-projection    Replay projection for one or more repair keys',
         '  repair-world-info-projection',
         '                       Replay World Info projection for one or more repair keys',
@@ -45,6 +49,8 @@ function printUsage() {
         '                       Replay secret projection for one or more repair keys',
         '  repair-managed-media-projection',
         '                       Replay managed-media projection for one or more repair keys',
+        '  repair-chat-projection',
+        '                       Replay canonical chat projection for one or more repair keys',
         '  gc-managed-media     Collect unreferenced tombstoned managed media (dry-run by default)',
         '  rebuild-chat-stats   Rebuild canonical chat stats from JSONL chat files',
         '  explain-blockers     Summarize rollout / rollback blockers for a phase',
@@ -54,7 +60,7 @@ function printUsage() {
         '  --repair-key <key>   Repeatable for repair-projection',
         '  --avatar <avatar>    Repeatable for rebuild-chat-stats',
         '  --phase <phase>      reads | writes | chatStats for explain-blockers/status',
-        '  --slice <key>        characters | world_info | settings | secrets | managed_media for status/audit/repair/blockers',
+        '  --slice <key>        characters | world_info | settings | secrets | managed_media | chats for status/audit/repair/blockers',
         '  --apply              Allow gc-managed-media to delete eligible managed files',
         '  --feature <k=v>      Repeatable feature flag override for explain-blockers/status',
         '  --json               Print JSON output',
@@ -208,6 +214,17 @@ function formatListManagedMediaRepairs(repairs) {
     return `${lines.join('\n')}\n`;
 }
 
+function formatListChatRepairs(repairs) {
+    const lines = [
+        'Canonical SQLite chat repairs',
+        `open: ${repairs.length}`,
+    ];
+    for (const repair of repairs) {
+        lines.push(`- ${repair.repairKey} | ${repair.operation} | ${repair.sourcePath} | ${repair.reason}`);
+    }
+    return `${lines.join('\n')}\n`;
+}
+
 function formatManagedMediaGc(result) {
     const lines = [
         'Canonical SQLite managed media GC',
@@ -327,6 +344,10 @@ async function main() {
             result = listCanonicalManagedMediaRepairs(db);
             formatter = formatListManagedMediaRepairs;
             break;
+        case 'list-chat-repairs':
+            result = listCanonicalChatRepairs(db);
+            formatter = formatListChatRepairs;
+            break;
         case 'repair-projection':
             result = await repairCanonicalProjection({
                 db,
@@ -354,6 +375,14 @@ async function main() {
         case 'repair-managed-media-projection':
             result = await runCanonicalSliceRepair({
                 sliceKey: 'managed_media',
+                db,
+                directories,
+                repairKeys: options.repairKeys.length ? options.repairKeys : null,
+            });
+            formatter = formatRepairProjection;
+            break;
+        case 'repair-chat-projection':
+            result = await repairCanonicalChatProjection({
                 db,
                 directories,
                 repairKeys: options.repairKeys.length ? options.repairKeys : null,
@@ -424,7 +453,7 @@ async function main() {
         : formatter(result));
 
     // status is a report command: blocked slice readiness is still a successful query.
-    if ((options.command === 'audit' || options.command === 'audit-world-info' || options.command === 'repair-projection' || options.command === 'repair-world-info-projection' || options.command === 'repair-secret-projection' || options.command === 'repair-managed-media-projection' || options.command === 'gc-managed-media' || options.command === 'explain-blockers' || options.command === 'audit-slice' || options.command === 'repair-slice') && result.ok === false) {
+    if ((options.command === 'audit' || options.command === 'audit-world-info' || options.command === 'repair-projection' || options.command === 'repair-world-info-projection' || options.command === 'repair-secret-projection' || options.command === 'repair-managed-media-projection' || options.command === 'repair-chat-projection' || options.command === 'gc-managed-media' || options.command === 'explain-blockers' || options.command === 'audit-slice' || options.command === 'repair-slice') && result.ok === false) {
         process.exitCode = 1;
     }
 }

@@ -21,6 +21,7 @@ import {
     getCanonicalSliceFlagContractStatus,
 } from '../src/canonical-sqlite-rollout-contract.js';
 import { recordProjectionRepair } from '../src/endpoints/character-store.js';
+import { recordCanonicalChatProjectionRepair } from '../src/endpoints/canonical-chat-store.js';
 import { recordCanonicalManagedMediaRepair } from '../src/endpoints/canonical-managed-media-store.js';
 import { MANAGED_MEDIA_AUDIT_SCOPE } from '../src/canonical-managed-media-shadow-import.js';
 import { CANONICAL_CHAT_AUDIT_SCOPE } from '../src/canonical-chat-shadow-import.js';
@@ -110,17 +111,69 @@ describe('canonical storage slice registry', () => {
         }
     });
 
-    test('registers chats as a shadow-only slice without a route cutover contract', () => {
+    test('registers chats as a canonical slice with clean-audit read/write gates', () => {
         const { db, directories } = openMigratedDb();
         const chats = getDefaultCanonicalStorageSliceRegistry().get('chats');
+        const featureFlags = {
+            enabled: true,
+            shadowImport: true,
+            reads: true,
+            writes: true,
+            strict: false,
+        };
+        persistCanonicalAuditStatus(db, {
+            ok: true,
+            blocking: false,
+            reason: null,
+            entries: [],
+        }, {
+            scope: CANONICAL_CHAT_AUDIT_SCOPE,
+        });
 
         expect(chats.auditScope).toBe(CANONICAL_CHAT_AUDIT_SCOPE);
-        expect(chats.authorityMode).toBe('shadow_only');
+        expect(chats.authorityMode).toBe('canonical');
         expect(chats.listOpenRepairs(db)).toEqual([]);
         expect(chats.getBackupManagedPaths(directories)).toEqual([
             directories.chats,
         ]);
-        expect(chats.getRollbackBlockers({ db })).toEqual({ ok: true, blockers: [] });
+        expect(chats.getRollbackBlockers({
+            db,
+            featureFlags,
+            phase: 'writes',
+        })).toEqual(expect.objectContaining({ ok: true, blockers: [] }));
+
+        expect(chats.getRollbackBlockers({
+            db,
+            featureFlags: { ...featureFlags, reads: false, writes: true },
+            phase: 'writes',
+        })).toEqual(expect.objectContaining({
+            ok: false,
+            blockers: expect.arrayContaining([
+                expect.objectContaining({ code: 'illegal_flag_combination:writes' }),
+            ]),
+        }));
+
+        recordCanonicalChatProjectionRepair(db, {
+            repairKey: 'chat:character:alice:chats%2Falice%2Ffirst.jsonl:save',
+            locator: {
+                ownerType: 'character',
+                ownerId: 'alice',
+                sourcePath: 'chats/alice/first.jsonl',
+            },
+            operation: 'save',
+            reason: 'projection_failed',
+            details: {},
+        });
+        expect(chats.getRollbackBlockers({
+            db,
+            featureFlags,
+            phase: 'writes',
+        })).toEqual(expect.objectContaining({
+            ok: false,
+            blockers: expect.arrayContaining([
+                expect.objectContaining({ code: 'open_chat_projection_repairs' }),
+            ]),
+        }));
     });
 
     test('keeps managed media flags, audit scope, repairs, and backup inventory independent', () => {

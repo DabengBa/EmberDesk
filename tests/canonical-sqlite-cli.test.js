@@ -102,6 +102,8 @@ describe('canonical sqlite CLI scripts', () => {
         expect(repairHelp).toContain('list-repairs');
         expect(repairHelp).toContain('repair-world-info-projection');
         expect(repairHelp).toContain('repair-managed-media-projection');
+        expect(repairHelp).toContain('repair-chat-projection');
+        expect(repairHelp).toContain('list-chat-repairs');
         expect(repairHelp).toContain('gc-managed-media');
         expect(repairHelp).toContain('status');
         expect(repairHelp).toContain('--slice');
