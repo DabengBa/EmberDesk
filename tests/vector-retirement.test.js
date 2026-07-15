@@ -32,17 +32,28 @@ describe('built-in vector retirement', () => {
     test('legacy vector routes return a stable 410 JSON response without touching legacy data', async () => {
         const { setupPrivateEndpoints } = await import('../src/server-startup.js');
         const legacyRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-vector-retirement-'));
-        const legacyFile = path.join(legacyRoot, 'vectors', 'chat', 'collection', 'index.json');
+        const previousDataRoot = globalThis.DATA_ROOT;
+        globalThis.DATA_ROOT = legacyRoot;
+        const { getUserDirectories } = await import('../src/user-directories.js');
+        const directories = getUserDirectories('vector-retirement-user');
+        const legacyFile = path.join(directories.vectors, 'chat', 'collection', 'index.json');
         fs.mkdirSync(path.dirname(legacyFile), { recursive: true });
         fs.writeFileSync(legacyFile, '{"legacy":true}', 'utf8');
 
         const app = express();
+        app.use((_request, _response, next) => {
+            _request.user = {
+                profile: { handle: 'vector-retirement-user' },
+                directories,
+            };
+            next();
+        });
         setupPrivateEndpoints(app);
         const { server, url } = await listen(app);
 
         try {
-            for (const route of ['query', 'unknown-retired-route']) {
-                const response = await fetch(`${url}/api/vector/${route}`, {
+            for (const route of ['', '/', '/query', '/unknown-retired-route']) {
+                const response = await fetch(`${url}/api/vector${route}`, {
                     method: 'POST',
                     headers: { 'content-type': 'application/json' },
                     body: '{}',
@@ -60,6 +71,7 @@ describe('built-in vector retirement', () => {
         } finally {
             await new Promise(resolve => server.close(resolve));
             fs.rmSync(legacyRoot, { recursive: true, force: true });
+            globalThis.DATA_ROOT = previousDataRoot;
         }
     });
 

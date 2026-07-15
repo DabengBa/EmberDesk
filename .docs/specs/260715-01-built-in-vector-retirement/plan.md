@@ -50,4 +50,5 @@ Doc IDs: feature.extension_panel_open, feature.world_info_panel, page.chat_works
 
 ## Review
 
+- [x] Review: R-01 Cover retired API namespace roots and bind the retention fixture to a real user vector directory (severity: medium; scope: Task 1; details: `src/endpoints/vector-retirement.js`, `tests/vector-retirement.test.js`; proof: focused unit test)
 - [x] Review complete
