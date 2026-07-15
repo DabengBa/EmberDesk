@@ -2,10 +2,9 @@
 created: 2026-07-14
 source: user
 confirmed: true
-last_updated: 2026-07-14
+last_updated: 2026-07-15
 feature_slug: canonical-chat-query-recovery
-status: active
-active_process_dir: .docs/specs/260714-04-canonical-chat-query-recovery
+status: delivered
 ---
 
 # Canonical Chat Query And Recovery Intent
@@ -32,10 +31,27 @@ backup/restore、operator repair 和 Node 26 large-chat proof，使 canonical ch
 
 - 不改变聊天交互、渲染、streaming 或 `showMoreMessages()` 客户端合同。
 
+## 交付结果
+
+- `src/endpoints/canonical-chat-query-service.js` 现在作为 character/group chat
+  canonical search/recent query owner，`src/endpoints/chats.js` 在 clean audit 后走
+  canonical reads，并只为 root chat recent 保留兼容文件回退。
+- `src/endpoints/canonical-chat-write-service.js` 在 canonical commit 前拒绝未注册的
+  managed attachment 路径，避免 authority 写入携带失配引用。
+- `src/endpoints/canonical-chat-backup-restore-service.js` 与
+  `src/canonical-sqlite-migrations.js` 现在提供 attachment manifest 校验、
+  restore journal 记录和 interrupted restore 状态。
+- `scripts/canonical-chat-node26-benchmark.mjs` 与当前测试/文档一起提供
+  Node.js 26.3.0 的 fixed-scale search/recent/save/concurrent-read/backup proof。
+- 耐久行为和用户可见合同见
+  [canonical-sqlite-storage-roadmap](../canonical-sqlite-storage-roadmap.md)、
+  [project history](../../PROJECT_HISTORY.md)、
+  [chat workspace](../../db/pages/chat-workspace.md) 和
+  [chat rendering](../../db/features/chat-message-rendering.md)。
+
 ## 参考资料
 
 - `src/endpoints/chat-route-service.js`
 - `src/endpoints/chat-backup-helpers.js`
 - `src/canonical-sqlite-operator.js`
 - `.docs/db/pages/chat-workspace.md`
-

@@ -449,6 +449,14 @@ canonical source IDs but do not become a second text authority.
 20. `canonical chat query and recovery`
     - Moves search/recent to canonical indexes and completes attachments, backup/restore,
       operator repair, and Node 26 performance proof.
+    - Delivered: `/api/chats/search` and `/api/chats/recent` now use canonical character/group
+      query state after a clean chat audit while preserving the existing route payload shape and
+      root-chat recent compatibility fallback; canonical writes now reject unregistered managed
+      attachment paths before commit; canonical chat backup bundles now bind session payloads,
+      projection state, and attachment manifests; restore validates that manifest before
+      replacing canonical rows, records a durable restore journal, and re-requires chat audit;
+      fixed-scale Node 26.3.0 benchmark proof now lives in
+      `scripts/canonical-chat-node26-benchmark.mjs` and its feature evidence artifact.
 
 21. `extension operation safety`
     - Keeps filesystem/Git discovery authority.

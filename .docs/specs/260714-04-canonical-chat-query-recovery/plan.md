@@ -9,7 +9,7 @@ Doc IDs: page.chat_workspace, feature.chat_message_rendering
 ## Tasks
 
 ### Task 1: 切换 canonical search/recent queries
-- [ ] **Done**
+- [x] **Done**
 - **Reqs:** R1, R2, R8
 - **Kind:** behavior
 - **Scope:** canonical indexes/query service, search/recent routes, parity fixtures
@@ -19,7 +19,7 @@ Doc IDs: page.chat_workspace, feature.chat_message_rendering
 - **Evidence:** evidence/task-01.md
 
 ### Task 2: 完成 attachment integrity、backup/restore 与 repair
-- [ ] **Done**
+- [x] **Done**
 - **Reqs:** R3, R4, R5, R6
 - **Kind:** behavior
 - **Scope:** backup manifest, restore journal, attachment repairs, operator commands/tests
@@ -29,7 +29,7 @@ Doc IDs: page.chat_workspace, feature.chat_message_rendering
 - **Evidence:** evidence/task-02.md
 
 ### Task 3: 建立 Node 26 large-chat release proof
-- [ ] **Done**
+- [x] **Done**
 - **Reqs:** R7, R8
 - **Kind:** non-behavior
 - **Scope:** deterministic benchmark fixtures, release validation docs, regression thresholds
@@ -40,4 +40,5 @@ Doc IDs: page.chat_workspace, feature.chat_message_rendering
 
 ## Review
 
-- [ ] Review complete
+- [x] Review: R-01 return client error for unregistered managed attachment writes (severity: high; scope: Task 2 write routes; details: tests/canonical-chat-route-authority.test.js; proof: bun run --cwd tests test:unit -- canonical-chat-write-service.test.js canonical-chat-route-authority.test.js --runInBand)
+- [x] Review complete

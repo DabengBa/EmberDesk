@@ -370,6 +370,26 @@ export const CANONICAL_SQLITE_MIGRATIONS = Object.freeze([
                 ON chat_projection_repairs (resolved_at_ms, owner_type, owner_id);
         `,
     }),
+    Object.freeze({
+        version: 9,
+        name: 'canonical_chat_restore_journal',
+        sql: `
+            CREATE TABLE IF NOT EXISTS chat_restore_operations (
+                restore_id TEXT PRIMARY KEY,
+                manifest_version INTEGER NOT NULL,
+                backup_created_at_ms INTEGER,
+                status TEXT NOT NULL,
+                reason_code TEXT,
+                details_json TEXT NOT NULL DEFAULT '{}',
+                created_at_ms INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL,
+                finished_at_ms INTEGER
+            );
+
+            CREATE INDEX IF NOT EXISTS chat_restore_operations_status_idx
+                ON chat_restore_operations (status, updated_at_ms DESC);
+        `,
+    }),
 ]);
 
 export class CanonicalMigrationBlockedError extends Error {

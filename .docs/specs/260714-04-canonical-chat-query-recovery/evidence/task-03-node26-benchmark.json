@@ -1,0 +1,36 @@
+{
+  "nodeVersion": "v26.3.0",
+  "fixture": {
+    "characterCount": 12,
+    "chatsPerCharacter": 3,
+    "messagesPerChat": 180,
+    "concurrentReads": 8
+  },
+  "thresholdsMs": {
+    "search": 50,
+    "recent": 35,
+    "save": 25,
+    "concurrentReadTotal": 30,
+    "backup": 20
+  },
+  "search": {
+    "elapsedMs": 1.678,
+    "resultCount": 3
+  },
+  "recent": {
+    "elapsedMs": 1.655,
+    "resultCount": 20
+  },
+  "save": {
+    "elapsedMs": 8.078,
+    "ok": true
+  },
+  "concurrentReadTotal": {
+    "elapsedMs": 2.459,
+    "readCount": 8
+  },
+  "backup": {
+    "elapsedMs": 1.602,
+    "sessionCount": 36
+  }
+}

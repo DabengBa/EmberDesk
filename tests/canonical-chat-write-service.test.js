@@ -189,4 +189,60 @@ describe('canonical chat write service', () => {
 
         manager.dispose();
     });
+
+    test('blocks a canonical write before commit when a managed attachment path is not registered', async () => {
+        const directories = makeDirectories();
+        const sourcePath = path.join(directories.chats, 'alice', 'first.jsonl');
+        const initialPayload = [
+            { chat_metadata: { integrity: 'clean' } },
+            { name: 'User', mes: 'Before' },
+        ];
+        fs.writeFileSync(sourcePath, initialPayload.map(line => JSON.stringify(line)).join('\n'), 'utf8');
+
+        const manager = createCanonicalSqliteManager({ logger: { info() {}, warn() {} } });
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        runCanonicalMigrations(db);
+        await runCanonicalChatShadowImport({
+            handle: 'alice',
+            directories,
+            db,
+            featureFlags: { enabled: true, shadowImport: true, strict: false },
+        });
+
+        const result = writeCanonicalChatPayload({
+            db,
+            locator: {
+                ownerType: 'character',
+                ownerId: 'alice',
+                sourcePath: 'chats/alice/first.jsonl',
+            },
+            payload: [
+                { chat_metadata: { integrity: 'clean' } },
+                { name: 'User', mes: 'Attachment', extra: { file: 'files/unregistered.txt' } },
+            ],
+            operation: 'save',
+            projectJsonl() {
+                throw new Error('projection should not run');
+            },
+        });
+
+        expect(result).toEqual({
+            ok: false,
+            authorityCommitted: false,
+            reason: 'unregistered_attachment',
+            path: 'files/unregistered.txt',
+        });
+        expect(readCanonicalChatPayload(db, {
+            ownerType: 'character',
+            ownerId: 'alice',
+            sourcePath: 'chats/alice/first.jsonl',
+        })).toEqual(initialPayload);
+        expect(listOpenCanonicalChatProjectionRepairs(db)).toEqual([]);
+
+        manager.dispose();
+    });
 });

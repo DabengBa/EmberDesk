@@ -9,7 +9,7 @@ the source of truth; deleted or historical `spec.md` status text is not evidence
 |---|---|---|---|
 | - | Delivered canonical chat foundation | Chat schema, stable IDs, lossless JSONL shadow import, and audit with JSONL runtime authority retained. | Delivered slice-gate maintenance; managed media |
 | - | Delivered canonical chat authority cutover | Complete chat payload reads/writes use the audited canonical store with JSONL projection, replayable repair, and no server pagination. | Delivered foundation clean audit |
-| 1 | [260714-04-canonical-chat-query-recovery](260714-04-canonical-chat-query-recovery/spec.md) | Complete search/recent indexes, attachments, backup/restore, repair, and Node 26 proof. | Delivered chat authority cutover |
+| - | Delivered canonical chat query and recovery | Search/recent now use canonical character/group query state, attachment writes fail before dangling commit, backup/restore journaling is validated against attachment manifests, and Node 26 proof is recorded. | Delivered chat authority cutover |
 | 2 | [260714-05-extension-operation-safety](260714-05-extension-operation-safety/spec.md) | Harden extension Git operations while filesystem/Git remains registry authority. | Independent of chat |
 | 3 | [260714-06-derived-vector-index-hardening](260714-06-derived-vector-index-hardening/spec.md) | Add stable source refs, atomic derived generations, fallback, invalidation, and rebuild. | Delivered chat query/recovery |
 

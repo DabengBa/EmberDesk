@@ -45,6 +45,10 @@ import {
     serializeCanonicalChatPayload,
 } from './canonical-chat-read-service.js';
 import {
+    readCanonicalRecentChatPayload,
+    searchCanonicalChatPayload,
+} from './canonical-chat-query-service.js';
+import {
     deleteCanonicalChat,
     parseCanonicalChatJsonl,
     renameCanonicalChat,
@@ -167,6 +171,14 @@ function sendCanonicalChatWriteBlocked(response, writeState) {
     return response.status(503).send({
         error: 'canonical_chat_write_blocked',
         reason: writeState.reason ?? 'canonical_chat_write_blocked',
+    });
+}
+
+function sendCanonicalChatWriteRejected(response, result) {
+    return response.status(400).send({
+        error: 'canonical_chat_write_rejected',
+        reason: result.reason ?? 'canonical_chat_write_rejected',
+        ...(result.path ? { path: result.path } : {}),
     });
 }
 
@@ -645,6 +657,9 @@ router.post('/save', validateAvatarUrlMiddleware, async function (request, respo
                     },
                 });
                 if (!result.ok) {
+                    if (!result.authorityCommitted) {
+                        return sendCanonicalChatWriteRejected(response, result);
+                    }
                     return response.status(500).send({
                         error: 'Failed to project canonical chat file.',
                         repairKey: result.repairKey,
@@ -1003,6 +1018,9 @@ router.post('/group/import', function (request, response) {
                 },
             });
             if (!result.ok) {
+                if (!result.authorityCommitted) {
+                    return sendCanonicalChatWriteRejected(response, result);
+                }
                 return response.send({ error: true, repairKey: result.repairKey });
             }
             fs.unlinkSync(pathToUpload);
@@ -1090,6 +1108,9 @@ router.post('/import', validateAvatarUrlMiddleware, function (request, response)
                     },
                 });
                 if (!result.ok) {
+                    if (!result.authorityCommitted) {
+                        return sendCanonicalChatWriteRejected(response, result);
+                    }
                     return response.send({ error: true, repairKey: result.repairKey });
                 }
             }
@@ -1266,6 +1287,9 @@ router.post('/group/save', async function (request, response) {
                     },
                 });
                 if (!result.ok) {
+                    if (!result.authorityCommitted) {
+                        return sendCanonicalChatWriteRejected(response, result);
+                    }
                     return response.status(500).send({
                         error: 'Failed to project canonical chat file.',
                         repairKey: result.repairKey,
@@ -1292,18 +1316,29 @@ router.post('/group/save', async function (request, response) {
 router.post('/search', validateAvatarUrlMiddleware, async function (request, response) {
     try {
         const { query, avatar_url, group_id } = request.body;
-        const payload = await searchChatPayload({
-            directories: request.user.directories,
-            query,
-            avatarUrl: avatar_url,
-            groupId: group_id,
-            dependencies: {
-                fs,
-                path,
-                getChatInfo,
-                warn: console.warn,
-            },
-        });
+        const dependencies = {
+            fs,
+            path,
+            getChatInfo,
+            warn: console.warn,
+        };
+        const readState = getCanonicalChatReadState(request);
+        const payload = readState.ok
+            ? await searchCanonicalChatPayload({
+                db: readState.db,
+                directories: request.user.directories,
+                query,
+                avatarUrl: avatar_url,
+                groupId: group_id,
+                dependencies,
+            })
+            : await searchChatPayload({
+                directories: request.user.directories,
+                query,
+                avatarUrl: avatar_url,
+                groupId: group_id,
+                dependencies,
+            });
 
         return response.send(payload);
     } catch (error) {
@@ -1314,17 +1349,28 @@ router.post('/search', validateAvatarUrlMiddleware, async function (request, res
 
 router.post('/recent', async function (request, response) {
     try {
-        const payload = await readRecentChatPayload({
-            directories: request.user.directories,
-            pinned: request.body.pinned,
-            max: request.body.max,
-            metadata: !!request.body.metadata,
-            dependencies: {
-                fs,
-                path,
-                getChatInfo,
-            },
-        });
+        const dependencies = {
+            fs,
+            path,
+            getChatInfo,
+        };
+        const readState = getCanonicalChatReadState(request);
+        const payload = readState.ok
+            ? await readCanonicalRecentChatPayload({
+                db: readState.db,
+                directories: request.user.directories,
+                pinned: request.body.pinned,
+                max: request.body.max,
+                metadata: !!request.body.metadata,
+                dependencies,
+            })
+            : await readRecentChatPayload({
+                directories: request.user.directories,
+                pinned: request.body.pinned,
+                max: request.body.max,
+                metadata: !!request.body.metadata,
+                dependencies,
+            });
 
         return response.send(payload);
     } catch (error) {

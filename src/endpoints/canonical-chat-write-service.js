@@ -17,6 +17,52 @@ function buildRepairKey(locator, operation) {
     ].join(':');
 }
 
+function listStringLeaves(value) {
+    if (typeof value === 'string') {
+        return [value];
+    }
+    if (Array.isArray(value)) {
+        return value.flatMap(entry => listStringLeaves(entry));
+    }
+    if (!value || typeof value !== 'object') {
+        return [];
+    }
+    return Object.values(value).flatMap(entry => listStringLeaves(entry));
+}
+
+function isManagedAttachmentCandidate(value) {
+    return /^(files|backgrounds|assets|user\/files|user\/images|User Avatars)\//.test(String(value ?? ''));
+}
+
+function findFirstUnregisteredAttachmentPath(db, payload) {
+    const managedPaths = new Set();
+    try {
+        const rows = db.prepare(`
+            SELECT compatibility_path
+            FROM media_references
+            WHERE deleted_at_ms IS NULL
+        `).all();
+        for (const row of rows) {
+            managedPaths.add(String(row.compatibility_path));
+        }
+    } catch (error) {
+        if (String(error?.message ?? '').includes('no such table: media_references')) {
+            return null;
+        }
+        throw error;
+    }
+
+    for (const message of payload.slice(1)) {
+        for (const value of listStringLeaves(message)) {
+            if (isManagedAttachmentCandidate(value) && !managedPaths.has(String(value))) {
+                return String(value);
+            }
+        }
+    }
+
+    return null;
+}
+
 /**
  * Commits one full chat session before attempting its JSONL compatibility projection.
  * A projection error is durable repair state, never a reason to restore file authority.
@@ -32,6 +78,15 @@ export function writeCanonicalChatPayload({
 }) {
     if (typeof projectJsonl !== 'function') {
         throw new Error('Canonical chat projection function is required.');
+    }
+    const unregisteredAttachmentPath = findFirstUnregisteredAttachmentPath(db, payload);
+    if (unregisteredAttachmentPath) {
+        return {
+            ok: false,
+            authorityCommitted: false,
+            reason: 'unregistered_attachment',
+            path: unregisteredAttachmentPath,
+        };
     }
 
     const record = createCanonicalChatSessionRecord(db, { locator, payload, nowMs });

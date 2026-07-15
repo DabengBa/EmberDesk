@@ -259,4 +259,63 @@ describe('canonical chat route authority', () => {
             }
         }
     });
+
+    test('returns a client error when /save includes an unregistered managed attachment path', async () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-canonical-chat-route-'));
+        roots.push(root);
+        const directories = {
+            root,
+            storage: path.join(root, 'storage'),
+            chats: path.join(root, 'chats'),
+            groupChats: path.join(root, 'group chats'),
+            backups: path.join(root, 'backups'),
+        };
+        for (const directory of Object.values(directories)) {
+            fs.mkdirSync(directory, { recursive: true });
+        }
+        const chatDirectory = path.join(directories.chats, 'alice');
+        fs.mkdirSync(chatDirectory, { recursive: true });
+        const chatPath = path.join(chatDirectory, 'first.jsonl');
+        const initialPayload = [
+            { chat_metadata: { integrity: 'clean' } },
+            { name: 'User', mes: 'Before' },
+        ];
+        fs.writeFileSync(chatPath, initialPayload.map(line => JSON.stringify(line)).join('\n'), 'utf8');
+
+        const db = canonicalSqliteManager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        runCanonicalMigrations(db);
+        await runCanonicalChatShadowImport({
+            handle: 'alice',
+            directories,
+            db,
+            featureFlags: { enabled: true, shadowImport: true, strict: false },
+        });
+        await auditCanonicalChatShadowImport({ handle: 'alice', directories, db });
+
+        const response = makeResponse();
+        await getRouteHandler('/save')({
+            body: {
+                avatar_url: 'alice.png',
+                file_name: 'first',
+                chat: [
+                    { chat_metadata: { integrity: 'clean' } },
+                    { name: 'User', mes: 'Attachment', extra: { file: 'files/unregistered.txt' } },
+                ],
+                force: false,
+            },
+            user: { directories, profile: { handle: 'alice' } },
+        }, response);
+
+        expect(response.statusCode).toBe(400);
+        expect(response.body).toEqual({
+            error: 'canonical_chat_write_rejected',
+            reason: 'unregistered_attachment',
+            path: 'files/unregistered.txt',
+        });
+        expect(fs.readFileSync(chatPath, 'utf8')).toBe(initialPayload.map(line => JSON.stringify(line)).join('\n'));
+    });
 });

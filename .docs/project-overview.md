@@ -66,6 +66,8 @@ Key module structure:
 - `canonical-storage-slice-registry.js` — registered canonical storage slices (`characters`, `world_info`, `settings`, `secrets`, `managed_media`) with descriptor-owned flag keys and isolated audit/repair/rollback/backup capabilities; omitted slice fields retain global compatibility behavior, while managed media keeps its independent no-global-fallback flags
 - `canonical-sqlite-rollout-contract.js` — shared flag legality and per-slice rollback-blocker builders, plus character compatibility helpers
 - `canonical-sqlite-operator.js` — multi-slice operator status, audit/repair routing, projection replay, blocker explanation, chat-stats rebuild, and backup/restore readiness reporting
+- `src/endpoints/canonical-chat-query-service.js` — canonical chat search/recent summary/query owner for character/group chats with root-chat compatibility fallback kept at the route edge
+- `src/endpoints/canonical-chat-backup-restore-service.js` — canonical chat backup bundle and validated restore owner that binds attachment manifests and records restore-journal state
 - `src/endpoints/character-store.js` — canonical character row helper that reconstructs route-compatible read payloads and now also normalizes DB-backed character metadata writes
 - `public/lib.js` — browser shared-library boundary for first-party modules and extensions; it preserves both source imports and bundled `/lib.js` output (see [frontend-shared-library-boundary](tech/frontend-shared-library-boundary.md) and [ADR-0006](adr/0006-preserve-dual-libjs-source-and-bundled-boundary.md))
 
@@ -108,7 +110,7 @@ Current delivered storage scope is narrow; the accepted successor roadmap is com
 - deleting `_cache/character-index.sqlite` cannot lose user data; current character-library behavior is recovered from canonical SQLite when enabled and audit-clean, or from direct compatibility files when fallback is required.
 - `src/endpoints/character-index.js` remains only as a historical/helper-level proof surface until a later cleanup deletes or archives it.
 - this retired derived slice remains separate from the canonical SQLite store and must not be promoted in place to authority
-- character metadata, chat stats, full World Info, settings, secrets, and managed media are delivered authority slices; active storage work maintains per-slice gates, then builds, cuts over, and operationally closes canonical chat in three stages
+- character metadata, chat stats, full World Info, settings, secrets, and managed media are delivered authority slices; canonical chat is now operationally closed as well, including full-payload authority, canonical search/recent, write-time attachment validation, validated backup/restore journaling, and Node 26 release proof
 - persona records/defaults/connections remain canonical inside the settings document, with avatars in managed media and chat-local locks moving with chat metadata; no separate persona table package is active
 - extension operation safety is active without changing filesystem/Git registry authority, and vector work hardens disposable generations over stable canonical source IDs rather than creating canonical chunk-text catalogs
 
