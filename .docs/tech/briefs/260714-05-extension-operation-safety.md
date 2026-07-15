@@ -2,10 +2,9 @@
 created: 2026-07-14
 source: user
 confirmed: true
-last_updated: 2026-07-14
+last_updated: 2026-07-15
 feature_slug: extension-operation-safety
-status: active
-active_process_dir: .docs/specs/260714-05-extension-operation-safety
+status: delivered
 ---
 
 # Extension Operation Safety Intent
@@ -38,10 +37,9 @@ worktree discovery 驱动。`extension_settings` 已由 canonical settings docum
 
 - 不迁移 extension registry/namespace 到 SQLite，不改变 discovery authority。
 
-## 参考资料
+## Delivery Trace
 
-- `src/endpoints/extensions.js`
-- `src/extension-repo-update-state.js`
-- `public/scripts/extensions.js`
-- `.docs/tech/third-party-extension-compatibility.md`
-
+- Code: `src/extension-operation-safety.js`, `src/endpoints/extensions.js`, `public/scripts/extensions.js`
+- Tests: `tests/extension-operation-safety.test.js`, `tests/extension-repo-update-state.test.js`
+- Owning docs: `.docs/db/features/extension-panel-open.md`, `.docs/db/terms/shared-browser-library.md`, `.docs/tech/third-party-extension-compatibility.md`
+- History: `.docs/PROJECT_HISTORY.md` entry for Extension operation safety (2026-07-15)

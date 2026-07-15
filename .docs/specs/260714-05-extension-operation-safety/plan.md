@@ -9,7 +9,7 @@ Doc IDs: feature.extension_panel_open, term.shared_browser_library
 ## Tasks
 
 ### Task 1: 固定 operation decision 与 failure envelope
-- [ ] **Done**
+- [x] **Done**
 - **Reqs:** R1, R2, R3, R5
 - **Kind:** behavior
 - **Scope:** Git/worktree state helpers, route contract tests, global/user scope fixtures
@@ -19,7 +19,7 @@ Doc IDs: feature.extension_panel_open, term.shared_browser_library
 - **Evidence:** evidence/task-01.md
 
 ### Task 2: 接入 install/update/switch/move/delete routes
-- [ ] **Done**
+- [x] **Done**
 - **Reqs:** R1, R2, R3, R4, R5, R6
 - **Kind:** behavior
 - **Scope:** `src/endpoints/extensions.js`, shared operation service, focused route tests
@@ -29,7 +29,7 @@ Doc IDs: feature.extension_panel_open, term.shared_browser_library
 - **Evidence:** evidence/task-02.md
 
 ### Task 3: 完成 UI feedback、兼容与文档
-- [ ] **Done**
+- [x] **Done**
 - **Reqs:** R5, R7, R8
 - **Kind:** behavior
 - **Scope:** extension panel feedback, compatibility tests, owning semantic/tech docs
@@ -40,5 +40,12 @@ Doc IDs: feature.extension_panel_open, term.shared_browser_library
 
 ## Review
 
-- [ ] Review complete
+- [x] Review complete
 
+Review notes (artifact-verified + revalidated proofs):
+- Correctness: shared preflight blocks dirty/detached/missing/collision/forbidden before mutation; route tests cover forbidden install/move, dirty delete non-mutation, and plain delete success shape.
+- Compatibility: legacy success shapes retained; failure envelopes omit local paths; `test:compat` green.
+- Frontend: toastr class routing for forbidden / user_action_required / retryable only; protected mount selectors preserved.
+- Scope: no new registry/DB authority; filesystem/Git + settings ownership unchanged.
+- Docs: feature.extension_panel_open, term.shared_browser_library, third-party-extension-compatibility updated; `docs:check` green.
+- No confirmed high-severity findings remaining.

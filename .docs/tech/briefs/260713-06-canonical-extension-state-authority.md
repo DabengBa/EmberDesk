@@ -18,11 +18,11 @@ root，而 canonical SQLite 是 per-user database。让 per-user SQLite 成为 g
 权威会产生跨用户所有权、启动顺序和权限冲突。当前也没有已接受的 server-wide canonical
 store 决策。
 
-新的可执行方向是
-`.docs/specs/260714-05-extension-operation-safety/`：保留 filesystem/Git 作为 extension
-runtime authority，保留 `extension_settings` 在 canonical settings document 内，只强化
-install/update/switch/move/delete 的 preflight、结构化失败和恢复行为。未来若要建立
-server-wide extension registry，必须先单独 ADR。
+新的可执行方向由后继 intent brief
+[extension-operation-safety](260714-05-extension-operation-safety.md) 与 owning tech/docs 维护：保留
+filesystem/Git 作为 extension runtime authority，保留 `extension_settings` 在 canonical
+settings document 内，只强化 install/update/switch/move/delete 的 preflight、结构化失败和
+恢复行为。未来若要建立 server-wide extension registry，必须先单独 ADR。
 
 旧 process directory 已在 2026-07-14 经用户确认后删除；当前结论仅由本 brief、后继
 operation-safety brief、路线图和 owning docs 维护。

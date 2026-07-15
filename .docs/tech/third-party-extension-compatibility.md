@@ -378,3 +378,19 @@ Use the following package when a Phase 7 cutover candidate touches extension com
 ### Hard gate
 
 If a candidate would break `JS-Slash-Runner` and no replacement path, migration note, and rollback path exist, the candidate must stay preserved, frozen, or delayed. Phase 6 does not authorize a stronger conclusion.
+
+## Extension mutation operation safety
+
+Filesystem/Git discovery remains the runtime authority for installed extensions.
+`extension_settings` remains owned by the canonical settings document.
+
+Install, update, branch switch, move, and delete share a preflight/result contract
+(`src/extension-operation-safety.js`) that:
+
+- Distinguishes global vs user scope and blocks non-admin global mutations
+- Blocks dirty, detached, missing, invalid-manifest, and collision states before worktree mutation
+- Returns structured failure envelopes (`reason`, `failureClass`, `actionHints`) without local path leakage
+- Keeps legacy success response shapes for compatible clients
+
+Protected mount points, `@sillytavern/*`, `/lib.js`, events, slash commands, and regex surfaces are unchanged by this contract.
+

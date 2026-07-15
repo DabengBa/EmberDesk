@@ -1429,6 +1429,68 @@ async function onUpdateClick() {
  * @param {boolean} quiet If true, don't show a success message
  * @param {number?} timeout Timeout in milliseconds to wait for the update to complete. If null, no timeout is set.
  */
+
+/**
+ * Parse a structured extension operation failure envelope from an HTTP response.
+ * Falls back to plain text for legacy/non-JSON error bodies.
+ * @param {Response} response
+ * @returns {Promise<{message: string, reason: string|null, failureClass: string|null, actionHints: string[], raw: object|null}>}
+ */
+async function readExtensionOperationError(response) {
+    const text = await response.text();
+    try {
+        const data = JSON.parse(text);
+        if (data && typeof data === 'object' && (data.reason || data.failureClass || data.message || data.ok === false)) {
+            return {
+                message: typeof data.message === 'string' && data.message
+                    ? data.message
+                    : (text || response.statusText),
+                reason: typeof data.reason === 'string' ? data.reason : null,
+                failureClass: typeof data.failureClass === 'string' ? data.failureClass : null,
+                actionHints: Array.isArray(data.actionHints) ? data.actionHints : [],
+                raw: data,
+            };
+        }
+    } catch {
+        // plain-text legacy body
+    }
+
+    return {
+        message: text || response.statusText,
+        reason: null,
+        failureClass: null,
+        actionHints: [],
+        raw: null,
+    };
+}
+
+/**
+ * Present install/update/switch/move/delete failures so users can distinguish
+ * retryable vs user-action-required vs forbidden outcomes.
+ * @param {{message: string, reason: string|null, failureClass: string|null, actionHints: string[]}} error
+ * @param {string} title
+ */
+function notifyExtensionOperationFailure(error, title) {
+    const message = error?.message || t`Extension operation failed`;
+    const options = { timeOut: 7000 };
+    const failureClass = error?.failureClass;
+
+    if (failureClass === 'forbidden') {
+        toastr.error(message, title, options);
+        return;
+    }
+    if (failureClass === 'user_action_required' || failureClass === 'invalid_request') {
+        toastr.warning(message, title, options);
+        return;
+    }
+    if (failureClass === 'retryable') {
+        toastr.error(message, title, { timeOut: 5000 });
+        return;
+    }
+
+    toastr.error(message, title, options);
+}
+
 async function updateExtension(extensionName, quiet, timeout = null) {
     try {
         const signal = timeout ? AbortSignal.timeout(timeout) : undefined;
@@ -1443,9 +1505,9 @@ async function updateExtension(extensionName, quiet, timeout = null) {
         });
 
         if (!response.ok) {
-            const text = await response.text();
-            toastr.error(text || response.statusText, t`Extension update failed`, { timeOut: 5000 });
-            console.error('Extension update failed', response.status, response.statusText, text);
+            const error = await readExtensionOperationError(response);
+            notifyExtensionOperationFailure(error, t`Extension update failed`);
+            console.error('Extension update failed', response.status, response.statusText, error);
             return;
         }
 
@@ -1614,9 +1676,9 @@ async function moveExtension(extensionName, source, destination) {
         });
 
         if (!result.ok) {
-            const text = await result.text();
-            toastr.error(text || result.statusText, t`Extension move failed`, { timeOut: 5000 });
-            console.error('Extension move failed', result.status, result.statusText, text);
+            const error = await readExtensionOperationError(result);
+            notifyExtensionOperationFailure(error, t`Extension move failed`);
+            console.error('Extension move failed', result.status, result.statusText, error);
             return;
         }
 
@@ -1643,7 +1705,7 @@ export async function deleteExtension(extensionName, shouldClean = false) {
     await callExtensionHook(fullExtensionName, 'delete');
 
     try {
-        await fetch('/api/extensions/delete', {
+        const response = await fetch('/api/extensions/delete', {
             method: 'POST',
             headers: getRequestHeaders(),
             body: JSON.stringify({
@@ -1651,8 +1713,16 @@ export async function deleteExtension(extensionName, shouldClean = false) {
                 global: getExtensionType(extensionName) === 'global',
             }),
         });
+        if (!response.ok) {
+            const error = await readExtensionOperationError(response);
+            notifyExtensionOperationFailure(error, t`Extension delete failed`);
+            console.error('Extension delete failed', response.status, response.statusText, error);
+            return;
+        }
     } catch (error) {
         console.error('Error:', error);
+        toastr.error(t`Extension delete failed`);
+        return;
     }
 
     // Delete or clean might have updated settings, which could race with the page reload, so we'll force save here
@@ -1749,9 +1819,9 @@ async function switchExtensionBranch(extensionName, isGlobal, branch) {
         });
 
         if (!response.ok) {
-            const text = await response.text();
-            toastr.error(text || response.statusText, t`Extension branch switch failed`);
-            console.error('Extension branch switch failed', response.status, response.statusText, text);
+            const error = await readExtensionOperationError(response);
+            notifyExtensionOperationFailure(error, t`Extension branch switch failed`);
+            console.error('Extension branch switch failed', response.status, response.statusText, error);
             return;
         }
 
@@ -1829,9 +1899,9 @@ export async function installExtension(url, global, branch = '') {
     });
 
     if (!request.ok) {
-        const text = await request.text();
-        toastr.warning(text || request.statusText, t`Extension installation failed`, { timeOut: 5000 });
-        console.error('Extension installation failed', request.status, request.statusText, text);
+        const error = await readExtensionOperationError(request);
+        notifyExtensionOperationFailure(error, t`Extension installation failed`);
+        console.error('Extension installation failed', request.status, request.statusText, error);
         return false;
     }
 

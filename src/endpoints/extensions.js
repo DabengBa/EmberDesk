@@ -6,9 +6,18 @@ import sanitize from 'sanitize-filename';
 import { CheckRepoActions, default as simpleGit } from 'simple-git';
 
 import { PUBLIC_DIRECTORIES } from '../constants.js';
-import { getConfigValue, isValidUrl } from '../util.js';
+import { getConfigValue } from '../util.js';
 import { createGitClient } from '../git/client.js';
 import { getExtensionRepositoryUpdateState } from '../extension-repo-update-state.js';
+import {
+    EXTENSION_REASON,
+    buildExtensionFailureEnvelope,
+    createExtensionDecision,
+    httpStatusForExtensionDecision,
+    preflightExtensionInstall,
+    preflightExtensionMutation,
+    validateExtensionManifest,
+} from '../extension-operation-safety.js';
 
 const gitBackend = getConfigValue('git.backend', 'auto');
 
@@ -44,6 +53,56 @@ async function checkIfRepoIsUpToDate(extensionPath) {
     return getExtensionRepositoryUpdateState(git);
 }
 
+/**
+ * Send a structured extension operation failure without exposing local paths.
+ * @param {import('express').Response} response
+ * @param {object} decision
+ */
+function sendExtensionFailure(response, decision) {
+    return response
+        .status(httpStatusForExtensionDecision(decision))
+        .json(buildExtensionFailureEnvelope(decision));
+}
+
+/**
+ * @param {import('express').Request} request
+ * @param {boolean} globalFlag
+ * @returns {{ userExtensionsDir: string, globalExtensionsDir: string, isAdmin: boolean, scope: 'local'|'global' }}
+ */
+function getExtensionOperationContext(request, globalFlag) {
+    return {
+        userExtensionsDir: request.user.directories.extensions,
+        globalExtensionsDir: PUBLIC_DIRECTORIES.globalExtensions,
+        isAdmin: Boolean(request.user.profile.admin),
+        scope: globalFlag ? 'global' : 'local',
+    };
+}
+
+/**
+ * @param {string} extensionPath
+ * @returns {import('simple-git').SimpleGit}
+ */
+function createExtensionGit(extensionPath) {
+    return simpleGit({ baseDir: extensionPath, ...OPTIONS });
+}
+
+/**
+ * @param {string} operation
+ * @param {import('express').Request} request
+ * @param {string} [message]
+ */
+function retryableFailure(operation, request, message = 'Internal Server Error. Check the server logs for more details.') {
+    return createExtensionDecision({
+        allowed: false,
+        operation,
+        scope: request.body?.global ? 'global' : 'local',
+        extensionName: typeof request.body?.extensionName === 'string' ? request.body.extensionName : null,
+        failureClass: 'retryable',
+        actionHints: ['retry_or_inspect_logs'],
+        message,
+    });
+}
+
 export const router = express.Router();
 
 /**
@@ -73,66 +132,65 @@ router.use(extensionsEnabledFeatureGuard);
 router.post('/install', async (request, response) => {
     try {
         const { url, global, branch } = request.body;
-
-        if (global && !request.user.profile.admin) {
-            console.error(`User ${request.user.profile.handle} does not have permission to install global extensions.`);
-            return response.status(403).send('Forbidden: No permission to install global extensions.');
+        const context = getExtensionOperationContext(request, Boolean(global));
+        const decision = preflightExtensionInstall({
+            url,
+            scope: context.scope,
+            isAdmin: context.isAdmin,
+            userExtensionsDir: context.userExtensionsDir,
+            globalExtensionsDir: context.globalExtensionsDir,
+            branch: branch || null,
+        });
+        if (!decision.allowed) {
+            if (decision.reason === EXTENSION_REASON.FORBIDDEN_GLOBAL) {
+                console.error(`User ${request.user.profile.handle} does not have permission to install global extensions.`);
+            }
+            return sendExtensionFailure(response, decision);
         }
-
-        if (!isValidUrl(url)) {
-            return response.status(400).send('Bad Request: A valid URL is required in the request body.');
-        }
-
-        const parsedUrl = new URL(url);
-        if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
-            return response.status(400).send('Bad Request: Only HTTP and HTTPS protocols are supported for the Extension URL.');
-        }
-
-        const git = createGitClient({ backend: gitBackend });
 
         // make sure the third-party directory exists
-        if (!fs.existsSync(path.join(request.user.directories.extensions))) {
-            fs.mkdirSync(path.join(request.user.directories.extensions));
+        if (!fs.existsSync(context.userExtensionsDir)) {
+            fs.mkdirSync(context.userExtensionsDir);
         }
 
-        if (!fs.existsSync(PUBLIC_DIRECTORIES.globalExtensions)) {
-            fs.mkdirSync(PUBLIC_DIRECTORIES.globalExtensions);
+        if (!fs.existsSync(context.globalExtensionsDir)) {
+            fs.mkdirSync(context.globalExtensionsDir);
         }
 
-        const basePath = global ? PUBLIC_DIRECTORIES.globalExtensions : request.user.directories.extensions;
-        const extensionNameSanitized = sanitize(path.basename(parsedUrl.pathname, '.git'));
-        if (!extensionNameSanitized) {
-            return response.status(400).send('Could not determine the extension name from the URL. Please provide a valid git repository URL.');
-        }
-
-        const extensionPath = path.join(basePath, extensionNameSanitized);
-        const folderName = path.basename(extensionPath);
-
-        if (fs.existsSync(extensionPath)) {
-            return response.status(409).send(`Directory already exists at ${extensionPath}`);
-        }
-
+        const extensionPath = decision.extensionPath;
+        const folderName = decision.extensionName;
+        const cloneUrl = decision.details?.url || url;
+        const git = createGitClient({ backend: gitBackend });
         const cloneOptions = { depth: 1 };
         if (branch) {
             cloneOptions.branch = branch;
         }
-        await git.clone(parsedUrl.href, extensionPath, cloneOptions);
-        console.info(`Extension has been cloned to ${extensionPath} from ${parsedUrl.href} at ${branch || '(default)'} branch`);
+        await git.clone(cloneUrl, extensionPath, cloneOptions);
+        console.info(`Extension has been cloned to ${extensionPath} from ${cloneUrl} at ${branch || '(default)'} branch`);
 
         try {
             const manifest = await getManifest(extensionPath);
-            if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) {
+            const validated = validateExtensionManifest(manifest);
+            if (!validated.ok) {
                 throw new Error('Manifest is not a valid JSON object.');
             }
-            const { version, author, display_name } = manifest;
+            const { version, author, display_name } = validated.manifest;
+            // Keep legacy success shape.
             return response.send({ version, author, display_name, extensionPath, folderName });
         } catch (manifestError) {
             await fs.promises.rm(extensionPath, { recursive: true, force: true });
-            throw manifestError;
+            console.error('Importing extension failed', manifestError);
+            return sendExtensionFailure(response, createExtensionDecision({
+                allowed: false,
+                operation: 'install',
+                scope: decision.scope,
+                extensionName: decision.extensionName,
+                reason: EXTENSION_REASON.INVALID_MANIFEST,
+            }));
         }
     } catch (error) {
         console.error('Importing extension failed', error);
-        return response.status(500).send('Internal Server Error. Check the server logs for more details.');
+        return response.status(500).json(buildExtensionFailureEnvelope(retryableFailure('install', request)));
     }
 });
 
@@ -149,33 +207,47 @@ router.post('/install', async (request, response) => {
  */
 router.post('/update', async (request, response) => {
     try {
-        if (typeof request.body.extensionName !== 'string') {
-            return response.status(400).send('Bad Request: A valid extensionName is required in the request body.');
-        }
-
         const { extensionName, global } = request.body;
-        const extensionNameSanitized = sanitize(extensionName);
-        if (!extensionNameSanitized) {
-            return response.status(400).send('Bad Request: A valid extensionName is required in the request body.');
+        const context = getExtensionOperationContext(request, Boolean(global));
+        const decision = await preflightExtensionMutation({
+            operation: 'update',
+            scope: context.scope,
+            extensionName,
+            isAdmin: context.isAdmin,
+            userExtensionsDir: context.userExtensionsDir,
+            globalExtensionsDir: context.globalExtensionsDir,
+            createGit: createExtensionGit,
+        });
+        if (!decision.allowed) {
+            if (decision.reason === EXTENSION_REASON.FORBIDDEN_GLOBAL) {
+                console.error(`User ${request.user.profile.handle} does not have permission to update global extensions.`);
+            }
+            return sendExtensionFailure(response, decision);
         }
 
-        if (global && !request.user.profile.admin) {
-            console.error(`User ${request.user.profile.handle} does not have permission to update global extensions.`);
-            return response.status(403).send('Forbidden: No permission to update global extensions.');
+        const extensionPath = decision.extensionPath;
+        const { isUpToDate, remoteUrl, skippedReason } = await checkIfRepoIsUpToDate(extensionPath);
+        // If auto-update helper still reports a blocked state, never pull.
+        if (skippedReason) {
+            return sendExtensionFailure(response, createExtensionDecision({
+                allowed: false,
+                operation: 'update',
+                scope: decision.scope,
+                extensionName: decision.extensionName,
+                reason: skippedReason,
+            }));
         }
 
-        const basePath = global ? PUBLIC_DIRECTORIES.globalExtensions : request.user.directories.extensions;
-        const extensionPath = path.join(basePath, extensionNameSanitized);
-
-        if (!fs.existsSync(extensionPath)) {
-            return response.status(404).send(`Directory does not exist at ${extensionPath}`);
-        }
-
-        const { isUpToDate, remoteUrl } = await checkIfRepoIsUpToDate(extensionPath);
-        const git = simpleGit({ baseDir: extensionPath, ...OPTIONS });
+        const git = createExtensionGit(extensionPath);
         const isRepo = await git.checkIsRepo(CheckRepoActions.IS_REPO_ROOT);
         if (!isRepo) {
-            throw new Error(`Directory is not a Git repository at ${extensionPath}`);
+            return sendExtensionFailure(response, createExtensionDecision({
+                allowed: false,
+                operation: 'update',
+                scope: decision.scope,
+                extensionName: decision.extensionName,
+                reason: EXTENSION_REASON.NOT_A_REPO,
+            }));
         }
         const currentBranch = await git.branch();
         if (!isUpToDate) {
@@ -188,10 +260,11 @@ router.post('/update', async (request, response) => {
         const fullCommitHash = await git.revparse(['HEAD']);
         const shortCommitHash = fullCommitHash.slice(0, 7);
 
+        // Keep legacy success shape.
         return response.send({ shortCommitHash, extensionPath, isUpToDate, remoteUrl });
     } catch (error) {
         console.error('Updating extension failed', error);
-        return response.status(500).send('Internal Server Error. Check the server logs for more details.');
+        return response.status(500).json(buildExtensionFailureEnvelope(retryableFailure('update', request)));
     }
 });
 
@@ -246,29 +319,37 @@ router.post('/branches', async (request, response) => {
 
 router.post('/switch', async (request, response) => {
     try {
-        if (typeof request.body.extensionName !== 'string') {
-            return response.status(400).send('Bad Request: A valid extensionName is required in the request body.');
-        }
-
         const { extensionName, branch, global } = request.body;
-        const extensionNameSanitized = sanitize(extensionName);
-        if (!extensionNameSanitized || !branch) {
-            return response.status(400).send('Bad Request: A valid extensionName and branch are required in the request body.');
+        if (branch == null || branch === '') {
+            return sendExtensionFailure(response, createExtensionDecision({
+                allowed: false,
+                operation: 'switch',
+                scope: global ? 'global' : 'local',
+                extensionName: typeof extensionName === 'string' ? extensionName : null,
+                reason: EXTENSION_REASON.INVALID_EXTENSION_NAME,
+                message: 'Bad Request: A valid extensionName and branch are required in the request body.',
+            }));
         }
 
-        if (global && !request.user.profile.admin) {
-            console.error(`User ${request.user.profile.handle} does not have permission to switch branches of global extensions.`);
-            return response.status(403).send('Forbidden: No permission to switch branches of global extensions.');
+        const context = getExtensionOperationContext(request, Boolean(global));
+        const decision = await preflightExtensionMutation({
+            operation: 'switch',
+            scope: context.scope,
+            extensionName,
+            isAdmin: context.isAdmin,
+            userExtensionsDir: context.userExtensionsDir,
+            globalExtensionsDir: context.globalExtensionsDir,
+            createGit: createExtensionGit,
+        });
+        if (!decision.allowed) {
+            if (decision.reason === EXTENSION_REASON.FORBIDDEN_GLOBAL) {
+                console.error(`User ${request.user.profile.handle} does not have permission to switch branches of global extensions.`);
+            }
+            return sendExtensionFailure(response, decision);
         }
 
-        const basePath = global ? PUBLIC_DIRECTORIES.globalExtensions : request.user.directories.extensions;
-        const extensionPath = path.join(basePath, extensionNameSanitized);
-
-        if (!fs.existsSync(extensionPath)) {
-            return response.status(404).send(`Directory does not exist at ${extensionPath}`);
-        }
-
-        const git = simpleGit({ baseDir: extensionPath, ...OPTIONS });
+        const extensionPath = decision.extensionPath;
+        const git = createExtensionGit(extensionPath);
         const branches = await git.branchLocal();
 
         if (String(branch).startsWith('origin/')) {
@@ -286,7 +367,14 @@ router.post('/switch', async (request, response) => {
 
         if (!branches.all.includes(branch)) {
             console.error(`Branch ${branch} does not exist locally`);
-            return response.status(404).send(`Branch ${branch} does not exist locally`);
+            return sendExtensionFailure(response, createExtensionDecision({
+                allowed: false,
+                operation: 'switch',
+                scope: decision.scope,
+                extensionName: decision.extensionName,
+                reason: EXTENSION_REASON.BRANCH_MISSING,
+                message: `Branch ${branch} does not exist locally`,
+            }));
         }
 
         // Check if the branch is already checked out
@@ -303,55 +391,38 @@ router.post('/switch', async (request, response) => {
         return response.sendStatus(204);
     } catch (error) {
         console.error('Switching branches failed', error);
-        return response.status(500).send('Internal Server Error. Check the server logs for more details.');
+        return response.status(500).json(buildExtensionFailureEnvelope(retryableFailure('switch', request)));
     }
 });
 
 router.post('/move', async (request, response) => {
     try {
-        if (typeof request.body.extensionName !== 'string') {
-            return response.status(400).send('Bad Request: A valid extensionName is required in the request body.');
-        }
-
         const { extensionName, source, destination } = request.body;
-        const extensionNameSanitized = sanitize(extensionName);
-        if (!extensionNameSanitized || !source || !destination) {
-            return response.status(400).send('Bad Request: A valid extensionName, source, and destination are required in the request body.');
+        const decision = await preflightExtensionMutation({
+            operation: 'move',
+            scope: source,
+            destinationScope: destination,
+            extensionName,
+            isAdmin: Boolean(request.user.profile.admin),
+            userExtensionsDir: request.user.directories.extensions,
+            globalExtensionsDir: PUBLIC_DIRECTORIES.globalExtensions,
+            createGit: createExtensionGit,
+        });
+        if (!decision.allowed) {
+            if (decision.reason === EXTENSION_REASON.FORBIDDEN_MOVE) {
+                console.error(`User ${request.user.profile.handle} does not have permission to move extensions.`);
+            }
+            return sendExtensionFailure(response, decision);
         }
 
-        if (!request.user.profile.admin) {
-            console.error(`User ${request.user.profile.handle} does not have permission to move extensions.`);
-            return response.status(403).send('Forbidden: No permission to move extensions.');
-        }
-
-        const sourceDirectory = source === 'global' ? PUBLIC_DIRECTORIES.globalExtensions : request.user.directories.extensions;
-        const destinationDirectory = destination === 'global' ? PUBLIC_DIRECTORIES.globalExtensions : request.user.directories.extensions;
-        const sourcePath = path.join(sourceDirectory, extensionNameSanitized);
-        const destinationPath = path.join(destinationDirectory, extensionNameSanitized);
-
-        if (!fs.existsSync(sourcePath) || !fs.statSync(sourcePath).isDirectory()) {
-            console.error(`Source directory does not exist at ${sourcePath}`);
-            return response.status(404).send('Source directory does not exist.');
-        }
-
-        if (fs.existsSync(destinationPath)) {
-            console.error(`Destination directory already exists at ${destinationPath}`);
-            return response.status(409).send('Destination directory already exists.');
-        }
-
-        if (source === destination) {
-            console.error('Source and destination directories are the same');
-            return response.status(409).send('Source and destination directories are the same.');
-        }
-
-        fs.cpSync(sourcePath, destinationPath, { recursive: true, force: true });
-        fs.rmSync(sourcePath, { recursive: true, force: true });
-        console.info(`Extension has been moved from ${sourcePath} to ${destinationPath}`);
+        fs.cpSync(decision.extensionPath, decision.destinationPath, { recursive: true, force: true });
+        fs.rmSync(decision.extensionPath, { recursive: true, force: true });
+        console.info(`Extension has been moved from ${decision.extensionPath} to ${decision.destinationPath}`);
 
         return response.sendStatus(204);
     } catch (error) {
         console.error('Moving extension failed', error);
-        return response.status(500).send('Internal Server Error. Check the server logs for more details.');
+        return response.status(500).json(buildExtensionFailureEnvelope(retryableFailure('move', request)));
     }
 });
 
@@ -422,35 +493,32 @@ router.post('/version', async (request, response) => {
  */
 router.post('/delete', async (request, response) => {
     try {
-        if (typeof request.body.extensionName !== 'string') {
-            return response.status(400).send('Bad Request: A valid extensionName is required in the request body.');
-        }
-
         const { extensionName, global } = request.body;
-        const extensionNameSanitized = sanitize(extensionName);
-        if (!extensionNameSanitized) {
-            return response.status(400).send('Bad Request: A valid extensionName is required in the request body.');
+        const context = getExtensionOperationContext(request, Boolean(global));
+        const decision = await preflightExtensionMutation({
+            operation: 'delete',
+            scope: context.scope,
+            extensionName,
+            isAdmin: context.isAdmin,
+            userExtensionsDir: context.userExtensionsDir,
+            globalExtensionsDir: context.globalExtensionsDir,
+            createGit: createExtensionGit,
+        });
+        if (!decision.allowed) {
+            if (decision.reason === EXTENSION_REASON.FORBIDDEN_GLOBAL) {
+                console.error(`User ${request.user.profile.handle} does not have permission to delete global extensions.`);
+            }
+            return sendExtensionFailure(response, decision);
         }
 
-        if (global && !request.user.profile.admin) {
-            console.error(`User ${request.user.profile.handle} does not have permission to delete global extensions.`);
-            return response.status(403).send('Forbidden: No permission to delete global extensions.');
-        }
+        await fs.promises.rm(decision.extensionPath, { recursive: true });
+        console.info(`Extension has been deleted at ${decision.extensionPath}`);
 
-        const basePath = global ? PUBLIC_DIRECTORIES.globalExtensions : request.user.directories.extensions;
-        const extensionPath = path.join(basePath, extensionNameSanitized);
-
-        if (!fs.existsSync(extensionPath)) {
-            return response.status(404).send(`Directory does not exist at ${extensionPath}`);
-        }
-
-        await fs.promises.rm(extensionPath, { recursive: true });
-        console.info(`Extension has been deleted at ${extensionPath}`);
-
-        return response.send(`Extension has been deleted at ${extensionPath}`);
+        // Keep legacy success shape (plain text path message).
+        return response.send(`Extension has been deleted at ${decision.extensionPath}`);
     } catch (error) {
         console.error('Deleting extension failed', error);
-        return response.status(500).send('Internal Server Error. Check the server logs for more details.');
+        return response.status(500).json(buildExtensionFailureEnvelope(retryableFailure('delete', request)));
     }
 });
 

@@ -977,7 +977,26 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('legacyBoundary="mount-points-loader-wand-regex-aliases"');
     });
 
-    test('renders an Extensions Host workflow through React-owned controls and explicit extensions helpers', () => {
+    
+    test('extension operation failure feedback distinguishes retryable, user-action, and forbidden classes', () => {
+        const extensionsSource = read('public/scripts/extensions.js');
+        expect(extensionsSource).toContain('async function readExtensionOperationError(response)');
+        expect(extensionsSource).toContain('function notifyExtensionOperationFailure(error, title)');
+        expect(extensionsSource).toContain("failureClass === 'user_action_required'");
+        expect(extensionsSource).toContain("failureClass === 'forbidden'");
+        expect(extensionsSource).toContain("failureClass === 'retryable'");
+        expect(extensionsSource).toContain('notifyExtensionOperationFailure(error, t`Extension update failed`)');
+        expect(extensionsSource).toContain('notifyExtensionOperationFailure(error, t`Extension installation failed`)');
+        expect(extensionsSource).toContain('notifyExtensionOperationFailure(error, t`Extension delete failed`)');
+        expect(extensionsSource).toContain('notifyExtensionOperationFailure(error, t`Extension move failed`)');
+        expect(extensionsSource).toContain('notifyExtensionOperationFailure(error, t`Extension branch switch failed`)');
+        // Protected mount points remain established.
+        expect(extensionsSource).toContain("$('#extensions_settings')");
+        expect(extensionsSource).toContain("$('#extensionsMenuButton')");
+        expect(extensionsSource).toContain("$('#extensionsMenu')");
+    });
+
+test('renders an Extensions Host workflow through React-owned controls and explicit extensions helpers', () => {
         const scriptSource = read('public/script.js');
         const extensionsSource = read('public/scripts/extensions.js');
         const workspacePanelSource = read('app/workspace-panels.tsx');
