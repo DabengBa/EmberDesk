@@ -44,9 +44,12 @@ Doc IDs: feature.extension_panel_open, term.shared_browser_library
 - [x] Review: R-01 Folder names starting with `third-party` were mis-normalized (severity: high; scope: backend name resolve; evidence: `normalizeExtensionFolderName`; proof: unit test `normalizeExtensionFolderName accepts third-party/`)
 - [x] Review: R-02 Quiet auto-update surfaced blocked worktree failures as toasts (severity: medium; scope: frontend update path; evidence: `updateExtension` quiet branch; proof: source contract + manual path)
 - [x] Review: R-03 Tech doc overstated detached blocking for delete (severity: low; scope: docs drift; evidence: third-party-extension-compatibility; proof: wording aligned with preflight)
+- [x] Review: R-04 Dirty no-remote and symlinked roots could bypass destructive preflight (severity: high; scope: backend safety; evidence: `inspectExtensionGitState` / `preflightExtensionMutation`; proof: extension-operation-safety tests)
+- [x] Review: R-05 Install and move could publish/overwrite after preflight races (severity: high; scope: backend mutation; evidence: install/move routes; proof: serialized target lock + staging implementation)
+- [x] Review: R-06 Quiet auto-update emitted successful-update toasts and dropped action hints (severity: medium; scope: frontend feedback; evidence: `updateExtension` / `notifyExtensionOperationFailure`; proof: source contract test)
 
 Multi-surface re-review (post-wrap-up, 2026-07-15):
-- Backend/core (Codex surface): confirmed R-01; also aligned `/branches` and `/version` name resolution with the same normalizer.
-- Docs/frontend (CodeBuddy surface): confirmed R-02/R-03; protected mounts and failure-class feedback remain.
+- Backend/core (Codex CLI surface): confirmed and fixed R-04/R-05, plus cross-scope install collisions, invalid-manifest mutation gating, detached/no-upstream destructive Git states, and literal `..` folder compatibility.
+- Docs/frontend (CodeBuddy surface): confirmed and fixed R-06; protected mounts and failure-class feedback remain.
 - Scope/security: no path leakage in failure envelopes; global/admin gates intact; no registry authority drift.
-- Rejected candidates: large helper module size (no safe shrink without losing shared contract); switch missing-branch reason mapping is cosmetic only.
+- Rejected candidates: large helper module size (no safe shrink without losing shared contract); pre-existing compatibility-doc typos outside the changed section.

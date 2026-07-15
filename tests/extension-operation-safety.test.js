@@ -154,7 +154,9 @@ function initDirtyGitRepo(extensionPath) {
     run(['config', 'user.email', 'test@example.test']);
     run(['config', 'user.name', 'Test']);
     fs.writeFileSync(path.join(extensionPath, 'README.md'), 'one\n', 'utf8');
+    fs.writeFileSync(path.join(extensionPath, 'manifest.json'), '{}', 'utf8');
     run(['add', 'README.md']);
+    run(['add', 'manifest.json']);
     run(['commit', '-m', 'init']);
     run(['branch', '-M', 'main']);
     run(['remote', 'add', 'origin', 'https://example.test/org/dirty-ext.git']);
@@ -168,6 +170,7 @@ describe('extension operation safety decisions', () => {
         expect(normalizeExtensionFolderName('/demo-ext')).toBe('demo-ext');
         // Folder names may themselves start with "third-party"; only the discovery prefix is stripped.
         expect(normalizeExtensionFolderName('third-party-helper')).toBe('third-party-helper');
+        expect(normalizeExtensionFolderName('valid..name')).toBe('valid..name');
         expect(normalizeExtensionFolderName('../escape')).toBeNull();
         expect(normalizeExtensionFolderName('nested/path')).toBeNull();
     });
@@ -218,6 +221,16 @@ describe('extension operation safety decisions', () => {
         expect(dirty.calls).not.toContain('fetch');
         expect(dirty.calls).not.toContain('pull');
         expect(dirty.calls).not.toContain('checkout');
+
+        const dirtyNoRemote = createGitDouble({
+            remotes: [],
+            status: { isClean: () => false, detached: false, tracking: null },
+        });
+        await expect(inspectExtensionGitState(dirtyNoRemote.git)).resolves.toMatchObject({
+            state: 'dirty',
+            reason: EXTENSION_REASON.DIRTY_WORKTREE,
+        });
+        expect(dirtyNoRemote.calls).toContain('status');
 
         const detached = createGitDouble({
             status: { isClean: () => true, detached: true, tracking: null },
@@ -294,6 +307,20 @@ describe('extension operation safety decisions', () => {
         });
         expect(collision.actionHints).toEqual(expect.arrayContaining(['choose_different_name_or_delete_existing']));
 
+        fs.mkdirSync(path.join(globalExtensionsDir, 'global-only'), { recursive: true });
+        const crossScopeCollision = preflightExtensionInstall({
+            url: 'https://example.test/org/global-only.git',
+            scope: 'local',
+            isAdmin: false,
+            userExtensionsDir,
+            globalExtensionsDir,
+        });
+        expect(crossScopeCollision).toMatchObject({
+            allowed: false,
+            reason: EXTENSION_REASON.PATH_COLLISION,
+            failureClass: EXTENSION_FAILURE_CLASS.USER_ACTION_REQUIRED,
+        });
+
         const clean = preflightExtensionInstall({
             url: 'https://example.test/org/fresh-ext.git',
             scope: 'local',
@@ -312,6 +339,7 @@ describe('extension operation safety decisions', () => {
         const extensionName = 'demo-ext';
         const extensionPath = path.join(userExtensionsDir, extensionName);
         fs.mkdirSync(extensionPath, { recursive: true });
+        fs.writeFileSync(path.join(extensionPath, 'manifest.json'), '{}', 'utf8');
 
         const missingPath = await preflightExtensionMutation({
             operation: 'update',
@@ -395,6 +423,8 @@ describe('extension operation safety decisions', () => {
         const extensionName = 'movable';
         fs.mkdirSync(path.join(userExtensionsDir, extensionName), { recursive: true });
         fs.mkdirSync(path.join(globalExtensionsDir, extensionName), { recursive: true });
+        fs.writeFileSync(path.join(userExtensionsDir, extensionName, 'manifest.json'), '{}', 'utf8');
+        fs.writeFileSync(path.join(globalExtensionsDir, extensionName, 'manifest.json'), '{}', 'utf8');
 
         const forbidden = await preflightExtensionMutation({
             operation: 'move',
@@ -448,6 +478,86 @@ describe('extension operation safety decisions', () => {
             failureClass: EXTENSION_FAILURE_CLASS.USER_ACTION_REQUIRED,
         });
         expect(dirtyGit.calls).not.toContain('checkout');
+    });
+
+    test('preflight blocks symlinked, invalid-manifest, detached, and no-upstream destructive worktrees', async () => {
+        const { root, userExtensionsDir, globalExtensionsDir } = makeScopeRoots();
+        const outsidePath = path.join(root, 'outside-extension');
+        const extensionPath = path.join(userExtensionsDir, 'demo-ext');
+        fs.mkdirSync(outsidePath, { recursive: true });
+        fs.symlinkSync(outsidePath, extensionPath, 'dir');
+
+        const symlinkDecision = await preflightExtensionMutation({
+            operation: 'delete',
+            scope: 'local',
+            extensionName: 'demo-ext',
+            isAdmin: true,
+            userExtensionsDir,
+            globalExtensionsDir,
+            createGit: () => {
+                throw new Error('Git inspection must not follow a symlinked extension root.');
+            },
+        });
+        expect(symlinkDecision).toMatchObject({
+            allowed: false,
+            reason: EXTENSION_REASON.PATH_ESCAPE,
+            failureClass: EXTENSION_FAILURE_CLASS.INVALID_REQUEST,
+        });
+
+        fs.rmSync(extensionPath, { recursive: true, force: true });
+        fs.mkdirSync(extensionPath, { recursive: true });
+        fs.writeFileSync(path.join(extensionPath, 'manifest.json'), '{invalid', 'utf8');
+        const invalidManifest = await preflightExtensionMutation({
+            operation: 'delete',
+            scope: 'local',
+            extensionName: 'demo-ext',
+            isAdmin: true,
+            userExtensionsDir,
+            globalExtensionsDir,
+            createGit: () => createGitDouble().git,
+        });
+        expect(invalidManifest).toMatchObject({
+            allowed: false,
+            reason: EXTENSION_REASON.INVALID_MANIFEST,
+        });
+
+        fs.writeFileSync(path.join(extensionPath, 'manifest.json'), '{}', 'utf8');
+        const detached = createGitDouble({
+            status: { isClean: () => true, detached: true, tracking: null },
+            branch: { current: '', detached: true, all: [], branches: {} },
+        });
+        const detachedDecision = await preflightExtensionMutation({
+            operation: 'delete',
+            scope: 'local',
+            extensionName: 'demo-ext',
+            isAdmin: true,
+            userExtensionsDir,
+            globalExtensionsDir,
+            createGit: () => detached.git,
+        });
+        expect(detachedDecision).toMatchObject({
+            allowed: false,
+            reason: EXTENSION_REASON.DETACHED_HEAD,
+        });
+
+        const noUpstream = createGitDouble({
+            status: { isClean: () => true, detached: false, tracking: null },
+            branch: { current: 'main', detached: false, all: ['main'], branches: { main: {} } },
+        });
+        const noUpstreamDecision = await preflightExtensionMutation({
+            operation: 'move',
+            scope: 'local',
+            destinationScope: 'global',
+            extensionName: 'demo-ext',
+            isAdmin: true,
+            userExtensionsDir,
+            globalExtensionsDir,
+            createGit: () => noUpstream.git,
+        });
+        expect(noUpstreamDecision).toMatchObject({
+            allowed: false,
+            reason: EXTENSION_REASON.MISSING_UPSTREAM,
+        });
     });
 
     test('failure envelope and status mapping keep reason/actionHints stable without local paths', () => {
@@ -585,6 +695,7 @@ describe('extension operation routes', () => {
     test('forbids non-admin move with structured envelope', async () => {
         const { userExtensionsDir, globalExtensionsDir } = makeScopeRoots();
         fs.mkdirSync(path.join(userExtensionsDir, 'movable'), { recursive: true });
+        fs.writeFileSync(path.join(userExtensionsDir, 'movable', 'manifest.json'), '{}', 'utf8');
         await withExtensionsApp({
             admin: false,
             userExtensionsDir,

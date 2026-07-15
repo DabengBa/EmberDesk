@@ -1,5 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import { randomUUID } from 'node:crypto';
 
 import express from 'express';
 import { CheckRepoActions, default as simpleGit } from 'simple-git';
@@ -20,6 +21,7 @@ import {
 } from '../extension-operation-safety.js';
 
 const gitBackend = getConfigValue('git.backend', 'auto');
+const extensionOperationLocks = new Map();
 
 /**
  * @type {Partial<import('simple-git').SimpleGitOptions>}
@@ -103,6 +105,60 @@ function retryableFailure(operation, request, message = 'Internal Server Error. 
     });
 }
 
+/**
+ * Serialize mutations of matching extension worktrees within this server process.
+ * @param {string[]} paths
+ * @param {() => Promise<unknown>} operation
+ * @returns {Promise<unknown>}
+ */
+async function withExtensionOperationLock(paths, operation) {
+    const lockPaths = [...new Set(paths.filter(Boolean).map(item => path.resolve(item)))].sort();
+    const previousLocks = lockPaths.map(item => extensionOperationLocks.get(item) ?? Promise.resolve());
+    let release;
+    const currentLock = new Promise(resolve => {
+        release = resolve;
+    });
+
+    for (const lockPath of lockPaths) {
+        extensionOperationLocks.set(lockPath, currentLock);
+    }
+
+    await Promise.all(previousLocks);
+    try {
+        return await operation();
+    } finally {
+        release();
+        for (const lockPath of lockPaths) {
+            if (extensionOperationLocks.get(lockPath) === currentLock) {
+                extensionOperationLocks.delete(lockPath);
+            }
+        }
+    }
+}
+
+/**
+ * @param {{ extensionName: unknown, scope: 'local'|'global', destinationScope?: 'local'|'global', userExtensionsDir: string, globalExtensionsDir: string }} options
+ * @returns {string[]}
+ */
+function getExtensionOperationLockPaths({
+    extensionName,
+    scope,
+    destinationScope = null,
+    userExtensionsDir,
+    globalExtensionsDir,
+}) {
+    const folderName = normalizeExtensionFolderName(extensionName);
+    if (!folderName) {
+        return [];
+    }
+
+    const getScopePath = (targetScope) => path.join(
+        targetScope === 'global' ? globalExtensionsDir : userExtensionsDir,
+        folderName,
+    );
+    return [getScopePath(scope), destinationScope ? getScopePath(destinationScope) : null];
+}
+
 export const router = express.Router();
 
 /**
@@ -157,37 +213,72 @@ router.post('/install', async (request, response) => {
             fs.mkdirSync(context.globalExtensionsDir);
         }
 
-        const extensionPath = decision.extensionPath;
-        const folderName = decision.extensionName;
-        const cloneUrl = decision.details?.url || url;
-        const git = createGitClient({ backend: gitBackend });
-        const cloneOptions = { depth: 1 };
-        if (branch) {
-            cloneOptions.branch = branch;
-        }
-        await git.clone(cloneUrl, extensionPath, cloneOptions);
-        console.info(`Extension has been cloned to ${extensionPath} from ${cloneUrl} at ${branch || '(default)'} branch`);
-
-        try {
-            const manifest = await getManifest(extensionPath);
-            const validated = validateExtensionManifest(manifest);
-            if (!validated.ok) {
-                throw new Error('Manifest is not a valid JSON object.');
-            }
-            const { version, author, display_name } = validated.manifest;
-            // Keep legacy success shape.
-            return response.send({ version, author, display_name, extensionPath, folderName });
-        } catch (manifestError) {
-            await fs.promises.rm(extensionPath, { recursive: true, force: true });
-            console.error('Importing extension failed', manifestError);
-            return sendExtensionFailure(response, createExtensionDecision({
-                allowed: false,
-                operation: 'install',
-                scope: decision.scope,
+        return await withExtensionOperationLock(
+            getExtensionOperationLockPaths({
                 extensionName: decision.extensionName,
-                reason: EXTENSION_REASON.INVALID_MANIFEST,
-            }));
-        }
+                scope: decision.scope,
+                destinationScope: decision.scope === 'global' ? 'local' : 'global',
+                userExtensionsDir: context.userExtensionsDir,
+                globalExtensionsDir: context.globalExtensionsDir,
+            }),
+            async () => {
+                const currentDecision = preflightExtensionInstall({
+                    url,
+                    scope: context.scope,
+                    isAdmin: context.isAdmin,
+                    userExtensionsDir: context.userExtensionsDir,
+                    globalExtensionsDir: context.globalExtensionsDir,
+                    branch: branch || null,
+                });
+                if (!currentDecision.allowed) {
+                    return sendExtensionFailure(response, currentDecision);
+                }
+
+                const extensionPath = currentDecision.extensionPath;
+                const folderName = currentDecision.extensionName;
+                const cloneUrl = currentDecision.details?.url || url;
+                const stagingPath = path.join(
+                    currentDecision.basePath,
+                    `.${folderName}.installing-${randomUUID()}`,
+                );
+                const git = createGitClient({ backend: gitBackend });
+                const cloneOptions = { depth: 1 };
+                if (branch) {
+                    cloneOptions.branch = branch;
+                }
+
+                try {
+                    await git.clone(cloneUrl, stagingPath, cloneOptions);
+                    let validated;
+                    try {
+                        validated = validateExtensionManifest(await getManifest(stagingPath));
+                    } catch {
+                        validated = { ok: false };
+                    }
+                    if (!validated.ok) {
+                        return sendExtensionFailure(response, createExtensionDecision({
+                            allowed: false,
+                            operation: 'install',
+                            scope: currentDecision.scope,
+                            extensionName: currentDecision.extensionName,
+                            reason: EXTENSION_REASON.INVALID_MANIFEST,
+                        }));
+                    }
+
+                    // Rename publishes only a fully cloned, valid extension.
+                    await fs.promises.rename(stagingPath, extensionPath);
+                    console.info(`Extension has been cloned to ${extensionPath} from ${cloneUrl} at ${branch || '(default)'} branch`);
+                    const { version, author, display_name } = validated.manifest;
+                    // Keep legacy success shape.
+                    return response.send({ version, author, display_name, extensionPath, folderName });
+                } catch (installError) {
+                    await fs.promises.rm(stagingPath, { recursive: true, force: true });
+                    throw installError;
+                } finally {
+                    await fs.promises.rm(stagingPath, { recursive: true, force: true });
+                }
+            },
+        );
     } catch (error) {
         console.error('Importing extension failed', error);
         return response.status(500).json(buildExtensionFailureEnvelope(retryableFailure('install', request)));
@@ -225,43 +316,67 @@ router.post('/update', async (request, response) => {
             return sendExtensionFailure(response, decision);
         }
 
-        const extensionPath = decision.extensionPath;
-        const { isUpToDate, remoteUrl, skippedReason } = await checkIfRepoIsUpToDate(extensionPath);
-        // If auto-update helper still reports a blocked state, never pull.
-        if (skippedReason) {
-            return sendExtensionFailure(response, createExtensionDecision({
-                allowed: false,
-                operation: 'update',
-                scope: decision.scope,
+        return await withExtensionOperationLock(
+            getExtensionOperationLockPaths({
                 extensionName: decision.extensionName,
-                reason: skippedReason,
-            }));
-        }
-
-        const git = createExtensionGit(extensionPath);
-        const isRepo = await git.checkIsRepo(CheckRepoActions.IS_REPO_ROOT);
-        if (!isRepo) {
-            return sendExtensionFailure(response, createExtensionDecision({
-                allowed: false,
-                operation: 'update',
                 scope: decision.scope,
-                extensionName: decision.extensionName,
-                reason: EXTENSION_REASON.NOT_A_REPO,
-            }));
-        }
-        const currentBranch = await git.branch();
-        if (!isUpToDate) {
-            await git.pull('origin', currentBranch.current);
-            console.info(`Extension has been updated at ${extensionPath}`);
-        } else {
-            console.info(`Extension is up to date at ${extensionPath}`);
-        }
-        await git.fetch('origin');
-        const fullCommitHash = await git.revparse(['HEAD']);
-        const shortCommitHash = fullCommitHash.slice(0, 7);
+                userExtensionsDir: context.userExtensionsDir,
+                globalExtensionsDir: context.globalExtensionsDir,
+            }),
+            async () => {
+                // Recheck after waiting for a competing mutation.
+                const currentDecision = await preflightExtensionMutation({
+                    operation: 'update',
+                    scope: context.scope,
+                    extensionName,
+                    isAdmin: context.isAdmin,
+                    userExtensionsDir: context.userExtensionsDir,
+                    globalExtensionsDir: context.globalExtensionsDir,
+                    createGit: createExtensionGit,
+                });
+                if (!currentDecision.allowed) {
+                    return sendExtensionFailure(response, currentDecision);
+                }
 
-        // Keep legacy success shape.
-        return response.send({ shortCommitHash, extensionPath, isUpToDate, remoteUrl });
+                const extensionPath = currentDecision.extensionPath;
+                const { isUpToDate, remoteUrl, skippedReason } = await checkIfRepoIsUpToDate(extensionPath);
+                // If auto-update helper still reports a blocked state, never pull.
+                if (skippedReason) {
+                    return sendExtensionFailure(response, createExtensionDecision({
+                        allowed: false,
+                        operation: 'update',
+                        scope: currentDecision.scope,
+                        extensionName: currentDecision.extensionName,
+                        reason: skippedReason,
+                    }));
+                }
+
+                const git = createExtensionGit(extensionPath);
+                const isRepo = await git.checkIsRepo(CheckRepoActions.IS_REPO_ROOT);
+                if (!isRepo) {
+                    return sendExtensionFailure(response, createExtensionDecision({
+                        allowed: false,
+                        operation: 'update',
+                        scope: currentDecision.scope,
+                        extensionName: currentDecision.extensionName,
+                        reason: EXTENSION_REASON.NOT_A_REPO,
+                    }));
+                }
+                const currentBranch = await git.branch();
+                if (!isUpToDate) {
+                    await git.pull('origin', currentBranch.current);
+                    console.info(`Extension has been updated at ${extensionPath}`);
+                } else {
+                    console.info(`Extension is up to date at ${extensionPath}`);
+                }
+                await git.fetch('origin');
+                const fullCommitHash = await git.revparse(['HEAD']);
+                const shortCommitHash = fullCommitHash.slice(0, 7);
+
+                // Keep legacy success shape.
+                return response.send({ shortCommitHash, extensionPath, isUpToDate, remoteUrl });
+            },
+        );
     } catch (error) {
         console.error('Updating extension failed', error);
         return response.status(500).json(buildExtensionFailureEnvelope(retryableFailure('update', request)));
@@ -344,47 +459,69 @@ router.post('/switch', async (request, response) => {
             return sendExtensionFailure(response, decision);
         }
 
-        const extensionPath = decision.extensionPath;
-        const git = createExtensionGit(extensionPath);
-        const branches = await git.branchLocal();
-
-        if (String(branch).startsWith('origin/')) {
-            const localBranch = branch.replace('origin/', '');
-            if (branches.all.includes(localBranch)) {
-                console.info(`Branch ${localBranch} already exists locally, checking it out`);
-                await git.checkout(localBranch);
-                return response.sendStatus(204);
-            }
-
-            console.info(`Branch ${localBranch} does not exist locally, creating it from ${branch}`);
-            await git.checkoutBranch(localBranch, branch);
-            return response.sendStatus(204);
-        }
-
-        if (!branches.all.includes(branch)) {
-            console.error(`Branch ${branch} does not exist locally`);
-            return sendExtensionFailure(response, createExtensionDecision({
-                allowed: false,
-                operation: 'switch',
-                scope: decision.scope,
+        return await withExtensionOperationLock(
+            getExtensionOperationLockPaths({
                 extensionName: decision.extensionName,
-                reason: EXTENSION_REASON.BRANCH_MISSING,
-                message: `Branch ${branch} does not exist locally`,
-            }));
-        }
+                scope: decision.scope,
+                userExtensionsDir: context.userExtensionsDir,
+                globalExtensionsDir: context.globalExtensionsDir,
+            }),
+            async () => {
+                const currentDecision = await preflightExtensionMutation({
+                    operation: 'switch',
+                    scope: context.scope,
+                    extensionName,
+                    isAdmin: context.isAdmin,
+                    userExtensionsDir: context.userExtensionsDir,
+                    globalExtensionsDir: context.globalExtensionsDir,
+                    createGit: createExtensionGit,
+                });
+                if (!currentDecision.allowed) {
+                    return sendExtensionFailure(response, currentDecision);
+                }
 
-        // Check if the branch is already checked out
-        const currentBranch = await git.branch();
-        if (currentBranch.current === branch) {
-            console.info(`Branch ${branch} is already checked out`);
-            return response.sendStatus(204);
-        }
+                const extensionPath = currentDecision.extensionPath;
+                const git = createExtensionGit(extensionPath);
+                const branches = await git.branchLocal();
 
-        // Checkout the branch
-        await git.checkout(branch);
-        console.info(`Checked out branch ${branch} at ${extensionPath}`);
+                if (String(branch).startsWith('origin/')) {
+                    const localBranch = branch.replace('origin/', '');
+                    if (branches.all.includes(localBranch)) {
+                        console.info(`Branch ${localBranch} already exists locally, checking it out`);
+                        await git.checkout(localBranch);
+                        return response.sendStatus(204);
+                    }
 
-        return response.sendStatus(204);
+                    console.info(`Branch ${localBranch} does not exist locally, creating it from ${branch}`);
+                    await git.checkoutBranch(localBranch, branch);
+                    return response.sendStatus(204);
+                }
+
+                if (!branches.all.includes(branch)) {
+                    console.error(`Branch ${branch} does not exist locally`);
+                    return sendExtensionFailure(response, createExtensionDecision({
+                        allowed: false,
+                        operation: 'switch',
+                        scope: currentDecision.scope,
+                        extensionName: currentDecision.extensionName,
+                        reason: EXTENSION_REASON.BRANCH_MISSING,
+                        message: `Branch ${branch} does not exist locally`,
+                    }));
+                }
+
+                // Check if the branch is already checked out
+                const currentBranch = await git.branch();
+                if (currentBranch.current === branch) {
+                    console.info(`Branch ${branch} is already checked out`);
+                    return response.sendStatus(204);
+                }
+
+                // Checkout the branch
+                await git.checkout(branch);
+                console.info(`Checked out branch ${branch} at ${extensionPath}`);
+                return response.sendStatus(204);
+            },
+        );
     } catch (error) {
         console.error('Switching branches failed', error);
         return response.status(500).json(buildExtensionFailureEnvelope(retryableFailure('switch', request)));
@@ -411,11 +548,40 @@ router.post('/move', async (request, response) => {
             return sendExtensionFailure(response, decision);
         }
 
-        fs.cpSync(decision.extensionPath, decision.destinationPath, { recursive: true, force: true });
-        fs.rmSync(decision.extensionPath, { recursive: true, force: true });
-        console.info(`Extension has been moved from ${decision.extensionPath} to ${decision.destinationPath}`);
+        return await withExtensionOperationLock(
+            getExtensionOperationLockPaths({
+                extensionName: decision.extensionName,
+                scope: decision.scope,
+                destinationScope: decision.destinationScope,
+                userExtensionsDir: request.user.directories.extensions,
+                globalExtensionsDir: PUBLIC_DIRECTORIES.globalExtensions,
+            }),
+            async () => {
+                const currentDecision = await preflightExtensionMutation({
+                    operation: 'move',
+                    scope: source,
+                    destinationScope: destination,
+                    extensionName,
+                    isAdmin: Boolean(request.user.profile.admin),
+                    userExtensionsDir: request.user.directories.extensions,
+                    globalExtensionsDir: PUBLIC_DIRECTORIES.globalExtensions,
+                    createGit: createExtensionGit,
+                });
+                if (!currentDecision.allowed) {
+                    return sendExtensionFailure(response, currentDecision);
+                }
 
-        return response.sendStatus(204);
+                // Never merge or overwrite a destination created after preflight.
+                await fs.promises.cp(currentDecision.extensionPath, currentDecision.destinationPath, {
+                    recursive: true,
+                    force: false,
+                    errorOnExist: true,
+                });
+                await fs.promises.rm(currentDecision.extensionPath, { recursive: true });
+                console.info(`Extension has been moved from ${currentDecision.extensionPath} to ${currentDecision.destinationPath}`);
+                return response.sendStatus(204);
+            },
+        );
     } catch (error) {
         console.error('Moving extension failed', error);
         return response.status(500).json(buildExtensionFailureEnvelope(retryableFailure('move', request)));
@@ -503,11 +669,34 @@ router.post('/delete', async (request, response) => {
             return sendExtensionFailure(response, decision);
         }
 
-        await fs.promises.rm(decision.extensionPath, { recursive: true });
-        console.info(`Extension has been deleted at ${decision.extensionPath}`);
+        return await withExtensionOperationLock(
+            getExtensionOperationLockPaths({
+                extensionName: decision.extensionName,
+                scope: decision.scope,
+                userExtensionsDir: context.userExtensionsDir,
+                globalExtensionsDir: context.globalExtensionsDir,
+            }),
+            async () => {
+                const currentDecision = await preflightExtensionMutation({
+                    operation: 'delete',
+                    scope: context.scope,
+                    extensionName,
+                    isAdmin: context.isAdmin,
+                    userExtensionsDir: context.userExtensionsDir,
+                    globalExtensionsDir: context.globalExtensionsDir,
+                    createGit: createExtensionGit,
+                });
+                if (!currentDecision.allowed) {
+                    return sendExtensionFailure(response, currentDecision);
+                }
 
-        // Keep legacy success shape (plain text path message).
-        return response.send(`Extension has been deleted at ${decision.extensionPath}`);
+                await fs.promises.rm(currentDecision.extensionPath, { recursive: true });
+                console.info(`Extension has been deleted at ${currentDecision.extensionPath}`);
+
+                // Keep legacy success shape (plain text path message).
+                return response.send(`Extension has been deleted at ${currentDecision.extensionPath}`);
+            },
+        );
     } catch (error) {
         console.error('Deleting extension failed', error);
         return response.status(500).json(buildExtensionFailureEnvelope(retryableFailure('delete', request)));
@@ -538,6 +727,7 @@ router.get('/discover', function (request, response) {
     const userExtensions = fs
         .readdirSync(path.join(request.user.directories.extensions))
         .filter(f => fs.statSync(path.join(request.user.directories.extensions, f)).isDirectory())
+        .filter(f => !f.startsWith('.'))
         .map(f => ({ type: 'local', name: `third-party/${f}` }));
 
     // Get all folders in global extensions folder
@@ -545,6 +735,7 @@ router.get('/discover', function (request, response) {
     const globalExtensions = fs
         .readdirSync(PUBLIC_DIRECTORIES.globalExtensions)
         .filter(f => fs.statSync(path.join(PUBLIC_DIRECTORIES.globalExtensions, f)).isDirectory())
+        .filter(f => !f.startsWith('.'))
         .map(f => ({ type: 'global', name: `third-party/${f}` }))
         .filter(f => !userExtensions.some(e => e.name === f.name));
 

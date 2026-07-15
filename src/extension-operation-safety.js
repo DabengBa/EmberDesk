@@ -271,12 +271,12 @@ export function normalizeExtensionFolderName(extensionName) {
     }
     value = value.replace(/^\/+/, '');
 
-    if (!value || value.includes('/') || value.includes('..') || value === '.' || value === '..') {
+    if (!value || value.includes('/') || value === '.' || value === '..') {
         return null;
     }
 
     const extensionNameSanitized = sanitize(value);
-    if (!extensionNameSanitized || extensionNameSanitized.includes('..')) {
+    if (!extensionNameSanitized || extensionNameSanitized === '.' || extensionNameSanitized === '..') {
         return null;
     }
 
@@ -373,23 +373,12 @@ export async function inspectExtensionGitState(git) {
         };
     }
 
-    const remotes = await git.getRemotes(true);
-    const remoteUrl = remotes[0]?.refs?.fetch || '';
-    if (!remotes.length) {
-        return {
-            state: 'no-remote',
-            reason: EXTENSION_REASON.NO_REMOTE,
-            remoteUrl: '',
-            currentBranch: null,
-        };
-    }
-
     const status = await git.status();
     if (typeof status.isClean === 'function' && !status.isClean()) {
         return {
             state: 'dirty',
             reason: EXTENSION_REASON.DIRTY_WORKTREE,
-            remoteUrl,
+            remoteUrl: '',
             currentBranch: null,
         };
     }
@@ -399,8 +388,19 @@ export async function inspectExtensionGitState(git) {
         return {
             state: 'detached',
             reason: EXTENSION_REASON.DETACHED_HEAD,
-            remoteUrl,
+            remoteUrl: '',
             currentBranch: branch.current || null,
+        };
+    }
+
+    const remotes = await git.getRemotes(true);
+    const remoteUrl = remotes[0]?.refs?.fetch || '';
+    if (!remotes.length) {
+        return {
+            state: 'no-remote',
+            reason: EXTENSION_REASON.NO_REMOTE,
+            remoteUrl: '',
+            currentBranch: branch.current,
         };
     }
 
@@ -502,7 +502,10 @@ export function preflightExtensionInstall({
         return target;
     }
 
-    if (fs.existsSync(target.extensionPath)) {
+    const otherScopePath = normalizedScope === 'global'
+        ? path.join(userExtensionsDir, target.extensionName)
+        : path.join(globalExtensionsDir, target.extensionName);
+    if (fs.existsSync(target.extensionPath) || fs.existsSync(otherScopePath)) {
         return createExtensionDecision({
             allowed: false,
             operation: 'install',
@@ -534,8 +537,8 @@ export function preflightExtensionInstall({
 const GIT_PROTECTED_OPERATIONS = new Set(['update', 'switch', 'move', 'delete']);
 
 /**
- * Operations that require a clean, attached, upstream-ready repo.
- * delete/move only require clean when the directory is a git repo.
+ * Operations that require a clean, attached, upstream-ready Git worktree.
+ * Non-Git directories remain deletable as a recovery path when their manifest is valid.
  */
 const GIT_REQUIRED_OPERATIONS = new Set(['update', 'switch']);
 
@@ -595,7 +598,7 @@ export async function preflightExtensionMutation({
         return source;
     }
 
-    if (!fs.existsSync(source.extensionPath) || !fs.statSync(source.extensionPath).isDirectory()) {
+    if (!fs.existsSync(source.extensionPath)) {
         return createExtensionDecision({
             allowed: false,
             operation,
@@ -604,6 +607,47 @@ export async function preflightExtensionMutation({
             extensionPath: source.extensionPath,
             basePath: source.basePath,
             reason: operation === 'move' ? EXTENSION_REASON.SOURCE_MISSING : EXTENSION_REASON.MISSING_WORKTREE,
+        });
+    }
+
+    const sourceStats = fs.lstatSync(source.extensionPath);
+    if (sourceStats.isSymbolicLink()) {
+        return createExtensionDecision({
+            allowed: false,
+            operation,
+            scope: normalizedScope,
+            extensionName: source.extensionName,
+            extensionPath: source.extensionPath,
+            basePath: source.basePath,
+            reason: EXTENSION_REASON.PATH_ESCAPE,
+        });
+    }
+    if (!sourceStats.isDirectory()) {
+        return createExtensionDecision({
+            allowed: false,
+            operation,
+            scope: normalizedScope,
+            extensionName: source.extensionName,
+            extensionPath: source.extensionPath,
+            basePath: source.basePath,
+            reason: operation === 'move' ? EXTENSION_REASON.SOURCE_MISSING : EXTENSION_REASON.MISSING_WORKTREE,
+        });
+    }
+
+    try {
+        const manifest = JSON.parse(fs.readFileSync(path.join(source.extensionPath, 'manifest.json'), 'utf8'));
+        if (!validateExtensionManifest(manifest).ok) {
+            throw new Error('Invalid extension manifest');
+        }
+    } catch {
+        return createExtensionDecision({
+            allowed: false,
+            operation,
+            scope: normalizedScope,
+            extensionName: source.extensionName,
+            extensionPath: source.extensionPath,
+            basePath: source.basePath,
+            reason: EXTENSION_REASON.INVALID_MANIFEST,
         });
     }
 
@@ -681,8 +725,9 @@ export async function preflightExtensionMutation({
                     },
                 });
             }
-        } else if (protectIfGit && gitState.reason === EXTENSION_REASON.DIRTY_WORKTREE) {
-            // delete/move: only block when directory is a git repo with dirty worktree.
+        } else if (protectIfGit && gitState.reason && gitState.reason !== EXTENSION_REASON.NOT_A_REPO) {
+            // Delete/move may recover a valid non-Git extension directory, but Git-backed
+            // worktrees must be clean, attached, and upstream-ready before destruction.
             return createExtensionDecision({
                 allowed: false,
                 operation,
@@ -692,24 +737,7 @@ export async function preflightExtensionMutation({
                 extensionPath: source.extensionPath,
                 destinationPath: destinationDecision?.extensionPath ?? null,
                 basePath: source.basePath,
-                reason: EXTENSION_REASON.DIRTY_WORKTREE,
-                details: {
-                    remoteUrl: gitState.remoteUrl,
-                    currentBranch: gitState.currentBranch,
-                    gitState: gitState.state,
-                },
-            });
-        } else if (protectIfGit && gitState.reason === EXTENSION_REASON.DETACHED_HEAD && operation === 'move') {
-            return createExtensionDecision({
-                allowed: false,
-                operation,
-                scope: normalizedScope,
-                destinationScope: destinationDecision?.scope ?? null,
-                extensionName: source.extensionName,
-                extensionPath: source.extensionPath,
-                destinationPath: destinationDecision?.extensionPath ?? null,
-                basePath: source.basePath,
-                reason: EXTENSION_REASON.DETACHED_HEAD,
+                reason: gitState.reason,
                 details: {
                     remoteUrl: gitState.remoteUrl,
                     currentBranch: gitState.currentBranch,
@@ -717,7 +745,7 @@ export async function preflightExtensionMutation({
                 },
             });
         }
-        // not-a-repo is allowed for delete of plain folders.
+        // not-a-repo is allowed for delete/move of valid plain extension folders.
     }
 
     return createExtensionDecision({

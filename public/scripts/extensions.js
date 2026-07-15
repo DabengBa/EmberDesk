@@ -1471,7 +1471,10 @@ async function readExtensionOperationError(response) {
  * @param {string} title
  */
 function notifyExtensionOperationFailure(error, title) {
-    const message = error?.message || t`Extension operation failed`;
+    const hintMessage = Array.isArray(error?.actionHints) && error.actionHints.length > 0
+        ? `\n${error.actionHints.join(', ')}`
+        : '';
+    const message = `${error?.message || t`Extension operation failed`}${hintMessage}`;
     const options = { timeOut: 7000 };
     const failureClass = error?.failureClass;
 
@@ -1528,7 +1531,9 @@ async function updateExtension(extensionName, quiet, timeout = null) {
         } else {
             const fullExtensionName = extensionName.startsWith('third-party') ? extensionName : `third-party${extensionName}`;
             await callExtensionHook(fullExtensionName, 'update');
-            toastr.success(t`Extension ${extensionName} updated to ${data.shortCommitHash}`, t`Reload the page to apply updates`);
+            if (!quiet) {
+                toastr.success(t`Extension ${extensionName} updated to ${data.shortCommitHash}`, t`Reload the page to apply updates`);
+            }
         }
     } catch (error) {
         console.error('Extension update error:', error);
