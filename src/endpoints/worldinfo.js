@@ -148,7 +148,7 @@ function invalidateWorldInfoAuditAfterFileWrite(request, operation) {
         return;
     }
 
-    const featureFlags = getCanonicalStorageSlice('world_info').getFeatureFlags();
+    const featureFlags = getCanonicalStorageSlice('world_info').getAuditTrackingFeatureFlags();
     if (!featureFlags.enabled) {
         return;
     }

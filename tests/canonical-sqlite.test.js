@@ -205,6 +205,71 @@ describe('canonical sqlite feature flags', () => {
             },
         }));
     });
+
+    test('fails closed with a stable reason code for invalid global overrides', () => {
+        expect(getCanonicalStorageSliceFeatureFlagSnapshot({
+            flagKey: 'settings',
+            overrides: {
+                enabled: true,
+                shadowImport: true,
+                reads: 'not-a-boolean',
+                writes: true,
+                strict: false,
+            },
+        })).toEqual(expect.objectContaining({
+            featureFlags: {
+                enabled: false,
+                shadowImport: false,
+                reads: false,
+                writes: false,
+                strict: false,
+            },
+            resolution: {
+                ok: false,
+                reasonCode: 'invalid_slice_flag_configuration',
+            },
+        }));
+    });
+
+    test('fails closed when slice override containers are malformed', () => {
+        const globalFlags = {
+            enabled: true,
+            shadowImport: true,
+            reads: true,
+            writes: true,
+            strict: false,
+        };
+
+        for (const overrides of [
+            {
+                ...globalFlags,
+                slices: {
+                    settings: true,
+                },
+            },
+            {
+                ...globalFlags,
+                slices: true,
+            },
+        ]) {
+            expect(getCanonicalStorageSliceFeatureFlagSnapshot({
+                flagKey: 'settings',
+                overrides,
+            })).toEqual(expect.objectContaining({
+                featureFlags: {
+                    enabled: false,
+                    shadowImport: false,
+                    reads: false,
+                    writes: false,
+                    strict: false,
+                },
+                resolution: {
+                    ok: false,
+                    reasonCode: 'invalid_slice_flag_configuration',
+                },
+            }));
+        }
+    });
 });
 
 describe('canonical sqlite manager', () => {

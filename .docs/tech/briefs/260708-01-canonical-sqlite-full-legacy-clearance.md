@@ -2,7 +2,7 @@
 created: 2026-07-08
 source: user
 confirmed: true
-last_updated: 2026-07-13
+last_updated: 2026-07-14
 ---
 
 # Canonical SQLite Full Legacy Clearance Intent
@@ -70,7 +70,9 @@ EmberDesk 已经交付 ADR-0011 首个 canonical SQLite 切片：character metad
   - 2026-07-08: 用户确认这些 structured slices 是 chat message bodies 之前的第三阶段。
 - Implementation traceability:
   - Owner candidates: `src/endpoints/settings.js`, `src/endpoints/secrets.js`, `src/endpoints/vectors.js`, `src/endpoints/assets.js`, `src/endpoints/backgrounds.js`, `src/endpoints/extensions.js`, `public/scripts/personas.js`, `public/scripts/backgrounds.js`, `public/scripts/extensions.js`
-  - Delivery status: superseded by the eight independently deliverable `260713-01` through `260713-08` process packages; implementation should follow their numbered dependency order.
+  - Delivery status: the 2026-07-13 process package set was retired. Current ownership and
+    implementation order live in `canonical-sqlite-storage-roadmap.md` and the retained
+    `260714-*` intent briefs.
 
 ### Domain: chat message bodies
 
@@ -80,7 +82,9 @@ EmberDesk 已经交付 ADR-0011 首个 canonical SQLite 切片：character metad
   - 2026-07-08: 用户确认 chat message bodies 是后续迁移的第四大阶段。
 - Implementation traceability:
   - Owner candidates: `src/endpoints/chats.js`, `src/endpoints/chat-route-service.js`, `src/endpoints/chat-import-service.js`, `src/endpoints/chat-backup-helpers.js`, `public/scripts/chats.js`
-  - Delivery status: superseded by `260713-07-canonical-chat-message-authority`, with vectors intentionally moved after chat to consume stable canonical source IDs.
+  - Delivery status: superseded by the retained canonical chat foundation, authority cutover,
+    and query/recovery briefs; derived vector hardening remains after chat to consume stable
+    canonical source IDs.
 
 ## Non-Goals
 

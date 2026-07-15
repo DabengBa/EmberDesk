@@ -38,18 +38,15 @@ and rollback gates.
 
 That first approved slice is now delivered, the legacy-mode accelerator around
 `_cache/character-index.sqlite` has been retired from normal runtime, and full World Info
-authority is delivered. The confirmed long-term direction is now comprehensive database
-authority, but the remaining work is ordered by system invariant rather than by names that
-happen to appear together:
+authority is delivered. Settings, secrets, and managed media are also delivered authority
+slices. The remaining work is ordered by system invariant and current runtime ownership:
 
-1. generalize the canonical storage control plane for independently gated slices
-2. migrate the settings document and snapshot/restore contract
-3. migrate secrets behind the existing `SecretManager` boundary
-4. establish database-owned managed media and blob references
-5. normalize persona authority out of the settings document
-6. migrate extension registry and namespace storage while retaining managed Git worktrees
-7. migrate character and group chat sessions, metadata, messages, swipes, and attachment references
-8. rebuild vector collection/catalog ownership over stable canonical source IDs, keeping embeddings derived
+1. maintain generic per-slice flags, global fallback, registry/operator contracts, and migration tests
+2. establish canonical chat schema, stable IDs, lossless JSONL shadow import, and audit
+3. cut character/group chat full-payload reads and writes over to canonical SQLite
+4. complete chat search/recent indexes, attachments, backup/restore, repair, and Node 26 proof
+5. harden extension Git operations without inventing a per-user owner for the global registry
+6. harden vector generations over stable canonical source IDs while keeping all vector state derived
 
 The canonical DB must be separate from derived caches:
 
@@ -68,11 +65,14 @@ Compatibility remains a hard boundary:
 - Full World Info authority is delivered; JSON files remain compatibility projection/import/export surfaces.
 - Extension-visible globals and `@sillytavern/*` imports remain frozen unless a later compatibility retirement decision says otherwise.
 
-Comprehensive database authority does not require every byte to be stored as a SQLite BLOB.
-SQLite owns structured state, stable identity, relationships, lifecycle, audit status, and
-content references. Large images, audio, attachments, and extension Git worktrees may remain
-as managed files when the database is the only authority allowed to create, resolve, retain,
-or delete those paths.
+Comprehensive database authority does not require every byte or every low-frequency nested
+subdomain to be normalized into separate SQLite tables. A revisioned canonical JSON document
+is valid authority when it preserves one write boundary and unknown fields, as settings does
+for personas and `extension_settings`. SQLite owns structured state, stable identity,
+relationships, lifecycle, audit status, and content references where those properties need
+independent enforcement. Large images, audio, and attachments may remain managed files.
+Extension Git worktrees remain filesystem/Git runtime authority until a separate server-wide
+registry decision exists.
 
 SQLite is the local/portable storage target. Express 5 remains the backend runtime owner; this roadmap does not introduce Rust, Axum, PostgreSQL, or a new server host.
 
@@ -262,17 +262,23 @@ without moving new business domains into SQLite.
 
 Current delivered foundation:
 
-- `src/canonical-storage-slice-registry.js` owns stable slice keys (`characters`, `world_info`),
-  required capability registration, default registry bootstrap, backup manifest construction,
-  and backup/restore readiness checks.
+- `src/canonical-storage-slice-registry.js` owns stable slice keys (`characters`, `world_info`,
+  `settings`, `secrets`, and `managed_media`), each descriptor's flag key, required capability
+  registration, default registry bootstrap, backup manifest construction, and backup/restore
+  readiness checks.
+- `src/storage-feature-flags.js` resolves optional per-slice values field-by-field, preserving the
+  existing global flag result whenever a slice value is absent. Explicit malformed slice values
+  fail closed with `invalid_slice_flag_configuration`; managed media retains its independent,
+  no-global-fallback contract.
 - `src/canonical-sqlite-rollout-contract.js` provides generic flag legality and
   per-slice rollback-blocker builders; character-only compatibility helpers remain for existing
   call sites.
-- `src/canonical-sqlite-operator.js` aggregates machine-readable multi-slice status, routes
-  audit/repair by slice key, and reports backup/restore readiness without user content or secrets.
-- Character write gating in `src/endpoints/characters.js` and World Info read gating in
-  `src/endpoints/worldinfo.js` resolve audit scope and rollback blockers through the registered
-  slice descriptors, so one slice's drift or open repair does not disable unrelated slice status.
+- `src/canonical-sqlite-operator.js` aggregates machine-readable multi-slice status, including
+  effective flags, per-flag sources, fail-closed resolver blockers, audit/repair routing, and
+  backup/restore readiness without user content or secrets.
+- Character, chat-stat, World Info, settings, secrets, and managed-media adapters resolve their
+  current gates through registered slice descriptors, so one slice's override, drift, or open
+  repair does not disable unrelated slice status.
 - Operator CLIs expose `status`, `--slice`, and keep existing character/World Info commands.
 - Backup/restore readiness only compares database + managed-file inventory and manifest
   completeness; it never auto-overwrites the database or compatibility files.
@@ -282,31 +288,31 @@ Current delivered foundation:
 
 ## Active Comprehensive Database Sequence
 
+Delivered packages remain optional process records. The active packages below are intentionally
+smaller than the superseded persona/extension/chat/vector plans so each risk has one rollback gate.
 
-The active design packages are intentionally separate. Each package must complete its own
-shadow import, audit, read cutover, write cutover, projection/managed-file handling, repair,
-rollback, tests, and docs before its flag can be enabled.
-
-| Order | Spec | Authority outcome | True dependency |
+| Order | Package | Authority outcome | True dependency |
 |---|---|---|---|
-| 1 | `260713-01-canonical-storage-control-plane` | **Delivered:** slice registry, generic audit/repair/rollback, backup/restore readiness, operator status | Delivered canonical manager and World Info/character patterns |
-| 2 | `260713-02-canonical-settings-document-authority` | **Delivered:** settings document revision authority, shadow import/audit, DB-first get/save, projection repairs, canonical snapshots | Generic control plane |
-| 3 | `260713-03-canonical-secrets-authority` | **Delivered:** secret records, labels, active selection, repair and rollback behind `SecretManager` | Generic control plane; settings payload must not contain secrets |
-| 4 | `260713-04-canonical-managed-media-authority` | **Delivered:** backgrounds, assets, persona avatars, uploads, and attachment catalog with managed content root, projection repair, and audited GC | Generic control plane |
-| 5 | `260713-05-canonical-persona-authority` | Persona identity, descriptions, defaults and character/group connections | Settings document and managed media |
-| 6 | `260713-06-canonical-extension-state-authority` | Extension registry, install/update state and namespace storage | Settings document, secrets and managed files |
-| 7 | `260713-07-canonical-chat-message-authority` | Character/group sessions, messages, swipes, metadata and attachment refs | Settings, personas and managed media |
-| 8 | `260713-08-canonical-vector-catalog-and-index` | Canonical source/chunk catalog plus rebuildable embedding index | Stable World Info, chat and managed-file IDs |
+| 1 | Canonical chat foundation | Delivered: chat schema, stable session/message IDs, lossless JSONL shadow import and audit; `shadow_only`, with no runtime cutover | Delivered slice-gate maintenance; delivered managed media |
+| 2 | Canonical chat authority cutover | DB-first full-payload get/save/rename/delete/import/export with JSONL projection repair | Order 1 clean audit |
+| 3 | Canonical chat query recovery | Search/recent indexes, attachment integrity, backup/restore, operator repair, Node 26 proof | Order 2 |
+| 4 | Extension operation safety | Safe Git preflight and structured failures while filesystem/Git remains authority | Existing extension compatibility contracts; independent of chat |
+| 5 | Derived vector index hardening | Stable source refs, atomic derived generations, last-complete fallback and rebuild | Order 3; stable World Info/media IDs |
 
-The settings document spec initially preserves nested `power_user.personas`,
-`extension_settings`, and `background` payloads for API compatibility. Later domain specs
-normalize their owned records and make the settings read/write adapter compose and decompose
-those fields. This avoids a flag day while still converging to one owner per field.
+Persona records, defaults and connections remain inside the revisioned canonical settings
+document; persona avatars remain managed media; persona/background chat locks move with
+`chat_metadata`. No separate persona implementation package is currently justified.
 
-Persona/background chat locks remain in `chat_metadata` until the chat authority spec. Vector
-embeddings remain derived because they can be regenerated from canonical source text; the
-database owns collection identity, source references, chunk text/hash, build version and
-invalidation status, not the semantic truth of source messages or files.
+Extension discovery and worktrees remain filesystem/Git-owned because global extensions are
+server-wide while canonical SQLite is per-user. `extension_settings` remains in canonical
+settings. A future server-wide extension registry requires a separate ADR.
+
+Chat server pagination is explicitly deferred. Current `/get` returns a complete chat and
+`showMoreMessages()` slices the already-loaded browser array, so pagination is a separate
+product/performance contract rather than a hidden requirement of storage migration.
+
+Vectra, chunks, and generation manifests remain deletable derived state. They reference stable
+canonical source IDs but do not become a second text authority.
 
 ## Task Breakdown And Dependencies
 
@@ -379,10 +385,11 @@ invalidation status, not the semantic truth of source messages or files.
       CLI `status`/`--slice` in `scripts/canonical-sqlite-repair.mjs` and
       `scripts/canonical-sqlite-audit.mjs`, character/World Info adapters, and
       backup/restore readiness helpers that never auto-rewrite managed files.
-    - Flag note: character and World Info still share `features.storage.canonicalSqlite.*`
-      for compatibility. The registry contract accepts independent flag objects so later
-      slices can introduce `features.storage.canonicalSqlite.slices.<slice>.*` without
-      rewriting character/World Info branches.
+    - Flag note: global `features.storage.canonicalSqlite.*` fields remain the compatibility
+      fallback. The current descriptor flag keys are `characters` and `worldInfo`, so their
+      independent overrides use `features.storage.canonicalSqlite.slices.characters.*` and
+      `features.storage.canonicalSqlite.slices.worldInfo.*` without rewriting the route
+      branches.
 
 14. `settings document authority`
     - Depends on the generalized control plane.
@@ -421,25 +428,36 @@ invalidation status, not the semantic truth of source messages or files.
       remain durable repairs, reference-aware deletes tombstone final blobs, and
       `gc-managed-media` is dry-run by default until an operator passes `--apply`.
 
-17. `persona authority`
-    - Depends on settings document and managed media authority.
-    - Normalizes persona records and connections out of the settings document while preserving
-      current startup/save payload composition.
+17. `slice gate maintenance`
+    - Delivered: generic optional per-slice overrides retain backward-compatible global fallback
+      when omitted, operator status reports each effective source, and invalid explicit values fail
+      closed.
+    - Domain tests now prove their named migration and required schema rather than the unrelated
+      catalog tail version.
 
-18. `extension state authority`
-    - Depends on settings, secrets and managed-file contracts.
-    - Owns extension registry, namespace storage and install/update repair state while Git
-      worktrees remain managed projections.
+18. `canonical chat foundation`
+    - Adds schema, stable IDs, lossless shadow import and audit without changing JSONL runtime authority.
 
-19. `chat message authority`
-    - Depends on stable persona and managed-media identities.
-    - Moves character and group chats, metadata, messages, swipes and attachment references
-      into canonical SQLite; JSONL becomes import/export/projection.
+19. `canonical chat authority cutover`
+    - Delivered: complete character/group chat payload reads, writes, and exports use
+      canonical SQLite after a clean chat audit while preserving the existing full-array
+      route contract and no-pagination behavior.
+    - JSONL remains a compatibility projection, explicit import/export, and rollback
+      surface; projection failures create durable chat repairs that operator/CLI replay can
+      restore.
 
-20. `vector catalog and derived index`
-    - Depends on canonical World Info, chat and managed-file identities.
-    - Stores source/chunk catalog and rebuild state in canonical SQLite, then rebuilds the
-      embedding index as disposable derived acceleration.
+20. `canonical chat query and recovery`
+    - Moves search/recent to canonical indexes and completes attachments, backup/restore,
+      operator repair, and Node 26 performance proof.
+
+21. `extension operation safety`
+    - Keeps filesystem/Git discovery authority.
+    - Unifies safe preflight and structured failures for install/update/switch/move/delete.
+
+22. `derived vector index hardening`
+    - Depends on stable canonical source IDs after chat query/recovery.
+    - Adds atomic generation publish, last-complete fallback, invalidation, and rebuild while
+      keeping chunks, embeddings, and manifests disposable.
 
 ## Feature Flag And Rollback Contract
 
@@ -458,17 +476,20 @@ The delivered character/World Info foundation retains its current compatibility 
 - `features.storage.canonicalSqlite.strict`
   - test/development gate that turns fallback into failures for proof.
 
-The control plane delivers the registration and legality contract for per-slice flags. Character
-and World Info keep the existing shared `features.storage.canonicalSqlite.*` flags for
-compatibility. New domains should add independent flag objects (equivalent to
-`features.storage.canonicalSqlite.slices.<slice>.shadowImport|reads|writes|strict`). Exact config
-serialization is implementation-owned, but it must satisfy these rules:
+The control plane resolves each descriptor's effective flags. For `characters`, `worldInfo`,
+`settings`, and `secrets`, an omitted
+`features.storage.canonicalSqlite.slices.<flagKey>.<field>` retains the existing global field
+result. An explicit slice value overrides only that field for that slice; `chatStats` applies only
+to the characters descriptor. Invalid explicit values or malformed slice mappings disable the
+affected slice and surface `invalid_slice_flag_configuration` in operator status. This keeps
+existing global-only installations compatible while letting later slices use the same contract.
+The contract must satisfy these rules:
 
 - enabling one slice does not enable or block an unrelated slice
 - `writes` requires that slice's migration, import, audit and `reads` gates
 - `strict` converts only that slice's fallback into a proof failure
-- vector build/index flags remain separate from vector catalog authority
-- existing character/World Info installations retain compatible flag interpretation during migration
+- vector build/index flags remain separate from canonical source authority
+- existing global-only installations retain compatible flag interpretation during migration
 
 Managed media uses the independent
 `features.storage.canonicalSqlite.slices.managedMedia.{enabled,shadowImport,reads,writes,strict}`
@@ -501,10 +522,11 @@ Rollback rules for every new slice:
 - Read rollback disables that slice's reads and returns to the audited compatibility source.
 - Write rollback requires a clean latest audit, current compatibility projection or managed-file
   manifest, and zero unresolved repair rows for that slice.
-- Settings, secrets, extension worktrees, chats and managed media must each prove their own
+- Settings, secrets, chats and managed media must each prove their own
   recovery surface; one slice's clean state cannot waive another slice's blockers.
-- Vector catalog rollback does not require preserving a corrupt derived index, but it does require
-  a rebuildable catalog or an audited legacy index before canonical reads are disabled.
+- Extension operations must never discard dirty worktree changes as a recovery shortcut.
+- Vector rollback does not preserve corrupt derived generations; it requires a stable source
+  snapshot or a usable last-complete generation.
 
 Fail-closed rules:
 

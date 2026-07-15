@@ -83,6 +83,8 @@ describe('chat route service', () => {
     test('matches all query fragments across message text while empty queries match all text', () => {
         expect(createTextMatcher('hello engine')(['Hello Ada', 'analytical engine'])).toBe(true);
         expect(createTextMatcher('hello missing')(['Hello Ada', 'analytical engine'])).toBe(false);
+        expect(createTextMatcher('session 01')(['Dev Character 001 Session 04'])).toBe(false);
+        expect(createTextMatcher('session 01')(['Dev Character 001 Session 01'])).toBe(true);
         expect(createTextMatcher('')(['anything'])).toBe(true);
         expect(createTextMatcher('   ')([])).toBe(true);
     });

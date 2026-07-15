@@ -18,7 +18,10 @@ import { listOpenSettingsProjectionRepairs } from './endpoints/settings-store.js
 import { listOpenSecretProjectionRepairs } from './endpoints/canonical-secrets-store.js';
 import { listOpenCanonicalManagedMediaRepairs } from './endpoints/canonical-managed-media-store.js';
 import { listOpenCanonicalChatProjectionRepairs } from './endpoints/canonical-chat-write-service.js';
-import { getCanonicalStorageSliceFeatureFlagSnapshot } from './storage-feature-flags.js';
+import {
+    getCanonicalSqliteFeatureFlags,
+    getCanonicalStorageSliceFeatureFlagSnapshot,
+} from './storage-feature-flags.js';
 import { SETTINGS_FILE } from './constants.js';
 
 const REQUIRED_SLICE_FIELDS = Object.freeze([
@@ -28,6 +31,7 @@ const REQUIRED_SLICE_FIELDS = Object.freeze([
     'listOpenRepairs',
     'getFeatureFlags',
     'getFeatureFlagSnapshot',
+    'getAuditTrackingFeatureFlags',
     'getMigrationReadiness',
     'getRollbackBlockers',
     'getBackupManagedPaths',
@@ -73,6 +77,12 @@ function createSliceFlagCapabilities({
         getFeatureFlagSnapshot,
         getFeatureFlags(overrides = null) {
             return getFeatureFlagSnapshot(overrides).featureFlags;
+        },
+        getAuditTrackingFeatureFlags() {
+            const featureFlags = getFeatureFlagSnapshot().featureFlags;
+            return featureFlags.enabled || !fallbackToGlobal
+                ? featureFlags
+                : getCanonicalSqliteFeatureFlags();
         },
     };
 }

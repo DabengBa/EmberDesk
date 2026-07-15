@@ -47,7 +47,19 @@ export function createTextMatcher(query) {
         if (fragments.length === 0) {
             return true;
         }
-        return fragments.every(fragment => textArray.some(text => String(text ?? '').toLowerCase().includes(fragment)));
+        return fragments.every(fragment => {
+            const isNumericFragment = /^\d+$/.test(fragment);
+
+            return textArray.some(text => {
+                const normalizedText = String(text ?? '').toLowerCase();
+                if (!isNumericFragment) {
+                    return normalizedText.includes(fragment);
+                }
+
+                const numericTokens = normalizedText.match(/\d+/g) ?? [];
+                return numericTokens.includes(fragment);
+            });
+        });
     };
 }
 

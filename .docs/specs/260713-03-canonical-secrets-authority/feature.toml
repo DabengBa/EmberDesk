@@ -1,4 +1,0 @@
-contract_version = 1
-feature_slug = "canonical-secrets-authority"
-brief = ".docs/tech/briefs/260713-03-canonical-secrets-authority.md"
-doc_ids = ["page.api_configuration"]

@@ -71,13 +71,44 @@ function parseExplicitBoolean(value) {
     return { ok: false, value: false };
 }
 
+function isRecord(value) {
+    return value != null && typeof value === 'object' && !Array.isArray(value);
+}
+
 function getSliceOverride(overrides, flagKey) {
     const snakeCaseFlagKey = flagKey.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
-    return overrides?.slices?.[flagKey]
-        ?? overrides?.slices?.[snakeCaseFlagKey]
-        ?? overrides?.[flagKey]
-        ?? overrides?.[snakeCaseFlagKey]
-        ?? null;
+    const slices = overrides?.slices;
+    if (slices !== undefined && !isRecord(slices)) {
+        return { ok: false, value: null };
+    }
+
+    for (const container of [slices, overrides]) {
+        if (!isRecord(container)) {
+            continue;
+        }
+        for (const key of [flagKey, snakeCaseFlagKey]) {
+            if (Object.prototype.hasOwnProperty.call(container, key)) {
+                return {
+                    ok: isRecord(container[key]),
+                    value: container[key],
+                };
+            }
+        }
+    }
+
+    return { ok: true, value: null };
+}
+
+function getConfiguredSliceOverride(flagKey) {
+    const slices = getExplicitConfigValue(`${STORAGE_FLAG_PREFIX}.slices`);
+    if (slices.present && !isRecord(slices.value)) {
+        return { ok: false };
+    }
+
+    const slice = getExplicitConfigValue(`${STORAGE_FLAG_PREFIX}.slices.${flagKey}`);
+    return {
+        ok: !slice.present || isRecord(slice.value),
+    };
 }
 
 function buildDisabledSnapshot({ flagNames, reasonCode = null, source = 'disabled_by_enabled' }) {
@@ -133,9 +164,17 @@ export function getCanonicalStorageSliceFeatureFlagSnapshot(options) {
         throw new Error('Canonical storage slice flagKey is required.');
     }
 
-    const sliceOverride = overrides == null
-        ? null
+    const sliceOverrideResult = overrides == null
+        ? getConfiguredSliceOverride(flagKey)
         : getSliceOverride(overrides, flagKey);
+    if (!sliceOverrideResult.ok) {
+        return buildDisabledSnapshot({
+            flagNames,
+            reasonCode: 'invalid_slice_flag_configuration',
+            source: 'invalid',
+        });
+    }
+    const sliceOverride = sliceOverrideResult.value;
     const globalSource = overrides == null ? 'global' : 'global_override';
     const sliceSource = overrides == null ? 'slice' : 'slice_override';
     const globalFeatureFlags = overrides == null ? getCanonicalSqliteFeatureFlags() : null;

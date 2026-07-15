@@ -1,4 +1,0 @@
-contract_version = 1
-feature_slug = "canonical-storage-control-plane"
-brief = ".docs/tech/briefs/260713-01-canonical-storage-control-plane.md"
-doc_ids = []

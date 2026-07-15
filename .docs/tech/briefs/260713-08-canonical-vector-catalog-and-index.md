@@ -2,18 +2,34 @@
 created: 2026-07-13
 source: user
 confirmed: true
-last_updated: 2026-07-13
+last_updated: 2026-07-14
 feature_slug: canonical-vector-catalog-and-index
-status: active
-active_process_dir: .docs/specs/260713-08-canonical-vector-catalog-and-index
+status: superseded
 ---
 
 # Canonical Vector Catalog And Index Intent
+
+## 2026-07-14 结论
+
+本 brief 已被更小的派生索引方案取代。当前 Vectra 目录及 chunk/build 内容位于
+`vectors/<source>/<collection>/<model>`，其正确属性是可删除、可重建的 derived state。
+把 chunk text 或 collection catalog 提升为 canonical user data 会制造第二份文本权威，
+并扩大 migration、backup 和删除一致性范围。
+
+后继可执行包是
+`.docs/specs/260714-06-derived-vector-index-hardening/`：只要求 derived build 引用稳定的
+canonical source IDs，具备 build identity、原子发布、last-complete fallback、
+invalidation 和 corruption recovery；Vectra、chunks 和 build manifests 仍可整体删除重建。
+
+旧 process directory 已在 2026-07-14 经用户确认后删除；当前结论仅由本 brief、后继
+derived-index brief、路线图和 owning docs 维护。
 
 ## 目标结果
 
 让 SQLite 拥有 vector collection、canonical source reference、chunk text/hash、provider/model
 configuration、build version 和 invalidation state；embedding index 保持可删除重建的派生层。
+
+以上包含 canonical chunk catalog 的原始目标已被取代。
 
 ## 约束
 

@@ -2,7 +2,7 @@
 created: 2026-07-13
 source: user
 confirmed: true
-last_updated: 2026-07-13
+last_updated: 2026-07-14
 status: active
 ---
 
@@ -26,6 +26,20 @@ status: active
 - 每个数据域独立具备 migration、audit、read cutover、write cutover、projection、
   repair、rollback 和 operator proof。
 
+## 2026-07-14 代码事实修订
+
+全面数据库权威不等于把每个低频嵌套子域都拆成规范化 tables，也不等于把可重建派生数据
+提升为 canonical data。当前代码确认：
+
+- canonical settings 已保存完整 revisioned JSON document，persona 与
+  `extension_settings` 可在该文档内保持单一权威；
+- extension discovery 同时包含 server-wide global root 与 per-user root，per-user SQLite
+  不能直接拥有 global registry；
+- chat `/get` 和 `/save` 仍以完整 JSONL payload 为边界，必须先建模/audit，再切 authority，
+  最后做 query/recovery；
+- Vectra、chunks 和 build manifests 是可删除重建的 derived state，不应建立第二份
+  canonical chunk-text authority。
+
 ## 已确认边界
 
 - 继续使用 Node.js 26.3.0、Express 5、`node:sqlite` 和现有 per-user
@@ -38,8 +52,8 @@ status: active
   `_cache/character-index.sqlite` 退休属于已交付回归合同，不重新写成待实现任务。
 - 二进制内容默认不写入 SQLite BLOB。SQLite 持有 stable blob identity、hash、media
   metadata、ownership 和 lifecycle；内容文件位于受数据库约束的 managed content root。
-- Git 仓库内容继续作为可执行工作树存在，但数据库持有 extension identity、source、
-  requested revision、installed revision、scope、enabled state 和 repair status。
+- Git 仓库内容继续作为 extension runtime authority。当前只强化操作安全；未来若建立
+  server-wide database registry，必须先单独 ADR。
 
 ## 系统不变量与交付顺序
 
@@ -54,32 +68,37 @@ status: active
 4. **Managed media authority**
    - 数据库接管 backgrounds、assets、persona avatars、uploads/attachments 的 catalog、
      blob identity、folder membership 和 lifecycle；内容文件进入 managed content root。
-5. **Persona authority**
-   - 将 persona identity、description、default/character connections 从 settings
-     文档规范化到 persona tables；chat-local lock 暂留 chat metadata，等 chat spec 接管。
-6. **Extension state authority**
-   - 数据库接管 extension registry、install/update state、first-party/third-party
-     namespace storage；Git worktree 和 protected browser surfaces 保持兼容。
-7. **Chat message authority**
-   - 数据库接管 character/group chat sessions、messages、swipes、chat metadata 和
-     attachment references；JSONL 降为 import/export/projection。
-8. **Vector catalog and derived index**
-   - 最后用 canonical chat、World Info 和 managed file IDs 重建 collection/source/chunk
-     catalog；embedding index 仍是可重建派生状态，不能反向成为消息或文件真源。
+5. **Slice gate maintenance**
+   - 补齐独立 slice flag resolver、global fallback 和 migration test contract，作为 chat
+     注册前置。
+6. **Canonical chat foundation**
+   - 建立 schema、stable IDs、lossless JSONL shadow import 与 audit，不切 runtime。
+7. **Canonical chat authority cutover**
+   - 切换完整 payload reads/writes，保留 JSONL projection/import/export 与 rollback。
+8. **Canonical chat query/recovery**
+   - 完成 search/recent indexes、attachment integrity、backup/restore、repair 与 Node 26
+     性能 proof。
+9. **Extension operation safety**
+   - 保留 filesystem/Git authority，强化 install/update/switch/move/delete preflight 和
+     结构化失败；可与 chat 主链并行。
+10. **Derived vector index hardening**
+   - 使用稳定 canonical source IDs、原子 generation 和 last-complete fallback；所有
+     chunks/embeddings/manifests 继续可删除重建。
 
 ## 为什么采用这个顺序
 
-- Settings、secrets、media、personas、extensions 和 chats 是事实源或用户直接维护状态。
-- Vectors 来自 chats、World Info 和 files，必须在源数据身份稳定后迁移，否则会产生
+- Settings、secrets、media 和 chats 是事实源或用户直接维护状态。
+- Vectors 来自 chats、World Info 和 files，必须在源数据身份稳定后硬化，否则会产生
   第二次 collection remap。
 - Persona chat lock 和 background chat lock 当前属于 `chat_metadata`，应随 chat authority
   一起迁移，而不是在 persona/background spec 中复制。
-- First-party extension settings 当前嵌在 settings payload；settings document authority
-  先保持兼容，extension spec 再迁移 namespace-owned data，避免一次切断 startup contract。
+- Persona records 与 extension settings 当前嵌在 canonical settings payload；在没有独立
+  查询、一致性或跨用户 registry 需求前，保持该权威比拆表更可维护。
 
 ## 验收标准
 
-- Roadmap 明确八个阶段、依赖、数据库/managed-file 边界和已交付回归合同。
+- Roadmap 明确已交付基础、新的六个实施包、依赖、数据库/managed-file/derived-state
+  边界和回归合同。
 - 每个阶段有独立 feature brief、`spec.md`、`feature.toml`、`plan.md` 和空 `evidence/`。
 - 每个 `spec.md` 可独立实施、回滚和验证，不以其它阶段的名称相似性替代真实依赖。
 - 所有旧 `260708-03` 至 `260708-07` 路径被清除或改指 durable owner。

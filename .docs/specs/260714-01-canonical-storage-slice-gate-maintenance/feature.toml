@@ -1,0 +1,5 @@
+contract_version = 1
+feature_slug = "canonical-storage-slice-gate-maintenance"
+brief = ".docs/tech/briefs/260714-01-canonical-storage-slice-gate-maintenance.md"
+doc_ids = []
+

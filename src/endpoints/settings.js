@@ -393,7 +393,7 @@ function invalidateSettingsAuditAfterFileWrite(request, operation) {
     if (!canReadCanonicalFeatureFlags()) {
         return;
     }
-    const featureFlags = getCanonicalStorageSlice('settings').getFeatureFlags();
+    const featureFlags = getCanonicalStorageSlice('settings').getAuditTrackingFeatureFlags();
     if (!featureFlags.enabled) {
         return;
     }

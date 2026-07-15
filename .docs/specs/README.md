@@ -1,41 +1,43 @@
 # Development Specs
 
-This directory keeps active or future development specs, plus a small number of durable phase archive entrypoints that intentionally remain after dated `spec.md` / `plan.md` process files are deleted.
+This directory keeps executable implementation packages. Runtime code and durable owning docs are
+the source of truth; deleted or historical `spec.md` status text is not evidence that work remains.
 
-Completed React Phase 0, Phase 1, Phase 2, Phase 3, Phase 3B, Phase 4, Phase 5, and Phase 7 dated implementation specs have been removed from the active workspace. Durable completion records live in:
+## Active Packages
 
-- [React modernization roadmap](../tech/react-modernization-roadmap.md)
-- [Project history](../PROJECT_HISTORY.md)
-- [User intent briefs](../tech/briefs/README.md)
-- [Phase 4 archive brief](../tech/briefs/react-phase4-state-management-sequenced-specs.md)
-- [Phase 7 archive brief](../tech/briefs/react-phase7-full-owner-cutover-sequenced-specs.md)
-- Owning semantic docs under `../db/`
-- Logic-description docs under `../logic-description/`
+| Order | Folder | Purpose | Dependency |
+|---|---|---|---|
+| - | Delivered canonical chat foundation | Chat schema, stable IDs, lossless JSONL shadow import, and audit with JSONL runtime authority retained. | Delivered slice-gate maintenance; managed media |
+| - | Delivered canonical chat authority cutover | Complete chat payload reads/writes use the audited canonical store with JSONL projection, replayable repair, and no server pagination. | Delivered foundation clean audit |
+| 1 | [260714-04-canonical-chat-query-recovery](260714-04-canonical-chat-query-recovery/spec.md) | Complete search/recent indexes, attachments, backup/restore, repair, and Node 26 proof. | Delivered chat authority cutover |
+| 2 | [260714-05-extension-operation-safety](260714-05-extension-operation-safety/spec.md) | Harden extension Git operations while filesystem/Git remains registry authority. | Independent of chat |
+| 3 | [260714-06-derived-vector-index-hardening](260714-06-derived-vector-index-hardening/spec.md) | Add stable source refs, atomic derived generations, fallback, invalidation, and rebuild. | Delivered chat query/recovery |
 
-## Phase Entry Folders
+Chat server pagination is not part of these packages. Current `/get` returns the complete chat and
+`showMoreMessages()` slices the already-loaded browser array; pagination requires a separate
+product/performance contract.
 
-| Folder | Roadmap phase | Purpose |
-|---|---|---|
-| [react-phase6-extension-compat](react-phase6-extension-compat/README.md) | Phase 6 | Durable phase-level entry for the completed extension compatibility evidence and JS-Slash-Runner gate. |
-| [react-phase7-full-owner-cutover](react-phase7-full-owner-cutover/README.md) | Phase 7 | Durable phase-level entry for the completed full owner cutover and final shell/global decisions. |
+## Removed Legacy Process Records
 
-## Active / Future Specs
+The 2026-07-13 process directories were removed after the user confirmed they would not be
+executed again:
 
-| Folder | Spec set | Purpose |
-|---|---|---|
-| [260706-02-legacy-panel-control-cutover](260706-02-legacy-panel-control-cutover/spec.md) | Workspace React Replacement Roadmap | Bring legacy-hosted drawers such as AI Config, Advanced Formatting, Settings fallback, and Group Chats under the React shell/dock control plane. |
-| [260706-04-supporting-panel-content-replacement](260706-04-supporting-panel-content-replacement/spec.md) | Workspace React Replacement Roadmap | Deepen World Info, Backgrounds, and Extensions from action-host islands into content owners with protected compatibility slots. |
-| [260706-05-legacy-cutover-and-deletion-gates](260706-05-legacy-cutover-and-deletion-gates/spec.md) | Workspace React Replacement Roadmap | Decide deletion, freeze, or compatibility-facade status for remaining legacy owners after replacement slices land. |
-| [260708-02-canonical-world-info-authority](260708-02-canonical-world-info-authority/spec.md) | Canonical SQLite Storage Roadmap | Move full World Info authority into canonical SQLite while preserving facade, regex, import/export, and delete-cascade compatibility. |
-| Canonical storage control plane (delivered) | Comprehensive Database Authority Roadmap | Delivered slice registry, isolated audit/repair/rollback, backup readiness, and multi-slice operator status. See [canonical-sqlite-storage-roadmap](../tech/canonical-sqlite-storage-roadmap.md). |
-| Canonical settings document authority (delivered) | Comprehensive Database Authority Roadmap | Delivered complete settings document revision authority, shadow import/audit, DB-first get/save, projection repairs, and canonical snapshots. See [canonical-sqlite-storage-roadmap](../tech/canonical-sqlite-storage-roadmap.md) and [settings](../db/pages/settings.md). |
-| Canonical secrets authority (delivered) | Comprehensive Database Authority Roadmap | Secret records, labels, active selection, repair, and rollback now sit behind `SecretManager`; see [canonical-sqlite-storage-roadmap](../tech/canonical-sqlite-storage-roadmap.md), [API Configuration](../db/pages/api-configuration.md), and [canonical secrets flow](../logic-description/canonical_secrets_authority_processing_flow.md). |
-| Canonical managed media authority (delivered) | Comprehensive Database Authority Roadmap | SQLite now owns media identity, folder membership, lifecycle, repair state, and managed-file references while retaining large content outside SQLite BLOBs. See [canonical-sqlite-storage-roadmap](../tech/canonical-sqlite-storage-roadmap.md), [Background Library Panel](../db/features/background-library-panel.md), and [Chat Workspace](../db/pages/chat-workspace.md). |
-| [260713-05-canonical-persona-authority](260713-05-canonical-persona-authority/spec.md) | Comprehensive Database Authority Roadmap | Normalize persona identity, defaults, descriptions, and connections out of the settings document. |
-| [260713-06-canonical-extension-state-authority](260713-06-canonical-extension-state-authority/spec.md) | Comprehensive Database Authority Roadmap | Own extension registry, revisions, namespace state, and repair status while retaining managed Git worktrees. |
-| [260713-07-canonical-chat-message-authority](260713-07-canonical-chat-message-authority/spec.md) | Comprehensive Database Authority Roadmap | Move character/group sessions, messages, swipes, metadata, and attachment references into canonical SQLite. |
-| [260713-08-canonical-vector-catalog-and-index](260713-08-canonical-vector-catalog-and-index/spec.md) | Comprehensive Database Authority Roadmap | Canonicalize vector source/chunk/build catalogs while keeping embeddings as a rebuildable derived index. |
+- Delivered control-plane, settings, secrets, and managed-media facts remain in
+  [canonical-sqlite-storage-roadmap](../tech/canonical-sqlite-storage-roadmap.md),
+  [project history](../PROJECT_HISTORY.md), semantic docs, logic-description docs, and retained
+  intent briefs.
+- The persona-table proposal remains superseded because canonical settings, managed media, and
+  chat metadata already provide the required ownership.
+- The per-user extension-registry proposal remains superseded by extension operation safety.
+- The oversized chat proposal was replaced by the three active chat packages above.
+- The canonical vector-catalog proposal was replaced by derived vector index hardening.
+
+No current implementation or durable architecture explanation depends on the removed process
+records.
 
 ## Maintenance Rule
 
-When a phase is completed and durable records have moved to the roadmap, project history, briefs, semantic docs, and logic-description docs, remove its dated implementation specs from this directory. Keep only the smallest phase-level archive entry that still helps future readers find the durable owners.
+- Verify code and durable docs before treating an old process package as current.
+- Active packages require `brief + spec.md + feature.toml + plan.md + evidence/`.
+- Completed packages should move durable facts to owning docs before process-record deletion.
+- Do not keep broken links or list non-existent directories as active work.

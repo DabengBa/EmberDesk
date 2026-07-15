@@ -1,4 +1,0 @@
-contract_version = 1
-feature_slug = "canonical-chat-message-authority"
-brief = ".docs/tech/briefs/260713-07-canonical-chat-message-authority.md"
-doc_ids = ["page.chat_workspace", "feature.chat_message_rendering", "feature.chat_message_actions"]

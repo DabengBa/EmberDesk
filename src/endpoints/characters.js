@@ -329,9 +329,13 @@ function getCanonicalCharacterFeatureFlags() {
     return getCanonicalStorageSlice('characters').getFeatureFlags();
 }
 
+function getCanonicalCharacterAuditTrackingFeatureFlags() {
+    return getCanonicalStorageSlice('characters').getAuditTrackingFeatureFlags();
+}
+
 function invalidateCanonicalCharacterAuditSafe(handle, directories, source) {
     try {
-        const featureFlags = getCanonicalCharacterFeatureFlags();
+        const featureFlags = getCanonicalCharacterAuditTrackingFeatureFlags();
         if (!featureFlags.enabled) {
             return;
         }

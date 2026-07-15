@@ -1,0 +1,5 @@
+contract_version = 1
+feature_slug = "derived-vector-index-hardening"
+brief = ".docs/tech/briefs/260714-06-derived-vector-index-hardening.md"
+doc_ids = ["feature.extension_panel_open", "page.chat_workspace"]
+

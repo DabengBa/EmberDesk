@@ -216,7 +216,8 @@ function syncCanonicalChatStatsAfterCharacterChatMutation(handle, directories, a
         return;
     }
 
-    const featureFlags = getCanonicalStorageSlice('characters').getFeatureFlags();
+    const characterSlice = getCanonicalStorageSlice('characters');
+    const featureFlags = characterSlice.getFeatureFlags();
     if (featureFlags.enabled && featureFlags.chatStats) {
         try {
             updateCanonicalCharacterChatStats(handle, directories, avatar, operation, featureFlags);
@@ -228,7 +229,13 @@ function syncCanonicalChatStatsAfterCharacterChatMutation(handle, directories, a
         }
     }
 
-    invalidateCanonicalChatStatsAuditSafe(handle, directories, avatar, operation, featureFlags);
+    invalidateCanonicalChatStatsAuditSafe(
+        handle,
+        directories,
+        avatar,
+        operation,
+        characterSlice.getAuditTrackingFeatureFlags(),
+    );
 }
 
 function invalidateCanonicalChatStatsAuditSafe(handle, directories, avatar, operation, featureFlags, reason = 'audit_stale_after_chat_stats_change') {
@@ -315,7 +322,6 @@ function updateCanonicalCharacterChatStats(handle, directories, avatar, operatio
     if (result.changes < 1) {
         throw createCanonicalChatStatsError('canonical_character_missing', operation, avatar);
     }
-
 }
 
 function warnAboutChatImportFailure(importPlan) {

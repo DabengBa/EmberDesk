@@ -105,6 +105,7 @@ describe('canonical storage slice registry', () => {
             expect(typeof slice.listOpenRepairs).toBe('function');
             expect(typeof slice.getFeatureFlags).toBe('function');
             expect(typeof slice.getFeatureFlagSnapshot).toBe('function');
+            expect(typeof slice.getAuditTrackingFeatureFlags).toBe('function');
             expect(typeof slice.getMigrationReadiness).toBe('function');
             expect(typeof slice.getRollbackBlockers).toBe('function');
             expect(typeof slice.getBackupManagedPaths).toBe('function');
@@ -329,6 +330,7 @@ describe('canonical storage slice registry', () => {
                 sources: { enabled: 'default' },
                 resolution: { ok: true, reasonCode: null },
             }),
+            getAuditTrackingFeatureFlags: () => ({ enabled: false }),
             getMigrationReadiness: () => ({ ok: true }),
             getRollbackBlockers: () => ({ ok: true, blockers: [] }),
             getBackupManagedPaths: () => [],

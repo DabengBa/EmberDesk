@@ -197,7 +197,7 @@ export function recordCanonicalSecretsProjectionFailure({
 }
 
 export function invalidateCanonicalSecretsAfterFileWrite(directories, operation) {
-    const featureFlags = getCanonicalStorageSlice('secrets').getFeatureFlags();
+    const featureFlags = getCanonicalStorageSlice('secrets').getAuditTrackingFeatureFlags();
     if (!featureFlags.enabled) {
         return;
     }

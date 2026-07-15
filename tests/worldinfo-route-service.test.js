@@ -85,6 +85,7 @@ function clearCanonicalEnv() {
     delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_WRITES;
     delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_CHATSTATS;
     delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_STRICT;
+    delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_WORLDINFO_ENABLED;
 }
 
 function seedCanonicalWorldInfo(directories, {
@@ -307,6 +308,35 @@ describe('world info canonical route service', () => {
             name: 'File Edited',
             entries: { one: { content: 'file-backed write' } },
         });
+        expect(getPersistedCanonicalAuditStatus(db, { scope: 'world_info' })).toEqual(expect.objectContaining({
+            ok: false,
+            blocking: true,
+            reason: 'audit_stale_after_world_info_file_write',
+        }));
+    });
+
+    test('file-backed writes invalidate the world_info audit while a slice override is disabled', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        fs.writeFileSync(path.join(directories.worlds, 'Lorebook.json'), JSON.stringify({
+            name: 'File Lore',
+            entries: {},
+        }));
+        const db = seedCanonicalWorldInfo(directories, {
+            payload: { name: 'Canonical Lore', entries: {} },
+        });
+        setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, writes: true });
+        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_WORLDINFO_ENABLED = 'false';
+
+        const response = await invokeRoute('/edit', {
+            name: 'Lorebook',
+            data: {
+                name: 'File Edited',
+                entries: { one: { content: 'file-backed write' } },
+            },
+        }, directories);
+
+        expect(response.statusCode).toBe(200);
         expect(getPersistedCanonicalAuditStatus(db, { scope: 'world_info' })).toEqual(expect.objectContaining({
             ok: false,
             blocking: true,

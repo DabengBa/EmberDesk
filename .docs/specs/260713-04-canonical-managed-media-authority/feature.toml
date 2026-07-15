@@ -1,4 +1,0 @@
-contract_version = 1
-feature_slug = "canonical-managed-media-authority"
-brief = ".docs/tech/briefs/260713-04-canonical-managed-media-authority.md"
-doc_ids = ["feature.background_library_panel", "page.chat_workspace"]
