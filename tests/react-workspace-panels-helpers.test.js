@@ -989,8 +989,10 @@ describe('React workspace panels bridge helpers', () => {
         expect(extensionsSource).toContain('if (!quiet) {');
         expect(extensionsSource).toContain('// Auto-update runs in quiet mode');
         expect(extensionsSource).toContain('await callExtensionHook(fullExtensionName, \'update\');\n            if (!quiet) {\n                toastr.success');
-        expect(extensionsSource).toContain("error?.actionHints) && error.actionHints.length > 0");
-        expect(extensionsSource).toContain("error.actionHints.join(', ')");
+        expect(extensionsSource).toContain('const actionHintMessages = {');
+        expect(extensionsSource).toContain('commit_or_stash_local_changes: t`Commit or stash your local changes.`');
+        expect(extensionsSource).toContain("error.actionHints.map(hint => actionHintMessages[hint]).filter(Boolean)");
+        expect(extensionsSource).not.toContain("error.actionHints.join(', ')");
         expect(extensionsSource).toContain('notifyExtensionOperationFailure(error, t`Extension installation failed`)');
         expect(extensionsSource).toContain('notifyExtensionOperationFailure(error, t`Extension delete failed`)');
         expect(extensionsSource).toContain('notifyExtensionOperationFailure(error, t`Extension move failed`)');

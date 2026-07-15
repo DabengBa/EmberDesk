@@ -1471,10 +1471,56 @@ async function readExtensionOperationError(response) {
  * @param {string} title
  */
 function notifyExtensionOperationFailure(error, title) {
-    const hintMessage = Array.isArray(error?.actionHints) && error.actionHints.length > 0
-        ? `\n${error.actionHints.join(', ')}`
+    const reasonMessages = {
+        'dirty-worktree': t`Extension has local uncommitted changes. Commit or stash them before continuing.`,
+        'detached-head': t`Extension repository is in a detached HEAD state. Check out a branch before continuing.`,
+        'missing-upstream': t`Extension branch has no upstream tracking branch. Set upstream before updating.`,
+        'missing-worktree': t`Extension directory does not exist.`,
+        'not-a-repo': t`Extension directory is not a Git repository root.`,
+        'invalid-manifest': t`Extension manifest.json is missing or invalid.`,
+        'path-collision': t`An extension directory already exists at the destination.`,
+        'destination-exists': t`Destination already contains an extension with this name.`,
+        'source-missing': t`Source extension directory does not exist.`,
+        'same-scope': t`Source and destination scopes are the same.`,
+        'invalid-url': t`A valid HTTP or HTTPS Git repository URL is required.`,
+        'invalid-extension-name': t`A valid extension name is required.`,
+        'invalid-scope': t`A valid extension scope is required.`,
+        'forbidden-global': t`No permission to modify global extensions.`,
+        'forbidden-move': t`No permission to move extensions.`,
+        'branch-missing': t`Requested branch does not exist.`,
+        'path-escape': t`Resolved extension path escapes the allowed root.`,
+        'no-remote': t`Extension repository has no configured remote.`,
+    };
+    const actionHintMessages = {
+        commit_or_stash_local_changes: t`Commit or stash your local changes.`,
+        retry_after_clean: t`Retry after the worktree is clean.`,
+        checkout_named_branch: t`Check out a named branch.`,
+        retry_after_branch_checkout: t`Retry after checking out a branch.`,
+        set_upstream_tracking_branch: t`Set an upstream tracking branch.`,
+        retry_after_upstream: t`Retry after setting the upstream branch.`,
+        reinstall_extension: t`Reinstall the extension.`,
+        reinstall_as_git_extension: t`Reinstall it from a Git repository.`,
+        fix_manifest_json: t`Fix the extension manifest.json file.`,
+        choose_different_name_or_delete_existing: t`Choose a different name or remove the existing extension.`,
+        delete_or_rename_destination: t`Delete or rename the destination extension.`,
+        choose_different_destination: t`Choose a different destination.`,
+        choose_different_destination_scope: t`Choose a different destination scope.`,
+        provide_http_https_git_url: t`Provide an HTTP or HTTPS Git repository URL.`,
+        provide_valid_extension_name: t`Provide a valid extension name.`,
+        provide_local_or_global_scope: t`Choose the local or global extension scope.`,
+        use_admin_account: t`Use an administrator account.`,
+        choose_existing_branch: t`Choose an existing branch.`,
+        add_git_remote: t`Add a Git remote to the extension repository.`,
+        retry_or_inspect_logs: t`Retry the operation or inspect the server logs.`,
+    };
+    const reasonMessage = reasonMessages[error?.reason] || error?.message || t`Extension operation failed`;
+    const hintMessages = Array.isArray(error?.actionHints)
+        ? error.actionHints.map(hint => actionHintMessages[hint]).filter(Boolean)
+        : [];
+    const hintMessage = hintMessages.length > 0
+        ? `\n${hintMessages.map(hint => `• ${hint}`).join('\n')}`
         : '';
-    const message = `${error?.message || t`Extension operation failed`}${hintMessage}`;
+    const message = `${reasonMessage}${hintMessage}`;
     const options = { timeOut: 7000 };
     const failureClass = error?.failureClass;
 
