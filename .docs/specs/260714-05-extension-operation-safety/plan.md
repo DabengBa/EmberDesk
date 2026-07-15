@@ -41,11 +41,12 @@ Doc IDs: feature.extension_panel_open, term.shared_browser_library
 ## Review
 
 - [x] Review complete
+- [x] Review: R-01 Folder names starting with `third-party` were mis-normalized (severity: high; scope: backend name resolve; evidence: `normalizeExtensionFolderName`; proof: unit test `normalizeExtensionFolderName accepts third-party/`)
+- [x] Review: R-02 Quiet auto-update surfaced blocked worktree failures as toasts (severity: medium; scope: frontend update path; evidence: `updateExtension` quiet branch; proof: source contract + manual path)
+- [x] Review: R-03 Tech doc overstated detached blocking for delete (severity: low; scope: docs drift; evidence: third-party-extension-compatibility; proof: wording aligned with preflight)
 
-Review notes (artifact-verified + revalidated proofs):
-- Correctness: shared preflight blocks dirty/detached/missing/collision/forbidden before mutation; route tests cover forbidden install/move, dirty delete non-mutation, and plain delete success shape.
-- Compatibility: legacy success shapes retained; failure envelopes omit local paths; `test:compat` green.
-- Frontend: toastr class routing for forbidden / user_action_required / retryable only; protected mount selectors preserved.
-- Scope: no new registry/DB authority; filesystem/Git + settings ownership unchanged.
-- Docs: feature.extension_panel_open, term.shared_browser_library, third-party-extension-compatibility updated; `docs:check` green.
-- No confirmed high-severity findings remaining.
+Multi-surface re-review (post-wrap-up, 2026-07-15):
+- Backend/core (Codex surface): confirmed R-01; also aligned `/branches` and `/version` name resolution with the same normalizer.
+- Docs/frontend (CodeBuddy surface): confirmed R-02/R-03; protected mounts and failure-class feedback remain.
+- Scope/security: no path leakage in failure envelopes; global/admin gates intact; no registry authority drift.
+- Rejected candidates: large helper module size (no safe shrink without losing shared contract); switch missing-branch reason mapping is cosmetic only.

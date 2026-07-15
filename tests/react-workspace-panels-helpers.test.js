@@ -986,6 +986,8 @@ describe('React workspace panels bridge helpers', () => {
         expect(extensionsSource).toContain("failureClass === 'forbidden'");
         expect(extensionsSource).toContain("failureClass === 'retryable'");
         expect(extensionsSource).toContain('notifyExtensionOperationFailure(error, t`Extension update failed`)');
+        expect(extensionsSource).toContain('if (!quiet) {');
+        expect(extensionsSource).toContain('// Auto-update runs in quiet mode');
         expect(extensionsSource).toContain('notifyExtensionOperationFailure(error, t`Extension installation failed`)');
         expect(extensionsSource).toContain('notifyExtensionOperationFailure(error, t`Extension delete failed`)');
         expect(extensionsSource).toContain('notifyExtensionOperationFailure(error, t`Extension move failed`)');

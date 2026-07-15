@@ -14,6 +14,7 @@ import {
     buildExtensionFailureEnvelope,
     httpStatusForExtensionDecision,
     inspectExtensionGitState,
+    normalizeExtensionFolderName,
     preflightExtensionInstall,
     preflightExtensionMutation,
     resolveExtensionTarget,
@@ -161,6 +162,16 @@ function initDirtyGitRepo(extensionPath) {
 }
 
 describe('extension operation safety decisions', () => {
+    test('normalizeExtensionFolderName accepts third-party/ and leading slash without stripping folder prefixes', () => {
+        expect(normalizeExtensionFolderName('demo-ext')).toBe('demo-ext');
+        expect(normalizeExtensionFolderName('third-party/demo-ext')).toBe('demo-ext');
+        expect(normalizeExtensionFolderName('/demo-ext')).toBe('demo-ext');
+        // Folder names may themselves start with "third-party"; only the discovery prefix is stripped.
+        expect(normalizeExtensionFolderName('third-party-helper')).toBe('third-party-helper');
+        expect(normalizeExtensionFolderName('../escape')).toBeNull();
+        expect(normalizeExtensionFolderName('nested/path')).toBeNull();
+    });
+
     test('resolveExtensionTarget distinguishes global and user scopes and blocks path escape', () => {
         const { userExtensionsDir, globalExtensionsDir } = makeScopeRoots();
 

@@ -388,7 +388,7 @@ Install, update, branch switch, move, and delete share a preflight/result contra
 (`src/extension-operation-safety.js`) that:
 
 - Distinguishes global vs user scope and blocks non-admin global mutations
-- Blocks dirty, detached, missing, invalid-manifest, and collision states before worktree mutation
+- Blocks dirty worktrees before update/switch/move/delete; blocks detached/no-upstream for update/switch; blocks missing, invalid-manifest, and collision states before worktree mutation
 - Returns structured failure envelopes (`reason`, `failureClass`, `actionHints`) without local path leakage
 - Keeps legacy success response shapes for compatible clients
 

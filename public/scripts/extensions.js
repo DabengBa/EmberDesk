@@ -1506,7 +1506,11 @@ async function updateExtension(extensionName, quiet, timeout = null) {
 
         if (!response.ok) {
             const error = await readExtensionOperationError(response);
-            notifyExtensionOperationFailure(error, t`Extension update failed`);
+            // Auto-update runs in quiet mode; blocked dirty/detached/no-upstream states
+            // must not spam toasts the way a manual update failure does.
+            if (!quiet) {
+                notifyExtensionOperationFailure(error, t`Extension update failed`);
+            }
             console.error('Extension update failed', response.status, response.statusText, error);
             return;
         }

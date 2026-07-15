@@ -2,7 +2,6 @@ import path from 'node:path';
 import fs from 'node:fs';
 
 import express from 'express';
-import sanitize from 'sanitize-filename';
 import { CheckRepoActions, default as simpleGit } from 'simple-git';
 
 import { PUBLIC_DIRECTORIES } from '../constants.js';
@@ -14,6 +13,7 @@ import {
     buildExtensionFailureEnvelope,
     createExtensionDecision,
     httpStatusForExtensionDecision,
+    normalizeExtensionFolderName,
     preflightExtensionInstall,
     preflightExtensionMutation,
     validateExtensionManifest,
@@ -270,12 +270,8 @@ router.post('/update', async (request, response) => {
 
 router.post('/branches', async (request, response) => {
     try {
-        if (typeof request.body.extensionName !== 'string') {
-            return response.status(400).send('Bad Request: A valid extensionName is required in the request body.');
-        }
-
         const { extensionName, global } = request.body;
-        const extensionNameSanitized = sanitize(extensionName);
+        const extensionNameSanitized = normalizeExtensionFolderName(extensionName);
         if (!extensionNameSanitized) {
             return response.status(400).send('Bad Request: A valid extensionName is required in the request body.');
         }
@@ -438,12 +434,8 @@ router.post('/move', async (request, response) => {
  */
 router.post('/version', async (request, response) => {
     try {
-        if (typeof request.body.extensionName !== 'string') {
-            return response.status(400).send('Bad Request: A valid extensionName is required in the request body.');
-        }
-
         const { extensionName, global } = request.body;
-        const extensionNameSanitized = sanitize(extensionName);
+        const extensionNameSanitized = normalizeExtensionFolderName(extensionName);
         if (!extensionNameSanitized) {
             return response.status(400).send('Bad Request: A valid extensionName is required in the request body.');
         }

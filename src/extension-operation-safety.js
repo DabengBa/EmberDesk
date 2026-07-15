@@ -263,10 +263,11 @@ export function normalizeExtensionFolderName(extensionName) {
     }
 
     let value = extensionName.trim().replace(/\\/g, '/');
+    // Accept discovery-style names and legacy UI values left after stripping the marker.
+    // Only strip an explicit `third-party/` prefix (or a lone leading slash). Never strip
+    // the literal characters `third-party` from a folder name like `third-party-helper`.
     if (value.startsWith('third-party/')) {
         value = value.slice('third-party/'.length);
-    } else if (value.startsWith('third-party')) {
-        value = value.slice('third-party'.length);
     }
     value = value.replace(/^\/+/, '');
 
