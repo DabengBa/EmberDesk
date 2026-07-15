@@ -16,6 +16,24 @@
 - **Proof:** `canonical-chat-route-authority.test.js` fails before the fix and now
   verifies `writes=true` plus `reads=false` leaves JSONL unchanged and returns `503`.
 
+### R-02 Repair commands previously reported success for missing keys
+
+- **Severity:** low
+- **Scope:** canonical repair CLI/operator
+- **Evidence:** `repairCanonicalProjection()`, `repairCanonicalWorldInfoProjection()`,
+  `repairCanonicalChatProjection()`, and generic `runCanonicalSliceRepair()` returned
+  `ok: true` with an empty `results` list when `--repair-key` (or `repairKeys`) named
+  no open repair. The secret repair path already returned `blocked/repair_not_found`,
+  so the inconsistency was real and operator-visible.
+- **Fix:** missing requested repair keys now produce
+  `{ status: 'blocked', blocker: 'repair_not_found' }` and force `ok: false` across
+  the direct character/world-info/chat repair functions and generic slice repair flow.
+- **Proof:** `canonical-sqlite-cli.test.js` now verifies
+  `repair-chat-projection --repair-key <missing>` exits non-zero with
+  `repair_not_found`; `canonical-sqlite-operator.test.js` verifies both direct
+  character repair and generic `repair-slice` managed-media paths return the same
+  blocked result.
+
 ## External Review Reconciliation
 
 - Frontend/documentation review identified the missing full-payload reconstructor,

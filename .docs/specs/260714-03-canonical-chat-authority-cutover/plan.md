@@ -41,4 +41,5 @@ Doc IDs: page.chat_workspace, feature.chat_message_rendering, feature.chat_messa
 ## Review
 
 - [x] Review: R-01 block invalid canonical write fallback (severity: high; scope: chat mutation routes; details: review.md#r-01-canonical-write-gate-previously-fell-back-to-jsonl; proof: canonical-chat-route-authority.test.js)
+- [x] Review: R-02 fail repair commands when requested keys do not exist (severity: low; scope: canonical repair CLI/operator; details: review.md#r-02-repair-commands-previously-reported-success-for-missing-keys; proof: canonical-sqlite-cli.test.js, canonical-sqlite-operator.test.js)
 - [x] Review complete

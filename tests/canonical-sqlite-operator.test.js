@@ -277,6 +277,32 @@ describe('canonical sqlite operator helpers', () => {
         }));
     });
 
+    test('reports repair_not_found when a requested character repair key does not exist', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        runCanonicalMigrations(db, { nowMs: 1735689600000 });
+
+        await expect(repairCanonicalProjection({
+            db,
+            directories,
+            repairKeys: ['repair:create:missing.png'],
+            nowMs: 1735689602000,
+        })).resolves.toEqual({
+            ok: false,
+            results: [{
+                repairKey: 'repair:create:missing.png',
+                status: 'blocked',
+                blocker: 'repair_not_found',
+            }],
+        });
+    });
+
     test('rebuilds canonical chat stats from JSONL chat files', async () => {
         const root = makeRoot();
         const directories = createDirectories(root);
@@ -433,6 +459,34 @@ describe('canonical sqlite operator helpers', () => {
         });
         expect(fs.existsSync(path.join(directories.worlds, 'Lorebook.json'))).toBe(false);
         expect(listCanonicalWorldInfoRepairs(db)).toEqual([]);
+    });
+
+    test('reports repair_not_found when repair-slice targets a missing managed-media key', async () => {
+        const root = makeRoot();
+        const directories = createDirectories(root);
+        const manager = createManager();
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        runCanonicalMigrations(db, { nowMs: 1735689600000 });
+
+        await expect(runCanonicalSliceRepair({
+            sliceKey: 'managed_media',
+            db,
+            directories,
+            repairKeys: ['managed_media:missing:write'],
+            nowMs: 1735689602000,
+        })).resolves.toEqual(expect.objectContaining({
+            ok: false,
+            sliceKey: 'managed_media',
+            results: [{
+                repairKey: 'managed_media:missing:write',
+                status: 'blocked',
+                blocker: 'repair_not_found',
+            }],
+        }));
     });
 
     test('explains open character and world info repair blockers for write rollback and can rerun audits on demand', async () => {

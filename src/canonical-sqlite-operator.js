@@ -140,6 +140,27 @@ function moveChatsIfNeeded({ oldInternalName, newInternalName, directories }) {
     }
 }
 
+function toRequestedRepairKeySet(repairKeys) {
+    return Array.isArray(repairKeys) && repairKeys.length > 0
+        ? new Set(repairKeys.map(String))
+        : null;
+}
+
+function buildMissingRepairResults(requested, openRepairs) {
+    if (!requested) {
+        return [];
+    }
+
+    const openRepairKeys = new Set((openRepairs ?? []).map(repair => String(repair.repairKey)));
+    return Array.from(requested)
+        .filter(repairKey => !openRepairKeys.has(repairKey))
+        .map(repairKey => ({
+            repairKey,
+            status: 'blocked',
+            blocker: 'repair_not_found',
+        }));
+}
+
 function deleteProjectionForRepair({ repair, directories }) {
     const avatarPath = getCharacterDirectoryPath(directories, repair.avatarFilename);
     if (fs.existsSync(avatarPath)) {
@@ -568,10 +589,11 @@ export function rebuildCanonicalChatStats({ db, directories, avatars = null, now
 }
 
 export async function repairCanonicalProjection({ db, directories, repairKeys = null, nowMs = Date.now() }) {
-    const requested = repairKeys ? new Set(repairKeys) : null;
-    const repairs = listOpenProjectionRepairs(db)
+    const requested = toRequestedRepairKeySet(repairKeys);
+    const openRepairs = listOpenProjectionRepairs(db);
+    const repairs = openRepairs
         .filter(repair => !requested || requested.has(repair.repairKey));
-    const results = [];
+    const results = buildMissingRepairResults(requested, openRepairs);
 
     for (const repair of repairs) {
         results.push(await repairSingleProjection({ db, directories, repair, nowMs }));
@@ -653,10 +675,11 @@ async function repairSingleWorldInfoProjection({ db, directories, repair, nowMs 
 }
 
 export async function repairCanonicalWorldInfoProjection({ db, directories, repairKeys = null, nowMs = Date.now() }) {
-    const requested = repairKeys ? new Set(repairKeys) : null;
-    const repairs = listOpenWorldInfoProjectionRepairs(db)
+    const requested = toRequestedRepairKeySet(repairKeys);
+    const openRepairs = listOpenWorldInfoProjectionRepairs(db);
+    const repairs = openRepairs
         .filter(repair => !requested || requested.has(repair.repairKey));
-    const results = [];
+    const results = buildMissingRepairResults(requested, openRepairs);
 
     for (const repair of repairs) {
         results.push(await repairSingleWorldInfoProjection({ db, directories, repair, nowMs }));
@@ -740,17 +763,19 @@ function repairSingleCanonicalChatProjection({ db, directories, repair, nowMs = 
 }
 
 export async function repairCanonicalChatProjection({ db, directories, repairKeys = null, nowMs = Date.now() }) {
-    const requested = Array.isArray(repairKeys) && repairKeys.length > 0
-        ? new Set(repairKeys.map(String))
-        : null;
-    const repairs = listOpenCanonicalChatProjectionRepairs(db)
+    const requested = toRequestedRepairKeySet(repairKeys);
+    const openRepairs = listOpenCanonicalChatProjectionRepairs(db);
+    const repairs = openRepairs
         .filter(repair => !requested || requested.has(repair.repairKey));
-    const results = repairs.map(repair => repairSingleCanonicalChatProjection({
-        db,
-        directories,
-        repair,
-        nowMs,
-    }));
+    const results = [
+        ...buildMissingRepairResults(requested, openRepairs),
+        ...repairs.map(repair => repairSingleCanonicalChatProjection({
+            db,
+            directories,
+            repair,
+            nowMs,
+        })),
+    ];
 
     if (results.some(result => result.status === 'repaired')) {
         invalidateCanonicalAuditStatus(db, {
@@ -778,12 +803,11 @@ async function runCanonicalSettingsAudit({ handle, directories, db, auditedAtMs 
 }
 
 async function repairCanonicalSettingsProjection({ db, directories, repairKeys = null, nowMs = Date.now() }) {
-    const requested = Array.isArray(repairKeys) && repairKeys.length > 0
-        ? new Set(repairKeys.map(String))
-        : null;
-    const repairs = listOpenSettingsProjectionRepairs(db)
+    const requested = toRequestedRepairKeySet(repairKeys);
+    const openRepairs = listOpenSettingsProjectionRepairs(db);
+    const repairs = openRepairs
         .filter(repair => !requested || requested.has(repair.repairKey));
-    const results = [];
+    const results = buildMissingRepairResults(requested, openRepairs);
 
     for (const repair of repairs) {
         const document = getCanonicalSettingsDocument(db, { userId: repair.userId });
@@ -849,21 +873,11 @@ export async function repairCanonicalSecretProjection({
     repairKeys = null,
     nowMs = Date.now(),
 } = {}) {
-    const requested = Array.isArray(repairKeys) && repairKeys.length > 0
-        ? new Set(repairKeys.map(String))
-        : null;
+    const requested = toRequestedRepairKeySet(repairKeys);
     const openRepairs = listOpenSecretProjectionRepairs(db);
     const repairs = openRepairs
         .filter(repair => !requested || requested.has(repair.repairKey));
-    const results = requested
-        ? Array.from(requested)
-            .filter(repairKey => !openRepairs.some(repair => repair.repairKey === repairKey))
-            .map(repairKey => ({
-                repairKey,
-                status: 'blocked',
-                blocker: 'repair_not_found',
-            }))
-        : [];
+    const results = buildMissingRepairResults(requested, openRepairs);
 
     for (const repair of repairs) {
         try {
@@ -979,5 +993,17 @@ export async function runCanonicalSliceRepair({
         throw new Error(`No repair runner registered for slice: ${sliceKey}`);
     }
     const result = await runners.runRepair({ db, directories, repairKeys, nowMs });
-    return { ...result, sliceKey };
+    const requested = toRequestedRepairKeySet(repairKeys);
+    const missingResults = buildMissingRepairResults(requested, activeRegistry.get(sliceKey).listOpenRepairs(db) ?? [])
+        .filter(missing => !(result.results ?? []).some(entry => String(entry.repairKey) === missing.repairKey));
+    if (missingResults.length === 0) {
+        return { ...result, sliceKey };
+    }
+
+    return {
+        ...result,
+        ok: false,
+        results: [...missingResults, ...(result.results ?? [])],
+        sliceKey,
+    };
 }

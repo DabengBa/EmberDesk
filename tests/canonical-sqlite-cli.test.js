@@ -10,6 +10,7 @@ import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalShadowImport } from '../src/canonical-sqlite-shadow-import.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import { runCanonicalManagedMediaShadowImport } from '../src/canonical-managed-media-shadow-import.js';
+import { runCanonicalChatShadowImport } from '../src/canonical-chat-shadow-import.js';
 import { recordProjectionRepair } from '../src/endpoints/character-store.js';
 import {
     recordWorldInfoProjectionRepair,
@@ -20,6 +21,7 @@ import {
     writeCanonicalSecret,
 } from '../src/endpoints/canonical-secrets-store.js';
 import { buildCharacterFileSnapshotRow } from '../src/endpoints/character-file-snapshot.js';
+import { writeCanonicalChatPayload } from '../src/endpoints/canonical-chat-write-service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -63,6 +65,12 @@ function createManager() {
 
 function writeCharacterFile(directories, avatar, payload) {
     fs.writeFileSync(path.join(directories.characters, avatar), JSON.stringify(payload), 'utf8');
+}
+
+function writeChatFile(directories, avatar, fileName, contents) {
+    const chatDirectory = path.join(directories.chats, path.parse(avatar).name);
+    fs.mkdirSync(chatDirectory, { recursive: true });
+    fs.writeFileSync(path.join(chatDirectory, fileName), contents, 'utf8');
 }
 
 function createSnapshotBuilder() {
@@ -352,6 +360,75 @@ describe('canonical sqlite CLI scripts', () => {
             name: 'Lorebook',
             entries: { one: { content: 'cli' } },
         });
+    });
+
+    test('reports repair_not_found for a missing canonical chat repair key', async () => {
+        const dataRoot = makeRoot();
+        const directories = createDirectories(path.join(dataRoot, 'alice'));
+        const manager = createManager();
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        runCanonicalMigrations(db, { nowMs: 1735689600000 });
+        writeChatFile(directories, 'alice.png', 'first.jsonl', [
+            '{"chat_metadata":{"integrity":"clean"}}',
+            '{"name":"User","mes":"Before"}',
+        ].join('\n'));
+        await runCanonicalChatShadowImport({
+            handle: 'alice',
+            directories,
+            db,
+            featureFlags: { enabled: true, shadowImport: true, strict: false },
+            nowMs: 1735689600000,
+        });
+        writeCanonicalChatPayload({
+            db,
+            locator: {
+                ownerType: 'character',
+                ownerId: 'alice',
+                sourcePath: 'chats/alice/first.jsonl',
+            },
+            payload: [
+                { chat_metadata: { integrity: 'clean', updated: true } },
+                { name: 'User', mes: 'After' },
+            ],
+            projectJsonl() {
+                throw new Error('projection unavailable');
+            },
+            nowMs: 1735689601000,
+        });
+        manager.dispose();
+
+        let unmatchedRepairError;
+        try {
+            execFileSync('node', [
+                'scripts/canonical-sqlite-repair.mjs',
+                'repair-chat-projection',
+                '--data-root', dataRoot,
+                '--handle', 'alice',
+                '--repair-key', 'chat:character:alice:missing.jsonl:save',
+                '--json',
+            ], {
+                cwd: repoRoot,
+                encoding: 'utf8',
+            });
+        } catch (error) {
+            unmatchedRepairError = error;
+        }
+
+        expect(unmatchedRepairError).toEqual(expect.objectContaining({
+            status: 1,
+        }));
+        expect(JSON.parse(unmatchedRepairError.stdout)).toEqual(expect.objectContaining({
+            ok: false,
+            results: [expect.objectContaining({
+                repairKey: 'chat:character:alice:missing.jsonl:save',
+                status: 'blocked',
+                blocker: 'repair_not_found',
+            })],
+        }));
     });
 
     test('audits, lists, and repairs secrets without serializing secret values', () => {
