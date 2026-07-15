@@ -28,6 +28,7 @@ Keep World Info/lorebook activation and editing available inside the chat worksp
 - When the same-entry React shell is enabled, its World Info entry owns only the transient active-panel/dock state and mounted or fallback status; prompt activation, regex placement, converter/import outcomes, and world-book deletion semantics remain owned by the World Info facade.
 - When canonical SQLite World Info authority is enabled and audit-clean, the server may read and write world books through the canonical database while projecting compatible JSON files for import/export and rollback. The visible selector, editor, entry cards, prompt activation, regex placement, import/export outcome, and fallback controls remain the same user workflow.
 - The visible drawer should not expose internal cutover-governance labels. Users see World Info readiness and task results, while maintainer verdicts stay in tech docs.
+- Entry-state controls offer normal and constant states only. Legacy `vectorized` / `extensions.vectorized` values remain lossless import/export and save compatibility fields, but are not presented as a usable World Info capability.
 
 ## Semantic Interaction IDs
 

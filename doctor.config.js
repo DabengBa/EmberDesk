@@ -64,7 +64,6 @@ export default {
                     'src/endpoints/stable-diffusion.js',
                     'src/endpoints/themes.js',
                     'src/endpoints/users-private.js',
-                    'src/endpoints/vectors.js',
                     'src/endpoints/worldinfo.js',
                 ],
                 rules: [

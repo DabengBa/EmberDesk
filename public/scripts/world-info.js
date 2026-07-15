@@ -4247,15 +4247,12 @@ export function renderCollapsedCard(name, data, entry) {
 
     // Entry state selector
     const stateSelector = template.find('select[name="entryStateSelector"]');
-    stateSelector.val(entry.constant === true ? 'constant' : entry.vectorized === true ? 'vectorized' : 'normal');
+    stateSelector.val(entry.constant === true ? 'constant' : 'normal');
     stateSelector.on('change', async function () {
         const val = $(this).val();
         if (val === 'constant') {
             data.entries[entry.uid].constant = true;
             data.entries[entry.uid].vectorized = false;
-        } else if (val === 'vectorized') {
-            data.entries[entry.uid].constant = false;
-            data.entries[entry.uid].vectorized = true;
         } else {
             data.entries[entry.uid].constant = false;
             data.entries[entry.uid].vectorized = false;

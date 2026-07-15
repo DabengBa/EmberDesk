@@ -11,7 +11,6 @@ the source of truth; deleted or historical `spec.md` status text is not evidence
 | - | Delivered canonical chat authority cutover | Complete chat payload reads/writes use the audited canonical store with JSONL projection, replayable repair, and no server pagination. | Delivered foundation clean audit |
 | - | Delivered canonical chat query and recovery | Search/recent now use canonical character/group query state, attachment writes fail before dangling commit, backup/restore journaling is validated against attachment manifests, and Node 26 proof is recorded. | Delivered chat authority cutover |
 | - | Delivered extension operation safety | Harden install/update/switch/move/delete preflight under filesystem/Git authority with structured failure feedback. | Independent of chat |
-| 3 | [260714-06-derived-vector-index-hardening](260714-06-derived-vector-index-hardening/spec.md) | Add stable source refs, atomic derived generations, fallback, invalidation, and rebuild. | Delivered chat query/recovery |
 
 Chat server pagination is not part of these packages. Current `/get` returns the complete chat and
 `showMoreMessages()` slices the already-loaded browser array; pagination requires a separate
@@ -30,7 +29,8 @@ executed again:
   chat metadata already provide the required ownership.
 - The per-user extension-registry proposal remains superseded by extension operation safety.
 - The oversized chat proposal was replaced by the three active chat packages above.
-- The canonical vector-catalog proposal was replaced by derived vector index hardening.
+- The canonical vector-catalog and derived vector hardening proposals were replaced by first-party
+  vector retirement after the user confirmed EmberDesk no longer needs the capability.
 
 No current implementation or durable architecture explanation depends on the removed process
 records.

@@ -26,6 +26,7 @@ Let users open the extensions surface from the main workspace while deferred ext
 - If the guarded host is disabled or cannot mount, the same workspace entry remains usable through the documented fallback surface.
 - Install, update, branch switch, move, and delete operations keep the established success response shapes, but failures are distinguished as retryable, user-action-required, forbidden, or invalid-request so the Extensions surface can show actionable feedback without auto-resetting dirty Git worktrees.
 - ES-module extensions can depend on [Shared Browser Library](term.shared_browser_library) for documented common browser utilities, but this feature does not redefine extension-specific behavior.
+- Built-in Vector Storage is retired: extension discovery and the settings panel do not expose it, while protected extension mounts and the independent Data Bank attachment entry remain available.
 
 ## Semantic Interaction IDs
 

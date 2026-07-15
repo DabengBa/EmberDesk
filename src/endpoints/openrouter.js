@@ -80,16 +80,6 @@ router.post('/models/multimodal', async (_req, res) => {
     }
 });
 
-router.post('/models/embedding', async (_req, res) => {
-    try {
-        const models = await fetchModelsByModality('/models', 'text', 'embeddings', m => ({ id: m.id, name: m.name }));
-        return res.json(models);
-    } catch (error) {
-        console.error(error);
-        return res.sendStatus(500);
-    }
-});
-
 router.post('/models/image', async (_req, res) => {
     try {
         const models = await fetchModelsByModality('/models', 'text', 'image', m => ({ value: m.id, text: m.name || m.id }));

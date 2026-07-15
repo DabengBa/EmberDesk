@@ -67,7 +67,6 @@ export const enumIcons = {
     constant: '🔵',
     normal: '🟢',
     disabled: '❌',
-    vectorized: '🔗',
 
     /**
      * Returns the appropriate state icon based on a boolean
@@ -88,7 +87,6 @@ export const enumIcons = {
     getWiStatusIcon: (entry) => {
         if (entry.constant) return enumIcons.constant;
         if (entry.disable) return enumIcons.disabled;
-        if (entry.vectorized) return enumIcons.vectorized;
         return enumIcons.normal;
     },
 

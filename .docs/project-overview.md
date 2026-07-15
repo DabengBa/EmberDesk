@@ -112,7 +112,7 @@ Current delivered storage scope is narrow; the accepted successor roadmap is com
 - this retired derived slice remains separate from the canonical SQLite store and must not be promoted in place to authority
 - character metadata, chat stats, full World Info, settings, secrets, and managed media are delivered authority slices; canonical chat is now operationally closed as well, including full-payload authority, canonical search/recent, write-time attachment validation, validated backup/restore journaling, and Node 26 release proof
 - persona records/defaults/connections remain canonical inside the settings document, with avatars in managed media and chat-local locks moving with chat metadata; no separate persona table package is active
-- extension operation safety is active without changing filesystem/Git registry authority, and vector work hardens disposable generations over stable canonical source IDs rather than creating canonical chunk-text catalogs
+- extension operation safety is active without changing filesystem/Git registry authority; first-party vector runtime is retired, and retained vector indexes remain rollback/export-compatible derived data rather than a canonical storage work item
 
 ## Explicit Exclusions
 

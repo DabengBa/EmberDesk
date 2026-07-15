@@ -123,8 +123,6 @@ export async function itemizedParams(itemizedPrompts, thisPromptSet, incomingMes
         thisPrompt_padding: itemizedPrompts[thisPromptSet].padding,
         this_main_api: itemizedPrompts[thisPromptSet].main_api,
         chatInjects: await getTokenCountAsync(itemizedPrompts[thisPromptSet].chatInjects),
-        chatVectorsStringTokens: await getTokenCountAsync(itemizedPrompts[thisPromptSet].chatVectorsString),
-        dataBankVectorsStringTokens: await getTokenCountAsync(itemizedPrompts[thisPromptSet].dataBankVectorsString),
         modelUsed: chat[incomingMesId]?.extra?.model,
         apiUsed: chat[incomingMesId]?.extra?.api,
         presetName: itemizedPrompts[thisPromptSet].presetName || t`(Unknown)`,

@@ -271,7 +271,6 @@ export const extension_settings = {
     speech_recognition: {},
     rvc: {},
     hypebot: {},
-    vectors: {},
     variables: {
         global: {},
     },

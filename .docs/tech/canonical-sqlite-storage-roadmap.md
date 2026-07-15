@@ -46,7 +46,7 @@ slices. The remaining work is ordered by system invariant and current runtime ow
 3. cut character/group chat full-payload reads and writes over to canonical SQLite
 4. complete chat search/recent indexes, attachments, backup/restore, repair, and Node 26 proof
 5. harden extension Git operations without inventing a per-user owner for the global registry
-6. harden vector generations over stable canonical source IDs while keeping all vector state derived
+6. retain old vector indexes only as rollback/export-compatible derived data; first-party vector runtime is retired and is not a canonical-storage work item
 
 The canonical DB must be separate from derived caches:
 
@@ -457,6 +457,9 @@ canonical source IDs but do not become a second text authority.
       replacing canonical rows, records a durable restore journal, and re-requires chat audit;
       fixed-scale Node 26.3.0 benchmark proof now lives in
       `scripts/canonical-chat-node26-benchmark.mjs` and its feature evidence artifact.
+    - Operators create and restore chat bundles with
+      `scripts/canonical-sqlite-repair.mjs backup-chat|restore-chat --backup-file <path>`;
+      `chat-restore-status` reports the latest durable restore result.
 
 21. `extension operation safety`
     - Keeps filesystem/Git discovery authority.
@@ -569,7 +572,7 @@ Code binding points:
 - `character-write-service.js` owns core character write sequencing.
 - `chats.js` owns chat save/rename/delete/import route side effects.
 - `character-index.js` is retired from normal runtime and remains only as a historical/helper-level proof surface.
-- `settings.js`, `secrets.js`, `assets.js`, `backgrounds.js`, `extensions.js`, and `vectors.js`
+- `settings.js`, `secrets.js`, `assets.js`, `backgrounds.js`, and `extensions.js`
   remain their HTTP/facade owners while domain stores move behind them.
 
 ## Validation

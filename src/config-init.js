@@ -68,11 +68,6 @@ const keyMigrationMap = [
         migrate: (value) => value,
     },
     {
-        oldKey: 'extras.embeddingModel',
-        newKey: 'extensions.models.embedding',
-        migrate: (value) => value,
-    },
-    {
         oldKey: 'extras.speechToTextModel',
         newKey: 'extensions.models.speechToText',
         migrate: (value) => value,

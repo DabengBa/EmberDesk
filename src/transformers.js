@@ -29,12 +29,6 @@ const tasks = {
         configField: 'extensions.models.captioning',
         quantized: true,
     },
-    'feature-extraction': {
-        defaultModel: 'Xenova/all-mpnet-base-v2',
-        pipeline: null,
-        configField: 'extensions.models.embedding',
-        quantized: true,
-    },
     'automatic-speech-recognition': {
         defaultModel: 'Xenova/whisper-small',
         pipeline: null,
