@@ -18,22 +18,43 @@ The boundary covers:
 
 This is a compatibility contract, not a request to refactor the extension or regex engine.
 
-## Phase 4 Bridge Migration Guide
+## Executable Contract Baseline
 
-Phase 4 adds internal React/Zustand observation through `app/stores/*` and `app/compat/global-compatibility-bridge.js`. This bridge is an EmberDesk runtime adapter, not a new third-party extension API. Phase 7 closes the current roadmap with an explicit final policy instead of leaving these surfaces in a pending state: `globalThis.SillyTavern` and `@sillytavern/*` remain documented frozen compatibility facades, `eventSource` / `event_types` remain long-term supported public runtime contracts, `/lib.js` remains the preferred long-term shared browser utility surface for new ES-module extensions, and `__emberDeskReactCompatibilityBridge` remains internal-only.
+As of 2026-07-16, the compatibility boundary is also expressed as a **provider-neutral executable contract** used by retirement packages:
 
-| Surface | Current status | Future access path | Fallback / rollback |
+- Manifest: `tests/helpers/frontend-compatibility-contract.js`
+- Static gate: `bun run test:compat` (`tests/third-party-extension-compatibility.test.js`)
+- Runtime gate: `bun run --cwd tests test:e2e -- third-party-extension-runtime.e2e.js --workers=1`
+- Bridge non-public gate: `bun run --cwd tests test:unit -- global-compatibility-bridge.test.js --runInBand`
+
+Contract families: `globals`, `events`, `aliases`, `slash`, `regex`, `mounts`, `selectors`, `message-mutation`, `internal-bridge`.
+
+Rules:
+
+1. Behavior and public name/value/selector shape are the contract. Legacy file paths are current providers, not permanent APIs.
+2. Each subsequent React legacy-retirement package must declare current provider, replacement provider, proof command, and deletion readiness against this manifest before deleting an old owner.
+3. Failure output is family-scoped (`[compat:<family>] ...`) so a broken globals/events/aliases/slash/regex/mount/selector surface is localizable.
+4. `__emberDeskReactCompatibilityBridge` and related internal names are exclusions only; they must never become third-party replacement APIs.
+5. This baseline is a behavior gate for retirement readiness, not a freeze of the current jQuery implementation.
+
+## Compatibility Replacement Direction
+
+
+Phase 4 adds internal React/Zustand observation through `app/stores/*` and `app/compat/global-compatibility-bridge.js`. This bridge is an EmberDesk runtime adapter, not a new third-party extension API.
+
+[ADR-0012](../adr/0012-react-migrated-surface-legacy-retirement.md) changes the destination for already migrated React surfaces: the external behavior below remains supported, but the current legacy providers, protected fallback nodes, and flag/build fallback paths must be replaced before those providers are removed. A release rolls back by deploying a prior version; it does not retain the old runtime in the released version. `/lib.js` remains the preferred shared browser utility surface for new ES-module extensions, and `__emberDeskReactCompatibilityBridge` remains internal-only.
+
+| Surface | Supported behavior | Current provider and replacement condition | Completion rule |
 |---|---|---|---|
-| `globalThis.SillyTavern` | Frozen public compatibility facade | Keep the current object for upstream-style helpers and extension-adjacent context lookups; it is no longer a pending deletion candidate in the current roadmap. | Keep the existing object owner; React bridge failure must not replace it with a stub. |
-| `eventSource` / `event_types` | Long-term supported public compatibility surface | Keep the current emitter methods, event names, and established runtime semantics as the supported contract for plugin/event consumers. | Keep event names and emitter methods stable; failed React bridge attach leaves existing exports untouched. |
-| `@sillytavern/*` browser aliases | Frozen documented compatibility facade | Keep current alias resolution and protected export shapes for existing extension ecosystems such as Tavern Helper / JS-Slash-Runner; new ES-module utility imports should prefer `/lib.js` when possible. | Preserve alias resolution and export shapes; rollback is the existing browser module mapping. |
-| Extension mount points (`#extensions_settings`, `#extensions_settings2`, `#regex_container`, wand menu) | Frozen public compatibility surface | React may own visible host controls and orchestration, but protected legacy nodes stay mount contract surfaces instead of a future removal candidate in this roadmap. | React may own the visible host controls, but protected legacy nodes remain frozen compatibility surfaces and rollback owners. |
-| Regex engine exports and `regex_placement` values | Long-term supported public compatibility surface | Keep the current module owner and numeric placement values; any future behavior or export narrowing needs a fresh ADR plus focused compatibility proof. | Do not rename exports or change numeric placement values; rollback is the current regex module owner. |
-| Slash parser / registry / executor exports | Frozen public compatibility surface | Keep `public/scripts/slash-commands.js` as the owner for parser, registry, executor, and public exports; React slash UI remains observational/visible UI only. | Keep `public/scripts/slash-commands.js` as owner; React failures fall back to legacy autocomplete and command execution. |
-| Phase 4 React/Zustand bridge snapshots | Internal-only first-party adapter | First-party React islands may observe sanitized workspace/main-chat state through the bridge while public globals and aliases stay external contracts. | Bridge detach removes only `__emberDeskReactCompatibilityBridge`; no third-party extension should depend on it. |
-| Full extension API retirement or facade freeze | Closed for the current roadmap | The current Phase 7 outcome is freeze-or-support, not deletion; any future retirement proposal requires a new ADR, migration note, and rollback proof. | Keep the current compatibility surface and tests. |
+| `globalThis.SillyTavern` | Public object shape and supported lookup behavior for upstream-style helpers and extension-adjacent context | Current browser-shell object; a React-era provider must preserve the supported object behavior before this provider is retired. | The bridge must never become a substitute public API. |
+| `eventSource` / `event_types` | Emitter methods, event names, values, and established timing semantics | Current event emitter and table; any React-era provider must preserve the documented contract. | No rename, narrowing, or timing regression without a replacement contract and focused proof. |
+| `@sillytavern/*` browser aliases | Alias resolution and protected export shapes for ecosystems such as Tavern Helper / JS-Slash-Runner | Current browser-module mapping; new ES-module utility imports should prefer `/lib.js`. | Replace the provider only after compatible aliases and exports are browser-proven. |
+| Extension mount points (`#extensions_settings`, `#extensions_settings2`, `#regex_container`, wand menu) | Reachable extension content and documented mount lifecycle | Current protected DOM nodes and templates; React must supply equivalent mount contracts before these nodes disappear. | Do not delete a node until affected extensions mount and operate through its replacement. |
+| Regex engine exports and `regex_placement` values | Existing exports, numeric placement values, and transformation behavior | Current regex module; React-era services may replace internals but not narrow the supported result. | Preserve numeric values and behavior with compatibility proof. |
+| Slash parser / registry / executor exports | Existing parser, registry, executor, autocomplete, and public export behavior | Current slash module; React may replace visible UI and eventually execution internals through a compatible provider. | Preserve extension execution and public exports before the legacy provider is deleted. |
+| Phase 4 React/Zustand bridge snapshots | Internal-only first-party diagnostics | First-party bridge only. | No third-party dependency or public migration target. |
 
-Phase 6 evidence collection must cover Tavern Helper / JS-Slash-Runner, Regex Manager behavior, Quick Reply-style event usage, Extensions Manager install/update/delete flows, alias resolution, event contracts, and protected mount-point lifecycle. Any migration candidate needs a rollback story that returns to the current legacy owner without data loss or extension API shrinkage.
+Evidence collection must cover Tavern Helper / JS-Slash-Runner, Regex Manager behavior, Quick Reply-style event usage, Extensions Manager install/update/delete flows, alias resolution, event contracts, and protected mount-point lifecycle. A retirement candidate must prove its React-era replacement without data loss or extension API shrinkage.
 
 ## Phase 6 Priority Rule
 
@@ -41,7 +62,7 @@ Phase 6 uses `JS-Slash-Runner` as the primary compatibility gate.
 
 - Any change that would break `JS-Slash-Runner` import resolution, mount lifecycle, event usage, slash-command integration, regex integration, or required public globals is a high-priority compatibility risk.
 - Secondary extension evidence such as Quick Reply-style flows, Regex Manager-specific UI behavior, or Extensions Manager protocol checks only enters the same delivery wave when it covers a risk that `JS-Slash-Runner` does not already cover.
-- A Phase 7 breaking candidate that would break `JS-Slash-Runner` without a replacement path, migration note, and rollback path is not eligible for delete-or-narrow decisions. The honest result is to freeze or delay that candidate.
+- A retirement candidate that would break `JS-Slash-Runner` without a replacement contract, migration note, and prior-version rollback plan is not eligible for deletion. The honest result is to delay the candidate, not retain a permanent same-version legacy fallback.
 
 ## Phase 6 Contract Ledger
 
@@ -51,18 +72,18 @@ Use the following `JS-Slash-Runner criticality` values when reviewing or extendi
 - `secondary`: not the main plugin integration path, but still a nearby compatibility risk
 - `internal-only`: first-party bridge surface, not supported for third-party extension use
 
-| Surface family | JS-Slash-Runner criticality | Current owner | Fallback / rollback owner | Primary proof | Phase 7 consumer | Current gap |
+| Surface family | JS-Slash-Runner criticality | Current provider | Required replacement proof | Primary proof | Retirement consumer | Current gap |
 |---|---|---|---|---|---|---|
-| `@sillytavern/*` browser aliases | `primary` | legacy browser module mapping under `public/` | existing alias mapping and source-relative bundle output | `bun run test:compat` | Sprint 4 / Sprint 7 | Static resolution is covered; behavior-specific alias consumers still rely on focused runtime checks. |
-| `#extensions_settings`, `#extensions_settings2`, `#regex_container`, `#extensionsMenuButton`, `#extensionsMenu` | `primary` | protected extension drawer and wand menu compatibility nodes, with visible host controls routed through `public/scripts/extensions.js` | protected legacy DOM nodes remain rollback owners when flags are off or bundle import fails | `bun run test:compat` | Sprint 4 | Static presence is covered; visible host controls now use explicit helper facades, but browser/runtime evidence still needs to confirm no protected node disappears in rollback paths. |
-| `eventSource` / `event_types` | `primary` | `public/script.js` and `public/scripts/events.js` | existing event emitter object and event-name table | `bun run test:compat` | Sprint 7 | Export/value stability is covered; not every runtime timing path is browser-proven. |
-| slash-command public exports from `public/scripts/slash-commands.js` | `primary` | legacy slash parser / registry / executor | legacy autocomplete and command execution path | `bun run test:compat` | Sprint 4 | Public exports are frozen; plugin-specific end-to-end execution remains a manual/runtime evidence concern. |
-| regex exports and `regex_placement` values | `primary` | `public/scripts/extensions/regex/engine.js` | legacy regex engine owner | `bun run test:compat` | Sprint 4 | Export/value stability is covered; plugin-specific transformation flows still need runtime evidence notes. |
-| `globalThis.SillyTavern` | `secondary` | legacy browser shell | existing legacy global object | `bun run test:compat` | Sprint 7 | Current repo evidence treats it as a compatibility surface, but `JS-Slash-Runner` primarily consumes module imports and extension context helpers instead of this global. |
-| message-row DOM contract | `secondary` | legacy main-chat rendering path | protected row structure and fail-closed React owner split | `bun run --cwd tests test:unit -- chat-workspace-structure.test.js third-party-extension-compatibility.test.js --runInBand`; `bun run --cwd tests test:e2e -- chat-message-layout.e2e.js`; `bun run --cwd tests test:e2e -- chat-message-rendering.e2e.js` | Sprint 6 / Sprint 7 | Core row structure is covered; plugin-specific rich DOM mutations remain a later renderer cutover concern. |
-| character-list DOM contract | `secondary` | legacy character list shell and guarded React row compatibility | legacy panel path from the same workspace entry | `bun run test:compat`; `bun run --cwd tests test:unit -- character-list-structure.test.js --runInBand` | Sprint 1 / Sprint 7 | Static row identity is covered; not a primary `JS-Slash-Runner` gate. |
-| character route payload shape | `secondary` | legacy route payload contract | legacy browser-facing response shapes | `bun run --cwd tests test:unit -- character-read-service.test.js interaction-performance-index.test.js character-list-structure.test.js --runInBand` | Sprint 1 | Internal service envelope leakage is guarded, but not a primary plugin gate. |
-| Phase 4 React compatibility bridge snapshots | `internal-only` | `app/compat/global-compatibility-bridge.js` | bridge detach removes only the internal bridge surface | `bun run --cwd tests test:unit -- global-compatibility-bridge.test.js --runInBand` | Sprint 7 | Snapshot safety is covered; the bridge is intentionally unsupported for third-party extension code. |
+| `@sillytavern/*` browser aliases | `primary` | browser module mapping under `public/` | compatible alias mapping and source-relative bundle output | `bun run test:compat` | Extensions Host / shell-global retirement | Static resolution is covered; behavior-specific alias consumers still rely on focused runtime checks. |
+| `#extensions_settings`, `#extensions_settings2`, `#regex_container`, `#extensionsMenuButton`, `#extensionsMenu` | `primary` | protected extension drawer and wand menu nodes, with visible host controls routed through `public/scripts/extensions.js` | React-owned mount protocol that leaves extension content reachable without legacy nodes | `bun run test:compat` | Extensions Host | Static presence is covered; browser/runtime evidence must prove replacement mount behavior before nodes disappear. |
+| `eventSource` / `event_types` | `primary` | `public/script.js` and `public/scripts/events.js` | emitter object and event-name table with matching runtime semantics | `bun run test:compat` | shell-global retirement | Export/value stability is covered; not every runtime timing path is browser-proven. |
+| slash-command public exports from `public/scripts/slash-commands.js` | `primary` | slash parser / registry / executor | compatible autocomplete and command execution provider | `bun run test:compat` | Extensions Host / Main Chat | Plugin-specific end-to-end execution remains a runtime evidence concern. |
+| regex exports and `regex_placement` values | `primary` | `public/scripts/extensions/regex/engine.js` | compatible regex provider and stable numeric placements | `bun run test:compat` | Extensions Host / World Info | Plugin-specific transformation flows still need runtime evidence notes. |
+| `globalThis.SillyTavern` | `secondary` | browser shell | supported global object behavior supplied without the legacy shell | `bun run test:compat` | shell-global retirement | Current repo evidence treats it as a compatibility surface, but `JS-Slash-Runner` primarily consumes module imports and extension context helpers instead of this global. |
+| message-row DOM contract | `secondary` | main-chat rendering path | protected row structure supplied by React main-chat owner | `bun run --cwd tests test:unit -- chat-workspace-structure.test.js third-party-extension-compatibility.test.js --runInBand`; `bun run --cwd tests test:e2e -- chat-message-layout.e2e.js`; `bun run --cwd tests test:e2e -- chat-message-rendering.e2e.js` | Main Chat | Core row structure is covered; plugin-specific rich DOM mutations remain a later renderer cutover concern. |
+| character-list DOM contract | `secondary` | character-list shell and guarded React row compatibility | React-owned list with protected row identity behavior | `bun run test:compat`; `bun run --cwd tests test:unit -- character-list-structure.test.js --runInBand` | Character Library | Static row identity is covered; not a primary `JS-Slash-Runner` gate. |
+| character route payload shape | `secondary` | browser-facing route payload contract | unchanged legacy-shaped payloads from the React-era consumer path | `bun run --cwd tests test:unit -- character-read-service.test.js interaction-performance-index.test.js character-list-structure.test.js --runInBand` | Character Library | Internal service envelope leakage is guarded, but not a primary plugin gate. |
+| Phase 4 React compatibility bridge snapshots | `internal-only` | `app/compat/global-compatibility-bridge.js` | no public extension use is introduced | `bun run --cwd tests test:unit -- global-compatibility-bridge.test.js --runInBand` | all retirement waves | Snapshot safety is covered; the bridge is intentionally unsupported for third-party extension code. |
 
 ## Phase 6 JS-Slash-Runner Runtime Evidence
 
@@ -74,7 +95,7 @@ External dependency paths in this section were checked on 2026-06-23 against `JS
 
 | Surface | Current plugin dependency path | Baseline proof | Remaining runtime evidence note | Phase 7 blocker when broken |
 |---|---|---|---|---|
-| Mount lifecycle | `src/index.ts` appends `#tavern_helper` to `#extensions_settings` | `bun run test:compat` | Phase 6 must still record that flag-off and bundle-import-failure paths leave the protected mount nodes intact for legacy ownership. | Yes |
+| Mount lifecycle | `src/index.ts` appends `#tavern_helper` to `#extensions_settings` | `bun run test:compat`; `bun run --cwd tests test:e2e -- third-party-extension-runtime.e2e.js --workers=1` | Runtime proof loads `#tavern_helper`; flag-off / bundle-import-failure still leave protected mount nodes intact for non-retired hosts. | Yes |
 | Alias resolution | `src/**` imports `@sillytavern/*` paths resolved into `public/` browser modules | `bun run test:compat` | Static alias presence passes in the 2026-06-23 proof set; Phase 6 still treats alias narrowing or path churn as a hard blocker until a migration path exists. | Yes |
 | Event contract | `src/function/generate/*.ts`, `PromptViewer.vue`, `variable_manager/*.vue`, `tavern_regex.ts`, and render helpers consume `eventSource` / `event_types` | `bun run test:compat` | Event values and emitter methods are frozen, but Phase 6 still records that event timing semantics are not exhaustively browser-proven. | Yes |
 | Slash-command integration | `src/function/slash.ts` imports `executeSlashCommandsWithOptions`; multiple panels rely on the protected slash surface | `bun run test:compat` | Public export stability is covered; Phase 6 still records that plugin-specific end-to-end slash execution remains a runtime compatibility concern, not a solved cutover path. | Yes |
@@ -94,10 +115,10 @@ If a secondary surface conflicts with the primary sample, the compatibility-pres
 
 ### Runtime blocker rules
 
-- Missing or cleared protected mount nodes in flag-off, import-failure, or fallback states are blockers.
+- During the current staged implementation, missing or cleared protected mount nodes in flag-off, import-failure, or fallback states are blockers. At retirement completion, the replacement mount protocol must make those legacy states unnecessary.
 - Narrowing `@sillytavern/*`, slash exports, regex exports, event names, or event emitter methods without migration notes is a blocker.
 - Treating `__emberDeskReactCompatibilityBridge` as a public replacement API is a blocker.
-- Any deletion candidate that breaks `JS-Slash-Runner` and lacks a rollback path is a blocker.
+- Any deletion candidate that breaks `JS-Slash-Runner` or lacks a compatible replacement and prior-version rollback plan is a blocker.
 
 ## Protected Mount Points
 
@@ -163,9 +184,9 @@ Keep these selectors and identity attributes stable unless a migration plan upda
 
 `data-chid` is the standard row identity for new code. The legacy `chid` attribute remains a compatibility affordance because existing selectors still use `.character_select[chid="..."]`. New code should not prefer `chid` over `data-chid`.
 
-The guarded React character-library panel island is inside this same compatibility boundary. When the React island is enabled, it may host the toolbar and virtualized list window, but generated rows must keep the protected selectors above, tag filtering continues to use the legacy tag controls and `entitiesFilter` semantics, and the React toolbar only hosts those controls instead of owning their selected tag state. Build-missing or flag-off states must keep the legacy panel path available from the same workspace entry.
+The guarded React character-library panel island is inside this same compatibility boundary. Current code may host the toolbar and virtualized list window while legacy tag controls and `entitiesFilter` semantics remain active. The Character Library retirement wave must make React the owner of those interactions while continuing to generate the protected selectors above. The current build-missing and flag-off route is a staged-code fact, not the completed product design.
 
-The shared workspace-panel React scaffold for World Info, Background Library, and Extensions Host is not a compatibility exemption. The current World Info, Background Library, and Extensions Host React hosts mount beside legacy nodes, not on top of them. Extensions Host now owns the visible notify/manage/install/Extras UI path through explicit `public/scripts/extensions.js` helpers, but it still does not own or replace the protected extension settings columns, regex container, wand menu, extension content mount surfaces, or third-party extension protocol surfaces. When the matching flag is off, the current wrappers do not insert an empty migration host. If a flagged scaffold bundle fails to import, protected legacy nodes still remain the rollback owner. A React host must mount beside or around protected legacy nodes rather than clearing them as an incidental render target.
+The shared workspace-panel React scaffold for World Info, Background Library, and Extensions Host is not a compatibility exemption. Current hosts mount beside legacy nodes, and Extensions Host routes visible notify/manage/install/Extras controls through `public/scripts/extensions.js` helpers. That current routing does not yet replace protected extension settings columns, regex container, wand menu, extension-content mounts, or third-party extension protocols. The retirement wave must replace those behaviors with deliberate contracts before the legacy nodes disappear; it must not remove them merely because the React host renders successfully.
 
 ## Protected Module Surface
 
@@ -273,7 +294,7 @@ Phase 6 treats `globalThis.SillyTavern`, `eventSource`, and `event_types` as pub
 | `event_types` | public compatibility surface | Direct runtime consumer across the same generate, prompt, render, and variable-manager paths listed above | Keep event names and values stable; React-owned slices cannot silently rename or narrow them | `bun run test:compat` |
 | `__emberDeskReactCompatibilityBridge` | internal-only first-party adapter | No supported third-party consumer; Phase 4 uses it only for sanitized React-owned snapshots | Bridge detach removes only the internal bridge surface; it must not mutate or replace public globals | `bun run --cwd tests test:unit -- global-compatibility-bridge.test.js --runInBand` |
 
-The internal bridge is not a migration target for third-party extensions. A Phase 7 cleanup may freeze or remove public globals only after a separate compatibility decision; it may not treat the bridge as an undocumented replacement.
+The internal bridge is not a migration target for third-party extensions. Retirement work may replace public-global providers only after proving the supported contract through a public replacement; it may never treat the bridge as an undocumented substitute.
 
 ## Character Route Compatibility
 
@@ -338,46 +359,46 @@ bun run --cwd tests test:unit -- character-read-service.test.js interaction-perf
 
 That focused route proof verifies the internal read-service envelope stays internal and the legacy browser-facing payload shape remains stable.
 
-## Phase 7 Input Package
+## Retirement Input Package
 
-Use the following package when a Phase 7 cutover candidate touches extension compatibility:
+Use the following package when a legacy-retirement candidate touches extension compatibility:
 
 ### Breaking-change review template
 
 - `candidate surface`
 - `current public contract`
 - `known consumers`
-- `current owner / rollback owner`
+- `current provider / replacement provider`
 - `JS-Slash-Runner impact`
 - `evidence summary`
 - `user impact`
-- `rollback trigger`
+- `prior-version rollback trigger`
 - `recommended next action`
 
 ### Deprecation window minimum
 
 - Warn in the owner doc and any user-visible compatibility note before deletion or narrowing.
 - Point the warning to the matching migration guidance.
-- Keep the warning active until the replacement path and rollback path are both documented.
-- If evidence remains incomplete, keep the surface frozen and documented instead of forcing a removal date.
+- Keep the warning active until the replacement path and prior-version rollback plan are both documented.
+- If evidence remains incomplete, delay deletion instead of forcing a removal date.
 
 ### Rollback minimum
 
-- State the legacy owner that will resume control.
-- State how flag-off, build-missing, or import-failure paths return to the current owner.
-- State how operators or reviewers confirm rollback success.
+- State the released version and replacement provider that are being retired.
+- State the prior version operators deploy if the release must be rolled back.
+- State how operators or reviewers confirm rollback success without restoring a same-version legacy runtime.
 - Do not widen user-data risk or extension API shrinkage as part of rollback.
 
-### Phase 7 consumer split
+### Retirement consumer split
 
 | Consumer | Required input from Phase 6 |
 |---|---|
-| Sprint 4: Extensions Host full owner cutover | `JS-Slash-Runner` primary gate status, mount lifecycle notes, alias stability notes, regex/slash export stability, extension-host blocker list |
-| Sprint 7: Workspace shell and global compatibility decision | public global evidence, internal-bridge boundary, deprecation-window minimum, rollback template, breaking-change review template |
+| Extensions Host retirement | `JS-Slash-Runner` primary gate status, mount lifecycle notes, alias stability notes, regex/slash export stability, extension-host blocker list |
+| Workspace shell and global-contract retirement | public global evidence, internal-bridge boundary, deprecation-window minimum, prior-version rollback template, breaking-change review template |
 
 ### Hard gate
 
-If a candidate would break `JS-Slash-Runner` and no replacement path, migration note, and rollback path exist, the candidate must stay preserved, frozen, or delayed. Phase 6 does not authorize a stronger conclusion.
+If a candidate would break `JS-Slash-Runner` and no replacement contract, migration note, and prior-version rollback plan exist, the candidate must stay delayed. This document does not authorize feature loss or permanent same-version legacy fallback.
 
 ## Extension mutation operation safety
 

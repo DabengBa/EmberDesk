@@ -235,4 +235,43 @@ describe('global compatibility bridge', () => {
 
         controller.detach();
     });
+
+
+    test('does not publish the bridge as a third-party public contract entry', async () => {
+        const { frontendCompatibilityContract, assertInternalNamesExcludedFromPublicManifest } = await import('./helpers/frontend-compatibility-contract.js');
+        expect(() => assertInternalNamesExcludedFromPublicManifest()).not.toThrow();
+        expect(frontendCompatibilityContract.exclusions.publicNames).toContain('__emberDeskReactCompatibilityBridge');
+
+        const publicFamilies = frontendCompatibilityContract.entries
+            .filter(entry => entry.family !== 'internal-bridge')
+            .map(entry => JSON.stringify(entry));
+        for (const serialized of publicFamilies) {
+            expect(serialized).not.toContain('__emberDeskReactCompatibilityBridge');
+        }
+    });
+
+    test('attach and detach leave public SillyTavern and event exports identity-stable', () => {
+        resetWorkspacePanelStore();
+        resetMainChatObservationStore();
+        resetGlobalCompatibilityBridgeForTests();
+        const legacyScope = createLegacyScope();
+        const originalSilly = legacyScope.SillyTavern;
+        const originalEvents = legacyScope.eventSource;
+        const originalTypes = legacyScope.event_types;
+
+        attachGlobalCompatibilityBridge({ legacyScope });
+        expect(legacyScope.SillyTavern).toBe(originalSilly);
+        expect(legacyScope.eventSource).toBe(originalEvents);
+        expect(legacyScope.event_types).toBe(originalTypes);
+        expect(legacyScope.__emberDeskReactCompatibilityBridge).toEqual(expect.objectContaining({
+            getSnapshot: expect.any(Function),
+        }));
+
+        detachGlobalCompatibilityBridge({ legacyScope });
+        expect(legacyScope.SillyTavern).toBe(originalSilly);
+        expect(legacyScope.eventSource).toBe(originalEvents);
+        expect(legacyScope.event_types).toBe(originalTypes);
+        expect(legacyScope.__emberDeskReactCompatibilityBridge).toBeUndefined();
+    });
+
 });

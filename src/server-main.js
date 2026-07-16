@@ -40,6 +40,8 @@ import {
     loginPageMiddleware,
     setupPageMiddleware,
     settingsPageMiddleware,
+    createLegacyLoginHtmlRedirectMiddleware,
+    createLegacySetupHtmlRedirectMiddleware,
     needsSetup,
     migratePublicOverrides,
 } from './users.js';
@@ -255,9 +257,11 @@ async function registerMiddleware(app, cli) {
 
     // Host setup page (first-time admin account creation)
     app.get('/setup', setupPageMiddleware);
+    app.get('/setup.html', createLegacySetupHtmlRedirectMiddleware());
 
     // Host login page
     app.get('/login', loginPageMiddleware);
+    app.get('/login.html', createLegacyLoginHtmlRedirectMiddleware());
 
     // Host settings route
     app.get('/settings', settingsPageMiddleware);

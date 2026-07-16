@@ -14,6 +14,8 @@ related: [page.login, page.settings, feature.startup_bootstrap, feature.next_wor
 
 ## Page Purpose
 
+- Workspace-facing events, slash, and extension reachability remain under the provider-neutral compatibility contract baseline used by React legacy-retirement packages.
+
 This page exists so a user can run their daily LLM workflow from one browser surface: choose a character, open or continue a chat, and adjust surrounding workspace context without leaving the main shell.
 
 ## Page Structure (UI Layout)
@@ -85,7 +87,7 @@ This page exists so a user can run their daily LLM workflow from one browser sur
 - **React chrome navigation state**: When the React workspace chrome is mounted, AI Config, Formatting, Character Library, World Info, Backgrounds, Extensions, Settings, Group Chats, and Character Authoring are the visible primary navigation entries. AI Config and Formatting open the existing `#left-nav-panel` and `#AdvancedFormatting` drawers without copying provider, prompt, formatting, or token values into React state. Settings opens the React [Settings](page.settings) route only when that page flag is enabled and otherwise opens the existing `#user-settings-block` drawer in this workspace. Group Chats and Character Authoring keep their same right-drawer entry points, but the normal visible owner for group and character create/edit fields is now the guarded React authoring surface mounted into those drawers, with the legacy forms retained only as rollback or compatibility hosts.
 - **React panel entry accessibility state**: Registry-backed entries remain role/name reachable and expose active pressed state while the active panel status remains a local shell/panel signal rather than global workspace loading.
 - **First-open panel state**: Opening World Info, Character Library, Backgrounds, or Extensions from the React chrome should succeed on the first click without freezing the visible workspace; the action should settle locally to the chosen panel instead of stalling the whole shell.
-- **Global compatibility export state**: `globalThis.SillyTavern` stays as a frozen public compatibility facade, `eventSource` / `event_types` stay as long-term supported public runtime contracts, `@sillytavern/*` stays as a frozen browser-module facade for existing extension ecosystems, `/lib.js` stays as the preferred long-term shared browser utility surface, and `__emberDeskReactCompatibilityBridge` stays internal-only.
+- **Global compatibility export state**: `globalThis.SillyTavern`, `eventSource` / `event_types`, and `@sillytavern/*` remain supported extension contracts. Current legacy providers are staged implementation facts; React retirement must preserve their behavior through deliberate replacements. `/lib.js` stays the preferred shared browser utility surface, and `__emberDeskReactCompatibilityBridge` stays internal-only.
 - **Shared-library state**: the workspace loads a shared browser library during startup so first-party modules and compatible extensions can use documented imports and legacy globals without each surface bundling its own copy.
 - **Message rendering state**: stored or finalized messages render into stable `.mes[mesid]` rows with readable `.mes_text`, while message-row actions remain attached to the rendered row.
 - **Generation failure recovery state**: when generation fails after a user message or partial assistant output, the workspace keeps the existing rows readable, restores composer input, and exposes a local recovery action instead of requiring a refresh.
@@ -97,6 +99,10 @@ This page exists so a user can run their daily LLM workflow from one browser sur
 - **Mobile panel dock state**: On narrow viewports, React panel dock status avoids consuming chrome width or covering the composer; drawer content and protected extension/message surfaces remain reachable through the existing mobile layout rules.
 - **Mobile shell status state**: On narrow viewports, the shell hides the status strip instead of compressing it into a competing badge so composer width and drawer reachability stay prioritized.
 - **Settings fallback state**: if React [Settings](page.settings) is disabled or its build is missing, opening `/settings` returns the user to this legacy workspace so existing drawers remain the available settings path.
+
+## Approved React Retirement Direction
+
+The current workspace documents both React owners and legacy fallback facts because implementation is still staged. The approved destination is different: every surface already migrated to React must preserve the same user workflow and supported extension/automation outcome while React becomes its sole runtime owner. Legacy chrome, hidden hosts, action facades, and flag/build fallbacks disappear only after their React replacement passes focused proof; the same `/` route remains, and rollback is deployment of a prior version rather than a live fallback.
 
 ## Navigation
 

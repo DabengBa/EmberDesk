@@ -16,6 +16,13 @@ related: [feature.first_time_setup, page.login, page.chat_workspace]
 
 This page exists so a new deployment operator must create a password-protected admin account before accessing [Chat Workspace](page.chat_workspace). It prevents the security gap of passwordless auto-login on first launch.
 
+## Runtime Owner
+
+- `/setup` is served only by the shared React auth app.
+- `/setup.html` redirects to `/setup` and preserves the query string; it is not a legacy runtime fallback.
+- Missing React build returns a clear server error instead of `public/setup.html`.
+- Rollback is a previous application version deploy, not an in-process jQuery controller.
+
 ## Page Structure (UI Layout)
 
 1. **Header row**: logo and page title "初始设置", visually separated from the setup controls.
@@ -64,12 +71,16 @@ The page does not allow passwordless accounts. In `fresh` mode, both handle and 
 
 | Key | Default | Effect |
 |---|---|---|
-| `features.react.pages.setup` | `false` | `true` serves the React implementation at `/setup`; `/setup.html` remains the legacy jQuery fallback surface. |
+| `features.react.pages.setup` | `false` | Current migration flag. The approved retirement direction removes this switch and the `/setup.html` fallback after fresh and set-password workflow parity is proven. |
 
 ## Behavioral Notes
 
 - The setup page is shown until the user store has a password-protected account. After setup is complete, `/setup` redirects to `/login`.
 - The display name field is optional; if left empty, the handle is used as the display name.
 - The created account is always admin and enabled.
-- `/setup` and `/setup.html` keep the same visible setup semantics, Chinese copy, and redirect targets even when the implementation switches between React and the legacy jQuery page.
+- Current code keeps `/setup` and `/setup.html` behavior aligned while migration is incomplete.
 - `app/routes/setup.tsx` owns the React setup page when `features.react.pages.setup` is enabled. `public/scripts/setup.js` continues to own the legacy controller via `createSetupController()` and `initSetupPage()`, including the stable `/setup.html` fallback surface. Tests disable legacy auto-init with `globalThis.EMBERDESK_SETUP_TEST_MODE`.
+
+## Approved Retirement Direction
+
+The React setup route is a first-wave legacy-retirement candidate. Its completion preserves fresh-account and password-upgrade outcomes, validation, rate-limit feedback, redirects, and accessible form behavior, then removes the legacy controller, route flag, and `/setup.html` fallback from the released version.

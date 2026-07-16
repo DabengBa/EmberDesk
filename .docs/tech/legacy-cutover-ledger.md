@@ -1,18 +1,50 @@
 # Legacy Cutover Ledger
 
-Created: 2026-07-07  
-Last reviewed: 2026-07-07
+## Compatibility Contract Gate
 
-This ledger is the maintainer-facing source of truth for the React workspace cutover closeout. It records whether an in-scope legacy owner, fallback path, or compatibility surface is a real deletion candidate, a long-term supported boundary, a compatibility facade, or currently blocked from deletion.
+Retirement rows that touch extension, slash, regex, event, selector, or browser-import behavior must pass the provider-neutral contract baseline before deletion:
+
+- manifest: `tests/helpers/frontend-compatibility-contract.js`
+- static: `bun run test:compat`
+- runtime: `bun run --cwd tests test:e2e -- third-party-extension-runtime.e2e.js --workers=1`
+- internal bridge exclusion: `bun run --cwd tests test:unit -- global-compatibility-bridge.test.js --runInBand`
+
+Each candidate records current provider, replacement provider, proof command, and deletion readiness. The contract is behavioral; it does not freeze legacy implementation paths forever.
+
+
+Created: 2026-07-07  
+Last reviewed: 2026-07-16
+
+This ledger is the maintainer-facing source of truth for retiring legacy runtime owners from already migrated React surfaces. The 2026-07-07 verdicts below remain the historical baseline; [ADR-0012](../adr/0012-react-migrated-surface-legacy-retirement.md) replaces their former destination-state policy.
 
 This document is not a user-facing feature guide. End-user UI should continue to expose only task-relevant active/status feedback, not governance labels such as `delete`, `freeze-supported`, `compatibility-facade`, or `blocked`.
 
 ## Verdict meanings
 
+- `ready`: React already has an independent, behavior-complete implementation; delete only after focused parity proof.
+- `foundation`: React has a meaningful UI/state/action base, but still relies on legacy behavior or compatibility implementation that must be replaced.
+- `last`: retire only after dependent React surfaces and cross-cutting compatibility contracts are complete.
+- `contract`: a supported external behavior that must be reimplemented before the legacy provider disappears.
 - `blocked`: still has real consumers, proof is incomplete, or deleting it would break an established contract. Do not treat it as soft debt.
 - `compatibility-facade`: the surface stays in place as a routed adapter, bridge, rollback owner, or public entry, but should not grow into a second competing implementation.
 - `freeze-supported`: the surface is an explicit long-term compatibility boundary. Internal implementation may evolve, but the documented external contract must not be narrowed casually.
 - `delete`: safe to remove only after the listed proof gates pass and no protected consumer remains.
+
+## 2026-07-16 Current Retirement Program
+
+| surface | successor status | why | deletion gate |
+|---|---|---|---|
+| Login | `retired` | React is the sole runtime owner for `/login`; `/login.html` redirects only | complete; missing build fails closed |
+| Setup | `retired` | React is the sole runtime owner for `/setup`; `/setup.html` redirects only | complete; missing build fails closed |
+| Character Library | `foundation` | React owns visible list state, but protected selectors, tags, dialogs, and compatibility projection remain legacy-coupled | React-owned row/tag/bulk/save contracts with compatible extension selectors |
+| Character and Group Authoring | `foundation` | React forms exist, but save completion currently waits for legacy write behavior | React command/service owner with create/edit/delete parity |
+| Settings | `foundation` | React route owns only a coverage ledger slice | complete settings coverage and remove workspace-drawer fallback |
+| World Info | `foundation` | React workbench is visible owner, but action/prompt/regex/import/delete kernels remain in `world-info.js` | React-owned behavior services plus World Info and regex compatibility proof |
+| Background Library | `foundation` | React galleries/actions exist, but file/folder/thumbnail/slash behavior remains legacy-owned | React-owned behavior services and `/lockbg`/`/unlockbg`/`/autobg` parity |
+| Extensions Host | `foundation` | React controls exist, but protected mounts and extension lifecycle remain legacy-owned | replacement extension host/protocol and JS-Slash-Runner proof |
+| Workspace Shell | `last` | current React chrome coordinates legacy drawers and panels | retire only after its panel owners no longer depend on legacy drawer coordination |
+| Main Chat | `last` | React covers selected visible cases; streaming, editing, unsafe rows, load-more, and excluded request families remain legacy-owned | complete provider/row/windowing/extension proof plus interaction performance evidence |
+| Globals, events, aliases, selectors, slash/regex contracts | `contract` | power-user extensions and automation use them across all surfaces | explicit supported replacement contracts before any supplying legacy implementation is removed |
 
 ## Shell And Navigation
 

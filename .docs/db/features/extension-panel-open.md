@@ -17,6 +17,8 @@ Let users open the extensions surface from the main workspace while deferred ext
 
 ## User-Visible Contract
 
+- Mount lifecycle compatibility for `#extensions_settings`, `#extensions_settings2`, `#regex_container`, and wand menu is gated by the `mounts` contract family (`bun run test:compat` and `third-party-extension-runtime.e2e.js`) before host-node retirement.
+
 - Opening the extensions surface from [Chat Workspace](page.chat_workspace) must not block the whole workspace while extension discovery or activation continues.
 - While deferred loading is pending, the surface shows a local placeholder; on success, installed extension settings, regex settings, and wand-menu entries remain in their established workspace locations.
 - If loading fails, the surface replaces indefinite loading with a local retry affordance.
@@ -27,6 +29,10 @@ Let users open the extensions surface from the main workspace while deferred ext
 - Install, update, branch switch, move, and delete operations keep the established success response shapes, but failures are distinguished as retryable, user-action-required, forbidden, or invalid-request so the Extensions surface can show actionable feedback without auto-resetting dirty Git worktrees.
 - ES-module extensions can depend on [Shared Browser Library](term.shared_browser_library) for documented common browser utilities, but this feature does not redefine extension-specific behavior.
 - Built-in Vector Storage is retired: extension discovery and the settings panel do not expose it, while protected extension mounts and the independent Data Bank attachment entry remain available.
+
+## Approved Retirement Direction
+
+The React Extensions Host is a third-wave retirement foundation. It may replace the legacy host only after supported extension content, protected mount behavior, regex/slash workflows, browser imports, and operation outcomes remain usable through a deliberate replacement contract. React must not delete those behaviors to remove the old host.
 
 ## Semantic Interaction IDs
 

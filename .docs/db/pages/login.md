@@ -16,6 +16,13 @@ related: [feature.login_submit, feature.password_toggle, feature.password_recove
 
 This page exists so an unauthenticated user can identify themselves and reach [Chat Workspace](page.chat_workspace). It replaces the older dual-mode login (card-select and discreet login) with a single consistent form.
 
+## Runtime Owner
+
+- `/login` is served only by the shared React auth app.
+- `/login.html` redirects to `/login` and preserves the query string; it is not a legacy runtime fallback.
+- Missing React build returns a clear server error instead of `public/login.html`.
+- Rollback is a previous application version deploy, not an in-process jQuery controller.
+
 ## Page Structure (UI Layout)
 
 1. **Header row**: logo and page title shared by both cards, visually separated from the form controls so the page reads as a focused entry surface rather than a generic form.
@@ -68,7 +75,7 @@ The login page does not expose a user list. The user must know their handle to l
 | Key | Default | Effect |
 |---|---|---|
 | `enableDiscreetLogin` | `false` | `true` hides the user list; the user must type their handle manually. |
-| `features.react.pages.login` | `true` | `true` serves the React implementation at `/login`; `/login.html` remains the legacy jQuery fallback. |
+| `features.react.pages.login` | `true` | Current migration flag. The approved retirement direction removes this switch and the `/login.html` fallback after full route parity proof. |
 | `sessionTimeout` | `-1` | Session lifetime in seconds. `-1` = never expires, `0` = expires on browser close. |
 | `rateLimiting.accountsLoginMaxAttempts` | `5` | Failed login attempts before per-account lockout. `0` disables. |
 | `rateLimiting.accountsLoginLockoutDuration` | `300` | Lockout window in seconds (5 minutes). |
@@ -92,3 +99,7 @@ When both `basicAuthMode` and `enableUserAccounts` are active, the user must pas
 ### Password Recovery
 
 Password recovery codes are **printed to the server console log** — there is no email or SMS delivery. The server operator must relay the code to the user out-of-band.
+
+## Approved Retirement Direction
+
+The React login route is a first-wave legacy-retirement candidate. Before removal, it must preserve login, lockout, password visibility, recovery, authentication redirects, and accessibility behavior; after removal, `/login.html` and the legacy runtime path are not offered as a same-version fallback.

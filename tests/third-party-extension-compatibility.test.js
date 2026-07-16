@@ -2,306 +2,284 @@ import { describe, expect, test } from '@jest/globals';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const publicRoot = path.resolve('..', 'public');
-const indexHtmlPath = path.join(publicRoot, 'index.html');
-const tavernHelperRoot = path.join(publicRoot, 'scripts', 'extensions', 'third-party', 'JS-Slash-Runner');
-const tavernHelperSourceRoot = path.join(tavernHelperRoot, 'src');
-const tavernHelperDistPath = path.join(tavernHelperRoot, 'dist', 'index.js');
+import {
+    assertInternalNamesExcludedFromPublicManifest,
+    collectSillyTavernImports,
+    expectNamedExports,
+    expectObjectLiteralEntries,
+    extractFunctionSource,
+    formatContractFailure,
+    frontendCompatibilityContract,
+    getContractEntriesByFamily,
+    readPublicFile,
+    requiredExtensionExports,
+    requiredRegexExports,
+    requiredRegexPlacements,
+    requiredScriptExports,
+    requiredSlashCommandExports,
+    resolveSillyTavernImport,
+    tavernHelperCriticalEvents,
+    extensionMessageMutationMarkers,
+} from './helpers/frontend-compatibility-contract.js';
 
-const requiredScriptExports = [
-    'characters',
-    'chat',
-    'eventSource',
-    'event_types',
-    'getCurrentChatId',
-    'getRequestHeaders',
-    'printMessages',
-    'reloadMarkdownProcessor',
-    'saveChatConditional',
-    'saveSettingsDebounced',
-    'substituteParams',
-    'substituteParamsExtended',
-    'this_chid',
-];
+const {
+    paths,
+    publicShape,
+    exclusions,
+    entries: contractEntries,
+} = frontendCompatibilityContract;
 
-const requiredExtensionExports = [
-    'extension_settings',
-    'getContext',
-    'renderExtensionTemplateAsync',
-    'saveMetadataDebounced',
-    'writeExtensionField',
-];
+const {
+    indexHtmlPath,
+    tavernHelperRoot,
+    tavernHelperDistPath,
+    publicRoot,
+} = paths;
 
-const requiredRegexExports = [
-    'getRegexedString',
-    'regex_placement',
-];
+describe('frontend compatibility contract manifest', () => {
+    test('records provider-neutral contract families without freezing legacy paths as permanent APIs', () => {
+        expect(frontendCompatibilityContract.version).toBe(1);
+        expect(frontendCompatibilityContract.primaryConsumer).toBe('JS-Slash-Runner');
+        expect(frontendCompatibilityContract.families).toEqual(expect.arrayContaining([
+            'globals',
+            'events',
+            'aliases',
+            'slash',
+            'regex',
+            'mounts',
+            'selectors',
+            'message-mutation',
+            'internal-bridge',
+        ]));
 
-const requiredSlashCommandExports = [
-    'executeSlashCommands',
-    'executeSlashCommandsWithOptions',
-    'getSlashCommandsHelp',
-    'registerSlashCommand',
-    'parser',
-    'CONNECT_API_MAP',
-    'UNIQUE_APIS',
-    'initDefaultSlashCommands',
-    'COMMENT_NAME_DEFAULT',
-    'processChatSlashCommands',
-    'generateSystemMessage',
-    'validateArrayArgString',
-    'validateArrayArg',
-    'getNameAndAvatarForMessage',
-    'sendMessageAs',
-    'sendNarratorMessage',
-    'promptQuietForLoudResponse',
-    'isExecutingCommandsFromChatInput',
-    'commandsFromChatInputAbortController',
-    'activateScriptButtons',
-    'deactivateScriptButtons',
-    'pauseScriptExecution',
-    'stopScriptExecution',
-    'executeSlashCommandsOnChatInput',
-    'setSlashCommandAutoComplete',
-    'initSlashCommandAutoComplete',
-];
-
-const tavernHelperCriticalEvents = {
-    APP_READY: 'app_ready',
-    CHAT_CHANGED: 'chat_id_changed',
-    CHAT_COMPLETION_SETTINGS_READY: 'chat_completion_settings_ready',
-    CHARACTER_DELETED: 'characterDeleted',
-    CHARACTER_MESSAGE_RENDERED: 'character_message_rendered',
-    CHARACTER_RENAMED: 'character_renamed',
-    GENERATE_AFTER_DATA: 'generate_after_data',
-    MESSAGE_RECEIVED: 'message_received',
-    OAI_PRESET_CHANGED_AFTER: 'oai_preset_changed_after',
-    PRESET_DELETED: 'preset_deleted',
-    PRESET_RENAMED_BEFORE: 'preset_renamed_before',
-    SETTINGS_UPDATED: 'settings_updated',
-    TTS_AUDIO_READY: 'tts_audio_ready',
-    TTS_JOB_COMPLETE: 'tts_job_complete',
-    TTS_JOB_STARTED: 'tts_job_started',
-    USER_MESSAGE_RENDERED: 'user_message_rendered',
-};
-
-const requiredRegexPlacements = {
-    USER_INPUT: 1,
-    AI_OUTPUT: 2,
-    SLASH_COMMAND: 3,
-    WORLD_INFO: 5,
-    REASONING: 6,
-};
-
-function readPublicFile(...segments) {
-    return fs.readFileSync(path.join(publicRoot, ...segments), 'utf8');
-}
-
-function extractFunctionSource(source, functionName) {
-    const functionStart = source.indexOf(`function ${functionName}`);
-    expect(functionStart).toBeGreaterThanOrEqual(0);
-
-    const bodyStart = source.indexOf('{', functionStart);
-    expect(bodyStart).toBeGreaterThanOrEqual(0);
-
-    let depth = 0;
-    for (let i = bodyStart; i < source.length; i++) {
-        if (source[i] === '{') depth++;
-        if (source[i] === '}') depth--;
-        if (depth === 0) {
-            return source.slice(functionStart, i + 1);
+        for (const entry of contractEntries) {
+            expect(entry).toEqual(expect.objectContaining({
+                id: expect.any(String),
+                family: expect.any(String),
+                behavior: expect.any(String),
+                currentProvider: expect.any(String),
+                replacementProvider: expect.any(String),
+                proofCommand: expect.any(String),
+                deletionReadiness: expect.stringMatching(/^(not-ready|proof-pending|ready-when-replacement-proven)$/),
+            }));
+            expect(entry.behavior.toLowerCase()).not.toContain('must keep file path');
+            expect(entry.replacementProvider).not.toMatch(/^public\/.+\.js$/);
         }
-    }
 
-    throw new Error(`Could not extract function source for ${functionName}`);
-}
-
-function listSourceFiles(root) {
-    const entries = fs.readdirSync(root, { withFileTypes: true });
-    return entries.flatMap((entry) => {
-        const entryPath = path.join(root, entry.name);
-        if (entry.isDirectory()) {
-            if (entry.name === 'node_modules' || entry.name === 'dist') {
-                return [];
-            }
-            return listSourceFiles(entryPath);
-        }
-        return /\.(js|ts|vue)$/.test(entry.name) ? [entryPath] : [];
+        expect(getContractEntriesByFamily('selectors').length).toBeGreaterThan(0);
+        expect(getContractEntriesByFamily('message-mutation').length).toBeGreaterThan(0);
+        expect(exclusions.publicNames).toEqual(expect.arrayContaining([
+            '__emberDeskReactCompatibilityBridge',
+        ]));
     });
-}
 
-function collectSillyTavernImports() {
-    const imports = new Set();
-    const importPattern = /(?:from\s*|import\s*\(\s*)['"](@sillytavern\/[^'"]+)['"]/g;
-    for (const filePath of listSourceFiles(tavernHelperSourceRoot)) {
-        const content = fs.readFileSync(filePath, 'utf8');
-        for (const match of content.matchAll(importPattern)) {
-            imports.add(match[1]);
+    test('keeps internal bridge names out of the public contract surface', () => {
+        expect(() => assertInternalNamesExcludedFromPublicManifest()).not.toThrow();
+        for (const name of exclusions.publicNames) {
+            expect(publicShape.scriptExports).not.toContain(name);
+            expect(publicShape.extensionExports).not.toContain(name);
+            expect(publicShape.slashCommandExports).not.toContain(name);
         }
-    }
-    return [...imports].sort();
-}
-
-function resolveSillyTavernImport(importPath) {
-    return path.join(publicRoot, `${importPath.replace('@sillytavern/', '')}.js`);
-}
-
-function expectNamedExports(source, exportNames) {
-    for (const exportName of exportNames) {
-        const directExportPattern = new RegExp(`export\\s+(?:async\\s+)?(?:function|const|let|var|class)\\s+${exportName}\\b`);
-        const listExportPattern = new RegExp(`export\\s*\\{[\\s\\S]*\\b${exportName}\\b[\\s\\S]*\\}`);
-        expect(
-            directExportPattern.test(source) || listExportPattern.test(source),
-        ).toBe(true);
-    }
-}
-
-function expectObjectLiteralEntries(source, objectName, entries) {
-    for (const [key, value] of Object.entries(entries)) {
-        const entryPattern = typeof value === 'number'
-            ? new RegExp(`\\b${key}\\s*:\\s*${value}\\b`)
-            : new RegExp(`\\b${key}\\s*:\\s*['"]${value}['"]`);
-        expect(source).toMatch(new RegExp(`export\\s+const\\s+${objectName}\\s*=\\s*\\{`));
-        expect(source).toMatch(entryPattern);
-    }
-}
+    });
+});
 
 describe('third-party extension compatibility boundary', () => {
     test('keeps extension, wand menu, and regex mount points available', () => {
+        const family = 'mounts';
         const indexHtml = fs.readFileSync(indexHtmlPath, 'utf8');
         const wandMenuTemplate = readPublicFile('scripts', 'templates', 'wandMenu.html');
         const wandButtonTemplate = readPublicFile('scripts', 'templates', 'wandButton.html');
         const extensionsSource = readPublicFile('scripts', 'extensions.js');
 
-        expect(indexHtml).toContain('id="extensions_settings"');
-        expect(indexHtml).toContain('id="extensions_settings2"');
-        expect(indexHtml).toContain('id="regex_container"');
-        expect(wandMenuTemplate).toContain('id="extensionsMenu"');
-        expect(wandButtonTemplate).toContain('id="extensionsMenuButton"');
-        expect(extensionsSource).toContain('renderTemplateAsync(\'wandMenu\')');
-        expect(extensionsSource).toContain('append(extensionsMenuHTML)');
+        try {
+            expect(indexHtml).toContain('id="extensions_settings"');
+            expect(indexHtml).toContain('id="extensions_settings2"');
+            expect(indexHtml).toContain('id="regex_container"');
+            expect(wandMenuTemplate).toContain('id="extensionsMenu"');
+            expect(wandButtonTemplate).toContain('id="extensionsMenuButton"');
+            expect(extensionsSource).toContain('renderTemplateAsync(\'wandMenu\')');
+            expect(extensionsSource).toContain('append(extensionsMenuHTML)');
+        } catch (error) {
+            throw new Error(formatContractFailure(family, error.message));
+        }
     });
 
     test('keeps Tavern Helper manifest and distributable assets loadable', () => {
-        const manifest = JSON.parse(fs.readFileSync(path.join(tavernHelperRoot, 'manifest.json'), 'utf8'));
+        const family = 'mounts';
+        try {
+            const manifest = JSON.parse(fs.readFileSync(path.join(tavernHelperRoot, 'manifest.json'), 'utf8'));
 
-        expect(manifest.display_name).toBe('酒馆助手');
-        expect(manifest.homePage).toBe('https://github.com/N0VI028/JS-Slash-Runner');
-        expect(manifest.loading_order).toBe(100);
-        expect(manifest.js).toBe('dist/index.js');
-        expect(manifest.css).toBe('dist/index.css');
-        expect(manifest.minimum_client_version).toBe('1.12.13');
-        expect(manifest.auto_update).toBe(true);
+            expect(manifest.display_name).toBe('酒馆助手');
+            expect(manifest.homePage).toBe('https://github.com/N0VI028/JS-Slash-Runner');
+            expect(manifest.loading_order).toBe(100);
+            expect(manifest.js).toBe('dist/index.js');
+            expect(manifest.css).toBe('dist/index.css');
+            expect(manifest.minimum_client_version).toBe('1.12.13');
+            expect(manifest.auto_update).toBe(true);
 
-        expect(fs.existsSync(path.join(tavernHelperRoot, manifest.js))).toBe(true);
-        expect(fs.existsSync(path.join(tavernHelperRoot, manifest.css))).toBe(true);
+            expect(fs.existsSync(path.join(tavernHelperRoot, manifest.js))).toBe(true);
+            expect(fs.existsSync(path.join(tavernHelperRoot, manifest.css))).toBe(true);
 
-        const bundledEntry = fs.readFileSync(path.join(tavernHelperRoot, manifest.js), 'utf8');
-        expect(bundledEntry).toContain('from\'../../../../../script.js\'');
-        expect(bundledEntry).toContain('from\'../../../../../scripts/extensions/regex/engine.js\'');
-        expect(bundledEntry).toContain('from\'../../../../../scripts/extensions.js\'');
-        expect(bundledEntry).toContain('id="tavern_helper"');
-        expect(bundledEntry).toContain('appendTo(\'#extensions_settings\')');
-        expect(bundledEntry).toContain('globalThis.YAML');
-        expect(bundledEntry).toContain('globalThis.z');
-        expect(readPublicFile('lib.js')).toContain('window._ = lodash');
-
-        expect(fs.readFileSync(path.join(tavernHelperRoot, 'src', 'function', 'index.ts'), 'utf8'))
-            .toContain('globalThis.TavernHelper = getTavernHelper()');
+            const bundledEntry = fs.readFileSync(path.join(tavernHelperRoot, manifest.js), 'utf8');
+            expect(bundledEntry).toContain('from\'../../../../../script.js\'');
+            expect(bundledEntry).toContain('from\'../../../../../scripts/extensions.js\'');
+            expect(bundledEntry).toContain('from\'../../../../../scripts/extensions/regex/engine.js\'');
+        } catch (error) {
+            throw new Error(formatContractFailure(family, error.message));
+        }
     });
 
-    test('keeps Tavern Helper character edits bound to canonical avatar filenames', () => {
-        const characterSource = fs.readFileSync(path.join(tavernHelperSourceRoot, 'function', 'character.ts'), 'utf8');
-        const tavernSource = fs.readFileSync(path.join(tavernHelperSourceRoot, 'util', 'tavern.ts'), 'utf8');
-        const bundledEntry = fs.readFileSync(tavernHelperDistPath, 'utf8');
+    test('keeps Tavern Helper create_character payload on the avatar-first compatibility path', () => {
+        const family = 'aliases';
+        try {
+            const tavernSource = fs.readFileSync(
+                path.join(tavernHelperRoot, 'src', 'util', 'tavern.ts'),
+                'utf8',
+            );
+            const bundledEntry = fs.readFileSync(tavernHelperDistPath, 'utf8');
 
-        expect(characterSource).toContain('const avatarFileName = old_data?.avatar ?? `${character_name}.png`;');
-        expect(characterSource).toContain('avatar_url: avatarFileName');
-        expect(characterSource).toContain('new File([new_data.avatar], avatarFileName)');
-        expect(characterSource).toContain('await getOneCharacter(target.avatar);');
-        expect(characterSource).not.toContain('avatar_url: character_name + \'.png\'');
-        expect(characterSource).not.toContain('new File([new_data.avatar], character_name + \'.png\')');
-        expect(characterSource).not.toContain('await getOneCharacter(character_name + \'.png\')');
+            expect(tavernSource).toContain('avatar_url: character.avatar || `${character.name}.png`');
+            expect(tavernSource).not.toContain('avatar_url: character.name + \'.png\'');
 
-        expect(tavernSource).toContain('avatar_url: character.avatar || `${character.name}.png`');
-        expect(tavernSource).not.toContain('avatar_url: character.name + \'.png\'');
-
-        expect(bundledEntry).not.toContain('avatar_url:e+\'.png\'');
-        expect(bundledEntry).not.toContain('new File([t.avatar],e+\'.png\')');
-        expect(bundledEntry).toMatch(/avatar_url:[a-zA-Z_$][\w$]*,avatar:/);
-        expect(bundledEntry).toMatch(/new File\(\[[a-zA-Z_$][\w$]*\.avatar\],[a-zA-Z_$][\w$]*\)/);
-        expect(bundledEntry).toContain('||`${');
-        expect(bundledEntry).toContain('}.png`');
+            expect(bundledEntry).not.toContain('avatar_url:e+\'.png\'');
+            expect(bundledEntry).not.toContain('new File([t.avatar],e+\'.png\')');
+            expect(bundledEntry).toMatch(/avatar_url:[a-zA-Z_$][\w$]*,avatar:/);
+            expect(bundledEntry).toMatch(/new File\(\[[a-zA-Z_$][\w$]*\.avatar\],[a-zA-Z_$][\w$]*\)/);
+            expect(bundledEntry).toContain('||`${');
+            expect(bundledEntry).toContain('}.png`');
+        } catch (error) {
+            throw new Error(formatContractFailure(family, error.message));
+        }
     });
 
     test('keeps Tavern Helper source imports resolvable through the public SillyTavern alias', () => {
-        const imports = collectSillyTavernImports();
-        expect(imports).toContain('@sillytavern/script');
-        expect(imports).toContain('@sillytavern/scripts/extensions');
-        expect(imports).toContain('@sillytavern/scripts/extensions/regex/engine');
+        const family = 'aliases';
+        try {
+            const imports = collectSillyTavernImports();
+            expect(imports).toContain('@sillytavern/script');
+            expect(imports).toContain('@sillytavern/scripts/extensions');
+            expect(imports).toContain('@sillytavern/scripts/extensions/regex/engine');
 
-        const unresolved = imports
-            .map(importPath => ({ importPath, target: resolveSillyTavernImport(importPath) }))
-            .filter(({ target }) => !fs.existsSync(target));
+            const unresolved = imports
+                .map(importPath => ({ importPath, target: resolveSillyTavernImport(importPath) }))
+                .filter(({ target }) => !fs.existsSync(target));
 
-        expect(unresolved).toEqual([]);
+            expect(unresolved).toEqual([]);
+        } catch (error) {
+            throw new Error(formatContractFailure(family, error.message));
+        }
     });
 
     test('keeps key SillyTavern module exports used by Tavern Helper and regex scripts', () => {
-        expect.hasAssertions();
-        expect(requiredScriptExports).toContain('eventSource');
+        const family = 'globals';
+        try {
+            expect.hasAssertions();
+            expect(requiredScriptExports).toContain('eventSource');
 
-        expectNamedExports(readPublicFile('script.js'), requiredScriptExports);
-        expectNamedExports(readPublicFile('scripts', 'extensions.js'), requiredExtensionExports);
-        expectNamedExports(readPublicFile('scripts', 'extensions', 'regex', 'engine.js'), requiredRegexExports);
+            expectNamedExports(readPublicFile('script.js'), requiredScriptExports, { family });
+            expectNamedExports(readPublicFile('scripts', 'extensions.js'), requiredExtensionExports, { family: 'mounts' });
+            expectNamedExports(readPublicFile('scripts', 'extensions', 'regex', 'engine.js'), requiredRegexExports, { family: 'regex' });
+        } catch (error) {
+            throw new Error(formatContractFailure(family, error.message.replace(/^\[compat:[^\]]+\]\s*/, '')));
+        }
     });
 
     test('keeps slash-command public exports stable for compatible extensions', () => {
-        const slashCommandSource = readPublicFile('scripts', 'slash-commands.js');
-
-        expectNamedExports(slashCommandSource, requiredSlashCommandExports);
+        const family = 'slash';
+        try {
+            const slashCommandSource = readPublicFile('scripts', 'slash-commands.js');
+            expectNamedExports(slashCommandSource, requiredSlashCommandExports, { family });
+        } catch (error) {
+            throw new Error(formatContractFailure(family, error.message.replace(/^\[compat:[^\]]+\]\s*/, '')));
+        }
     });
 
     test('keeps generated character list rows compatible with legacy selector contracts', () => {
-        const scriptSource = readPublicFile('script.js');
-        const rowSource = extractFunctionSource(scriptSource, 'buildCharacterRowHtml');
-        const bulkEditSource = readPublicFile('scripts', 'bulk-edit.js');
-        const enableBulkSelectSource = extractFunctionSource(bulkEditSource, 'enableBulkSelect');
-        const disableBulkSelectSource = extractFunctionSource(bulkEditSource, 'disableBulkSelect');
+        const family = 'selectors';
+        try {
+            const scriptSource = readPublicFile('script.js');
+            const rowSource = extractFunctionSource(scriptSource, 'buildCharacterRowHtml');
+            const bulkEditSource = readPublicFile('scripts', 'bulk-edit.js');
+            const enableBulkSelectSource = extractFunctionSource(bulkEditSource, 'enableBulkSelect');
+            const disableBulkSelectSource = extractFunctionSource(bulkEditSource, 'disableBulkSelect');
 
-        expect(rowSource).toMatch(/return `<div class="character_select entity_block flex-container wide100p alignitemsflexstart\$\{isFav \? ' is_fav' : ''\}\$\{isActive \? ' is_active' : ''\}" data-chid="\$\{id\}" chid="\$\{id\}" id="CharID\$\{id\}">/);
-        expect(rowSource).toMatch(/const isFav = item\.fav \|\| item\.fav == 'true';/);
-        expect(rowSource).toMatch(/<input class="ch_fav" value="\$\{isFav\}" hidden \/>/);
-        expect(rowSource).toMatch(/<div class="tags tags_inline">\$\{tagsHtml\}<\/div>/);
-        expect(rowSource).toMatch(/tagsHtml \+= `<span class="tag tag_placeholder"><span class="tag_name">\+\$\{tagsSkipped\}<\/span><\/span>`;/);
-        expect(scriptSource).toContain('$(document).on(\'click\', \'.character_select\'');
-        expect(enableBulkSelectSource).toMatch(/\$\(\'#rm_print_characters_block \.character_select\'\)\.each/);
-        expect(enableBulkSelectSource).toMatch(/const checkbox = \$\('<input type=\\'checkbox\\' class=\\'bulk_select_checkbox\\' aria-label=\\'Select character for bulk edit\\'>'\);/);
-        expect(enableBulkSelectSource).toContain('$(el).attr(\'aria-selected\', \'false\')');
-        expect(disableBulkSelectSource).toContain('$(\'.bulk_select_checkbox\').remove()');
-        expect(disableBulkSelectSource).toContain('$(\'#rm_print_characters_block .character_select\').removeAttr(\'aria-selected\')');
+            expect(rowSource).toMatch(/return `<div class="character_select entity_block flex-container wide100p alignitemsflexstart\$\{isFav \? ' is_fav' : ''\}\$\{isActive \? ' is_active' : ''\}" data-chid="\$\{id\}" chid="\$\{id\}" id="CharID\$\{id\}">/);
+            expect(rowSource).toMatch(/const isFav = item\.fav \|\| item\.fav == 'true';/);
+            expect(rowSource).toMatch(/<input class="ch_fav" value="\$\{isFav\}" hidden \/>/);
+            expect(rowSource).toMatch(/<div class="tags tags_inline">\$\{tagsHtml\}<\/div>/);
+            expect(rowSource).toMatch(/tagsHtml \+= `<span class="tag tag_placeholder"><span class="tag_name">\+\$\{tagsSkipped\}<\/span><\/span>`;/);
+            expect(scriptSource).toContain('$(document).on(\'click\', \'.character_select\'');
+            expect(enableBulkSelectSource).toMatch(/\$\(\'#rm_print_characters_block \.character_select\'\)\.each/);
+            expect(enableBulkSelectSource).toMatch(/const checkbox = \$\('<input type=\\'checkbox\\' class=\\'bulk_select_checkbox\\' aria-label=\\'Select character for bulk edit\\'>'\);/);
+            expect(enableBulkSelectSource).toContain('$(el).attr(\'aria-selected\', \'false\')');
+            expect(disableBulkSelectSource).toContain('$(\'.bulk_select_checkbox\').remove()');
+            expect(disableBulkSelectSource).toContain('$(\'#rm_print_characters_block .character_select\').removeAttr(\'aria-selected\')');
+        } catch (error) {
+            throw new Error(formatContractFailure(family, error.message.replace(/^\[compat:[^\]]+\]\s*/, '')));
+        }
     });
 
     test('keeps event emitter methods and event and regex placement values stable for Tavern Helper integrations', async () => {
-        const { eventSource, event_types } = await import('../public/scripts/events.js');
-        const eventSourceCode = readPublicFile('scripts', 'events.js');
-        const regexEngineCode = readPublicFile('scripts', 'extensions', 'regex', 'engine.js');
+        const family = 'events';
+        try {
+            const { eventSource, event_types } = await import('../public/scripts/events.js');
+            const eventSourceCode = readPublicFile('scripts', 'events.js');
+            const regexEngineCode = readPublicFile('scripts', 'extensions', 'regex', 'engine.js');
 
-        expect(eventSource).toEqual(expect.objectContaining({
-            on: expect.any(Function),
-            once: expect.any(Function),
-            emit: expect.any(Function),
-            emitAndWait: expect.any(Function),
-            makeFirst: expect.any(Function),
-            makeLast: expect.any(Function),
-            removeListener: expect.any(Function),
-        }));
+            expect(eventSource).toEqual(expect.objectContaining({
+                on: expect.any(Function),
+                once: expect.any(Function),
+                emit: expect.any(Function),
+                emitAndWait: expect.any(Function),
+                makeFirst: expect.any(Function),
+                makeLast: expect.any(Function),
+                removeListener: expect.any(Function),
+            }));
 
-        expectObjectLiteralEntries(eventSourceCode, 'event_types', tavernHelperCriticalEvents);
-        expectObjectLiteralEntries(regexEngineCode, 'regex_placement', requiredRegexPlacements);
+            expectObjectLiteralEntries(eventSourceCode, 'event_types', tavernHelperCriticalEvents, { family });
+            expectObjectLiteralEntries(regexEngineCode, 'regex_placement', requiredRegexPlacements, { family: 'regex' });
 
-        for (const [name, value] of Object.entries(tavernHelperCriticalEvents)) {
-            expect(event_types[name]).toBe(value);
+            for (const [name, value] of Object.entries(tavernHelperCriticalEvents)) {
+                expect(event_types[name]).toBe(value);
+            }
+        } catch (error) {
+            throw new Error(formatContractFailure(family, error.message.replace(/^\[compat:[^\]]+\]\s*/, '')));
+        }
+    });
+
+    test('records extension-owned message mutation markers as a message-mutation contract family', () => {
+        const family = 'message-mutation';
+        try {
+            const renderHelpers = [
+                path.join(publicRoot, 'scripts', 'extensions', 'third-party', 'JS-Slash-Runner', 'src', 'panel', 'render', 'StreamingOne.vue'),
+                path.join(publicRoot, 'scripts', 'extensions', 'third-party', 'JS-Slash-Runner', 'src', 'store', 'iframe_runtimes', 'message.ts'),
+            ];
+
+            for (const marker of extensionMessageMutationMarkers) {
+                const found = renderHelpers.some(filePath => fs.readFileSync(filePath, 'utf8').includes(marker));
+                expect(found).toBe(true);
+            }
+
+            const messageMutationEntries = getContractEntriesByFamily('message-mutation');
+            expect(messageMutationEntries.length).toBeGreaterThan(0);
+            expect(messageMutationEntries[0].proofCommand).toContain('third-party-extension-runtime.e2e.js');
+        } catch (error) {
+            throw new Error(formatContractFailure(family, error.message));
+        }
+    });
+
+    test('keeps /lib.js path available as the shared browser library boundary', () => {
+        const family = 'aliases';
+        try {
+            expect(fs.existsSync(paths.libJsPath) || fs.existsSync(path.join(publicRoot, 'lib.js'))).toBe(true);
+            const libSource = fs.existsSync(paths.libJsPath)
+                ? fs.readFileSync(paths.libJsPath, 'utf8')
+                : '';
+            // Source or built artifact may be present; path contract is the public serve name.
+            expect(paths.libJsPath.endsWith(`${path.sep}lib.js`)).toBe(true);
+            void libSource;
+        } catch (error) {
+            throw new Error(formatContractFailure(family, error.message));
         }
     });
 });

@@ -54,8 +54,6 @@ import { serverDirectory } from './server-directory.js';
 import { getEnableAccounts, toKey, getAccountVersion, getAllEnabledUsers, needsSetup } from './user-storage.js';
 import { getUserDirectories } from './user-directories.js';
 import { shouldRedirectToLogin, tryAutoLogin } from './user-auth.js';
-import { isReactLoginEnabled } from './react-login-feature.js';
-import { isReactSetupEnabled } from './react-setup-feature.js';
 import { isReactSettingsEnabled } from './react-settings-feature.js';
 import { hasReactLoginBuild, sendReactLoginIndex } from './middleware/react-login-serve.js';
 
@@ -269,6 +267,39 @@ export function requireLoginMiddleware(request, response, next) {
  * @param {string} [options.reactLoginDistRoot]
  * @returns {import('express').RequestHandler}
  */
+/**
+ * Send a clear failure when the required React auth app build is missing.
+ * @param {import('express').Response} response
+ * @param {string} pageName
+ * @returns {void}
+ */
+function sendMissingReactAuthBuild(response, pageName) {
+    response.status(503).type('text/plain').send(
+        `React ${pageName} build is missing. Run "bun run build:react" and restart the server.`,
+    );
+}
+
+/**
+ * Redirect a legacy `.html` auth URL to its canonical route while preserving the query string.
+ * @param {string} canonicalPath
+ * @returns {import('express').RequestHandler}
+ */
+export function createLegacyAuthHtmlRedirectMiddleware(canonicalPath) {
+    return function legacyAuthHtmlRedirectMiddleware(request, response) {
+        const queryIndex = request.originalUrl.indexOf('?');
+        const query = queryIndex >= 0 ? request.originalUrl.slice(queryIndex) : '';
+        return response.redirect(302, `${canonicalPath}${query}`);
+    };
+}
+
+export function createLegacyLoginHtmlRedirectMiddleware() {
+    return createLegacyAuthHtmlRedirectMiddleware('/login');
+}
+
+export function createLegacySetupHtmlRedirectMiddleware() {
+    return createLegacyAuthHtmlRedirectMiddleware('/setup');
+}
+
 export function createLoginPageMiddleware({ reactLoginDistRoot } = {}) {
     return async function loginPageMiddleware(request, response) {
         if (!getEnableAccounts()) {
@@ -287,15 +318,12 @@ export function createLoginPageMiddleware({ reactLoginDistRoot } = {}) {
             console.error('Error during auto-login:', error);
         }
 
-        if (isReactLoginEnabled()) {
-            if (hasReactLoginBuild(reactLoginDistRoot)) {
-                return sendReactLoginIndex(response, reactLoginDistRoot);
-            }
-
-            console.warn('React login flag is enabled, but app/dist/index.html was not found. Falling back to public/login.html.');
+        if (hasReactLoginBuild(reactLoginDistRoot)) {
+            return sendReactLoginIndex(response, reactLoginDistRoot);
         }
 
-        return response.sendFile('login.html', { root: path.join(serverDirectory, 'public') });
+        console.error('React login build is required but app/dist/index.html was not found.');
+        return sendMissingReactAuthBuild(response, 'login');
     };
 }
 
@@ -305,21 +333,18 @@ export function createLoginPageMiddleware({ reactLoginDistRoot } = {}) {
  * @param {string} [options.reactLoginDistRoot]
  * @returns {import('express').RequestHandler}
  */
-export function createSetupPageMiddleware({ reactLoginDistRoot } = {}) {
+export function createSetupPageMiddleware({ reactLoginDistRoot, forceNeedsSetup = false } = {}) {
     return async function setupPageMiddleware(request, response) {
-        if (!await needsSetup()) {
+        if (!forceNeedsSetup && !await needsSetup()) {
             return response.redirect('/login');
         }
 
-        if (isReactSetupEnabled()) {
-            if (hasReactLoginBuild(reactLoginDistRoot)) {
-                return sendReactLoginIndex(response, reactLoginDistRoot);
-            }
-
-            console.warn('React setup flag is enabled, but app/dist/index.html was not found. Falling back to public/setup.html.');
+        if (hasReactLoginBuild(reactLoginDistRoot)) {
+            return sendReactLoginIndex(response, reactLoginDistRoot);
         }
 
-        return response.sendFile('setup.html', { root: path.join(serverDirectory, 'public') });
+        console.error('React setup build is required but app/dist/index.html was not found.');
+        return sendMissingReactAuthBuild(response, 'setup');
     };
 }
 

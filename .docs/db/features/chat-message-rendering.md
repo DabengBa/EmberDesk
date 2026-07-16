@@ -19,6 +19,8 @@ Let users reliably read opened chat history and finalized generated messages as 
 
 ## User-Visible Contract
 
+- Extension-owned message mutation markers (`.TH-streaming`, `.TH-render`) are gated by the `message-mutation` contract family and runtime e2e before main-chat renderer retirement.
+
 - Stored and finalized user, assistant, character, or system messages render as readable message rows whose visible text matches the source message after normal browser whitespace handling.
 - Message text remains the primary content of each row; reasoning, media, files, bias, swipe state, and row actions may appear around it only when valid for that message.
 - Safe finalized rows may be visibly owned by the guarded React message-list path, but they must preserve the same row identity, message text shell, reasoning/media/file shells, action attachment points, and reading flow as the established surface.
@@ -29,6 +31,10 @@ Let users reliably read opened chat history and finalized generated messages as 
 - Long chats may open with only the recent visible window, but users must retain the existing load-more affordance for older messages; loaded older rows stay stable without requiring a separate jump-to-newest recovery control.
 - Returning to a previously read chat in the same page session may restore the expanded history window and reading region when safe; if not safe, EmberDesk falls back to the normal open result.
 - Recoverable visible generation failure must not remove the user message or duplicate assistant rows; final success or final failed state remains on one stable assistant row.
+
+## Approved Retirement Direction
+
+Main-chat rendering is a final-wave retirement surface. React must extend from safe finalized rows to editing, streaming, unsafe, extension-mutated, rich-body, and long-chat load-more cases without changing row identity or supported extension behavior before the legacy formatter and renderer paths are deleted.
 
 ## Semantic Interaction IDs
 

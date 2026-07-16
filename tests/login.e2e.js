@@ -20,6 +20,7 @@ test.describe('login page', () => {
         await expectAuthInputSemantics();
 
         await page.goto('/login.html');
+        await expect(page).toHaveURL(/\/login(?:\?|$)/);
         await expect(page.getByRole('heading', { name: 'EmberDesk' })).toBeVisible();
         await expectAuthInputSemantics();
     });
@@ -33,7 +34,7 @@ test.describe('login page', () => {
         await expect(loginCard.getByLabel('用户名')).toBeVisible();
         await expect(loginCard.getByRole('textbox', { name: '密码' })).toBeVisible();
         await expect(loginCard.getByRole('button', { name: '登录' })).toBeVisible();
-        await expect(loginCard.getByRole('link', { name: '忘记密码？' })).toBeVisible();
+        await expect(loginCard.getByRole('button', { name: '忘记密码？' })).toBeVisible();
 
         await loginCard.getByLabel('用户名').fill('default-user');
         await loginCard.getByRole('textbox', { name: '密码' }).fill('wrongpass');
@@ -43,13 +44,13 @@ test.describe('login page', () => {
         await loginCard.getByRole('textbox', { name: '密码' }).fill('test123');
         await expect(loginCard.getByRole('alert')).toBeHidden();
 
-        await loginCard.getByRole('link', { name: '忘记密码？' }).click();
+        await loginCard.getByRole('button', { name: '忘记密码？' }).click();
 
         const recoveryCard = page.locator('#recoveryCard');
         await expect(recoveryCard.getByRole('heading', { name: '重置密码' })).toBeVisible();
         await expect(recoveryCard.getByLabel('用户名')).toBeVisible();
         await expect(recoveryCard.getByRole('button', { name: '发送恢复码' })).toBeVisible();
-        await expect(recoveryCard.getByRole('link', { name: '返回登录' })).toBeVisible();
+        await expect(recoveryCard.getByRole('button', { name: '返回登录' })).toBeVisible();
     });
 
     test('supports password toggle and recovery validation without leaving the page', async ({ page }) => {
@@ -69,7 +70,7 @@ test.describe('login page', () => {
         await expect(passwordInput).toHaveAttribute('type', 'password');
         await expect(passwordInput).toHaveValue('visible-secret');
 
-        await loginCard.getByRole('link', { name: '忘记密码？' }).click();
+        await loginCard.getByRole('button', { name: '忘记密码？' }).click();
 
         const recoveryCard = page.locator('#recoveryCard');
         await recoveryCard.getByLabel('用户名').fill('');
@@ -95,8 +96,8 @@ test.describe('login page', () => {
         await expect(loginCard).toBeVisible();
         await expect(recoveryCard).toBeHidden();
 
-        await loginCard.getByRole('link', { name: '忘记密码？' }).click();
-        await recoveryCard.getByRole('link', { name: '返回登录' }).click();
+        await loginCard.getByRole('button', { name: '忘记密码？' }).click();
+        await recoveryCard.getByRole('button', { name: '返回登录' }).click();
         await expect(loginCard).toBeVisible();
         await expect(recoveryCard).toBeHidden();
     });

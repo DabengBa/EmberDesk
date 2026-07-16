@@ -17,9 +17,11 @@ The shared browser library is the import surface that lets browser modules and E
 
 ## Final Compatibility Status
 
+- Retirement packages use the provider-neutral contract in `tests/helpers/frontend-compatibility-contract.js` (`aliases` / `globals` families) with `bun run test:compat` before deleting a shared-library provider.
+
 - `/lib.js` is a long-term supported browser-module surface for first-party code and new ES-module extensions.
-- The legacy `window.*` shims installed from `public/lib.js` are frozen compatibility affordances, not a growth path for adding new globals.
-- Existing upstream-style `@sillytavern/*` aliases remain a separate frozen compatibility facade for ecosystems such as `JS-Slash-Runner`; when an extension only needs shared utilities, `/lib.js` is the preferred new import surface.
+- Legacy `window.*` shims are current compatibility affordances, not a growth path for adding new globals. Their supported behavior must be deliberately reimplemented before the supplying legacy runtime is removed.
+- Existing upstream-style `@sillytavern/*` aliases remain a supported compatibility contract for ecosystems such as `JS-Slash-Runner`; when an extension only needs shared utilities, `/lib.js` is the preferred new import surface.
 - Maintainer closeout state for `/lib.js`, legacy globals, and `@sillytavern/*` aliases lives in tech docs and ADRs. The product-facing promise here is only that the shared browser utility surface remains stable.
 
 ## User-Facing Lifecycle
@@ -27,7 +29,7 @@ The shared browser library is the import surface that lets browser modules and E
 1. The workspace loads the shared library during normal startup.
 2. First-party browser modules import named utilities from the library.
 3. New ES-module extensions may import from `/lib.js` instead of bundling their own copies of common dependencies.
-4. Legacy extensions can continue using the documented global names installed by the workspace startup shim.
+4. Supported legacy extensions can continue using documented global names or their documented equivalent contract during and after React retirement.
 
 ## UI-Relevant Boundaries
 

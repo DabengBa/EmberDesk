@@ -1,0 +1,4 @@
+contract_version = 1
+feature_slug = "react-compatibility-contract-baseline"
+brief = ".docs/tech/briefs/260716-04-react-compatibility-contract-baseline.md"
+doc_ids = ["term.shared_browser_library", "feature.extension_panel_open", "feature.character_library_panel", "feature.chat_message_rendering", "page.chat_workspace"]

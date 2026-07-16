@@ -121,8 +121,6 @@ features:
           strict: false
   react:
     pages:
-      login: true
-      setup: false
       settings: false
     panels:
       characterLibrary: false

@@ -1,0 +1,4 @@
+contract_version = 1
+feature_slug = "react-login-setup-retirement"
+brief = ".docs/tech/briefs/260716-03-react-login-setup-retirement.md"
+doc_ids = ["page.login", "page.setup"]

@@ -21,15 +21,13 @@ beforeAll(() => {
         'features:',
         '  react:',
         '    pages:',
-        '      login: false',
-        '      setup: false',
+        '      settings: false',
         '',
     ].join('\n'), 'utf8');
     setConfigFilePath(configPath);
 });
 
 afterEach(() => {
-    delete process.env.EMBERDESK_FEATURES_REACT_PAGES_SETUP;
     for (const root of tmpRoots.splice(0)) {
         fs.rmSync(root, { recursive: true, force: true });
     }
@@ -58,40 +56,63 @@ async function usingApp(app, callback) {
     }
 }
 
+function createRequestContext() {
+    return {
+        session: {},
+        user: null,
+    };
+}
+
+function writeReactDist() {
+    const distRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-setup-react-dist-'));
+    const assetsRoot = path.join(distRoot, 'assets');
+    tmpRoots.push(distRoot);
+    fs.mkdirSync(assetsRoot, { recursive: true });
+    fs.writeFileSync(path.join(distRoot, 'index.html'), [
+        '<!DOCTYPE html>',
+        '<html lang="zh-CN">',
+        '<head>',
+        '  <meta charset="UTF-8" />',
+        '  <title>EmberDesk React Setup</title>',
+        '  <script type="module" crossorigin src="/react/login/assets/setup.js"></script>',
+        '</head>',
+        '<body><div id="root"></div></body>',
+        '</html>',
+        '',
+    ].join('\n'), 'utf8');
+    fs.writeFileSync(path.join(assetsRoot, 'setup.js'), 'console.log("react setup");', 'utf8');
+    return distRoot;
+}
+
 async function createSetupRouteApp({ reactLoginDistRoot } = {}) {
-    const dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-setup-react-data-'));
-    tmpRoots.push(dataRoot);
-    globalThis.DATA_ROOT = dataRoot;
+    globalThis.COMMAND_LINE_ARGS = { basicAuthMode: false };
 
     const usersModule = await import(`../src/users.js?setupRoute=${Date.now()}-${Math.random()}`);
     const middlewareModule = await import(`../src/middleware/react-login-serve.js?setupRoute=${Date.now()}-${Math.random()}`);
     const basePathModule = await import(`../src/react-login-feature.js?setupRoute=${Date.now()}-${Math.random()}`);
-    const featureModule = await import(`../src/react-setup-feature.js?setupRoute=${Date.now()}-${Math.random()}`);
-
-    await usersModule.initUserStorage(dataRoot);
 
     const app = express();
-    app.get('/setup', usersModule.createSetupPageMiddleware({ reactLoginDistRoot }));
-    app.get('/setup.html', (_request, response) => {
-        response.sendFile('setup.html', { root: path.join(repoRoot, 'public') });
+    app.use((request, _response, next) => {
+        Object.assign(request, createRequestContext());
+        next();
     });
+    app.get('/setup', usersModule.createSetupPageMiddleware({
+        reactLoginDistRoot,
+        forceNeedsSetup: true,
+    }));
+    app.get('/setup.html', usersModule.createLegacySetupHtmlRedirectMiddleware());
     app.use(basePathModule.REACT_LOGIN_BASE_PATH, middlewareModule.getReactLoginServeMiddleware(reactLoginDistRoot));
-    app.use(express.static(path.join(repoRoot, 'public'), {}));
-
-    return { app, featureModule };
+    return { app, usersModule };
 }
 
-describe('setup React route flag', () => {
+describe('setup React sole owner route', () => {
     jest.setTimeout(20_000);
 
-    test('wires the React setup route through TanStack Form, Query, and Zod while reusing shared setup helpers', () => {
-        const clientSource = fs.readFileSync(path.join(repoRoot, 'app', 'client.tsx'), 'utf8');
+    test('wires the React setup route through shared helpers and TanStack Form/Query/Zod', () => {
         const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'routes', 'setup.tsx'), 'utf8');
         const helperSource = fs.readFileSync(path.join(repoRoot, 'app', 'lib', 'setup-helpers.ts'), 'utf8');
         const sharedSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'setup-shared.js'), 'utf8');
 
-        expect(clientSource).toContain("import { QueryClient, QueryClientProvider } from '@tanstack/react-query';");
-        expect(clientSource).toContain('<QueryClientProvider client={queryClient}>');
         expect(routeSource).toContain("import { useForm } from '@tanstack/react-form';");
         expect(routeSource).toContain("import { useMutation, useQuery } from '@tanstack/react-query';");
         expect(routeSource).toContain("import { z } from 'zod';");
@@ -109,60 +130,50 @@ describe('setup React route flag', () => {
         expect(sharedSource).toContain('export function buildSetupRequestBody');
     });
 
-    test('keeps /setup on the legacy page when the React setup flag is disabled', async () => {
-        const { app, featureModule } = await createSetupRouteApp();
-
-        expect(featureModule.isReactSetupEnabled()).toBe(false);
-
-        await usingApp(app, async (url) => {
-            const response = await fetch(`${url}/setup`);
-            expect(response.status).toBe(200);
-            const body = await response.text();
-            expect(body).toContain('<section class="login-card login-card--setup" id="setupCard"');
-            expect(body).toContain('<script src="scripts/setup.js" type="module"></script>');
-        });
-    });
-
-    test('serves the React setup shell from /setup and keeps /setup.html as fallback when the flag is enabled', async () => {
-        process.env.EMBERDESK_FEATURES_REACT_PAGES_SETUP = 'true';
-        const distRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-setup-react-dist-'));
-        const assetsRoot = path.join(distRoot, 'assets');
-        tmpRoots.push(distRoot);
-        fs.mkdirSync(assetsRoot, { recursive: true });
-        fs.writeFileSync(path.join(distRoot, 'index.html'), [
-            '<!DOCTYPE html>',
-            '<html lang="zh-CN">',
-            '<head>',
-            '  <meta charset="UTF-8" />',
-            '  <title>EmberDesk React Setup</title>',
-            '  <script type="module" crossorigin src="/react/login/assets/setup.js"></script>',
-            '</head>',
-            '<body><div id="root"></div></body>',
-            '</html>',
-            '',
-        ].join('\n'), 'utf8');
-        fs.writeFileSync(path.join(assetsRoot, 'setup.js'), 'console.log("react setup");', 'utf8');
-
-        const { app, featureModule } = await createSetupRouteApp({ reactLoginDistRoot: distRoot });
-
-        expect(featureModule.isReactSetupEnabled()).toBe(true);
+    test('serves React from /setup and redirects /setup.html while preserving supported query context', async () => {
+        const distRoot = writeReactDist();
+        const { app } = await createSetupRouteApp({ reactLoginDistRoot: distRoot });
 
         await usingApp(app, async (url) => {
-            const setupResponse = await fetch(`${url}/setup`);
+            const setupResponse = await fetch(`${url}/setup?from=bookmark`);
             expect(setupResponse.status).toBe(200);
             const setupBody = await setupResponse.text();
             expect(setupBody).toContain('/react/login/assets/setup.js');
             expect(setupBody).not.toContain('scripts/setup.js');
 
-            const legacyResponse = await fetch(`${url}/setup.html`);
-            expect(legacyResponse.status).toBe(200);
-            const legacyBody = await legacyResponse.text();
-            expect(legacyBody).toContain('<script src="scripts/setup.js" type="module"></script>');
+            const legacyResponse = await fetch(`${url}/setup.html?from=bookmark`, { redirect: 'manual' });
+            expect([301, 302, 307, 308]).toContain(legacyResponse.status);
+            const location = legacyResponse.headers.get('location');
+            expect(location).toMatch(/\/setup/);
+            expect(location).toContain('from=bookmark');
 
             const assetResponse = await fetch(`${url}/react/login/assets/setup.js`);
             expect(assetResponse.status).toBe(200);
-            expect(assetResponse.headers.get('content-type')).toContain('text/javascript');
             expect(await assetResponse.text()).toContain('react setup');
         });
+    });
+
+    test('returns an explicit error when the React build is missing instead of legacy HTML', async () => {
+        const missingRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-setup-missing-'));
+        tmpRoots.push(missingRoot);
+        const { app } = await createSetupRouteApp({ reactLoginDistRoot: missingRoot });
+
+        await usingApp(app, async (url) => {
+            const response = await fetch(`${url}/setup`);
+            expect(response.status).toBeGreaterThanOrEqual(500);
+            const body = await response.text();
+            expect(body.toLowerCase()).toMatch(/react|build|missing|not found|unavailable/);
+            expect(body).not.toContain('scripts/setup.js');
+            expect(body).not.toContain('id="setupCard"');
+        });
+    });
+
+    test('removes legacy setup page files and feature flag helpers from the runtime surface', () => {
+        expect(fs.existsSync(path.join(repoRoot, 'public', 'setup.html'))).toBe(false);
+        expect(fs.existsSync(path.join(repoRoot, 'public', 'scripts', 'setup.js'))).toBe(false);
+        expect(fs.existsSync(path.join(repoRoot, 'src', 'react-setup-feature.js'))).toBe(false);
+        const usersSource = fs.readFileSync(path.join(repoRoot, 'src', 'users.js'), 'utf8');
+        expect(usersSource).not.toContain('isReactSetupEnabled');
+        expect(usersSource).not.toContain("sendFile('setup.html'");
     });
 });
