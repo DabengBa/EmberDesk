@@ -27,6 +27,21 @@ import { buildCascadeSectionHtml, captureCascadeChoices } from './world-cascade-
 import { convertAgnaiMemoryBook, convertCharacterBook, convertNovelLorebook, convertRisuLorebook } from './world-info-converters.js';
 import { DragAndDropHandler } from './dragdrop.js';
 import { createWorldInfoImportResult, summarizeWorldInfoBatchImport } from './world-info-import-results.js';
+import {
+    WORLD_INFO_WORKBENCH_EDITABLE_FIELDS as DOMAIN_WORKBENCH_EDITABLE_FIELDS,
+    getWorldInfoWorkbenchPositionLabel as domainGetWorldInfoWorkbenchPositionLabel,
+    buildWorldInfoWorkbenchEntrySummary as domainBuildWorldInfoWorkbenchEntrySummary,
+    buildWorldInfoWorkbenchEntryDetail as domainBuildWorldInfoWorkbenchEntryDetail,
+    addMissingWorldInfoFields as domainAddMissingWorldInfoFields,
+    sortWorldInfoEntries as domainSortWorldInfoEntries,
+} from './world-info-domain.js';
+import { createWorldInfoWorkbenchSession } from './world-info-workbench-service.js';
+export { createWorldInfoWorkbenchSession };
+export {
+    buildWorldInfoReactPanelState,
+    WORLD_INFO_DEFAULT_SORT_OPTIONS,
+    resolveWorldInfoSortOption,
+} from './world-info-workbench-service.js';
 import { getWorldInfoShellEventSourceProperty, requireWorldInfoShellContext } from './world-info-shell-context.js';
 
 export { convertCharacterBook };
@@ -1634,7 +1649,12 @@ export function reloadEditor(file, loadIfNotSelected = false) {
 }
 
 function getSelectedWorldInfoEditorName() {
-    const selectedIndex = Number($('#world_editor_select').val());
+    const selectedValue = String($('#world_editor_select').val() ?? '');
+    if (selectedValue === '') {
+        return '';
+    }
+
+    const selectedIndex = Number(selectedValue);
     return Number.isInteger(selectedIndex) && selectedIndex >= 0
         ? world_names?.[selectedIndex] ?? ''
         : '';
@@ -1654,6 +1674,10 @@ export async function selectWorldInfoEditorIndex(worldIndex) {
 
     $('#world_info_search').val('');
     worldInfoFilter.setFilterData(FILTER_TYPES.WORLD_INFO_SEARCH, '', true);
+
+    const session = getWorldInfoWorkbenchSession();
+    await session.selectWorldIndex(selectedValue);
+    worldInfoWorkbenchSelectedEntryUid = '';
 
     if (selectedValue === '') {
         await hideWorldEditor();
@@ -1675,14 +1699,19 @@ export async function selectWorldInfoEditorIndex(worldIndex) {
 
 export function applyWorldInfoSearchQuery(searchQuery) {
     const normalizedQuery = String(searchQuery ?? '');
+    const session = getWorldInfoWorkbenchSession();
+    session.applySearchQuery(normalizedQuery);
+    // Keep legacy filter/DOM in sync for non-React consumers while dual-path exists.
     $('#world_info_search').val(normalizedQuery);
     worldInfoFilter.setFilterData(FILTER_TYPES.WORLD_INFO_SEARCH, normalizedQuery);
 }
 
 export function applyWorldInfoSortOption(sortValue) {
     const normalizedSortValue = String(sortValue ?? '');
+    const session = getWorldInfoWorkbenchSession();
+    session.applySortOption(normalizedSortValue);
     $('#world_info_sort_order').val(normalizedSortValue);
-    if (normalizedSortValue !== 'search') {
+    if (normalizedSortValue !== 'search' && normalizedSortValue !== '14') {
         accountStorage.setItem(SORT_ORDER_KEY, normalizedSortValue);
     }
     updateEditor(navigation_option.none);
@@ -1958,49 +1987,27 @@ export async function openWorldInfoEntryByUid(uid) {
 /** @type {string} */
 let worldInfoWorkbenchSelectedEntryUid = '';
 
-const WORLD_INFO_WORKBENCH_EDITABLE_FIELDS = new Set([
-    'key',
-    'keysecondary',
-    'comment',
-    'content',
-    'constant',
-    'selective',
-    'selectiveLogic',
-    'addMemo',
-    'order',
-    'position',
-    'disable',
-    'ignoreBudget',
-    'excludeRecursion',
-    'preventRecursion',
-    'matchPersonaDescription',
-    'matchCharacterDescription',
-    'matchCharacterPersonality',
-    'matchCharacterDepthPrompt',
-    'matchScenario',
-    'matchCreatorNotes',
-    'delayUntilRecursion',
-    'probability',
-    'useProbability',
-    'depth',
-    'outletName',
-    'group',
-    'groupOverride',
-    'groupWeight',
-    'scanDepth',
-    'caseSensitive',
-    'matchWholeWords',
-    'useGroupScoring',
-    'automationId',
-    'role',
-    'sticky',
-    'cooldown',
-    'delay',
-    'characterFilterNames',
-    'characterFilterTags',
-    'characterFilterExclude',
-    'triggers',
-]);
+/** @type {ReturnType<typeof createWorldInfoWorkbenchSession>|null} */
+let worldInfoWorkbenchSession = null;
+
+function getWorldInfoWorkbenchSession() {
+    if (!worldInfoWorkbenchSession) {
+        worldInfoWorkbenchSession = createWorldInfoWorkbenchSession({
+            worldNames: Array.isArray(world_names) ? world_names : [],
+            selectedWorldInfo: Array.isArray(selected_world_info) ? selected_world_info : [],
+            loadWorldInfo,
+            saveWorldInfo,
+            setOriginalDataValue: setWIOriginalDataValue,
+        });
+    }
+
+    worldInfoWorkbenchSession.setWorldNames(Array.isArray(world_names) ? world_names : []);
+    worldInfoWorkbenchSession.setSelectedWorldInfo(Array.isArray(selected_world_info) ? selected_world_info : []);
+    return worldInfoWorkbenchSession;
+}
+
+
+const WORLD_INFO_WORKBENCH_EDITABLE_FIELDS = DOMAIN_WORKBENCH_EDITABLE_FIELDS;
 
 /**
  * Human-readable injection position for workbench list/editor display.
@@ -2008,21 +2015,7 @@ const WORLD_INFO_WORKBENCH_EDITABLE_FIELDS = new Set([
  * @returns {string}
  */
 export function getWorldInfoWorkbenchPositionLabel(entry) {
-    if (!entry || typeof entry !== 'object') {
-        return '';
-    }
-
-    switch (entry.position) {
-        case world_info_position.before: return '角色定义前';
-        case world_info_position.after: return '角色定义后';
-        case world_info_position.EMTop: return '示例消息顶部';
-        case world_info_position.EMBottom: return '示例消息底部';
-        case world_info_position.ANTop: return '作者注释顶部';
-        case world_info_position.ANBottom: return '作者注释底部';
-        case world_info_position.atDepth: return `按深度 ${entry.depth ?? DEFAULT_DEPTH}`;
-        case world_info_position.outlet: return entry.outletName ? `出口: ${entry.outletName}` : '出口';
-        default: return '未知位置';
-    }
+    return domainGetWorldInfoWorkbenchPositionLabel(entry);
 }
 
 /**
@@ -2030,25 +2023,7 @@ export function getWorldInfoWorkbenchPositionLabel(entry) {
  * @returns {object}
  */
 export function buildWorldInfoWorkbenchEntrySummary(entry) {
-    const keys = Array.isArray(entry?.key) ? entry.key.filter(Boolean) : [];
-    const title = String(entry?.comment || '').trim() || keys.join(', ') || `Entry ${entry?.uid ?? ''}`;
-    const constant = Boolean(entry?.constant);
-    return {
-        uid: String(entry?.uid ?? ''),
-        title,
-        disabled: Boolean(entry?.disable),
-        constant,
-        keywordsSummary: constant ? 'Constant' : (keys.join(', ') || 'No keywords'),
-        positionLabel: getWorldInfoWorkbenchPositionLabel(entry),
-        order: Number(entry?.order ?? 0),
-        hasSecondaryKeys: Array.isArray(entry?.keysecondary) && entry.keysecondary.length > 0,
-        probability: Number(entry?.probability ?? 100),
-        useProbability: entry?.useProbability !== false,
-        group: String(entry?.group || ''),
-        sticky: entry?.sticky ?? null,
-        cooldown: entry?.cooldown ?? null,
-        delay: entry?.delay ?? null,
-    };
+    return domainBuildWorldInfoWorkbenchEntrySummary(entry);
 }
 
 /**
@@ -2058,62 +2033,17 @@ export function buildWorldInfoWorkbenchEntrySummary(entry) {
  * @returns {object|null}
  */
 export function buildWorldInfoWorkbenchEntryDetail(entry) {
-    if (!entry || typeof entry !== 'object') {
-        return null;
-    }
-
-    return {
-        uid: String(entry.uid ?? ''),
-        comment: String(entry.comment ?? ''),
-        content: String(entry.content ?? ''),
-        key: Array.isArray(entry.key) ? [...entry.key] : [],
-        keysecondary: Array.isArray(entry.keysecondary) ? [...entry.keysecondary] : [],
-        constant: Boolean(entry.constant),
-        selective: entry.selective !== false,
-        selectiveLogic: Number(entry.selectiveLogic ?? world_info_logic.AND_ANY),
-        disable: Boolean(entry.disable),
-        order: Number(entry.order ?? 100),
-        position: Number(entry.position ?? world_info_position.before),
-        role: Number(entry.role ?? 0),
-        depth: Number(entry.depth ?? DEFAULT_DEPTH),
-        probability: Number(entry.probability ?? 100),
-        useProbability: entry.useProbability !== false,
-        ignoreBudget: Boolean(entry.ignoreBudget),
-        excludeRecursion: Boolean(entry.excludeRecursion),
-        preventRecursion: Boolean(entry.preventRecursion),
-        delayUntilRecursion: Number(entry.delayUntilRecursion ?? 0),
-        sticky: entry.sticky ?? null,
-        cooldown: entry.cooldown ?? null,
-        delay: entry.delay ?? null,
-        group: String(entry.group ?? ''),
-        groupOverride: Boolean(entry.groupOverride),
-        groupWeight: Number(entry.groupWeight ?? DEFAULT_WEIGHT),
-        scanDepth: entry.scanDepth ?? null,
-        caseSensitive: entry.caseSensitive ?? null,
-        matchWholeWords: entry.matchWholeWords ?? null,
-        useGroupScoring: entry.useGroupScoring ?? null,
-        automationId: String(entry.automationId ?? ''),
-        outletName: String(entry.outletName ?? ''),
-        matchPersonaDescription: Boolean(entry.matchPersonaDescription),
-        matchCharacterDescription: Boolean(entry.matchCharacterDescription),
-        matchCharacterPersonality: Boolean(entry.matchCharacterPersonality),
-        matchCharacterDepthPrompt: Boolean(entry.matchCharacterDepthPrompt),
-        matchScenario: Boolean(entry.matchScenario),
-        matchCreatorNotes: Boolean(entry.matchCreatorNotes),
-        characterFilterNames: Array.isArray(entry.characterFilterNames) ? [...entry.characterFilterNames] : [],
-        characterFilterTags: Array.isArray(entry.characterFilterTags) ? [...entry.characterFilterTags] : [],
-        characterFilterExclude: Boolean(entry.characterFilterExclude),
-        triggers: Array.isArray(entry.triggers) ? [...entry.triggers] : [],
-        // Compatibility-only: not rendered as a capability in the workbench UI.
-        vectorized: Boolean(entry.vectorized),
-        positionLabel: getWorldInfoWorkbenchPositionLabel(entry),
-    };
+    return domainBuildWorldInfoWorkbenchEntryDetail(entry);
 }
 
 /**
  * @returns {string}
  */
 export function getWorldInfoWorkbenchSelectedEntryUid() {
+    const session = worldInfoWorkbenchSession;
+    if (session) {
+        return session.getSelectedEntryUid() || worldInfoWorkbenchSelectedEntryUid;
+    }
     return worldInfoWorkbenchSelectedEntryUid;
 }
 
@@ -2123,28 +2053,16 @@ export function getWorldInfoWorkbenchSelectedEntryUid() {
  * @returns {Promise<boolean>}
  */
 export async function selectWorldInfoWorkbenchEntry(uid) {
-    const normalizedUid = String(uid ?? '');
-    if (!normalizedUid) {
-        worldInfoWorkbenchSelectedEntryUid = '';
-        return true;
-    }
-
+    const session = getWorldInfoWorkbenchSession();
     const worldName = getSelectedWorldInfoEditorName();
-    if (!worldName) {
-        worldInfoWorkbenchSelectedEntryUid = '';
-        return false;
+    if (worldName) {
+        await session.selectWorldName(worldName);
+    } else {
+        await session.selectWorldIndex('');
     }
-
-    const data = await loadWorldInfo(worldName);
-    const entry = data?.entries?.[normalizedUid]
-        ?? data?.entries?.[Number(normalizedUid)]
-        ?? null;
-    if (!entry) {
-        return false;
-    }
-
-    worldInfoWorkbenchSelectedEntryUid = String(entry.uid);
-    return true;
+    const ok = await session.selectEntry(uid);
+    worldInfoWorkbenchSelectedEntryUid = session.getSelectedEntryUid();
+    return ok;
 }
 
 /**
@@ -2154,52 +2072,18 @@ export async function selectWorldInfoWorkbenchEntry(uid) {
  * @returns {Promise<boolean>}
  */
 export async function updateWorldInfoWorkbenchEntryFields(uid, fields = {}) {
+    const session = getWorldInfoWorkbenchSession();
     const worldName = getSelectedWorldInfoEditorName();
-    if (!worldName || !fields || typeof fields !== 'object') {
+    if (worldName) {
+        await session.selectWorldName(worldName);
+    } else {
         return false;
     }
-
-    const data = await loadWorldInfo(worldName);
-    if (!data?.entries) {
-        return false;
+    const ok = await session.updateEntryFields(uid, fields);
+    if (ok) {
+        worldInfoWorkbenchSelectedEntryUid = session.getSelectedEntryUid();
     }
-
-    const normalizedUid = String(uid ?? '');
-    const entry = data.entries[normalizedUid] ?? data.entries[Number(normalizedUid)];
-    if (!entry) {
-        return false;
-    }
-
-    let changed = false;
-    for (const [field, value] of Object.entries(fields)) {
-        if (!WORLD_INFO_WORKBENCH_EDITABLE_FIELDS.has(field)) {
-            continue;
-        }
-        entry[field] = value;
-        setWIOriginalDataValue(data, entry.uid, field, value);
-        if (field === 'key') {
-            setWIOriginalDataValue(data, entry.uid, 'keyprimary', value);
-        }
-        if (field === 'position') {
-            setWIOriginalDataValue(
-                data,
-                entry.uid,
-                'position',
-                value == world_info_position.before ? 'before_char' : 'after_char',
-            );
-            setWIOriginalDataValue(data, entry.uid, 'extensions.position', value);
-        }
-        changed = true;
-    }
-
-    // Editable allowlist intentionally omits vectorized; existing values remain on the entry object.
-    if (!changed) {
-        return false;
-    }
-
-    worldInfoWorkbenchSelectedEntryUid = String(entry.uid);
-    await saveWorldInfo(worldName, data, true);
-    return true;
+    return ok;
 }
 
 /**
@@ -2208,33 +2092,15 @@ export async function updateWorldInfoWorkbenchEntryFields(uid, fields = {}) {
  * @returns {Promise<object[]>}
  */
 export async function getWorldInfoWorkbenchEntrySummaries() {
+    const session = getWorldInfoWorkbenchSession();
     const worldName = getSelectedWorldInfoEditorName();
-    if (!worldName) {
+    if (worldName) {
+        await session.selectWorldName(worldName);
+    } else {
+        await session.selectWorldIndex('');
         return [];
     }
-
-    const data = await loadWorldInfo(worldName);
-    if (!data?.entries) {
-        return [];
-    }
-
-    // Mirror legacy editor list pipeline so React search/sort stay on the same facade.
-    let entriesArray = Object.keys(data.entries).map(uid => {
-        const entry = data.entries[uid];
-        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
-            return null;
-        }
-        entry.displayIndex = entry.displayIndex ?? entry.uid;
-        return entry;
-    }).filter(entry => entry !== null);
-
-    if (typeof addMissingWorldInfoFields === 'function') {
-        entriesArray = addMissingWorldInfoFields(entriesArray);
-    }
-    entriesArray = worldInfoFilter.applyFilters(entriesArray);
-    entriesArray = sortWorldInfoEntries(entriesArray);
-
-    return entriesArray.map(entry => buildWorldInfoWorkbenchEntrySummary(entry));
+    return session.getEntrySummaries();
 }
 
 /**
@@ -2243,23 +2109,14 @@ export async function getWorldInfoWorkbenchEntrySummaries() {
  * @returns {Promise<object|null>}
  */
 export async function getWorldInfoWorkbenchEntryDetail(uid = worldInfoWorkbenchSelectedEntryUid) {
+    const session = getWorldInfoWorkbenchSession();
     const worldName = getSelectedWorldInfoEditorName();
-    if (!worldName) {
+    if (worldName) {
+        await session.selectWorldName(worldName);
+    } else {
         return null;
     }
-
-    const data = await loadWorldInfo(worldName);
-    if (!data?.entries) {
-        return null;
-    }
-
-    const normalizedUid = String(uid ?? '');
-    if (!normalizedUid) {
-        return null;
-    }
-
-    const entry = data.entries[normalizedUid] ?? data.entries[Number(normalizedUid)];
-    return buildWorldInfoWorkbenchEntryDetail(entry);
+    return session.getSelectedEntryDetail(uid);
 }
 
 /**
@@ -2267,35 +2124,44 @@ export async function getWorldInfoWorkbenchEntryDetail(uid = worldInfoWorkbenchS
  * @returns {Promise<object>}
  */
 export async function getWorldInfoWorkbenchFacadeSnapshot() {
-    const editorWorldName = getSelectedWorldInfoEditorName();
-    const entrySummaries = await getWorldInfoWorkbenchEntrySummaries();
-    let selectedEntryUid = worldInfoWorkbenchSelectedEntryUid;
-
-    if (selectedEntryUid && !entrySummaries.some(entry => entry.uid === selectedEntryUid)) {
-        selectedEntryUid = '';
-        worldInfoWorkbenchSelectedEntryUid = '';
+    const session = getWorldInfoWorkbenchSession();
+    const worldName = getSelectedWorldInfoEditorName();
+    if (worldName) {
+        await session.selectWorldName(worldName);
+    } else {
+        await session.selectWorldIndex('');
     }
-
-    if (!selectedEntryUid && entrySummaries.length > 0) {
-        // Keep selection empty until the user chooses; avoid silent auto-select coupling.
-        selectedEntryUid = '';
+    // Keep session entry selection in sync with facade module state.
+    if (worldInfoWorkbenchSelectedEntryUid) {
+        await session.selectEntry(worldInfoWorkbenchSelectedEntryUid);
     }
-
-    const selectedEntry = selectedEntryUid
-        ? await getWorldInfoWorkbenchEntryDetail(selectedEntryUid)
-        : null;
-
-    return {
-        globalActiveNames: Array.isArray(selected_world_info) ? [...selected_world_info] : [],
-        globalActiveCount: Array.isArray(selected_world_info) ? selected_world_info.length : 0,
-        editorWorldName,
-        entryCount: entrySummaries.length,
-        entrySummaries,
-        selectedEntryUid,
-        selectedEntry,
-        hasEditorWorld: Boolean(editorWorldName),
-    };
+    const snapshot = await session.getFacadeSnapshot();
+    worldInfoWorkbenchSelectedEntryUid = snapshot.selectedEntryUid || '';
+    return snapshot;
 }
+
+/**
+ * React panel state built from workbench service (no workbench DOM required).
+ * @returns {Promise<object>}
+ */
+export async function getWorldInfoReactPanelState(meta = {}) {
+    const session = getWorldInfoWorkbenchSession();
+    const worldName = getSelectedWorldInfoEditorName();
+    if (worldName) {
+        await session.selectWorldName(worldName);
+    } else {
+        await session.selectWorldIndex('');
+    }
+    if (worldInfoWorkbenchSelectedEntryUid) {
+        await session.selectEntry(worldInfoWorkbenchSelectedEntryUid);
+    }
+    return session.getReactPanelState({
+        worldNames: Array.isArray(world_names) ? world_names : [],
+        importBusy: Boolean(worldInfoImportBusy),
+        ...meta,
+    });
+}
+
 
 //MARK: regWISlashCommands
 function registerWorldInfoSlashCommands() {
@@ -3408,37 +3274,7 @@ function getWIElement(name) {
  * @returns {any[]} Data with backfilled fields
  */
 function addMissingWorldInfoFields(data) {
-    data.forEach((entry) => {
-        // Add missing fields from the template
-        Object.entries(newWorldInfoEntryTemplate).forEach(([key, value]) => {
-            if (!Object.hasOwn(entry, key)) {
-                entry[key] = structuredClone(value);
-            }
-        });
-
-        // Ensure that the key is always an array
-        if (!Array.isArray(entry.key)) {
-            console.debug('[WI] Fixing invalid "key" field for entry', entry);
-            entry.key = [];
-        }
-
-        // Ensure that the keysecondary is always an array
-        if (!Array.isArray(entry.keysecondary)) {
-            console.debug('[WI] Fixing invalid "keysecondary" field for entry', entry);
-            entry.keysecondary = [];
-        }
-
-        // Ensure that the characterFilter is an object with the expected structure
-        if (!entry.characterFilter || typeof entry.characterFilter !== 'object' || Array.isArray(entry.characterFilter)) {
-            entry.characterFilter = {
-                isExclude: false,
-                names: [],
-                tags: [],
-            };
-        }
-    });
-
-    return data;
+    return domainAddMissingWorldInfoFields(data, newWorldInfoEntryTemplate);
 }
 
 /**
@@ -3450,69 +3286,20 @@ function addMissingWorldInfoFields(data) {
  * @returns {any[]} Sorted data
  */
 export function sortWorldInfoEntries(data, { customSort = null } = {}) {
-    const option = $('#world_info_sort_order').find(':selected');
-    const sortField = customSort?.sortField ?? option.data('field');
-    const sortOrder = customSort?.sortOrder ?? option.data('order');
-    const sortRule = customSort?.sortRule ?? option.data('rule');
-    const orderSign = sortOrder === 'asc' ? 1 : -1;
-
-    if (!data.length) return data;
-
-    /** @type {(a: any, b: any) => number} */
-    let primarySort;
-
-    // Secondary and tertiary it will always be sorted by Order descending, and last UID ascending
-    // This is the most sensible approach for sorts where the primary sort has a lot of equal values
-    const secondarySort = (a, b) => b.order - a.order;
-    const tertiarySort = (a, b) => a.uid - b.uid;
-
-    // If we have a search term for WI, we are sorting by weighting scores
-    if (sortRule === 'search') {
-        primarySort = (a, b) => {
-            const aScore = worldInfoFilter.getScore(FILTER_TYPES.WORLD_INFO_SEARCH, a.uid);
-            const bScore = worldInfoFilter.getScore(FILTER_TYPES.WORLD_INFO_SEARCH, b.uid);
-            return aScore - bScore;
-        };
-    } else if (sortRule === 'custom') {
-        // First by display index
-        primarySort = (a, b) => {
-            const aValue = a.displayIndex;
-            const bValue = b.displayIndex;
-            return aValue - bValue;
-        };
-    } else if (sortRule === 'priority') {
-        // First constant, then normal, then disabled.
-        primarySort = (a, b) => {
-            const aValue = a.disable ? 2 : a.constant ? 0 : 1;
-            const bValue = b.disable ? 2 : b.constant ? 0 : 1;
-            return aValue - bValue;
-        };
-    } else {
-        primarySort = (a, b) => {
-            const aValue = a[sortField];
-            const bValue = b[sortField];
-
-            // Sort strings
-            if (typeof aValue === 'string' && typeof bValue === 'string') {
-                if (sortRule === 'length') {
-                    // Sort by string length
-                    return orderSign * (aValue.length - bValue.length);
-                } else {
-                    // Sort by A-Z ordinal
-                    return orderSign * aValue.localeCompare(bValue);
-                }
-            }
-
-            // Sort numbers
-            return orderSign * (Number(aValue) - Number(bValue));
+    let resolvedCustomSort = customSort;
+    if (!resolvedCustomSort) {
+        const option = $('#world_info_sort_order').find(':selected');
+        resolvedCustomSort = {
+            sortField: option.data('field'),
+            sortOrder: option.data('order'),
+            sortRule: option.data('rule'),
         };
     }
 
-    data.sort((a, b) => {
-        return primarySort(a, b) || secondarySort(a, b) || tertiarySort(a, b);
+    return domainSortWorldInfoEntries(data, {
+        customSort: resolvedCustomSort,
+        getSearchScore: (uid) => worldInfoFilter.getScore(FILTER_TYPES.WORLD_INFO_SEARCH, uid),
     });
-
-    return data;
 }
 
 function nullWorldInfo() {

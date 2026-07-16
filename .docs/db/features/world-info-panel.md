@@ -15,6 +15,10 @@ related: [page.chat_workspace, feature.world_book_delete, feature.character_dele
 
 Keep World Info/lorebook activation and editing available inside the chat workspace through visible selectors, entry cards, editor controls, and import/export actions.
 
+## Approved Retirement Direction
+
+World Info is a completed third-wave React sole-owner surface. The React workbench owns the visible editor workflow; framework-neutral domain and workbench services own projection, selection, and entry field updates. `public/scripts/world-info.js` remains a compatibility barrel for prompt/scan, import/export, delete cascade, slash commands, and supported extension exports. Product flag-off and legacy visible editor fallbacks are retired; missing-build failures stay fail-closed and prior-version deploy is the rollback path.
+
 ## User-Visible Contract
 
 - The World Info drawer belongs to [Chat Workspace](page.chat_workspace); users activate global worlds and edit world books without leaving the main shell.
@@ -24,12 +28,12 @@ Keep World Info/lorebook activation and editing available inside the chat worksp
 - The editor toolbar exposes search, sort, create, import, export, rename, duplicate, delete, refresh, backfill, and apply-sorting actions when valid for the selected world.
 - Entry cards provide scannable collapsed rows and focused editing through expansion or the content editor modal.
 - File import accepts supported `.json`, `.lorebook`, and `.png` files through the toolbar or drop target, blocks duplicate picker starts while active, shows progress and conflict decisions, and restores normal controls after success, skip, cancellation, parse failure, or network failure.
-- When `features.react.shell.takeover` and `features.react.panels.worldInfo` are enabled and the bundle mounts, the React World Info workbench is the sole visible owner inside `#wi-holder`: one global-activation summary, one editor-book header, one entry list, and one entry editor. Legacy selector/search/sort/toolbar/entry DOM stays as a hidden adapter for deferred replay and fail-closed rollback, not a second visible control set.
+- The React World Info workbench is the sole visible owner inside `#wi-holder`: one global-activation summary, one editor-book header, one entry list, and one entry editor. Hidden legacy workbench children stay inert compatibility hosts only (for example activation-rules DOM), not a second visible control set or product fallback.
 - Desktop workbench layout places entry list and current entry editor side by side; mobile uses list/editor two-state navigation with a single active scroll root and restore of list position/focus on return.
 - Entry editing uses progressive disclosure: basic identity and enablement, trigger keywords, primary content, injection placement, then collapsed advanced groups (timing/recursion, inclusion group, automation/outlet) that surface non-default summaries.
 - Global activation remains a compact summary with a secondary activation-rules entry; choosing an editor book never auto-changes global activation, and changing global activation never silently switches the editor book.
-- The React host routes all mutations through the World Info facade (`public/scripts/world-info.js`) snapshot/action seam. Prompt activation, regex placement, converter/import outcomes, delete cascade, and persistence stay facade-owned; flag-off or mount failure restores the full legacy drawer as sole visible owner.
-- When the same-entry React shell is enabled, its World Info entry owns only the transient active-panel/dock state and mounted or fallback status; prompt activation, regex placement, converter/import outcomes, and world-book deletion semantics remain owned by the World Info facade.
+- The React host routes mutations through the World Info workbench service and compatibility barrel (`public/scripts/world-info.js`). Prompt activation, regex placement, converter/import outcomes, delete cascade, and persistence remain available through the public module path; there is no product flag that restores the legacy editor as sole visible owner.
+- When the same-entry React shell is enabled, its World Info entry owns only the transient active-panel/dock state and mount status; prompt activation, regex placement, converter/import outcomes, and world-book deletion semantics remain owned by the World Info service/barrel.
 - When canonical SQLite World Info authority is enabled and audit-clean, the server may read and write world books through the canonical database while projecting compatible JSON files for import/export and rollback. The visible selector, editor, entry cards, prompt activation, regex placement, import/export outcome, and fallback controls remain the same user workflow.
 - The visible drawer should not expose internal cutover-governance labels. Users see World Info readiness and task results, while maintainer verdicts stay in tech docs.
 - Entry-state controls offer normal and constant states only. Legacy `vectorized` / `extensions.vectorized` values remain lossless import/export and save compatibility fields, but are not presented as a usable World Info capability.

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useForm } from '@tanstack/react-form';
 import { z } from 'zod';
@@ -216,12 +216,6 @@ export function getWorldInfoPanelStatus(bridgeState: WorldInfoWorkspacePanelStat
     if (!bridgeState.editorSelectorPresent && !bridgeState.importMenuPresent) {
         return 'error';
     }
-    if (!bridgeState.hasEditorWorld && !(bridgeState.selectedWorldName)) {
-        return bridgeState.importMenuPresent || bridgeState.createWorldMenuPresent ? 'empty' : 'error';
-    }
-    if ((bridgeState.entryCount ?? 0) === 0 && !(bridgeState.selectedWorldName)) {
-        return 'empty';
-    }
     return 'success';
 }
 
@@ -253,22 +247,36 @@ function EntryEditor({
     entry,
     actionMutation,
     onBack,
+    emptyMessage = '选择一条条目开始编辑',
 }: {
     entry: WorldInfoWorkbenchEntryDetail | null;
     actionMutation: WorkspacePanelActionMutation;
     onBack?: () => void;
+    emptyMessage?: string;
 }) {
     const [draft, setDraft] = useState(entry);
+    const titleInputRef = useRef<HTMLInputElement>(null);
     const advanced = isAdvancedDefault(entry);
+    const entryUid = entry?.uid;
+    const focusTitleOnOpen = Boolean(onBack);
 
     useEffect(() => {
         setDraft(entry);
     }, [entry]);
 
+    useEffect(() => {
+        if (!entryUid || !focusTitleOnOpen) {
+            return undefined;
+        }
+
+        const frame = requestAnimationFrame(() => titleInputRef.current?.focus());
+        return () => cancelAnimationFrame(frame);
+    }, [entryUid, focusTitleOnOpen]);
+
     if (!entry || !draft) {
         return (
             <div className="wi-workbench-editor empty" data-world-info-react-editor="empty">
-                <p>选择一条条目开始编辑</p>
+                <p>{emptyMessage}</p>
             </div>
         );
     }
@@ -302,6 +310,8 @@ function EntryEditor({
                     <span>标题</span>
                     <input
                         className="text_pole"
+                        ref={titleInputRef}
+                        autoFocus={focusTitleOnOpen}
                         value={draft.comment}
                         data-world-info-react-field="comment"
                         onChange={event => setDraft({ ...draft, comment: event.target.value })}
@@ -555,6 +565,7 @@ export function WorldInfoWorkbenchPanel({
     const [mobileView, setMobileView] = useState<'list' | 'editor'>('list');
     const [activationOpen, setActivationOpen] = useState(false);
     const [listScrollTop, setListScrollTop] = useState(0);
+    const [returnEntryUid, setReturnEntryUid] = useState('');
     const [isNarrow, setIsNarrow] = useState(false);
 
     useEffect(() => {
@@ -586,24 +597,7 @@ export function WorldInfoWorkbenchPanel({
     const globalCount = bridgeState.globalActiveCount ?? globalNames.length;
     const recoveryActions: Array<{ id: string; label: string; disabled?: boolean; onClick: () => void }> = [];
 
-    if (status === 'empty') {
-        if (bridgeState.importMenuPresent) {
-            recoveryActions.push({
-                id: 'import-world',
-                label: '导入世界书',
-                disabled: Boolean(bridgeState.importBusy),
-                onClick: () => worldInfoActionMutation.mutate({ action: 'importWorld' }),
-            });
-        }
-        if (bridgeState.createWorldMenuPresent) {
-            recoveryActions.push({
-                id: 'create-world',
-                label: '新建世界书',
-                onClick: () => worldInfoActionMutation.mutate({ action: 'createWorld' }),
-            });
-        }
-    }
-    if ((status === 'empty' || status === 'error') && bridgeState.refreshMenuPresent) {
+    if (status === 'error' && bridgeState.refreshMenuPresent) {
         recoveryActions.push({
             id: 'refresh-world',
             label: '刷新面板',
@@ -616,6 +610,7 @@ export function WorldInfoWorkbenchPanel({
         if (list) {
             setListScrollTop(list.scrollTop);
         }
+        setReturnEntryUid(uid);
         worldInfoActionMutation.mutate({ action: 'openEntry', payload: { uid } });
         if (isNarrow) {
             setMobileView('editor');
@@ -629,7 +624,13 @@ export function WorldInfoWorkbenchPanel({
             const list = document.querySelector('[data-world-info-react-list-scroll]') as HTMLElement | null;
             if (list) {
                 list.scrollTop = listScrollTop;
-                list.focus();
+                const trigger = Array.from(document.querySelectorAll('[data-world-info-react-entry]'))
+                    .find(element => element.getAttribute('data-world-info-react-entry') === returnEntryUid);
+                if (trigger instanceof HTMLElement) {
+                    trigger.focus();
+                } else {
+                    list.focus();
+                }
             }
         });
     };
@@ -706,71 +707,83 @@ export function WorldInfoWorkbenchPanel({
                         </output>
                     </div>
                     <div className="wi-workbench-book-tools">
-                        <worldInfoForm.Field name="searchQuery">
-                            {field => (
-                                <input
-                                    className="text_pole"
-                                    type="search"
-                                    data-world-info-react-control="search"
-                                    aria-label="搜索条目"
-                                    placeholder="搜索"
-                                    value={field.state.value}
-                                    onChange={event => {
-                                        const searchQuery = event.target.value;
-                                        field.handleChange(searchQuery);
-                                        worldInfoActionMutation.mutate({ action: 'applySearchQuery', payload: { searchQuery } });
-                                    }}
-                                />
-                            )}
-                        </worldInfoForm.Field>
-                        <worldInfoForm.Field name="sortValue">
-                            {field => (
-                                <select
-                                    className="text_pole"
-                                    data-world-info-react-control="sort"
-                                    aria-label="排序"
-                                    value={field.state.value}
-                                    onChange={event => {
-                                        const sortValue = event.target.value;
-                                        field.handleChange(sortValue);
-                                        worldInfoActionMutation.mutate({ action: 'applySortOption', payload: { sortValue } });
-                                    }}
+                        {selectedWorldName ? (
+                            <>
+                                <worldInfoForm.Field name="searchQuery">
+                                    {field => (
+                                        <input
+                                            className="text_pole"
+                                            type="search"
+                                            data-world-info-react-control="search"
+                                            aria-label="搜索条目"
+                                            placeholder="搜索"
+                                            value={field.state.value}
+                                            onChange={event => {
+                                                const searchQuery = event.target.value;
+                                                field.handleChange(searchQuery);
+                                                worldInfoActionMutation.mutate({ action: 'applySearchQuery', payload: { searchQuery } });
+                                            }}
+                                        />
+                                    )}
+                                </worldInfoForm.Field>
+                                <worldInfoForm.Field name="sortValue">
+                                    {field => (
+                                        <select
+                                            className="text_pole"
+                                            data-world-info-react-control="sort"
+                                            aria-label="排序"
+                                            value={field.state.value}
+                                            onChange={event => {
+                                                const sortValue = event.target.value;
+                                                field.handleChange(sortValue);
+                                                worldInfoActionMutation.mutate({ action: 'applySortOption', payload: { sortValue } });
+                                            }}
+                                        >
+                                            {sortOptions.filter(option => !option.hidden).map(option => (
+                                                <option key={option.value} value={option.value}>{option.label}</option>
+                                            ))}
+                                        </select>
+                                    )}
+                                </worldInfoForm.Field>
+                                <button
+                                    type="button"
+                                    className="menu_button"
+                                    data-world-info-react-action="new-entry"
+                                    disabled={!bridgeState.canCreateEntry}
+                                    onClick={() => worldInfoActionMutation.mutate({ action: 'createEntry' })}
                                 >
-                                    {sortOptions.filter(option => !option.hidden).map(option => (
-                                        <option key={option.value} value={option.value}>{option.label}</option>
-                                    ))}
-                                </select>
-                            )}
-                        </worldInfoForm.Field>
-                        <button
-                            type="button"
-                            className="menu_button"
-                            data-world-info-react-action="new-entry"
-                            disabled={!bridgeState.canCreateEntry}
-                            onClick={() => worldInfoActionMutation.mutate({ action: 'createEntry' })}
-                        >
-                            新建条目
-                        </button>
-                        <button type="button" className="menu_button" data-world-info-react-action="new-world"
-                            onClick={() => worldInfoActionMutation.mutate({ action: 'createWorld' })}>新建</button>
-                        <button type="button" className="menu_button" data-world-info-react-action="import"
-                            disabled={Boolean(bridgeState.importBusy)}
-                            onClick={() => worldInfoActionMutation.mutate({ action: 'importWorld' })}>导入</button>
-                        <button type="button" className="menu_button" data-world-info-react-action="export"
-                            disabled={!bridgeState.exportMenuPresent || !selectedWorldName}
-                            onClick={() => worldInfoActionMutation.mutate({ action: 'exportWorld' })}>导出</button>
-                        <button type="button" className="menu_button" data-world-info-react-action="refresh"
-                            disabled={!bridgeState.refreshMenuPresent}
-                            onClick={() => worldInfoActionMutation.mutate({ action: 'refreshWorld' })}>刷新</button>
-                        <button type="button" className="menu_button" data-world-info-react-action="rename"
-                            disabled={!bridgeState.renameMenuPresent || !selectedWorldName}
-                            onClick={() => worldInfoActionMutation.mutate({ action: 'renameWorld' })}>重命名</button>
-                        <button type="button" className="menu_button" data-world-info-react-action="duplicate"
-                            disabled={!bridgeState.duplicateMenuPresent || !selectedWorldName}
-                            onClick={() => worldInfoActionMutation.mutate({ action: 'duplicateWorld' })}>复制</button>
-                        <button type="button" className="menu_button redWarningBG" data-world-info-react-action="delete"
-                            disabled={!bridgeState.deleteMenuPresent || !selectedWorldName}
-                            onClick={() => worldInfoActionMutation.mutate({ action: 'deleteWorld' })}>删除</button>
+                                    新建条目
+                                </button>
+                                <button type="button" className="menu_button" data-world-info-react-action="new-world"
+                                    onClick={() => worldInfoActionMutation.mutate({ action: 'createWorld' })}>新建</button>
+                                <button type="button" className="menu_button" data-world-info-react-action="import"
+                                    disabled={Boolean(bridgeState.importBusy)}
+                                    onClick={() => worldInfoActionMutation.mutate({ action: 'importWorld' })}>导入</button>
+                                <button type="button" className="menu_button" data-world-info-react-action="export"
+                                    disabled={!bridgeState.exportMenuPresent}
+                                    onClick={() => worldInfoActionMutation.mutate({ action: 'exportWorld' })}>导出</button>
+                                <button type="button" className="menu_button" data-world-info-react-action="refresh"
+                                    disabled={!bridgeState.refreshMenuPresent}
+                                    onClick={() => worldInfoActionMutation.mutate({ action: 'refreshWorld' })}>刷新</button>
+                                <button type="button" className="menu_button" data-world-info-react-action="rename"
+                                    disabled={!bridgeState.renameMenuPresent}
+                                    onClick={() => worldInfoActionMutation.mutate({ action: 'renameWorld' })}>重命名</button>
+                                <button type="button" className="menu_button" data-world-info-react-action="duplicate"
+                                    disabled={!bridgeState.duplicateMenuPresent}
+                                    onClick={() => worldInfoActionMutation.mutate({ action: 'duplicateWorld' })}>复制</button>
+                                <button type="button" className="menu_button redWarningBG" data-world-info-react-action="delete"
+                                    disabled={!bridgeState.deleteMenuPresent}
+                                    onClick={() => worldInfoActionMutation.mutate({ action: 'deleteWorld' })}>删除</button>
+                            </>
+                        ) : (
+                            <>
+                                <button type="button" className="menu_button" data-world-info-react-action="new-world"
+                                    onClick={() => worldInfoActionMutation.mutate({ action: 'createWorld' })}>新建世界书</button>
+                                <button type="button" className="menu_button" data-world-info-react-action="import"
+                                    disabled={Boolean(bridgeState.importBusy)}
+                                    onClick={() => worldInfoActionMutation.mutate({ action: 'importWorld' })}>导入世界书</button>
+                            </>
+                        )}
                     </div>
                 </header>
 
@@ -824,6 +837,7 @@ export function WorldInfoWorkbenchPanel({
                             entry={bridgeState.selectedEntry ?? null}
                             actionMutation={worldInfoActionMutation}
                             onBack={isNarrow && mobileView === 'editor' ? backToList : undefined}
+                            emptyMessage={selectedWorldName ? '选择一条条目开始编辑' : '请先选择或创建世界书'}
                         />
                     </div>
                 </div>

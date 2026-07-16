@@ -121,10 +121,8 @@ features:
           strict: false
   react:
     pages:
-      settings: false
     panels:
       mainChatMessageList: false
-      worldInfo: false
       backgroundLibrary: false
       extensionsHost: false
     shell:

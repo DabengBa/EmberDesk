@@ -20,10 +20,10 @@ Current binding points:
 
 - `public/scripts/world-info-shell-context.js` stores, requires, clears, and reads event-source properties from the registered shell context.
 - `public/script.js` registers settings, request-header, chat metadata, character, event, extension-prompt-role, save, and selection capabilities for World Info.
-- `public/scripts/world-info.js` keeps the compatibility facade and proxies shell-owned data through the registered context.
+- `public/scripts/world-info.js` keeps the compatibility barrel and proxies shell-owned data through the registered context; React panel state prefers the workbench service.
 - `tests/world-info-shell-context.test.js` proves the fail-closed missing-context rule, the direct-import removal from `world-info.js`, lazy `extensionPromptRoles` registration, and event-source method binding.
 
-The context deliberately does not own World Info import, prompt activation, regex placement, delete cascade, token budgeting, or storage semantics. Those remain in `public/scripts/world-info.js` and adjacent World Info modules.
+The context deliberately does not own World Info import, prompt activation, regex placement, delete cascade, token budgeting, or storage semantics. Those remain in `public/scripts/world-info.js`, `world-info-domain.js`, `world-info-workbench-service.js`, and adjacent World Info modules.
 
 ## Related Semantic IDs And Code Binding Points
 

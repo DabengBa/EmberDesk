@@ -42,7 +42,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(getDefaultWorkspaceReactFeatures()).toEqual({
             reactPanels: {
                 mainChatMessageList: false,
-                worldInfo: false,
+                worldInfo: true,
                 backgroundLibrary: false,
                 extensionsHost: false,
                 characterAuthoring: true,
@@ -57,7 +57,7 @@ describe('React workspace panels bridge helpers', () => {
             },
         });
 
-        expect(isReactWorkspacePanelEnabled('worldInfo')).toBe(false);
+        expect(isReactWorkspacePanelEnabled('worldInfo')).toBe(true);
         expect(isReactWorkspacePanelEnabled('mainChatMessageList')).toBe(false);
         expect(isReactWorkspaceShellTakeoverEnabled()).toBe(false);
     });
@@ -295,10 +295,11 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain("case 'openWorldInfo':");
         expect(scriptSource).toContain('function waitForWorkspaceShellPanelOpenTask()');
         expect(scriptSource).toContain('await waitForWorkspaceShellPanelOpenTask();');
-        expect(scriptSource).toContain("await ensureWorkspaceShellDeferredPanel('world-info-body');");
-        expect(scriptSource.indexOf('await waitForWorkspaceShellPanelOpenTask();')).toBeLessThan(scriptSource.indexOf("await ensureWorkspaceShellDeferredPanel('world-info-body');"));
-        expect(scriptSource.indexOf("await ensureWorkspaceShellDeferredPanel('world-info-body');")).toBeLessThan(scriptSource.indexOf("await openWorkspaceShellDrawer('WorldInfo');"));
-        expect(scriptSource.indexOf("await openWorkspaceShellDrawer('WorldInfo');")).toBeLessThan(scriptSource.indexOf("return createWorkspaceShellPanelResult('worldInfo', await mountReactWorldInfoPanel());"));
+        expect(scriptSource).toContain("void ensureWorkspaceShellDeferredPanel('world-info-body');");
+        expect(scriptSource.indexOf('await waitForWorkspaceShellPanelOpenTask();')).toBeLessThan(scriptSource.indexOf("const worldInfoMount = await mountReactWorldInfoPanel();"));
+        expect(scriptSource.indexOf("const worldInfoMount = await mountReactWorldInfoPanel();")).toBeLessThan(scriptSource.indexOf("void ensureWorkspaceShellDeferredPanel('world-info-body');"));
+        expect(scriptSource.indexOf("await openWorkspaceShellDrawer('WorldInfo');")).toBeLessThan(scriptSource.indexOf("const worldInfoMount = await mountReactWorldInfoPanel();"));
+        expect(scriptSource.indexOf("const worldInfoMount = await mountReactWorldInfoPanel();")).toBeLessThan(scriptSource.indexOf("return createWorkspaceShellPanelResult('worldInfo', worldInfoMount);"));
         expect(scriptSource.indexOf("await openWorkspaceShellDrawer('Backgrounds');")).toBeLessThan(scriptSource.indexOf("return createWorkspaceShellPanelResult('backgroundLibrary', await mountReactBackgroundLibraryPanel());"));
         expect(scriptSource.indexOf("await openWorkspaceShellDrawer('rm_extensions_block');")).toBeLessThan(scriptSource.indexOf("return createWorkspaceShellPanelResult('extensionsHost', await mountReactExtensionsHostPanel());"));
         expect(scriptSource).toContain('function openWorkspaceShellDrawerImmediate(drawerId)');
@@ -330,7 +331,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('locked: dockState.locked,');
         expect(scriptSource).toContain('pinned: dockState.pinned,');
         expect(scriptSource).toContain("return createWorkspaceShellPanelResult('characterLibrary',");
-        expect(scriptSource).toContain("return createWorkspaceShellPanelResult('worldInfo', await mountReactWorldInfoPanel());");
+        expect(scriptSource).toContain("return createWorkspaceShellPanelResult('worldInfo', worldInfoMount);");
         expect(scriptSource).toContain("return createWorkspaceShellPanelResult('backgroundLibrary', await mountReactBackgroundLibraryPanel());");
         expect(scriptSource).toContain("return createWorkspaceShellPanelResult('extensionsHost', await mountReactExtensionsHostPanel());");
         expect(scriptSource).toContain("case 'openAIConfig':\n                    window.location.assign('/settings?tab=providers');");
@@ -417,6 +418,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('data-react-authoring-field="joinPrefix"');
         expect(workspacePanelSource).toContain('data-react-authoring-field="joinSuffix"');
         expect(workspacePanelSource).toContain('data-react-authoring-field="groupFavorite"');
+        expect(workspacePanelSource).toContain('data-react-authoring-field="groupTags"');
         expect(workspacePanelSource).not.toContain('Additional extension fields still use the legacy editor:');
         expect(workspacePanelSource).toContain('data-react-authoring-members');
         expect(workspacePanelSource).toContain('data-react-authoring-candidates');
@@ -462,7 +464,10 @@ describe('React workspace panels bridge helpers', () => {
         expect(groupSaveSource).not.toBe('');
         expect(groupSaveSource).toContain("fetch('/api/groups/create'");
         expect(groupSaveSource).not.toContain("$('#rm_group_submit').trigger('click')");
-        expect(groupSaveSource).toContain('await editGroup(selected_group, true, true)');
+        expect(groupSaveSource).toContain('const groupId = reactGroupAuthoringGroupId;');
+        expect(groupSaveSource).toContain('await editGroup(groupId, true, true)');
+        expect(groupSaveSource).toContain('await getGroups();');
+        expect(groupSaveSource).toContain('await printCharacters(true);');
         expect(scriptSource).toContain('function hideLegacyGroupAuthoringEditor(hidden)');
         expect(scriptSource).toContain('hideLegacyGroupAuthoringEditor(true);');
         expect(scriptSource).not.toContain('hideLegacyGroupAuthoringEditor(Boolean(result?.mounted));');
@@ -471,7 +476,8 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('function queueReactGroupAuthoringRemount()');
         expect(scriptSource).toContain("eventSource.on(event_types.CHARACTER_EDITOR_OPENED, () => {");
         expect(scriptSource).toContain('queueReactCharacterAuthoringRemount();');
-        expect(scriptSource).toContain("eventSource.on('groupSelected', () => {");
+        expect(scriptSource).toContain("eventSource.on('groupSelected', event => {");
+        expect(scriptSource).toContain('reactGroupAuthoringGroupId = groupId == null ? null : String(groupId);');
         expect(scriptSource).toContain('queueReactGroupAuthoringRemount();');
         expect(scriptSource).toContain('hideLegacyCharacterAuthoringEditor(true);');
         expect(scriptSource).toContain('data-react-authoring-build-error');
@@ -758,7 +764,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('const WORLD_INFO_REACT_HOST_ID = \'emberdesk-react-world-info-panel-host\';');
         expect(scriptSource).toContain('function ensureWorldInfoReactHost()');
         expect(scriptSource).toContain('function hideLegacyWorldInfoWorkbench(hidden');
-        expect(scriptSource).toContain('hideLegacyWorldInfoWorkbench(Boolean(result?.mounted))');
+        expect(scriptSource).toContain('// Sole-owner: React host owns the workbench; legacy editor stays hidden/inert.');
         expect(scriptSource).toContain('function getWorldInfoReactBridgeState(');
         expect(scriptSource).toContain('globalSelectorPresent: Boolean(globalSelector)');
         expect(scriptSource).toContain('editorSelectorPresent: Boolean(editorSelector)');

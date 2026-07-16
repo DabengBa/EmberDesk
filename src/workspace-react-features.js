@@ -8,7 +8,8 @@ import {
 export const WORKSPACE_REACT_FEATURES_GLOBAL = '__emberDeskWorkspaceFeatures';
 
 export function isReactWorldInfoPanelEnabled() {
-    return isReactWorkspacePanelEnabled('worldInfo');
+    // World Info is React sole-owner; product flag is retired.
+    return true;
 }
 
 export function isReactMainChatMessageListPanelEnabled() {
@@ -40,7 +41,7 @@ export function isReactGroupAuthoringPanelEnabled() {
 export function getWorkspaceReactFeatures() {
     return {
         reactPages: {
-            settings: isReactPageEnabled('settings'),
+            settings: true,
         },
         reactPanels: {
             mainChatMessageList: isReactMainChatMessageListPanelEnabled(),

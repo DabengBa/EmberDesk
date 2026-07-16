@@ -33,7 +33,6 @@ beforeAll(() => {
         '      settings: false',
         '    panels:',
         '      mainChatMessageList: false',
-        '      worldInfo: false',
         '      backgroundLibrary: false',
         '      extensionsHost: false',
         '    shell:',
@@ -60,11 +59,11 @@ describe('workspace React panel flags', () => {
 
         expect(featureBootstrapModule.getWorkspaceReactFeatures()).toEqual({
             reactPages: {
-                settings: false,
+                settings: true,
             },
             reactPanels: {
                 mainChatMessageList: false,
-                worldInfo: false,
+                worldInfo: true,
                 backgroundLibrary: false,
                 extensionsHost: false,
                 characterAuthoring: true,
@@ -86,7 +85,7 @@ describe('workspace React panel flags', () => {
 
         expect(featureBootstrapModule.getWorkspaceReactFeatures()).toEqual({
             reactPages: {
-                settings: false,
+                settings: true,
             },
             reactPanels: {
                 mainChatMessageList: true,
@@ -174,7 +173,7 @@ describe('workspace React panel flags', () => {
         expect(configSource).toContain('takeover: false');
         expect(configSource).not.toContain('characterLibrary:');
         expect(configSource).toContain('mainChatMessageList: false');
-        expect(configSource).toContain('worldInfo: false');
+        expect(configSource).not.toContain('worldInfo:');
         expect(configSource).toContain('backgroundLibrary: false');
         expect(configSource).toContain('extensionsHost: false');
         expect(configSource).not.toContain('characterAuthoring:');

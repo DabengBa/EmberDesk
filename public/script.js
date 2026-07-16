@@ -46,6 +46,7 @@ import {
     selectWorldInfoWorkbenchEntry,
     updateWorldInfoWorkbenchEntryFields,
     getWorldInfoWorkbenchFacadeSnapshot,
+    getWorldInfoReactPanelState,
 } from './scripts/world-info.js';
 import { scanImportedCharacter, showUnifiedImportConfirm, applyImportChoices, buildSkipAllChoices } from './scripts/import-confirm-dialog.js';
 
@@ -383,7 +384,7 @@ export function getWorkspaceReactFeatures() {
         },
         reactPanels: {
             mainChatMessageList: false,
-            worldInfo: false,
+            worldInfo: true,
             backgroundLibrary: false,
             extensionsHost: false,
             characterAuthoring: true,
@@ -429,9 +430,39 @@ const EXTENSIONS_HOST_REACT_HOST_ID = 'emberdesk-react-extensions-host-panel-hos
 const MAIN_CHAT_MESSAGE_LIST_REACT_HOST_ID = 'emberdesk-react-main-chat-message-list-host';
 const CHARACTER_AUTHORING_REACT_HOST_ID = 'emberdesk-react-character-authoring-panel-host';
 const GROUP_AUTHORING_REACT_HOST_ID = 'emberdesk-react-group-authoring-panel-host';
+let reactGroupAuthoringGroupId = null;
+const LEGACY_SETTINGS_DRAWER_ROUTE_TARGETS = {
+    '#ai-config-button > .drawer-toggle': '/settings?tab=providers',
+    '#sys-settings-button > .drawer-toggle': '/settings?tab=providers',
+    '#advanced-formatting-button > .drawer-toggle': '/settings?tab=advanced',
+    '#user-settings-button > .drawer-toggle': '/settings',
+};
 const WORKSPACE_SHELL_TAKEOVER_MARKER_ID = 'emberdesk-react-shell-takeover-foundation';
 const WORKSPACE_SHELL_CHROME_HOST_ID = 'emberdesk-react-workspace-shell-chrome-host';
 const LEGACY_WORKSPACE_CHROME_SELECTOR = '#top-bar, #ai-config-button > .drawer-toggle, #advanced-formatting-button > .drawer-toggle, #user-settings-button > .drawer-toggle, .drawer-opener[data-target="rightNavHolder"], .drawer-opener[data-target="extensions-settings-button"]';
+
+document.addEventListener('click', event => {
+    const clickTarget = event.target;
+    if (!(clickTarget instanceof Element)) {
+        return;
+    }
+
+    const drawerToggle = clickTarget.closest('.drawer-toggle');
+    if (!drawerToggle) {
+        return;
+    }
+
+    for (const [selector, route] of Object.entries(LEGACY_SETTINGS_DRAWER_ROUTE_TARGETS)) {
+        if (!drawerToggle.matches(selector)) {
+            continue;
+        }
+
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        window.location.assign(route);
+        return;
+    }
+}, true);
 const MAIN_CHAT_SCROLL_RESTORE_THRESHOLD_PX = 12;
 const mainChatMessageRowSnapshotSchema = MAIN_CHAT_MESSAGE_ROW_SNAPSHOT_SCHEMA;
 const mainChatRichBodySnapshotSchema = MAIN_CHAT_RICH_BODY_SNAPSHOT_SCHEMA;
@@ -770,10 +801,12 @@ function getWorkspaceShellChromeBridge() {
                 case 'openCharacterLibrary':
                     return openWorkspaceShellCharacterLibrary();
                 case 'openWorldInfo':
-                    await ensureWorkspaceShellDeferredPanel('world-info-body');
+                    // React sole-owner: open drawer and mount workbench; deferred body is hidden activation-rules DOM only.
                     await openWorkspaceShellDrawer('WorldInfo');
                     await waitForWorkspaceShellPanelOpenTask();
-                    return createWorkspaceShellPanelResult('worldInfo', await mountReactWorldInfoPanel());
+                    const worldInfoMount = await mountReactWorldInfoPanel();
+                    void ensureWorkspaceShellDeferredPanel('world-info-body');
+                    return createWorkspaceShellPanelResult('worldInfo', worldInfoMount);
                 case 'openBackgrounds':
                     await openWorkspaceShellDrawer('Backgrounds');
                     await waitForWorkspaceShellPanelOpenTask();
@@ -1438,22 +1471,22 @@ function hideLegacyCharacterAuthoringEditor(hidden) {
     form.dataset.legacyCharacterAuthoringHiddenByReact = hidden ? 'true' : 'false';
 }
 
-function getCharacterAuthoringReactBridgeState() {
+function getCharacterAuthoringReactBridgeState(stateOverrides = {}) {
     const mode = getCurrentCharacterAuthoringMode();
     const sourceCharacter = getCurrentCharacterAuthoringSource();
-    const draft = mode === 'edit'
+    const sourceDraft = mode === 'edit'
         ? createCharacterAuthoringDraft(sourceCharacter ?? {}, { mode })
         : createCharacterAuthoringDraftFromCreateState(create_save, { mode });
+    const draft = stateOverrides?.draft && typeof stateOverrides.draft === 'object'
+        ? createCharacterAuthoringDraft(stateOverrides.draft, { mode })
+        : sourceDraft;
     const title = draft.name.trim() || String($('#character_popup-button-h3').text() || '').trim();
-    const baselineDraft = mode === 'edit'
-        ? createCharacterAuthoringDraft(sourceCharacter ?? {}, { mode })
-        : createCharacterAuthoringDraftFromCreateState(create_save, { mode });
 
     return {
         mode,
         title: title || (mode === 'edit' ? 'Character Authoring' : 'New Character'),
         subtitle: 'Character draft',
-        dirty: getCharacterAuthoringDirtyFields(baselineDraft, draft).length > 0,
+        dirty: getCharacterAuthoringDirtyFields(sourceDraft, draft).length > 0,
         draft,
         unsupportedFields: Array.isArray(draft.unsupportedFields) ? [...draft.unsupportedFields] : [],
     };
@@ -1595,8 +1628,8 @@ async function saveCharacterAuthoringFromPayload(saveModel = {}) {
     };
 }
 
-async function reopenCharacterAuthoringAfterLegacyPopup() {
-    await mountReactCharacterAuthoringPanel();
+async function reopenCharacterAuthoringAfterLegacyPopup(draft) {
+    await mountReactCharacterAuthoringPanel({ draft });
 }
 
 function queueReactCharacterAuthoringRemount() {
@@ -1615,7 +1648,9 @@ eventSource.on(event_types.CHARACTER_EDITOR_OPENED, () => {
     queueReactCharacterAuthoringRemount();
 });
 
-eventSource.on('groupSelected', () => {
+eventSource.on('groupSelected', event => {
+    const groupId = event?.detail?.id;
+    reactGroupAuthoringGroupId = groupId == null ? null : String(groupId);
     queueReactGroupAuthoringRemount();
 });
 
@@ -1647,14 +1682,14 @@ function getCharacterAuthoringReactBridge() {
                     hideLegacyCharacterAuthoringEditor(false);
                     await openCharacterWorldPopup();
                     hideLegacyCharacterAuthoringEditor(true);
-                    await reopenCharacterAuthoringAfterLegacyPopup();
+                    await reopenCharacterAuthoringAfterLegacyPopup(payload?.draft);
                     return false;
                 case 'openAlternateGreetings':
                     applyCharacterAuthoringSaveModel(payload, { submit: false });
                     hideLegacyCharacterAuthoringEditor(false);
                     await openAlternateGreetings();
                     hideLegacyCharacterAuthoringEditor(true);
-                    await reopenCharacterAuthoringAfterLegacyPopup();
+                    await reopenCharacterAuthoringAfterLegacyPopup(payload?.draft);
                     return false;
                 default:
                     console.warn('Unknown React character authoring action', action);
@@ -1663,6 +1698,10 @@ function getCharacterAuthoringReactBridge() {
         shouldRemount(actionResult) {
             return actionResult !== false;
         },
+        shouldRemountOnError() {
+            // Keep the React draft available for an actionable retry.
+            return false;
+        },
         remount: () => {
             hideLegacyCharacterAuthoringEditor(true);
             void mountReactCharacterAuthoringPanel();
@@ -1670,13 +1709,14 @@ function getCharacterAuthoringReactBridge() {
     });
 }
 
-async function mountReactCharacterAuthoringPanel() {
+async function mountReactCharacterAuthoringPanel(stateOverrides = undefined) {
     const result = await mountWorkspacePanelHost({
         kind: 'characterAuthoring',
         ensureContainer: ensureCharacterAuthoringReactHost,
-        getState: () => getCharacterAuthoringReactBridgeState(),
+        getState: (overrides) => getCharacterAuthoringReactBridgeState(overrides),
         bridge: getCharacterAuthoringReactBridge(),
         features: getWorkspaceReactFeatures(),
+        stateOverrides,
         onDisabled() {
             // Sole-owner surface: never re-enable legacy form as product fallback.
             hideLegacyCharacterAuthoringEditor(true);
@@ -1732,22 +1772,27 @@ function hideLegacyGroupAuthoringEditor(hidden) {
 
 function getGroupAuthoringReactBridgeState() {
     const title = String($('#rm_group_chat_name').val() || '').trim();
-    const group = selected_group ? groups.find(x => x.id == selected_group) : null;
+    const group = reactGroupAuthoringGroupId
+        ? groups.find(x => x.id == reactGroupAuthoringGroupId)
+        : null;
     const memberIds = Array.isArray(group?.members) ? [...group.members] : [];
     const candidates = characters
         .filter(character => character?.avatar && !memberIds.includes(character.avatar))
-        .slice(0, 12)
         .map(character => ({
             id: character.avatar,
             label: character.name || character.avatar,
         }));
+    const tagOptions = tags
+        .map(tag => ({ id: String(tag.id), label: String(tag.name ?? '') }))
+        .filter(tag => tag.id && tag.label)
+        .sort((left, right) => left.label.localeCompare(right.label));
     return {
-        mode: selected_group ? 'edit' : 'create',
-        title: title || (selected_group ? 'Group Authoring' : 'New Group'),
+        mode: group ? 'edit' : 'create',
+        title: title || (group ? 'Group Authoring' : 'New Group'),
         subtitle: 'Group draft',
         dirty: false,
         draft: {
-            id: selected_group || '',
+            id: group?.id || '',
             name: title,
             avatar_url: String($('#group_avatar_preview img').attr('src') || group?.avatar_url || ''),
             members: memberIds,
@@ -1760,14 +1805,18 @@ function getGroupAuthoringReactBridgeState() {
             auto_mode_delay: Number($('#rm_group_automode_delay').val()),
             generation_mode_join_prefix: String($('#rm_group_generation_mode_join_prefix').val() || ''),
             generation_mode_join_suffix: String($('#rm_group_generation_mode_join_suffix').val() || ''),
+            tagIds: group?.id && Array.isArray(tag_map[group.id]) ? [...tag_map[group.id]] : [],
         },
         candidates,
+        tagOptions,
         unsupportedFields: [],
     };
 }
 
 async function applyGroupAuthoringSaveModel(saveModel = {}) {
     const members = Array.isArray(saveModel.members) ? [...saveModel.members] : [];
+    const tagIds = Array.isArray(saveModel.tag_ids) ? [...saveModel.tag_ids] : [];
+    const groupId = reactGroupAuthoringGroupId;
     if (members.length === 0) {
         toastr.error(t`Add at least one member`);
         throw new Error('Group requires at least one member');
@@ -1782,14 +1831,15 @@ async function applyGroupAuthoringSaveModel(saveModel = {}) {
     setAuthoringInputValue('#rm_group_automode_delay', saveModel.auto_mode_delay);
     setAuthoringInputValue('#rm_group_generation_mode_join_prefix', saveModel.generation_mode_join_prefix);
     setAuthoringInputValue('#rm_group_generation_mode_join_suffix', saveModel.generation_mode_join_suffix);
-    setGroupAuthoringMembersDraft(members, selected_group);
+    setGroupAuthoringMembersDraft(members, groupId);
 
-    if (selected_group) {
-        const group = groups.find(x => x.id == selected_group);
+    if (groupId) {
+        const group = groups.find(x => x.id == groupId);
         if (!group) {
             throw new Error('Selected group not found');
         }
 
+        const previousGroup = structuredClone(group);
         group.name = String(saveModel.name || group.name || '');
         group.avatar_url = String(saveModel.avatar_url || group.avatar_url || '');
         group.members = members;
@@ -1802,8 +1852,15 @@ async function applyGroupAuthoringSaveModel(saveModel = {}) {
         group.generation_mode_join_suffix = String(saveModel.generation_mode_join_suffix || '');
         group.fav = Boolean(saveModel.fav);
         group.disabled_members = Array.isArray(saveModel.disabled_members) ? [...saveModel.disabled_members] : [];
-        await editGroup(selected_group, true, true);
-        return { ok: true, mode: 'edit', id: selected_group, group };
+        try {
+            await editGroup(groupId, true, true);
+        } catch (error) {
+            Object.assign(group, previousGroup);
+            throw error;
+        }
+        tag_map[groupId] = tagIds;
+        saveSettingsDebounced();
+        return { ok: true, mode: 'edit', id: groupId, group };
     }
 
     let name = String(saveModel.name || '').trim();
@@ -1841,8 +1898,11 @@ async function applyGroupAuthoringSaveModel(saveModel = {}) {
     }
 
     const data = await createGroupResponse.json();
-    createTagMapFromList('#groupTagList', data.id);
+    tag_map[data.id] = tagIds;
+    saveSettingsDebounced();
     await getCharacters();
+    await getGroups();
+    await printCharacters(true);
     select_rm_info('group_create', data.id);
     return { ok: true, mode: 'create', id: data.id, group: data };
 }
@@ -1867,6 +1927,10 @@ function getGroupAuthoringReactBridge() {
         },
         shouldRemount(actionResult, action) {
             return action !== 'cancelAuthoring' && action !== 'deleteAuthoring';
+        },
+        shouldRemountOnError() {
+            // Keep the React draft available for an actionable retry.
+            return false;
         },
         remount: () => mountReactGroupAuthoringPanel(),
     });
@@ -1992,10 +2056,13 @@ function getWorldInfoReactBridgeState(facadeSnapshot = null) {
 
 async function getWorldInfoReactBridgeStateAsync() {
     try {
+        if (typeof getWorldInfoReactPanelState === 'function') {
+            return await getWorldInfoReactPanelState();
+        }
         const facadeSnapshot = await getWorldInfoWorkbenchFacadeSnapshot();
         return getWorldInfoReactBridgeState(facadeSnapshot);
     } catch (error) {
-        console.warn('World Info workbench facade snapshot failed; using DOM fallback.', error);
+        console.warn('World Info workbench service state failed; using DOM fallback.', error);
         return getWorldInfoReactBridgeState(null);
     }
 }
@@ -2059,11 +2126,17 @@ async function mountReactWorldInfoPanel() {
         bridge: getWorldInfoReactBridge(),
         features: getWorkspaceReactFeatures(),
         onDisabled() {
-            hideLegacyWorldInfoWorkbench(false);
+            // Sole-owner: never re-enable the legacy workbench editor.
+            hideLegacyWorldInfoWorkbench(true);
         },
     });
 
-    hideLegacyWorldInfoWorkbench(Boolean(result?.mounted));
+    // Sole-owner: React host owns the workbench; legacy editor stays hidden/inert.
+    hideLegacyWorldInfoWorkbench(true, {
+        revealGlobalPanel: Boolean(
+            document.getElementById('wi-holder')?.dataset?.worldInfoActivationRulesOpen === 'true',
+        ),
+    });
     return result;
 }
 
@@ -15269,6 +15342,10 @@ jQuery(async function () {
     $('#rm_button_create').on('click', function () {
         selected_button = 'create';
         select_rm_create();
+        // This is also the React Character Library's New action. Selecting the
+        // legacy-compatible panel does not emit CHARACTER_EDITOR_OPENED, so mount
+        // the sole-owner authoring UI explicitly for new-character drafts.
+        queueReactCharacterAuthoringRemount();
     });
     $('#rm_button_selected_ch').on('click', function () {
         if (selected_group) {

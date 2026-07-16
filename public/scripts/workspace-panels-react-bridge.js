@@ -22,11 +22,11 @@ export function getReactWorkspacePanelsAssetPath() {
 export function getDefaultWorkspaceReactFeatures() {
     return {
         reactPages: {
-            settings: false,
+            settings: true,
         },
         reactPanels: {
             mainChatMessageList: false,
-            worldInfo: false,
+            worldInfo: true,
             backgroundLibrary: false,
             extensionsHost: false,
             characterAuthoring: true,
