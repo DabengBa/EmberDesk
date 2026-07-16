@@ -14,7 +14,7 @@ related: [page.settings, page.chat_workspace, feature.custom_base_url, feature.c
 
 ## Page Purpose
 
-This page exists so a user can configure how EmberDesk connects to an LLM API provider: which provider to use, which model to target, and what credentials and endpoint to use for the connection. During the React migration it remains the legacy workspace owner for connection-profile behavior, provider-specific credential details, and fields not yet exposed on [Settings](page.settings).
+This page exists so a user can configure how EmberDesk connects to an LLM API provider: which provider to use, which model to target, and what credentials and endpoint to use for the connection. User-facing general provider, secret, Vertex service-account, and connection-profile selection workflows are owned by [Settings](page.settings). This drawer DOM may still exist for compatibility hosts, but workspace shell AI Config navigation now opens `/settings?tab=providers`.
 
 ## Page Structure (UI Layout)
 
@@ -31,7 +31,7 @@ This page exists so a user can configure how EmberDesk connects to an LLM API pr
 - `feature.connection_profile`: creating, applying, and switching named configuration snapshots.
 - `feature.chat_completion_select`: selecting the chat completion source and model.
 - `feature.fallback_provider`: configuring the optional OpenAI-compatible fallback provider and its dedicated secret.
-- `page.settings`: the standalone React route that now overlaps the Sprint 3 provider/model, reverse proxy, Vertex AI Express, fallback provider, and secret-state slice while keeping legacy-only provider details here.
+- `page.settings`: sole product owner for general provider/model, reverse proxy, Vertex AI (including service account), fallback provider, secrets, and connection-profile selection.
 
 ## Included Features
 
@@ -59,6 +59,8 @@ This page exists so a user can configure how EmberDesk connects to an LLM API pr
 ## Navigation
 
 - This drawer is accessed from the [Chat Workspace](page.chat_workspace) sidebar.
-- On builds with the same-entry React chrome enabled, the drawer is also reachable through the shell's AI Config entry and follows the shell's active-entry close/reopen behavior.
 - Connection profiles can be switched without leaving the page.
-- Users may use [Settings](page.settings) for the migrated standalone provider slice when the React settings feature flag and build are available.
+
+## Superseded Product Entry
+
+The workspace AI Config shell entry no longer opens this drawer as the product path. Prefer [Settings](page.settings) Providers tab. Protected extension mount points and non-settings specialized surfaces remain unchanged.

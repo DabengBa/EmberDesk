@@ -42,6 +42,7 @@ describe('provider secret field state', () => {
             placeholder: 'Proxy password',
             value: 'proxy-password',
             vertexAiActive: false,
+            isServiceAccount: false,
         });
 
         expect(getUnifiedKeyFieldState({
@@ -106,7 +107,7 @@ describe('provider secret field state', () => {
             secretKey: 'api_key_makersuite',
             chatCompletionSources: sources,
         });
-        expect(fullSecretKey).toBeNull();
+        expect(fullSecretKey).toBe('vertexai_service_account_json');
         expect(canUseDirectProviderSecret({
             settings: {
                 reverse_proxy: '',
@@ -114,7 +115,7 @@ describe('provider secret field state', () => {
                 vertexai_auth_mode: 'full',
             },
             secretKey: fullSecretKey,
-        })).toBe(false);
+        })).toBe(true);
 
         const proxySecretKey = resolveProviderSecretKeyForSettings({
             settings: {

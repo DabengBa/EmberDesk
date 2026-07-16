@@ -1,10 +1,8 @@
-import { isReactPageEnabled } from './react-feature-flags.js';
-
 /**
- * Whether the React settings page is enabled.
- * Reuses the existing shared React app build served for /login and /setup.
+ * React Settings is a sole-owner route surface.
+ * The product flag is retired; build presence is enforced by the route middleware.
  * @returns {boolean}
  */
 export function isReactSettingsEnabled() {
-    return isReactPageEnabled('settings');
+    return true;
 }

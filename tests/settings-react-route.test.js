@@ -23,7 +23,7 @@ beforeAll(() => {
         '    pages:',
         '      login: false',
         '      setup: false',
-        '      settings: false',
+        '      settings: true',
         '',
     ].join('\n'), 'utf8');
     setConfigFilePath(configPath);
@@ -145,7 +145,8 @@ describe('settings React route flag', () => {
         expect(routeSource).toContain('const [showDiagnostics, setShowDiagnostics] = useState(false);');
         expect(routeSource).toContain('window.setTimeout(() => {');
         expect(routeSource).toContain('setSaveStatus(null);');
-        expect(routeSource).toContain("setSaveStatus({ kind: 'success', message: '设置已保存。' });");
+        expect(routeSource).toContain("setSaveStatus({ kind: 'success', message: '设置已保存。返回 Workspace 后将与刷新后一致地加载。' });");
+        expect(routeSource).toContain("window.sessionStorage.setItem('emberdesk-settings-saved-at'");
         expect(routeSource).toContain('setSaveStatus({ kind:');
         expect(routeSource).toContain('Diagnostics');
         expect(routeSource).toContain('{showDiagnostics && (');
@@ -504,6 +505,153 @@ describe('settings React route flag', () => {
         });
     });
 
+
+
+    test('coerces string numeric enums into form numbers for lossless save validation', async () => {
+        const helperModule = await import(`../app/lib/settings-helpers.js?settingsCoerce=${Date.now()}-${Math.random()}`);
+        const defaults = helperModule.buildSettingsFormDefaults({
+            oai_settings: { names_behavior: '2', n: '3' },
+            power_user: {
+                avatar_style: '1',
+                chat_display: '2',
+                send_on_enter: '-1',
+                tag_import_setting: '3',
+                context: { story_string_depth: '4' },
+            },
+        });
+        expect(defaults.general.namesBehavior).toBe(2);
+        expect(defaults.general.n).toBe(3);
+        expect(defaults.userInterface.avatarStyle).toBe(1);
+        expect(defaults.userInterface.chatDisplay).toBe(2);
+        expect(defaults.userInterface.sendOnEnter).toBe(-1);
+        expect(defaults.userInterface.tagImportSetting).toBe(3);
+        expect(defaults.advanced.contextStoryStringDepth).toBe(4);
+    });
+
+    test('owner inventory covers drawer fields with lossless single-field save round-trip', async () => {
+        const helperModule = await import(`../app/lib/settings-helpers.js?settingsInventory=${Date.now()}-${Math.random()}`);
+
+        expect(helperModule.settingsOwnerInventory.drawers.userSettings).toBe('#user-settings-block');
+        expect(helperModule.settingsOwnerInventory.drawers.apiConfiguration).toBe('#rm_api_block');
+        expect(helperModule.settingsOwnerInventory.drawers.advancedFormatting).toBe('#AdvancedFormatting');
+        expect(helperModule.settingsOwnerInventory.specializedSurfaces).toEqual(expect.arrayContaining([
+            'world_info_settings',
+            'extension_settings',
+            'power_user.personas',
+            'tags',
+            'tag_map',
+        ]));
+
+        const reactPaths = Object.values(helperModule.settingsCoverage.reactOwned).flat();
+        for (const path of [
+            'oai_settings.tool_reasoning_mode',
+            'oai_settings.assistant_prefill',
+            'oai_settings.names_behavior',
+            'oai_settings.request_images',
+            'oai_settings.verbosity',
+            'oai_settings.media_inlining',
+            'power_user.main_text_color',
+            'power_user.expand_message_actions',
+            'power_user.send_on_enter',
+            'power_user.pin_styles',
+            'power_user.message_token_count_enabled',
+            'power_user.collapse_newlines',
+            'power_user.token_padding',
+            'power_user.user_prompt_bias',
+        ]) {
+            expect(reactPaths).toContain(path);
+            expect(helperModule.settingsCoverage.legacyOwned).not.toContain(path);
+        }
+
+        const fixture = {
+            untouched: { keep: true, nested: { a: 1 } },
+            unknown_root: 'preserve-me',
+            preset_settings: 'LegacyTextGenPreset',
+            world_info_settings: { depth: 2 },
+            extension_settings: { disabled: [] },
+            oai_settings: {
+                chat_completion_source: 'openai',
+                reasoning_effort: 'xhigh',
+                tool_reasoning_mode: 'active_chain',
+                names_behavior: 2,
+                verbosity: 'low',
+                media_inlining: false,
+                request_images: true,
+                request_image_aspect_ratio: '16:9',
+                assistant_prefill: 'legacy-prefill',
+                n: 3,
+                openai_max_context: 4095,
+            },
+            power_user: {
+                theme: 'Dark Lite',
+                main_text_color: 'rgba(1, 2, 3, 1)',
+                expand_message_actions: true,
+                send_on_enter: -1,
+                pin_styles: false,
+                message_token_count_enabled: true,
+                collapse_newlines: true,
+                token_padding: 32,
+                user_prompt_bias: 'start-with',
+                custom_css: '.x{}',
+                stscript: {
+                    matching: 'fuzzy',
+                    autocomplete: {
+                        state: 2,
+                        autoHide: false,
+                        style: 'theme',
+                        select: 3,
+                        showInAllMacroFields: false,
+                        font: { scale: 0.8 },
+                        width: { left: 0, right: 0 },
+                    },
+                    parser: { flags: { 1: false, 2: true } },
+                },
+            },
+            tags: [{ id: 1 }],
+            tag_map: { a: ['b'] },
+        };
+
+        const defaults = helperModule.buildSettingsFormDefaults(fixture);
+        expect(defaults.general.toolReasoningMode).toBe('active_chain');
+        expect(defaults.general.namesBehavior).toBe(2);
+        expect(defaults.general.verbosity).toBe('low');
+        expect(defaults.general.assistantPrefill).toBe('legacy-prefill');
+        expect(defaults.userInterface.mainTextColor).toBe('rgba(1, 2, 3, 1)');
+        expect(defaults.userInterface.sendOnEnter).toBe(-1);
+        expect(defaults.advanced.collapseNewlines).toBe(true);
+        expect(defaults.advanced.tokenPadding).toBe(32);
+
+        // Mutate a single field only.
+        const singleEdit = structuredClone(defaults);
+        singleEdit.userInterface.mainTextColor = 'rgba(9, 8, 7, 1)';
+        const saved = helperModule.buildSettingsSavePayload(fixture, singleEdit);
+
+        expect(saved.untouched).toEqual({ keep: true, nested: { a: 1 } });
+        expect(saved.unknown_root).toBe('preserve-me');
+        expect(saved.preset_settings).toBe('LegacyTextGenPreset');
+        expect(saved.world_info_settings).toEqual({ depth: 2 });
+        expect(saved.extension_settings).toEqual({ disabled: [] });
+        expect(saved.tags).toEqual([{ id: 1 }]);
+        expect(saved.tag_map).toEqual({ a: ['b'] });
+        expect(saved.oai_settings.tool_reasoning_mode).toBe('active_chain');
+        expect(saved.oai_settings.names_behavior).toBe(2);
+        expect(saved.oai_settings.reasoning_effort).toBe('xhigh');
+        expect(saved.oai_settings.assistant_prefill).toBe('legacy-prefill');
+        expect(saved.power_user.main_text_color).toBe('rgba(9, 8, 7, 1)');
+        expect(saved.power_user.expand_message_actions).toBe(true);
+        expect(saved.power_user.send_on_enter).toBe(-1);
+        expect(saved.power_user.stscript.parser.flags).toEqual({ 1: false, 2: true });
+        expect(saved.power_user.user_prompt_bias).toBe('start-with');
+        expect(saved.power_user.token_padding).toBe(32);
+        expect(saved.power_user.collapse_newlines).toBe(true);
+
+        // Full identity round-trip with no form edits preserves unknown enums/values.
+        const identity = helperModule.buildSettingsSavePayload(fixture, defaults);
+        expect(identity.oai_settings.reasoning_effort).toBe('xhigh');
+        expect(identity.oai_settings.tool_reasoning_mode).toBe('active_chain');
+        expect(identity.power_user.main_text_color).toBe('rgba(1, 2, 3, 1)');
+    });
+
     test('keeps legacy Vertex AI and advanced reasoning effort values saveable through the React form', async () => {
         const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'routes', 'settings.tsx'), 'utf8');
         const helperModule = await import(`../app/lib/settings-helpers.js?settingsCompat=${Date.now()}-${Math.random()}`);
@@ -541,6 +689,108 @@ describe('settings React route flag', () => {
         expect(routeSource).toContain("reasoningEffort: z.enum(['auto', 'low', 'medium', 'high', 'min', 'max', 'none', 'minimal', 'xhigh']),");
     });
 
+
+
+    test('advanced formatting sequences and context inject fields round-trip through React bindings', async () => {
+        const helperModule = await import(`../app/lib/settings-helpers.js?settingsAf=${Date.now()}-${Math.random()}`);
+        const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'routes', 'settings.tsx'), 'utf8');
+        expect(routeSource).toContain('settings-workspace-link');
+        expect(routeSource).toContain('emberdesk-settings-saved-at');
+        expect(helperModule.settingsCoverage.reactOwned.advanced).toEqual(expect.arrayContaining([
+            'power_user.instruct.input_sequence',
+            'power_user.instruct.output_sequence',
+            'power_user.instruct.stop_sequence',
+            'power_user.context.story_string_position',
+            'power_user.context.story_string_depth',
+        ]));
+
+        const fixture = {
+            power_user: {
+                instruct: {
+                    enabled: true,
+                    input_sequence: '### Input:',
+                    output_sequence: '### Response:',
+                    stop_sequence: '</s>',
+                    system_same_as_user: true,
+                    names_behavior: 'completion',
+                },
+                context: {
+                    preset: 'Default',
+                    story_string: '{{description}}',
+                    story_string_position: 1,
+                    story_string_role: 0,
+                    story_string_depth: 4,
+                },
+            },
+            keep: true,
+        };
+        const defaults = helperModule.buildSettingsFormDefaults(fixture);
+        expect(defaults.advanced.instructInputSequence).toBe('### Input:');
+        expect(defaults.advanced.contextStoryStringDepth).toBe(4);
+        const edited = structuredClone(defaults);
+        edited.advanced.instructOutputSequence = '### Assistant:';
+        const saved = helperModule.buildSettingsSavePayload(fixture, edited);
+        expect(saved.keep).toBe(true);
+        expect(saved.power_user.instruct.input_sequence).toBe('### Input:');
+        expect(saved.power_user.instruct.output_sequence).toBe('### Assistant:');
+        expect(saved.power_user.instruct.stop_sequence).toBe('</s>');
+        expect(saved.power_user.context.story_string_depth).toBe(4);
+        expect(saved.power_user.instruct.system_same_as_user).toBe(true);
+    });
+
+    test('wires Vertex service account and connection profile selection without putting secrets into settings JSON', async () => {
+        const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'routes', 'settings.tsx'), 'utf8');
+        const helperModule = await import(`../app/lib/settings-helpers.js?settingsSecrets=${Date.now()}-${Math.random()}`);
+        const secretHelpers = await import(`../public/scripts/provider-secret-field-state.js?settingsSecrets=${Date.now()}-${Math.random()}`);
+
+        expect(routeSource).toContain('vertexai_service_account_json');
+        expect(routeSource).toContain('providers.connectionProfileId');
+        expect(routeSource).toContain("fetch('/api/secrets/write'");
+        expect(routeSource).not.toContain('Service account JSON remains in API Configuration.');
+
+        const fullKey = secretHelpers.resolveProviderSecretKeyForSettings({
+            settings: { reverse_proxy: '', use_vertexai: true, vertexai_auth_mode: 'full' },
+            source: 'makersuite',
+            secretKey: 'api_key_makersuite',
+            chatCompletionSources: { OPENAI: 'openai', CLAUDE: 'claude', MAKERSUITE: 'makersuite' },
+        });
+        expect(fullKey).toBe('vertexai_service_account_json');
+
+        const fixture = {
+            oai_settings: {
+                chat_completion_source: 'makersuite',
+                use_vertexai: true,
+                vertexai_auth_mode: 'full',
+                vertexai_region: 'us-central1',
+            },
+            extension_settings: {
+                connectionManager: {
+                    selectedProfile: 'profile-1',
+                    profiles: [
+                        { id: 'profile-1', name: 'Home' },
+                        { id: 'profile-2', name: 'Work' },
+                    ],
+                },
+            },
+            secrets_should_not_exist: 'x',
+        };
+        const defaults = helperModule.buildSettingsFormDefaults(fixture);
+        expect(defaults.providers.connectionProfileId).toBe('profile-1');
+        expect(defaults.providers.vertexaiAuthMode).toBe('full');
+
+        const next = structuredClone(defaults);
+        next.providers.connectionProfileId = 'profile-2';
+        const saved = helperModule.buildSettingsSavePayload(fixture, next);
+        expect(saved.extension_settings.connectionManager.selectedProfile).toBe('profile-2');
+        expect(saved.extension_settings.connectionManager.profiles).toEqual([
+            { id: 'profile-1', name: 'Home' },
+            { id: 'profile-2', name: 'Work' },
+        ]);
+        expect(JSON.stringify(saved)).not.toContain('BEGIN PRIVATE KEY');
+        expect(JSON.stringify(saved)).not.toContain('vertexai_service_account_json');
+        expect(helperModule.settingsCoverage.reactOwned.providers).toContain('extension_settings.connectionManager.selectedProfile');
+    });
+
     test('redirects unauthenticated /settings requests to /login', async () => {
         const { app } = await createSettingsRouteApp({ isLoggedIn: false });
 
@@ -551,20 +801,24 @@ describe('settings React route flag', () => {
         });
     }, 15000);
 
-    test('keeps /settings on the legacy workspace entry when the React settings flag is disabled', async () => {
-        const { app, featureModule } = await createSettingsRouteApp();
+    test('returns a clear error when the React settings build is missing instead of falling back to the workspace', async () => {
+        const missingRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-settings-missing-dist-'));
+        tmpRoots.push(missingRoot);
+        const { app, featureModule } = await createSettingsRouteApp({
+            reactLoginDistRoot: missingRoot,
+        });
 
-        expect(featureModule.isReactSettingsEnabled()).toBe(false);
+        expect(featureModule.isReactSettingsEnabled()).toBe(true);
 
         await usingApp(app, async (url) => {
             const response = await fetch(`${url}/settings`, { redirect: 'manual' });
-            expect(response.status).toBe(302);
-            expect(response.headers.get('location')).toBe('/');
+            expect(response.status).toBe(503);
+            expect(await response.text()).toContain('React settings build is missing');
+            expect(response.headers.get('location')).toBeNull();
         });
     });
 
-    test('serves the React settings shell from /settings when the flag is enabled and the build exists', async () => {
-        process.env.EMBERDESK_FEATURES_REACT_PAGES_SETTINGS = 'true';
+    test('serves the React settings shell from /settings when the build exists', async () => {
         const distRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-settings-react-dist-'));
         const assetsRoot = path.join(distRoot, 'assets');
         tmpRoots.push(distRoot);

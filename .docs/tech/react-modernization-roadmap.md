@@ -6,11 +6,11 @@
 
 ## 状态
 
-状态：原 React 现代化 roadmap 已开发完成并进入兼容维护；Phase 0-6 已按批准边界交付，Phase 7 Sprint 1-7 已完成 full owner cutover 与最终决策闭环。Character Library、World Info、Background Library、Extensions Host 和当前 main-chat surface 的同入口 legacy path 已不再被视为未决竞争实现：它们要么被 React owner 取代，要么被 ADR 冻结为同入口 compatibility facade / rollback owner。2026-06-24 的结论仍是不推进 separate-route/full SPA workspace shell；2026-07-01 的 Next Workspace Shell successor 在此基础上重开当前 `/` 的 same-entry shell takeover，允许 React 接管外层 chrome 和主聊天 layout/status，而不新增 `/workspace-next`、不删除兼容 substrate。2026-07-06 的后续收口把 AI Config、Formatting、Character Library、World Info、Backgrounds、Extensions、Settings、Group Chats、Character Authoring 全部纳入 registry-backed panel entry 协调：可见 shell 只发布 active/status 反馈，同一入口 open/close/reopen 语义由 adapter 结果驱动，当前 drawer `pinnedOpen` 事实只保留在内部 compatibility snapshot 中。`globalThis.SillyTavern` 与 `@sillytavern/*` 仍冻结为 documented compatibility facades，`eventSource` / `event_types` 保持长期支持。
+状态：Phase 0-6 和原 Phase 7 已交付为 React guarded-island、状态和兼容性基线。2026-07-16 起，已迁移 React surface 进入新的 legacy-retirement program：React 必须在功能完整、用户操作等价、支持的扩展/自动化契约仍可用后成为唯一 runtime owner；同版本 legacy fallback、hidden host、action facade 和 flag-off path 必须删除。当前代码中仍存在的 fallback 是待替换的事实，不是最终架构。该方向由 [ADR-0012](../adr/0012-react-migrated-surface-legacy-retirement.md) 和 [React Legacy Retirement Brief](briefs/260716-02-react-legacy-retirement.md) 记录。仍不引入 `/workspace-next`，不把未迁移 surface 纳入，也不以删除为名缩减用户能力。
 创建日期：2026-06-15  
 前置条件：`.docs/tech/modernization-roadmap.md` 已于 2026-06-05 冻结完成
 
-当前决策记录：[ADR-0007: React page and panel islands with legacy fallbacks](../adr/0007-react-page-islands-with-legacy-fallbacks.md)
+当前决策记录：[ADR-0012: Retire Legacy Runtime Owners From Migrated React Surfaces](../adr/0012-react-migrated-surface-legacy-retirement.md)；ADR-0007 保留早期 guarded-island 基线。
 
 本路线图不改变用户可见的产品语义。用户界面行为仍由 `.docs/db/` 拥有。
 
@@ -32,7 +32,7 @@
 | 数据获取 | TanStack Query | 已采用 | React login/setup/settings、character-library panel、workspace panel shell，以及 World Info / Background Library / Extensions Host 的 guarded React state/action surfaces 已使用 TanStack Query。 |
 | 表单 | TanStack Form + Zod | 已采用 | React login/setup/settings、character-library toolbar、World Info controls、Background Library filter/sort controls 和 Extensions Host Extras controls 的 React-owned 表单/呈现态使用 TanStack Form + Zod；legacy-owned 控件可通过 host 边界保留。 |
 | 列表性能 | TanStack Virtual | 已采用 | Character Library panel 在大页尺寸下用 `@tanstack/react-virtual` 限制同时挂载行数；main-chat `mainChatMessageList` island 现在也用它做 headless measurement / snapshot / restore controller，但仍不渲染第二套可见消息列表。 |
-| 状态 | Zustand + legacy compatibility globals | 已采用 / 策略冻结 | Zustand 已用于 workspace panel mount/update/unmount store 和 main-chat observation store；`globalThis.SillyTavern` 与 `@sillytavern/*` 现已冻结为 documented compatibility facades，`eventSource` / `event_types` 保持长期支持，`__emberDeskReactCompatibilityBridge` 明确 internal-only。 |
+| 状态 | Zustand + compatibility contracts | 已采用 / 替代中 | Zustand 已用于 workspace panel mount/update/unmount store 和 main-chat observation store；`globalThis.SillyTavern`、`@sillytavern/*` 与 `eventSource` / `event_types` 的外部行为继续受支持，但其 legacy provider 必须在 retirement program 中被可验证的替代实现接管；`__emberDeskReactCompatibilityBridge` 明确 internal-only。 |
 | 数据层 | file-backed user data + derived SQLite cache | 当前保留 | Phase 5 Sprint 2 已明确当前不采用 Drizzle；SQLite 仍只作为 derived cache，不是用户数据正本，见 [ADR-0009](../adr/0009-derived-cache-sqlite-drizzle-decision.md)。 |
 | 测试 | Jest + Playwright | 当前保留 | Vitest 尚未采用；现有验证仍以 Jest unit、Playwright E2E、docs compiler 和 focused compatibility tests 为主。 |
 | 工具 | ESLint / typecheck / focused proof scripts | 当前保留 | React Doctor 尚未采用；性能与逻辑证明依赖现有 runner 和 `.docs/logic-description/*_sandbox_proof.py`。 |
@@ -45,9 +45,20 @@
 4. **测试驱动**：每个迁移步骤必须有对应的单元测试或 E2E 测试
 5. **性能可测**：保留 startup/interaction performance runner，迁移后性能不能劣化
 6. **TanStack 收口优先**：React 页面迁移默认必须使用 TanStack Form + Zod 管理表单和校验，使用 TanStack Query 管理服务端状态；任何例外都必须在对应 spec/ADR 中说明原因和退出计划
-7. **Page / panel island 优先**：Phase 1 的 React 页面和早期 Phase 2 的工作区面板都以 feature-flagged island 形式上线，必须保留 legacy fallback；扩展兼容和全局 bridge 由 Phase 4 / Phase 6 建证据，legacy fallback / full SPA workspace shell 的删除或冻结统一由 Phase 7 决策
+7. **Page / panel island 是迁移起点，不是终点**：早期 feature-flagged island 与 legacy fallback 是已交付的风险控制基线；已迁移 surface 的终点由 ADR-0012 定义为 React 唯一 owner，兼容行为由替代契约保持。
 8. **剩余项不悬空**：任何 Phase 完成时保留的 legacy owner、fallback path 或兼容边界，必须在本路线图中有后续 Phase、backlog 子阶段、ADR-only milestone 或明确退出条件；不得只写“未来处理”。
-9. **Full owner cutover 必须显式排期**：guarded island / visible owner 只代表可回滚迁移完成，不代表 legacy owner 已退出；每个保留的 legacy 行为 owner、DOM fallback、public API 兼容出口和 build-missing fallback 都必须在 Phase 7 标明 cutover 条件、验证门和退出策略。
+9. **Full owner retirement 必须显式排期**：guarded island / visible owner 不代表 legacy owner 已退出；每个保留的行为 owner、DOM host、public contract provider 和 build-missing path 都必须在 retirement ledger 中有 React 替代、验证门和删除策略。
+
+## 2026-07-16 Legacy Retirement Program
+
+The next implementation work is sequenced by outcome, not by the old fallback taxonomy:
+
+1. delete-ready standalone React pages: Login and Setup;
+2. complete existing foundations: Character Library, Character/Group Authoring, Settings, World Info, Background Library, and Extensions Host;
+3. complete cross-cutting extension/automation contracts while each foundation moves;
+4. retire the same-entry workspace shell and main-chat legacy owners last.
+
+No step may delete user capability, change a documented user workflow, or break a supported extension contract. Release rollback uses a prior application version; it is not a reason to keep an in-process fallback.
 
 ## 迁移阶段
 
@@ -79,12 +90,12 @@
 **当前执行状态**：
 - `Sprint 1 / Login`：React 页面已上线并默认开启，`/login.html` 保留 legacy 回退入口；React 登录流程已按路线图完成 TanStack Form / Zod / TanStack Query 收口。
 - `Sprint 2 / Setup`：React 页面已交付并由 `features.react.pages.setup` 控制，默认保持关闭；`/setup.html` 保留 legacy 回退入口；React setup 流程已按路线图完成 TanStack Form / Zod / TanStack Query 收口。
-- `Sprint 3 / Settings`：React `/settings` 已交付并由 `features.react.pages.settings` 控制；flag 开启且 React build 存在时进入独立 Settings 页面，关闭或缺 build 时回退到 legacy `/` 工作区；本 Sprint 已严格采用 TanStack Form / Zod / TanStack Query，覆盖更广的 General 控制、fallback / Vertex AI / prompt post-processing、更多 UI 设置，以及 Advanced 中的大部分 power-user 设置面。legacy `vertexai` source 会显示为 Google + Vertex AI 并在未关闭 Vertex AI 时保存回 `vertexai`；高级 reasoning effort 值 `min` / `max` / `none` / `minimal` / `xhigh` 保持可见和可保存。用户可见语义见 [`page.settings`](../db/pages/settings.md)，当前 payload 规则见 [React settings payload processing flow](../logic-description/react_settings_payload_processing_flow.md)。
+- `Sprint 3 / Settings`：React `/settings` 已交付为 sole owner。product flag 与 workspace drawer fallback 已退休；build 存在时始终服务该页，缺 build 时 HTTP 503。页面覆盖 General / Providers / UI / Advanced，含 Vertex service-account secrets、connection-profile 选择、revision conflict 与完整 document round-trip。legacy `vertexai` source 会显示为 Google + Vertex AI 并在未关闭 Vertex AI 时保存回 `vertexai`；高级 reasoning effort 值 `min` / `max` / `none` / `minimal` / `xhigh` 保持可见和可保存。用户可见语义见 [`page.settings`](../db/pages/settings.md)，当前 payload 规则见 [React settings payload processing flow](../logic-description/react_settings_payload_processing_flow.md)。
 
 **Sprint 列表**：
 - ✅ Sprint 1: Login 页面 React 重写（2 周，React 实现已上线并默认开启 feature flag；TanStack Form / Zod / Query 已完成收口）
 - ✅ Sprint 2: Setup 页面 React 重写（2 周，React 实现已交付并挂在 `features.react.pages.setup` 下；`/setup.html` 保留 legacy 回退入口；TanStack Form / Zod / Query 已完成收口）
-- ✅ Sprint 3: Settings 面板 React 重写（4 周，React `/settings` 已交付并挂在 `features.react.pages.settings` 下；覆盖 General / Providers / User Interface / Advanced 的 Sprint 3 设置切片；TanStack Form / Zod / Query 已完成收口）
+- ✅ Sprint 3: Settings 面板 React 重写（4 周，React `/settings` 已交付为 sole owner；product flag 与 drawer fallback 已退休；覆盖 General / Providers / User Interface / Advanced；TanStack Form / Zod / Query 已完成收口）
 
 ---
 
@@ -399,33 +410,37 @@ bun run docs:check
 
 以下变更需要独立 ADR 批准：
 
-1. **[ADR-0007: React page and panel islands with legacy fallbacks](../adr/0007-react-page-islands-with-legacy-fallbacks.md)**
+1. **[ADR-0012: Retire Legacy Runtime Owners From Migrated React Surfaces](../adr/0012-react-migrated-surface-legacy-retirement.md)**
+   - 决策：已迁移 React surface 在功能完整和兼容行为可验证后删除 legacy runtime，而不是永久保留 fallback
+   - 理由：结束双 owner、hidden host 和 action facade 的长期复杂度，同时保持产品与扩展行为
+   - 权衡：部分 guarded island 需要继续功能迁移，主聊天和 shell 必须最后处理
+
+2. **[ADR-0007: React page and panel islands with legacy fallbacks](../adr/0007-react-page-islands-with-legacy-fallbacks.md)**
    - 决策：先以 feature-flagged React islands 迁移 `/login`、`/setup`、`/settings`，以及像 character library 这样的早期工作区 panel
    - 理由：降低早期 React 化风险，保持 legacy rollback、扩展兼容边界和同入口迁移体验
    - 权衡：短期保留 React/jQuery 双实现、共享 build fallback，以及面板 bridge 复杂度
 
-2. **[ADR-0008: Hono route island under Express host](../adr/0008-hono-route-island-under-express-host.md)**
+3. **[ADR-0008: Hono route island under Express host](../adr/0008-hono-route-island-under-express-host.md)**
    - 决策：仅在 Express 宿主下，以 `POST /api/moving-ui/save` 为首个 Hono route island 试点；不授权顶层 runtime replacement
    - 理由：先验证 typed route ergonomics 能否在不打穿现有 host chain 的前提下带来真实收益
    - 权衡：更好的 typed contract / RPC 体验 vs. 新框架引入、测试面扩大、宿主/子路由双栈复杂度
 
-3. **[ADR-0009: Derived cache SQLite Drizzle decision](../adr/0009-derived-cache-sqlite-drizzle-decision.md)**
+4. **[ADR-0009: Derived cache SQLite Drizzle decision](../adr/0009-derived-cache-sqlite-drizzle-decision.md)**
    - 决策：当前不为 `character-index.sqlite` derived-cache slice 引入 Drizzle，继续保留 handwritten `node:sqlite` helper
    - 理由：保持 derived cache 可重建、可回滚，同时避免为简单 sidecar 查询引入额外抽象
    - 权衡：schema tooling 和迁移管理 vs. 学习曲线、额外依赖、对现有 `node:sqlite` helper 的重写成本
 
-4. **[ADR-0010: Express runtime owner boundary](../adr/0010-express-runtime-owner-boundary.md)**
+5. **[ADR-0010: Express runtime owner boundary](../adr/0010-express-runtime-owner-boundary.md)**
    - 决策：继续保留 Express 作为 backend runtime owner；未来若讨论 sunset，必须先补齐 middleware-order、plugin mount、proxy/upload/error/404、startup split 和 rollback proof
    - 理由：route-island proof 不等于 whole-runtime parity；当前宿主链仍承载生产关键边界
    - 权衡：保留成熟宿主与回滚确定性 vs. 持续承受双栈渐进现代化成本
 
-5. **Phase 7 closeout policy**
-   - 决策：本阶段的最终判定由 [ADR-0007](../adr/0007-react-page-islands-with-legacy-fallbacks.md) 的后续更新加上 [Legacy Cutover Ledger](legacy-cutover-ledger.md) 共同承接，不再保留占位 ADR。
-   - 理由：当前仓库已经有被持续更新的 owner/fallback ADR 边界，缺的不是再起一份空壳 ADR，而是把每个 surface 的最终 verdict 写成 durable policy。
-   - 权衡：少一份空洞流程文档，换取更清晰的 surface-by-surface closeout；代价是后续变更必须按具体 surface 重开 spec/ADR，而不是回到一个泛化 Phase 7 待办。
-   - 覆盖：Character Library、World Info、Background Library、Extensions Host、main-chat transport、main-chat renderer/windowing、workspace shell/global compatibility exports 的最终 verdict 见 ledger 与 ADR-0007 updates。
+6. **React legacy-retirement program**
+   - 决策：由 ADR-0012、[React Legacy Retirement Brief](briefs/260716-02-react-legacy-retirement.md) 和 [Legacy Cutover Ledger](legacy-cutover-ledger.md) 记录已迁移 surface 的替代、验证、删除顺序。
+   - 理由：guarded-island closeout 是历史基线，不是永久双实现策略。
+   - 权衡：每个 surface 都必须完成行为和兼容替代，不能以删除为名缩减产品能力。
 
-6. **ADR-BBBB: Canonical storage 变更**
+7. **ADR-BBBB: Canonical storage 变更**
    - 决策：是否让 SQLite / ORM 从 derived cache 进入用户数据正本路径
    - 理由：当前路线图明确 file-backed user data 是正本，任何改变都超出 Phase 5 默认边界
    - 权衡：查询能力和类型安全 vs. 数据迁移、备份、回滚和用户数据丢失风险
@@ -494,8 +509,8 @@ bun run docs:check
 ✅ **测试覆盖率**：单元测试覆盖率 > 70%，E2E 覆盖核心流程  
 ✅ **类型安全**：TypeScript 严格模式，前后端类型共享  
 ✅ **开发体验**：HMR < 200ms，类型提示完整，构建 < 30s  
-✅ **Owner 清晰**：每个迁移 surface 只有一个 runtime owner；legacy 代码若保留，必须是 documented compatibility facade
-✅ **Fallback 有归属**：guarded fallback、build-missing fallback、legacy DOM bridge、global compatibility exports 均已删除或由 ADR 冻结为长期支持面
+✅ **Owner 清晰**：每个已迁移 surface 只有一个 React runtime owner；不再保留同版本 legacy behavior owner
+✅ **Compatibility 可验证**：guarded fallback、build-missing fallback、legacy DOM bridge 已删除；支持的 globals、events、aliases、selectors 和 automation 行为由明确替代契约提供
 ✅ **文档完备**：用户迁移指南、扩展开发文档、ADR 记录、Phase 7 cutover checklist 和最终 owner split 均已更新
 
 ## 退出策略

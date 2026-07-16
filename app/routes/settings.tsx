@@ -22,14 +22,22 @@ import {
     defaultSettingsFormValues,
     getProviderModelFieldConfig,
     getValueAtPath,
+    imageOverswipeOptions,
+    mediaDisplayOptions,
+    namesBehaviorOptions,
     parseSettingsPayload,
     promptPostProcessingOptions,
     providerOptions,
     providerSecretKeyBySource,
     reasoningEffortOptions,
+    sendOnEnterOptions,
     settingsCoverage,
+    settingsOwnerInventory,
     settingsTabDefinitions,
+    tagImportSettingOptions,
     toastPositionOptions,
+    toolReasoningModeOptions,
+    verbosityOptions,
     vertexAuthModeOptions,
 } from '@/lib/settings-helpers.js';
 
@@ -58,6 +66,29 @@ const settingsSchema = z.object({
         continuePostfix: z.string(),
         squashSystemMessages: z.boolean(),
         customPromptPostProcessing: z.string(),
+        n: z.coerce.number(),
+        verbosity: z.string(),
+        mediaInlining: z.boolean(),
+        inlineImageQuality: z.string(),
+        requestImages: z.boolean(),
+        requestImageAspectRatio: z.string(),
+        requestImageResolution: z.string(),
+        toolReasoningMode: z.string(),
+        toolCallRecurseLimit: z.coerce.number(),
+        sendIfEmpty: z.string(),
+        impersonationPrompt: z.string(),
+        newChatPrompt: z.string(),
+        newGroupChatPrompt: z.string(),
+        newExampleChatPrompt: z.string(),
+        continueNudgePrompt: z.string(),
+        wiFormat: z.string(),
+        scenarioFormat: z.string(),
+        personalityFormat: z.string(),
+        groupNudgePrompt: z.string(),
+        assistantPrefill: z.string(),
+        assistantImpersonation: z.string(),
+        namesBehavior: z.coerce.number(),
+        biasPresetSelected: z.string(),
     }),
     providers: z.object({
         chatCompletionSource: z.enum(['openai', 'claude', 'makersuite']),
@@ -78,6 +109,7 @@ const settingsSchema = z.object({
         fallbackProviderBaseUrl: z.string(),
         fallbackProviderModel: z.string(),
         bindPresetToConnection: z.boolean(),
+        connectionProfileId: z.string(),
     }),
     userInterface: z.object({
         theme: z.string(),
@@ -90,14 +122,72 @@ const settingsSchema = z.object({
         reducedMotion: z.boolean(),
         noShadows: z.boolean(),
         toastrPosition: z.string(),
-        avatarStyle: z.number().int().min(0).max(3),
-        chatDisplay: z.number().int().min(0).max(2),
+        avatarStyle: z.coerce.number().int().min(0).max(3),
+        chatDisplay: z.coerce.number().int().min(0).max(2),
         timerEnabled: z.boolean(),
         timestampsEnabled: z.boolean(),
         timestampModelIcon: z.boolean(),
         mesIDDisplayEnabled: z.boolean(),
         hideChatAvatarsEnabled: z.boolean(),
         compactInputArea: z.boolean(),
+        waifuMode: z.boolean(),
+        expandMessageActions: z.boolean(),
+        enableZenSliders: z.boolean(),
+        enableLabMode: z.boolean(),
+        messageTokenCountEnabled: z.boolean(),
+        showSwipeNumAllMessages: z.boolean(),
+        hotswapEnabled: z.boolean(),
+        zoomedAvatarMagnification: z.boolean(),
+        bogusFolders: z.boolean(),
+        clickToEdit: z.boolean(),
+        mediaDisplay: z.string(),
+        blurStrength: z.coerce.number(),
+        shadowWidth: z.coerce.number(),
+        mainTextColor: z.string(),
+        italicsTextColor: z.string(),
+        underlineTextColor: z.string(),
+        quoteTextColor: z.string(),
+        blurTintColor: z.string(),
+        chatTintColor: z.string(),
+        userMesBlurTintColor: z.string(),
+        botMesBlurTintColor: z.string(),
+        shadowColor: z.string(),
+        borderColor: z.string(),
+        playMessageSound: z.boolean(),
+        playSoundUnfocused: z.boolean(),
+        relaxedApiUrls: z.boolean(),
+        worldImportDialog: z.boolean(),
+        enableAutoSelectInput: z.boolean(),
+        enableMdHotkeys: z.boolean(),
+        restoreUserInput: z.boolean(),
+        sendOnEnter: z.coerce.number(),
+        continueOnSend: z.boolean(),
+        quickContinue: z.boolean(),
+        quickImpersonate: z.boolean(),
+        gestures: z.boolean(),
+        autoLoadChat: z.boolean(),
+        autoScrollChatToBottom: z.boolean(),
+        autoSaveMsgEdits: z.boolean(),
+        confirmMessageDelete: z.boolean(),
+        autoFixGeneratedMarkdown: z.boolean(),
+        forbidExternalMedia: z.boolean(),
+        allowName1Display: z.boolean(),
+        allowName2Display: z.boolean(),
+        encodeTags: z.boolean(),
+        disableGroupTrimming: z.boolean(),
+        consoleLogPrompts: z.boolean(),
+        requestTokenProbabilities: z.boolean(),
+        showGroupChatQueue: z.boolean(),
+        pinStyles: z.boolean(),
+        fuzzySearch: z.boolean(),
+        preferCharacterPrompt: z.boolean(),
+        preferCharacterJailbreak: z.boolean(),
+        neverResizeAvatars: z.boolean(),
+        showCardAvatarUrls: z.boolean(),
+        spoilerFreeMode: z.boolean(),
+        imageOverswipe: z.string(),
+        auxField: z.string(),
+        tagImportSetting: z.coerce.number(),
     }),
     advanced: z.object({
         autoSwipe: z.boolean(),
@@ -111,7 +201,7 @@ const settingsSchema = z.object({
         autoContinueEnabled: z.boolean(),
         autoContinueAllowChatCompletions: z.boolean(),
         autoContinueTargetLength: z.number().int().min(0),
-        chatTruncation: z.number().int().min(0),
+        chatTruncation: z.coerce.number().int().min(0),
         streamingFps: z.number().int().min(1),
         smoothStreaming: z.boolean(),
         smoothStreamingNoThink: z.boolean(),
@@ -155,6 +245,39 @@ const settingsSchema = z.object({
         stscriptAutocompleteWidthRight: z.number().int().min(0).max(2),
         stscriptParserFlagStrictEscaping: z.boolean(),
         stscriptParserFlagReplaceGetvar: z.boolean(),
+        collapseNewlines: z.boolean(),
+        alwaysForceName2: z.boolean(),
+        trimSentences: z.boolean(),
+        trimSpaces: z.boolean(),
+        singleLine: z.boolean(),
+        markdownEscapeStrings: z.string(),
+        userPromptBias: z.string(),
+        showUserPromptBias: z.boolean(),
+        tokenPadding: z.coerce.number(),
+        instructDerived: z.boolean(),
+        contextDerived: z.boolean(),
+        contextSizeDerived: z.boolean(),
+        instructInputSequence: z.string(),
+        instructInputSuffix: z.string(),
+        instructOutputSequence: z.string(),
+        instructOutputSuffix: z.string(),
+        instructSystemSequence: z.string(),
+        instructSystemSuffix: z.string(),
+        instructLastSystemSequence: z.string(),
+        instructFirstInputSequence: z.string(),
+        instructFirstOutputSequence: z.string(),
+        instructLastInputSequence: z.string(),
+        instructLastOutputSequence: z.string(),
+        instructStoryStringPrefix: z.string(),
+        instructStoryStringSuffix: z.string(),
+        instructStopSequence: z.string(),
+        instructUserAlignmentMessage: z.string(),
+        instructSystemSameAsUser: z.boolean(),
+        instructNamesBehavior: z.string(),
+        instructSeparatorSequence: z.string(),
+        contextStoryStringPosition: z.coerce.number(),
+        contextStoryStringRole: z.coerce.number(),
+        contextStoryStringDepth: z.coerce.number(),
     }),
 });
 
@@ -184,7 +307,15 @@ async function readJsonObject(response: Response) {
 }
 
 function SettingsPage() {
-    const [activeTab, setActiveTab] = useState(settingsTabDefinitions[0].id);
+    const [activeTab, setActiveTab] = useState(() => {
+        if (typeof window === 'undefined') {
+            return settingsTabDefinitions[0].id;
+        }
+        const requestedTab = new URLSearchParams(window.location.search).get('tab');
+        return settingsTabDefinitions.some(tab => tab.id === requestedTab)
+            ? requestedTab
+            : settingsTabDefinitions[0].id;
+    });
     const [pageError, setPageError] = useState('');
     const [saveStatus, setSaveStatus] = useState<{ kind: 'success' | 'info'; message: string } | null>(null);
     const [showDiagnostics, setShowDiagnostics] = useState(false);
@@ -339,7 +470,13 @@ function SettingsPage() {
             }
 
             await refetchSettings();
-            setSaveStatus({ kind: 'success', message: '设置已保存。' });
+            setSaveStatus({ kind: 'success', message: '设置已保存。返回 Workspace 后将与刷新后一致地加载。' });
+            try {
+                window.sessionStorage.setItem('emberdesk-settings-saved-at', String(Date.now()));
+                window.sessionStorage.setItem('emberdesk-settings-revision', String(parsedPayload.settingsRevision ?? ''));
+            } catch {
+                // sessionStorage may be unavailable in private contexts
+            }
             return payload;
         },
         retry: false,
@@ -541,10 +678,21 @@ function SettingsPage() {
             <div className="settings-layout">
                 <section className="settings-main-panel">
                     <header className="settings-page-header">
-                        <h1 className="settings-page-title">Settings</h1>
-                        <p className="settings-page-summary">
-                            Defaults, providers, workspace display, and power-user controls.
-                        </p>
+                        <div className="settings-page-header-row">
+                            <div>
+                                <h1 className="settings-page-title">Settings</h1>
+                                <p className="settings-page-summary">
+                                    Defaults, providers, workspace display, and power-user controls.
+                                </p>
+                            </div>
+                            <a
+                                className="settings-button settings-button--secondary settings-workspace-link"
+                                href="/"
+                                data-doc-id="page.chat_workspace"
+                            >
+                                返回 Workspace
+                            </a>
+                        </div>
                     </header>
 
                     <SettingsTabs tabs={settingsTabDefinitions} activeTab={activeTab} onChange={setActiveTab} />
@@ -756,7 +904,214 @@ function SettingsPage() {
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
-                                </SettingsSection>
+                                                                    <SettingField
+                                        form={settingsForm}
+                                        name="general.n"
+                                        label="N"
+                                        description="Settings path binding for general.n."
+                                        variant="number"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="general.verbosity"
+                                        label="Verbosity"
+                                        description="Settings path binding for general.verbosity."
+                                        variant="select"
+                                        options={verbosityOptions}
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="general.mediaInlining"
+                                        label="Media Inlining"
+                                        description="Settings path binding for general.mediaInlining."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="general.inlineImageQuality"
+                                        label="Inline Image Quality"
+                                        description="Settings path binding for general.inlineImageQuality."
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="general.requestImages"
+                                        label="Request Images"
+                                        description="Settings path binding for general.requestImages."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="general.requestImageAspectRatio"
+                                        label="Request Image Aspect Ratio"
+                                        description="Settings path binding for general.requestImageAspectRatio."
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="general.requestImageResolution"
+                                        label="Request Image Resolution"
+                                        description="Settings path binding for general.requestImageResolution."
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="general.toolReasoningMode"
+                                        label="Tool Reasoning Mode"
+                                        description="Settings path binding for general.toolReasoningMode."
+                                        variant="select"
+                                        options={toolReasoningModeOptions}
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="general.toolCallRecurseLimit"
+                                        label="Tool Call Recurse Limit"
+                                        description="Settings path binding for general.toolCallRecurseLimit."
+                                        variant="number"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="general.sendIfEmpty"
+                                        label="Send If Empty"
+                                        description="Settings path binding for general.sendIfEmpty."
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="general.impersonationPrompt"
+                                        label="Impersonation Prompt"
+                                        description="Settings path binding for general.impersonationPrompt."
+                                        variant="textarea"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="general.newChatPrompt"
+                                        label="New Chat Prompt"
+                                        description="Settings path binding for general.newChatPrompt."
+                                        variant="textarea"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="general.newGroupChatPrompt"
+                                        label="New Group Chat Prompt"
+                                        description="Settings path binding for general.newGroupChatPrompt."
+                                        variant="textarea"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="general.newExampleChatPrompt"
+                                        label="New Example Chat Prompt"
+                                        description="Settings path binding for general.newExampleChatPrompt."
+                                        variant="textarea"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="general.continueNudgePrompt"
+                                        label="Continue Nudge Prompt"
+                                        description="Settings path binding for general.continueNudgePrompt."
+                                        variant="textarea"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="general.wiFormat"
+                                        label="Wi Format"
+                                        description="Settings path binding for general.wiFormat."
+                                        variant="textarea"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="general.scenarioFormat"
+                                        label="Scenario Format"
+                                        description="Settings path binding for general.scenarioFormat."
+                                        variant="textarea"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="general.personalityFormat"
+                                        label="Personality Format"
+                                        description="Settings path binding for general.personalityFormat."
+                                        variant="textarea"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="general.groupNudgePrompt"
+                                        label="Group Nudge Prompt"
+                                        description="Settings path binding for general.groupNudgePrompt."
+                                        variant="textarea"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="general.assistantPrefill"
+                                        label="Assistant Prefill"
+                                        description="Settings path binding for general.assistantPrefill."
+                                        variant="textarea"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="general.assistantImpersonation"
+                                        label="Assistant Impersonation"
+                                        description="Settings path binding for general.assistantImpersonation."
+                                        variant="textarea"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="general.namesBehavior"
+                                        label="Names Behavior"
+                                        description="Settings path binding for general.namesBehavior."
+                                        variant="select"
+                                        selectValueType="number"
+                                        options={namesBehaviorOptions}
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="general.biasPresetSelected"
+                                        label="Bias Preset Selected"
+                                        description="Settings path binding for general.biasPresetSelected."
+                                        variant="textarea"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+</SettingsSection>
                             </div>
 
                             <div className={activeTab === 'providers' ? 'block' : 'hidden'}>
@@ -925,6 +1280,23 @@ function SettingsPage() {
 
                                         {directSecretMode ? (
                                             <div className="settings-inline-actions">
+                                                {unifiedKeyFieldState.isServiceAccount ? (
+                                                    <textarea
+                                                        id="provider-secret-input"
+                                                        name="provider-secret-input"
+                                                        aria-label="Vertex AI Service Account JSON"
+                                                        className="settings-input"
+                                                        rows={6}
+                                                        placeholder={unifiedKeyFieldState.placeholder}
+                                                        value={providerSecretInput}
+                                                        disabled={providerSecretMutation.isPending}
+                                                        onChange={event => {
+                                                            setProviderSecretInput(event.target.value);
+                                                            setSaveStatus(null);
+                                                            setPageError('');
+                                                        }}
+                                                    />
+                                                ) : (
                                                 <input
                                                     type="password"
                                                     id="provider-secret-input"
@@ -940,6 +1312,7 @@ function SettingsPage() {
                                                         setPageError('');
                                                     }}
                                                 />
+                                                )}
                                                 <button
                                                     type="button"
                                                     className="settings-button settings-button--primary"
@@ -952,12 +1325,14 @@ function SettingsPage() {
                                                             key: currentSecretKey,
                                                             mode: 'save',
                                                             value: providerSecretInput,
-                                                            successMessage: 'Provider API key 已保存。',
+                                                            successMessage: currentSecretKey === 'vertexai_service_account_json'
+                                                                ? 'Vertex service account 已保存。'
+                                                                : 'Provider API key 已保存。',
                                                             clearInput: () => setProviderSecretInput(''),
                                                         });
                                                     }}
                                                 >
-                                                    保存 Key
+                                                    {currentSecretKey === 'vertexai_service_account_json' ? '保存 Service Account' : '保存 Key'}
                                                 </button>
                                                 <button
                                                     type="button"
@@ -971,21 +1346,21 @@ function SettingsPage() {
                                                             key: currentSecretKey,
                                                             mode: 'clear',
                                                             value: '',
-                                                            successMessage: 'Provider API key 已清除。',
+                                                            successMessage: currentSecretKey === 'vertexai_service_account_json'
+                                                                ? 'Vertex service account 已清除。'
+                                                                : 'Provider API key 已清除。',
                                                             clearInput: () => setProviderSecretInput(''),
                                                         });
                                                     }}
                                                 >
-                                                    清除 Key
+                                                    {currentSecretKey === 'vertexai_service_account_json' ? '清除 Service Account' : '清除 Key'}
                                                 </button>
                                             </div>
                                         ) : (
                                             <p className="settings-card-description">
-                                                {vertexAiFullMode
-                                                    ? 'Service account JSON remains in API Configuration.'
-                                                    : unifiedKeyFieldState.vertexAiActive
-                                                        ? 'Vertex Express key uses the secrets store.'
-                                                        : 'Reverse proxy mode uses Proxy Password instead.'}
+                                                {unifiedKeyFieldState.vertexAiActive
+                                                    ? 'Vertex Express key uses the secrets store.'
+                                                    : 'Reverse proxy mode uses Proxy Password instead of provider secrets.'}
                                             </p>
                                         )}
                                     </div>
@@ -1052,7 +1427,39 @@ function SettingsPage() {
                                             </button>
                                         </div>
                                     </div>
-                                </SettingsSection>
+                                                                    <SettingField
+                                        form={settingsForm}
+                                        name="providers.openaiModel"
+                                        label="Openai Model"
+                                        description="Settings path binding for providers.openaiModel."
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="providers.claudeModel"
+                                        label="Claude Model"
+                                        description="Settings path binding for providers.claudeModel."
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="providers.googleModel"
+                                        label="Google Model"
+                                        description="Settings path binding for providers.googleModel."
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="providers.connectionProfileId"
+                                        label="Connection Profile Id"
+                                        description="Settings path binding for providers.connectionProfileId."
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+</SettingsSection>
                             </div>
 
                             <div className={activeTab === 'userInterface' ? 'block' : 'hidden'}>
@@ -1234,7 +1641,524 @@ function SettingsPage() {
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
-                                </SettingsSection>
+                                                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.waifuMode"
+                                        label="Waifu Mode"
+                                        description="Settings path binding for userInterface.waifuMode."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.expandMessageActions"
+                                        label="Expand Message Actions"
+                                        description="Settings path binding for userInterface.expandMessageActions."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.enableZenSliders"
+                                        label="Enable Zen Sliders"
+                                        description="Settings path binding for userInterface.enableZenSliders."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.enableLabMode"
+                                        label="Enable Lab Mode"
+                                        description="Settings path binding for userInterface.enableLabMode."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.messageTokenCountEnabled"
+                                        label="Message Token Count Enabled"
+                                        description="Settings path binding for userInterface.messageTokenCountEnabled."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.showSwipeNumAllMessages"
+                                        label="Show Swipe Num All Messages"
+                                        description="Settings path binding for userInterface.showSwipeNumAllMessages."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.hotswapEnabled"
+                                        label="Hotswap Enabled"
+                                        description="Settings path binding for userInterface.hotswapEnabled."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.zoomedAvatarMagnification"
+                                        label="Zoomed Avatar Magnification"
+                                        description="Settings path binding for userInterface.zoomedAvatarMagnification."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.bogusFolders"
+                                        label="Bogus Folders"
+                                        description="Settings path binding for userInterface.bogusFolders."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.clickToEdit"
+                                        label="Click To Edit"
+                                        description="Settings path binding for userInterface.clickToEdit."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.mediaDisplay"
+                                        label="Media Display"
+                                        description="Settings path binding for userInterface.mediaDisplay."
+                                        variant="select"
+                                        options={mediaDisplayOptions}
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.blurStrength"
+                                        label="Blur Strength"
+                                        description="Settings path binding for userInterface.blurStrength."
+                                        variant="number"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.shadowWidth"
+                                        label="Shadow Width"
+                                        description="Settings path binding for userInterface.shadowWidth."
+                                        variant="number"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.mainTextColor"
+                                        label="Main Text Color"
+                                        description="Settings path binding for userInterface.mainTextColor."
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.italicsTextColor"
+                                        label="Italics Text Color"
+                                        description="Settings path binding for userInterface.italicsTextColor."
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.underlineTextColor"
+                                        label="Underline Text Color"
+                                        description="Settings path binding for userInterface.underlineTextColor."
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.quoteTextColor"
+                                        label="Quote Text Color"
+                                        description="Settings path binding for userInterface.quoteTextColor."
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.blurTintColor"
+                                        label="Blur Tint Color"
+                                        description="Settings path binding for userInterface.blurTintColor."
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.chatTintColor"
+                                        label="Chat Tint Color"
+                                        description="Settings path binding for userInterface.chatTintColor."
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.userMesBlurTintColor"
+                                        label="User Mes Blur Tint Color"
+                                        description="Settings path binding for userInterface.userMesBlurTintColor."
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.botMesBlurTintColor"
+                                        label="Bot Mes Blur Tint Color"
+                                        description="Settings path binding for userInterface.botMesBlurTintColor."
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.shadowColor"
+                                        label="Shadow Color"
+                                        description="Settings path binding for userInterface.shadowColor."
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.borderColor"
+                                        label="Border Color"
+                                        description="Settings path binding for userInterface.borderColor."
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.playMessageSound"
+                                        label="Play Message Sound"
+                                        description="Settings path binding for userInterface.playMessageSound."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.playSoundUnfocused"
+                                        label="Play Sound Unfocused"
+                                        description="Settings path binding for userInterface.playSoundUnfocused."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.relaxedApiUrls"
+                                        label="Relaxed Api Urls"
+                                        description="Settings path binding for userInterface.relaxedApiUrls."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.worldImportDialog"
+                                        label="World Import Dialog"
+                                        description="Settings path binding for userInterface.worldImportDialog."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.enableAutoSelectInput"
+                                        label="Enable Auto Select Input"
+                                        description="Settings path binding for userInterface.enableAutoSelectInput."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.enableMdHotkeys"
+                                        label="Enable Md Hotkeys"
+                                        description="Settings path binding for userInterface.enableMdHotkeys."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.restoreUserInput"
+                                        label="Restore User Input"
+                                        description="Settings path binding for userInterface.restoreUserInput."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.sendOnEnter"
+                                        label="Send On Enter"
+                                        description="Settings path binding for userInterface.sendOnEnter."
+                                        variant="select"
+                                        selectValueType="number"
+                                        options={sendOnEnterOptions}
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.continueOnSend"
+                                        label="Continue On Send"
+                                        description="Settings path binding for userInterface.continueOnSend."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.quickContinue"
+                                        label="Quick Continue"
+                                        description="Settings path binding for userInterface.quickContinue."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.quickImpersonate"
+                                        label="Quick Impersonate"
+                                        description="Settings path binding for userInterface.quickImpersonate."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.gestures"
+                                        label="Gestures"
+                                        description="Settings path binding for userInterface.gestures."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.autoLoadChat"
+                                        label="Auto Load Chat"
+                                        description="Settings path binding for userInterface.autoLoadChat."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.autoScrollChatToBottom"
+                                        label="Auto Scroll Chat To Bottom"
+                                        description="Settings path binding for userInterface.autoScrollChatToBottom."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.autoSaveMsgEdits"
+                                        label="Auto Save Msg Edits"
+                                        description="Settings path binding for userInterface.autoSaveMsgEdits."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.confirmMessageDelete"
+                                        label="Confirm Message Delete"
+                                        description="Settings path binding for userInterface.confirmMessageDelete."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.autoFixGeneratedMarkdown"
+                                        label="Auto Fix Generated Markdown"
+                                        description="Settings path binding for userInterface.autoFixGeneratedMarkdown."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.forbidExternalMedia"
+                                        label="Forbid External Media"
+                                        description="Settings path binding for userInterface.forbidExternalMedia."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.allowName1Display"
+                                        label="Allow Name1 Display"
+                                        description="Settings path binding for userInterface.allowName1Display."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.allowName2Display"
+                                        label="Allow Name2 Display"
+                                        description="Settings path binding for userInterface.allowName2Display."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.encodeTags"
+                                        label="Encode Tags"
+                                        description="Settings path binding for userInterface.encodeTags."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.disableGroupTrimming"
+                                        label="Disable Group Trimming"
+                                        description="Settings path binding for userInterface.disableGroupTrimming."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.consoleLogPrompts"
+                                        label="Console Log Prompts"
+                                        description="Settings path binding for userInterface.consoleLogPrompts."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.requestTokenProbabilities"
+                                        label="Request Token Probabilities"
+                                        description="Settings path binding for userInterface.requestTokenProbabilities."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.showGroupChatQueue"
+                                        label="Show Group Chat Queue"
+                                        description="Settings path binding for userInterface.showGroupChatQueue."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.pinStyles"
+                                        label="Pin Styles"
+                                        description="Settings path binding for userInterface.pinStyles."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.fuzzySearch"
+                                        label="Fuzzy Search"
+                                        description="Settings path binding for userInterface.fuzzySearch."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.preferCharacterPrompt"
+                                        label="Prefer Character Prompt"
+                                        description="Settings path binding for userInterface.preferCharacterPrompt."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.preferCharacterJailbreak"
+                                        label="Prefer Character Jailbreak"
+                                        description="Settings path binding for userInterface.preferCharacterJailbreak."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.neverResizeAvatars"
+                                        label="Never Resize Avatars"
+                                        description="Settings path binding for userInterface.neverResizeAvatars."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.showCardAvatarUrls"
+                                        label="Show Card Avatar Urls"
+                                        description="Settings path binding for userInterface.showCardAvatarUrls."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.spoilerFreeMode"
+                                        label="Spoiler Free Mode"
+                                        description="Settings path binding for userInterface.spoilerFreeMode."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.imageOverswipe"
+                                        label="Image Overswipe"
+                                        description="Settings path binding for userInterface.imageOverswipe."
+                                        variant="select"
+                                        options={imageOverswipeOptions}
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.auxField"
+                                        label="Aux Field"
+                                        description="Settings path binding for userInterface.auxField."
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="userInterface.tagImportSetting"
+                                        label="Tag Import Setting"
+                                        description="Settings path binding for userInterface.tagImportSetting."
+                                        variant="select"
+                                        selectValueType="number"
+                                        options={tagImportSettingOptions}
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+</SettingsSection>
                             </div>
 
                             <div className={activeTab === 'advanced' ? 'block' : 'hidden'}>
@@ -1761,7 +2685,301 @@ function SettingsPage() {
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
-                                </SettingsSection>
+                                                                    <SettingField
+                                        form={settingsForm}
+                                        name="advanced.collapseNewlines"
+                                        label="Collapse Newlines"
+                                        description="Settings path binding for advanced.collapseNewlines."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="advanced.alwaysForceName2"
+                                        label="Always Force Name2"
+                                        description="Settings path binding for advanced.alwaysForceName2."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="advanced.trimSentences"
+                                        label="Trim Sentences"
+                                        description="Settings path binding for advanced.trimSentences."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="advanced.trimSpaces"
+                                        label="Trim Spaces"
+                                        description="Settings path binding for advanced.trimSpaces."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="advanced.singleLine"
+                                        label="Single Line"
+                                        description="Settings path binding for advanced.singleLine."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="advanced.markdownEscapeStrings"
+                                        label="Markdown Escape Strings"
+                                        description="Settings path binding for advanced.markdownEscapeStrings."
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="advanced.userPromptBias"
+                                        label="User Prompt Bias"
+                                        description="Settings path binding for advanced.userPromptBias."
+                                        variant="textarea"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="advanced.showUserPromptBias"
+                                        label="Show User Prompt Bias"
+                                        description="Settings path binding for advanced.showUserPromptBias."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="advanced.tokenPadding"
+                                        label="Token Padding"
+                                        description="Settings path binding for advanced.tokenPadding."
+                                        variant="number"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="advanced.instructDerived"
+                                        label="Instruct Derived"
+                                        description="Settings path binding for advanced.instructDerived."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="advanced.contextDerived"
+                                        label="Context Derived"
+                                        description="Settings path binding for advanced.contextDerived."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="advanced.contextSizeDerived"
+                                        label="Context Size Derived"
+                                        description="Settings path binding for advanced.contextSizeDerived."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="advanced.instructInputSequence"
+                                        label="Instruct Input Sequence"
+                                        description="Settings path binding for advanced.instructInputSequence."
+                                        variant="textarea"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="advanced.instructInputSuffix"
+                                        label="Instruct Input Suffix"
+                                        description="Settings path binding for advanced.instructInputSuffix."
+                                        variant="textarea"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="advanced.instructOutputSequence"
+                                        label="Instruct Output Sequence"
+                                        description="Settings path binding for advanced.instructOutputSequence."
+                                        variant="textarea"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="advanced.instructOutputSuffix"
+                                        label="Instruct Output Suffix"
+                                        description="Settings path binding for advanced.instructOutputSuffix."
+                                        variant="textarea"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="advanced.instructSystemSequence"
+                                        label="Instruct System Sequence"
+                                        description="Settings path binding for advanced.instructSystemSequence."
+                                        variant="textarea"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="advanced.instructSystemSuffix"
+                                        label="Instruct System Suffix"
+                                        description="Settings path binding for advanced.instructSystemSuffix."
+                                        variant="textarea"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="advanced.instructLastSystemSequence"
+                                        label="Instruct Last System Sequence"
+                                        description="Settings path binding for advanced.instructLastSystemSequence."
+                                        variant="textarea"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="advanced.instructFirstInputSequence"
+                                        label="Instruct First Input Sequence"
+                                        description="Settings path binding for advanced.instructFirstInputSequence."
+                                        variant="textarea"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="advanced.instructFirstOutputSequence"
+                                        label="Instruct First Output Sequence"
+                                        description="Settings path binding for advanced.instructFirstOutputSequence."
+                                        variant="textarea"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="advanced.instructLastInputSequence"
+                                        label="Instruct Last Input Sequence"
+                                        description="Settings path binding for advanced.instructLastInputSequence."
+                                        variant="textarea"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="advanced.instructLastOutputSequence"
+                                        label="Instruct Last Output Sequence"
+                                        description="Settings path binding for advanced.instructLastOutputSequence."
+                                        variant="textarea"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="advanced.instructStoryStringPrefix"
+                                        label="Instruct Story String Prefix"
+                                        description="Settings path binding for advanced.instructStoryStringPrefix."
+                                        variant="textarea"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="advanced.instructStoryStringSuffix"
+                                        label="Instruct Story String Suffix"
+                                        description="Settings path binding for advanced.instructStoryStringSuffix."
+                                        variant="textarea"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="advanced.instructStopSequence"
+                                        label="Instruct Stop Sequence"
+                                        description="Settings path binding for advanced.instructStopSequence."
+                                        variant="textarea"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="advanced.instructUserAlignmentMessage"
+                                        label="Instruct User Alignment Message"
+                                        description="Settings path binding for advanced.instructUserAlignmentMessage."
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="advanced.instructSystemSameAsUser"
+                                        label="Instruct System Same As User"
+                                        description="Settings path binding for advanced.instructSystemSameAsUser."
+                                        variant="toggle"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="advanced.instructNamesBehavior"
+                                        label="Instruct Names Behavior"
+                                        description="Settings path binding for advanced.instructNamesBehavior."
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="advanced.instructSeparatorSequence"
+                                        label="Instruct Separator Sequence"
+                                        description="Settings path binding for advanced.instructSeparatorSequence."
+                                        variant="textarea"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="advanced.contextStoryStringPosition"
+                                        label="Context Story String Position"
+                                        description="Settings path binding for advanced.contextStoryStringPosition."
+                                        variant="number"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="advanced.contextStoryStringRole"
+                                        label="Context Story String Role"
+                                        description="Settings path binding for advanced.contextStoryStringRole."
+                                        variant="number"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+                                    <SettingField
+                                        form={settingsForm}
+                                        name="advanced.contextStoryStringDepth"
+                                        label="Context Story String Depth"
+                                        description="Settings path binding for advanced.contextStoryStringDepth."
+                                        variant="number"
+                                        disabled={isBusy}
+                                        onValueChange={clearTransientState}
+                                    />
+</SettingsSection>
                             </div>
 
                             <div className="settings-save-bar">
@@ -1833,6 +3051,7 @@ function SettingsPage() {
                                 <div className="settings-diagnostics-group">
                                     <h3 className="settings-diagnostics-title">Legacy-owned</h3>
                                     <ul className="settings-diagnostics-list">
+                                        {/* specialized surfaces remain outside /settings: */ void settingsOwnerInventory.specializedSurfaces}
                                         {settingsCoverage.legacyOwned.map(path => (
                                             <li key={path}>{path}</li>
                                         ))}

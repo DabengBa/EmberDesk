@@ -379,7 +379,7 @@ if (globalThis.location?.pathname === '/' && globalThis.location?.search.include
 export function getWorkspaceReactFeatures() {
     return globalThis.__emberDeskWorkspaceFeatures ?? {
         reactPages: {
-            settings: false,
+            settings: true,
         },
         reactPanels: {
             mainChatMessageList: false,
@@ -762,10 +762,10 @@ function getWorkspaceShellChromeBridge() {
 
             switch (action) {
                 case 'openAIConfig':
-                    await openWorkspaceShellDrawer('left-nav-panel');
+                    window.location.assign('/settings?tab=providers');
                     return createWorkspaceShellPanelResult('aiConfig', { kind: 'aiConfig', mounted: false, status: 'success' });
                 case 'openFormatting':
-                    await openWorkspaceShellDrawer('AdvancedFormatting');
+                    window.location.assign('/settings?tab=advanced');
                     return createWorkspaceShellPanelResult('advancedFormatting', { kind: 'advancedFormatting', mounted: false, status: 'success' });
                 case 'openCharacterLibrary':
                     return openWorkspaceShellCharacterLibrary();
@@ -785,12 +785,7 @@ function getWorkspaceShellChromeBridge() {
                 case 'closeWorkspacePanel':
                     return closeWorkspaceShellPanel(payload?.kind);
                 case 'openSettings':
-                    if (getWorkspaceReactFeatures()?.reactPages?.settings) {
-                        window.location.assign('/settings');
-                        return createWorkspaceShellPanelResult('settings', { kind: 'settings', mounted: false, status: 'success' });
-                    } else {
-                        await openWorkspaceShellDrawer('user-settings-block');
-                    }
+                    window.location.assign('/settings');
                     return createWorkspaceShellPanelResult('settings', { kind: 'settings', mounted: false, status: 'success' });
                 case 'openGroupChats':
                     return openWorkspaceShellGroupChats();

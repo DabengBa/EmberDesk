@@ -101,6 +101,51 @@ export const chatDisplayOptions = [
     { value: '2', label: 'Document' },
 ];
 
+export const namesBehaviorOptions = [
+    { value: '-1', label: 'None' },
+    { value: '0', label: 'Default' },
+    { value: '1', label: 'Completion' },
+    { value: '2', label: 'Content' },
+];
+
+export const toolReasoningModeOptions = [
+    { value: 'disabled', label: 'Disabled' },
+    { value: 'since_last_user', label: 'Since Last User' },
+    { value: 'active_chain', label: 'Active Tool Chain' },
+];
+
+export const verbosityOptions = [
+    { value: 'auto', label: 'Auto' },
+    { value: 'low', label: 'Low' },
+    { value: 'medium', label: 'Medium' },
+    { value: 'high', label: 'High' },
+];
+
+export const mediaDisplayOptions = [
+    { value: 'list', label: 'List' },
+    { value: 'gallery', label: 'Gallery' },
+];
+
+export const sendOnEnterOptions = [
+    { value: '-1', label: 'Disabled' },
+    { value: '0', label: 'Automatic' },
+    { value: '1', label: 'Enabled' },
+];
+
+export const imageOverswipeOptions = [
+    { value: 'generate', label: 'Generate new' },
+    { value: 'rollover', label: 'Roll over' },
+];
+
+export const tagImportSettingOptions = [
+    { value: '1', label: 'Ask' },
+    { value: '2', label: 'None' },
+    { value: '3', label: 'All' },
+    { value: '4', label: 'Existing' },
+];
+
+
+
 export const defaultSettingsFormValues = {
     general: {
         presetSettings: '',
@@ -120,7 +165,30 @@ export const defaultSettingsFormValues = {
         continuePostfix: ' ',
         squashSystemMessages: false,
         customPromptPostProcessing: '',
-    },
+        n: 1,
+        verbosity: "auto",
+        mediaInlining: true,
+        inlineImageQuality: "auto",
+        requestImages: false,
+        requestImageAspectRatio: "",
+        requestImageResolution: "",
+        toolReasoningMode: "disabled",
+        toolCallRecurseLimit: 5,
+        sendIfEmpty: "",
+        impersonationPrompt: "",
+        newChatPrompt: "",
+        newGroupChatPrompt: "",
+        newExampleChatPrompt: "",
+        continueNudgePrompt: "",
+        wiFormat: "",
+        scenarioFormat: "",
+        personalityFormat: "",
+        groupNudgePrompt: "",
+        assistantPrefill: "",
+        assistantImpersonation: "",
+        namesBehavior: 0,
+        biasPresetSelected: "Default (none)",
+},
     providers: {
         chatCompletionSource: 'openai',
         openaiModel: '',
@@ -140,6 +208,7 @@ export const defaultSettingsFormValues = {
         fallbackProviderBaseUrl: '',
         fallbackProviderModel: '',
         bindPresetToConnection: true,
+        connectionProfileId: '',
     },
     userInterface: {
         theme: '',
@@ -160,7 +229,65 @@ export const defaultSettingsFormValues = {
         mesIDDisplayEnabled: false,
         hideChatAvatarsEnabled: false,
         compactInputArea: true,
-    },
+        waifuMode: false,
+        expandMessageActions: false,
+        enableZenSliders: false,
+        enableLabMode: false,
+        messageTokenCountEnabled: false,
+        showSwipeNumAllMessages: false,
+        hotswapEnabled: true,
+        zoomedAvatarMagnification: false,
+        bogusFolders: false,
+        clickToEdit: false,
+        mediaDisplay: "list",
+        blurStrength: 10,
+        shadowWidth: 2,
+        mainTextColor: "rgba(220, 220, 210, 1)",
+        italicsTextColor: "rgba(190, 190, 190, 1)",
+        underlineTextColor: "rgba(190, 190, 190, 1)",
+        quoteTextColor: "rgba(225, 138, 36, 1)",
+        blurTintColor: "rgba(0, 0, 0, 1)",
+        chatTintColor: "rgba(0, 0, 0, 1)",
+        userMesBlurTintColor: "rgba(0, 0, 0, 1)",
+        botMesBlurTintColor: "rgba(0, 0, 0, 1)",
+        shadowColor: "rgba(0, 0, 0, 1)",
+        borderColor: "rgba(0, 0, 0, 1)",
+        playMessageSound: false,
+        playSoundUnfocused: true,
+        relaxedApiUrls: false,
+        worldImportDialog: true,
+        enableAutoSelectInput: false,
+        enableMdHotkeys: false,
+        restoreUserInput: true,
+        sendOnEnter: 0,
+        continueOnSend: false,
+        quickContinue: true,
+        quickImpersonate: true,
+        gestures: true,
+        autoLoadChat: true,
+        autoScrollChatToBottom: true,
+        autoSaveMsgEdits: true,
+        confirmMessageDelete: true,
+        autoFixGeneratedMarkdown: true,
+        forbidExternalMedia: false,
+        allowName1Display: true,
+        allowName2Display: true,
+        encodeTags: false,
+        disableGroupTrimming: false,
+        consoleLogPrompts: false,
+        requestTokenProbabilities: false,
+        showGroupChatQueue: false,
+        pinStyles: true,
+        fuzzySearch: false,
+        preferCharacterPrompt: true,
+        preferCharacterJailbreak: true,
+        neverResizeAvatars: false,
+        showCardAvatarUrls: false,
+        spoilerFreeMode: false,
+        imageOverswipe: "generate",
+        auxField: "character_version",
+        tagImportSetting: 1,
+},
     advanced: {
         autoSwipe: false,
         autoSwipeMinimumLength: 0,
@@ -217,7 +344,40 @@ export const defaultSettingsFormValues = {
         stscriptAutocompleteWidthRight: 0,
         stscriptParserFlagStrictEscaping: false,
         stscriptParserFlagReplaceGetvar: false,
-    },
+        collapseNewlines: false,
+        alwaysForceName2: false,
+        trimSentences: false,
+        trimSpaces: true,
+        singleLine: false,
+        markdownEscapeStrings: "",
+        userPromptBias: "",
+        showUserPromptBias: true,
+        tokenPadding: 64,
+        instructDerived: false,
+        contextDerived: false,
+        contextSizeDerived: false,
+        instructInputSequence: "",
+        instructInputSuffix: "",
+        instructOutputSequence: "",
+        instructOutputSuffix: "",
+        instructSystemSequence: "",
+        instructSystemSuffix: "",
+        instructLastSystemSequence: "",
+        instructFirstInputSequence: "",
+        instructFirstOutputSequence: "",
+        instructLastInputSequence: "",
+        instructLastOutputSequence: "",
+        instructStoryStringPrefix: "",
+        instructStoryStringSuffix: "",
+        instructStopSequence: "",
+        instructUserAlignmentMessage: "",
+        instructSystemSameAsUser: false,
+        instructNamesBehavior: "default",
+        instructSeparatorSequence: "",
+        contextStoryStringPosition: 0,
+        contextStoryStringRole: 0,
+        contextStoryStringDepth: 1,
+},
 };
 
 function parseBlacklistToFormValue(value) {
@@ -307,6 +467,21 @@ const fieldBindings = [
     { tab: 'providers', formPath: 'providers.fallbackProviderBaseUrl', settingsPath: 'oai_settings.fallback_provider_base_url' },
     { tab: 'providers', formPath: 'providers.fallbackProviderModel', settingsPath: 'oai_settings.fallback_provider_model' },
     { tab: 'providers', formPath: 'providers.bindPresetToConnection', settingsPath: 'oai_settings.bind_preset_to_connection' },
+    {
+        tab: 'providers',
+        formPath: 'providers.connectionProfileId',
+        settingsPath: 'extension_settings.connectionManager.selectedProfile',
+        toForm: (value) => (value == null ? '' : String(value)),
+        toFormWhenMissing: true,
+        toSettings: (value, _formValues, baseSettings) => {
+            const normalized = value == null ? '' : String(value);
+            const hasConnectionManager = getValueAtPath(baseSettings, 'extension_settings.connectionManager') !== undefined;
+            if (!normalized && !hasConnectionManager) {
+                return undefined;
+            }
+            return normalized || null;
+        },
+    },
 
     { tab: 'userInterface', formPath: 'userInterface.theme', settingsPath: 'power_user.theme' },
     { tab: 'userInterface', formPath: 'userInterface.chatWidth', settingsPath: 'power_user.chat_width' },
@@ -388,7 +563,160 @@ const fieldBindings = [
     { tab: 'advanced', formPath: 'advanced.stscriptAutocompleteWidthRight', settingsPath: 'power_user.stscript.autocomplete.width.right' },
     { tab: 'advanced', formPath: 'advanced.stscriptParserFlagStrictEscaping', settingsPath: 'power_user.stscript.parser.flags.1' },
     { tab: 'advanced', formPath: 'advanced.stscriptParserFlagReplaceGetvar', settingsPath: 'power_user.stscript.parser.flags.2' },
+
+    { tab: 'general', formPath: 'general.n', settingsPath: 'oai_settings.n' },
+    { tab: 'general', formPath: 'general.verbosity', settingsPath: 'oai_settings.verbosity' },
+    { tab: 'general', formPath: 'general.mediaInlining', settingsPath: 'oai_settings.media_inlining' },
+    { tab: 'general', formPath: 'general.inlineImageQuality', settingsPath: 'oai_settings.inline_image_quality' },
+    { tab: 'general', formPath: 'general.requestImages', settingsPath: 'oai_settings.request_images' },
+    { tab: 'general', formPath: 'general.requestImageAspectRatio', settingsPath: 'oai_settings.request_image_aspect_ratio' },
+    { tab: 'general', formPath: 'general.requestImageResolution', settingsPath: 'oai_settings.request_image_resolution' },
+    { tab: 'general', formPath: 'general.toolReasoningMode', settingsPath: 'oai_settings.tool_reasoning_mode' },
+    { tab: 'general', formPath: 'general.toolCallRecurseLimit', settingsPath: 'oai_settings.tool_call_recurse_limit' },
+    { tab: 'general', formPath: 'general.sendIfEmpty', settingsPath: 'oai_settings.send_if_empty' },
+    { tab: 'general', formPath: 'general.impersonationPrompt', settingsPath: 'oai_settings.impersonation_prompt' },
+    { tab: 'general', formPath: 'general.newChatPrompt', settingsPath: 'oai_settings.new_chat_prompt' },
+    { tab: 'general', formPath: 'general.newGroupChatPrompt', settingsPath: 'oai_settings.new_group_chat_prompt' },
+    { tab: 'general', formPath: 'general.newExampleChatPrompt', settingsPath: 'oai_settings.new_example_chat_prompt' },
+    { tab: 'general', formPath: 'general.continueNudgePrompt', settingsPath: 'oai_settings.continue_nudge_prompt' },
+    { tab: 'general', formPath: 'general.wiFormat', settingsPath: 'oai_settings.wi_format' },
+    { tab: 'general', formPath: 'general.scenarioFormat', settingsPath: 'oai_settings.scenario_format' },
+    { tab: 'general', formPath: 'general.personalityFormat', settingsPath: 'oai_settings.personality_format' },
+    { tab: 'general', formPath: 'general.groupNudgePrompt', settingsPath: 'oai_settings.group_nudge_prompt' },
+    { tab: 'general', formPath: 'general.assistantPrefill', settingsPath: 'oai_settings.assistant_prefill' },
+    { tab: 'general', formPath: 'general.assistantImpersonation', settingsPath: 'oai_settings.assistant_impersonation' },
+    { tab: 'general', formPath: 'general.namesBehavior', settingsPath: 'oai_settings.names_behavior' },
+    { tab: 'general', formPath: 'general.biasPresetSelected', settingsPath: 'oai_settings.bias_preset_selected' },
+    { tab: 'userInterface', formPath: 'userInterface.waifuMode', settingsPath: 'power_user.waifuMode' },
+    { tab: 'userInterface', formPath: 'userInterface.expandMessageActions', settingsPath: 'power_user.expand_message_actions' },
+    { tab: 'userInterface', formPath: 'userInterface.enableZenSliders', settingsPath: 'power_user.enableZenSliders' },
+    { tab: 'userInterface', formPath: 'userInterface.enableLabMode', settingsPath: 'power_user.enableLabMode' },
+    { tab: 'userInterface', formPath: 'userInterface.messageTokenCountEnabled', settingsPath: 'power_user.message_token_count_enabled' },
+    { tab: 'userInterface', formPath: 'userInterface.showSwipeNumAllMessages', settingsPath: 'power_user.show_swipe_num_all_messages' },
+    { tab: 'userInterface', formPath: 'userInterface.hotswapEnabled', settingsPath: 'power_user.hotswap_enabled' },
+    { tab: 'userInterface', formPath: 'userInterface.zoomedAvatarMagnification', settingsPath: 'power_user.zoomed_avatar_magnification' },
+    { tab: 'userInterface', formPath: 'userInterface.bogusFolders', settingsPath: 'power_user.bogus_folders' },
+    { tab: 'userInterface', formPath: 'userInterface.clickToEdit', settingsPath: 'power_user.click_to_edit' },
+    { tab: 'userInterface', formPath: 'userInterface.mediaDisplay', settingsPath: 'power_user.media_display' },
+    { tab: 'userInterface', formPath: 'userInterface.blurStrength', settingsPath: 'power_user.blur_strength' },
+    { tab: 'userInterface', formPath: 'userInterface.shadowWidth', settingsPath: 'power_user.shadow_width' },
+    { tab: 'userInterface', formPath: 'userInterface.mainTextColor', settingsPath: 'power_user.main_text_color' },
+    { tab: 'userInterface', formPath: 'userInterface.italicsTextColor', settingsPath: 'power_user.italics_text_color' },
+    { tab: 'userInterface', formPath: 'userInterface.underlineTextColor', settingsPath: 'power_user.underline_text_color' },
+    { tab: 'userInterface', formPath: 'userInterface.quoteTextColor', settingsPath: 'power_user.quote_text_color' },
+    { tab: 'userInterface', formPath: 'userInterface.blurTintColor', settingsPath: 'power_user.blur_tint_color' },
+    { tab: 'userInterface', formPath: 'userInterface.chatTintColor', settingsPath: 'power_user.chat_tint_color' },
+    { tab: 'userInterface', formPath: 'userInterface.userMesBlurTintColor', settingsPath: 'power_user.user_mes_blur_tint_color' },
+    { tab: 'userInterface', formPath: 'userInterface.botMesBlurTintColor', settingsPath: 'power_user.bot_mes_blur_tint_color' },
+    { tab: 'userInterface', formPath: 'userInterface.shadowColor', settingsPath: 'power_user.shadow_color' },
+    { tab: 'userInterface', formPath: 'userInterface.borderColor', settingsPath: 'power_user.border_color' },
+    { tab: 'userInterface', formPath: 'userInterface.playMessageSound', settingsPath: 'power_user.play_message_sound' },
+    { tab: 'userInterface', formPath: 'userInterface.playSoundUnfocused', settingsPath: 'power_user.play_sound_unfocused' },
+    { tab: 'userInterface', formPath: 'userInterface.relaxedApiUrls', settingsPath: 'power_user.relaxed_api_urls' },
+    { tab: 'userInterface', formPath: 'userInterface.worldImportDialog', settingsPath: 'power_user.world_import_dialog' },
+    { tab: 'userInterface', formPath: 'userInterface.enableAutoSelectInput', settingsPath: 'power_user.enable_auto_select_input' },
+    { tab: 'userInterface', formPath: 'userInterface.enableMdHotkeys', settingsPath: 'power_user.enable_md_hotkeys' },
+    { tab: 'userInterface', formPath: 'userInterface.restoreUserInput', settingsPath: 'power_user.restore_user_input' },
+    { tab: 'userInterface', formPath: 'userInterface.sendOnEnter', settingsPath: 'power_user.send_on_enter' },
+    { tab: 'userInterface', formPath: 'userInterface.continueOnSend', settingsPath: 'power_user.continue_on_send' },
+    { tab: 'userInterface', formPath: 'userInterface.quickContinue', settingsPath: 'power_user.quick_continue' },
+    { tab: 'userInterface', formPath: 'userInterface.quickImpersonate', settingsPath: 'power_user.quick_impersonate' },
+    { tab: 'userInterface', formPath: 'userInterface.gestures', settingsPath: 'power_user.gestures' },
+    { tab: 'userInterface', formPath: 'userInterface.autoLoadChat', settingsPath: 'power_user.auto_load_chat' },
+    { tab: 'userInterface', formPath: 'userInterface.autoScrollChatToBottom', settingsPath: 'power_user.auto_scroll_chat_to_bottom' },
+    { tab: 'userInterface', formPath: 'userInterface.autoSaveMsgEdits', settingsPath: 'power_user.auto_save_msg_edits' },
+    { tab: 'userInterface', formPath: 'userInterface.confirmMessageDelete', settingsPath: 'power_user.confirm_message_delete' },
+    { tab: 'userInterface', formPath: 'userInterface.autoFixGeneratedMarkdown', settingsPath: 'power_user.auto_fix_generated_markdown' },
+    { tab: 'userInterface', formPath: 'userInterface.forbidExternalMedia', settingsPath: 'power_user.forbid_external_media' },
+    { tab: 'userInterface', formPath: 'userInterface.allowName1Display', settingsPath: 'power_user.allow_name1_display' },
+    { tab: 'userInterface', formPath: 'userInterface.allowName2Display', settingsPath: 'power_user.allow_name2_display' },
+    { tab: 'userInterface', formPath: 'userInterface.encodeTags', settingsPath: 'power_user.encode_tags' },
+    { tab: 'userInterface', formPath: 'userInterface.disableGroupTrimming', settingsPath: 'power_user.disable_group_trimming' },
+    { tab: 'userInterface', formPath: 'userInterface.consoleLogPrompts', settingsPath: 'power_user.console_log_prompts' },
+    { tab: 'userInterface', formPath: 'userInterface.requestTokenProbabilities', settingsPath: 'power_user.request_token_probabilities' },
+    { tab: 'userInterface', formPath: 'userInterface.showGroupChatQueue', settingsPath: 'power_user.show_group_chat_queue' },
+    { tab: 'userInterface', formPath: 'userInterface.pinStyles', settingsPath: 'power_user.pin_styles' },
+    { tab: 'userInterface', formPath: 'userInterface.fuzzySearch', settingsPath: 'power_user.fuzzy_search' },
+    { tab: 'userInterface', formPath: 'userInterface.preferCharacterPrompt', settingsPath: 'power_user.prefer_character_prompt' },
+    { tab: 'userInterface', formPath: 'userInterface.preferCharacterJailbreak', settingsPath: 'power_user.prefer_character_jailbreak' },
+    { tab: 'userInterface', formPath: 'userInterface.neverResizeAvatars', settingsPath: 'power_user.never_resize_avatars' },
+    { tab: 'userInterface', formPath: 'userInterface.showCardAvatarUrls', settingsPath: 'power_user.show_card_avatar_urls' },
+    { tab: 'userInterface', formPath: 'userInterface.spoilerFreeMode', settingsPath: 'power_user.spoiler_free_mode' },
+    { tab: 'userInterface', formPath: 'userInterface.imageOverswipe', settingsPath: 'power_user.image_overswipe' },
+    { tab: 'userInterface', formPath: 'userInterface.auxField', settingsPath: 'power_user.aux_field' },
+    { tab: 'userInterface', formPath: 'userInterface.tagImportSetting', settingsPath: 'power_user.tag_import_setting' },
+    { tab: 'advanced', formPath: 'advanced.collapseNewlines', settingsPath: 'power_user.collapse_newlines' },
+    { tab: 'advanced', formPath: 'advanced.alwaysForceName2', settingsPath: 'power_user.always_force_name2' },
+    { tab: 'advanced', formPath: 'advanced.trimSentences', settingsPath: 'power_user.trim_sentences' },
+    { tab: 'advanced', formPath: 'advanced.trimSpaces', settingsPath: 'power_user.trim_spaces' },
+    { tab: 'advanced', formPath: 'advanced.singleLine', settingsPath: 'power_user.single_line' },
+    { tab: 'advanced', formPath: 'advanced.markdownEscapeStrings', settingsPath: 'power_user.markdown_escape_strings' },
+    { tab: 'advanced', formPath: 'advanced.userPromptBias', settingsPath: 'power_user.user_prompt_bias' },
+    { tab: 'advanced', formPath: 'advanced.showUserPromptBias', settingsPath: 'power_user.show_user_prompt_bias' },
+    { tab: 'advanced', formPath: 'advanced.tokenPadding', settingsPath: 'power_user.token_padding' },
+    { tab: 'advanced', formPath: 'advanced.instructDerived', settingsPath: 'power_user.instruct_derived' },
+    { tab: 'advanced', formPath: 'advanced.contextDerived', settingsPath: 'power_user.context_derived' },
+    { tab: 'advanced', formPath: 'advanced.contextSizeDerived', settingsPath: 'power_user.context_size_derived' },
+    { tab: 'advanced', formPath: 'advanced.instructInputSequence', settingsPath: 'power_user.instruct.input_sequence' },
+    { tab: 'advanced', formPath: 'advanced.instructInputSuffix', settingsPath: 'power_user.instruct.input_suffix' },
+    { tab: 'advanced', formPath: 'advanced.instructOutputSequence', settingsPath: 'power_user.instruct.output_sequence' },
+    { tab: 'advanced', formPath: 'advanced.instructOutputSuffix', settingsPath: 'power_user.instruct.output_suffix' },
+    { tab: 'advanced', formPath: 'advanced.instructSystemSequence', settingsPath: 'power_user.instruct.system_sequence' },
+    { tab: 'advanced', formPath: 'advanced.instructSystemSuffix', settingsPath: 'power_user.instruct.system_suffix' },
+    { tab: 'advanced', formPath: 'advanced.instructLastSystemSequence', settingsPath: 'power_user.instruct.last_system_sequence' },
+    { tab: 'advanced', formPath: 'advanced.instructFirstInputSequence', settingsPath: 'power_user.instruct.first_input_sequence' },
+    { tab: 'advanced', formPath: 'advanced.instructFirstOutputSequence', settingsPath: 'power_user.instruct.first_output_sequence' },
+    { tab: 'advanced', formPath: 'advanced.instructLastInputSequence', settingsPath: 'power_user.instruct.last_input_sequence' },
+    { tab: 'advanced', formPath: 'advanced.instructLastOutputSequence', settingsPath: 'power_user.instruct.last_output_sequence' },
+    { tab: 'advanced', formPath: 'advanced.instructStoryStringPrefix', settingsPath: 'power_user.instruct.story_string_prefix' },
+    { tab: 'advanced', formPath: 'advanced.instructStoryStringSuffix', settingsPath: 'power_user.instruct.story_string_suffix' },
+    { tab: 'advanced', formPath: 'advanced.instructStopSequence', settingsPath: 'power_user.instruct.stop_sequence' },
+    { tab: 'advanced', formPath: 'advanced.instructUserAlignmentMessage', settingsPath: 'power_user.instruct.user_alignment_message' },
+    { tab: 'advanced', formPath: 'advanced.instructSystemSameAsUser', settingsPath: 'power_user.instruct.system_same_as_user' },
+    { tab: 'advanced', formPath: 'advanced.instructNamesBehavior', settingsPath: 'power_user.instruct.names_behavior' },
+    { tab: 'advanced', formPath: 'advanced.instructSeparatorSequence', settingsPath: 'power_user.instruct.separator_sequence' },
+    { tab: 'advanced', formPath: 'advanced.contextStoryStringPosition', settingsPath: 'power_user.context.story_string_position' },
+    { tab: 'advanced', formPath: 'advanced.contextStoryStringRole', settingsPath: 'power_user.context.story_string_role' },
+    { tab: 'advanced', formPath: 'advanced.contextStoryStringDepth', settingsPath: 'power_user.context.story_string_depth' },
 ];
+
+
+/**
+ * Owner inventory for settings retirement.
+ * reactOwned paths come from fieldBindings; specializedSurfaces stay out of /settings.
+ */
+export const settingsOwnerInventory = {
+    drawers: {
+        userSettings: '#user-settings-block',
+        apiConfiguration: '#rm_api_block',
+        advancedFormatting: '#AdvancedFormatting',
+    },
+    specializedSurfaces: [
+        'world_info_settings',
+        'extension_settings',
+        'power_user.personas',
+        'power_user.persona_description',
+        'power_user.persona_descriptions',
+        'power_user.persona_show_notifications',
+        'power_user.default_persona',
+        'tags',
+        'tag_map',
+    ],
+    complexManagers: [
+        'oai_settings.bias_presets',
+        'oai_settings.prompts',
+        'oai_settings.prompt_order',
+        'oai_settings.extensions',
+        'power_user.movingUIState',
+        'power_user.servers',
+    ],
+    textGenRoots: [
+        'preset_settings',
+        'main_api',
+        'max_context',
+        'amount_gen',
+    ],
+};
 
 export const settingsFormFieldPaths = fieldBindings.map(binding => binding.formPath);
 
@@ -400,39 +728,25 @@ export const settingsCoverage = {
         return accumulator;
     }, {}),
     legacyOwned: [
+        // Text-gen root + specialized surfaces (not general settings drawers)
         'preset_settings',
         'main_api',
         'max_context',
         'amount_gen',
         'world_info_settings',
         'extension_settings',
-        'oai_settings.tool_reasoning_mode',
-        'oai_settings.assistant_prefill',
-        'oai_settings.assistant_impersonation',
-        'oai_settings.names_behavior',
-        'oai_settings.bias_preset_selected',
+        // Complex managers / runtime-only / persona surfaces
         'oai_settings.bias_presets',
-        'oai_settings.request_images',
-        'oai_settings.request_image_aspect_ratio',
-        'oai_settings.request_image_resolution',
-        'oai_settings.bind_preset_to_connection_profiles',
+        'oai_settings.prompts',
+        'oai_settings.prompt_order',
+        'oai_settings.extensions',
         'power_user.movingUIState',
-        'power_user.main_text_color',
-        'power_user.italics_text_color',
-        'power_user.underline_text_color',
-        'power_user.quote_text_color',
-        'power_user.blur_tint_color',
-        'power_user.chat_tint_color',
-        'power_user.user_mes_blur_tint_color',
-        'power_user.bot_mes_blur_tint_color',
-        'power_user.shadow_color',
-        'power_user.border_color',
         'power_user.personas',
         'power_user.persona_description',
+        'power_user.persona_descriptions',
         'power_user.persona_show_notifications',
-        'power_user.message_token_count_enabled',
-        'power_user.expand_message_actions',
-        'power_user.pin_styles',
+        'power_user.default_persona',
+        'power_user.servers',
         'tags',
         'tag_map',
     ],
@@ -507,9 +821,16 @@ export function buildSettingsFormDefaults(settings) {
             continue;
         }
 
-        const nextValue = typeof binding.toForm === 'function'
+        let nextValue = typeof binding.toForm === 'function'
             ? binding.toForm(currentValue, settings)
             : currentValue;
+
+        // Legacy settings files often store numeric enums as strings. Coerce when the form
+        // default for that path is a number so Zod/select number fields stay valid.
+        const defaultValue = getValueAtPath(defaults, binding.formPath);
+        if (typeof defaultValue === 'number' && typeof nextValue === 'string' && nextValue.trim() !== '' && Number.isFinite(Number(nextValue))) {
+            nextValue = Number(nextValue);
+        }
 
         setValueAtPath(defaults, binding.formPath, nextValue);
     }
@@ -517,14 +838,28 @@ export function buildSettingsFormDefaults(settings) {
     return defaults;
 }
 
+/**
+ * @param {object} baseSettings
+ * @param {object} formValues
+ * @param {{ settingsRevision?: number | null }} [options]
+ */
 export function buildSettingsSavePayload(baseSettings, formValues, { settingsRevision = null } = {}) {
     const nextSettings = structuredClone(baseSettings && typeof baseSettings === 'object' ? baseSettings : {});
 
     for (const binding of fieldBindings) {
         const formValue = getValueAtPath(formValues, binding.formPath);
+        // Partial form objects (tests or progressive UI) must not wipe unbound paths with undefined.
+        if (formValue === undefined && typeof binding.toSettings !== 'function') {
+            continue;
+        }
+
         const nextValue = typeof binding.toSettings === 'function'
             ? binding.toSettings(formValue, formValues, baseSettings)
             : formValue;
+
+        if (nextValue === undefined) {
+            continue;
+        }
 
         setValueAtPath(nextSettings, binding.settingsPath, nextValue);
     }

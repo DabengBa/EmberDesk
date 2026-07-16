@@ -49,7 +49,7 @@ describe('React workspace panels bridge helpers', () => {
                 groupAuthoring: true,
             },
             reactPages: {
-                settings: false,
+                settings: true,
             },
             reactShell: {
                 strict: false,
@@ -230,11 +230,12 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('Extensions');
         expect(workspacePanelSource).toContain('Settings');
         expect(scriptSource).toContain("case 'openAIConfig':");
-        expect(scriptSource).toContain("await openWorkspaceShellDrawer('left-nav-panel');");
+        expect(scriptSource).toContain("window.location.assign('/settings?tab=providers');");
         expect(scriptSource).toContain("case 'openFormatting':");
-        expect(scriptSource).toContain("await openWorkspaceShellDrawer('AdvancedFormatting');");
-        expect(scriptSource).toContain('if (getWorkspaceReactFeatures()?.reactPages?.settings)');
-        expect(scriptSource).toContain("await openWorkspaceShellDrawer('user-settings-block');");
+        expect(scriptSource).toContain("window.location.assign('/settings?tab=advanced');");
+        expect(scriptSource).toContain("case 'openSettings':");
+        expect(scriptSource).toContain("window.location.assign('/settings');");
+        expect(scriptSource).not.toContain("await openWorkspaceShellDrawer('user-settings-block');");
     });
 
     test('coordinates React shell panel entries with transient dock state and legacy fallback results', () => {
@@ -332,16 +333,15 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain("return createWorkspaceShellPanelResult('worldInfo', await mountReactWorldInfoPanel());");
         expect(scriptSource).toContain("return createWorkspaceShellPanelResult('backgroundLibrary', await mountReactBackgroundLibraryPanel());");
         expect(scriptSource).toContain("return createWorkspaceShellPanelResult('extensionsHost', await mountReactExtensionsHostPanel());");
-        expect(scriptSource).toContain("case 'openAIConfig':\n                    await openWorkspaceShellDrawer('left-nav-panel');");
+        expect(scriptSource).toContain("case 'openAIConfig':\n                    window.location.assign('/settings?tab=providers');");
         expect(scriptSource).toContain("return createWorkspaceShellPanelResult('aiConfig', { kind: 'aiConfig', mounted: false, status: 'success' });");
-        expect(scriptSource).toContain("case 'openFormatting':\n                    await openWorkspaceShellDrawer('AdvancedFormatting');");
+        expect(scriptSource).toContain("case 'openFormatting':\n                    window.location.assign('/settings?tab=advanced');");
         expect(scriptSource).toContain("return createWorkspaceShellPanelResult('advancedFormatting', { kind: 'advancedFormatting', mounted: false, status: 'success' });");
-        expect(scriptSource).toContain("await openWorkspaceShellDrawer('user-settings-block');");
         expect(scriptSource).toContain("return createWorkspaceShellPanelResult('settings', { kind: 'settings', mounted: false, status: 'success' });");
         const openSettingsBranch = scriptSource.match(/case 'openSettings':[\s\S]*?case 'openGroupChats':/)?.[0] ?? '';
-        expect(openSettingsBranch).toContain('if (getWorkspaceReactFeatures()?.reactPages?.settings)');
         expect(openSettingsBranch).toContain("window.location.assign('/settings');");
-        expect(openSettingsBranch.indexOf("window.location.assign('/settings');")).toBeLessThan(openSettingsBranch.indexOf("await openWorkspaceShellDrawer('user-settings-block');"));
+        expect(openSettingsBranch).not.toContain("openWorkspaceShellDrawer('user-settings-block')");
+        expect(openSettingsBranch).not.toContain('reactPages?.settings');
         expect(scriptSource).toContain("case 'openGroupChats':\n                    return openWorkspaceShellGroupChats();");
         expect(scriptSource.match(/openWorkspaceShellGroupChats\(\) \{[\s\S]*?\n\}/)?.[0] ?? '').not.toContain("$('#rm_button_group_chats').trigger('click');");
 

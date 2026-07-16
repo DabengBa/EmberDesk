@@ -13,15 +13,15 @@ related: [page.chat_workspace, feature.startup_bootstrap, feature.character_libr
 
 ## Purpose
 
-Give users one modern, compact workspace frame for current context, shell status, and primary navigation while preserving the established chat, composer, drawer, and extension compatibility surfaces underneath it.
+Give users one modern, compact workspace frame for current context, shell status, and primary navigation. Current code still coordinates established chat, composer, drawer, and extension surfaces underneath it while retirement work is incomplete.
 
 ## User-Visible Contract
 
 - Opening `/` on a build with shell takeover enabled shows a React-owned workspace chrome instead of competing legacy and React top navigation.
 - The chrome summarizes the current context in understandable terms for no active chat, temporary Assistant chat, normal character chat, and group chat.
 - Primary entries for AI Config, Formatting, Character Library, World Info, Backgrounds, Extensions, Settings, Group Chats, and Character Authoring are reachable by role/name and route through the existing workspace behavior or the existing Settings route.
-- Settings opens the standalone React Settings route only when that page flag is enabled; otherwise it opens the existing User Settings drawer in the current workspace.
-- AI Config and Formatting are shell-controlled legacy-hosted panels: the shell owns the named entry, active marker, and close/reopen signal, while provider fields and prompt/formatting fields stay in their established workspace drawers.
+- Settings always opens the standalone React [Settings](page.settings) route.
+- AI Config opens `/settings?tab=providers` and Formatting opens `/settings?tab=advanced`; provider, secret, and formatting fields are edited on the Settings page rather than in workspace drawers.
 - Group Chats and Character Authoring keep the same right-drawer entry points, but when their guarded authoring flags are enabled the normal visible owner inside those hosts is the React authoring surface. The shell still owns only the navigation entry, active marker, and close/reopen signal.
 - The main-chat outer layout can be React shell-owned through existing `#chat`, `#send_form`, and `#nonQRFormItems` containers so the chat canvas, composer/action rail, and local generation status feel coordinated without wrapping or moving message rows.
 - Primary entries publish a transient React dock owner state so the shell can show the active entry and local mounted/disabled/loading/empty/success/error status while the existing facades continue to own panel behavior.
@@ -35,6 +35,10 @@ Give users one modern, compact workspace frame for current context, shell status
 - The chrome must not cover readable chat rows, `#send_textarea`, `#send_but`, or protected extension mount points.
 - If the feature flag is disabled, the bundle cannot load, or the chrome cannot mount, EmberDesk keeps the legacy workspace chrome usable and records a structured takeover reason.
 - Development, test, and CI strict mode should expose missing host, invalid payload, bundle-load, or mount failures instead of treating fallback as success; an unspecified `NODE_ENV` keeps the production safety fallback behavior.
+
+## Approved Retirement Direction
+
+The shell is a final-wave surface. It may remove its legacy chrome and drawer-coordination runtime only after the React-owned panel and main-chat surfaces no longer depend on it. The completed shell preserves the same `/` entry, named navigation, open/close behavior, accessibility, and supported extension reachability; release rollback uses a prior version rather than restoring a same-version legacy chrome.
 
 ## Semantic Interaction IDs
 

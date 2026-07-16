@@ -1,0 +1,4 @@
+contract_version = 1
+feature_slug = "react-settings-retirement"
+brief = ".docs/tech/briefs/260716-07-react-settings-retirement.md"
+doc_ids = ["page.settings", "page.api_configuration", "page.chat_workspace", "feature.chat_completion_select", "feature.custom_base_url", "feature.fallback_provider"]

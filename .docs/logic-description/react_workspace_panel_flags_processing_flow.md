@@ -55,7 +55,7 @@ Inputs:
 - `features.react.panels.worldInfo`: controls the current World Info independent React readiness host.
 - `features.react.panels.backgroundLibrary`: controls the current Background Library independent React status host.
 - `features.react.panels.extensionsHost`: controls the current Extensions Host independent React host.
-- `features.react.pages.settings`: controls whether the React workspace chrome Settings entry routes to `/settings` or opens the legacy User Settings drawer.
+- `features.react.pages.settings`: retained bootstrap field always reported true for Settings; product ownership is the `/settings` sole-owner route (missing build fails closed with 503). Shell AI Config / Formatting also route to Settings tabs.
 - `features.react.shell.takeover`: controls whether the current `/` workspace attempts same-entry React shell chrome takeover.
 - `CI`, `NODE_ENV`: control whether takeover failures are strict. `CI=true`, `NODE_ENV=development`, and `NODE_ENV=test` enable strict mode when takeover is enabled; an unset `NODE_ENV` keeps safety fallback behavior.
 - `workspaceIndexHtml`: the legacy workspace HTML string read before response send.
@@ -276,7 +276,7 @@ The processing outputs are:
 ## Key Rules
 
 - The feature payload is a bootstrap contract from the server to the legacy browser shell; it is not a product-facing settings surface.
-- The same payload now includes `reactPages.settings` and `reactShell` because the React workspace chrome needs to decide whether Settings is a route transition or a legacy drawer action, and whether takeover failures should fail fast or keep the safety fallback.
+- The same payload still includes `reactPages.settings` (always true for the sole-owner Settings route) and `reactShell` so chrome can decide takeover failure behavior; Settings / AI Config / Formatting navigation always targets `/settings` rather than legacy drawers.
 - Same-entry shell dock coordination is transient by design: `workspacePanelDock` is in-memory only, derived from current drawer state, and reset with the browser session.
 - The delivered workspace bootstrap payload now covers both dedicated-bundle and shared-bundle React slices. `characterLibrary` uses its own character-library bundle; `mainChatMessageList`, `worldInfo`, `backgroundLibrary`, and `extensionsHost` use the shared `workspace-panels.js` bundle.
 - `reactShell.strict` is not a synonym for "not production"; unconfigured self-hosted starts with `NODE_ENV` unset keep safety fallback behavior.
@@ -297,7 +297,7 @@ The processing outputs are:
 {
   "workspaceReactFeatures": {
     "reactPages": {
-      "settings": false
+      "settings": true
     },
     "reactPanels": {
       "characterLibrary": false,

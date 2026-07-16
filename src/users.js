@@ -54,7 +54,6 @@ import { serverDirectory } from './server-directory.js';
 import { getEnableAccounts, toKey, getAccountVersion, getAllEnabledUsers, needsSetup } from './user-storage.js';
 import { getUserDirectories } from './user-directories.js';
 import { shouldRedirectToLogin, tryAutoLogin } from './user-auth.js';
-import { isReactSettingsEnabled } from './react-settings-feature.js';
 import { hasReactLoginBuild, sendReactLoginIndex } from './middleware/react-login-serve.js';
 
 /**
@@ -360,15 +359,12 @@ export function createSettingsPageMiddleware({ reactLoginDistRoot } = {}) {
             return response.redirect('/login');
         }
 
-        if (isReactSettingsEnabled()) {
-            if (hasReactLoginBuild(reactLoginDistRoot)) {
-                return sendReactLoginIndex(response, reactLoginDistRoot);
-            }
-
-            console.warn('React settings flag is enabled, but app/dist/index.html was not found. Falling back to /.');
+        if (hasReactLoginBuild(reactLoginDistRoot)) {
+            return sendReactLoginIndex(response, reactLoginDistRoot);
         }
 
-        return response.redirect('/');
+        console.error('React settings build is required but app/dist/index.html was not found.');
+        return sendMissingReactAuthBuild(response, 'settings');
     };
 }
 

@@ -52,11 +52,11 @@ describe('chat workspace structure', () => {
             'data-legacy-workspace-chrome-hidden-by-react',
             'openWorkspaceShellDrawer',
             "case 'openAIConfig':",
-            "await openWorkspaceShellDrawer('left-nav-panel');",
+            "window.location.assign('/settings?tab=providers');",
             "case 'openFormatting':",
-            "await openWorkspaceShellDrawer('AdvancedFormatting');",
-            'if (getWorkspaceReactFeatures()?.reactPages?.settings)',
-            "await openWorkspaceShellDrawer('user-settings-block');",
+            "window.location.assign('/settings?tab=advanced');",
+            "case 'openSettings':",
+            "window.location.assign('/settings');",
         ], { contractName: 'same-entry React workspace chrome host' });
         expect(scriptSource).not.toContain('#top-settings-holder > .drawer > .drawer-toggle');
         expect(scriptSource).not.toContain('#top-settings-holder[hidden]');

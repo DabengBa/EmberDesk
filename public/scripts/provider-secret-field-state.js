@@ -30,7 +30,7 @@ export function resolveProviderSecretKeyForSettings({
         case 'express':
             return 'api_key_vertexai';
         case 'full':
-            return null;
+            return 'vertexai_service_account_json';
         default:
             return secretKey;
     }
@@ -56,6 +56,7 @@ export function getUnifiedKeyFieldState({
             placeholder: 'Proxy password',
             value: settings.proxy_password || '',
             vertexAiActive,
+            isServiceAccount: false,
         };
     }
 
@@ -67,6 +68,16 @@ export function getUnifiedKeyFieldState({
             placeholder: label ? `Saved (${label})` : 'Saved',
             value: '',
             vertexAiActive,
+            isServiceAccount: secretKey === 'vertexai_service_account_json',
+        };
+    }
+
+    if (secretKey === 'vertexai_service_account_json') {
+        return {
+            placeholder: 'Paste service account JSON',
+            value: '',
+            vertexAiActive,
+            isServiceAccount: true,
         };
     }
 
@@ -80,6 +91,7 @@ export function getUnifiedKeyFieldState({
         placeholder: placeholders[source] || 'Enter API key',
         value: '',
         vertexAiActive,
+        isServiceAccount: false,
     };
 }
 
