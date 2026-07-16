@@ -125,21 +125,21 @@ const worldInfoPanelFormSchema = z.object({
 });
 
 const POSITION_OPTIONS = [
-    { value: 0, label: 'Before Character' },
-    { value: 1, label: 'After Character' },
-    { value: 5, label: 'Example Messages Top' },
-    { value: 6, label: 'Example Messages Bottom' },
-    { value: 2, label: 'Author\'s Note Top' },
-    { value: 3, label: 'Author\'s Note Bottom' },
-    { value: 4, label: 'At Depth' },
-    { value: 7, label: 'Outlet' },
+    { value: 0, label: '角色定义前' },
+    { value: 1, label: '角色定义后' },
+    { value: 5, label: '示例消息顶部' },
+    { value: 6, label: '示例消息底部' },
+    { value: 2, label: '作者注释顶部' },
+    { value: 3, label: '作者注释底部' },
+    { value: 4, label: '按深度' },
+    { value: 7, label: '出口' },
 ] as const;
 
 const SELECTIVE_LOGIC_OPTIONS = [
-    { value: 0, label: 'AND ANY' },
-    { value: 3, label: 'AND ALL' },
-    { value: 2, label: 'NOT ANY' },
-    { value: 1, label: 'NOT ALL' },
+    { value: 0, label: '满足任一 (AND ANY)' },
+    { value: 3, label: '满足全部 (AND ALL)' },
+    { value: 2, label: '排除任一 (NOT ANY)' },
+    { value: 1, label: '排除全部 (NOT ALL)' },
 ] as const;
 
 function joinKeywords(values: string[] | undefined): string {
@@ -457,21 +457,21 @@ function EntryEditor({
                 <AdvancedSection id="timing" title="递归与时序" summary={advanced.timing ? buildAdvancedSummary(entry).split(' · ')[0] : ''}>
                     <div className="wi-workbench-inline-fields">
                         <label className="wi-workbench-field">
-                            <span>Sticky</span>
+                            <span>黏性</span>
                             <input className="text_pole" type="number" value={draft.sticky ?? ''} data-world-info-react-field="sticky"
                                 onBlur={event => saveFields({ sticky: event.target.value === '' ? null : Number(event.target.value) })}
                                 onChange={event => setDraft({ ...draft, sticky: event.target.value === '' ? null : Number(event.target.value) })}
                             />
                         </label>
                         <label className="wi-workbench-field">
-                            <span>Cooldown</span>
+                            <span>冷却</span>
                             <input className="text_pole" type="number" value={draft.cooldown ?? ''} data-world-info-react-field="cooldown"
                                 onBlur={event => saveFields({ cooldown: event.target.value === '' ? null : Number(event.target.value) })}
                                 onChange={event => setDraft({ ...draft, cooldown: event.target.value === '' ? null : Number(event.target.value) })}
                             />
                         </label>
                         <label className="wi-workbench-field">
-                            <span>Delay</span>
+                            <span>延迟</span>
                             <input className="text_pole" type="number" value={draft.delay ?? ''} data-world-info-react-field="delay"
                                 onBlur={event => saveFields({ delay: event.target.value === '' ? null : Number(event.target.value) })}
                                 onChange={event => setDraft({ ...draft, delay: event.target.value === '' ? null : Number(event.target.value) })}
@@ -507,14 +507,14 @@ function EntryEditor({
                 </AdvancedSection>
                 <AdvancedSection id="automation" title="自动化与 Outlet" summary={advanced.automation ? (entry.automationId || entry.outletName || '已配置') : ''}>
                     <label className="wi-workbench-field">
-                        <span>Automation ID</span>
+                        <span>自动化 ID</span>
                         <input className="text_pole" value={draft.automationId} data-world-info-react-field="automationId"
                             onChange={event => setDraft({ ...draft, automationId: event.target.value })}
                             onBlur={event => saveFields({ automationId: event.target.value })}
                         />
                     </label>
                     <label className="wi-workbench-field">
-                        <span>Outlet</span>
+                        <span>出口</span>
                         <input className="text_pole" value={draft.outletName} data-world-info-react-field="outletName"
                             onChange={event => setDraft({ ...draft, outletName: event.target.value })}
                             onBlur={event => saveFields({ outletName: event.target.value })}

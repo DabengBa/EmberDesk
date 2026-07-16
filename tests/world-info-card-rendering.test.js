@@ -358,6 +358,7 @@ describe('world info card rendering', () => {
         expect(script).toContain('hideLegacyWorldInfoWorkbench(false)');
         expect(script).toContain('revealGlobalPanel');
         expect(script).toContain('setWorldInfoActivationRulesVisible');
+        expect(script).toContain("document.getElementById('WIMultiSelector')");
         expect(script).toContain("const workbench = document.getElementById('wi-holder')");
         expect(script).toContain('hostParent.prepend(host)');
         expect(script).toContain("host.setAttribute('data-doc-id', 'feature.world_info_panel')");

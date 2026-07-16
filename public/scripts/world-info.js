@@ -2013,15 +2013,15 @@ export function getWorldInfoWorkbenchPositionLabel(entry) {
     }
 
     switch (entry.position) {
-        case world_info_position.before: return 'Before Character';
-        case world_info_position.after: return 'After Character';
-        case world_info_position.EMTop: return 'Example Messages Top';
-        case world_info_position.EMBottom: return 'Example Messages Bottom';
-        case world_info_position.ANTop: return 'Author\'s Note Top';
-        case world_info_position.ANBottom: return 'Author\'s Note Bottom';
-        case world_info_position.atDepth: return `At Depth ${entry.depth ?? DEFAULT_DEPTH}`;
-        case world_info_position.outlet: return entry.outletName ? `Outlet: ${entry.outletName}` : 'Outlet';
-        default: return 'Unknown position';
+        case world_info_position.before: return '角色定义前';
+        case world_info_position.after: return '角色定义后';
+        case world_info_position.EMTop: return '示例消息顶部';
+        case world_info_position.EMBottom: return '示例消息底部';
+        case world_info_position.ANTop: return '作者注释顶部';
+        case world_info_position.ANBottom: return '作者注释底部';
+        case world_info_position.atDepth: return `按深度 ${entry.depth ?? DEFAULT_DEPTH}`;
+        case world_info_position.outlet: return entry.outletName ? `出口: ${entry.outletName}` : '出口';
+        default: return '未知位置';
     }
 }
 
@@ -2218,9 +2218,23 @@ export async function getWorldInfoWorkbenchEntrySummaries() {
         return [];
     }
 
-    return Object.values(data.entries)
-        .map(entry => buildWorldInfoWorkbenchEntrySummary(entry))
-        .sort((a, b) => b.order - a.order || a.title.localeCompare(b.title));
+    // Mirror legacy editor list pipeline so React search/sort stay on the same facade.
+    let entriesArray = Object.keys(data.entries).map(uid => {
+        const entry = data.entries[uid];
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+            return null;
+        }
+        entry.displayIndex = entry.displayIndex ?? entry.uid;
+        return entry;
+    }).filter(entry => entry !== null);
+
+    if (typeof addMissingWorldInfoFields === 'function') {
+        entriesArray = addMissingWorldInfoFields(entriesArray);
+    }
+    entriesArray = worldInfoFilter.applyFilters(entriesArray);
+    entriesArray = sortWorldInfoEntries(entriesArray);
+
+    return entriesArray.map(entry => buildWorldInfoWorkbenchEntrySummary(entry));
 }
 
 /**

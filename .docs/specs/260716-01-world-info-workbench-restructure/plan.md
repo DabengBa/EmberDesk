@@ -72,5 +72,14 @@ Doc IDs: feature.world_info_panel, page.chat_workspace
 - Rebuild: `bun run build:react:workspace-panels` PASS
 - Unit recheck: world-info-card-rendering + react-workspace-panels-helpers PASS
 
+
+### Post-delivery multi-surface re-review (2026-07-16)
+- [x] Review: R-04 React list ignored search/sort facade pipeline (severity: high; scope: task-02/list; evidence: public/scripts/world-info.js getWorldInfoWorkbenchEntrySummaries; proof: unit helpers + filter/sort markers)
+- [x] Review: R-05 Field blur remount stole editor focus (severity: high; scope: task-02/bridge; evidence: public/script.js shouldRemount; proof: unit marker + rebuild)
+- [x] Review: R-06 Activation rules reveal re-exposed global multi-select dual owner (severity: medium; scope: task-01/global; evidence: hideLegacyWorldInfoWorkbench WIMultiSelector hide; proof: unit card-rendering markers)
+- [x] Review: R-07 Mixed EN advanced labels vs Chinese workbench claim (severity: medium; scope: task-03/i18n; evidence: app/world-info-workbench.tsx + position labels; proof: build:react:workspace-panels)
+- Doc ID gate: `bun run docs:check` green (30 docs); no ID rename/topology island introduced by this re-review.
+- Residual gap: full Playwright ST e2e for workbench still environment-dependent; structure/unit/build/docs revalidated after fixes.
+
 ### Residual gaps
 - Full Playwright ST browser proof for workbench e2e not executed in this run (environment-dependent); unit/structure/build/docs gates are green.

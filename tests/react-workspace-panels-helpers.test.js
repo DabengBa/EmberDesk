@@ -1363,6 +1363,11 @@ test('renders an Extensions Host workflow through React-owned controls and expli
         const hostControllerSource = read('public/scripts/workspace-panel-host-controller.js');
 
         expect(worldInfoSource).toContain('export async function getWorldInfoWorkbenchFacadeSnapshot');
+        expect(worldInfoSource).toContain('worldInfoFilter.applyFilters(entriesArray)');
+        expect(worldInfoSource).toContain('sortWorldInfoEntries(entriesArray)');
+        expect(scriptSource).toContain("action !== 'updateEntryFields' && action !== 'toggleActivationRules'");
+        expect(scriptSource).toContain('WIMultiSelector');
+
         expect(worldInfoSource).toContain('export async function updateWorldInfoWorkbenchEntryFields');
         expect(worldInfoSource).toContain('export async function selectWorldInfoWorkbenchEntry');
         expect(worldInfoSource).toContain('vectorized');

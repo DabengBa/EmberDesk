@@ -20,3 +20,29 @@
 
 ## Doc IDs
 - `bun run docs:check` validated 30 semantic docs after feature/page updates.
+
+## Post-delivery multi-surface re-review
+
+### R-04 React list ignored search/sort facade pipeline
+- Severity: high
+- Evidence: `getWorldInfoWorkbenchEntrySummaries` returned raw `Object.values` sorted by order/title, while search/sort actions only updated legacy filter DOM.
+- Fix: reuse `addMissingWorldInfoFields` + `worldInfoFilter.applyFilters` + `sortWorldInfoEntries`.
+- Validation: unit helpers assert filter/sort markers; suite PASS.
+
+### R-05 Field blur remount stole editor focus
+- Severity: high
+- Evidence: default `shouldRemount=true` remounted after every `updateEntryFields`.
+- Fix: `shouldRemount` skips `updateEntryFields` and `toggleActivationRules`.
+- Validation: unit marker + rebuild PASS.
+
+### R-06 Activation rules reveal re-exposed global multi-select dual owner
+- Severity: medium
+- Evidence: revealing `#wiGlobalPanel` made `#WIMultiSelector` visible beside React global summary.
+- Fix: while rules open under React owner, force-hide multi-select and section header; only rules surface remains.
+- Validation: unit card-rendering markers PASS.
+
+### R-07 Mixed EN advanced labels vs Chinese workbench claim
+- Severity: medium
+- Evidence: Sticky/Cooldown/position option labels stayed English in React workbench.
+- Fix: Chinese labels in workbench controls and facade position summary strings.
+- Validation: `build:react:workspace-panels` PASS.

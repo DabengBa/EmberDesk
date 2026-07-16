@@ -1371,10 +1371,27 @@ function hideLegacyWorldInfoWorkbench(hidden, { revealGlobalPanel = false } = {}
     workbench.dataset.worldInfoActivationRulesOpen = hidden && revealGlobalPanel ? 'true' : 'false';
 
     if (hidden && revealGlobalPanel) {
+        const globalPanel = document.getElementById('wiGlobalPanel');
+        const multiSelector = document.getElementById('WIMultiSelector');
+        const sectionHeader = globalPanel?.querySelector?.('.wi-section-header');
+        // Keep React as the sole global-activation summary owner; only rules controls surface.
+        for (const node of [multiSelector, sectionHeader]) {
+            if (!(node instanceof HTMLElement)) continue;
+            node.hidden = true;
+            node.setAttribute('aria-hidden', 'true');
+            node.setAttribute('inert', '');
+            node.dataset.legacyWorldInfoHiddenByReact = 'true';
+        }
         const rulesToggle = document.querySelector('#wiGlobalPanel .wi-settings-toggle');
         const rulesContent = document.querySelector('#wiGlobalPanel .wi-global-rules-content');
-        if (rulesContent instanceof HTMLElement && rulesContent.style.display === 'none') {
-            rulesToggle?.dispatchEvent(new Event('click', { bubbles: true }));
+        if (rulesContent instanceof HTMLElement) {
+            // Prefer opening the rules drawer when it is collapsed.
+            const isCollapsed = rulesContent.hidden
+                || rulesContent.style.display === 'none'
+                || rulesContent.classList.contains('displayNone');
+            if (isCollapsed) {
+                rulesToggle?.dispatchEvent(new Event('click', { bubbles: true }));
+            }
         }
     }
 }
@@ -1929,6 +1946,10 @@ function getWorldInfoReactBridge() {
                     console.warn('Unknown World Info React action', action);
                     return undefined;
             }
+        },
+        shouldRemount(_result, action) {
+            // Field edits keep local draft focus; activation toggle is DOM-only under React owner.
+            return action !== 'updateEntryFields' && action !== 'toggleActivationRules';
         },
         remount: () => {
             void mountReactWorldInfoPanel();
