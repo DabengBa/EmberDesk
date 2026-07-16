@@ -67,6 +67,24 @@
     gap: var(--spacing-lg, 15px);
 }
 
+.wi-workbench.wi-workbench-react-owned {
+    min-height: 0;
+    flex: 1 1 auto;
+}
+
+.emberdesk-react-world-info-panel-host {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    flex: 1 1 auto;
+    width: 100%;
+}
+
+#wi-holder[data-world-info-visible-owner="react"] > [data-legacy-world-info-hidden-by-react="true"],
+#wi-holder > [data-legacy-world-info-hidden-by-react="true"] {
+    display: none !important;
+}
+
 .wi-section {
     display: flex;
     flex-direction: column;
@@ -1167,6 +1185,18 @@ select.keyselect + span.select2-container .select2-selection--multiple {
         overflow-y: auto;
     }
 
+    #WorldInfo.openDrawer #wi-holder.wi-workbench-react-owned {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    #WorldInfo.openDrawer #wi-holder.wi-workbench-react-owned .emberdesk-react-world-info-panel-host {
+        min-height: 0;
+        flex: 1 1 auto;
+        overflow: hidden;
+    }
+
     #world_popup {
         border-radius: 0;
     }
@@ -1244,5 +1274,236 @@ select.keyselect + span.select2-container .select2-selection--multiple {
     .wi-content-editor-panel {
         width: calc(100vw - 10px);
         height: calc(100dvh - 10px);
+    }
+}
+
+/* --- React World Info Workbench --- */
+.wi-workbench-root {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm, 8px);
+    min-height: 0;
+    flex: 1 1 auto;
+    height: 100%;
+}
+
+.wi-workbench-global {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.wi-workbench-global-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 0.92em;
+}
+
+.wi-workbench-book-header {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border: 1px solid color-mix(in oklch, var(--SmartThemeBorderColor), transparent 30%);
+    border-radius: var(--rounded-lg, 10px);
+    padding: 8px;
+    background: color-mix(in oklch, var(--SmartThemeBlurTintColor), transparent 20%);
+}
+
+.wi-workbench-book-title-row,
+.wi-workbench-book-tools,
+.wi-workbench-inline-fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.wi-workbench-book-title-row select,
+.wi-workbench-book-tools .text_pole,
+.wi-workbench-book-tools input[type="search"] {
+    min-width: 0;
+    flex: 1 1 140px;
+}
+
+.wi-workbench-body {
+    display: grid;
+    grid-template-columns: minmax(220px, 0.9fr) minmax(280px, 1.2fr);
+    gap: 10px;
+    min-height: 0;
+    flex: 1 1 auto;
+}
+
+.wi-workbench-list-pane,
+.wi-workbench-editor-pane {
+    min-height: 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid color-mix(in oklch, var(--SmartThemeBorderColor), transparent 35%);
+    border-radius: var(--rounded-lg, 10px);
+    background: color-mix(in oklch, var(--SmartThemeBlurTintColor), transparent 35%);
+}
+
+.wi-workbench-list {
+    overflow-y: auto;
+    min-height: 0;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px;
+}
+
+.wi-workbench-entry-row {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    width: 100%;
+    text-align: left;
+    border: 0;
+    border-radius: 8px;
+    padding: 8px;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+}
+
+.wi-workbench-entry-row:hover,
+.wi-workbench-entry-row.is-selected {
+    background: color-mix(in oklch, var(--SmartThemeQuoteColor), transparent 88%);
+}
+
+.wi-workbench-entry-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+}
+
+.wi-workbench-entry-state {
+    font-size: 0.75em;
+    opacity: 0.8;
+    border: 1px solid color-mix(in oklch, var(--SmartThemeBorderColor), transparent 20%);
+    border-radius: 999px;
+    padding: 0 6px;
+}
+
+.wi-workbench-entry-state.is-disabled {
+    opacity: 0.55;
+}
+
+.wi-workbench-entry-meta {
+    font-size: 0.82em;
+    opacity: 0.75;
+}
+
+.wi-workbench-editor {
+    overflow-y: auto;
+    min-height: 0;
+    flex: 1 1 auto;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.wi-workbench-editor.empty {
+    align-items: center;
+    justify-content: center;
+    opacity: 0.7;
+}
+
+.wi-workbench-editor-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.wi-workbench-editor-section header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.wi-workbench-editor-section h4 {
+    margin: 0;
+    font-size: 0.95em;
+}
+
+.wi-workbench-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 120px;
+    flex: 1 1 140px;
+}
+
+.wi-workbench-content {
+    min-height: 180px;
+    resize: vertical;
+}
+
+.wi-workbench-advanced {
+    border: 1px solid color-mix(in oklch, var(--SmartThemeBorderColor), transparent 40%);
+    border-radius: 8px;
+    padding: 6px 8px;
+}
+
+.wi-workbench-advanced-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.wi-workbench-advanced-chip {
+    font-size: 0.78em;
+    opacity: 0.8;
+}
+
+.wi-workbench-advanced-body {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.wi-workbench-empty {
+    padding: 24px 12px;
+    text-align: center;
+    opacity: 0.7;
+}
+
+@media (max-width: 768px) {
+    .wi-workbench-body {
+        grid-template-columns: 1fr;
+    }
+
+    .wi-workbench-root[data-world-info-react-mobile-view="list"] [data-world-info-react-pane="editor"] {
+        display: none;
+    }
+
+    .wi-workbench-root[data-world-info-react-mobile-view="editor"] [data-world-info-react-pane="list"] {
+        display: none;
+    }
+
+    .wi-workbench-list-pane,
+    .wi-workbench-editor-pane {
+        min-height: 50dvh;
+    }
+
+    .wi-workbench-root {
+        overflow: hidden;
+    }
+
+    .wi-workbench-list,
+    .wi-workbench-editor {
+        overflow-y: auto;
+        overscroll-behavior: contain;
     }
 }

@@ -43,6 +43,9 @@ import {
     deleteCurrentWorldInfo,
     refreshCurrentWorldInfoEditor,
     openWorldInfoEntryByUid,
+    selectWorldInfoWorkbenchEntry,
+    updateWorldInfoWorkbenchEntryFields,
+    getWorldInfoWorkbenchFacadeSnapshot,
 } from './scripts/world-info.js';
 import { scanImportedCharacter, showUnifiedImportConfirm, applyImportChoices, buildSkipAllChoices } from './scripts/import-confirm-dialog.js';
 
@@ -323,10 +326,8 @@ import { onboardingExperimentalMacroEngine } from './scripts/macros/engine/Macro
 import { compressRequest, setRequestCompressionConfig } from './scripts/request-compression.js';
 import { canJumpToSwipeForMessage, canOpenSwipePickerForMessage, initSwipePicker } from './scripts/swipe-picker.js';
 import {
-    applyCharacterAuthoringDraftToCreateState,
     createCharacterAuthoringDraft,
     createCharacterAuthoringDraftFromCreateState,
-    createCharacterAuthoringSaveModel,
     getCharacterAuthoringDirtyFields,
 } from './scripts/character-authoring.js';
 import {
@@ -628,6 +629,7 @@ function openWorkspaceShellDrawerImmediate(drawerId) {
 
     drawer.classList.add('openDrawer');
     drawer.classList.remove('closedDrawer');
+    drawer.style.opacity = '1';
     drawerIcon?.classList.add('openIcon');
     drawerIcon?.classList.remove('closedIcon');
 }
@@ -1316,28 +1318,75 @@ function persistMainChatMessageListScrollSnapshotBeforeClear(chatId = getCurrent
 }
 
 function ensureWorldInfoReactHost() {
+    const workbench = document.getElementById('wi-holder');
     const editorPanel = document.getElementById('wiEditorPanel');
-    if (!editorPanel) {
+    const hostParent = workbench || editorPanel;
+    if (!hostParent) {
         return null;
     }
 
     let host = document.getElementById(WORLD_INFO_REACT_HOST_ID);
     if (host) {
+        if (host.parentElement !== hostParent) {
+            hostParent.prepend(host);
+        }
         return host;
     }
 
     host = document.createElement('div');
     host.id = WORLD_INFO_REACT_HOST_ID;
     host.className = 'emberdesk-react-world-info-panel-host';
-
-    const worldPopup = document.getElementById('world_popup');
-    if (worldPopup?.parentElement === editorPanel) {
-        editorPanel.insertBefore(host, worldPopup);
-    } else {
-        editorPanel.prepend(host);
-    }
+    host.setAttribute('data-doc-id', 'feature.world_info_panel');
+    hostParent.prepend(host);
 
     return host;
+}
+
+function hideLegacyWorldInfoWorkbench(hidden, { revealGlobalPanel = false } = {}) {
+    const workbench = document.getElementById('wi-holder');
+    const host = document.getElementById(WORLD_INFO_REACT_HOST_ID);
+    if (!(workbench instanceof HTMLElement)) {
+        return;
+    }
+
+    Array.from(workbench.children).forEach((child) => {
+        if (!(child instanceof HTMLElement) || child === host) {
+            return;
+        }
+
+        const isGlobalPanel = child.id === 'wiGlobalPanel';
+        const shouldHide = hidden && !(revealGlobalPanel && isGlobalPanel);
+        child.hidden = shouldHide;
+        child.setAttribute('aria-hidden', shouldHide ? 'true' : 'false');
+        if (shouldHide) {
+            child.setAttribute('inert', '');
+        } else {
+            child.removeAttribute('inert');
+        }
+        child.dataset.legacyWorldInfoHiddenByReact = shouldHide ? 'true' : 'false';
+    });
+
+    workbench.classList.toggle('wi-workbench-react-owned', hidden);
+    workbench.dataset.worldInfoVisibleOwner = hidden ? 'react' : 'legacy';
+    workbench.dataset.worldInfoActivationRulesOpen = hidden && revealGlobalPanel ? 'true' : 'false';
+
+    if (hidden && revealGlobalPanel) {
+        const rulesToggle = document.querySelector('#wiGlobalPanel .wi-settings-toggle');
+        const rulesContent = document.querySelector('#wiGlobalPanel .wi-global-rules-content');
+        if (rulesContent instanceof HTMLElement && rulesContent.style.display === 'none') {
+            rulesToggle?.dispatchEvent(new Event('click', { bubbles: true }));
+        }
+    }
+}
+
+function setWorldInfoActivationRulesVisible(open) {
+    const workbench = document.getElementById('wi-holder');
+    const reactOwned = workbench?.dataset.worldInfoVisibleOwner === 'react';
+    if (!reactOwned) {
+        return false;
+    }
+    hideLegacyWorldInfoWorkbench(true, { revealGlobalPanel: Boolean(open) });
+    return true;
 }
 
 function ensureCharacterAuthoringReactHost() {
@@ -1783,7 +1832,7 @@ function getWorldInfoReactEntrySummaries() {
     });
 }
 
-function getWorldInfoReactBridgeState() {
+function getWorldInfoReactBridgeState(facadeSnapshot = null) {
     const globalSelector = document.getElementById('world_info');
     const editorSelector = /** @type {HTMLSelectElement|null} */ (document.getElementById('world_editor_select'));
     const importMenuItem = document.getElementById('world_import_menu_item');
@@ -1792,7 +1841,13 @@ function getWorldInfoReactBridgeState() {
     const worldInfoSearch = /** @type {HTMLInputElement|null} */ (document.getElementById('world_info_search'));
     const worldInfoSortOrder = /** @type {HTMLSelectElement|null} */ (document.getElementById('world_info_sort_order'));
     const createEntryButton = document.getElementById('world_create_button');
-    const entrySummaries = getWorldInfoReactEntrySummaries();
+    const facadeEntrySummaries = Array.isArray(facadeSnapshot?.entrySummaries)
+        ? facadeSnapshot.entrySummaries
+        : null;
+    const entrySummaries = facadeEntrySummaries ?? getWorldInfoReactEntrySummaries();
+    const globalActiveNames = Array.isArray(facadeSnapshot?.globalActiveNames)
+        ? facadeSnapshot.globalActiveNames
+        : [];
 
     return {
         globalSelectorPresent: Boolean(globalSelector),
@@ -1802,10 +1857,10 @@ function getWorldInfoReactBridgeState() {
         importBusy: importMenuItem?.getAttribute('aria-disabled') === 'true' || importFileInput?.disabled === true,
         dropTargetPresent: Boolean(worldPopup),
         worldNames: getWorldInfoReactWorldNames(editorSelector),
-        selectedWorldName: getWorldInfoReactSelectedWorldName(editorSelector),
+        selectedWorldName: getWorldInfoReactSelectedWorldName(editorSelector) || facadeSnapshot?.editorWorldName || '',
         selectedWorldIndex: editorSelector?.value ?? '',
-        entryCount: entrySummaries.length,
-        entrySummaries: getWorldInfoReactEntrySummaries(),
+        entryCount: facadeSnapshot?.entryCount ?? entrySummaries.length,
+        entrySummaries,
         searchQuery: worldInfoSearch?.value ?? '',
         sortValue: worldInfoSortOrder?.value ?? '',
         sortOptions: getWorldInfoReactSortOptions(worldInfoSortOrder),
@@ -1813,7 +1868,25 @@ function getWorldInfoReactBridgeState() {
         exportMenuPresent: Boolean(document.getElementById('world_export_menu_item')),
         createWorldMenuPresent: Boolean(document.getElementById('world_create_world')),
         refreshMenuPresent: Boolean(document.getElementById('world_refresh')),
+        globalActiveNames,
+        globalActiveCount: facadeSnapshot?.globalActiveCount ?? globalActiveNames.length,
+        selectedEntryUid: facadeSnapshot?.selectedEntryUid ?? '',
+        selectedEntry: facadeSnapshot?.selectedEntry ?? null,
+        hasEditorWorld: facadeSnapshot?.hasEditorWorld ?? Boolean(editorSelector?.value),
+        renameMenuPresent: Boolean(document.getElementById('world_rename_menu_item')),
+        duplicateMenuPresent: Boolean(document.getElementById('world_duplicate_menu_item')),
+        deleteMenuPresent: Boolean(document.getElementById('world_delete_menu_item')),
     };
+}
+
+async function getWorldInfoReactBridgeStateAsync() {
+    try {
+        const facadeSnapshot = await getWorldInfoWorkbenchFacadeSnapshot();
+        return getWorldInfoReactBridgeState(facadeSnapshot);
+    } catch (error) {
+        console.warn('World Info workbench facade snapshot failed; using DOM fallback.', error);
+        return getWorldInfoReactBridgeState(null);
+    }
 }
 
 function getWorldInfoReactBridge() {
@@ -1843,7 +1916,15 @@ function getWorldInfoReactBridge() {
                 case 'refreshWorld':
                     return refreshCurrentWorldInfoEditor();
                 case 'openEntry':
+                    return selectWorldInfoWorkbenchEntry(payload?.uid ?? '');
+                case 'expandLegacyEntry':
                     return openWorldInfoEntryByUid(payload?.uid ?? '');
+                case 'updateEntryFields':
+                    return updateWorldInfoWorkbenchEntryFields(payload?.uid ?? '', payload?.fields ?? {});
+                case 'clearSelectedEntry':
+                    return selectWorldInfoWorkbenchEntry('');
+                case 'toggleActivationRules':
+                    return setWorldInfoActivationRulesVisible(Boolean(payload?.open));
                 default:
                     console.warn('Unknown World Info React action', action);
                     return undefined;
@@ -1856,13 +1937,19 @@ function getWorldInfoReactBridge() {
 }
 
 async function mountReactWorldInfoPanel() {
-    return mountWorkspacePanelHost({
+    const result = await mountWorkspacePanelHost({
         kind: 'worldInfo',
         ensureContainer: ensureWorldInfoReactHost,
-        getState: () => getWorldInfoReactBridgeState(),
+        getState: () => getWorldInfoReactBridgeStateAsync(),
         bridge: getWorldInfoReactBridge(),
         features: getWorkspaceReactFeatures(),
+        onDisabled() {
+            hideLegacyWorldInfoWorkbench(false);
+        },
     });
+
+    hideLegacyWorldInfoWorkbench(Boolean(result?.mounted));
+    return result;
 }
 
 function ensureMainChatMessageListReactHost() {
@@ -2392,6 +2479,7 @@ function getMainChatMessageListReactBridge() {
                 }
                 case 'setSlashVisibleOwner':
                     setMainChatSlashCommandReactOwnerEnabled(Boolean(payload?.enabled));
+                    shouldRefreshPanel = false;
                     break;
                 case 'selectSlashAutocompleteOption':
                     selectMainChatSlashCommandOption(Number(payload?.index));
@@ -4615,37 +4703,15 @@ function projectCharacterLibraryCharactersAgainstPendingDeletes(queryCharacters)
     return projection.characters;
 }
 
-async function syncCharactersFromQuery(queryCharacters) {
-    const normalizedCharacters = projectCharacterLibraryCharactersAgainstPendingDeletes(
-        normalizeCharacterListPayload(queryCharacters),
-    );
-
-    if (!hasCharacterLibraryPayloadChanged(characters, normalizedCharacters)) {
-        return false;
-    }
-
-    const previousAvatar = this_chid !== undefined ? characters[this_chid]?.avatar : null;
-    characters.splice(0, characters.length, ...normalizedCharacters);
-
-    if (previousAvatar) {
-        const newCharacterId = characters.findIndex(x => x.avatar === previousAvatar);
-        if (newCharacterId >= 0) {
-            setCharacterId(newCharacterId);
-            await selectCharacterById(newCharacterId, { switchMenu: false });
-        }
-    }
-
-    await getGroups();
-    await printCharacters(true);
-    return true;
-}
-
 export async function getCharacters() {
     try {
         const previousAvatar = this_chid !== undefined ? characters[this_chid]?.avatar : null;
         const normalizedCharacters = projectCharacterLibraryCharactersAgainstPendingDeletes(
             await fetchAllCharactersDataOnly(),
         );
+        if (!hasCharacterLibraryPayloadChanged(characters, normalizedCharacters)) {
+            return;
+        }
         characters.splice(0, characters.length, ...normalizedCharacters);
 
         if (previousAvatar) {
@@ -7513,6 +7579,7 @@ class StreamingProcessor {
                 this.swipes = Array.from(swipes ?? []);
                 this.observedTokenCount += 1;
                 this.observedChunkCount += 1;
+                scheduleMainChatMessageListPanelRefresh();
                 if (logprobs) {
                     this.messageLogprobs.push(...(Array.isArray(logprobs) ? logprobs : [logprobs]));
                 }
@@ -11750,7 +11817,7 @@ export async function saveSettings(loopCounter = 0) {
                     // ignore parse failures
                 }
                 toastr.warning(t`Settings were updated elsewhere. Reload to pick up the latest settings before saving again.`, t`Settings conflict`);
-                throw new Error(`Failed to save settings: revision conflict`);
+                throw new Error('Failed to save settings: revision conflict');
             }
             throw new Error(`Failed to save settings: ${result.statusText}`);
         }
@@ -11765,7 +11832,8 @@ export async function saveSettings(loopCounter = 0) {
         }
 
         // Do not persist the protocol field into the in-memory settings document.
-        const { settings_revision: _settingsRevision, ...documentPayload } = payload;
+        const documentPayload = { ...payload };
+        delete documentPayload.settings_revision;
         settings = documentPayload;
         await eventSource.emit(event_types.SETTINGS_UPDATED);
     } catch (error) {
@@ -12260,6 +12328,27 @@ async function displayChats(searchQuery, currentChat, displayName, avatarImg, gr
         $('#select_chat_div').empty();
 
         filteredData.sort((a, b) => sortMoments(timestampToMoment(a.last_mes), timestampToMoment(b.last_mes)));
+
+        if (filteredData.length === 0) {
+            const emptyState = $('<div>', {
+                id: 'select_chat_empty',
+                class: 'select_chat_empty',
+                role: 'status',
+            }).append($('<div>').text(searchQuery ? t`No chats match your search.` : t`No saved chats yet.`));
+
+            if (searchQuery) {
+                $('<button>', {
+                    type: 'button',
+                    class: 'menu_button',
+                    text: t`Clear search`,
+                }).on('click', () => {
+                    $('#select_chat_search').val('').trigger('input').trigger('focus');
+                }).appendTo(emptyState);
+            }
+
+            $('#select_chat_div').append(emptyState);
+            return;
+        }
 
         for (const chat of filteredData) {
             const isSelected = currentChat === chat.file_name;

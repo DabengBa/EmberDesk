@@ -24,7 +24,11 @@ Keep World Info/lorebook activation and editing available inside the chat worksp
 - The editor toolbar exposes search, sort, create, import, export, rename, duplicate, delete, refresh, backfill, and apply-sorting actions when valid for the selected world.
 - Entry cards provide scannable collapsed rows and focused editing through expansion or the content editor modal.
 - File import accepts supported `.json`, `.lorebook`, and `.png` files through the toolbar or drop target, blocks duplicate picker starts while active, shows progress and conflict decisions, and restores normal controls after success, skip, cancellation, parse failure, or network failure.
-- The guarded React host, when enabled, may own visible selector/search/sort/action shortcuts and readiness reporting, but it remains additive and must preserve the established World Info action chain and fallback controls.
+- When `features.react.shell.takeover` and `features.react.panels.worldInfo` are enabled and the bundle mounts, the React World Info workbench is the sole visible owner inside `#wi-holder`: one global-activation summary, one editor-book header, one entry list, and one entry editor. Legacy selector/search/sort/toolbar/entry DOM stays as a hidden adapter for deferred replay and fail-closed rollback, not a second visible control set.
+- Desktop workbench layout places entry list and current entry editor side by side; mobile uses list/editor two-state navigation with a single active scroll root and restore of list position/focus on return.
+- Entry editing uses progressive disclosure: basic identity and enablement, trigger keywords, primary content, injection placement, then collapsed advanced groups (timing/recursion, inclusion group, automation/outlet) that surface non-default summaries.
+- Global activation remains a compact summary with a secondary activation-rules entry; choosing an editor book never auto-changes global activation, and changing global activation never silently switches the editor book.
+- The React host routes all mutations through the World Info facade (`public/scripts/world-info.js`) snapshot/action seam. Prompt activation, regex placement, converter/import outcomes, delete cascade, and persistence stay facade-owned; flag-off or mount failure restores the full legacy drawer as sole visible owner.
 - When the same-entry React shell is enabled, its World Info entry owns only the transient active-panel/dock state and mounted or fallback status; prompt activation, regex placement, converter/import outcomes, and world-book deletion semantics remain owned by the World Info facade.
 - When canonical SQLite World Info authority is enabled and audit-clean, the server may read and write world books through the canonical database while projecting compatible JSON files for import/export and rollback. The visible selector, editor, entry cards, prompt activation, regex placement, import/export outcome, and fallback controls remain the same user workflow.
 - The visible drawer should not expose internal cutover-governance labels. Users see World Info readiness and task results, while maintainer verdicts stay in tech docs.
@@ -36,9 +40,9 @@ Keep World Info/lorebook activation and editing available inside the chat worksp
 - `feature.world_info_panel.global_selector`: the Global World Info selector and its empty-state prompt.
 - `feature.world_info_panel.editor_selector`: the World Info Editor selector that chooses which world book is edited.
 - `feature.world_info_panel.toolbar`: editor actions for search, sort, create, import, export, rename, duplicate, delete, refresh, backfill, and apply sorting.
-- `feature.world_info_panel.entry_card`: collapsed entry-card list and per-entry expansion/edit affordance.
-- `feature.world_info_panel.content_editor`: modal dialog for focused entry-content editing.
-- `feature.world_info_panel.react_host`: guarded host/action surface for mirrored selection, search/sort, import/export, refresh, and entry shortcuts.
+- `feature.world_info_panel.entry_card`: collapsed entry-card list and per-entry expansion/edit affordance in the legacy path; React workbench uses the list/editor panes instead of expanded cards as the primary path.
+- `feature.world_info_panel.content_editor`: modal dialog for focused entry-content editing on the legacy path; React workbench keeps primary content editing inline in the entry editor pane.
+- `feature.world_info_panel.react_host`: guarded sole-visible workbench owner for global summary, editor-book header, entry list/editor, import/export/refresh actions, and fail-closed legacy fallback.
 
 ## Acceptance Workflows
 
@@ -65,6 +69,8 @@ Keep World Info/lorebook activation and editing available inside the chat worksp
 - Batch conflict decisions are hidden or applied differently than the user chose.
 - Opening World Info closes a locked Character Management panel or strands the shell on global startup feedback.
 - The guarded host appears but the established World Info controls or fallback path disappear.
+- Flag-on path shows two visible owners for selector, search, sort, actions, list, or editor.
+- Mobile workbench stacks list and full editor so the editor becomes unreachable, or returns from editor without restoring list focus/scroll.
 
 ## Boundaries
 

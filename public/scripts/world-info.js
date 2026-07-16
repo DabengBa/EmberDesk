@@ -1955,6 +1955,334 @@ export async function openWorldInfoEntryByUid(uid) {
     return button instanceof HTMLElement;
 }
 
+/** @type {string} */
+let worldInfoWorkbenchSelectedEntryUid = '';
+
+const WORLD_INFO_WORKBENCH_EDITABLE_FIELDS = new Set([
+    'key',
+    'keysecondary',
+    'comment',
+    'content',
+    'constant',
+    'selective',
+    'selectiveLogic',
+    'addMemo',
+    'order',
+    'position',
+    'disable',
+    'ignoreBudget',
+    'excludeRecursion',
+    'preventRecursion',
+    'matchPersonaDescription',
+    'matchCharacterDescription',
+    'matchCharacterPersonality',
+    'matchCharacterDepthPrompt',
+    'matchScenario',
+    'matchCreatorNotes',
+    'delayUntilRecursion',
+    'probability',
+    'useProbability',
+    'depth',
+    'outletName',
+    'group',
+    'groupOverride',
+    'groupWeight',
+    'scanDepth',
+    'caseSensitive',
+    'matchWholeWords',
+    'useGroupScoring',
+    'automationId',
+    'role',
+    'sticky',
+    'cooldown',
+    'delay',
+    'characterFilterNames',
+    'characterFilterTags',
+    'characterFilterExclude',
+    'triggers',
+]);
+
+/**
+ * Human-readable injection position for workbench list/editor display.
+ * @param {object} entry
+ * @returns {string}
+ */
+export function getWorldInfoWorkbenchPositionLabel(entry) {
+    if (!entry || typeof entry !== 'object') {
+        return '';
+    }
+
+    switch (entry.position) {
+        case world_info_position.before: return 'Before Character';
+        case world_info_position.after: return 'After Character';
+        case world_info_position.EMTop: return 'Example Messages Top';
+        case world_info_position.EMBottom: return 'Example Messages Bottom';
+        case world_info_position.ANTop: return 'Author\'s Note Top';
+        case world_info_position.ANBottom: return 'Author\'s Note Bottom';
+        case world_info_position.atDepth: return `At Depth ${entry.depth ?? DEFAULT_DEPTH}`;
+        case world_info_position.outlet: return entry.outletName ? `Outlet: ${entry.outletName}` : 'Outlet';
+        default: return 'Unknown position';
+    }
+}
+
+/**
+ * @param {object} entry
+ * @returns {object}
+ */
+export function buildWorldInfoWorkbenchEntrySummary(entry) {
+    const keys = Array.isArray(entry?.key) ? entry.key.filter(Boolean) : [];
+    const title = String(entry?.comment || '').trim() || keys.join(', ') || `Entry ${entry?.uid ?? ''}`;
+    const constant = Boolean(entry?.constant);
+    return {
+        uid: String(entry?.uid ?? ''),
+        title,
+        disabled: Boolean(entry?.disable),
+        constant,
+        keywordsSummary: constant ? 'Constant' : (keys.join(', ') || 'No keywords'),
+        positionLabel: getWorldInfoWorkbenchPositionLabel(entry),
+        order: Number(entry?.order ?? 0),
+        hasSecondaryKeys: Array.isArray(entry?.keysecondary) && entry.keysecondary.length > 0,
+        probability: Number(entry?.probability ?? 100),
+        useProbability: entry?.useProbability !== false,
+        group: String(entry?.group || ''),
+        sticky: entry?.sticky ?? null,
+        cooldown: entry?.cooldown ?? null,
+        delay: entry?.delay ?? null,
+    };
+}
+
+/**
+ * Clone entry fields for React editor state without advertising retired capabilities.
+ * `vectorized` remains in the payload for lossless save round-trips only.
+ * @param {object} entry
+ * @returns {object|null}
+ */
+export function buildWorldInfoWorkbenchEntryDetail(entry) {
+    if (!entry || typeof entry !== 'object') {
+        return null;
+    }
+
+    return {
+        uid: String(entry.uid ?? ''),
+        comment: String(entry.comment ?? ''),
+        content: String(entry.content ?? ''),
+        key: Array.isArray(entry.key) ? [...entry.key] : [],
+        keysecondary: Array.isArray(entry.keysecondary) ? [...entry.keysecondary] : [],
+        constant: Boolean(entry.constant),
+        selective: entry.selective !== false,
+        selectiveLogic: Number(entry.selectiveLogic ?? world_info_logic.AND_ANY),
+        disable: Boolean(entry.disable),
+        order: Number(entry.order ?? 100),
+        position: Number(entry.position ?? world_info_position.before),
+        role: Number(entry.role ?? 0),
+        depth: Number(entry.depth ?? DEFAULT_DEPTH),
+        probability: Number(entry.probability ?? 100),
+        useProbability: entry.useProbability !== false,
+        ignoreBudget: Boolean(entry.ignoreBudget),
+        excludeRecursion: Boolean(entry.excludeRecursion),
+        preventRecursion: Boolean(entry.preventRecursion),
+        delayUntilRecursion: Number(entry.delayUntilRecursion ?? 0),
+        sticky: entry.sticky ?? null,
+        cooldown: entry.cooldown ?? null,
+        delay: entry.delay ?? null,
+        group: String(entry.group ?? ''),
+        groupOverride: Boolean(entry.groupOverride),
+        groupWeight: Number(entry.groupWeight ?? DEFAULT_WEIGHT),
+        scanDepth: entry.scanDepth ?? null,
+        caseSensitive: entry.caseSensitive ?? null,
+        matchWholeWords: entry.matchWholeWords ?? null,
+        useGroupScoring: entry.useGroupScoring ?? null,
+        automationId: String(entry.automationId ?? ''),
+        outletName: String(entry.outletName ?? ''),
+        matchPersonaDescription: Boolean(entry.matchPersonaDescription),
+        matchCharacterDescription: Boolean(entry.matchCharacterDescription),
+        matchCharacterPersonality: Boolean(entry.matchCharacterPersonality),
+        matchCharacterDepthPrompt: Boolean(entry.matchCharacterDepthPrompt),
+        matchScenario: Boolean(entry.matchScenario),
+        matchCreatorNotes: Boolean(entry.matchCreatorNotes),
+        characterFilterNames: Array.isArray(entry.characterFilterNames) ? [...entry.characterFilterNames] : [],
+        characterFilterTags: Array.isArray(entry.characterFilterTags) ? [...entry.characterFilterTags] : [],
+        characterFilterExclude: Boolean(entry.characterFilterExclude),
+        triggers: Array.isArray(entry.triggers) ? [...entry.triggers] : [],
+        // Compatibility-only: not rendered as a capability in the workbench UI.
+        vectorized: Boolean(entry.vectorized),
+        positionLabel: getWorldInfoWorkbenchPositionLabel(entry),
+    };
+}
+
+/**
+ * @returns {string}
+ */
+export function getWorldInfoWorkbenchSelectedEntryUid() {
+    return worldInfoWorkbenchSelectedEntryUid;
+}
+
+/**
+ * Select an entry for the React workbench without requiring legacy card expansion.
+ * @param {string|number} uid
+ * @returns {Promise<boolean>}
+ */
+export async function selectWorldInfoWorkbenchEntry(uid) {
+    const normalizedUid = String(uid ?? '');
+    if (!normalizedUid) {
+        worldInfoWorkbenchSelectedEntryUid = '';
+        return true;
+    }
+
+    const worldName = getSelectedWorldInfoEditorName();
+    if (!worldName) {
+        worldInfoWorkbenchSelectedEntryUid = '';
+        return false;
+    }
+
+    const data = await loadWorldInfo(worldName);
+    const entry = data?.entries?.[normalizedUid]
+        ?? data?.entries?.[Number(normalizedUid)]
+        ?? null;
+    if (!entry) {
+        return false;
+    }
+
+    worldInfoWorkbenchSelectedEntryUid = String(entry.uid);
+    return true;
+}
+
+/**
+ * Update editable entry fields through the World Info facade and preserve compatibility fields.
+ * @param {string|number} uid
+ * @param {Record<string, unknown>} fields
+ * @returns {Promise<boolean>}
+ */
+export async function updateWorldInfoWorkbenchEntryFields(uid, fields = {}) {
+    const worldName = getSelectedWorldInfoEditorName();
+    if (!worldName || !fields || typeof fields !== 'object') {
+        return false;
+    }
+
+    const data = await loadWorldInfo(worldName);
+    if (!data?.entries) {
+        return false;
+    }
+
+    const normalizedUid = String(uid ?? '');
+    const entry = data.entries[normalizedUid] ?? data.entries[Number(normalizedUid)];
+    if (!entry) {
+        return false;
+    }
+
+    let changed = false;
+    for (const [field, value] of Object.entries(fields)) {
+        if (!WORLD_INFO_WORKBENCH_EDITABLE_FIELDS.has(field)) {
+            continue;
+        }
+        entry[field] = value;
+        setWIOriginalDataValue(data, entry.uid, field, value);
+        if (field === 'key') {
+            setWIOriginalDataValue(data, entry.uid, 'keyprimary', value);
+        }
+        if (field === 'position') {
+            setWIOriginalDataValue(
+                data,
+                entry.uid,
+                'position',
+                value == world_info_position.before ? 'before_char' : 'after_char',
+            );
+            setWIOriginalDataValue(data, entry.uid, 'extensions.position', value);
+        }
+        changed = true;
+    }
+
+    // Editable allowlist intentionally omits vectorized; existing values remain on the entry object.
+    if (!changed) {
+        return false;
+    }
+
+    worldInfoWorkbenchSelectedEntryUid = String(entry.uid);
+    await saveWorldInfo(worldName, data, true);
+    return true;
+}
+
+/**
+ * Build data-backed entry summaries for the current editor book.
+ * Falls back to empty when no book is selected.
+ * @returns {Promise<object[]>}
+ */
+export async function getWorldInfoWorkbenchEntrySummaries() {
+    const worldName = getSelectedWorldInfoEditorName();
+    if (!worldName) {
+        return [];
+    }
+
+    const data = await loadWorldInfo(worldName);
+    if (!data?.entries) {
+        return [];
+    }
+
+    return Object.values(data.entries)
+        .map(entry => buildWorldInfoWorkbenchEntrySummary(entry))
+        .sort((a, b) => b.order - a.order || a.title.localeCompare(b.title));
+}
+
+/**
+ * Full entry detail for the selected workbench entry.
+ * @param {string|number} [uid]
+ * @returns {Promise<object|null>}
+ */
+export async function getWorldInfoWorkbenchEntryDetail(uid = worldInfoWorkbenchSelectedEntryUid) {
+    const worldName = getSelectedWorldInfoEditorName();
+    if (!worldName) {
+        return null;
+    }
+
+    const data = await loadWorldInfo(worldName);
+    if (!data?.entries) {
+        return null;
+    }
+
+    const normalizedUid = String(uid ?? '');
+    if (!normalizedUid) {
+        return null;
+    }
+
+    const entry = data.entries[normalizedUid] ?? data.entries[Number(normalizedUid)];
+    return buildWorldInfoWorkbenchEntryDetail(entry);
+}
+
+/**
+ * Snapshot pieces owned by the World Info facade for the React workbench.
+ * @returns {Promise<object>}
+ */
+export async function getWorldInfoWorkbenchFacadeSnapshot() {
+    const editorWorldName = getSelectedWorldInfoEditorName();
+    const entrySummaries = await getWorldInfoWorkbenchEntrySummaries();
+    let selectedEntryUid = worldInfoWorkbenchSelectedEntryUid;
+
+    if (selectedEntryUid && !entrySummaries.some(entry => entry.uid === selectedEntryUid)) {
+        selectedEntryUid = '';
+        worldInfoWorkbenchSelectedEntryUid = '';
+    }
+
+    if (!selectedEntryUid && entrySummaries.length > 0) {
+        // Keep selection empty until the user chooses; avoid silent auto-select coupling.
+        selectedEntryUid = '';
+    }
+
+    const selectedEntry = selectedEntryUid
+        ? await getWorldInfoWorkbenchEntryDetail(selectedEntryUid)
+        : null;
+
+    return {
+        globalActiveNames: Array.isArray(selected_world_info) ? [...selected_world_info] : [],
+        globalActiveCount: Array.isArray(selected_world_info) ? selected_world_info.length : 0,
+        editorWorldName,
+        entryCount: entrySummaries.length,
+        entrySummaries,
+        selectedEntryUid,
+        selectedEntry,
+        hasEditorWorld: Boolean(editorWorldName),
+    };
+}
+
 //MARK: regWISlashCommands
 function registerWorldInfoSlashCommands() {
     /**

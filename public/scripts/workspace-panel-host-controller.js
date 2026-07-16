@@ -50,10 +50,11 @@ export async function mountWorkspacePanelHost({
         return decision;
     }
 
+    const resolvedState = await Promise.resolve(getState(stateOverrides));
     return mountReactWorkspacePanel({
         kind,
         container,
-        state: getState(stateOverrides),
+        state: resolvedState,
         bridge,
         features,
     });

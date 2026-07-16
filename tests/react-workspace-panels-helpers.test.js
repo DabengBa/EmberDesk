@@ -303,6 +303,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource.indexOf("await openWorkspaceShellDrawer('Backgrounds');")).toBeLessThan(scriptSource.indexOf("return createWorkspaceShellPanelResult('backgroundLibrary', await mountReactBackgroundLibraryPanel());"));
         expect(scriptSource.indexOf("await openWorkspaceShellDrawer('rm_extensions_block');")).toBeLessThan(scriptSource.indexOf("return createWorkspaceShellPanelResult('extensionsHost', await mountReactExtensionsHostPanel());"));
         expect(scriptSource).toContain('function openWorkspaceShellDrawerImmediate(drawerId)');
+        expect(scriptSource).toContain("drawer.style.opacity = '1';");
         expect(scriptSource).toContain('function closeWorkspaceShellDrawer(drawerId)');
         expect(scriptSource).toContain('function closeWorkspaceShellPanel(kind)');
         expect(scriptSource).toContain('function getWorkspaceShellPanelDrawerId(kind)');
@@ -720,7 +721,9 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('mountWorkspacePanelHost');
         expect(scriptSource).toContain('const WORLD_INFO_REACT_HOST_ID = \'emberdesk-react-world-info-panel-host\';');
         expect(scriptSource).toContain('function ensureWorldInfoReactHost()');
-        expect(scriptSource).toContain('function getWorldInfoReactBridgeState()');
+        expect(scriptSource).toContain('function hideLegacyWorldInfoWorkbench(hidden');
+        expect(scriptSource).toContain('hideLegacyWorldInfoWorkbench(Boolean(result?.mounted))');
+        expect(scriptSource).toContain('function getWorldInfoReactBridgeState(');
         expect(scriptSource).toContain('globalSelectorPresent: Boolean(globalSelector)');
         expect(scriptSource).toContain('editorSelectorPresent: Boolean(editorSelector)');
         expect(scriptSource).toContain('selectorsSeparated: Boolean(globalSelector && editorSelector && globalSelector !== editorSelector)');
@@ -729,7 +732,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('async function mountReactWorldInfoPanel()');
         expect(scriptSource).toContain('return mountWorkspacePanelHost({');
         expect(scriptSource).toContain('kind: \'worldInfo\'');
-        expect(scriptSource).toContain('getState: () => getWorldInfoReactBridgeState()');
+        expect(scriptSource).toContain('getState: () => getWorldInfoReactBridgeStateAsync()');
         expect(scriptSource).toContain('void mountReactWorldInfoPanel();');
         const worldInfoReplayHook = scriptSource.match(/function _replayWorldInfoSettings\(\) \{[\s\S]*?\n\}/)?.[0] ?? '';
         expect(worldInfoReplayHook).toContain('initWorldInfo();');
@@ -738,10 +741,11 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).not.toContain('mountReactWorkspacePanel({\n        kind: \'worldInfo\',\n        container: document.getElementById(\'world_popup\')');
 
         expect(workspacePanelSource).toContain('function WorldInfoWorkspacePanel');
+        expect(workspacePanelSource).toContain('WorldInfoWorkbenchPanel');
         expect(workspacePanelSource).toContain('kind="worldInfo"');
-        expect(workspacePanelSource).toContain('interface WorldInfoWorkspacePanelState');
+        expect(read('app/world-info-workbench.tsx')).toContain('export interface WorldInfoWorkspacePanelState');
         expect(workspacePanelSource).toContain("{ id: 'global-selector', label: 'Global selector', ready: bridgeState.globalSelectorPresent }");
-        expect(workspacePanelSource).toContain("{ id: 'editor-selector', label: 'Editor selector', ready: bridgeState.editorSelectorPresent && bridgeState.selectorsSeparated }");
+        expect(workspacePanelSource).toContain("{ id: 'editor-selector', label: 'Editor selector', ready: Boolean(bridgeState.editorSelectorPresent && bridgeState.selectorsSeparated) }");
         expect(workspacePanelSource).toContain("{ id: 'import-controls', label: 'Import controls', ready: bridgeState.importMenuPresent }");
         expect(workspacePanelSource).toContain("{ id: 'legacy-editor', label: 'Legacy editor', ready: bridgeState.dropTargetPresent }");
         expect(workspacePanelSource).not.toContain('data-world-info-bridge-state={stateId}');
@@ -757,7 +761,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('function getWorldInfoReactBridge()');
         expect(scriptSource).toContain('worldNames: getWorldInfoReactWorldNames(editorSelector)');
         expect(scriptSource).toContain('selectedWorldName: getWorldInfoReactSelectedWorldName(editorSelector)');
-        expect(scriptSource).toContain('entrySummaries: getWorldInfoReactEntrySummaries()');
+        expect(scriptSource).toContain('getWorldInfoWorkbenchFacadeSnapshot');
         expect(scriptSource).toContain('searchQuery: worldInfoSearch?.value ?? \'\'');
         expect(scriptSource).toContain('sortOptions: getWorldInfoReactSortOptions(worldInfoSortOrder)');
         expect(scriptSource).toContain('applyWorldInfoSearchQuery');
@@ -806,22 +810,23 @@ describe('React workspace panels bridge helpers', () => {
 
         expect(workspacePanelSource).toContain('import { useForm } from \'@tanstack/react-form\';');
         expect(workspacePanelSource).toContain('import { z } from \'zod\';');
-        expect(workspacePanelSource).toContain('const worldInfoPanelFormSchema = z.object(');
-        expect(workspacePanelSource).toContain('function buildWorldInfoPanelFormDefaults');
-        expect(workspacePanelSource).toContain('return bridgeState.importMenuPresent || bridgeState.refreshMenuPresent ? \'empty\' : \'error\';');
-        expect(workspacePanelSource).toContain('const worldInfoActionMutation = useMutation({');
-        expect(workspacePanelSource).toContain('data-world-info-react-control="world-select"');
-        expect(workspacePanelSource).toContain('data-world-info-react-control="search"');
-        expect(workspacePanelSource).toContain('data-world-info-react-control="sort"');
-        expect(workspacePanelSource).toContain('data-world-info-react-action="import"');
-        expect(workspacePanelSource).toContain('data-world-info-react-action="export"');
-        expect(workspacePanelSource).toContain('className="menu_button workspace-panel-item-row workspace-panel-world-info-entry"');
-        expect(workspacePanelSource).toContain('data-world-info-react-entry={entry.uid}');
+        expect(read('app/world-info-workbench.tsx')).toContain('const worldInfoPanelFormSchema = z.object(');
+        expect(read('app/world-info-workbench.tsx')).toContain('export function buildWorldInfoPanelFormDefaults');
+        expect(read('app/world-info-workbench.tsx')).toContain('export function getWorldInfoPanelStatus');
+        expect(read('app/world-info-workbench.tsx')).toContain('const worldInfoActionMutation = useMutation({');
+        expect(read('app/world-info-workbench.tsx')).toContain('data-world-info-react-control="world-select"');
+        expect(read('app/world-info-workbench.tsx')).toContain('data-world-info-react-control="search"');
+        expect(read('app/world-info-workbench.tsx')).toContain('data-world-info-react-control="sort"');
+        expect(read('app/world-info-workbench.tsx')).toContain('data-world-info-react-action="import"');
+        expect(read('app/world-info-workbench.tsx')).toContain('data-world-info-react-action="export"');
+        expect(read('app/world-info-workbench.tsx')).toContain('data-world-info-react-entry={entry.uid}');
+        expect(read('app/world-info-workbench.tsx')).toContain('data-world-info-react-entry={entry.uid}');
         expect(workspacePanelSource).toContain('className="workspace-panel-item-label"');
         expect(workspacePanelSource).toContain('className="workspace-panel-item-status"');
-        expect(workspacePanelSource).toContain('if (bridgeState.importMenuPresent) {');
-        expect(workspacePanelSource).toContain('worldInfoActionMutation.mutate({ action: \'importWorld\' })');
-        expect(workspacePanelSource).toContain('worldInfoActionMutation.mutate({ action: \'exportWorld\' })');
+        expect(read('app/world-info-workbench.tsx')).toContain("action: 'importWorld'");
+        expect(read('app/world-info-workbench.tsx')).toContain("action: 'exportWorld'");
+        expect(read('app/world-info-workbench.tsx')).toContain('data-world-info-react-workflow="workbench"');
+        expect(read('public/css/world-info.css')).toContain('.wi-workbench-body');
 
         const styleSource = read('public/style.css');
         expect(styleSource).toContain('.workspace-panel-item-row.menu_button');
@@ -1336,6 +1341,8 @@ test('renders an Extensions Host workflow through React-owned controls and expli
         expect(workspacePanelSource).toContain('data-main-chat-layout-status=');
         expect(workspacePanelSource).toContain('data-main-chat-local-status=');
         expect(workspacePanelSource).toContain('data-main-chat-local-action={action.id}');
+        expect(workspacePanelSource).toContain("state.chatContainer?.querySelector('.generation_failure_retry')");
+        expect(workspacePanelSource).toContain("generationControl.failureRetryVisible && !hasMessageRetryAction");
         expect(workspacePanelSource).toContain('bridge?.dispatchAction?.(\'openCharacterLibrary\')');
         expect(workspacePanelSource).toContain('syncMainChatLayoutShellDom(');
         expect(workspacePanelSource).toContain('data-main-chat-layout-owner');
@@ -1345,5 +1352,37 @@ test('renders an Extensions Host workflow through React-owned controls and expli
         expect(scriptSource).toContain('export async function messageEdit(editMessageId)');
         expect(scriptSource).toContain('updateEditArrowClasses();');
         expect(scriptSource).toContain('scheduleMainChatMessageListPanelRefresh();');
+        expect(scriptSource).toContain('this.observedChunkCount += 1;\n                scheduleMainChatMessageListPanelRefresh();');
+        expect(scriptSource).toContain("case 'setSlashVisibleOwner':\n                    setMainChatSlashCommandReactOwnerEnabled(Boolean(payload?.enabled));\n                    shouldRefreshPanel = false;");
     });
+
+    test('world info workbench facade owns snapshot and entry field updates without DOM action bypass', () => {
+        const scriptSource = read('public/script.js');
+        const worldInfoSource = read('public/scripts/world-info.js');
+        const workbenchSource = read('app/world-info-workbench.tsx');
+        const hostControllerSource = read('public/scripts/workspace-panel-host-controller.js');
+
+        expect(worldInfoSource).toContain('export async function getWorldInfoWorkbenchFacadeSnapshot');
+        expect(worldInfoSource).toContain('export async function updateWorldInfoWorkbenchEntryFields');
+        expect(worldInfoSource).toContain('export async function selectWorldInfoWorkbenchEntry');
+        expect(worldInfoSource).toContain('vectorized');
+        expect(worldInfoSource).toContain('WORLD_INFO_WORKBENCH_EDITABLE_FIELDS');
+        expect(scriptSource).toContain('getWorldInfoReactBridgeStateAsync');
+        expect(scriptSource).toContain("case 'updateEntryFields':");
+        expect(scriptSource).toContain("case 'clearSelectedEntry':");
+        expect(scriptSource).toContain("case 'toggleActivationRules':");
+        expect(scriptSource).toContain('setWorldInfoActivationRulesVisible');
+        expect(scriptSource).toContain('selectWorldInfoWorkbenchEntry');
+        expect(scriptSource).toContain('updateWorldInfoWorkbenchEntryFields');
+        expect(scriptSource).not.toContain("document.getElementById('world_import_menu_item')?.click();");
+        expect(hostControllerSource).toContain('const resolvedState = await Promise.resolve(getState(stateOverrides));');
+        expect(workbenchSource).toContain('data-world-info-react-workflow="workbench"');
+        expect(workbenchSource).toContain('data-world-info-react-layout="split"');
+        expect(workbenchSource).toContain('data-world-info-react-mobile-view');
+        expect(workbenchSource).toContain('返回条目列表');
+        expect(workbenchSource).toContain('扫描规则');
+        expect(workbenchSource).not.toContain('可向量化');
+        expect(workbenchSource).not.toContain('Vectorized');
+    });
+
 });

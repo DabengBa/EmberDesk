@@ -321,4 +321,49 @@ describe('world info card rendering', () => {
         expect(source).toContain('$(contentEditorReturnFocus).trigger(\'focus\');');
         expect(source).toContain('if (e.key === \'Escape\')');
     });
+
+    test('world info workbench keeps editor panel inside wi-holder with explicit containment', () => {
+        const indexHtml = read('public/index.html');
+        const wiHolderOpen = indexHtml.indexOf('id="wi-holder"');
+        const wiEditorOpen = indexHtml.indexOf('id="wiEditorPanel"');
+        const wiHolderCloseAfterEditor = indexHtml.indexOf('</div>', indexHtml.indexOf('id="world_popup"'));
+
+        expect(wiHolderOpen).toBeGreaterThanOrEqual(0);
+        expect(wiEditorOpen).toBeGreaterThan(wiHolderOpen);
+
+        const betweenHolderAndEditor = indexHtml.slice(wiHolderOpen, wiEditorOpen);
+        // wiGlobalPanel must close before editor opens; wi-holder must not close early.
+        expect(betweenHolderAndEditor).toContain('id="wiGlobalPanel"');
+        expect(betweenHolderAndEditor).toMatch(/<\/section>/);
+        expect(betweenHolderAndEditor).not.toMatch(/id="wi-holder"[\s\S]*<\/div>\s*<section id="wiEditorPanel"/);
+
+        const afterEditorStart = indexHtml.slice(wiEditorOpen, wiEditorOpen + 2500);
+        expect(afterEditorStart).toContain('id="world_popup"');
+        expect(afterEditorStart.indexOf('</section>')).toBeGreaterThan(-1);
+        // editor section closes, then wi-holder closes
+        const editorSectionClose = afterEditorStart.indexOf('</section>');
+        const holderClose = afterEditorStart.indexOf('</div>', editorSectionClose);
+        expect(holderClose).toBeGreaterThan(editorSectionClose);
+    });
+
+    test('react world info host becomes sole visible owner and hides legacy workbench children', () => {
+        const script = read('public/script.js');
+        const css = read('public/css/world-info.css');
+
+        expect(script).toContain('function hideLegacyWorldInfoWorkbench(hidden');
+        expect(script).toContain("workbench.dataset.worldInfoVisibleOwner = hidden ? 'react' : 'legacy'");
+        expect(script).toContain('legacyWorldInfoHiddenByReact');
+        expect(script).toContain("setAttribute('inert'");
+        expect(script).toContain('hideLegacyWorldInfoWorkbench(Boolean(result?.mounted))');
+        expect(script).toContain('hideLegacyWorldInfoWorkbench(false)');
+        expect(script).toContain('revealGlobalPanel');
+        expect(script).toContain('setWorldInfoActivationRulesVisible');
+        expect(script).toContain("const workbench = document.getElementById('wi-holder')");
+        expect(script).toContain('hostParent.prepend(host)');
+        expect(script).toContain("host.setAttribute('data-doc-id', 'feature.world_info_panel')");
+        expect(css).toContain('.wi-workbench.wi-workbench-react-owned');
+        expect(css).toContain('[data-legacy-world-info-hidden-by-react="true"]');
+        expect(css).toContain('#WorldInfo.openDrawer #wi-holder.wi-workbench-react-owned');
+    });
+
 });

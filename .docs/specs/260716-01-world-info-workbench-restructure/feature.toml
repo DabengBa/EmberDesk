@@ -1,0 +1,4 @@
+contract_version = 1
+feature_slug = "world-info-workbench-restructure"
+brief = ".docs/tech/briefs/260716-01-world-info-workbench-restructure.md"
+doc_ids = ["feature.world_info_panel", "page.chat_workspace"]

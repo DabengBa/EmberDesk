@@ -16,6 +16,7 @@ export const workspacePanelFlagEnvKeys = [
 const workspaceShellProofSpecFiles = new Set([
     'workspace-shell-panel-navigation.e2e.js',
     'character-group-authoring.e2e.js',
+    'world-info-workbench.e2e.js',
 ]);
 
 const authoringProofSpecFiles = new Set([

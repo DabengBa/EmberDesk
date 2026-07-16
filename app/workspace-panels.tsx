@@ -43,6 +43,15 @@ import {
 import {
     createGroupAuthoringSession,
 } from '../public/scripts/group-authoring.js';
+import {
+    WorldInfoWorkbenchPanel,
+    buildWorldInfoPanelFormDefaults as buildWorldInfoWorkbenchFormDefaults,
+    getWorldInfoPanelStatus as getWorldInfoWorkbenchPanelStatus,
+    type WorldInfoWorkspacePanelState as WorldInfoWorkbenchPanelState,
+    type WorldInfoReactEntrySummary as WorldInfoWorkbenchEntrySummary,
+    type WorldInfoReactSortOption as WorldInfoWorkbenchSortOption,
+    type WorldInfoReactWorldOption as WorldInfoWorkbenchWorldOption,
+} from './world-info-workbench';
 
 export type WorkspacePanelKind = 'worldInfo' | 'backgroundLibrary' | 'extensionsHost' | 'mainChatMessageList' | 'characterAuthoring' | 'groupAuthoring';
 type WorkspaceDockPanelKind =
@@ -142,44 +151,10 @@ interface WorkspaceShellNavigationEntry {
     panelKind?: WorkspaceDockPanelKind;
 }
 
-interface WorldInfoWorkspacePanelState {
-    globalSelectorPresent?: boolean;
-    editorSelectorPresent?: boolean;
-    selectorsSeparated?: boolean;
-    importMenuPresent?: boolean;
-    importBusy?: boolean;
-    dropTargetPresent?: boolean;
-    worldNames?: WorldInfoReactWorldOption[];
-    selectedWorldName?: string;
-    selectedWorldIndex?: string;
-    entryCount?: number;
-    entrySummaries?: WorldInfoReactEntrySummary[];
-    searchQuery?: string;
-    sortValue?: string;
-    sortOptions?: WorldInfoReactSortOption[];
-    canCreateEntry?: boolean;
-    exportMenuPresent?: boolean;
-    createWorldMenuPresent?: boolean;
-    refreshMenuPresent?: boolean;
-}
-
-interface WorldInfoReactWorldOption {
-    value: string;
-    label: string;
-    selected?: boolean;
-}
-
-interface WorldInfoReactSortOption {
-    value: string;
-    label: string;
-    hidden?: boolean;
-}
-
-interface WorldInfoReactEntrySummary {
-    uid: string;
-    title: string;
-    disabled?: boolean;
-}
+type WorldInfoWorkspacePanelState = WorldInfoWorkbenchPanelState;
+type WorldInfoReactWorldOption = WorldInfoWorkbenchWorldOption;
+type WorldInfoReactSortOption = WorldInfoWorkbenchSortOption;
+type WorldInfoReactEntrySummary = WorldInfoWorkbenchEntrySummary;
 
 interface BackgroundLibraryWorkspacePanelState {
     status?: 'disabled' | 'loading' | 'empty' | 'success' | 'error';
@@ -533,11 +508,6 @@ const MAIN_CHAT_VIRTUAL_INDEX_ATTRIBUTE = 'data-main-chat-virtual-index';
 const MAIN_CHAT_SCROLL_RESTORE_THRESHOLD_PX = 12;
 const MAIN_CHAT_DEFAULT_ROW_HEIGHT_PX = 160;
 
-const worldInfoPanelFormSchema = z.object({
-    selectedWorldIndex: z.string(),
-    searchQuery: z.string(),
-    sortValue: z.string(),
-});
 
 const backgroundLibraryPanelFormSchema = z.object({
     filterQuery: z.string(),
@@ -928,11 +898,7 @@ function persistMainChatMessageListScrollSnapshot(
 }
 
 function buildWorldInfoPanelFormDefaults(state: WorldInfoWorkspacePanelState) {
-    return {
-        selectedWorldIndex: state.selectedWorldIndex ?? '',
-        searchQuery: state.searchQuery ?? '',
-        sortValue: state.sortValue ?? '',
-    };
+    return buildWorldInfoWorkbenchFormDefaults(state);
 }
 
 function buildBackgroundLibraryPanelFormDefaults(state: BackgroundLibraryWorkspacePanelState) {
@@ -1986,6 +1952,9 @@ function MainChatLayoutStatusPortal({
     const sendForm = state.sendForm;
     const shouldShow = status !== 'success';
     const actions: WorkspacePanelRecoveryAction[] = [];
+    const hasMessageRetryAction = Boolean(
+        state.chatContainer?.querySelector('.generation_failure_retry'),
+    );
 
     if (!(sendForm instanceof HTMLElement) || !shouldShow) {
         return null;
@@ -2001,7 +1970,7 @@ function MainChatLayoutStatusPortal({
         });
     }
 
-    if (status === 'error' && generationControl.failureRetryVisible) {
+    if (status === 'error' && generationControl.failureRetryVisible && !hasMessageRetryAction) {
         actions.push({
             id: 'retry-generation',
             label: 'Retry generation',
@@ -2249,11 +2218,14 @@ function AuthoringWorkspacePanel({
     const submitDraft = useCallback(() => {
         const submitResult = authoringSession.submit();
         if (!submitResult.ok) {
-            setFieldErrors(submitResult.fieldErrors);
+            setFieldErrors((submitResult.fieldErrors ?? {}) as Record<string, string>);
             return;
         }
 
         setFieldErrors({});
+        if (typeof submitResult.action !== 'string') {
+            return;
+        }
         authoringActionMutation.mutateAsync({ action: submitResult.action, payload: submitResult.payload })
             .then(() => {
                 setAuthoringSession(currentSession => kind === 'characterAuthoring'
@@ -2284,6 +2256,13 @@ function AuthoringWorkspacePanel({
     const characterActionPayload = characterToolPayload && characterToolPayload.ok ? characterToolPayload.payload : undefined;
     const isCreateMode = (bridgeState.mode ?? 'create') === 'create';
     const isActionPending = authoringActionMutation.isPending;
+    const updateGroupSession = (
+        update: (session: ReturnType<typeof createGroupAuthoringSession>) => ReturnType<typeof createGroupAuthoringSession>,
+    ) => {
+        setAuthoringSession(currentSession => update(
+            currentSession as ReturnType<typeof createGroupAuthoringSession>,
+        ));
+    };
 
     return (
         <WorkspacePanelShell
@@ -2359,7 +2338,7 @@ function AuthoringWorkspacePanel({
                                         className="menu_button"
                                         data-react-authoring-action="remove-member"
                                         aria-label={`Remove ${member}`}
-                                        onClick={() => setAuthoringSession(currentSession => currentSession.removeMember(member))}
+                                        onClick={() => updateGroupSession(currentSession => currentSession.removeMember(member))}
                                     >
                                         Remove
                                     </button>
@@ -2369,7 +2348,7 @@ function AuthoringWorkspacePanel({
                                         data-react-authoring-action="move-up"
                                         aria-label={`Move ${member} up`}
                                         disabled={index === 0}
-                                        onClick={() => setAuthoringSession(currentSession => currentSession.moveMember(member, 'up'))}
+                                        onClick={() => updateGroupSession(currentSession => currentSession.moveMember(member, 'up'))}
                                     >
                                         Move up
                                     </button>
@@ -2379,7 +2358,7 @@ function AuthoringWorkspacePanel({
                                         data-react-authoring-action="move-down"
                                         aria-label={`Move ${member} down`}
                                         disabled={index === members.length - 1}
-                                        onClick={() => setAuthoringSession(currentSession => currentSession.moveMember(member, 'down'))}
+                                        onClick={() => updateGroupSession(currentSession => currentSession.moveMember(member, 'down'))}
                                     >
                                         Move down
                                     </button>
@@ -2393,7 +2372,7 @@ function AuthoringWorkspacePanel({
                                         type="button"
                                         className="menu_button react-authoring-candidate"
                                         data-react-authoring-action="add-member"
-                                        onClick={() => setAuthoringSession(currentSession => currentSession.addMember(candidate.id))}
+                                        onClick={() => updateGroupSession(currentSession => currentSession.addMember(candidate.id))}
                                     >
                                         Add {candidate.label}
                                     </button>
@@ -2441,19 +2420,7 @@ function AuthoringWorkspacePanel({
 }
 
 function getWorldInfoPanelStatus(bridgeState: WorldInfoWorkspacePanelState): WorkspacePanelStatus {
-    if (bridgeState.importBusy) {
-        return 'loading';
-    }
-
-    if (!bridgeState.globalSelectorPresent && !bridgeState.editorSelectorPresent) {
-        return bridgeState.importMenuPresent || bridgeState.refreshMenuPresent ? 'empty' : 'error';
-    }
-
-    if (bridgeState.globalSelectorPresent && bridgeState.editorSelectorPresent && bridgeState.selectorsSeparated) {
-        return 'success';
-    }
-
-    return 'error';
+    return getWorldInfoWorkbenchPanelStatus(bridgeState);
 }
 
 function getBackgroundLibraryPanelStatus(bridgeState: BackgroundLibraryWorkspacePanelState): WorkspacePanelStatus {
@@ -2499,197 +2466,28 @@ function getExtensionsHostPanelStatus(bridgeState: ExtensionsHostWorkspacePanelS
 
 function WorldInfoWorkspacePanel({ state, bridge }: { state?: unknown; bridge?: WorkspacePanelBridge }) {
     const bridgeState = asWorldInfoState(state);
-    const status = getWorldInfoPanelStatus(bridgeState);
-    const formDefaults = useMemo(() => buildWorldInfoPanelFormDefaults(bridgeState), [bridgeState]);
-    const worldInfoForm = useForm({
-        defaultValues: formDefaults,
-        validators: {
-            onChange: worldInfoPanelFormSchema,
-        },
-    });
-    const worldInfoActionMutation = useMutation({
-        mutationFn: async ({ action, payload }: { action: string; payload?: Record<string, unknown> }) => {
-            await bridge?.dispatchAction?.(action, payload);
-        },
-        retry: false,
-    });
-
-    useEffect(() => {
-        worldInfoForm.reset(formDefaults);
-    }, [formDefaults, worldInfoForm]);
-
-    const worldNames = bridgeState.worldNames ?? [];
-    const sortOptions = bridgeState.sortOptions ?? [];
-    const entrySummaries = bridgeState.entrySummaries ?? [];
-    const selectedWorldName = bridgeState.selectedWorldName || 'No world selected';
-    const recoveryActions: WorkspacePanelRecoveryAction[] = [];
-
-    if (status === 'empty') {
-        if (bridgeState.importMenuPresent) {
-            recoveryActions.push({
-                id: 'import-world',
-                label: 'Import world',
-                disabled: Boolean(bridgeState.importBusy),
-                onClick: () => worldInfoActionMutation.mutate({ action: 'importWorld' }),
-            });
-        }
-    }
-
-    if ((status === 'empty' || status === 'error') && bridgeState.refreshMenuPresent) {
-        recoveryActions.push({
-            id: 'refresh-world',
-            label: 'Refresh panel',
-            disabled: !bridgeState.refreshMenuPresent,
-            onClick: () => worldInfoActionMutation.mutate({ action: 'refreshWorld' }),
-        });
-    }
-
     return (
-        <WorkspacePanelShell
-            kind="worldInfo"
-            title="World Info"
-            status={status}
-            actions={recoveryActions}
-            legacyBoundary="activation-import-regex-prompt-delete"
-            slots={[
-                { id: 'global-selector', label: 'Global selector', ready: bridgeState.globalSelectorPresent },
-                { id: 'editor-selector', label: 'Editor selector', ready: bridgeState.editorSelectorPresent && bridgeState.selectorsSeparated },
-                { id: 'import-controls', label: 'Import controls', ready: bridgeState.importMenuPresent },
-                { id: 'legacy-editor', label: 'Legacy editor', ready: bridgeState.dropTargetPresent },
-            ]}
-        >
-            <div className="flex-container flexFlowColumn gap8" data-world-info-react-workflow="editor-import-export">
-                <div className="flex-container flexwrap gap8 alignitemscenter">
-                    <output>Selected: {selectedWorldName}</output>
-                    <output>Worlds: {worldNames.length}</output>
-                    <output>Entries: {bridgeState.entryCount ?? entrySummaries.length}</output>
-                </div>
-                <div className="flex-container flexwrap gap8 alignitemscenter">
-                    <worldInfoForm.Field name="selectedWorldIndex">
-                        {field => (
-                            <select
-                                className="text_pole textarea_compact"
-                                data-world-info-react-control="world-select"
-                                aria-label="World"
-                                value={field.state.value}
-                                onChange={event => {
-                                    const worldIndex = event.target.value;
-                                    field.handleChange(worldIndex);
-                                    worldInfoActionMutation.mutate({ action: 'selectWorld', payload: { worldIndex } });
-                                }}
-                            >
-                                <option value="">--- Pick to Edit ---</option>
-                                {worldNames.map(world => (
-                                    <option key={world.value} value={world.value}>
-                                        {world.label}
-                                    </option>
-                                ))}
-                            </select>
-                        )}
-                    </worldInfoForm.Field>
-                    <worldInfoForm.Field name="searchQuery">
-                        {field => (
-                            <input
-                                className="text_pole textarea_compact"
-                                type="search"
-                                data-world-info-react-control="search"
-                                aria-label="Search world info"
-                                value={field.state.value}
-                                onChange={event => {
-                                    const searchQuery = event.target.value;
-                                    field.handleChange(searchQuery);
-                                    worldInfoActionMutation.mutate({ action: 'applySearchQuery', payload: { searchQuery } });
-                                }}
-                            />
-                        )}
-                    </worldInfoForm.Field>
-                    <worldInfoForm.Field name="sortValue">
-                        {field => (
-                            <select
-                                className="text_pole textarea_compact"
-                                data-world-info-react-control="sort"
-                                aria-label="Sort world info"
-                                value={field.state.value}
-                                onChange={event => {
-                                    const sortValue = event.target.value;
-                                    field.handleChange(sortValue);
-                                    worldInfoActionMutation.mutate({ action: 'applySortOption', payload: { sortValue } });
-                                }}
-                            >
-                                {sortOptions.map(option => (
-                                    <option key={option.value} value={option.value} hidden={option.hidden}>
-                                        {option.label}
-                                    </option>
-                                ))}
-                            </select>
-                        )}
-                    </worldInfoForm.Field>
-                </div>
-                <div className="flex-container flexwrap gap8 alignitemscenter">
-                    <button
-                        type="button"
-                        className="menu_button"
-                        data-world-info-react-action="new-world"
-                        onClick={() => worldInfoActionMutation.mutate({ action: 'createWorld' })}
-                        disabled={!bridgeState.createWorldMenuPresent}
-                    >
-                            New World
-                    </button>
-                    <button
-                        type="button"
-                        className="menu_button"
-                        data-world-info-react-action="new-entry"
-                        onClick={() => worldInfoActionMutation.mutate({ action: 'createEntry' })}
-                        disabled={!bridgeState.canCreateEntry}
-                    >
-                            New Entry
-                    </button>
-                    <button
-                        type="button"
-                        className="menu_button"
-                        data-world-info-react-action="import"
-                        onClick={() => worldInfoActionMutation.mutate({ action: 'importWorld' })}
-                        disabled={Boolean(bridgeState.importBusy)}
-                    >
-                            Import
-                    </button>
-                    <button
-                        type="button"
-                        className="menu_button"
-                        data-world-info-react-action="export"
-                        onClick={() => worldInfoActionMutation.mutate({ action: 'exportWorld' })}
-                        disabled={!bridgeState.exportMenuPresent || !bridgeState.selectedWorldName}
-                    >
-                            Export
-                    </button>
-                    <button
-                        type="button"
-                        className="menu_button"
-                        data-world-info-react-action="refresh"
-                        onClick={() => worldInfoActionMutation.mutate({ action: 'refreshWorld' })}
-                        disabled={!bridgeState.refreshMenuPresent}
-                    >
-                            Refresh
-                    </button>
-                </div>
-                <div className="flex-container flexFlowColumn gap4" data-world-info-react-entries>
-                    {entrySummaries.length > 0 ? entrySummaries.map(entry => (
-                        <button
-                            key={entry.uid}
-                            type="button"
-                            className="menu_button workspace-panel-item-row workspace-panel-world-info-entry"
-                            data-world-info-react-entry={entry.uid}
-                            onClick={() => worldInfoActionMutation.mutate({ action: 'openEntry', payload: { uid: entry.uid } })}
-                        >
-                            <span className="workspace-panel-item-label">{entry.title}</span>
-                            <span className="workspace-panel-item-status">{entry.disabled ? 'Disabled' : 'Edit'}</span>
-                        </button>
-                    )) : (
-                        <span className="opacity50">No visible entries</span>
-                    )}
-                </div>
-            </div>
-        </WorkspacePanelShell>
+        <WorldInfoWorkbenchPanel
+            state={state}
+            bridge={bridge}
+            shell={({ status, recoveryActions, children }) => (
+                <WorkspacePanelShell
+                    kind="worldInfo"
+                    title="世界书"
+                    status={status}
+                    actions={recoveryActions}
+                    legacyBoundary="activation-import-regex-prompt-delete"
+                    slots={[
+                        { id: 'global-selector', label: 'Global selector', ready: bridgeState.globalSelectorPresent },
+                        { id: 'editor-selector', label: 'Editor selector', ready: Boolean(bridgeState.editorSelectorPresent && bridgeState.selectorsSeparated) },
+                        { id: 'import-controls', label: 'Import controls', ready: bridgeState.importMenuPresent },
+                        { id: 'legacy-editor', label: 'Legacy editor', ready: bridgeState.dropTargetPresent },
+                    ]}
+                >
+                    {children}
+                </WorkspacePanelShell>
+            )}
+        />
     );
 }
 
@@ -3423,6 +3221,7 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
         ? null
         : reactVisibleTransportRuntime;
     const activeRuntimeMessageRow = shouldIgnoreVisibleTransportRuntime ? null : rawActiveRuntimeMessageRow;
+    const activeRuntimeMessageId = effectiveReactVisibleTransportRuntime?.activeMessageId;
     const effectiveGenerationControl = buildReactOwnedMainChatGenerationControl(
         effectiveReactVisibleTransportRuntime,
         bridgeState.generationControl ?? mainChatGenerationControlFallback,
@@ -3563,6 +3362,10 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
                 );
             })}
             {ownedRichBodySnapshots.map(snapshot => {
+                if (snapshot.messageId === String(activeRuntimeMessageId ?? '')) {
+                    return null;
+                }
+
                 const messageRow = messageRowMap.get(snapshot.messageId);
                 if (!(messageRow instanceof HTMLElement)) {
                     return null;
@@ -3796,7 +3599,9 @@ function getWorkspacePanelVisibleStatusLabel(status: WorkspacePanelStatus) {
 }
 
 function useWorkspacePanelDockSnapshot() {
-    const [dockSnapshot, setDockSnapshot] = useState<WorkspacePanelDockSnapshot>(() => getWorkspacePanelDockSnapshot());
+    const [dockSnapshot, setDockSnapshot] = useState<WorkspacePanelDockSnapshot>(
+        () => getWorkspacePanelDockSnapshot() as WorkspacePanelDockSnapshot,
+    );
 
     useEffect(() => subscribeWorkspacePanelDock((nextSnapshot: WorkspacePanelDockSnapshot) => {
         setDockSnapshot(nextSnapshot);
