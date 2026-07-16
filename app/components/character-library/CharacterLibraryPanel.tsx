@@ -1,6 +1,14 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { LegacyElementHost } from './LegacyElementHost';
+import { CharacterLibraryCharacterRow } from './CharacterLibraryCharacterRow';
+import { CharacterLibraryFolderRow } from './CharacterLibraryFolderRow';
+import { CharacterLibraryGroupRow } from './CharacterLibraryGroupRow';
+import {
+    CharacterLibraryBackBlock,
+    CharacterLibraryEmptyBlock,
+    CharacterLibraryHiddenBlock,
+} from './CharacterLibraryStatusBlocks';
+import { projectCharacterEntityToRowModel } from '@/lib/character-library-row-helpers';
 
 export interface CharacterLibraryPanelEntity {
     type: string;
@@ -10,6 +18,12 @@ export interface CharacterLibraryPanelEntity {
     entities?: Array<unknown>;
     hidden?: number;
     isUseless?: boolean;
+    memberNames?: string[];
+    memberCount?: number;
+    avatarHtml?: string | null;
+    folderIconClass?: string;
+    folderColor?: string;
+    folderColor2?: string;
 }
 
 export interface CharacterLibraryPanelRenderPlan {
@@ -17,6 +31,9 @@ export interface CharacterLibraryPanelRenderPlan {
     hiddenCount: number;
     showEmptyBlock: boolean;
     showHiddenBlock: boolean;
+    emptyText?: string;
+    emptyMessage?: string;
+    showClearFilters?: boolean;
 }
 
 export interface CharacterLibraryPanelState {
@@ -26,26 +43,99 @@ export interface CharacterLibraryPanelState {
     renderPlan: CharacterLibraryPanelRenderPlan;
     estimatedRowHeight?: number;
     scrollElement: HTMLElement | null;
+    bulkMode?: boolean;
+    selectedCharacterIds?: Array<string | number>;
+    activeCharacterId?: string | number | null;
+    activeGroupId?: string | number | null;
 }
 
 export interface CharacterLibraryPanelBridge {
-    createEntityElement(entity: CharacterLibraryPanelEntity): HTMLElement | Promise<HTMLElement | null> | null;
-    createBackBlockElement?(): HTMLElement | Promise<HTMLElement | null> | null;
-    createEmptyElement?(): HTMLElement | Promise<HTMLElement | null> | null;
-    createHiddenElement?(hiddenCount: number): HTMLElement | Promise<HTMLElement | null> | null;
+    onSelectCharacter?(id: string | number): void;
+    onSelectGroup?(id: string | number): void;
+    onOpenFolder?(id: string | number): void;
+    onBackFolder?(): void;
+    onClearFilters?(): void;
+    onBulkToggleCharacter?(id: string | number, checked: boolean): void;
+    /** Optional: remaining non-row DOM hosts (toolbar only). Kept for transition. */
+    createEntityElement?(entity: CharacterLibraryPanelEntity): HTMLElement | Promise<HTMLElement | null> | null;
 }
 
-interface LegacyEntityRowProps {
+interface EntityRowProps {
     bridge: CharacterLibraryPanelBridge;
     entity: CharacterLibraryPanelEntity;
+    bulkMode: boolean;
+    selectedCharacterIds: Array<string | number>;
+    activeCharacterId?: string | number | null;
 }
 
-function LegacyEntityRow({ bridge, entity }: LegacyEntityRowProps) {
-    return (
-        <LegacyElementHost
-            factory={() => bridge.createEntityElement(entity)}
-        />
-    );
+function EntityRow({
+    bridge,
+    entity,
+    bulkMode,
+    selectedCharacterIds,
+    activeCharacterId,
+}: EntityRowProps) {
+    if (entity.type === 'character' && entity.item) {
+        const model = projectCharacterEntityToRowModel({
+            type: entity.type,
+            id: entity.id,
+            item: entity.item,
+        }, {
+            activeCharacterId,
+            resolveAvatarUrl: (avatar) => {
+                if (avatar === 'none') {
+                    return String(entity.item?.avatarUrl ?? '');
+                }
+                return String(entity.item?.avatarUrl ?? entity.item?.avatar ?? avatar);
+            },
+        });
+        if (model) {
+            const selected = selectedCharacterIds.some(id => String(id) === String(entity.id));
+            return (
+                <CharacterLibraryCharacterRow
+                    model={model}
+                    selected={selected}
+                    bulkMode={bulkMode}
+                    onSelect={(id) => bridge.onSelectCharacter?.(id)}
+                    onBulkToggle={(id, checked) => bridge.onBulkToggleCharacter?.(id, checked)}
+                />
+            );
+        }
+    }
+
+    if (entity.type === 'group' && entity.item) {
+        const item = entity.item;
+        return (
+            <CharacterLibraryGroupRow
+                id={entity.id}
+                name={String(item.name ?? '')}
+                memberNames={entity.memberNames ?? []}
+                memberCount={entity.memberCount}
+                isFav={Boolean(item.fav)}
+                avatarHtml={entity.avatarHtml}
+                onSelect={(id) => bridge.onSelectGroup?.(id)}
+            />
+        );
+    }
+
+    if (entity.type === 'tag' && entity.item) {
+        const item = entity.item;
+        return (
+            <CharacterLibraryFolderRow
+                id={entity.id}
+                name={String(item.name ?? '')}
+                count={Array.isArray(entity.entities) ? entity.entities.length : 0}
+                hiddenCount={entity.hidden ?? 0}
+                iconClass={entity.folderIconClass}
+                color={entity.folderColor}
+                color2={entity.folderColor2}
+                isUseless={Boolean(entity.isUseless)}
+                onOpen={(id) => bridge.onOpenFolder?.(id)}
+            />
+        );
+    }
+
+    return null;
 }
 
 export function CharacterLibraryPanel({ bridge, state }: { bridge: CharacterLibraryPanelBridge; state: CharacterLibraryPanelState; }) {
@@ -55,6 +145,8 @@ export function CharacterLibraryPanel({ bridge, state }: { bridge: CharacterLibr
     }, [state.scrollElement]);
 
     const estimatedRowHeight = state.estimatedRowHeight ?? 112;
+    const bulkMode = Boolean(state.bulkMode);
+    const selectedCharacterIds = state.selectedCharacterIds ?? [];
     const virtualizer = useVirtualizer({
         count: state.pageEntities.length,
         getScrollElement: () => scrollElementRef.current,
@@ -65,20 +157,22 @@ export function CharacterLibraryPanel({ bridge, state }: { bridge: CharacterLibr
     const virtualItems = virtualizer.getVirtualItems();
     const totalSize = virtualizer.getTotalSize();
     const showVirtualRows = !state.renderPlan.showEmptyBlock;
-    const hiddenBlockFactory = useMemo(() => {
-        return () => bridge.createHiddenElement?.(state.renderPlan.hiddenCount) ?? null;
-    }, [bridge, state.renderPlan.hiddenCount]);
-    const emptyBlockFactory = useMemo(() => {
-        return () => bridge.createEmptyElement?.() ?? null;
-    }, [bridge]);
-    const backBlockFactory = useMemo(() => {
-        return () => bridge.createBackBlockElement?.() ?? null;
-    }, [bridge]);
 
     return (
         <>
-            {state.renderPlan.includeBackBlock ? <LegacyElementHost factory={backBlockFactory} /> : null}
-            {state.renderPlan.showEmptyBlock ? <LegacyElementHost factory={emptyBlockFactory} /> : null}
+            {state.renderPlan.includeBackBlock
+                ? <CharacterLibraryBackBlock onBack={() => bridge.onBackFolder?.()} />
+                : null}
+            {state.renderPlan.showEmptyBlock
+                ? (
+                    <CharacterLibraryEmptyBlock
+                        text={state.renderPlan.emptyText ?? 'No items'}
+                        message={state.renderPlan.emptyMessage ?? 'There are no items to display.'}
+                        showClearFilters={state.renderPlan.showClearFilters}
+                        onClearFilters={() => bridge.onClearFilters?.()}
+                    />
+                )
+                : null}
             {showVirtualRows ? (
                 <div
                     className="character-library-react-panel"
@@ -101,16 +195,21 @@ export function CharacterLibraryPanel({ bridge, state }: { bridge: CharacterLibr
                                     transform: `translateY(${item.start}px)`,
                                 }}
                             >
-                                <LegacyEntityRow
+                                <EntityRow
                                     bridge={bridge}
                                     entity={entity}
+                                    bulkMode={bulkMode}
+                                    selectedCharacterIds={selectedCharacterIds}
+                                    activeCharacterId={state.activeCharacterId}
                                 />
                             </div>
                         );
                     })}
                 </div>
             ) : null}
-            {state.renderPlan.showHiddenBlock ? <LegacyElementHost factory={hiddenBlockFactory} /> : null}
+            {state.renderPlan.showHiddenBlock
+                ? <CharacterLibraryHiddenBlock hiddenCount={state.renderPlan.hiddenCount} />
+                : null}
         </>
     );
 }

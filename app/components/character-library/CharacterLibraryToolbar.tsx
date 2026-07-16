@@ -6,7 +6,7 @@ import {
     getCharacterLibraryBulkSelectionShortText,
     type CharacterLibraryToolbarState,
 } from '@/lib/character-library-helpers';
-import { LegacyElementHost } from './LegacyElementHost';
+import { HostedDomSlot } from './HostedDomSlot';
 
 export interface CharacterLibraryToolbarBridge {
     clickLegacyAction(actionId: string): void;
@@ -72,7 +72,7 @@ export function CharacterLibraryToolbar({
                     <ToolbarActionButton label="File" title="Import Character from File" onClick={() => bridge.clickLegacyAction('character_import_button')} />
                     <ToolbarActionButton label="URL" title="Import content from external URL" onClick={() => bridge.clickLegacyAction('external_import_button')} />
                     <ToolbarActionButton label="Group" title="Create New Chat Group" onClick={() => bridge.clickLegacyAction('rm_button_group_chats')} />
-                    <LegacyElementHost factory={() => state.extensionButtonsElement} />
+                    <HostedDomSlot factory={() => state.extensionButtonsElement} />
                 </div>
                 <div className="flex-container flexnowrap gap8 alignItemsCenter">
                     <ToolbarActionButton label={state.isGrid ? 'List' : 'Grid'} title="Toggle character grid view" onClick={() => bridge.toggleGrid()} />
@@ -142,7 +142,7 @@ export function CharacterLibraryToolbar({
                     </toolbarForm.Field>
                 </div>
             </div>
-            <LegacyElementHost factory={() => state.tagControlsElement} />
+            <HostedDomSlot factory={() => state.tagControlsElement} />
         </div>
     );
 }

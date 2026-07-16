@@ -202,11 +202,11 @@ describe('character list structure', () => {
         expect(printCharactersSource).toContain('await renderCharacterListPage(data, { fullRefresh: useFullRefresh });');
         expect(renderCharacterListPageSource).toContain('createCharacterListPageRenderPlan({');
         expect(scriptSource).toContain('createCharacterListPageReconcilePlan');
-        expect(scriptSource).toContain('applyCharacterListPageRenderPlan({');
         expect(scriptSource).toContain('let currentCharacterListPageEntities = [];');
-        expect(scriptSource).toMatch(/if \(fullRefresh \|\| reconcilePlan\.mode !== 'incremental'\) \{\s+await renderCharacterListPageFull\(renderPlan\);/);
-        expect(scriptSource).toMatch(/if \(renderPlan\.showEmptyBlock\) \{\s+desiredElements\.push\(\(await getEmptyBlock\(\)\)\[0\]\);/);
-        expect(scriptSource).toMatch(/desiredElements\.push\(\(await getHiddenBlock\(renderPlan\.hiddenCount\)\)\[0\]\);/);
+        expect(renderCharacterListPageSource).toContain('renderCharacterListPageReact');
+        expect(scriptSource).toContain('Character list container #rm_print_characters_block is missing.');
+        expect(scriptSource).toContain('Character Library React build is missing');
+        expect(scriptSource).toContain('Legacy list fallback is retired');
         expect(renderStateSource).toMatch(/const displayCount = pageEntities\.filter\(entity => entity\.type === 'character' \|\| entity\.type === 'group'\)\.length;/);
         expect(renderStateSource).toMatch(/const hiddenCount = \(totalCharacters \+ totalGroups\) - displayCount;/);
         expect(scriptSource).toMatch(/const hasActiveCharacterListFilter = entitiesFilter\.hasAnyFilter\(\);/);

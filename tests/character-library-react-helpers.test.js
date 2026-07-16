@@ -9,7 +9,7 @@ import {
     hasCharacterLibraryPayloadChanged,
     parseCharacterLibraryFetchResponse,
     projectCharacterLibraryQueryAgainstDeletedAvatars,
-} from '../public/scripts/character-library-react-sync.js';
+} from '../public/scripts/character-library-query-helpers.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,7 +20,7 @@ function read(relativePath) {
 }
 
 describe('character library React panel scaffold', () => {
-    test('ships a standalone React panel bundle with virtualized legacy rows', () => {
+    test('ships a standalone React panel bundle with virtualized React-owned rows', () => {
         const packageSource = read('package.json');
         const viteSource = read('vite.config.ts');
         const panelEntrySource = read('app/character-library-panel.tsx');
@@ -67,7 +67,8 @@ describe('character library React panel scaffold', () => {
 
         expect(panelSource).toContain('const showVirtualRows = !state.renderPlan.showEmptyBlock;');
         expect(panelSource).not.toContain('const showVirtualRows = !state.renderPlan.includeBackBlock && !state.renderPlan.showEmptyBlock;');
-        expect(panelSource).toContain('{state.renderPlan.includeBackBlock ? <LegacyElementHost factory={backBlockFactory} /> : null}');
+        expect(panelSource).toContain('CharacterLibraryBackBlock');
+        expect(panelSource).toContain('CharacterLibraryCharacterRow');
         expect(panelSource).toContain('const entity = state.pageEntities[item.index];');
     });
 

@@ -1,9 +1,8 @@
-import { isReactWorkspacePanelEnabled } from './react-feature-flags.js';
-
 /**
- * Whether the React character-library workspace panel is enabled.
+ * Character Library is React sole-owner.
+ * Kept as a stable import surface for any residual callers.
  * @returns {boolean}
  */
 export function isReactCharacterLibraryEnabled() {
-    return isReactWorkspacePanelEnabled('characterLibrary');
+    return true;
 }

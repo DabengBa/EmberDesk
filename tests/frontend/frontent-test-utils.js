@@ -25,7 +25,59 @@ async function pageFetchJson(page, url, init = {}) {
     }, { targetUrl: url, requestInit: init });
 }
 
+function isAppShellPath(pathname) {
+    return pathname !== '/login' && pathname !== '/setup';
+}
+
+async function isOnAppOrigin(page) {
+    try {
+        const currentUrl = page.url();
+        if (!currentUrl || currentUrl === 'about:blank') {
+            return false;
+        }
+        const current = new URL(currentUrl);
+        const base = new URL(BASE_URL);
+        return current.origin === base.origin && isAppShellPath(current.pathname);
+    } catch {
+        return false;
+    }
+}
+
+async function isAppReady(page) {
+    try {
+        return await page.evaluate(() => Boolean(
+            window.SillyTavern?.getContext
+            && document.getElementById('preloader') === null
+        ));
+    } catch {
+        return false;
+    }
+}
+
+async function waitForAppReady(page) {
+    await page.waitForFunction(
+        'window.SillyTavern?.getContext && document.getElementById("preloader") === null',
+        { timeout: 120_000 },
+    );
+}
+
 async function ensureSession(page) {
+    // Prefer waiting out an in-flight same-origin boot (e.g. after page.reload)
+    // instead of issuing another full document load. A second navigation aborts
+    // the unbundled module waterfall and can trip Chromium
+    // net::ERR_INSUFFICIENT_RESOURCES under React panel assets + authoring panels.
+    if (await isOnAppOrigin(page)) {
+        if (await isAppReady(page)) {
+            return;
+        }
+        try {
+            await waitForAppReady(page);
+            return;
+        } catch {
+            // Fall through to full bootstrap when the in-flight page never becomes ready.
+        }
+    }
+
     await page.goto(BASE_URL);
 
     const setupModeResponse = await pageFetchJson(page, '/api/users/setup-mode');
@@ -139,7 +191,7 @@ async function ensureSession(page) {
     if (path === '/login' || path === '/setup') {
         throw new Error(`E2E authentication did not reach the app shell; current path is ${path}`);
     }
-    await page.waitForFunction('window.SillyTavern?.getContext && document.getElementById("preloader") === null', { timeout: 120_000 });
+    await waitForAppReady(page);
 }
 
 export const testSetup = {

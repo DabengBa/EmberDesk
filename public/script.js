@@ -355,7 +355,7 @@ import {
     hasCharacterLibraryPayloadChanged,
     parseCharacterLibraryFetchResponse,
     projectCharacterLibraryQueryAgainstDeletedAvatars,
-} from './scripts/character-library-react-sync.js';
+} from './scripts/character-library-query-helpers.js';
 import { mountReactWorkspaceShellChrome } from './scripts/workspace-panels-react-bridge.js';
 import {
     WORKSPACE_SHELL_TAKEOVER_STATUSES,
@@ -422,7 +422,8 @@ registerWorldInfoShellContext({
 });
 
 export function isReactCharacterLibraryPanelEnabled() {
-    return Boolean(getWorkspaceReactFeatures()?.reactPanels?.characterLibrary);
+    // Character Library is React sole-owner; feature flag is retired.
+    return true;
 }
 
 const WORLD_INFO_REACT_HOST_ID = 'emberdesk-react-world-info-panel-host';
@@ -2896,7 +2897,50 @@ function showLegacyCharacterLibraryToolbarChrome() {
 
 function getReactCharacterLibraryPanelBridge() {
     return globalThis.__emberDeskCharacterLibraryPanelBridge ??= {
+        onSelectCharacter(id) {
+            void selectCharacterById(Number(id));
+        },
+        onSelectGroup(id) {
+            const groupEl = document.querySelector(`.group_select[data-grid="${CSS.escape(String(id))}"]`);
+            if (groupEl instanceof HTMLElement) {
+                groupEl.click();
+                return;
+            }
+            // Fallback: trigger open via group-chats click path using synthetic data-grid node.
+            const temp = document.createElement('div');
+            temp.className = 'group_select';
+            temp.setAttribute('data-grid', String(id));
+            document.getElementById('rm_print_characters_block')?.appendChild(temp);
+            temp.click();
+            temp.remove();
+        },
+        onOpenFolder(id) {
+            const folderEl = document.querySelector(`.bogus_folder_select[tagid="${CSS.escape(String(id))}"]`);
+            if (folderEl instanceof HTMLElement) {
+                folderEl.click();
+            }
+        },
+        onBackFolder() {
+            document.getElementById('BogusFolderBack')?.click();
+        },
+        onClearFilters() {
+            $('#character_search_bar').val('').trigger('input');
+            $('.rm_tag_filter .clearAllFilters').trigger('click');
+        },
+        onBulkToggleCharacter(id, checked) {
+            const row = document.getElementById(`CharID${id}`) || document.querySelector(`.character_select[data-chid="${CSS.escape(String(id))}"]`);
+            if (!(row instanceof HTMLElement) || !characterGroupOverlay) {
+                return;
+            }
+            const isSelected = characterGroupOverlay.selectedCharacters?.some?.(value => String(value) === String(id))
+                || row.classList.contains('character_selected');
+            if (Boolean(checked) !== Boolean(isSelected)) {
+                characterGroupOverlay.toggleSingleCharacter(row);
+            }
+            void syncReactCharacterLibraryToolbarState();
+        },
         createEntityElement(entity) {
+            // Compatibility shim only; React panel prefers native row components.
             switch (entity?.type) {
                 case 'character':
                     return getCharacterBlock(entity.item, entity.id)[0] ?? null;
@@ -2974,14 +3018,82 @@ async function loadReactCharacterLibraryPanelModule() {
     return reactCharacterLibraryPanelModulePromise;
 }
 
+function enrichCharacterLibraryPageEntities(pageEntities) {
+    return (Array.isArray(pageEntities) ? pageEntities : []).map(entity => {
+        if (entity?.type === 'group' && entity.item) {
+            const members = Array.isArray(entity.item.members) ? entity.item.members : [];
+            const memberNames = [];
+            for (const member of members) {
+                const character = characters.find(x => x.avatar === member || x.name === member);
+                if (character?.name) {
+                    memberNames.push(character.name);
+                }
+            }
+            return {
+                ...entity,
+                memberNames,
+                memberCount: memberNames.length,
+                avatarHtml: null,
+            };
+        }
+        if (entity?.type === 'tag' && entity.item) {
+            const folderType = entity.item.folder_type;
+            return {
+                ...entity,
+                folderIconClass: folderType ? undefined : 'fa-folder',
+                folderColor: entity.item.color,
+                folderColor2: entity.item.color2,
+            };
+        }
+        if (entity?.type === 'character' && entity.item) {
+            const item = entity.item;
+            let avatarUrl = default_avatar;
+            if (item.avatar && item.avatar !== 'none') {
+                try {
+                    avatarUrl = getThumbnailUrl('avatar', item.avatar);
+                } catch {
+                    avatarUrl = item.avatar;
+                }
+            }
+            return {
+                ...entity,
+                item: {
+                    ...item,
+                    avatarUrl,
+                },
+            };
+        }
+        return entity;
+    });
+}
+
 function createCharacterLibraryPanelStateSnapshot({ listElement, pageEntities, renderPlan, currentPage, pageSize }) {
+    const bulkMode = $('#rm_print_characters_block').hasClass('bulk_select');
+    const selectedCharacterIds = Array.isArray(characterGroupOverlay?.selectedCharacters)
+        ? characterGroupOverlay.selectedCharacters.slice()
+        : [];
     return {
         currentPage,
         pageSize,
-        pageEntities,
-        renderPlan,
+        pageEntities: enrichCharacterLibraryPageEntities(pageEntities),
+        renderPlan: {
+            ...renderPlan,
+            emptyText: renderPlan.showEmptyBlock ? ((entitiesFilter?.hasAnyFilter?.() ? 'No matching characters' : 'Here be dragons')) : undefined,
+            emptyMessage: renderPlan.showEmptyBlock
+                ? (entitiesFilter?.hasAnyFilter?.()
+                    ? (entitiesFilter.getFilterData?.(FILTER_TYPES.SEARCH)
+                        ? 'Clear search or filters to show the full list.'
+                        : 'Clear filters to show the full list.')
+                    : 'There are no items to display.')
+                : undefined,
+            showClearFilters: Boolean(renderPlan.showEmptyBlock && entitiesFilter?.hasAnyFilter?.()),
+        },
         estimatedRowHeight: power_user.charListGrid ? 224 : 112,
         scrollElement: listElement,
+        bulkMode,
+        selectedCharacterIds,
+        activeCharacterId: this_chid,
+        activeGroupId: selected_group,
     };
 }
 
@@ -2999,10 +3111,6 @@ function createCharacterLibraryToolbarStateSnapshot() {
 }
 
 async function mountReactCharacterLibraryPanel(state) {
-    if (!isReactCharacterLibraryPanelEnabled()) {
-        return false;
-    }
-
     const listElement = state.scrollElement;
     if (!listElement) {
         return false;
@@ -3022,21 +3130,20 @@ async function mountReactCharacterLibraryPanel(state) {
         panelModule.updateCharacterLibraryPanel(state);
         return true;
     } catch (error) {
-        console.warn('React character library panel failed to load. Falling back to legacy render path.', error);
+        console.error('React character library panel failed to load. Legacy list fallback is retired.', error);
         reactCharacterLibraryPanelMounted = false;
+        listElement.replaceChildren();
+        const errorBlock = document.createElement('div');
+        errorBlock.className = 'character_list_empty empty_block';
+        errorBlock.textContent = 'Character Library React build is missing. Run bun run build:react:character-library.';
+        listElement.appendChild(errorBlock);
         return false;
     }
 }
 
 async function mountReactCharacterLibraryToolbar(state = createCharacterLibraryToolbarStateSnapshot()) {
-    if (!isReactCharacterLibraryPanelEnabled()) {
-        showLegacyCharacterLibraryToolbarChrome();
-        return false;
-    }
-
     const host = ensureReactCharacterLibraryToolbarHost();
     if (!host) {
-        showLegacyCharacterLibraryToolbarChrome();
         return false;
     }
 
@@ -3054,19 +3161,50 @@ async function mountReactCharacterLibraryToolbar(state = createCharacterLibraryT
         panelModule.updateCharacterLibraryToolbar(state);
         return true;
     } catch (error) {
-        showLegacyCharacterLibraryToolbarChrome();
-        console.warn('React character library toolbar failed to load. Falling back to legacy toolbar path.', error);
+        console.error('React character library toolbar failed to load. Legacy toolbar fallback is retired.', error);
         reactCharacterLibraryToolbarMounted = false;
         return false;
     }
 }
 
 export async function syncReactCharacterLibraryToolbarState() {
-    if (!reactCharacterLibraryToolbarMounted) {
-        return false;
+    let toolbarOk = false;
+    try {
+        toolbarOk = reactCharacterLibraryToolbarMounted
+            ? await mountReactCharacterLibraryToolbar(createCharacterLibraryToolbarStateSnapshot())
+            : false;
+    } catch (error) {
+        console.warn('React character library toolbar sync failed.', error);
     }
 
-    return mountReactCharacterLibraryToolbar(createCharacterLibraryToolbarStateSnapshot());
+    // Keep React list rows in sync with bulk selection / active character without full printCharacters.
+    if (reactCharacterLibraryPanelMounted) {
+        const listElement = document.getElementById('rm_print_characters_block');
+        if (listElement) {
+            try {
+                const pageEntities = Array.isArray(currentCharacterListPageEntities)
+                    ? currentCharacterListPageEntities
+                    : [];
+                await mountReactCharacterLibraryPanel(createCharacterLibraryPanelStateSnapshot({
+                    listElement,
+                    pageEntities,
+                    renderPlan: createCharacterListPageRenderPlan({
+                        pageEntities,
+                        includeBackBlock: Boolean(power_user?.bogus_folders && typeof isBogusFolderOpen === 'function' && isBogusFolderOpen()),
+                        totalCharacters: Array.isArray(characters) ? characters.length : 0,
+                        totalGroups: Array.isArray(groups) ? groups.length : 0,
+                        hasActiveFilter: Boolean(entitiesFilter?.hasAnyFilter?.()),
+                    }),
+                    currentPage: getCharacterListCurrentPage(),
+                    pageSize: getCharacterListCurrentPageSize(),
+                }));
+            } catch (error) {
+                console.warn('React character library panel sync failed.', error);
+            }
+        }
+    }
+
+    return toolbarOk;
 }
 
 async function renderCharacterListPageReact(state) {
@@ -4247,41 +4385,25 @@ async function renderCharacterListPage(data, { fullRefresh = false } = {}) {
         hasActiveFilter: entitiesFilter.hasAnyFilter(),
     });
 
-    if (listElement) {
-        const reactPanelRendered = await renderCharacterListPageReact(createCharacterLibraryPanelStateSnapshot({
-            listElement,
-            pageEntities: data,
-            renderPlan,
-            currentPage: getCharacterListCurrentPage(),
-            pageSize: getCharacterListCurrentPageSize(),
-        }));
-        if (reactPanelRendered) {
-            currentCharacterListPageEntities = data;
-            localizePagination($('#rm_print_characters_pagination'));
-            await eventSource.emit(event_types.CHARACTER_PAGE_LOADED);
-            return;
-        }
+    if (!listElement) {
+        console.error('Character list container #rm_print_characters_block is missing.');
+        return;
     }
 
-    if (!listElement) {
-        await renderCharacterListPageFull(renderPlan);
-    } else if (fullRefresh || reconcilePlan.mode !== 'incremental') {
-        await renderCharacterListPageFull(renderPlan);
-    } else {
-        const reconciled = await applyCharacterListPageRenderPlan({
-            listElement,
-            renderPlan: reconcilePlan.renderPlan,
-            beforePageEntities: currentCharacterListPageEntities,
-        });
-        if (!reconciled) {
-            await renderCharacterListPageFull(renderPlan);
-        }
-    }
+    void fullRefresh;
+    void reconcilePlan;
+
+    await renderCharacterListPageReact(createCharacterLibraryPanelStateSnapshot({
+        listElement,
+        pageEntities: data,
+        renderPlan,
+        currentPage: getCharacterListCurrentPage(),
+        pageSize: getCharacterListCurrentPageSize(),
+    }));
 
     currentCharacterListPageEntities = data;
     localizePagination($('#rm_print_characters_pagination'));
-
-    eventSource.emit(event_types.CHARACTER_PAGE_LOADED);
+    await eventSource.emit(event_types.CHARACTER_PAGE_LOADED);
 }
 
 function getCharacterListCurrentPage() {

@@ -19,7 +19,7 @@ Let users browse, search, filter, sort, bulk-select, and choose [character cards
 
 - Protected row selectors and identity attributes are gated by the `selectors` contract family in `tests/helpers/frontend-compatibility-contract.js` before legacy list-owner deletion.
 
-- The character-library entry point stays inside [Chat Workspace](page.chat_workspace); the guarded React panel is the normal visible owner for list/search/sort/bulk browsing state, with the legacy panel retained only as a documented flag-off or bundle-failure fallback.
+- The character-library entry point stays inside [Chat Workspace](page.chat_workspace); the guarded React panel is the normal visible owner for list/search/sort/bulk browsing state, as the sole runtime owner. Bundle-missing fails closed with a visible error; rollback is a previous application version deploy.
 - When the same-entry React shell is enabled, its Character Library entry owns the transient dock/active-panel state and reports mounted or fallback status while the character-library panel remains the owner of browsing, row identity, selection, and bulk state.
 - Opening an existing character from the library keeps the established workspace selection behavior, but the normal visible owner for create/edit authoring inside the right drawer is now the guarded React Character Authoring panel; the legacy form remains only as the hidden compatibility host or rollback fallback.
 - When the Character Management lock is enabled, the character-library panel remains open while users open supporting drawers such as World Info; when it is not locked, opening another drawer may close it to keep the workspace uncluttered.
@@ -33,7 +33,7 @@ Let users browse, search, filter, sort, bulk-select, and choose [character cards
 
 ## Approved Retirement Direction
 
-The React library is a second-wave retirement foundation, not yet a deletion claim. Completion keeps the same row identities, tags, bulk behavior, dialogs, selection outcome, and supported extension selectors while removing the legacy panel, toolbar, hidden compatibility host, and runtime fallback.
+The React library is the sole runtime owner for browsing, filters, tags, bulk, selection, and compatible row identity. Extension-facing selectors are produced by React-owned rows; previous-version deploy is the rollback path.
 
 ## Semantic Interaction IDs
 

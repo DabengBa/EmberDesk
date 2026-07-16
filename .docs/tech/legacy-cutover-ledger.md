@@ -36,7 +36,7 @@ This document is not a user-facing feature guide. End-user UI should continue to
 |---|---|---|---|
 | Login | `retired` | React is the sole runtime owner for `/login`; `/login.html` redirects only | complete; missing build fails closed |
 | Setup | `retired` | React is the sole runtime owner for `/setup`; `/setup.html` redirects only | complete; missing build fails closed |
-| Character Library | `foundation` | React owns visible list state, but protected selectors, tags, dialogs, and compatibility projection remain legacy-coupled | React-owned row/tag/bulk/save contracts with compatible extension selectors |
+| Character Library | `retired` | React is sole list/row owner; protected selectors come from React DOM; no flag/legacy list fallback | complete |
 | Character and Group Authoring | `foundation` | React forms exist, but save completion currently waits for legacy write behavior | React command/service owner with create/edit/delete parity |
 | Settings | `foundation` | React route owns only a coverage ledger slice | complete settings coverage and remove workspace-drawer fallback |
 | World Info | `foundation` | React workbench is visible owner, but action/prompt/regex/import/delete kernels remain in `world-info.js` | React-owned behavior services plus World Info and regex compatibility proof |
@@ -65,7 +65,7 @@ This document is not a user-facing feature guide. End-user UI should continue to
 
 | entry | verdict | current owner | rollback owner | evidence gate | blocking reason | durable doc owner | last reviewed |
 |---|---|---|---|---|---|---|---|
-| Same-entry Character Library visible toolbar/list/search/sort/bulk path | `compatibility-facade` | React character-library panel path as the normal visible owner | same-entry legacy Character Library path for flag-off, build-missing, or rollback | `bun run test:compat`; `bun run --cwd tests test:unit -- character-list-structure.test.js react-workspace-panels-helpers.test.js --runInBand`; `bun run --cwd tests test:e2e -- workspace-shell-panel-navigation.e2e.js --workers=1` |  | `.docs/db/pages/chat-workspace.md`; `.docs/adr/0007-react-page-islands-with-legacy-fallbacks.md`; `.docs/tech/react-modernization-roadmap.md` | 2026-07-07 |
+| Same-entry Character Library visible toolbar/list/search/sort/bulk path | `retired` | React character-library panel is the sole list/row owner | previous application version deploy (no in-process legacy list fallback) | `bun run test:compat`; `bun run --cwd tests test:unit -- character-list-structure.test.js character-library-react-panel-flag.test.js --runInBand`; `bun run --cwd tests test:e2e -- welcome-screen-character-management.e2e.js --workers=1` |  | `.docs/db/features/character-library-panel.md`; `.docs/db/pages/chat-workspace.md`; `.docs/adr/0012-react-migrated-surface-legacy-retirement.md` | 2026-07-16 |
 
 ## World Info
 

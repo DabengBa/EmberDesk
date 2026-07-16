@@ -1,6 +1,6 @@
 # ADR-0007: Use React page and panel islands with legacy fallbacks for early migration
 
-Status: accepted
+Status: superseded in part by ADR-0012
 
 EmberDesk's main workspace still exposes jQuery-era compatibility surfaces for extensions, slash commands, shared globals, and file-backed settings flows, while early React migration now needs both lower-risk standalone routes and the first workspace-side panel slice. The decision is to ship `/login`, `/setup`, and `/settings` as feature-flagged React page islands, and to ship early workspace slices such as the character library as guarded React panel islands behind the existing workspace entry points, reusing the shared React build and keeping `/login.html`, `/setup.html`, legacy `/` workspace behavior, and legacy panel fallbacks until each surface is safe to retire.
 
@@ -102,3 +102,9 @@ Consequences:
 - Same-entry React shell and panel entries own visible active/toggle/status coordination only where their proofs cover that surface. Drawer contents, protected extension mount points, row families, transport families, public globals, event contracts, and `@sillytavern/*` aliases remain with their documented facade or freeze-supported owners unless a future spec/ADR provides replacement contract, migration evidence, rollback proof, and compatibility validation.
 - `delete`, `freeze-supported`, `compatibility-facade`, and `blocked` are maintainer-facing governance verdicts. They must stay in ADR/tech/semantic docs and diagnostics as appropriate; end-user workspace UI continues to show only task-relevant active, ready, loading, empty, error, or local validation feedback.
 - Future work that reopens any ledger surface must start from the ledger verdict and this ADR update. It must not treat retained legacy surfaces as ambiguous debt or remove public compatibility contracts as incidental cleanup.
+
+2026-07-16 supersession update:
+
+- ADR-0012 replaces this ADR's destination-state policy for surfaces that have already migrated to React. The current guarded-island and fallback details remain an accurate historical baseline until each surface is actually retired, but they are no longer the intended final runtime architecture.
+- The successor program requires React to become the sole runtime owner, deletes same-version legacy fallback paths after behavior parity is proven, and preserves supported extension and automation behavior through replacement contracts rather than retained jQuery implementations.
+- This ADR still records why the early staged migration used guarded islands and same-entry routes. It does not authorize a separate `/workspace-next` route or a broad SPA rewrite.
