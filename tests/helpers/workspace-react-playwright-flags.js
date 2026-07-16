@@ -4,7 +4,6 @@ export const workspaceShellFlagEnvKeys = [
 ];
 
 export const workspacePanelFlagEnvKeys = [
-    'EMBERDESK_FEATURES_REACT_PANELS_CHARACTERLIBRARY',
     'EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST',
     'EMBERDESK_FEATURES_REACT_PANELS_WORLDINFO',
     'EMBERDESK_FEATURES_REACT_PANELS_BACKGROUNDLIBRARY',
@@ -58,17 +57,15 @@ export function applyWorkspaceReactPlaywrightFlagDefaults(env = process.env, arg
     const shellProofEnabled = shouldEnableWorkspaceShellProofFlags(argv);
     const authoringProofEnabled = shouldEnableAuthoringProofFlags(argv);
 
+    // Authoring panels are sole-owner; always enable for e2e bootstrap compatibility.
+    env.EMBERDESK_FEATURES_REACT_PANELS_CHARACTERAUTHORING = 'true';
+    env.EMBERDESK_FEATURES_REACT_PANELS_GROUPAUTHORING = 'true';
+
     if (shellProofEnabled) {
         env.EMBERDESK_FEATURES_REACT_SHELL_TAKEOVER ??= 'true';
-        env.EMBERDESK_FEATURES_REACT_PANELS_CHARACTERLIBRARY ??= 'true';
         env.EMBERDESK_FEATURES_REACT_PANELS_WORLDINFO ??= 'true';
         env.EMBERDESK_FEATURES_REACT_PANELS_BACKGROUNDLIBRARY ??= 'true';
         env.EMBERDESK_FEATURES_REACT_PANELS_EXTENSIONSHOST ??= 'true';
-    }
-
-    if (authoringProofEnabled) {
-        env.EMBERDESK_FEATURES_REACT_PANELS_CHARACTERAUTHORING ??= 'true';
-        env.EMBERDESK_FEATURES_REACT_PANELS_GROUPAUTHORING ??= 'true';
     }
 
     return {
@@ -77,13 +74,13 @@ export function applyWorkspaceReactPlaywrightFlagDefaults(env = process.env, arg
     };
 }
 
-export function shouldBuildCharacterLibraryPanel(env = process.env) {
-    return env.EMBERDESK_FEATURES_REACT_PANELS_CHARACTERLIBRARY === 'true';
+export function shouldBuildCharacterLibraryPanel() {
+    return true;
 }
 
 export function shouldBuildWorkspacePanels(env = process.env) {
-    return workspaceShellFlagEnvKeys.some(envKey => env[envKey] === 'true')
-        || workspacePanelFlagEnvKeys.some(envKey => env[envKey] === 'true');
+    // Character/Group Authoring are sole-owner React surfaces; workspace-panels bundle is required.
+    return true;
 }
 
 export function hasEnabledWorkspaceReactPlaywrightFlag(env = process.env) {

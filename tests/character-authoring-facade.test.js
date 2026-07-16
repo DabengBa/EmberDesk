@@ -1,10 +1,13 @@
 import {
     applyCharacterAuthoringDraftToCreateState,
+    buildCharacterAuthoringFormData,
     createCharacterAuthoringDraft,
     createCharacterAuthoringDraftFromCreateState,
     createCharacterAuthoringSession,
     createCharacterAuthoringSaveModel,
     getCharacterAuthoringDirtyFields,
+    getCharacterAuthoringWriteUrl,
+    shouldApplyCharacterAuthoringSaveResult,
     validateCharacterAuthoringDraft,
 } from '../public/scripts/character-authoring.js';
 
@@ -266,7 +269,7 @@ describe('character authoring facade', () => {
             depthPrompt: {
                 prompt: 'Keep it procedural',
                 depth: 5,
-                role: null,
+                role: 'system',
             },
         });
         expect(draft.unsupportedFields).toEqual(['data.extensions.third_party_blob']);
@@ -286,7 +289,7 @@ describe('character authoring facade', () => {
             alternate_greetings: ['Hello again.', 'Docking complete.'],
             depth_prompt_prompt: 'Keep it procedural',
             depth_prompt_depth: 5,
-            depth_prompt_role: null,
+            depth_prompt_role: 'system',
             extensions: {
                 third_party_blob: {
                     keep: true,
@@ -295,9 +298,74 @@ describe('character authoring facade', () => {
                 depth_prompt: {
                     prompt: 'Keep it procedural',
                     depth: 5,
-                    role: null,
+                    role: 'system',
                 },
             },
         });
     });
 });
+
+
+    test('builds multipart write payload and endpoint without DOM write-through', () => {
+        const saveModel = createCharacterAuthoringSaveModel({
+            name: 'Mira',
+            description: 'Field medic',
+            firstMessage: 'Stay with me.',
+            tags: ['medic'],
+            favorite: true,
+            alternateGreetings: ['Move.', 'Hold still.'],
+            characterWorld: 'Colony Lore',
+            depthPrompt: { prompt: 'Stay tense', depth: 3, role: 'system' },
+        });
+
+        const formData = buildCharacterAuthoringFormData(saveModel, {
+            mode: 'edit',
+            existingAvatar: 'Mira.png',
+            chat: 'Mira - chat',
+            createDate: '2026-01-01T00:00:00.000Z',
+        });
+
+        expect(formData.get('ch_name')).toBe('Mira');
+        expect(formData.get('first_mes')).toBe('Stay with me.');
+        expect(formData.get('avatar_url')).toBe('Mira.png');
+        expect(formData.get('fav')).toBe('true');
+        expect(formData.get('world')).toBe('Colony Lore');
+        expect(formData.getAll('alternate_greetings')).toEqual(['Move.', 'Hold still.']);
+        expect(JSON.parse(String(formData.get('extensions')))).toMatchObject({
+            world: 'Colony Lore',
+            depth_prompt: { prompt: 'Stay tense', depth: 3, role: 'system' },
+        });
+        expect(getCharacterAuthoringWriteUrl('create')).toBe('/api/characters/create');
+        expect(getCharacterAuthoringWriteUrl('edit')).toBe('/api/characters/edit');
+    });
+
+
+    test('ignores late save results after cancel, delete, or newer generation', () => {
+        expect(shouldApplyCharacterAuthoringSaveResult({
+            generation: 1,
+            activeGeneration: 1,
+            ok: true,
+        })).toBe(true);
+        expect(shouldApplyCharacterAuthoringSaveResult({
+            generation: 1,
+            activeGeneration: 2,
+            ok: true,
+        })).toBe(false);
+        expect(shouldApplyCharacterAuthoringSaveResult({
+            generation: 3,
+            activeGeneration: 3,
+            cancelled: true,
+            ok: true,
+        })).toBe(false);
+        expect(shouldApplyCharacterAuthoringSaveResult({
+            generation: 3,
+            activeGeneration: 3,
+            deleted: true,
+            ok: true,
+        })).toBe(false);
+        expect(shouldApplyCharacterAuthoringSaveResult({
+            generation: 3,
+            activeGeneration: 3,
+            ok: false,
+        })).toBe(false);
+    });

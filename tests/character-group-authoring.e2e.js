@@ -43,7 +43,23 @@ async function memberNameAt(memberRows, index) {
     return text.replace(/^\d+\.\s*/, '');
 }
 
+async function waitForSelectedCharacter(page, name) {
+    await expect.poll(async () => page.evaluate((characterName) => {
+        const context = window.SillyTavern.getContext();
+        return context.characters[context.characterId]?.name === characterName;
+    }, name)).toBe(true);
+}
+
+async function waitForSelectedGroup(page, groupId) {
+    await expect.poll(async () => page.evaluate((expectedGroupId) => {
+        const context = window.SillyTavern.getContext();
+        return String(context.groupId) === expectedGroupId;
+    }, String(groupId))).toBe(true);
+}
+
 test.describe('character and group authoring', () => {
+    test.setTimeout(90_000);
+
     test('create-mode authoring hides destructive delete actions', async ({ page }) => {
         await testSetup.awaitST({ page });
 
@@ -68,9 +84,12 @@ test.describe('character and group authoring', () => {
 
         await openCharacterLibrary(page);
 
-        const firstCharacter = page.locator('#rm_print_characters_block .character_select[data-chid]').first();
+        const firstCharacter = page.locator('#rm_print_characters_block .character_select[data-chid]')
+            .filter({ hasText: 'Dev Character 004' })
+            .first();
         const originalName = (await firstCharacter.locator('.ch_name').textContent())?.trim() || 'Dev Character 001';
         await firstCharacter.click();
+        await waitForSelectedCharacter(page, originalName);
         await openShellPanel(page, 'Character Authoring');
 
         const authoringPanel = page.locator('[data-react-authoring-owner="characterAuthoring"]');
@@ -83,6 +102,7 @@ test.describe('character and group authoring', () => {
         const descriptionInput = authoringPanel.locator('[data-react-authoring-field="description"] textarea');
         const firstMessageInput = authoringPanel.locator('[data-react-authoring-field="firstMessage"] textarea');
         const statusBadge = authoringPanel.locator('.react-authoring-panel-state');
+        await expect(nameInput).toBeEditable({ timeout: 30_000 });
 
         const originalDescription = await descriptionInput.inputValue();
         const originalFirstMessage = await firstMessageInput.inputValue();
@@ -130,6 +150,7 @@ test.describe('character and group authoring', () => {
         await testSetup.awaitST({ page });
         await openCharacterLibrary(page);
         await page.locator('#rm_print_characters_block .character_select[data-chid]').filter({ hasText: updatedName }).first().click();
+        await waitForSelectedCharacter(page, updatedName);
         await openShellPanel(page, 'Character Authoring');
         const reloadedPanel = page.locator('[data-react-authoring-owner="characterAuthoring"]');
         await expect(reloadedPanel.locator('[data-react-authoring-field="name"] input')).toHaveValue(updatedName, { timeout: 10_000 });
@@ -140,7 +161,11 @@ test.describe('character and group authoring', () => {
         await testSetup.awaitST({ page });
 
         await openGroupSelectionFromCharacterLibrary(page);
-        await page.locator('#rm_print_characters_block .group_select[data-grid]').first().click();
+        const firstGroup = page.locator('#rm_print_characters_block .group_select[data-grid]').first();
+        const groupId = await firstGroup.getAttribute('data-grid');
+        expect(groupId).toBeTruthy();
+        await firstGroup.click();
+        await waitForSelectedGroup(page, groupId);
         await openGroupChats(page);
 
         const authoringPanel = page.locator('[data-react-authoring-owner="groupAuthoring"]');
@@ -160,7 +185,9 @@ test.describe('character and group authoring', () => {
         const firstMemberBefore = await memberNameAt(memberRows, 0);
         const secondMemberBefore = await memberNameAt(memberRows, 1);
 
-        await memberRows.nth(1).getByRole('button', { name: /Move .* up/ }).click();
+        const moveUpButton = memberRows.nth(1).getByRole('button', { name: /Move .* up/ });
+        await expect(moveUpButton).toBeEnabled({ timeout: 30_000 });
+        await moveUpButton.click();
         await expect.poll(async () => memberNameAt(memberRows, 0), { timeout: 5_000 }).toBe(secondMemberBefore);
         await expect.poll(async () => memberNameAt(memberRows, 1), { timeout: 5_000 }).toBe(firstMemberBefore);
 
@@ -172,7 +199,9 @@ test.describe('character and group authoring', () => {
         await page.reload({ waitUntil: 'domcontentloaded' });
         await testSetup.awaitST({ page });
         await openGroupSelectionFromCharacterLibrary(page);
-        await page.locator('#rm_print_characters_block .group_select[data-grid]').filter({ hasText: updatedName }).first().click();
+        const reloadedGroup = page.locator('#rm_print_characters_block .group_select[data-grid]').filter({ hasText: updatedName }).first();
+        await reloadedGroup.click();
+        await waitForSelectedGroup(page, groupId);
         await openGroupChats(page);
 
         const reloadedPanel = page.locator('[data-react-authoring-owner="groupAuthoring"]');

@@ -1,0 +1,4 @@
+contract_version = 1
+feature_slug = "react-character-group-authoring-retirement"
+brief = ".docs/tech/briefs/260716-06-react-character-group-authoring-retirement.md"
+doc_ids = ["feature.group_authoring", "feature.character_library_panel", "page.chat_workspace"]

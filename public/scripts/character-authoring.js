@@ -61,6 +61,24 @@ function normalizeNullableNumber(value) {
     return Number.isFinite(numberValue) ? numberValue : null;
 }
 
+function normalizeDepthPromptRole(value) {
+    if (value == null || value === '') {
+        return null;
+    }
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        return value;
+    }
+    const text = normalizeString(value).trim().toLowerCase();
+    if (!text) {
+        return null;
+    }
+    if (['system', 'user', 'assistant'].includes(text)) {
+        return text;
+    }
+    const numberValue = Number(text);
+    return Number.isFinite(numberValue) ? numberValue : text;
+}
+
 function normalizeDepthPrompt(value) {
     if (!value || typeof value !== 'object') {
         return { ...CHARACTER_FIELD_DEFAULTS.depthPrompt };
@@ -69,7 +87,7 @@ function normalizeDepthPrompt(value) {
     return {
         prompt: normalizeString(value.prompt),
         depth: normalizeNullableNumber(value.depth),
-        role: normalizeNullableNumber(value.role),
+        role: normalizeDepthPromptRole(value.role),
     };
 }
 
@@ -164,15 +182,15 @@ export function createCharacterAuthoringDraftFromCreateState(createState = {}, o
     const createExtensions = createState?.extensions && typeof createState.extensions === 'object'
         ? createState.extensions
         : {};
-    const normalizedDepthPromptRole = typeof createState?.depth_prompt_role === 'number'
-        ? createState.depth_prompt_role
-        : null;
     const depthPrompt = createExtensions.depth_prompt && typeof createExtensions.depth_prompt === 'object'
-        ? createExtensions.depth_prompt
+        ? {
+            ...createExtensions.depth_prompt,
+            role: createExtensions.depth_prompt.role ?? createState?.depth_prompt_role,
+        }
         : {
             prompt: createState?.depth_prompt_prompt,
             depth: createState?.depth_prompt_depth,
-            role: normalizedDepthPromptRole,
+            role: createState?.depth_prompt_role,
         };
 
     return createCharacterAuthoringDraft({
@@ -336,4 +354,109 @@ export function createCharacterAuthoringSession(character = {}, options = {}) {
     }
 
     return createSession(initialDraft);
+}
+
+
+/**
+ * Build multipart form body for /api/characters/create|edit from a save model.
+ * Pure helper: no DOM, no event waits.
+ * @param {ReturnType<typeof createCharacterAuthoringSaveModel>} saveModel
+ * @param {{ mode?: 'create'|'edit', chat?: string, createDate?: string, jsonData?: string, avatarFile?: File|null, existingAvatar?: string }} [meta]
+ * @returns {FormData}
+ */
+export function buildCharacterAuthoringFormData(saveModel, meta = {}) {
+    const fields = saveModel?.fields && typeof saveModel.fields === 'object' ? saveModel.fields : {};
+    const extensions = saveModel?.extensions && typeof saveModel.extensions === 'object' ? saveModel.extensions : {};
+    const depthPrompt = extensions.depth_prompt && typeof extensions.depth_prompt === 'object'
+        ? extensions.depth_prompt
+        : { prompt: '', depth: null, role: null };
+    const formData = new FormData();
+
+    formData.set('ch_name', normalizeString(fields.name));
+    formData.set('description', normalizeString(fields.description));
+    formData.set('personality', normalizeString(fields.personality));
+    formData.set('scenario', normalizeString(fields.scenario));
+    formData.set('first_mes', normalizeString(fields.first_mes));
+    formData.set('mes_example', normalizeString(fields.mes_example));
+    formData.set('creator_notes', normalizeString(fields.creator_notes));
+    formData.set('system_prompt', normalizeString(fields.system_prompt));
+    formData.set('post_history_instructions', normalizeString(fields.post_history_instructions));
+    formData.set('creator', normalizeString(fields.creator));
+    formData.set('character_version', normalizeString(fields.character_version));
+    formData.set('tags', Array.isArray(fields.tags) ? fields.tags.join(', ') : normalizeString(fields.tags));
+    formData.set('talkativeness', fields.talkativeness == null || fields.talkativeness === ''
+        ? ''
+        : String(fields.talkativeness));
+    formData.set('fav', String(Boolean(fields.fav)));
+    formData.set('world', normalizeString(extensions.world));
+    formData.set('depth_prompt_prompt', normalizeString(depthPrompt.prompt));
+    formData.set('depth_prompt_depth', depthPrompt.depth == null ? '' : String(depthPrompt.depth));
+    formData.set('depth_prompt_role', depthPrompt.role == null ? 'system' : String(depthPrompt.role));
+
+    const avatarUrl = normalizeString(meta.existingAvatar || fields.avatar);
+    if (avatarUrl) {
+        formData.set('avatar_url', avatarUrl);
+    }
+    if (meta.chat) {
+        formData.set('chat', normalizeString(meta.chat));
+    }
+    if (meta.createDate) {
+        formData.set('create_date', normalizeString(meta.createDate));
+    }
+    if (meta.jsonData) {
+        formData.set('json_data', normalizeString(meta.jsonData));
+    }
+
+    const greetings = Array.isArray(fields.alternate_greetings) ? fields.alternate_greetings : [];
+    for (const greeting of greetings) {
+        formData.append('alternate_greetings', normalizeString(greeting));
+    }
+
+    // Preserve known ST extensions; never write unsupported extension keys.
+    formData.append('extensions', JSON.stringify({
+        world: normalizeString(extensions.world),
+        depth_prompt: {
+            prompt: normalizeString(depthPrompt.prompt),
+            depth: depthPrompt.depth,
+            role: depthPrompt.role,
+        },
+    }));
+
+    if (meta.avatarFile instanceof File) {
+        formData.set('avatar', meta.avatarFile);
+    }
+
+    return formData;
+}
+
+/**
+ * Resolve create vs edit endpoint for a character authoring save.
+ * @param {'create'|'edit'} mode
+ * @param {string} [cropQuery]
+ */
+export function getCharacterAuthoringWriteUrl(mode, cropQuery) {
+    const base = mode === 'edit' ? '/api/characters/edit' : '/api/characters/create';
+    if (!cropQuery) {
+        return base;
+    }
+    return `${base}?crop=${encodeURIComponent(cropQuery)}`;
+}
+
+
+/**
+ * Decide whether a save response should update the active authoring draft.
+ * Late responses after a newer generation, cancel, or deleted entity must be ignored.
+ * @param {{ generation: number, activeGeneration: number, cancelled?: boolean, deleted?: boolean, ok?: boolean }} input
+ */
+export function shouldApplyCharacterAuthoringSaveResult(input = {}) {
+    if (input.cancelled || input.deleted) {
+        return false;
+    }
+    if (input.ok === false) {
+        return false;
+    }
+    if (!Number.isFinite(input.generation) || !Number.isFinite(input.activeGeneration)) {
+        return false;
+    }
+    return input.generation === input.activeGeneration;
 }

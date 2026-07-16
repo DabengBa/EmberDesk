@@ -32,13 +32,10 @@ beforeAll(() => {
         '      setup: false',
         '      settings: false',
         '    panels:',
-        '      characterLibrary: false',
         '      mainChatMessageList: false',
         '      worldInfo: false',
         '      backgroundLibrary: false',
         '      extensionsHost: false',
-        '      characterAuthoring: false',
-        '      groupAuthoring: false',
         '    shell:',
         '      takeover: false',
         '',
@@ -47,7 +44,6 @@ beforeAll(() => {
 });
 
 afterEach(() => {
-    delete process.env.EMBERDESK_FEATURES_REACT_PANELS_CHARACTERLIBRARY;
     delete process.env.EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST;
     delete process.env.EMBERDESK_FEATURES_REACT_PANELS_WORLDINFO;
     delete process.env.EMBERDESK_FEATURES_REACT_PANELS_BACKGROUNDLIBRARY;
@@ -67,13 +63,12 @@ describe('workspace React panel flags', () => {
                 settings: false,
             },
             reactPanels: {
-                characterLibrary: false,
                 mainChatMessageList: false,
                 worldInfo: false,
                 backgroundLibrary: false,
                 extensionsHost: false,
-                characterAuthoring: false,
-                groupAuthoring: false,
+                characterAuthoring: true,
+                groupAuthoring: true,
             },
             reactShell: {
                 strict: false,
@@ -94,7 +89,6 @@ describe('workspace React panel flags', () => {
                 settings: false,
             },
             reactPanels: {
-                characterLibrary: false,
                 mainChatMessageList: true,
                 worldInfo: true,
                 backgroundLibrary: true,
@@ -140,7 +134,6 @@ describe('workspace React panel flags', () => {
         const featureBootstrapModule = await import(`../src/workspace-react-features.js?workspacePanelEscaping=${Date.now()}-${Math.random()}`);
         const html = featureBootstrapModule.injectWorkspaceReactFeatures('<html><head></head><body></body></html>', {
             reactPanels: {
-                characterLibrary: true,
                 mainChatMessageList: true,
                 worldInfo: true,
                 backgroundLibrary: true,
@@ -179,12 +172,13 @@ describe('workspace React panel flags', () => {
 
         expect(configSource).toContain('shell:');
         expect(configSource).toContain('takeover: false');
+        expect(configSource).not.toContain('characterLibrary:');
         expect(configSource).toContain('mainChatMessageList: false');
         expect(configSource).toContain('worldInfo: false');
         expect(configSource).toContain('backgroundLibrary: false');
         expect(configSource).toContain('extensionsHost: false');
-        expect(configSource).toContain('characterAuthoring: false');
-        expect(configSource).toContain('groupAuthoring: false');
+        expect(configSource).not.toContain('characterAuthoring:');
+        expect(configSource).not.toContain('groupAuthoring:');
         expect(packageSource).toContain('"build:react:workspace-panels": "vite build --mode workspace-panels"');
         expect(viteSource).toContain('const isWorkspacePanelsBuild = mode === \'workspace-panels\';');
         expect(viteSource).toContain('entry: path.resolve(process.cwd(), \'app/workspace-panels.tsx\')');
@@ -201,7 +195,6 @@ describe('workspace React panel flags', () => {
         });
         expect(fullSuiteEnv).toMatchObject({
             EMBERDESK_FEATURES_REACT_SHELL_TAKEOVER: 'true',
-            EMBERDESK_FEATURES_REACT_PANELS_CHARACTERLIBRARY: 'true',
             EMBERDESK_FEATURES_REACT_PANELS_WORLDINFO: 'true',
             EMBERDESK_FEATURES_REACT_PANELS_BACKGROUNDLIBRARY: 'true',
             EMBERDESK_FEATURES_REACT_PANELS_EXTENSIONSHOST: 'true',
@@ -221,7 +214,9 @@ describe('workspace React panel flags', () => {
             shellProofEnabled: true,
         });
         expect(shellSpecEnv.EMBERDESK_FEATURES_REACT_SHELL_TAKEOVER).toBe('true');
-        expect(shellSpecEnv.EMBERDESK_FEATURES_REACT_PANELS_CHARACTERAUTHORING).toBeUndefined();
+        // Authoring sole-owner flags remain forced on for every Playwright bootstrap.
+        expect(shellSpecEnv.EMBERDESK_FEATURES_REACT_PANELS_CHARACTERAUTHORING).toBe('true');
+        expect(shellSpecEnv.EMBERDESK_FEATURES_REACT_PANELS_GROUPAUTHORING).toBe('true');
 
         const unrelatedSpecEnv = {};
         const unrelatedSpecResult = applyWorkspaceReactPlaywrightFlagDefaults(unrelatedSpecEnv, [
@@ -234,26 +229,27 @@ describe('workspace React panel flags', () => {
             authoringProofEnabled: false,
             shellProofEnabled: false,
         });
-        expect(unrelatedSpecEnv).toEqual({});
+        expect(unrelatedSpecEnv).toEqual({
+            EMBERDESK_FEATURES_REACT_PANELS_CHARACTERAUTHORING: 'true',
+            EMBERDESK_FEATURES_REACT_PANELS_GROUPAUTHORING: 'true',
+        });
     });
 
-    test('builds React bundles before starting Playwright servers that need workspace React flags', () => {
-        const characterLibraryEnv = {
-            EMBERDESK_FEATURES_REACT_PANELS_CHARACTERLIBRARY: 'true',
-        };
+    test('always builds the React character-library bundle and only flags guarded workspace panels', () => {
         const shellEnv = {
             EMBERDESK_FEATURES_REACT_SHELL_TAKEOVER: 'true',
         };
         const seedSource = read('scripts/seed-dev-environment.mjs');
 
-        expect(shouldBuildCharacterLibraryPanel(characterLibraryEnv)).toBe(true);
-        expect(shouldBuildWorkspacePanels(characterLibraryEnv)).toBe(true);
-        expect(shouldBuildCharacterLibraryPanel(shellEnv)).toBe(false);
+        expect(shouldBuildCharacterLibraryPanel({})).toBe(true);
+        expect(shouldBuildCharacterLibraryPanel(shellEnv)).toBe(true);
         expect(shouldBuildWorkspacePanels(shellEnv)).toBe(true);
+        expect(shouldBuildWorkspacePanels({})).toBe(true);
         expect(hasEnabledWorkspaceReactPlaywrightFlag(shellEnv)).toBe(true);
         expect(hasEnabledWorkspaceReactPlaywrightFlag({})).toBe(false);
         expect(seedSource).toContain('EMBERDESK_FEATURES_REACT_SHELL_TAKEOVER');
         expect(seedSource).toContain('EMBERDESK_FEATURES_REACT_SHELL_STRICT');
+        expect(seedSource).not.toContain('EMBERDESK_FEATURES_REACT_PANELS_CHARACTERLIBRARY');
         expect(seedSource).toContain('shell:');
     });
 });

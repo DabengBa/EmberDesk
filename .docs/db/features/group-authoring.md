@@ -17,15 +17,18 @@ Let users manage group identity, members, ordering, and save state from one comp
 
 ## User-Visible Contract
 
-- The Group Chats workspace entry stays inside [Chat Workspace](page.chat_workspace); when the guarded authoring flag is enabled, the normal visible owner for group create/edit fields is the React Group Authoring panel mounted in the existing right drawer.
-- The legacy group form remains only as a rollback or compatibility host. EmberDesk must not leave users with two simultaneously editable group owners.
-- The default React authoring surface shows current group name and members when editing an existing group. Avatar, tag, generation-strategy, and related toggle controls stay on the legacy compatibility host until a later cutover gives them dedicated React controls.
+- The Group Chats workspace entry stays inside [Chat Workspace](page.chat_workspace); React Group Authoring is the sole runtime owner for create/edit fields in the existing right drawer.
+- The legacy group form is hidden while React owns the surface and is not a product rollback path. Missing workspace-panels builds fail closed with a visible build error instead of re-enabling a dual-owner editor.
+- The React authoring surface covers name, avatar URL, favorite, members with non-drag reorder, activation strategy, generation mode, auto-mode delay, join prefix/suffix, and self-response / muted-sprite toggles.
 - Member management must stay possible without drag-and-drop alone. Users can move members up or down through explicit controls and immediately see the new order.
 - Save is the primary action, Cancel is the safe exit, and Delete remains visually separated as a danger action instead of sitting in the main save row.
 - In create mode, the add-member candidate list stays compact enough that Save and Cancel remain visible in the right drawer on desktop and mobile-width layouts.
-- Saving continues to use the established file-backed group path and refreshes the current workspace state without changing the underlying group storage format.
-- Refreshing the page and reopening the same group must show the saved name and member order.
-- If the guarded React authoring path is disabled or the bundle cannot mount, the existing group editor remains usable from the same entry instead of leaving an empty migration host.
+- Saving posts directly to the established group create/edit endpoints and refreshes workspace state without DOM submit completion waits or storage format changes.
+- Refreshing the page and reopening the same group must show the saved name and member order. Cancel leaves stored data unchanged.
+
+## Approved Retirement Direction
+
+React is the sole runtime owner for group authoring fields and save flow. Previous-version deploy is the rollback path.
 
 ## Semantic Interaction IDs
 
@@ -39,7 +42,7 @@ Let users manage group identity, members, ordering, and save state from one comp
 - As a user reorganizing a group, move a member up or down through the visible controls and save; EmberDesk must show the new order immediately, keep the moved member in the edited list, and preserve that order after reload, with failure signaled by a reorder control that changes nothing or reverts after save.
 - As a user editing group identity, change the group name and save; EmberDesk must refresh the visible workspace state and reopen with the saved name after reload, and failure is a save that appears successful but reopens the old value.
 - As a user closing the group editor without saving, make a local edit and cancel; EmberDesk must leave stored data unchanged and must not silently write the draft on close.
-- As a user on a build where React group authoring is unavailable, open Group Chats from the same workspace entry; EmberDesk must keep the legacy group editor usable instead of showing an empty React host.
+- As a user on a release where the workspace-panels build is missing, open Group Chats from the same workspace entry; EmberDesk must show a visible React build error and must not re-enable the legacy group form as a dual owner.
 
 ## Feature-Specific Evidence
 

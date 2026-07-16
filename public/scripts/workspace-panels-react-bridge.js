@@ -25,13 +25,12 @@ export function getDefaultWorkspaceReactFeatures() {
             settings: false,
         },
         reactPanels: {
-            characterLibrary: false,
             mainChatMessageList: false,
             worldInfo: false,
             backgroundLibrary: false,
             extensionsHost: false,
-            characterAuthoring: false,
-            groupAuthoring: false,
+            characterAuthoring: true,
+            groupAuthoring: true,
         },
         reactShell: {
             strict: false,

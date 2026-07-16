@@ -66,10 +66,10 @@ import {
     renameGroupMember,
     createNewGroupChat,
     getGroupAvatar,
+    openGroupById,
     deleteGroupChat,
     renameGroupChat,
     importGroupChat,
-    getGroupBlock,
     getGroupCharacterCardsLazy,
     getGroupDepthPrompts,
 } from './scripts/group-chats.js';
@@ -195,7 +195,6 @@ import {
     isBogusFolder,
     isBogusFolderOpen,
     chooseBogusFolder,
-    getTagBlock,
     loadTagsSettings,
     printTagFilters,
     getTagKeyForEntity,
@@ -326,9 +325,11 @@ import { onboardingExperimentalMacroEngine } from './scripts/macros/engine/Macro
 import { compressRequest, setRequestCompressionConfig } from './scripts/request-compression.js';
 import { canJumpToSwipeForMessage, canOpenSwipePickerForMessage, initSwipePicker } from './scripts/swipe-picker.js';
 import {
+    buildCharacterAuthoringFormData,
     createCharacterAuthoringDraft,
     createCharacterAuthoringDraftFromCreateState,
     getCharacterAuthoringDirtyFields,
+    getCharacterAuthoringWriteUrl,
 } from './scripts/character-authoring.js';
 import {
     mountWorkspacePanelHost,
@@ -343,12 +344,9 @@ import {
     createCharacterBulkDeletePagePlan,
     createCharacterDeleteReconcilePlan,
     createCharacterListEntitySnapshot,
-    getCharacterListPageEntities,
-    createCharacterListPageReconcilePlan,
     createCharacterListPageRenderPlan,
     getCharacterListPaginationRangeLabel,
     shouldSuppressCharacterDeleteListReprintState,
-    syncCharacterListRowIdentity,
 } from './scripts/character-list-render-state.js';
 import {
     getCharacterLibraryFetchErrorData,
@@ -384,13 +382,12 @@ export function getWorkspaceReactFeatures() {
             settings: false,
         },
         reactPanels: {
-            characterLibrary: false,
             mainChatMessageList: false,
             worldInfo: false,
             backgroundLibrary: false,
             extensionsHost: false,
-            characterAuthoring: false,
-            groupAuthoring: false,
+            characterAuthoring: true,
+            groupAuthoring: true,
         },
         reactShell: {
             strict: false,
@@ -1502,56 +1499,105 @@ function applyCharacterAuthoringSaveModel(saveModel = {}, { submit = true } = {}
         depth_prompt: extensions.depth_prompt || {},
     };
 
-    if (submit) {
-        $('#create_button').trigger('click');
-    }
-}
-
-function waitForCharacterAuthoringSaveCompletion(mode, saveModel = {}) {
-    return new Promise((resolve, reject) => {
-        const timeout = window.setTimeout(() => {
-            eventSource.removeListener(event_types.CHARACTER_EDITED, onEditSuccess);
-            window.clearInterval(createPoll);
-            reject(new Error('Timed out waiting for legacy character authoring save to complete'));
-        }, 15000);
-        const initialCharacterCount = characters.length;
-        const expectedName = String(saveModel?.fields?.name || '').trim();
-        let createPoll = null;
-
-        function finish(event) {
-            window.clearTimeout(timeout);
-            eventSource.removeListener(event_types.CHARACTER_EDITED, onEditSuccess);
-            window.clearInterval(createPoll);
-            resolve(event);
-        }
-
-        function onEditSuccess(event) {
-            finish(event);
-        }
-
-        if (mode === 'edit') {
-            eventSource.once(event_types.CHARACTER_EDITED, onEditSuccess);
-            return;
-        }
-
-        createPoll = window.setInterval(() => {
-            const selectedCharacter = this_chid !== undefined ? characters[this_chid] : null;
-            const createdCharacter = selectedCharacter && characters.length >= initialCharacterCount
-                ? selectedCharacter
-                : characters.slice(initialCharacterCount).find(character => character?.name === expectedName);
-            if (createdCharacter?.avatar && (!expectedName || createdCharacter.name === expectedName)) {
-                finish({ detail: { character: createdCharacter } });
-            }
-        }, 100);
-    });
+    // Direct API save owns writes; submit flag is ignored.
 }
 
 async function saveCharacterAuthoringFromPayload(saveModel = {}) {
+    if (!settingsReady) {
+        throw new Error('Settings not ready');
+    }
+
     const mode = getCurrentCharacterAuthoringMode();
-    const saveCompletion = waitForCharacterAuthoringSaveCompletion(mode, saveModel);
-    applyCharacterAuthoringSaveModel(saveModel, { submit: true });
-    await saveCompletion;
-    return false;
+    const sourceCharacter = getCurrentCharacterAuthoringSource();
+    const expectedName = String(saveModel?.fields?.name || '').trim();
+    if (!expectedName) {
+        toastr.error(t`Name is required`);
+        throw new Error('Name is required');
+    }
+    if (mode === 'create' && (is_group_generating || is_send_press)) {
+        toastr.error(t`Cannot create characters while generating. Stop the request and try again.`, t`Creation aborted`);
+        throw new Error('Creation aborted while generating');
+    }
+
+    const avatarFileInput = /** @type {HTMLInputElement|null} */ (document.getElementById('add_avatar_button'));
+    const avatarFile = avatarFileInput?.files?.[0] ?? (create_save.avatar?.[0] ?? null);
+    let preparedAvatarFile = null;
+    if (avatarFile instanceof File) {
+        preparedAvatarFile = await ensureImageFormatSupported(avatarFile);
+    }
+
+    const formData = buildCharacterAuthoringFormData(saveModel, {
+        mode,
+        existingAvatar: sourceCharacter?.avatar || saveModel?.fields?.avatar || '',
+        chat: sourceCharacter?.chat || String($('#selected_chat_pole').val() || ''),
+        createDate: sourceCharacter?.create_date
+            ? timestampToMoment(sourceCharacter.create_date).toISOString()
+            : String($('#create_date_pole').val() || ''),
+        jsonData: sourceCharacter?.json_data || String($('#character_json_data').val() || ''),
+        avatarFile: preparedAvatarFile,
+    });
+
+    // Keep create_save / legacy form mirrors in sync for remaining tool popups without submitting.
+    applyCharacterAuthoringSaveModel(saveModel, { submit: false });
+
+    let url = getCharacterAuthoringWriteUrl(mode);
+    if (crop_data != undefined) {
+        url = getCharacterAuthoringWriteUrl(mode, JSON.stringify(crop_data));
+    }
+
+    const headers = getRequestHeaders({ omitContentType: true });
+    const fetchResult = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: formData,
+        cache: 'no-cache',
+    });
+
+    if (!fetchResult.ok) {
+        const message = mode === 'create'
+            ? t`Failed to create character`
+            : t`Something went wrong while saving the character, or the image file provided was in an invalid format. Double check that the image is not a webp.`;
+        toastr.error(message);
+        throw new Error(`Character authoring ${mode} failed with status ${fetchResult.status}`);
+    }
+
+    if (mode === 'create') {
+        const avatarId = await fetchResult.text();
+        createTagMapFromList('#tagList', avatarId);
+        await getCharacters();
+        const createdIndex = characters.findIndex(character => character?.avatar === avatarId);
+        if (createdIndex >= 0) {
+            select_selected_character(createdIndex, { switchMenu: false });
+            await eventSource.emit(event_types.CHARACTER_EDITED, {
+                detail: { id: createdIndex, character: characters[createdIndex] },
+            });
+        } else {
+            select_rm_info('char_create', avatarId, this_chid !== undefined ? characters[this_chid]?.avatar : null);
+        }
+        crop_data = undefined;
+        return {
+            ok: true,
+            mode,
+            avatar: avatarId,
+            character: createdIndex >= 0 ? characters[createdIndex] : null,
+        };
+    }
+
+    const editedAvatar = String(formData.get('avatar_url') || sourceCharacter?.avatar || '');
+    if (shouldRefreshCharacterAfterEdit(characters, editedAvatar)) {
+        await getOneCharacter(editedAvatar);
+        favsToHotswap();
+        await eventSource.emit(event_types.CHARACTER_EDITED, {
+            detail: { id: this_chid, character: characters[this_chid] },
+        });
+    }
+    crop_data = undefined;
+    return {
+        ok: true,
+        mode,
+        avatar: editedAvatar,
+        character: this_chid !== undefined ? characters[this_chid] : null,
+    };
 }
 
 async function reopenCharacterAuthoringAfterLegacyPopup() {
@@ -1559,20 +1605,12 @@ async function reopenCharacterAuthoringAfterLegacyPopup() {
 }
 
 function queueReactCharacterAuthoringRemount() {
-    if (!getWorkspaceReactFeatures()?.reactPanels?.characterAuthoring) {
-        return;
-    }
-
     window.setTimeout(() => {
         void mountReactCharacterAuthoringPanel();
     }, 0);
 }
 
 function queueReactGroupAuthoringRemount() {
-    if (!getWorkspaceReactFeatures()?.reactPanels?.groupAuthoring) {
-        return;
-    }
-
     window.setTimeout(() => {
         void mountReactGroupAuthoringPanel();
     }, 0);
@@ -1645,11 +1683,19 @@ async function mountReactCharacterAuthoringPanel() {
         bridge: getCharacterAuthoringReactBridge(),
         features: getWorkspaceReactFeatures(),
         onDisabled() {
-            hideLegacyCharacterAuthoringEditor(false);
+            // Sole-owner surface: never re-enable legacy form as product fallback.
+            hideLegacyCharacterAuthoringEditor(true);
         },
     });
 
-    hideLegacyCharacterAuthoringEditor(Boolean(result?.mounted));
+    // Always hide legacy form; React is the only editable owner.
+    hideLegacyCharacterAuthoringEditor(true);
+    if (!result?.mounted) {
+        const host = ensureCharacterAuthoringReactHost();
+        if (host && !host.querySelector('[data-react-authoring-build-error]')) {
+            host.innerHTML = '<div class="react-authoring-panel" data-react-authoring-build-error="true" role="alert">Character Authoring React build is missing or failed to mount. Redeploy the workspace-panels bundle.</div>';
+        }
+    }
     return result;
 }
 
@@ -1725,27 +1771,33 @@ function getGroupAuthoringReactBridgeState() {
     };
 }
 
-function applyGroupAuthoringSaveModel(saveModel = {}) {
+async function applyGroupAuthoringSaveModel(saveModel = {}) {
+    const members = Array.isArray(saveModel.members) ? [...saveModel.members] : [];
+    if (members.length === 0) {
+        toastr.error(t`Add at least one member`);
+        throw new Error('Group requires at least one member');
+    }
+
+    // Mirror values into remaining legacy controls for non-React consumers without clicking submit.
     setAuthoringInputValue('#rm_group_chat_name', saveModel.name);
-    $('#rm_group_allow_self_responses').prop('checked', Boolean(saveModel.allow_self_responses)).trigger('input');
-    $('#rm_group_hidemutedsprites').prop('checked', Boolean(saveModel.hideMutedSprites)).trigger('input');
-    $('#rm_group_activation_strategy').val(String(saveModel.activation_strategy ?? 0)).trigger('change');
-    $('#rm_group_generation_mode').val(String(saveModel.generation_mode ?? 0)).trigger('change');
+    $('#rm_group_allow_self_responses').prop('checked', Boolean(saveModel.allow_self_responses));
+    $('#rm_group_hidemutedsprites').prop('checked', Boolean(saveModel.hideMutedSprites));
+    $('#rm_group_activation_strategy').val(String(saveModel.activation_strategy ?? 0));
+    $('#rm_group_generation_mode').val(String(saveModel.generation_mode ?? 0));
     setAuthoringInputValue('#rm_group_automode_delay', saveModel.auto_mode_delay);
     setAuthoringInputValue('#rm_group_generation_mode_join_prefix', saveModel.generation_mode_join_prefix);
     setAuthoringInputValue('#rm_group_generation_mode_join_suffix', saveModel.generation_mode_join_suffix);
-    if (Array.isArray(saveModel.members)) {
-        setGroupAuthoringMembersDraft(saveModel.members, selected_group);
-    }
+    setGroupAuthoringMembersDraft(members, selected_group);
 
     if (selected_group) {
         const group = groups.find(x => x.id == selected_group);
         if (!group) {
-            return;
+            throw new Error('Selected group not found');
         }
 
         group.name = String(saveModel.name || group.name || '');
         group.avatar_url = String(saveModel.avatar_url || group.avatar_url || '');
+        group.members = members;
         group.allow_self_responses = Boolean(saveModel.allow_self_responses);
         group.hideMutedSprites = Boolean(saveModel.hideMutedSprites);
         group.activation_strategy = Number(saveModel.activation_strategy ?? group.activation_strategy ?? 0);
@@ -1755,10 +1807,49 @@ function applyGroupAuthoringSaveModel(saveModel = {}) {
         group.generation_mode_join_suffix = String(saveModel.generation_mode_join_suffix || '');
         group.fav = Boolean(saveModel.fav);
         group.disabled_members = Array.isArray(saveModel.disabled_members) ? [...saveModel.disabled_members] : [];
-        return editGroup(selected_group, true, false);
+        await editGroup(selected_group, true, true);
+        return { ok: true, mode: 'edit', id: selected_group, group };
     }
 
-    $('#rm_group_submit').trigger('click');
+    let name = String(saveModel.name || '').trim();
+    if (!name) {
+        const memberNames = characters.filter(x => members.includes(x.avatar)).map(x => x.name).join(', ');
+        name = t`Group: ${memberNames}`;
+    }
+
+    const groupCreateModel = {
+        name,
+        members,
+        avatar_url: String(saveModel.avatar_url || default_avatar),
+        allow_self_responses: Boolean(saveModel.allow_self_responses),
+        hideMutedSprites: Boolean(saveModel.hideMutedSprites),
+        activation_strategy: Number(saveModel.activation_strategy ?? 0),
+        generation_mode: Number(saveModel.generation_mode ?? 0),
+        disabled_members: Array.isArray(saveModel.disabled_members) ? [...saveModel.disabled_members] : [],
+        fav: Boolean(saveModel.fav),
+        chat_id: humanizedDateTime(),
+        chats: [],
+        auto_mode_delay: Number(saveModel.auto_mode_delay ?? 5),
+        generation_mode_join_prefix: String(saveModel.generation_mode_join_prefix || ''),
+        generation_mode_join_suffix: String(saveModel.generation_mode_join_suffix || ''),
+    };
+    groupCreateModel.chats = [groupCreateModel.chat_id];
+
+    const createGroupResponse = await fetch('/api/groups/create', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: JSON.stringify(groupCreateModel),
+    });
+    if (!createGroupResponse.ok) {
+        toastr.error(t`Failed to create group`);
+        throw new Error(`Group create failed with status ${createGroupResponse.status}`);
+    }
+
+    const data = await createGroupResponse.json();
+    createTagMapFromList('#groupTagList', data.id);
+    await getCharacters();
+    select_rm_info('group_create', data.id);
+    return { ok: true, mode: 'create', id: data.id, group: data };
 }
 
 function getGroupAuthoringReactBridge() {
@@ -1768,10 +1859,11 @@ function getGroupAuthoringReactBridge() {
                 case 'saveGroupAuthoring':
                     return applyGroupAuthoringSaveModel(payload);
                 case 'cancelAuthoring':
-                    hideLegacyGroupAuthoringEditor(false);
+                    hideLegacyGroupAuthoringEditor(true);
                     return openWorkspaceShellGroupChats();
                 case 'deleteAuthoring':
-                    hideLegacyGroupAuthoringEditor(false);
+                    // Keep legacy host hidden; delete handler still uses the existing confirmation control.
+                    hideLegacyGroupAuthoringEditor(true);
                     $('#rm_group_delete').trigger('click');
                     return false;
                 default:
@@ -1793,11 +1885,17 @@ async function mountReactGroupAuthoringPanel() {
         bridge: getGroupAuthoringReactBridge(),
         features: getWorkspaceReactFeatures(),
         onDisabled() {
-            hideLegacyGroupAuthoringEditor(false);
+            hideLegacyGroupAuthoringEditor(true);
         },
     });
 
-    hideLegacyGroupAuthoringEditor(Boolean(result?.mounted));
+    hideLegacyGroupAuthoringEditor(true);
+    if (!result?.mounted) {
+        const host = ensureGroupAuthoringReactHost();
+        if (host && !host.querySelector('[data-react-authoring-build-error]')) {
+            host.innerHTML = '<div class="react-authoring-panel" data-react-authoring-build-error="true" role="alert">Group Authoring React build is missing or failed to mount. Redeploy the workspace-panels bundle.</div>';
+        }
+    }
     return result;
 }
 
@@ -2901,27 +2999,13 @@ function getReactCharacterLibraryPanelBridge() {
             void selectCharacterById(Number(id));
         },
         onSelectGroup(id) {
-            const groupEl = document.querySelector(`.group_select[data-grid="${CSS.escape(String(id))}"]`);
-            if (groupEl instanceof HTMLElement) {
-                groupEl.click();
-                return;
-            }
-            // Fallback: trigger open via group-chats click path using synthetic data-grid node.
-            const temp = document.createElement('div');
-            temp.className = 'group_select';
-            temp.setAttribute('data-grid', String(id));
-            document.getElementById('rm_print_characters_block')?.appendChild(temp);
-            temp.click();
-            temp.remove();
+            void openGroupById(String(id));
         },
         onOpenFolder(id) {
-            const folderEl = document.querySelector(`.bogus_folder_select[tagid="${CSS.escape(String(id))}"]`);
-            if (folderEl instanceof HTMLElement) {
-                folderEl.click();
-            }
+            chooseBogusFolder($('#rm_print_characters_block'), String(id));
         },
         onBackFolder() {
-            document.getElementById('BogusFolderBack')?.click();
+            chooseBogusFolder($('#rm_print_characters_block'), 'back');
         },
         onClearFilters() {
             $('#character_search_bar').val('').trigger('input');
@@ -2938,28 +3022,6 @@ function getReactCharacterLibraryPanelBridge() {
                 characterGroupOverlay.toggleSingleCharacter(row);
             }
             void syncReactCharacterLibraryToolbarState();
-        },
-        createEntityElement(entity) {
-            // Compatibility shim only; React panel prefers native row components.
-            switch (entity?.type) {
-                case 'character':
-                    return getCharacterBlock(entity.item, entity.id)[0] ?? null;
-                case 'group':
-                    return getGroupBlock(entity.item)[0] ?? null;
-                case 'tag':
-                    return getTagBlock(entity.item, entity.entities, entity.hidden, entity.isUseless)[0] ?? null;
-                default:
-                    return null;
-            }
-        },
-        createBackBlockElement() {
-            return getBackBlock()[0] ?? null;
-        },
-        async createEmptyElement() {
-            return (await getEmptyBlock())[0] ?? null;
-        },
-        async createHiddenElement(hiddenCount) {
-            return (await getHiddenBlock(hiddenCount))[0] ?? null;
         },
         clickLegacyAction(actionId) {
             document.getElementById(actionId)?.click();
@@ -2996,13 +3058,50 @@ function getReactCharacterLibraryPanelBridge() {
             doCharListDisplaySwitch();
         },
         toggleBulkEdit() {
-            document.getElementById('bulkEditButton')?.click();
+            if (!characterGroupOverlay) {
+                return;
+            }
+            if ($('#rm_print_characters_block').hasClass('bulk_select')) {
+                characterGroupOverlay.browseState();
+            } else {
+                characterGroupOverlay.selectState();
+            }
         },
         selectAllInBulkMode() {
-            document.getElementById('bulkSelectAllButton')?.click();
+            if (!characterGroupOverlay) {
+                return;
+            }
+            const selectedCharacterIds = Array.isArray(characterGroupOverlay.selectedCharacters)
+                ? characterGroupOverlay.selectedCharacters
+                : [];
+            const pageCharacterIds = currentCharacterListPageEntities
+                .filter(entity => entity?.type === 'character')
+                .map(entity => Number(entity.id))
+                .filter(Number.isFinite);
+            if (pageCharacterIds.length === 0) {
+                return;
+            }
+
+            const isSelected = (id) => selectedCharacterIds.some(selectedId => String(selectedId) === String(id));
+            const hasUnselectedCharacter = pageCharacterIds.some(id => !isSelected(id));
+            if (hasUnselectedCharacter) {
+                for (const id of pageCharacterIds) {
+                    if (!isSelected(id)) {
+                        selectedCharacterIds.push(id);
+                    }
+                }
+            } else {
+                const pageCharacterIdSet = new Set(pageCharacterIds);
+                const retainedCharacterIds = selectedCharacterIds.filter(id => !pageCharacterIdSet.has(Number(id)));
+                selectedCharacterIds.splice(0, selectedCharacterIds.length, ...retainedCharacterIds);
+            }
+            characterGroupOverlay.updateSelectedCount();
+            void syncReactCharacterLibraryToolbarState();
         },
         deleteSelectedInBulkMode() {
-            document.getElementById('bulkDeleteButton')?.click();
+            if (characterGroupOverlay?.selectedCharacters?.length) {
+                void characterGroupOverlay.handleContextMenuDelete();
+            }
         },
     };
 }
@@ -3016,6 +3115,24 @@ async function loadReactCharacterLibraryPanelModule() {
     }
 
     return reactCharacterLibraryPanelModulePromise;
+}
+
+function getCharacterLibraryEntityTags(entityId) {
+    const tagKey = getTagKeyForEntity(entityId);
+    if (tagKey == null || !Array.isArray(tag_map[tagKey])) {
+        return [];
+    }
+
+    return tag_map[tagKey]
+        .map(id => tags.find(tag => tag.id === id))
+        .filter(Boolean)
+        .sort(compareTagsForSort)
+        .map(tag => ({
+            id: getCharacterCardTagId(tag.id),
+            name: String(tag.name ?? ''),
+            hiddenOnCard: Boolean(tag.is_hidden_on_character_card),
+            forceVisible: isBogusFolder(tag) || Boolean(tag.filter_state && !isFilterState(tag.filter_state, FILTER_STATES.UNDEFINED)),
+        }));
 }
 
 function enrichCharacterLibraryPageEntities(pageEntities) {
@@ -3033,7 +3150,8 @@ function enrichCharacterLibraryPageEntities(pageEntities) {
                 ...entity,
                 memberNames,
                 memberCount: memberNames.length,
-                avatarHtml: null,
+                avatarHtml: getGroupAvatar(entity.item)?.[0]?.outerHTML ?? null,
+                tags: getCharacterLibraryEntityTags(entity.id),
             };
         }
         if (entity?.type === 'tag' && entity.item) {
@@ -3061,6 +3179,10 @@ function enrichCharacterLibraryPageEntities(pageEntities) {
                     ...item,
                     avatarUrl,
                 },
+                tags: getCharacterLibraryEntityTags(entity.id),
+                assistantAvatar: getPermanentAssistantAvatar(),
+                auxFieldName: power_user.aux_field || 'character_version',
+                showAvatarUrl: Boolean(power_user.show_card_avatar_urls),
             };
         }
         return entity;
@@ -4021,128 +4143,6 @@ export async function selectCharacterById(id, { switchMenu = true } = {}) {
     }
 }
 
-function getBackBlock() {
-    const template = $('#bogus_folder_back_template .bogus_folder_select').clone();
-    return template;
-}
-
-async function getEmptyBlock() {
-    const hasActiveCharacterListFilter = entitiesFilter.hasAnyFilter();
-    const searchQuery = entitiesFilter.getFilterData(FILTER_TYPES.SEARCH);
-    const isSearchEmptyState = Boolean(searchQuery);
-    const icons = hasActiveCharacterListFilter ? ['fa-magnifying-glass'] : ['fa-dragon', 'fa-otter', 'fa-kiwi-bird', 'fa-crow', 'fa-frog'];
-    const texts = hasActiveCharacterListFilter ? [t`No matching characters`] : [t`Here be dragons`, t`Otterly empty`, t`Kiwibunga`, t`Pump-a-Rum`, t`Croak it`];
-    const roll = hasActiveCharacterListFilter ? 0 : new Date().getMinutes() % icons.length;
-    const params = {
-        text: texts[roll],
-        icon: icons[roll],
-        message: hasActiveCharacterListFilter
-            ? (isSearchEmptyState ? t`Clear search or filters to show the full list.` : t`Clear filters to show the full list.`)
-            : t`There are no items to display.`,
-        showClearFilters: hasActiveCharacterListFilter,
-    };
-    const emptyBlock = await renderTemplateAsync('emptyBlock', params);
-    const emptyBlockElement = $(emptyBlock);
-    emptyBlockElement.find('.clear_character_filters').on('click', function () {
-        $('#character_search_bar').val('').trigger('input');
-        $('.rm_tag_filter .clearAllFilters').trigger('click');
-    });
-    return emptyBlockElement;
-}
-
-/**
- * @param {number} hidden Number of hidden characters
- */
-async function getHiddenBlock(hidden) {
-    const params = {
-        text: (hidden > 1 ? t`${hidden} characters hidden.` : t`${hidden} character hidden.`),
-    };
-    const hiddenBlock = await renderTemplateAsync('hiddenBlock', params);
-    return $(hiddenBlock);
-}
-
-function getCharacterBlock(item, id) {
-    return $(buildCharacterRowHtml(item, id));
-}
-
-/**
- * Builds a character row as an HTML string, replacing the jQuery clone/find/append path.
- * @param {object} item Character data object
- * @param {string|number} id Character index
- * @returns {string} HTML string for the character row
- */
-function buildCharacterRowHtml(item, id) {
-    let this_avatar = default_avatar;
-    if (item.avatar != 'none') {
-        this_avatar = getThumbnailUrl('avatar', item.avatar);
-    }
-
-    const isFav = item.fav || item.fav == 'true';
-    const isActive = !selected_group && this_chid !== undefined && String(this_chid) === String(id);
-    const isAssistant = item.avatar === getPermanentAssistantAvatar();
-    const description = item.data?.creator_notes || '';
-    const auxFieldName = power_user.aux_field || 'character_version';
-    const auxFieldValue = (item.data && item.data[auxFieldName]) || '';
-    const showAvatarUrl = power_user.show_card_avatar_urls;
-
-    const escapedName = escapeHtml(item.name);
-    const escapedAvatar = escapeHtml(item.avatar);
-    const escapedDescription = escapeHtml(description);
-    const escapedAuxField = escapeHtml(auxFieldValue);
-
-    // Build inline tag markup as string using exported tag_map and tags
-    const tagKey = getTagKeyForEntity(id);
-    let printableTags = [];
-    if (tagKey != null && Array.isArray(tag_map[tagKey])) {
-        printableTags = tag_map[tagKey]
-            .map(x => tags.find(y => y.id === x))
-            .filter(x => x)
-            .filter(tag => !tag.is_hidden_on_character_card)
-            .sort(compareTagsForSort);
-    }
-
-    const DEFAULT_TAGS_LIMIT = 50;
-    const tagsDisplayLimit = DEFAULT_TAGS_LIMIT;
-    const isFilterActive = (tag) => tag.filter_state && !isFilterState(tag.filter_state, FILTER_STATES.UNDEFINED);
-    const shouldPrintTag = (tag) => isBogusFolder(tag) || isFilterActive(tag);    const mandatoryPrintTagsCount = printableTags.filter(shouldPrintTag).length;
-    const availableSlotsForAdditionalTags = Math.max(tagsDisplayLimit - mandatoryPrintTagsCount, 0);
-    let additionalTagsPrinted = 0;
-    let tagsSkipped = 0;
-
-    let tagsHtml = '';
-    for (const tag of printableTags) {
-        if (shouldPrintTag(tag) || additionalTagsPrinted++ < availableSlotsForAdditionalTags) {
-            const tagName = escapeHtml(tag.name);
-            tagsHtml += `<span class="tag" id="${escapeHtml(getCharacterCardTagId(tag.id))}"><span class="tag_name">${tagName}</span></span>`;
-        } else {
-            tagsSkipped++;
-        }
-    }
-    if (tagsSkipped > 0) {
-        tagsHtml += `<span class="tag tag_placeholder"><span class="tag_name">+${tagsSkipped}</span></span>`;
-    }
-
-    return `<div class="character_select entity_block flex-container wide100p alignitemsflexstart${isFav ? ' is_fav' : ''}${isActive ? ' is_active' : ''}" data-chid="${id}" chid="${id}" id="CharID${id}">
-                <div class="avatar" title="[Character] ${escapedName}\nFile: ${escapedAvatar}">
-                    <img src="${this_avatar}" alt="${escapedName}" loading="lazy" decoding="async">
-                    <i class="ch_fav_icon fa-solid fa-star" aria-hidden="true"></i>
-                </div>
-                <div class="flex-container wide100pLess70px character_select_container">
-                    <div class="wide100p character_name_block">
-                        <small class="entity_type_badge character_type_badge" data-i18n="Character">Character</small>
-                        <span class="ch_name" title="[Character] ${escapedName}">${escapedName}</span>
-                        <small class="ch_additional_info ch_add_placeholder">+++</small>
-                        ${isAssistant ? '<small class="ch_assistant" title="This character will be used as a welcome page assistant." data-i18n="[title]This character will be used as a welcome page assistant."><i class="fa-solid fa-sm fa-user-graduate"></i></small>' : ''}
-                        ${auxFieldValue ? `<small class="ch_additional_info character_version">${escapedAuxField}</small>` : '<small class="ch_additional_info character_version" style="display:none"></small>'}
-                        ${showAvatarUrl ? `<small class="ch_additional_info ch_avatar_url">${escapedAvatar}</small>` : ''}
-                    </div>
-                    <input class="ch_fav" value="${isFav}" hidden />
-                    <div class="ch_description"${description ? '' : ' style="display:none"'}>${description ? escapedDescription : ''}</div>
-                    <div class="tags tags_inline">${tagsHtml}</div>
-                </div>
-            </div>`;
-}
-
 /**
  * Patches a visible character row in place for a narrow set of safe metadata updates.
  * Returns true if patched, false if the row is not visible or conditions are not met.
@@ -4294,75 +4294,6 @@ export async function printCharacters(fullRefresh = false, { allowDuringCharacte
     updatePersonaConnectionsAvatarList();
 }
 
-async function renderCharacterListPageFull(renderPlan) {
-    const listId = '#rm_print_characters_block';
-    $(listId).empty();
-    if (renderPlan.includeBackBlock) {
-        $(listId).append(getBackBlock());
-    }
-    if (renderPlan.showEmptyBlock) {
-        const emptyBlock = await getEmptyBlock();
-        $(listId).append(emptyBlock);
-    }
-    for (const i of renderPlan.pageEntities) {
-        switch (i.type) {
-            case 'character':
-                $(listId).append(getCharacterBlock(i.item, i.id));
-                break;
-            case 'group':
-                $(listId).append(getGroupBlock(i.item));
-                break;
-            case 'tag':
-                $(listId).append(getTagBlock(i.item, i.entities, i.hidden, i.isUseless));
-                break;
-        }
-    }
-
-    if (renderPlan.showHiddenBlock) {
-        const hiddenBlock = await getHiddenBlock(renderPlan.hiddenCount);
-        $(listId).append(hiddenBlock);
-    }
-}
-
-async function applyCharacterListPageRenderPlan({ listElement, renderPlan, beforePageEntities }) {
-    const existingElements = indexExistingCharacterListElements(listElement, beforePageEntities);
-    const desiredElements = [];
-
-    if (renderPlan.showEmptyBlock) {
-        desiredElements.push((await getEmptyBlock())[0]);
-    }
-
-    for (const entity of renderPlan.pageEntities) {
-        const existingElement = existingElements.get(entity.renderKey);
-        if (existingElement) {
-            desiredElements.push(existingElement);
-        } else {
-            const $element = renderCharacterListEntityBlock(entity);
-            if (!$element?.length) {
-                return false;
-            }
-            desiredElements.push($element[0]);
-        }
-    }
-
-    if (renderPlan.showHiddenBlock) {
-        desiredElements.push((await getHiddenBlock(renderPlan.hiddenCount))[0]);
-    }
-
-    const desiredElementSet = new Set(desiredElements);
-    for (const child of Array.from(listElement.children)) {
-        if (!desiredElementSet.has(child)) {
-            child.remove();
-        }
-    }
-    for (const element of desiredElements) {
-        listElement.appendChild(element);
-    }
-
-    syncCharacterListRowIdentity(listElement, renderPlan.pageEntities);
-    return true;
-}
-
 async function renderCharacterListPage(data, { fullRefresh = false } = {}) {
     const listElement = document.getElementById('rm_print_characters_block');
     const renderPlan = createCharacterListPageRenderPlan({
@@ -4372,26 +4303,12 @@ async function renderCharacterListPage(data, { fullRefresh = false } = {}) {
         totalGroups: groups.length,
         hasActiveFilter: entitiesFilter.hasAnyFilter(),
     });
-    const afterSnapshot = createCharacterListEntitySnapshot(getEntitiesList({ doFilter: true }));
-    const reconcilePlan = createCharacterListPageReconcilePlan({
-        beforePageEntities: currentCharacterListPageEntities,
-        afterSnapshot,
-        pageEntities: data,
-        currentPage: getCharacterListCurrentPage(),
-        pageSize: getCharacterListCurrentPageSize(),
-        totalCharacters: characters.length,
-        totalGroups: groups.length,
-        includeBackBlock: renderPlan.includeBackBlock,
-        hasActiveFilter: entitiesFilter.hasAnyFilter(),
-    });
-
     if (!listElement) {
         console.error('Character list container #rm_print_characters_block is missing.');
         return;
     }
 
     void fullRefresh;
-    void reconcilePlan;
 
     await renderCharacterListPageReact(createCharacterLibraryPanelStateSnapshot({
         listElement,
@@ -4426,38 +4343,6 @@ function getCharacterListCurrentPageSize() {
         // Fall through to persisted/default size.
     }
     return Number(accountStorage.getItem('Characters_PerPage')) || per_page_default;
-}
-
-function renderCharacterListEntityBlock(entity) {
-    switch (entity.type) {
-        case 'character':
-            return getCharacterBlock(entity.item, entity.id);
-        case 'group':
-            return getGroupBlock(entity.item);
-        case 'tag':
-            return getTagBlock(entity.item, entity.entities, entity.hidden, entity.isUseless);
-        default:
-            return null;
-    }
-}
-
-function indexExistingCharacterListElements(listElement, beforePageEntities) {
-    const map = new Map();
-    const entityBlocks = Array.from(listElement.children).filter(element => {
-        return element.classList.contains('character_select') ||
-            element.classList.contains('group_select') ||
-            element.classList.contains('bogus_folder_select');
-    });
-
-    for (let index = 0; index < beforePageEntities.length; index++) {
-        const entity = beforePageEntities[index];
-        const element = entityBlocks[index];
-        if (entity?.renderKey && element) {
-            map.set(entity.renderKey, element);
-        }
-    }
-
-    return map;
 }
 
 function updateCharacterListPaginationState(plan, afterSnapshot, { skipInitialCallback = false } = {}) {
@@ -4570,13 +4455,14 @@ async function reconcileCharacterListAfterDelete(options) {
             totalGroups: groups.length,
             hasActiveFilter,
         });
-        const beforePageEntities = getCharacterListPageEntities(beforeSnapshot, currentPage, pageSize);
-        const reconciled = await applyCharacterListPageRenderPlan({
+        const rendered = await renderCharacterListPageReact(createCharacterLibraryPanelStateSnapshot({
             listElement,
+            pageEntities: plan.pageEntities,
             renderPlan,
-            beforePageEntities,
-        });
-        if (!reconciled) {
+            currentPage: plan.currentPage,
+            pageSize: plan.pageSize,
+        }));
+        if (!rendered) {
             return false;
         }
 

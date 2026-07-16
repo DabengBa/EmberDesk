@@ -39,6 +39,7 @@ import {
 } from '../public/scripts/main-chat-bridge-contract.js';
 import {
     createCharacterAuthoringSession,
+    shouldApplyCharacterAuthoringSaveResult,
 } from '../public/scripts/character-authoring.js';
 import {
     createGroupAuthoringSession,
@@ -2198,14 +2199,16 @@ function AuthoringWorkspacePanel({
         : createGroupAuthoringSession(bridgeState.draft ?? {}, { mode: bridgeState.mode ?? 'create' }), [bridgeState.draft, bridgeState.mode, kind]);
     const [authoringSession, setAuthoringSession] = useState(initialSession);
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+    const saveGenerationRef = useRef(0);
     const authoringActionMutation = useMutation({
         mutationFn: async ({ action, payload }: { action: string; payload?: Record<string, unknown> }) => {
-            await bridge?.dispatchAction?.(action, payload);
+            return await bridge?.dispatchAction?.(action, payload);
         },
         retry: false,
     });
 
     useEffect(() => {
+        saveGenerationRef.current += 1;
         setAuthoringSession(initialSession);
         setFieldErrors({});
     }, [initialSession]);
@@ -2226,11 +2229,22 @@ function AuthoringWorkspacePanel({
         if (typeof submitResult.action !== 'string') {
             return;
         }
+        const saveGeneration = saveGenerationRef.current;
+        const submittedDraft = authoringSession.draft;
         authoringActionMutation.mutateAsync({ action: submitResult.action, payload: submitResult.payload })
-            .then(() => {
-                setAuthoringSession(currentSession => kind === 'characterAuthoring'
-                    ? createCharacterAuthoringSession(currentSession.draft, { mode: bridgeState.mode ?? 'create' })
-                    : createGroupAuthoringSession(currentSession.draft, { mode: bridgeState.mode ?? 'create' }));
+            .then((result) => {
+                const ok = !(result && typeof result === 'object' && 'ok' in (result as Record<string, unknown>)
+                    && (result as { ok?: boolean }).ok === false);
+                if (!shouldApplyCharacterAuthoringSaveResult({
+                    generation: saveGeneration,
+                    activeGeneration: saveGenerationRef.current,
+                    ok,
+                })) {
+                    return;
+                }
+                setAuthoringSession(() => kind === 'characterAuthoring'
+                    ? createCharacterAuthoringSession(submittedDraft, { mode: bridgeState.mode ?? 'create' })
+                    : createGroupAuthoringSession(submittedDraft, { mode: bridgeState.mode ?? 'create' }));
             })
             .catch(() => {
                 // Mutation state carries the failed status; keep the dirty draft intact for retry.
@@ -2238,6 +2252,7 @@ function AuthoringWorkspacePanel({
     }, [authoringActionMutation, authoringSession, bridgeState.mode, kind]);
 
     const cancelDraft = useCallback(() => {
+        saveGenerationRef.current += 1;
         setAuthoringSession(currentSession => currentSession.cancel());
         setFieldErrors({});
         authoringActionMutation.mutate({ action: 'cancelAuthoring', payload: { kind } });
@@ -2245,9 +2260,22 @@ function AuthoringWorkspacePanel({
 
     const draft = authoringSession.draft as Record<string, unknown>;
     const statusLabel = authoringActionMutation.isPending ? 'Saving' : authoringSession.dirty ? 'Unsaved' : 'Ready';
-    const nameValue = typeof draft.name === 'string' ? draft.name : '';
-    const descriptionValue = typeof draft.description === 'string' ? draft.description : '';
-    const firstMessageValue = typeof draft.firstMessage === 'string' ? draft.firstMessage : '';
+    const stringDraft = (key: string) => (typeof draft[key] === 'string' ? draft[key] as string : '');
+    const nameValue = stringDraft('name');
+    const descriptionValue = stringDraft('description');
+    const firstMessageValue = stringDraft('firstMessage');
+    const tagsText = Array.isArray(draft.tags)
+        ? draft.tags.filter((tag): tag is string => typeof tag === 'string').join(', ')
+        : '';
+    const alternateGreetingsText = Array.isArray(draft.alternateGreetings)
+        ? draft.alternateGreetings.filter((item): item is string => typeof item === 'string').join('\n')
+        : '';
+    const depthPrompt = draft.depthPrompt && typeof draft.depthPrompt === 'object'
+        ? draft.depthPrompt as { prompt?: string; depth?: number | null; role?: string | number | null }
+        : { prompt: '', depth: null, role: 'system' };
+    const talkativenessValue = draft.talkativeness == null || draft.talkativeness === ''
+        ? ''
+        : String(draft.talkativeness);
     const members = Array.isArray(draft.members) ? draft.members.filter((member): member is string => typeof member === 'string') : [];
     const candidates = Array.isArray(bridgeState.candidates)
         ? bridgeState.candidates.filter(candidate => candidate && typeof candidate.id === 'string' && typeof candidate.label === 'string')
@@ -2291,7 +2319,7 @@ function AuthoringWorkspacePanel({
                 </header>
                 {unsupportedFields.length > 0 ? (
                     <div className="react-authoring-panel-warning" role="status">
-                        Additional extension fields still use the legacy editor: {unsupportedFields.join(', ')}
+                        Unsupported extension fields are preserved server-side and not edited here: {unsupportedFields.join(', ')}
                     </div>
                 ) : null}
                 <div className="react-authoring-fields">
@@ -2307,6 +2335,40 @@ function AuthoringWorkspacePanel({
                     </label>
                     {kind === 'characterAuthoring' ? (
                         <>
+                            <label className="react-authoring-field" data-react-authoring-field="avatar">
+                                <span>Avatar</span>
+                                <input
+                                    className="text_pole"
+                                    value={stringDraft('avatar')}
+                                    onChange={(event) => updateDraft({ avatar: event.target.value })}
+                                    placeholder="Avatar filename"
+                                />
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    aria-label="Upload character avatar"
+                                    onChange={(event) => {
+                                        const file = event.target.files?.[0];
+                                        const legacyInput = document.getElementById('add_avatar_button');
+                                        if (file && legacyInput instanceof HTMLInputElement) {
+                                            const transfer = new DataTransfer();
+                                            transfer.items.add(file);
+                                            legacyInput.files = transfer.files;
+                                        }
+                                        if (file) {
+                                            updateDraft({ avatar: file.name });
+                                        }
+                                    }}
+                                />
+                            </label>
+                            <label className="react-authoring-field" data-react-authoring-field="favorite">
+                                <span>Favorite</span>
+                                <input
+                                    type="checkbox"
+                                    checked={Boolean(draft.favorite)}
+                                    onChange={(event) => updateDraft({ favorite: event.target.checked })}
+                                />
+                            </label>
                             <label className="react-authoring-field" data-react-authoring-field="description">
                                 <span>Description</span>
                                 <textarea
@@ -2325,8 +2387,256 @@ function AuthoringWorkspacePanel({
                                     onChange={(event) => updateDraft({ firstMessage: event.target.value })}
                                 />
                             </label>
+                            <label className="react-authoring-field" data-react-authoring-field="alternateGreetings">
+                                <span>Alternate greetings</span>
+                                <textarea
+                                    className="text_pole"
+                                    rows={3}
+                                    value={alternateGreetingsText}
+                                    onChange={(event) => updateDraft({
+                                        alternateGreetings: event.target.value
+                                            .split('\n')
+                                            .map(line => line.trimEnd())
+                                            .filter((line, index, lines) => line.length > 0 || index < lines.length - 1),
+                                    })}
+                                    placeholder="One greeting per line"
+                                />
+                            </label>
+                            <label className="react-authoring-field" data-react-authoring-field="personality">
+                                <span>Personality</span>
+                                <textarea
+                                    className="text_pole"
+                                    rows={3}
+                                    value={stringDraft('personality')}
+                                    onChange={(event) => updateDraft({ personality: event.target.value })}
+                                />
+                            </label>
+                            <label className="react-authoring-field" data-react-authoring-field="scenario">
+                                <span>Scenario</span>
+                                <textarea
+                                    className="text_pole"
+                                    rows={3}
+                                    value={stringDraft('scenario')}
+                                    onChange={(event) => updateDraft({ scenario: event.target.value })}
+                                />
+                            </label>
+                            <label className="react-authoring-field" data-react-authoring-field="exampleMessages">
+                                <span>Example messages</span>
+                                <textarea
+                                    className="text_pole"
+                                    rows={4}
+                                    value={stringDraft('exampleMessages')}
+                                    onChange={(event) => updateDraft({ exampleMessages: event.target.value })}
+                                />
+                            </label>
+                            <label className="react-authoring-field" data-react-authoring-field="systemPrompt">
+                                <span>System prompt</span>
+                                <textarea
+                                    className="text_pole"
+                                    rows={3}
+                                    value={stringDraft('systemPrompt')}
+                                    onChange={(event) => updateDraft({ systemPrompt: event.target.value })}
+                                />
+                            </label>
+                            <label className="react-authoring-field" data-react-authoring-field="postHistoryInstructions">
+                                <span>Post-history instructions</span>
+                                <textarea
+                                    className="text_pole"
+                                    rows={3}
+                                    value={stringDraft('postHistoryInstructions')}
+                                    onChange={(event) => updateDraft({ postHistoryInstructions: event.target.value })}
+                                />
+                            </label>
+                            <label className="react-authoring-field" data-react-authoring-field="creatorNotes">
+                                <span>Creator notes</span>
+                                <textarea
+                                    className="text_pole"
+                                    rows={3}
+                                    value={stringDraft('creatorNotes')}
+                                    onChange={(event) => updateDraft({ creatorNotes: event.target.value })}
+                                />
+                            </label>
+                            <label className="react-authoring-field" data-react-authoring-field="creator">
+                                <span>Creator</span>
+                                <input
+                                    className="text_pole"
+                                    value={stringDraft('creator')}
+                                    onChange={(event) => updateDraft({ creator: event.target.value })}
+                                />
+                            </label>
+                            <label className="react-authoring-field" data-react-authoring-field="characterVersion">
+                                <span>Character version</span>
+                                <input
+                                    className="text_pole"
+                                    value={stringDraft('characterVersion')}
+                                    onChange={(event) => updateDraft({ characterVersion: event.target.value })}
+                                />
+                            </label>
+                            <label className="react-authoring-field" data-react-authoring-field="tags">
+                                <span>Tags</span>
+                                <input
+                                    className="text_pole"
+                                    value={tagsText}
+                                    onChange={(event) => updateDraft({
+                                        tags: event.target.value
+                                            .split(',')
+                                            .map(tag => tag.trim())
+                                            .filter(Boolean),
+                                    })}
+                                    placeholder="Comma-separated tags"
+                                />
+                            </label>
+                            <label className="react-authoring-field" data-react-authoring-field="characterWorld">
+                                <span>World Info</span>
+                                <input
+                                    className="text_pole"
+                                    value={stringDraft('characterWorld')}
+                                    onChange={(event) => updateDraft({ characterWorld: event.target.value })}
+                                    placeholder="Linked world file name"
+                                />
+                            </label>
+                            <label className="react-authoring-field" data-react-authoring-field="talkativeness">
+                                <span>Talkativeness</span>
+                                <input
+                                    className="text_pole"
+                                    type="number"
+                                    min={0}
+                                    max={1}
+                                    step={0.05}
+                                    value={talkativenessValue}
+                                    onChange={(event) => updateDraft({
+                                        talkativeness: event.target.value === '' ? null : Number(event.target.value),
+                                    })}
+                                />
+                            </label>
+                            <label className="react-authoring-field" data-react-authoring-field="depthPrompt.prompt">
+                                <span>Depth prompt</span>
+                                <textarea
+                                    className="text_pole"
+                                    rows={3}
+                                    value={depthPrompt.prompt}
+                                    onChange={(event) => updateDraft({
+                                        depthPrompt: { ...depthPrompt, prompt: event.target.value },
+                                    })}
+                                />
+                            </label>
+                            <label className="react-authoring-field" data-react-authoring-field="depthPrompt.depth">
+                                <span>Depth</span>
+                                <input
+                                    className="text_pole"
+                                    type="number"
+                                    min={0}
+                                    value={depthPrompt.depth ?? ''}
+                                    onChange={(event) => updateDraft({
+                                        depthPrompt: {
+                                            ...depthPrompt,
+                                            depth: event.target.value === '' ? null : Number(event.target.value),
+                                        },
+                                    })}
+                                />
+                            </label>
+                            <label className="react-authoring-field" data-react-authoring-field="depthPrompt.role">
+                                <span>Depth role</span>
+                                <select
+                                    className="text_pole"
+                                    value={String(depthPrompt.role ?? 'system')}
+                                    onChange={(event) => updateDraft({
+                                        depthPrompt: { ...depthPrompt, role: event.target.value },
+                                    })}
+                                >
+                                    <option value="system">System</option>
+                                    <option value="user">User</option>
+                                    <option value="assistant">Assistant</option>
+                                </select>
+                            </label>
                         </>
                     ) : (
+                        <>
+                            <label className="react-authoring-field" data-react-authoring-field="avatar">
+                                <span>Avatar URL</span>
+                                <input
+                                    className="text_pole"
+                                    value={stringDraft('avatarUrl')}
+                                    onChange={(event) => updateDraft({ avatarUrl: event.target.value })}
+                                />
+                            </label>
+                            <label className="react-authoring-field" data-react-authoring-field="groupFavorite">
+                                <span>Favorite</span>
+                                <input
+                                    type="checkbox"
+                                    checked={Boolean(draft.favorite)}
+                                    onChange={(event) => updateDraft({ favorite: event.target.checked })}
+                                />
+                            </label>
+                            <label className="react-authoring-field" data-react-authoring-field="allowSelfResponses">
+                                <span>Allow self responses</span>
+                                <input
+                                    type="checkbox"
+                                    checked={Boolean(draft.allowSelfResponses)}
+                                    onChange={(event) => updateDraft({ allowSelfResponses: event.target.checked })}
+                                />
+                            </label>
+                            <label className="react-authoring-field" data-react-authoring-field="hideMutedSprites">
+                                <span>Hide muted sprites</span>
+                                <input
+                                    type="checkbox"
+                                    checked={Boolean(draft.hideMutedSprites)}
+                                    onChange={(event) => updateDraft({ hideMutedSprites: event.target.checked })}
+                                />
+                            </label>
+                            <label className="react-authoring-field" data-react-authoring-field="activationStrategy">
+                                <span>Activation strategy</span>
+                                <select
+                                    className="text_pole"
+                                    value={String(draft.activationStrategy ?? 0)}
+                                    onChange={(event) => updateDraft({ activationStrategy: Number(event.target.value) })}
+                                >
+                                    <option value="0">Natural</option>
+                                    <option value="1">List</option>
+                                    <option value="2">Manual</option>
+                                    <option value="3">Pooled</option>
+                                </select>
+                            </label>
+                            <label className="react-authoring-field" data-react-authoring-field="generationMode">
+                                <span>Generation mode</span>
+                                <select
+                                    className="text_pole"
+                                    value={String(draft.generationMode ?? 0)}
+                                    onChange={(event) => updateDraft({ generationMode: Number(event.target.value) })}
+                                >
+                                    <option value="0">Swap</option>
+                                    <option value="1">Append</option>
+                                    <option value="2">Append disabled</option>
+                                </select>
+                            </label>
+                            <label className="react-authoring-field" data-react-authoring-field="autoModeDelay">
+                                <span>Auto mode delay</span>
+                                <input
+                                    className="text_pole"
+                                    type="number"
+                                    min={1}
+                                    value={Number(draft.autoModeDelay ?? 5)}
+                                    onChange={(event) => updateDraft({ autoModeDelay: Number(event.target.value) })}
+                                />
+                            </label>
+                            <label className="react-authoring-field" data-react-authoring-field="joinPrefix">
+                                <span>Join prefix</span>
+                                <textarea
+                                    className="text_pole"
+                                    rows={2}
+                                    value={stringDraft('joinPrefix')}
+                                    onChange={(event) => updateDraft({ joinPrefix: event.target.value })}
+                                />
+                            </label>
+                            <label className="react-authoring-field" data-react-authoring-field="joinSuffix">
+                                <span>Join suffix</span>
+                                <textarea
+                                    className="text_pole"
+                                    rows={2}
+                                    value={stringDraft('joinSuffix')}
+                                    onChange={(event) => updateDraft({ joinSuffix: event.target.value })}
+                                />
+                            </label>
                         <section className="react-authoring-members" data-react-authoring-members>
                             <div className="react-authoring-section-title">Members</div>
                             {fieldErrors.members ? <small role="alert">{fieldErrors.members}</small> : null}
@@ -2381,6 +2691,7 @@ function AuthoringWorkspacePanel({
                                 )}
                             </div>
                         </section>
+                        </>
                     )}
                 </div>
                 <div className="react-authoring-panel-actions" aria-label={`${title} actions`}>
