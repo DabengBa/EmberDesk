@@ -43,7 +43,7 @@ describe('React workspace panels bridge helpers', () => {
             reactPanels: {
                 mainChatMessageList: false,
                 worldInfo: true,
-                backgroundLibrary: false,
+                backgroundLibrary: true,
                 extensionsHost: false,
                 characterAuthoring: true,
                 groupAuthoring: true,
@@ -823,6 +823,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('dispatchAction(action, payload = {}) {');
         expect(scriptSource).toContain('void mountReactWorldInfoPanel();');
         expect(scriptSource).toContain('bridge: getWorldInfoReactBridge()');
+        expect(scriptSource).toContain('eventSource.on(event_types.WORLDINFO_SETTINGS_UPDATED');
         expect(scriptSource).not.toContain('$(\'#world_info_search\').val(String(payload?.searchQuery ?? \'\')).trigger(\'input\');');
         expect(scriptSource).not.toContain('$(\'#world_info_sort_order\').val(String(payload?.sortValue ?? \'\')).trigger(\'change\');');
         expect(scriptSource).not.toContain('$(\'#world_editor_select\').val(String(payload?.worldIndex ?? \'\')).trigger(\'change\');');
@@ -889,8 +890,11 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('chatContainerPresent: Boolean(chatContainer)');
         expect(scriptSource).toContain('systemItemCount');
         expect(scriptSource).toContain('chatItemCount');
-        expect(scriptSource).toContain('getBackgroundPanelState({');
+        expect(scriptSource).toContain('getBackgroundLibraryPanelStatus as getBackgroundPanelState');
         expect(scriptSource).toContain('async function mountReactBackgroundLibraryPanel(');
+        expect(scriptSource).toContain('function hideLegacyBackgroundGallery(');
+        expect(scriptSource).toContain("dataset.backgroundLibraryVisibleOwner = hidden ? 'react' : 'legacy'");
+        expect(scriptSource).toContain("data-doc-id', 'feature.background_library_panel'");
         expect(scriptSource).toContain('kind: \'backgroundLibrary\'');
         expect(scriptSource).toContain('getState: overrides => getBackgroundLibraryReactBridgeState(overrides ?? stateOverrides)');
         expect(scriptSource).toContain('const handleReactBackgroundLibraryStateChange = createWorkspacePanelStateChangeHandler(');
@@ -907,7 +911,14 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain("{ id: 'global-gallery', label: 'Global gallery', ready: bridgeState.systemContainerPresent }");
         expect(workspacePanelSource).toContain("{ id: 'chat-gallery', label: 'Chat gallery', ready: bridgeState.chatContainerPresent }");
         expect(workspacePanelSource).not.toContain('data-background-library-bridge-state="status"');
-        expect(workspacePanelSource).toContain('legacyBoundary="upload-delete-rename-select-lock-slash"');
+        expect(workspacePanelSource).toContain('legacyBoundary="service-owned-catalog-actions"');
+        expect(scriptSource).toContain("case 'enterFolder':");
+        expect(scriptSource).toContain("case 'exitFolder':");
+        expect(backgroundsSource).toContain('export function enterBackgroundLibraryFolder');
+        expect(backgroundsSource).toContain('export function exitBackgroundLibraryFolder');
+        expect(workspacePanelSource).toContain('data-background-library-react-action="exit-folder"');
+        expect(workspacePanelSource).toContain('data-background-library-react-folders="root"');
+
         expect(workspacePanelSource).toContain("{ id: 'background-actions', label: 'Background actions', ready: bridgeState.systemContainerPresent || bridgeState.chatContainerPresent }");
     });
 
@@ -975,11 +986,26 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('data-background-library-react-gallery={source}');
         expect(workspacePanelSource).toContain('<BackgroundGallery source="global" items={systemBackgrounds} actionMutation={backgroundLibraryActionMutation} />');
         expect(workspacePanelSource).toContain('<BackgroundGallery source="chat" items={chatBackgrounds} actionMutation={backgroundLibraryActionMutation} />');
-        expect(workspacePanelSource).toContain('className="menu_button workspace-panel-item-row workspace-panel-background-item"');
+        expect(workspacePanelSource).toContain('className="flex-container flexFlowColumn gap4 workspace-panel-background-item"');
         expect(workspacePanelSource).toContain('data-background-library-react-item={item.id}');
         expect(workspacePanelSource).toContain('backgroundLibraryActionMutation.mutate({ action: \'uploadBackground\' })');
         expect(workspacePanelSource).toContain('backgroundLibraryActionMutation.mutate({ action: \'lockBackground\' })');
         expect(workspacePanelSource).toContain('backgroundLibraryActionMutation.mutate({ action: \'unlockBackground\' })');
+        expect(scriptSource).toContain('getBackgroundLibraryServicePanelState');
+        expect(scriptSource).toContain('renameBackgroundLibraryItem');
+        expect(scriptSource).toContain('deleteBackgroundLibraryItem');
+        expect(scriptSource).toContain("case 'renameBackground':");
+        expect(scriptSource).toContain("case 'deleteBackground':");
+        expect(backgroundsSource).toContain('export async function renameBackgroundLibraryItem');
+        expect(backgroundsSource).toContain('export async function deleteBackgroundLibraryItem');
+        expect(backgroundsSource).toContain('ensureBackgroundLibrarySession().applyFilter');
+        expect(backgroundsSource).toContain('ensureBackgroundLibrarySession().applySort');
+        expect(backgroundsSource).toContain('ensureBackgroundLibrarySession().selectBackground');
+        expect(workspacePanelSource).toContain('data-background-library-react-item-action="rename"');
+        expect(workspacePanelSource).toContain('data-background-library-react-item-action="delete"');
+        expect(workspacePanelSource).toContain("action: 'renameBackground'");
+        expect(workspacePanelSource).toContain("action: 'deleteBackground'");
+        expect(workspacePanelSource).toContain('legacyBoundary="service-owned-catalog-actions"');
     });
 
     test('wires Extensions Host to an independent React host without replacing protected mount points', () => {

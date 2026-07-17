@@ -1,0 +1,4 @@
+contract_version = 1
+feature_slug = "react-background-library-retirement"
+brief = ".docs/tech/briefs/260716-09-react-background-library-retirement.md"
+doc_ids = ["feature.background_library_panel", "page.chat_workspace"]

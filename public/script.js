@@ -34,6 +34,7 @@ import {
     selectWorldInfoEditorIndex,
     applyWorldInfoSearchQuery,
     applyWorldInfoSortOption,
+    setWorldInfoGlobalActiveNames,
     createWorldInfoEntryFromEditor,
     promptToCreateWorldInfo,
     requestWorldInfoImportSelection,
@@ -266,8 +267,13 @@ import {
     unlockCurrentBackground,
     runAutoBackgroundSelection,
     refreshBackgroundLibrary,
+    renameBackgroundLibraryItem,
+    deleteBackgroundLibraryItem,
+    enterBackgroundLibraryFolder,
+    exitBackgroundLibraryFolder,
+    getBackgroundLibraryServicePanelState,
 } from './scripts/backgrounds.js';
-import { getBackgroundPanelState } from './scripts/background-panel-controller.js';
+import { getBackgroundLibraryPanelStatus as getBackgroundPanelState } from './scripts/background-domain.js';
 import { loader } from './scripts/action-loader.js';
 import { createSingleFlightTask, resolvePersistedCurrentVersion, resolveStartupSettingsPlan } from './scripts/startup-helpers.js';
 import { ensurePanel, registerPanelHook } from './scripts/deferred-panels.js';
@@ -385,7 +391,7 @@ export function getWorkspaceReactFeatures() {
         reactPanels: {
             mainChatMessageList: false,
             worldInfo: true,
-            backgroundLibrary: false,
+            backgroundLibrary: true,
             extensionsHost: false,
             characterAuthoring: true,
             groupAuthoring: true,
@@ -808,6 +814,7 @@ function getWorkspaceShellChromeBridge() {
                     void ensureWorkspaceShellDeferredPanel('world-info-body');
                     return createWorkspaceShellPanelResult('worldInfo', worldInfoMount);
                 case 'openBackgrounds':
+                    // React sole-owner: open drawer and mount Background Library; legacy gallery remains hidden compatibility DOM.
                     await openWorkspaceShellDrawer('Backgrounds');
                     await waitForWorkspaceShellPanelOpenTask();
                     return createWorkspaceShellPanelResult('backgroundLibrary', await mountReactBackgroundLibraryPanel());
@@ -1654,6 +1661,16 @@ eventSource.on('groupSelected', event => {
     queueReactGroupAuthoringRemount();
 });
 
+function queueReactWorldInfoRemount() {
+    if (document.getElementById('WorldInfo')?.classList.contains('openDrawer')) {
+        window.setTimeout(() => void mountReactWorldInfoPanel(), 0);
+    }
+}
+
+eventSource.on(event_types.WORLDINFO_SETTINGS_UPDATED, () => {
+    queueReactWorldInfoRemount();
+});
+
 function getCharacterAuthoringReactBridge() {
     return createWorkspacePanelActionBridge({
         async dispatchAction(action, payload = {}) {
@@ -2077,6 +2094,8 @@ function getWorldInfoReactBridge() {
                     return applyWorldInfoSearchQuery(payload?.searchQuery ?? '');
                 case 'applySortOption':
                     return applyWorldInfoSortOption(payload?.sortValue ?? '');
+                case 'setGlobalWorlds':
+                    return setWorldInfoGlobalActiveNames(payload?.names ?? []);
                 case 'createEntry':
                     return createWorldInfoEntryFromEditor();
                 case 'createWorld':
@@ -2724,22 +2743,73 @@ function ensureBackgroundLibraryReactHost() {
     }
 
     let host = document.getElementById(BACKGROUND_LIBRARY_REACT_HOST_ID);
-    if (host) {
-        return host;
+    if (!host) {
+        host = document.createElement('div');
+        host.id = BACKGROUND_LIBRARY_REACT_HOST_ID;
+        host.className = 'emberdesk-react-background-library-panel-host';
+        host.setAttribute('data-doc-id', 'feature.background_library_panel');
+        // Prefer the drawer body as host parent.
+        const body = backgroundPanel.querySelector('.drawer-body') || backgroundPanel;
+        body.prepend(host);
     }
 
-    host = document.createElement('div');
-    host.id = BACKGROUND_LIBRARY_REACT_HOST_ID;
-    host.className = 'emberdesk-react-background-library-panel-host';
-
-    const backgroundTabs = document.getElementById('bg_tabs');
-    if (backgroundTabs?.parentElement === backgroundPanel) {
-        backgroundPanel.insertBefore(host, backgroundTabs);
-    } else {
-        backgroundPanel.prepend(host);
-    }
-
+    hideLegacyBackgroundGallery(true);
     return host;
+}
+
+function hideLegacyBackgroundGallery(hidden) {
+    const backgroundPanel = document.getElementById('Backgrounds');
+    const host = document.getElementById(BACKGROUND_LIBRARY_REACT_HOST_ID);
+    if (!(backgroundPanel instanceof HTMLElement)) {
+        return;
+    }
+
+    const legacySelectors = [
+        '#bg_tabs',
+        '#bg_menu_content',
+        '#bg_custom_content',
+        '#bg_folder_grid',
+        '#bg_folder_breadcrumb',
+        '#bg-filter',
+        '#bg-sort',
+        '#bg_thumb_zoom_in',
+        '#bg_thumb_zoom_out',
+        '#auto_background',
+        '#bg_selection_mode_button',
+        '#bg_group_add_to_folder_button',
+        '#bg_folder_remove_selected_button',
+        '#bg_chat_hint',
+        '.bg-drawer-controls',
+        '.bg_list',
+    ];
+
+    for (const selector of legacySelectors) {
+        backgroundPanel.querySelectorAll(selector).forEach((node) => {
+            if (!(node instanceof HTMLElement) || node === host || host?.contains(node)) {
+                return;
+            }
+            node.hidden = hidden;
+            node.setAttribute('aria-hidden', hidden ? 'true' : 'false');
+            if (hidden) {
+                node.setAttribute('inert', '');
+            } else {
+                node.removeAttribute('inert');
+            }
+            node.dataset.legacyBackgroundHiddenByReact = hidden ? 'true' : 'false';
+        });
+    }
+
+    // Keep the file input available for service-backed upload selection.
+    const uploadInput = document.getElementById('add_bg_button');
+    if (uploadInput instanceof HTMLElement) {
+        uploadInput.hidden = false;
+        uploadInput.removeAttribute('inert');
+        uploadInput.setAttribute('aria-hidden', 'true');
+        uploadInput.classList.add('displayNone');
+    }
+
+    backgroundPanel.classList.toggle('bg-drawer-react-owned', hidden);
+    backgroundPanel.dataset.backgroundLibraryVisibleOwner = hidden ? 'react' : 'legacy';
 }
 
 function getBackgroundLibraryReactGalleryItems(container) {
@@ -2762,13 +2832,42 @@ function getBackgroundLibraryReactBridgeState(stateOverrides = {}) {
     const systemContainer = document.getElementById('bg_menu_content');
     const chatContainer = document.getElementById('bg_custom_content');
     const loadingIndicator = document.getElementById('bg_startup_loading');
-    const systemItemCount = systemContainer?.querySelectorAll('.bg_example').length ?? 0;
-    const chatItemCount = chatContainer?.querySelectorAll('.bg_example').length ?? 0;
     const backgroundFilter = /** @type {HTMLInputElement|null} */ (document.getElementById('bg-filter'));
     const backgroundSort = /** @type {HTMLSelectElement|null} */ (document.getElementById('bg-sort'));
+
+    // Prefer the DOM-free background library service snapshot when available.
+    try {
+        if (typeof getBackgroundLibraryServicePanelState === 'function') {
+            const serviceState = getBackgroundLibraryServicePanelState({
+                systemContainerPresent: Boolean(systemContainer),
+                chatContainerPresent: Boolean(chatContainer),
+                refreshQueued: Boolean(stateOverrides.refreshQueued),
+                isLoading: Boolean(stateOverrides.isLoading) || Boolean(loadingIndicator),
+                error: stateOverrides.error ?? null,
+                filterQuery: backgroundFilter?.value,
+                sortValue: backgroundSort?.value,
+            });
+            if (serviceState) {
+                return {
+                    ...serviceState,
+                    refreshQueued: Boolean(stateOverrides.refreshQueued),
+                    systemContainerPresent: Boolean(systemContainer),
+                    chatContainerPresent: Boolean(chatContainer),
+                    filterQuery: serviceState.filterQuery ?? backgroundFilter?.value ?? '',
+                    sortValue: serviceState.sortValue ?? backgroundSort?.value ?? '',
+                };
+            }
+        }
+    } catch (error) {
+        console.warn('Background library service panel state unavailable; falling back to gallery DOM snapshot.', error);
+    }
+
+    const systemItemCount = systemContainer?.querySelectorAll('.bg_example').length ?? 0;
+    const chatItemCount = chatContainer?.querySelectorAll('.bg_example').length ?? 0;
     const panelState = getBackgroundPanelState({
         isLoading: Boolean(stateOverrides.isLoading) || Boolean(loadingIndicator),
-        itemCount: systemItemCount + chatItemCount,
+        systemItemCount,
+        chatItemCount,
         error: stateOverrides.error ?? null,
     });
 
@@ -2809,6 +2908,16 @@ function getBackgroundLibraryReactBridge() {
                     return runAutoBackgroundSelection();
                 case 'refreshBackgrounds':
                     return refreshBackgroundLibrary();
+                case 'renameBackground':
+                    return renameBackgroundLibraryItem(payload?.id ?? '', payload?.nextName ?? '', payload?.source ?? 'global');
+                case 'deleteBackground':
+                    return deleteBackgroundLibraryItem(payload?.id ?? '', payload?.source ?? 'global', {
+                        deleteFromServer: Boolean(payload?.deleteFromServer),
+                    });
+                case 'enterFolder':
+                    return enterBackgroundLibraryFolder(payload?.folderId ?? '');
+                case 'exitFolder':
+                    return exitBackgroundLibraryFolder();
                 default:
                     console.warn('Unknown Background Library React action', action);
                     return undefined;
@@ -2821,7 +2930,7 @@ function getBackgroundLibraryReactBridge() {
 }
 
 async function mountReactBackgroundLibraryPanel(stateOverrides = {}) {
-    return mountWorkspacePanelHost({
+    const result = await mountWorkspacePanelHost({
         kind: 'backgroundLibrary',
         ensureContainer: ensureBackgroundLibraryReactHost,
         getState: overrides => getBackgroundLibraryReactBridgeState(overrides ?? stateOverrides),
@@ -2829,6 +2938,10 @@ async function mountReactBackgroundLibraryPanel(stateOverrides = {}) {
         features: getWorkspaceReactFeatures(),
         stateOverrides,
     });
+    if (result?.mounted) {
+        hideLegacyBackgroundGallery(true);
+    }
+    return result;
 }
 const handleReactBackgroundLibraryStateChange = createWorkspacePanelStateChangeHandler((stateOverrides) => {
     void mountReactBackgroundLibraryPanel(stateOverrides);

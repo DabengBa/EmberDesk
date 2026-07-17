@@ -4,7 +4,6 @@ import { cancelDebouncedMetadataSave, openThirdPartyExtensionMenu, saveMetadataD
 import { SlashCommand } from './slash-commands/SlashCommand.js';
 import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
 import { createSingleFlightTask } from './startup-helpers.js';
-import { replaceBackgroundPanelController } from './background-panel-controller.js';
 import { cancelDebounce, createThumbnail, flashHighlight, getBase64Async, stringFormat, debounce, setupScrollToTop, saveBase64AsFile, getFileExtension, sortIgnoreCaseAndAccents } from './utils.js';
 import { debounce_timeout } from './constants.js';
 import { t } from './i18n.js';
@@ -12,9 +11,32 @@ import { callGenericPopup, Popup, POPUP_TYPE } from './popup.js';
 import { groups, selected_group } from './group-chats.js';
 import { humanizedDateTime } from './RossAscends-mods.js';
 import { deleteMediaFromServer } from './chats.js';
+import {
+    BG_METADATA_KEY as DOMAIN_BG_METADATA_KEY,
+    BG_SORT_OPTIONS as DOMAIN_BG_SORT_OPTIONS,
+    BG_SOURCES as DOMAIN_BG_SOURCES,
+    LIST_METADATA_KEY as DOMAIN_LIST_METADATA_KEY,
+    generateUrlParameter as domainGenerateUrlParameter,
+    getBackgroundPath as domainGetBackgroundPath,
+    getBackgroundRelativePath as domainGetBackgroundRelativePath,
+    getFriendlyBackgroundTitle as domainGetFriendlyBackgroundTitle,
+    isAnimatedBackgroundExtension as domainIsAnimatedBackgroundExtension,
+    isCustomBackgroundUrl as domainIsCustomBackgroundUrl,
+    sortBackgrounds as domainSortBackgrounds,
+    getFilteredImagesByFolder as domainGetFilteredImagesByFolder,
+    resolveReplacementFilename as domainResolveReplacementFilename,
+    buildBackgroundGalleryItems as domainBuildBackgroundGalleryItems,
+    buildBackgroundLibraryReactPanelState,
+} from './background-domain.js';
+import { createBackgroundLibrarySession } from './background-library-service.js';
+export { createBackgroundLibrarySession };
+export {
+    buildBackgroundLibraryReactPanelState,
+    BG_SORT_OPTIONS as DOMAIN_EXPORTED_BG_SORT_OPTIONS,
+} from './background-domain.js';
 
-const BG_METADATA_KEY = 'custom_background';
-const LIST_METADATA_KEY = 'chat_backgrounds';
+const BG_METADATA_KEY = DOMAIN_BG_METADATA_KEY;
+const LIST_METADATA_KEY = DOMAIN_LIST_METADATA_KEY;
 
 /** @type {Array<{id: string, name: string, thumbnailFile: string}>} */
 let folderList = [];
@@ -54,7 +76,7 @@ const THUMBNAIL_CONFIG = {
     height: 90,
 };
 
-const ANIMATED_BACKGROUND_EXTENSIONS = ['mp4', 'webp', 'gif', 'apng'];
+const ANIMATED_BACKGROUND_EXTENSIONS = ['mp4', 'webp', 'gif', 'apng']; // domain owns authoritative list
 
 /**
  * Cache for image metadata.
@@ -67,22 +89,14 @@ const METADATA_CACHE = new Map();
  * @readonly
  * @enum {number}
  */
-const BG_SOURCES = {
-    GLOBAL: 0,
-    CHAT: 1,
-};
+const BG_SOURCES = DOMAIN_BG_SOURCES;
 
 /**
  * Background sorting options.
  * @readonly
  * @enum {string}
  */
-const BG_SORT_OPTIONS = {
-    AZ: 'az',
-    ZA: 'za',
-    NEWEST: 'newest',
-    OLDEST: 'oldest',
-};
+const BG_SORT_OPTIONS = DOMAIN_BG_SORT_OPTIONS;
 
 /**
  * Mapping of background sources to their corresponding tab IDs.
@@ -106,8 +120,106 @@ let lazyLoadObserver = null;
  * @type {Array<{filename: string, isAnimated: boolean}>}
  */
 let cachedSystemBackgrounds = [];
-let backgroundPanelController = null;
 const backgroundCatalogTask = createSingleFlightTask(loadBackgroundCatalog);
+
+/** @type {ReturnType<typeof createBackgroundLibrarySession>|null} */
+let backgroundLibrarySession = null;
+
+function ensureBackgroundLibrarySession() {
+    if (backgroundLibrarySession) {
+        return backgroundLibrarySession;
+    }
+
+    backgroundLibrarySession = createBackgroundLibrarySession({
+        getSettings: () => background_settings,
+        setSettings: (next) => {
+            Object.assign(background_settings, next || {});
+        },
+        saveSettings: () => saveSettings(),
+        saveSettingsDebounced: () => saveSettingsDebounced(),
+        getChatMetadata: () => chat_metadata,
+        setChatMetadataValue: (key, value) => {
+            chat_metadata[key] = value;
+        },
+        deleteChatMetadataValue: (key) => {
+            delete chat_metadata[key];
+        },
+        saveMetadata: () => saveMetadata(),
+        saveMetadataDebounced: () => saveMetadataDebounced(),
+        getCurrentChatId: () => getCurrentChatId(),
+        fetchSystemCatalog: async () => {
+            const response = await fetch('/api/backgrounds/all', {
+                method: 'POST',
+                headers: getRequestHeaders(),
+                body: JSON.stringify({}),
+            });
+            if (!response.ok) {
+                throw new Error(`Failed to load backgrounds: ${response.status}`);
+            }
+            return response.json();
+        },
+        fetchFolders: async () => {
+            const response = await fetch('/api/backgrounds/folders', {
+                method: 'POST',
+                headers: getRequestHeaders(),
+                body: JSON.stringify({}),
+            });
+            if (!response.ok) {
+                return { folders: [], imageFolderMap: {} };
+            }
+            return response.json();
+        },
+        fetchImageMetadata: async () => {
+            const response = await fetch('/api/image-metadata/all', {
+                method: 'POST',
+                headers: getRequestHeaders(),
+                body: JSON.stringify({ prefix: 'backgrounds/' }),
+            });
+            if (!response.ok) {
+                return { images: {} };
+            }
+            return response.json();
+        },
+        deleteSystemBackground: async (filename) => {
+            await delBackground(filename);
+        },
+        renameSystemBackground: async (oldBg, newBg) => {
+            const response = await fetch('/api/backgrounds/rename', {
+                method: 'POST',
+                headers: getRequestHeaders(),
+                body: JSON.stringify({ old_bg: oldBg, new_bg: newBg }),
+            });
+            if (!response.ok) {
+                throw new Error('Failed to rename background');
+            }
+        },
+        uploadSystemBackground: async (formData) => {
+            // Keep existing upload helpers as transport; session owns result reconcile.
+            return formData;
+        },
+        uploadChatBackground: async (formData) => {
+            return formData;
+        },
+        deleteMediaFromServer: async (path) => {
+            await deleteMediaFromServer(path);
+        },
+        generateQuietPrompt: async (prompt) => generateQuietPrompt(prompt),
+        onVisualBackgroundChange: (url) => {
+            $('#bg1').css('background-image', url);
+        },
+        compareNames: sortIgnoreCaseAndAccents,
+    });
+
+    return backgroundLibrarySession;
+}
+
+/**
+ * Snapshot for React without reading gallery DOM.
+ * @param {object} [meta]
+ */
+export function getBackgroundLibraryServicePanelState(meta = {}) {
+    return ensureBackgroundLibrarySession().getReactPanelState(meta);
+}
 
 function dispatchBackgroundLibraryStateChange(detail = {}) {
     if (typeof document === 'undefined' || typeof CustomEvent === 'undefined') {
@@ -136,30 +248,14 @@ export let background_settings = {
  * @returns {string[]} Sorted array of background filenames
  */
 function sortBackgrounds(backgrounds, isCustom = false) {
-    const sortOrder = background_settings.sortOrder || BG_SORT_OPTIONS.AZ;
-
-    return [...backgrounds].sort((a, b) => {
-        switch (sortOrder) {
-            case BG_SORT_OPTIONS.AZ:
-                return sortIgnoreCaseAndAccents(a, b);
-            case BG_SORT_OPTIONS.ZA:
-                return sortIgnoreCaseAndAccents(b, a);
-            case BG_SORT_OPTIONS.NEWEST:
-            case BG_SORT_OPTIONS.OLDEST: {
-                const keyA = isCustom ? a : `backgrounds/${a}`;
-                const keyB = isCustom ? b : `backgrounds/${b}`;
-                const metaA = METADATA_CACHE.get(keyA);
-                const metaB = METADATA_CACHE.get(keyB);
-                const timestampA = metaA?.addedTimestamp ?? 0;
-                const timestampB = metaB?.addedTimestamp ?? 0;
-                // Newest first (descending) or oldest first (ascending)
-                return sortOrder === BG_SORT_OPTIONS.NEWEST
-                    ? timestampB - timestampA
-                    : timestampA - timestampB;
-            }
-            default:
-                return 0;
-        }
+    return domainSortBackgrounds(backgrounds, {
+        sortOrder: background_settings.sortOrder || BG_SORT_OPTIONS.AZ,
+        isCustom,
+        compareNames: sortIgnoreCaseAndAccents,
+        getTimestamp: (filename, custom) => {
+            const key = custom ? filename : `backgrounds/${filename}`;
+            return METADATA_CACHE.get(key)?.addedTimestamp ?? 0;
+        },
     });
 }
 
@@ -197,7 +293,7 @@ function createThumbnailElement(imageData) {
 
     const url = generateUrlParameter(bg, isCustom);
     const title = isCustom ? bg.split('/').pop() : bg;
-    const friendlyTitle = String(title || '').slice(0, title.lastIndexOf('.'));
+    const friendlyTitle = domainGetFriendlyBackgroundTitle(title);
 
     thumbnail.attr('title', title);
     thumbnail.attr('bgfile', bg);
@@ -292,7 +388,7 @@ async function onChatChanged() {
  */
 export function isCustomBackgroundUrl(fileUrl) {
     const customBackgrounds = chat_metadata[LIST_METADATA_KEY] || [];
-    return customBackgrounds.some(bg => bg === fileUrl || generateUrlParameter(bg, true) === fileUrl);
+    return domainIsCustomBackgroundUrl(fileUrl, customBackgrounds);
 }
 
 /**
@@ -301,7 +397,7 @@ export function isCustomBackgroundUrl(fileUrl) {
  * @returns {string} Client path for the system backgroun
  */
 export function getBackgroundPath(fileUrl) {
-    return `backgrounds/${encodeURIComponent(fileUrl)}`;
+    return domainGetBackgroundPath(fileUrl);
 }
 
 /**
@@ -311,7 +407,7 @@ export function getBackgroundPath(fileUrl) {
  * @returns {string} Raw relative path, e.g. "backgrounds/my file.jpg"
  */
 function getBackgroundRelativePath(file) {
-    return `backgrounds/${file}`;
+    return domainGetBackgroundRelativePath(file);
 }
 
 
@@ -804,6 +900,18 @@ async function loadBackgroundCatalog() {
 
             await preloadImageMetadata();
 
+            // Keep the DOM-free service session authoritative for React gallery state.
+            ensureBackgroundLibrarySession().hydrateCatalog({
+                images: cachedSystemBackgrounds,
+                folders: folderList,
+                imageFolderMap,
+                metadata: Object.fromEntries(METADATA_CACHE.entries()),
+                config: THUMBNAIL_CONFIG,
+                isLoading: false,
+                error: null,
+                activeFolderId,
+            });
+
             // Render only filtered images if inside a folder, otherwise all
             renderSystemBackgrounds(getFilteredImages());
             syncBackgroundSelectionUi();
@@ -814,21 +922,25 @@ async function loadBackgroundCatalog() {
 }
 
 function setBackgroundCatalogLoading(isLoading) {
+    // Loading ownership is service/React state. Keep a minimal legacy indicator only when the hidden gallery container exists.
     const container = document.getElementById('bg_menu_content');
-    if (!container) {
-        return;
+    if (container) {
+        let indicator = container.querySelector('#bg_startup_loading');
+        if (isLoading) {
+            if (!indicator) {
+                indicator = document.createElement('div');
+                indicator.id = 'bg_startup_loading';
+                indicator.className = 'wide100p textAlignCenter marginTop10';
+                indicator.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span></span>';
+                indicator.querySelector('span').textContent = t`Loading backgrounds...`;
+                container.prepend(indicator);
+            }
+        } else if (indicator) {
+            indicator.remove();
+        }
     }
 
-    if (!backgroundPanelController || backgroundPanelController.container !== container) {
-        backgroundPanelController = replaceBackgroundPanelController({
-            currentController: backgroundPanelController,
-            root: document,
-            container,
-            loadingText: t`Loading backgrounds...`,
-        });
-    }
-
-    backgroundPanelController.setLoading(isLoading);
+    ensureBackgroundLibrarySession().hydrateCatalog({ isLoading });
     dispatchBackgroundLibraryStateChange({ isLoading });
 }
 
@@ -967,11 +1079,7 @@ async function getFolderCoverUrl(folder) {
  * @returns {Array<{filename: string, isAnimated: boolean}>}
  */
 function getFilteredImages() {
-    if (!activeFolderId) return cachedSystemBackgrounds;
-    return cachedSystemBackgrounds.filter(img => {
-        const fids = imageFolderMap[img.filename];
-        return fids && fids.includes(activeFolderId);
-    });
+    return domainGetFilteredImagesByFolder(cachedSystemBackgrounds, activeFolderId, imageFolderMap);
 }
 
 /**
@@ -984,6 +1092,7 @@ function onFolderDrillIn(folderId) {
 
     clearBackgroundGroupSelection();
     activeFolderId = folderId;
+    ensureBackgroundLibrarySession().enterFolder(folderId);
     $('#Backgrounds').addClass('in-folder-view');
 
     // Hide folder grid, show breadcrumb
@@ -1002,6 +1111,7 @@ function onFolderDrillIn(folderId) {
 function onBackToFolders() {
     clearBackgroundGroupSelection();
     activeFolderId = null;
+    ensureBackgroundLibrarySession().exitFolder();
     $('#Backgrounds').removeClass('in-folder-view');
 
     // Show folder grid, hide breadcrumb
@@ -1509,12 +1619,11 @@ function getUrlParameter(block) {
 }
 
 function generateUrlParameter(bg, isCustom) {
-    return isCustom ? `url("${encodeURI(bg)}")` : `url("${getBackgroundPath(bg)}")`;
+    return domainGenerateUrlParameter(bg, isCustom);
 }
 
 function isAnimatedBackgroundExtension(fileName) {
-    const fileExtension = fileName.split('.').pop().toLowerCase();
-    return ANIMATED_BACKGROUND_EXTENSIONS.includes(fileExtension);
+    return domainIsAnimatedBackgroundExtension(fileName);
 }
 
 /**
@@ -1785,12 +1894,14 @@ const debouncedOnBackgroundFilterInput = debounce(onBackgroundFilterInput, debou
 
 export function applyBackgroundLibraryFilter(filterQuery) {
     const normalizedQuery = String(filterQuery ?? '');
+    ensureBackgroundLibrarySession().applyFilter(normalizedQuery);
     $('#bg-filter').val(normalizedQuery);
     onBackgroundFilterInput();
 }
 
 export function applyBackgroundLibrarySort(sortValue) {
     const normalizedSortValue = String(sortValue ?? '');
+    ensureBackgroundLibrarySession().applySort(normalizedSortValue);
     $('#bg-sort').val(normalizedSortValue);
     background_settings.sortOrder = normalizedSortValue;
     saveSettingsDebounced();
@@ -1813,31 +1924,131 @@ export function selectBackgroundLibraryItem(backgroundId, source) {
         : document.querySelectorAll('#bg_menu_content .bg_example');
     const backgroundElement = Array.from(candidates)
         .find(element => element.getAttribute('bgfile') === normalizedBackgroundId);
+    if (!backgroundElement) {
+        // No legacy gallery node: service is the sole selection owner.
+        void ensureBackgroundLibrarySession().selectBackground(
+            normalizedBackgroundId,
+            normalizedSource === 'chat' ? 'chat' : 'global',
+        );
+        syncBackgroundSelectionUi();
+        return true;
+    }
     return applyBackgroundSelection(backgroundElement, { respectGroupSelectionMode: false });
 }
 
 export function lockCurrentBackground() {
     if (!getCurrentChatId()) {
+        // Preserve toast/warning behavior for no-chat lock attempts.
         onLockBackgroundClick();
         return false;
     }
 
-    onLockBackgroundClick();
+    const result = ensureBackgroundLibrarySession().lockCurrentBackground();
+    if (!result?.ok) {
+        onLockBackgroundClick();
+        return false;
+    }
+    // Keep legacy gallery highlight classes in sync.
+    syncBackgroundSelectionUi();
     return true;
 }
 
 export function unlockCurrentBackground() {
-    onUnlockBackgroundClick();
+    const result = ensureBackgroundLibrarySession().unlockCurrentBackground();
+    if (!result?.ok) {
+        onUnlockBackgroundClick();
+        return false;
+    }
+    syncBackgroundSelectionUi();
     return true;
 }
 
 export async function runAutoBackgroundSelection() {
+    const serviceResult = await ensureBackgroundLibrarySession().runAutoBackgroundSelection();
+    if (serviceResult?.ok) {
+        // Apply selection to settings/visuals via existing select path for identity consistency.
+        if (serviceResult.name) {
+            selectBackgroundLibraryItem(serviceResult.name, 'global');
+        }
+        return true;
+    }
+    // Fall back to the established AI command path when the service cannot resolve a match.
     await autoBackgroundCommand();
     return true;
 }
 
 export async function refreshBackgroundLibrary() {
     await getBackgrounds({ force: true });
+    return true;
+}
+
+/**
+ * Rename a background through the service session, then refresh galleries.
+ * @param {string} backgroundId
+ * @param {string} nextName
+ * @param {string} [source]
+ */
+export async function renameBackgroundLibraryItem(backgroundId, nextName, source = 'global') {
+    const oldBg = String(backgroundId ?? '');
+    let newBg = String(nextName ?? '').trim();
+    if (!oldBg || !newBg) {
+        return false;
+    }
+    if (!newBg.includes('.') && oldBg.includes('.')) {
+        newBg = `${newBg}${oldBg.slice(oldBg.lastIndexOf('.'))}`;
+    }
+    const result = await ensureBackgroundLibrarySession().renameBackground(
+        oldBg,
+        newBg,
+        { source: source === 'chat' ? 'chat' : 'global' },
+    );
+    if (!result?.ok) {
+        return false;
+    }
+    await getBackgrounds({ force: true });
+    await onChatChanged();
+    syncBackgroundSelectionUi();
+    return true;
+}
+
+/**
+ * Delete a background through the service session, then refresh galleries.
+ * @param {string} backgroundId
+ * @param {string} [source]
+ * @param {{deleteFromServer?: boolean}} [options]
+ */
+export async function deleteBackgroundLibraryItem(backgroundId, source = 'global', options = {}) {
+    const bg = String(backgroundId ?? '');
+    if (!bg) {
+        return false;
+    }
+    const result = await ensureBackgroundLibrarySession().deleteBackground(bg, {
+        source: source === 'chat' ? 'chat' : 'global',
+        deleteFromServer: Boolean(options.deleteFromServer),
+    });
+    if (!result?.ok) {
+        return false;
+    }
+    if (source === 'chat') {
+        renderChatBackgrounds();
+    } else {
+        await getBackgrounds({ force: true });
+    }
+    syncBackgroundSelectionUi();
+    return true;
+}
+
+export function enterBackgroundLibraryFolder(folderId) {
+    const result = ensureBackgroundLibrarySession().enterFolder(folderId);
+    if (result?.ok) {
+        onFolderDrillIn(folderId);
+    }
+    return Boolean(result?.ok);
+}
+
+export function exitBackgroundLibraryFolder() {
+    ensureBackgroundLibrarySession().exitFolder();
+    onBackToFolders();
     return true;
 }
 
@@ -1975,7 +2186,7 @@ export function initBackgrounds() {
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'lockbg',
         callback: () => {
-            onLockBackgroundClick();
+            lockCurrentBackground();
             return '';
         },
         aliases: ['bglock'],
@@ -1984,7 +2195,7 @@ export function initBackgrounds() {
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'unlockbg',
         callback: () => {
-            onUnlockBackgroundClick();
+            unlockCurrentBackground();
             return '';
         },
         aliases: ['bgunlock'],
@@ -1992,7 +2203,10 @@ export function initBackgrounds() {
     }));
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'autobg',
-        callback: autoBackgroundCommand,
+        callback: async () => {
+            await runAutoBackgroundSelection();
+            return '';
+        },
         aliases: ['bgauto'],
         helpString: 'Automatically changes the background based on the chat context using the AI request prompt',
     }));

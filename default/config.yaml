@@ -123,7 +123,7 @@ features:
     pages:
     panels:
       mainChatMessageList: false
-      backgroundLibrary: false
+      backgroundLibrary: true
       extensionsHost: false
     shell:
       takeover: false

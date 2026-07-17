@@ -27,7 +27,7 @@ export function getDefaultWorkspaceReactFeatures() {
         reactPanels: {
             mainChatMessageList: false,
             worldInfo: true,
-            backgroundLibrary: false,
+            backgroundLibrary: true,
             extensionsHost: false,
             characterAuthoring: true,
             groupAuthoring: true,

@@ -64,7 +64,7 @@ describe('workspace React panel flags', () => {
             reactPanels: {
                 mainChatMessageList: false,
                 worldInfo: true,
-                backgroundLibrary: false,
+                backgroundLibrary: true,
                 extensionsHost: false,
                 characterAuthoring: true,
                 groupAuthoring: true,
@@ -174,7 +174,7 @@ describe('workspace React panel flags', () => {
         expect(configSource).not.toContain('characterLibrary:');
         expect(configSource).toContain('mainChatMessageList: false');
         expect(configSource).not.toContain('worldInfo:');
-        expect(configSource).toContain('backgroundLibrary: false');
+        expect(configSource).toContain('backgroundLibrary: true');
         expect(configSource).toContain('extensionsHost: false');
         expect(configSource).not.toContain('characterAuthoring:');
         expect(configSource).not.toContain('groupAuthoring:');

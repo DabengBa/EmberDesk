@@ -17,7 +17,8 @@ export function isReactMainChatMessageListPanelEnabled() {
 }
 
 export function isReactBackgroundLibraryPanelEnabled() {
-    return isReactWorkspacePanelEnabled('backgroundLibrary');
+    // Background Library is React sole-owner; product flag is retired.
+    return true;
 }
 
 export function isReactExtensionsHostPanelEnabled() {

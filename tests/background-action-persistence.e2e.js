@@ -7,6 +7,8 @@ const pngPixel = Buffer.from(
     'base64',
 );
 
+test.describe.configure({ mode: 'serial' });
+
 async function openWorkspace(page) {
     await page.goto('/');
 
@@ -25,10 +27,86 @@ async function openWorkspace(page) {
 
 async function openBackgroundLibrary(page) {
     if (!await page.locator('#Backgrounds').isVisible()) {
-        await page.locator('#backgrounds-drawer-toggle').click();
+        const panelButton = page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'Backgrounds' });
+        await panelButton.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => {});
+        if (await panelButton.isVisible()) {
+            await panelButton.click({ timeout: 10_000 });
+            await expect(panelButton).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
+        } else {
+            await page.locator('#backgrounds-drawer-toggle').click({ timeout: 10_000 });
+        }
     }
-    await expect(page.locator('#Backgrounds')).toBeVisible();
-    await expect(page.locator('#bg_menu_content .bg_example').first()).toBeVisible();
+    await expect(page.locator('#Backgrounds.openDrawer')).toBeVisible();
+    const reactHost = page.locator('#emberdesk-react-background-library-panel-host');
+    const legacyItem = page.locator('#bg_menu_content .bg_example').first();
+    // React is sole visible owner; legacy gallery may remain as hidden compatibility DOM.
+    if (await reactHost.count()) {
+        await expect(reactHost).toBeVisible();
+        await expect(page.locator('[data-background-library-react-gallery="global"]')).toBeVisible();
+    } else {
+        await expect(legacyItem).toBeVisible();
+    }
+}
+
+function backgroundItem(page, filename) {
+    const reactItem = page.locator(`[data-background-library-react-item="${filename}"]`);
+    const legacyItem = page.locator(`#bg_menu_content .bg_example[bgfile="${filename}"]`);
+    return {
+        async expectVisible() {
+            if (await reactItem.count()) {
+                await expect(reactItem).toBeVisible();
+                return;
+            }
+            await expect(legacyItem).toBeVisible();
+        },
+        async expectMissing() {
+            if (await reactItem.count()) {
+                await expect(reactItem).toHaveCount(0);
+                return;
+            }
+            await expect(legacyItem).toHaveCount(0);
+        },
+        async select() {
+            if (await reactItem.count()) {
+                await reactItem.locator('[data-background-library-react-item-select]').click();
+                return;
+            }
+            await legacyItem.click();
+        },
+        async rename(nextBaseName) {
+            if (await reactItem.count()) {
+                page.once('dialog', async dialog => {
+                    await dialog.accept(nextBaseName);
+                });
+                await reactItem.locator('[data-background-library-react-item-action="rename"]').click();
+                return;
+            }
+            await legacyItem.hover();
+            await legacyItem.locator('[data-action="edit"]').click();
+            await page.locator('.popup:visible input.popup-input, .popup:visible textarea.popup-input').last().fill(nextBaseName);
+            await page.locator('.popup:visible .popup-button-ok').click();
+        },
+        async delete() {
+            if (await reactItem.count()) {
+                page.once('dialog', async dialog => {
+                    await dialog.accept();
+                });
+                await reactItem.locator('[data-background-library-react-item-action="delete"]').click();
+                return;
+            }
+            await legacyItem.hover();
+            await legacyItem.locator('[data-action="delete"]').click();
+            await page.locator('.popup:visible .popup-button-ok').click();
+        },
+        async expectSelected() {
+            if (await reactItem.count()) {
+                await expect(reactItem.locator('.workspace-panel-item-status')).toContainText(/Selected|Locked/);
+                return;
+            }
+            await expect(legacyItem).toHaveClass(/selected-background/);
+        },
+        locator: reactItem.or(legacyItem),
+    };
 }
 
 async function fetchPersistedSettings(page) {
@@ -45,7 +123,7 @@ async function fetchPersistedSettings(page) {
 }
 
 async function uploadActiveBackground(page, filename) {
-    const item = page.locator(`#bg_menu_content .bg_example[bgfile="${filename}"]`);
+    const item = backgroundItem(page, filename);
     const uploadSettingsSave = page.waitForResponse((response) => {
         if (!response.url().endsWith('/api/settings/save') || response.request().method() !== 'POST') {
             return false;
@@ -61,8 +139,8 @@ async function uploadActiveBackground(page, filename) {
         mimeType: 'image/png',
         buffer: pngPixel,
     });
-    await expect(item).toBeVisible();
-    await expect(item).toHaveClass(/selected-background/);
+    await item.expectVisible();
+    await item.expectSelected();
     expect((await uploadSettingsSave).ok()).toBe(true);
     expect((await fetchPersistedSettings(page)).background?.name).toBe(filename);
     return item;
@@ -76,26 +154,8 @@ test('persists the replacement before an active background disappears from the U
     await openBackgroundLibrary(page);
     let item = await uploadActiveBackground(page, filename);
 
-    await page.evaluate((backgroundName) => {
-        globalThis.__backgroundRemoved = new Promise((resolve) => {
-            const selector = `#bg_menu_content .bg_example[bgfile="${backgroundName}"]`;
-            const observer = new MutationObserver(() => {
-                if (!document.querySelector(selector)) {
-                    observer.disconnect();
-                    resolve();
-                }
-            });
-            observer.observe(document.getElementById('bg_menu_content'), {
-                childList: true,
-                subtree: true,
-            });
-        });
-    }, filename);
-
-    await item.hover();
-    await item.locator('[data-action="delete"]').click();
-    await page.locator('.popup:visible .popup-button-ok').click();
-    await page.evaluate(() => globalThis.__backgroundRemoved);
+    await item.delete();
+    await item.expectMissing();
 
     await page.close();
     page = await context.newPage();
@@ -110,8 +170,7 @@ test('persists the replacement before an active background disappears from the U
 
     expect(settings?.background?.name).not.toBe(filename);
     await openBackgroundLibrary(page);
-    item = page.locator(`#bg_menu_content .bg_example[bgfile="${filename}"]`);
-    await expect(item).toHaveCount(0);
+    await backgroundItem(page, filename).expectMissing();
 });
 
 test('persists the new identity before a renamed active background appears complete', async ({ page: initialPage, context }) => {
@@ -124,11 +183,8 @@ test('persists the new identity before a renamed active background appears compl
     await openBackgroundLibrary(page);
     const oldItem = await uploadActiveBackground(page, oldFilename);
 
-    await oldItem.hover();
-    await oldItem.locator('[data-action="edit"]').click();
-    await page.locator('.popup:visible input.popup-input, .popup:visible textarea.popup-input').last().fill(newBaseName);
-    await page.locator('.popup:visible .popup-button-ok').click();
-    await expect(page.locator(`#bg_menu_content .bg_example[bgfile="${newFilename}"]`)).toBeVisible();
+    await oldItem.rename(newBaseName);
+    await backgroundItem(page, newFilename).expectVisible();
 
     await page.close();
     page = await context.newPage();
@@ -136,33 +192,53 @@ test('persists the new identity before a renamed active background appears compl
 
     expect((await fetchPersistedSettings(page)).background?.name).toBe(newFilename);
     await openBackgroundLibrary(page);
-    await expect(page.locator(`#bg_menu_content .bg_example[bgfile="${oldFilename}"]`)).toHaveCount(0);
-    await expect(page.locator(`#bg_menu_content .bg_example[bgfile="${newFilename}"]`)).toBeVisible();
+    await backgroundItem(page, oldFilename).expectMissing();
+    const renamedItem = backgroundItem(page, newFilename);
+    await renamedItem.expectVisible();
+
+    const transparentItem = backgroundItem(page, '__transparent.png');
+    await transparentItem.select();
+    await expect.poll(async () => (await fetchPersistedSettings(page)).background?.name).toBe('__transparent.png');
+
+    await renamedItem.delete();
+    await renamedItem.expectMissing();
 });
 
-test('clears the persisted selection when the final system background is deleted', async ({ page }) => {
+test('clears the persisted selection when no replacement background is visible', async ({ page }) => {
     const filename = `final-background-${Date.now()}.png`;
 
     await openWorkspace(page);
     await openBackgroundLibrary(page);
     await uploadActiveBackground(page, filename);
 
-    const otherFilenames = await page.locator(`#bg_menu_content .bg_example:not([bgfile="${filename}"])`).evaluateAll(items =>
-        items.map(item => item.getAttribute('bgfile')).filter(Boolean),
-    );
-    for (const otherFilename of otherFilenames) {
-        const item = page.locator(`#bg_menu_content .bg_example[bgfile="${otherFilename}"]`);
-        await item.hover();
-        await item.locator('[data-action="delete"]').click();
-        await page.locator('.popup:visible .popup-button-ok').click();
-        await expect(item).toHaveCount(0);
-    }
+    // Force the active background to be the only remaining system catalog entry.
+    await page.evaluate(async (backgroundName) => {
+        const headers = window.SillyTavern.getContext().getRequestHeaders();
+        const all = await (await fetch('/api/backgrounds/all', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({}),
+        })).json();
+        const others = (all.images || [])
+            .map(item => item.filename)
+            .filter(name => name && name !== backgroundName);
+        for (const other of others) {
+            await fetch('/api/backgrounds/delete', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ bg: other }),
+            });
+        }
+    }, filename);
+    await page.locator('[data-background-library-react-action="refresh"]').click();
+    await expect.poll(async () => {
+        return page.locator('[data-background-library-react-gallery="global"] [data-background-library-react-item]').count();
+    }).toBe(1);
 
-    const finalItem = page.locator(`#bg_menu_content .bg_example[bgfile="${filename}"]`);
-    await finalItem.hover();
-    await finalItem.locator('[data-action="delete"]').click();
-    await page.locator('.popup:visible .popup-button-ok').click();
-    await expect(finalItem).toHaveCount(0);
+    const finalItem = backgroundItem(page, filename);
+    await finalItem.expectVisible();
+    await finalItem.delete();
+    await finalItem.expectMissing();
 
     await expect(page.locator('#bg1')).toHaveCSS('background-image', 'none');
     const settings = await fetchPersistedSettings(page);

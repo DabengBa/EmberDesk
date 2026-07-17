@@ -172,6 +172,8 @@ interface BackgroundLibraryWorkspacePanelState {
     filterQuery?: string;
     sortValue?: string;
     folderViewActive?: boolean;
+    activeFolderId?: string | null;
+    folders?: Array<{ id: string; name: string; thumbnailFile?: string }>;
     lockedCount?: number;
     selectedCount?: number;
 }
@@ -257,6 +259,7 @@ interface AuthoringWorkspacePanelState {
     unsupportedFields?: string[];
     draft?: Record<string, unknown>;
     candidates?: AuthoringCandidateState[];
+    tagOptions?: AuthoringCandidateState[];
 }
 
 interface AuthoringCandidateState {
@@ -2280,8 +2283,15 @@ function AuthoringWorkspacePanel({
     const candidates = Array.isArray(bridgeState.candidates)
         ? bridgeState.candidates.filter(candidate => candidate && typeof candidate.id === 'string' && typeof candidate.label === 'string')
         : [];
+    const groupTagIds = Array.isArray(draft.tagIds)
+        ? draft.tagIds.filter((tagId): tagId is string => typeof tagId === 'string')
+        : [];
+    const groupTagOptions = Array.isArray(bridgeState.tagOptions)
+        ? bridgeState.tagOptions.filter(tag => tag && typeof tag.id === 'string' && typeof tag.label === 'string')
+        : [];
     const characterToolPayload = kind === 'characterAuthoring' ? authoringSession.submit() : null;
     const characterActionPayload = characterToolPayload && characterToolPayload.ok ? characterToolPayload.payload : undefined;
+    const characterToolActionPayload = characterActionPayload ? { ...characterActionPayload, draft } : undefined;
     const isCreateMode = (bridgeState.mode ?? 'create') === 'create';
     const isActionPending = authoringActionMutation.isPending;
     const updateGroupSession = (
@@ -2290,6 +2300,7 @@ function AuthoringWorkspacePanel({
         setAuthoringSession(currentSession => update(
             currentSession as ReturnType<typeof createGroupAuthoringSession>,
         ));
+        setFieldErrors({});
     };
 
     return (
@@ -2322,7 +2333,37 @@ function AuthoringWorkspacePanel({
                         Unsupported extension fields are preserved server-side and not edited here: {unsupportedFields.join(', ')}
                     </div>
                 ) : null}
-                <div className="react-authoring-fields">
+                <div className="react-authoring-panel-actions" aria-label={`${title} actions`}>
+                    <button type="button" className="menu_button react-authoring-save" disabled={isActionPending} onClick={submitDraft}>Save</button>
+                    <button type="button" className="menu_button react-authoring-secondary-action" disabled={isActionPending} onClick={cancelDraft}>Cancel</button>
+                    {kind === 'characterAuthoring' ? (
+                        <>
+                            <button
+                                type="button"
+                                className="menu_button react-authoring-tool-action"
+                                disabled={isActionPending}
+                                onClick={() => authoringActionMutation.mutate({ action: 'openWorldInfo', payload: characterToolActionPayload })}
+                            >
+                                World Info
+                            </button>
+                            <button
+                                type="button"
+                                className="menu_button react-authoring-tool-action"
+                                disabled={isActionPending}
+                                onClick={() => authoringActionMutation.mutate({ action: 'openAlternateGreetings', payload: characterToolActionPayload })}
+                            >
+                                Alternate Greetings
+                            </button>
+                            <button type="button" className="menu_button react-authoring-tool-action" disabled={isActionPending} onClick={() => authoringActionMutation.mutate({ action: 'duplicateAuthoring', payload: { kind } })}>Duplicate</button>
+                            <button type="button" className="menu_button react-authoring-tool-action" disabled={isActionPending} onClick={() => authoringActionMutation.mutate({ action: 'exportAuthoring', payload: characterActionPayload })}>Export</button>
+                        </>
+                    ) : null}
+                </div>
+                <fieldset
+                    className="react-authoring-fields"
+                    disabled={isActionPending}
+                    style={{ border: 0, margin: 0, minWidth: 0, padding: 0 }}
+                >
                     <label className="react-authoring-field" data-react-authoring-field="name">
                         <span>Name</span>
                         <input
@@ -2637,6 +2678,26 @@ function AuthoringWorkspacePanel({
                                     onChange={(event) => updateDraft({ joinSuffix: event.target.value })}
                                 />
                             </label>
+                            <section className="react-authoring-tags" data-react-authoring-field="groupTags">
+                                <div className="react-authoring-section-title">Tags</div>
+                                <div className="react-authoring-candidates">
+                                    {groupTagOptions.map(tag => (
+                                        <button
+                                            key={tag.id}
+                                            type="button"
+                                            className="menu_button"
+                                            aria-pressed={groupTagIds.includes(tag.id)}
+                                            onClick={() => updateGroupSession(currentSession => currentSession.update({
+                                                tagIds: groupTagIds.includes(tag.id)
+                                                    ? groupTagIds.filter(tagId => tagId !== tag.id)
+                                                    : [...groupTagIds, tag.id],
+                                            }))}
+                                        >
+                                            {groupTagIds.includes(tag.id) ? 'Remove' : 'Add'} {tag.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </section>
                         <section className="react-authoring-members" data-react-authoring-members>
                             <div className="react-authoring-section-title">Members</div>
                             {fieldErrors.members ? <small role="alert">{fieldErrors.members}</small> : null}
@@ -2693,33 +2754,7 @@ function AuthoringWorkspacePanel({
                         </section>
                         </>
                     )}
-                </div>
-                <div className="react-authoring-panel-actions" aria-label={`${title} actions`}>
-                    <button type="button" className="menu_button react-authoring-save" disabled={isActionPending} onClick={submitDraft}>Save</button>
-                    <button type="button" className="menu_button react-authoring-secondary-action" disabled={isActionPending} onClick={cancelDraft}>Cancel</button>
-                    {kind === 'characterAuthoring' ? (
-                        <>
-                            <button
-                                type="button"
-                                className="menu_button react-authoring-tool-action"
-                                disabled={isActionPending}
-                                onClick={() => authoringActionMutation.mutate({ action: 'openWorldInfo', payload: characterActionPayload })}
-                            >
-                                World Info
-                            </button>
-                            <button
-                                type="button"
-                                className="menu_button react-authoring-tool-action"
-                                disabled={isActionPending}
-                                onClick={() => authoringActionMutation.mutate({ action: 'openAlternateGreetings', payload: characterActionPayload })}
-                            >
-                                Alternate Greetings
-                            </button>
-                            <button type="button" className="menu_button react-authoring-tool-action" disabled={isActionPending} onClick={() => authoringActionMutation.mutate({ action: 'duplicateAuthoring', payload: { kind } })}>Duplicate</button>
-                            <button type="button" className="menu_button react-authoring-tool-action" disabled={isActionPending} onClick={() => authoringActionMutation.mutate({ action: 'exportAuthoring', payload: characterActionPayload })}>Export</button>
-                        </>
-                    ) : null}
-                </div>
+                </fieldset>
                 {!isCreateMode ? (
                     <div className="react-authoring-danger-zone">
                         <button type="button" className="menu_button red_button" disabled={isActionPending} onClick={() => authoringActionMutation.mutate({ action: 'deleteAuthoring', payload: { kind } })}>Delete</button>
@@ -2818,16 +2853,57 @@ function BackgroundGallery({
                 <span>{items.length}</span>
             </div>
             {items.length > 0 ? items.map(item => (
-                <button
+                <div
                     key={`${source}:${item.id}`}
-                    type="button"
-                    className="menu_button workspace-panel-item-row workspace-panel-background-item"
+                    className="flex-container flexFlowColumn gap4 workspace-panel-background-item"
                     data-background-library-react-item={item.id}
-                    onClick={() => actionMutation.mutate({ action: 'selectBackground', payload: { id: item.id, source } })}
                 >
-                    <span className="workspace-panel-item-label">{item.title}</span>
-                    <span className="workspace-panel-item-status">{item.locked ? 'Locked' : item.selected ? 'Selected' : item.animated ? 'Animated' : 'Select'}</span>
-                </button>
+                    <button
+                        type="button"
+                        className="menu_button workspace-panel-item-row"
+                        data-background-library-react-item-select={item.id}
+                        onClick={() => actionMutation.mutate({ action: 'selectBackground', payload: { id: item.id, source } })}
+                    >
+                        <span className="workspace-panel-item-label">{item.title}</span>
+                        <span className="workspace-panel-item-status">{item.locked ? 'Locked' : item.selected ? 'Selected' : item.animated ? 'Animated' : 'Select'}</span>
+                    </button>
+                    <div className="flex-container flexwrap gap4">
+                        <button
+                            type="button"
+                            className="menu_button"
+                            data-background-library-react-item-action="rename"
+                            onClick={() => {
+                                const nextName = globalThis.prompt?.(`Rename ${item.title}`, item.title);
+                                if (!nextName) {
+                                    return;
+                                }
+                                actionMutation.mutate({
+                                    action: 'renameBackground',
+                                    payload: { id: item.id, nextName, source },
+                                });
+                            }}
+                        >
+                            Rename
+                        </button>
+                        <button
+                            type="button"
+                            className="menu_button red_button"
+                            data-background-library-react-item-action="delete"
+                            onClick={() => {
+                                const confirmed = globalThis.confirm?.(`Delete ${item.title}?`);
+                                if (!confirmed) {
+                                    return;
+                                }
+                                actionMutation.mutate({
+                                    action: 'deleteBackground',
+                                    payload: { id: item.id, source, deleteFromServer: source === 'chat' },
+                                });
+                            }}
+                        >
+                            Delete
+                        </button>
+                    </div>
+                </div>
             )) : (
                 <span className="opacity50">No backgrounds</span>
             )}
@@ -2881,7 +2957,7 @@ function BackgroundLibraryWorkspacePanel({ state, bridge }: { state?: unknown; b
             title="Backgrounds"
             status={status}
             actions={recoveryActions}
-            legacyBoundary="upload-delete-rename-select-lock-slash"
+            legacyBoundary="service-owned-catalog-actions"
             slots={[
                 { id: 'global-gallery', label: 'Global gallery', ready: bridgeState.systemContainerPresent },
                 { id: 'chat-gallery', label: 'Chat gallery', ready: bridgeState.chatContainerPresent },
@@ -2891,6 +2967,16 @@ function BackgroundLibraryWorkspacePanel({ state, bridge }: { state?: unknown; b
             <div className="flex-container flexFlowColumn gap8" data-background-library-react-workflow="gallery-actions">
                 <div className="flex-container flexwrap gap8 alignitemscenter">
                     <output>Folder view: {bridgeState.folderViewActive ? 'On' : 'Off'}</output>
+                    {bridgeState.folderViewActive ? (
+                        <button
+                            type="button"
+                            className="menu_button"
+                            data-background-library-react-action="exit-folder"
+                            onClick={() => backgroundLibraryActionMutation.mutate({ action: 'exitFolder' })}
+                        >
+                            Back to folders
+                        </button>
+                    ) : null}
                     <output>Locked: {bridgeState.lockedCount ?? 0}</output>
                     <output>Selected: {bridgeState.selectedCount ?? 0}</output>
                 </div>
@@ -2974,6 +3060,25 @@ function BackgroundLibraryWorkspacePanel({ state, bridge }: { state?: unknown; b
                             Refresh
                     </button>
                 </div>
+                {!bridgeState.folderViewActive && Array.isArray(bridgeState.folders) && bridgeState.folders.length > 0 ? (
+                    <div className="flex-container flexFlowColumn gap4" data-background-library-react-folders="root">
+                        <span>Folders</span>
+                        {bridgeState.folders.map(folder => (
+                            <button
+                                key={folder.id}
+                                type="button"
+                                className="menu_button workspace-panel-item-row"
+                                data-background-library-react-folder={folder.id}
+                                onClick={() => backgroundLibraryActionMutation.mutate({
+                                    action: 'enterFolder',
+                                    payload: { folderId: folder.id },
+                                })}
+                            >
+                                <span className="workspace-panel-item-label">{folder.name}</span>
+                            </button>
+                        ))}
+                    </div>
+                ) : null}
                 <BackgroundGallery source="global" items={systemBackgrounds} actionMutation={backgroundLibraryActionMutation} />
                 <BackgroundGallery source="chat" items={chatBackgrounds} actionMutation={backgroundLibraryActionMutation} />
             </div>
