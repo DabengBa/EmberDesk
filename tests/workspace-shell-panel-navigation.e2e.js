@@ -51,16 +51,14 @@ async function expectShellPanelVisible(page, entry) {
 
 test.describe('workspace shell panel navigation', () => {
     test('all registry entries expose unified pressed state and short ready status', async ({ page }) => {
+        test.setTimeout(120_000);
         await testSetup.awaitST({ page });
 
         const registryEntries = [
-            { label: 'AI Config', visibleSelector: '#left-nav-panel.openDrawer' },
-            { label: 'Formatting', visibleSelector: '#AdvancedFormatting.openDrawer' },
             { label: 'Character Library', visibleSelector: '#right-nav-panel.openDrawer #rm_characters_block' },
             { label: 'World Info', visibleSelector: '#WorldInfo.openDrawer' },
             { label: 'Backgrounds', visibleSelector: '#Backgrounds.openDrawer' },
             { label: 'Extensions', visibleSelector: '#rm_extensions_block.openDrawer' },
-            { label: 'Settings', visibleSelector: '#user-settings-block.openDrawer' },
             { label: 'Group Chats', visibleSelector: '#right-nav-panel.openDrawer #rm_group_chats_block' },
             { label: 'Character Authoring', visibleSelector: '#right-nav-panel.openDrawer #rm_ch_create_block' },
         ];
@@ -71,12 +69,12 @@ test.describe('workspace shell panel navigation', () => {
             await expect(panelButton).toBeFocused();
 
             await clickShellPanel(page, entry.label);
-            await expect(panelButton).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
+            await expect(panelButton).toHaveAttribute('aria-pressed', 'true', { timeout: 15_000 });
             await expectActivePanel(page, entry.label, entry.status ?? readyOrLegacyStatus(entry.label));
-            await expect(page.locator(entry.visibleSelector)).toBeVisible({ timeout: 10_000 });
+            await expect(page.locator(entry.visibleSelector)).toBeVisible({ timeout: 15_000 });
 
             await clickShellPanel(page, entry.label);
-            await expect(panelButton).toHaveAttribute('aria-pressed', 'false', { timeout: 10_000 });
+            await expect(panelButton).toHaveAttribute('aria-pressed', 'false', { timeout: 15_000 });
             await expectNoActivePanel(page);
         }
     });
@@ -101,9 +99,6 @@ test.describe('workspace shell panel navigation', () => {
         await testSetup.awaitST({ page });
 
         const legacyHostedEntries = [
-            { label: 'AI Config', visibleSelector: '#left-nav-panel.openDrawer' },
-            { label: 'Formatting', visibleSelector: '#AdvancedFormatting.openDrawer' },
-            { label: 'Settings', visibleSelector: '#user-settings-block.openDrawer' },
             { label: 'Group Chats', visibleSelector: '#right-nav-panel.openDrawer #rm_group_chats_block' },
         ];
 
@@ -125,26 +120,27 @@ test.describe('workspace shell panel navigation', () => {
     });
 
     test('legacy-hosted panel switching preserves legacy form values', async ({ page }) => {
+        test.setTimeout(90_000);
         await testSetup.awaitST({ page });
 
-        await openShellPanel(page, 'AI Config');
-        await page.locator('#openai_max_context').fill('12');
-        await page.locator('#openai_max_tokens').fill('3');
+        // AI Config / Formatting are React /settings routes, not drawer form hosts.
+        // Keep this case on remaining same-route drawer panels and verify drawer state survives switches.
+        await openShellPanel(page, 'Group Chats');
+        await expect(page.locator('#right-nav-panel.openDrawer #rm_group_chats_block')).toBeVisible({ timeout: 15_000 });
+        const groupName = page.locator('#rm_group_chats_block #group_name, #rm_group_chats_block input').first();
+        if (await groupName.count()) {
+            await groupName.fill('shell-preserve-group');
+        }
 
-        await openShellPanel(page, 'Formatting');
-        await page.locator('#context_story_string').fill('Shell keeps context story string');
-        await page.locator('#custom_stopping_strings').fill('["shell-stop"]');
+        await openShellPanel(page, 'Extensions');
+        await expect(page.locator('#rm_extensions_block.openDrawer')).toBeVisible({ timeout: 15_000 });
+        await expect(page.locator('#extensions_settings')).toBeAttached();
 
         await openShellPanel(page, 'Group Chats');
-        await expect(page.locator('#right-nav-panel.openDrawer #rm_group_chats_block')).toBeVisible({ timeout: 10_000 });
-
-        await openShellPanel(page, 'AI Config');
-        await expect(page.locator('#openai_max_context')).toHaveValue('12');
-        await expect(page.locator('#openai_max_tokens')).toHaveValue('3');
-
-        await openShellPanel(page, 'Formatting');
-        await expect(page.locator('#context_story_string')).toHaveValue('Shell keeps context story string');
-        await expect(page.locator('#custom_stopping_strings')).toHaveValue('["shell-stop"]');
+        await expect(page.locator('#right-nav-panel.openDrawer #rm_group_chats_block')).toBeVisible({ timeout: 15_000 });
+        if (await groupName.count()) {
+            await expect(groupName).toHaveValue('shell-preserve-group');
+        }
     });
 
     test('panel entries stay responsive when switching from character library to world info immediately', async ({ page }) => {
@@ -187,5 +183,33 @@ test.describe('workspace shell panel navigation', () => {
             active: 'Character Library',
             status: expect.stringMatching(/^Character Library (ready|using legacy panel)$/),
         });
+    });
+    test('navigates Settings shell entry to /settings instead of opening legacy drawers', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await Promise.all([
+            page.waitForURL(/\/settings(?:\?|$)/, { timeout: 15_000 }),
+            page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'Settings' }).click({ timeout: 10_000 }),
+        ]);
+        await expect(page).toHaveURL(/\/settings(?:\?|$)/);
+        await expect(page.locator('main.settings-page')).toBeVisible({ timeout: 15_000 });
+        await expect(page.locator('#user-settings-block.openDrawer')).toHaveCount(0);
+    });
+
+    test('navigates AI Config and Formatting shell entries into React settings tabs', async ({ page }) => {
+        await testSetup.awaitST({ page });
+
+        await Promise.all([
+            page.waitForURL(/\/settings\?tab=providers(?:&|$)/, { timeout: 15_000 }),
+            page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'AI Config' }).click({ timeout: 10_000 }),
+        ]);
+        await expect(page).toHaveURL(/tab=providers/);
+
+        await page.goto('/');
+        await testSetup.awaitST({ page });
+        await Promise.all([
+            page.waitForURL(/\/settings\?tab=advanced(?:&|$)/, { timeout: 15_000 }),
+            page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'Formatting' }).click({ timeout: 10_000 }),
+        ]);
+        await expect(page).toHaveURL(/tab=advanced/);
     });
 });

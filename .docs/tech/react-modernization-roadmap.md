@@ -6,7 +6,7 @@
 
 ## 状态
 
-状态：Phase 0-6 和原 Phase 7 已交付为 React guarded-island、状态和兼容性基线。2026-07-16 起，已迁移 React surface 进入新的 legacy-retirement program：React 必须在功能完整、用户操作等价、支持的扩展/自动化契约仍可用后成为唯一 runtime owner；同版本 legacy fallback、hidden host、action facade 和 flag-off path 必须删除。当前代码中仍存在的 fallback 是待替换的事实，不是最终架构。该方向由 [ADR-0012](../adr/0012-react-migrated-surface-legacy-retirement.md) 和 [React Legacy Retirement Brief](briefs/260716-02-react-legacy-retirement.md) 记录。仍不引入 `/workspace-next`，不把未迁移 surface 纳入，也不以删除为名缩减用户能力。
+状态：Phase 0-6 和原 Phase 7 已交付为 React guarded-island、状态和兼容性基线。2026-07-16 起，已迁移 React surface 进入新的 legacy-retirement program：React 必须在功能完整、用户操作等价、支持的扩展/自动化契约仍可用后成为唯一 runtime owner；同版本 legacy fallback、hidden host、action facade 和 flag-off path 必须删除。当前代码中仍存在的 fallback 是待替换的事实，不是最终架构。该方向由 [ADR-0012](../adr/0012-react-migrated-surface-legacy-retirement.md) 和 [Legacy Cutover Ledger](legacy-cutover-ledger.md) 记录。仍不引入 `/workspace-next`，不把未迁移 surface 纳入，也不以删除为名缩减用户能力。
 创建日期：2026-06-15  
 前置条件：`.docs/tech/modernization-roadmap.md` 已于 2026-06-05 冻结完成
 
@@ -111,7 +111,7 @@ No step may delete user capability, change a documented user workflow, or break 
 - TanStack 收口状态：`/api/characters/all` 的读取与 mount-time refresh 由 TanStack Query 承接；搜索 / 排序 / bulk toolbar 呈现态由 TanStack Form + Zod 承接；标签过滤继续复用 legacy tag controls 与 `entitiesFilter` 语义，并通过 `LegacyElementHost` 挂入 React toolbar，tag 选择值不进入当前 TanStack Form / Zod schema；当前页 rows 在 `1000 / 页` 下通过 `@tanstack/react-virtual` 保持可见窗口挂载，而不是一次性挂载整页角色。React island 同步会按完整 normalized character payload 判断是否需要更新 legacy `characters` 数组，并保留 `/api/characters/all` 的结构化 overflow 错误给既有提示路径；当前规则见 [React character-library sync processing flow](../logic-description/react_character_library_sync_processing_flow.md)。
 - `Sprint 4-5 / World Info`：已交付为 `features.react.panels.worldInfo` 控制的 guarded React workspace panel island。React host 在 legacy World Info editor 内显示 global/editor selector readiness、当前 world、entry count、search/sort 控件、创建/导入/导出/刷新入口和 entry 快捷入口；这些 React controls 通过 bridge 调用 legacy DOM actions，World Info scanning、prompt injection、regex placement、converter/import result handling 和 world-book delete cascade 仍由 legacy owner 执行。
 - `Sprint 6 / Background Library`：已交付为 `features.react.panels.backgroundLibrary` 控制的 guarded React workspace panel island。React host 显示 loading/empty/success/error 状态、filter/sort controls、global/chat gallery counts 和背景动作入口；filter/sort/upload/select/lock/unlock/auto/refresh 通过 bridge 调用 legacy background controls，`/api/backgrounds/*`、thumbnail/lazy-load、文件夹、选择、lock 和 slash-command 行为仍由 legacy owner 执行。
-- `Sprint 7 / Extensions Host`：已交付为 `features.react.panels.extensionsHost` 控制的 guarded React workspace panel island。React host 显示 notify updates、Manage、Install、Extras API URL/API key/autoconnect/connect controls、loader state 和 protected mount-point readiness；这些 controls 通过 bridge 调用 `public/scripts/extensions.js` 的既有 DOM actions，`#extensions_settings`、`#extensions_settings2`、`#regex_container`、`#extensionsMenuButton`、`#extensionsMenu`、Tavern Helper、regex extension、install/update/delete protocol 和 `@sillytavern/*` 兼容面保持 legacy owner。
+- `Sprint 7 / Extensions Host`：已退休为 React sole owner。React host 拥有 notify updates、Manage、Install、Extras API URL/API key/autoconnect/connect、loader/error/retry 与 protected mount lifecycle；framework-neutral domain/service 模块与 `public/scripts/extensions.js` 薄 barrel 拥有 discovery/activation/operations/Extras。`#extensions_settings`、`#extensions_settings2`、`#regex_container`、`#extensionsMenuButton`、`#extensionsMenu`、Tavern Helper、regex extension、install/update/delete protocol 和 `@sillytavern/*` 保持 freeze-supported 兼容契约，不再作为第二可见 host。
 
 **Sprint 列表**：
 - ✅ Sprint 1: 角色库面板 - 列表基础（3 周，已交付为 guarded React panel island；保留 row DOM 合约，并在 `1000 / 页` 下验证虚拟滚动窗口挂载）
@@ -131,7 +131,7 @@ No step may delete user capability, change a documented user workflow, or break 
 - World Info React island 当前接管宿主壳、world select、search/sort、create/import/export/refresh buttons 和 entry shortcut 呈现；World Info prompt activation、regex engine、converter/import result semantics 和 deletion cascade 仍由 `public/scripts/world-info.js` 及相关 legacy modules 拥有。
 - `public/scripts/world-info-shell-context.js` 现在由 `public/script.js` 在启动时注册默认 shell context；`public/scripts/world-info.js` 继续作为 World Info compatibility facade，但它读取 shell-owned settings/request/event/chat/character capabilities 时不再直接批量依赖 `../script.js`。该 context 必须对稍后初始化的 shell 常量保持 lazy access，并在代理 `eventSource` 方法时保留原 emitter binding，避免启动顺序和事件契约回归。
 - Background Library React island 当前接管宿主壳、filter/sort controls、gallery presentation 和 upload/select/lock/unlock/auto/refresh entry points；background file APIs、thumbnail/lazy-load、folder state、selection effects 和 slash commands 仍由 `public/scripts/backgrounds.js` / `public/scripts/background-panel-controller.js` 拥有。
-- Extensions Host React island 当前接管宿主壳、notify/manage/install/Extras API host controls 和 protected mount-point status presentation；extension discovery、manifest loading、script/style injection、Tavern Helper、regex extension、wand menu templates、install/update/delete protocols 和 `@sillytavern/*` aliases 仍由 legacy extension compatibility boundary 拥有。第三方扩展 API 和迁移指南仍由 Phase 4 / Phase 6 处理。
+- Extensions Host React 现为 sole visible owner：宿主壳、notify/manage/install/Extras、loader/retry 与 slot lifecycle 属于 React + host services；`extensions.js` 为 public barrel。Tavern Helper、regex extension、wand menu templates、install/update/delete protocols 和 `@sillytavern/*` aliases 保持 freeze-supported。第三方扩展 API 与迁移指南仍由 Phase 4 / Phase 6 兼容文档拥有。
 
 **Phase 2 后 full owner cutover 归属**：
 
@@ -140,7 +140,7 @@ No step may delete user capability, change a documented user workflow, or break 
 | Character Library | React toolbar/list/search/sort/bulk 呈现、TanStack Query refresh、TanStack Form + Zod toolbar state、虚拟滚动窗口 | legacy tag controls、`entitiesFilter`、`characters` global array sync、delete dialog、bulk delete/tag side effects、protected row selectors、flag/build fallback | `Phase 7 Sprint 1: Character Library full owner cutover` |
 | World Info | React host、world select、search/sort、create/import/export/refresh entry points、entry shortcut 呈现 | prompt activation、regex engine、converter/import result semantics、delete cascade、legacy DOM action bridge、flag/build fallback | `Phase 7 Sprint 2: World Info full owner cutover` |
 | Background Library | React host、filter/sort、gallery presentation、upload/select/lock/unlock/auto/refresh entry points | `/api/backgrounds/*` action semantics、thumbnail/lazy-load、folder state、selection effects、slash commands、legacy background controller、flag/build fallback | `Phase 7 Sprint 3: Background Library full owner cutover` |
-| Extensions Host | React drawer host、notify/manage/install/Extras controls、mount readiness presentation | extension discovery、manifest loading、script/style injection、Tavern Helper、regex extension、wand menu templates、install/update/delete protocols、`@sillytavern/*` aliases、protected mount-point lifecycle、flag/build fallback | `Phase 7 Sprint 4: Extensions Host full owner cutover`，并依赖 Phase 6 兼容验证 |
+| Extensions Host | React sole-owner host、notify/manage/install/Extras、loader/retry、mount lifecycle | extension discovery/activation services、Tavern Helper、regex extension、wand menu templates、install/update/delete protocols、`@sillytavern/*` aliases、freeze-supported protected mount IDs | `sole-owner retirement complete`; residual work is freeze-supported contract maintenance |
 
 **Sprint 4-7 验证门**：
 ```bash
@@ -436,7 +436,7 @@ bun run docs:check
    - 权衡：保留成熟宿主与回滚确定性 vs. 持续承受双栈渐进现代化成本
 
 6. **React legacy-retirement program**
-   - 决策：由 ADR-0012、[React Legacy Retirement Brief](briefs/260716-02-react-legacy-retirement.md) 和 [Legacy Cutover Ledger](legacy-cutover-ledger.md) 记录已迁移 surface 的替代、验证、删除顺序。
+   - 决策：由 ADR-0012 和 [Legacy Cutover Ledger](legacy-cutover-ledger.md) 记录已迁移 surface 的替代、验证、删除顺序。
    - 理由：guarded-island closeout 是历史基线，不是永久双实现策略。
    - 权衡：每个 surface 都必须完成行为和兼容替代，不能以删除为名缩减产品能力。
 

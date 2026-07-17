@@ -34,7 +34,7 @@ The shared browser library is the import surface that lets browser modules and E
 ## UI-Relevant Boundaries
 
 - A stable shared library reduces extension breakage when the main workspace is modernized incrementally.
-- Guarded React panel hosts can modernize surrounding workspace UI while extension-facing imports and globals remain stable.
+- React sole-owner panel hosts can modernize surrounding workspace UI while extension-facing imports and globals remain stable.
 - Legacy global names are compatibility affordances, not a signal that every library should become a global.
 - The shared library supports the workspace and extension surfaces; it is not a separate page or an end-user settings feature.
 - Extension install/update/switch/move/delete safety work must not redefine `/lib.js` or `@sillytavern/*` import boundaries.

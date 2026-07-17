@@ -124,7 +124,7 @@ features:
     panels:
       mainChatMessageList: false
       backgroundLibrary: true
-      extensionsHost: false
+      extensionsHost: true
     shell:
       takeover: false
 

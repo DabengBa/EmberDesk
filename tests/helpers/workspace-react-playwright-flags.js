@@ -16,6 +16,7 @@ const workspaceShellProofSpecFiles = new Set([
     'workspace-shell-panel-navigation.e2e.js',
     'character-group-authoring.e2e.js',
     'world-info-workbench.e2e.js',
+    'extensions-host.e2e.js',
 ]);
 
 const authoringProofSpecFiles = new Set([
@@ -60,6 +61,8 @@ export function applyWorkspaceReactPlaywrightFlagDefaults(env = process.env, arg
     // Authoring panels are sole-owner; always enable for e2e bootstrap compatibility.
     env.EMBERDESK_FEATURES_REACT_PANELS_CHARACTERAUTHORING = 'true';
     env.EMBERDESK_FEATURES_REACT_PANELS_GROUPAUTHORING = 'true';
+    // Extensions Host is sole-owner; always enable for e2e bootstrap compatibility.
+    env.EMBERDESK_FEATURES_REACT_PANELS_EXTENSIONSHOST = 'true';
 
     if (shellProofEnabled) {
         env.EMBERDESK_FEATURES_REACT_SHELL_TAKEOVER ??= 'true';

@@ -2849,63 +2849,70 @@ function BackgroundGallery({
     return (
         <div className="flex-container flexFlowColumn gap4" data-background-library-react-gallery={source}>
             <div className="flex-container justifyspacebetween alignitemscenter gap8">
-                <span>{source === 'global' ? 'Global' : 'Chat'}</span>
+                <span>{source === 'global' ? '全局背景' : '聊天背景'}</span>
                 <span>{items.length}</span>
             </div>
             {items.length > 0 ? items.map(item => (
                 <div
                     key={`${source}:${item.id}`}
-                    className="flex-container flexFlowColumn gap4 workspace-panel-background-item"
+                    className="workspace-panel-background-item"
                     data-background-library-react-item={item.id}
                 >
-                    <button
-                        type="button"
-                        className="menu_button workspace-panel-item-row"
-                        data-background-library-react-item-select={item.id}
-                        onClick={() => actionMutation.mutate({ action: 'selectBackground', payload: { id: item.id, source } })}
-                    >
-                        <span className="workspace-panel-item-label">{item.title}</span>
-                        <span className="workspace-panel-item-status">{item.locked ? 'Locked' : item.selected ? 'Selected' : item.animated ? 'Animated' : 'Select'}</span>
-                    </button>
-                    <div className="flex-container flexwrap gap4">
+                    <div
+                        className="workspace-panel-background-preview"
+                        style={{ backgroundImage: item.url }}
+                        aria-hidden="true"
+                    />
+                    <div className="workspace-panel-background-details">
                         <button
                             type="button"
-                            className="menu_button"
-                            data-background-library-react-item-action="rename"
-                            onClick={() => {
-                                const nextName = globalThis.prompt?.(`Rename ${item.title}`, item.title);
-                                if (!nextName) {
-                                    return;
-                                }
-                                actionMutation.mutate({
-                                    action: 'renameBackground',
-                                    payload: { id: item.id, nextName, source },
-                                });
-                            }}
+                            className="menu_button workspace-panel-item-row"
+                            data-background-library-react-item-select={item.id}
+                            onClick={() => actionMutation.mutate({ action: 'selectBackground', payload: { id: item.id, source } })}
                         >
-                            Rename
+                            <span className="workspace-panel-item-label">{item.title}</span>
+                            <span className="workspace-panel-item-status">{item.locked ? '已锁定' : item.selected ? '已选择' : item.animated ? '动态背景' : '选择'}</span>
                         </button>
-                        <button
-                            type="button"
-                            className="menu_button red_button"
-                            data-background-library-react-item-action="delete"
-                            onClick={() => {
-                                const confirmed = globalThis.confirm?.(`Delete ${item.title}?`);
-                                if (!confirmed) {
-                                    return;
-                                }
-                                actionMutation.mutate({
-                                    action: 'deleteBackground',
-                                    payload: { id: item.id, source, deleteFromServer: source === 'chat' },
-                                });
-                            }}
-                        >
-                            Delete
-                        </button>
+                        <div className="flex-container flexwrap gap4">
+                            <button
+                                type="button"
+                                className="menu_button"
+                                data-background-library-react-item-action="rename"
+                                onClick={() => {
+                                    const nextName = globalThis.prompt?.(`重命名 ${item.title}`, item.title);
+                                    if (!nextName) {
+                                        return;
+                                    }
+                                    actionMutation.mutate({
+                                        action: 'renameBackground',
+                                        payload: { id: item.id, nextName, source },
+                                    });
+                                }}
+                            >
+                                重命名
+                            </button>
+                            <button
+                                type="button"
+                                className="menu_button red_button"
+                                data-background-library-react-item-action="delete"
+                                onClick={() => {
+                                    const confirmed = globalThis.confirm?.(`删除 ${item.title}？`);
+                                    if (!confirmed) {
+                                        return;
+                                    }
+                                    actionMutation.mutate({
+                                        action: 'deleteBackground',
+                                        payload: { id: item.id, source, deleteFromServer: source === 'chat' },
+                                    });
+                                }}
+                            >
+                                删除
+                            </button>
+                        </div>
                     </div>
                 </div>
             )) : (
-                <span className="opacity50">No backgrounds</span>
+                <span className="opacity50">暂无背景</span>
             )}
         </div>
     );
@@ -2938,15 +2945,18 @@ function BackgroundLibraryWorkspacePanel({ state, bridge }: { state?: unknown; b
     if (status === 'empty') {
         recoveryActions.push({
             id: 'upload-background',
-            label: 'Upload background',
-            onClick: () => backgroundLibraryActionMutation.mutate({ action: 'uploadBackground' }),
+            label: '上传背景',
+            onClick: () => backgroundLibraryActionMutation.mutate({
+                action: 'uploadBackground',
+                payload: { source: 'global' },
+            }),
         });
     }
 
     if (status === 'empty' || status === 'error') {
         recoveryActions.push({
             id: 'refresh-backgrounds',
-            label: 'Refresh panel',
+            label: '刷新面板',
             onClick: () => backgroundLibraryActionMutation.mutate({ action: 'refreshBackgrounds' }),
         });
     }
@@ -2954,7 +2964,7 @@ function BackgroundLibraryWorkspacePanel({ state, bridge }: { state?: unknown; b
     return (
         <WorkspacePanelShell
             kind="backgroundLibrary"
-            title="Backgrounds"
+            title="背景"
             status={status}
             actions={recoveryActions}
             legacyBoundary="service-owned-catalog-actions"
@@ -2966,7 +2976,7 @@ function BackgroundLibraryWorkspacePanel({ state, bridge }: { state?: unknown; b
         >
             <div className="flex-container flexFlowColumn gap8" data-background-library-react-workflow="gallery-actions">
                 <div className="flex-container flexwrap gap8 alignitemscenter">
-                    <output>Folder view: {bridgeState.folderViewActive ? 'On' : 'Off'}</output>
+                    <output>文件夹视图：{bridgeState.folderViewActive ? '开' : '关'}</output>
                     {bridgeState.folderViewActive ? (
                         <button
                             type="button"
@@ -2974,11 +2984,11 @@ function BackgroundLibraryWorkspacePanel({ state, bridge }: { state?: unknown; b
                             data-background-library-react-action="exit-folder"
                             onClick={() => backgroundLibraryActionMutation.mutate({ action: 'exitFolder' })}
                         >
-                            Back to folders
+                            返回文件夹
                         </button>
                     ) : null}
-                    <output>Locked: {bridgeState.lockedCount ?? 0}</output>
-                    <output>Selected: {bridgeState.selectedCount ?? 0}</output>
+                    <output>已锁定：{bridgeState.lockedCount ?? 0}</output>
+                    <output>已选择：{bridgeState.selectedCount ?? 0}</output>
                 </div>
                 <div className="flex-container flexwrap gap8 alignitemscenter">
                     <backgroundLibraryForm.Field name="filterQuery">
@@ -2987,7 +2997,8 @@ function BackgroundLibraryWorkspacePanel({ state, bridge }: { state?: unknown; b
                                 className="text_pole textarea_compact"
                                 type="search"
                                 data-background-library-react-control="filter"
-                                aria-label="Filter backgrounds"
+                                aria-label="搜索背景"
+                                placeholder="搜索背景"
                                 value={field.state.value}
                                 onChange={event => {
                                     const filterQuery = event.target.value;
@@ -3002,7 +3013,7 @@ function BackgroundLibraryWorkspacePanel({ state, bridge }: { state?: unknown; b
                             <select
                                 className="text_pole textarea_compact"
                                 data-background-library-react-control="sort"
-                                aria-label="Sort backgrounds"
+                                aria-label="背景排序"
                                 value={field.state.value}
                                 onChange={event => {
                                     const sortValue = event.target.value;
@@ -3012,20 +3023,34 @@ function BackgroundLibraryWorkspacePanel({ state, bridge }: { state?: unknown; b
                             >
                                 <option value="az">A-Z</option>
                                 <option value="za">Z-A</option>
-                                <option value="newest">Newest</option>
-                                <option value="oldest">Oldest</option>
+                                <option value="newest">最新</option>
+                                <option value="oldest">最旧</option>
                             </select>
                         )}
                     </backgroundLibraryForm.Field>
                 </div>
-                <div className="flex-container flexwrap gap8 alignitemscenter">
+                <div className="flex-container flexwrap gap8 alignitemscenter workspace-panel-background-actions">
                     <button
                         type="button"
                         className="menu_button"
-                        data-background-library-react-action="upload"
-                        onClick={() => backgroundLibraryActionMutation.mutate({ action: 'uploadBackground' })}
+                        data-background-library-react-action="upload-global"
+                        onClick={() => backgroundLibraryActionMutation.mutate({
+                            action: 'uploadBackground',
+                            payload: { source: 'global' },
+                        })}
                     >
-                            Upload
+                            上传全局背景
+                    </button>
+                    <button
+                        type="button"
+                        className="menu_button"
+                        data-background-library-react-action="upload-chat"
+                        onClick={() => backgroundLibraryActionMutation.mutate({
+                            action: 'uploadBackground',
+                            payload: { source: 'chat' },
+                        })}
+                    >
+                            上传聊天背景
                     </button>
                     <button
                         type="button"
@@ -3033,7 +3058,7 @@ function BackgroundLibraryWorkspacePanel({ state, bridge }: { state?: unknown; b
                         data-background-library-react-action="lock"
                         onClick={() => backgroundLibraryActionMutation.mutate({ action: 'lockBackground' })}
                     >
-                            Lock
+                            锁定
                     </button>
                     <button
                         type="button"
@@ -3041,7 +3066,7 @@ function BackgroundLibraryWorkspacePanel({ state, bridge }: { state?: unknown; b
                         data-background-library-react-action="unlock"
                         onClick={() => backgroundLibraryActionMutation.mutate({ action: 'unlockBackground' })}
                     >
-                            Unlock
+                            解锁
                     </button>
                     <button
                         type="button"
@@ -3049,7 +3074,7 @@ function BackgroundLibraryWorkspacePanel({ state, bridge }: { state?: unknown; b
                         data-background-library-react-action="auto"
                         onClick={() => backgroundLibraryActionMutation.mutate({ action: 'autoBackground' })}
                     >
-                            Auto
+                            自动选择
                     </button>
                     <button
                         type="button"
@@ -3057,12 +3082,12 @@ function BackgroundLibraryWorkspacePanel({ state, bridge }: { state?: unknown; b
                         data-background-library-react-action="refresh"
                         onClick={() => backgroundLibraryActionMutation.mutate({ action: 'refreshBackgrounds' })}
                     >
-                            Refresh
+                            刷新
                     </button>
                 </div>
                 {!bridgeState.folderViewActive && Array.isArray(bridgeState.folders) && bridgeState.folders.length > 0 ? (
                     <div className="flex-container flexFlowColumn gap4" data-background-library-react-folders="root">
-                        <span>Folders</span>
+                        <span>文件夹</span>
                         {bridgeState.folders.map(folder => (
                             <button
                                 key={folder.id}
@@ -3090,6 +3115,8 @@ function ExtensionsHostWorkspacePanel({ state, bridge }: { state?: unknown; brid
     const bridgeState = asExtensionsHostState(state);
     const status = getExtensionsHostPanelStatus(bridgeState);
     const formDefaults = useMemo(() => buildExtensionsHostPanelFormDefaults(bridgeState), [bridgeState]);
+    const settingsColumnRef = useRef<HTMLDivElement | null>(null);
+    const settingsColumn2Ref = useRef<HTMLDivElement | null>(null);
     const extensionsHostForm = useForm({
         defaultValues: formDefaults,
         validators: {
@@ -3105,6 +3132,13 @@ function ExtensionsHostWorkspacePanel({ state, bridge }: { state?: unknown; brid
     useEffect(() => {
         extensionsHostForm.reset(formDefaults);
     }, [extensionsHostForm, formDefaults]);
+    // Claim stable compatibility slots outside the React tree so unmount does not
+    // destroy extension content. Re-entry keeps the same DOM nodes and children.
+    useLayoutEffect(() => {
+        void bridge?.dispatchAction?.('ensureExtensionCompatibilitySlots', {
+            owner: 'react-extensions-host',
+        });
+    }, [bridge]);
     const recoveryActions: WorkspacePanelRecoveryAction[] = [];
 
     if (status === 'empty') {
@@ -3125,7 +3159,12 @@ function ExtensionsHostWorkspacePanel({ state, bridge }: { state?: unknown; brid
         });
     }
 
-    if (status === 'error') {
+    if (status === 'error' || bridgeState.deferredState === 'failed') {
+        recoveryActions.push({
+            id: 'retry-deferred-extensions',
+            label: 'Retry extensions',
+            onClick: () => extensionsHostActionMutation.mutate({ action: 'retryDeferredExtensions' }),
+        });
         recoveryActions.push({
             id: 'connect-extras-api',
             label: 'Retry connection',
@@ -3140,7 +3179,7 @@ function ExtensionsHostWorkspacePanel({ state, bridge }: { state?: unknown; brid
             title="Extensions"
             status={status}
             actions={recoveryActions}
-            legacyBoundary="mount-points-loader-wand-regex-aliases"
+            legacyBoundary="react-owned-slots-lifecycle"
             slots={[
                 { id: 'extensions-settings', label: 'Settings column', ready: bridgeState.extensionsSettingsPresent },
                 { id: 'extensions-settings2', label: 'Settings column 2', ready: bridgeState.extensionsSettings2Present },
@@ -3236,6 +3275,22 @@ function ExtensionsHostWorkspacePanel({ state, bridge }: { state?: unknown; brid
                             Connect
                     </button>
                     <output>{bridgeState.extrasStatusText || 'Not connected...'}</output>
+                </div>
+                <div
+                    className="flex-container flexFlowColumn gap8"
+                    data-extensions-host-react-workflow="compatibility-slots"
+                >
+                    {/* Protected mount IDs stay in established drawer DOM; React owns lifecycle via ensureExtensionCompatibilitySlots. */}
+                    <div
+                        ref={settingsColumnRef}
+                        data-extensions-host-compat-slot="extensions_settings"
+                    />
+                    <div
+                        ref={settingsColumn2Ref}
+                        data-extensions-host-compat-slot="extensions_settings2"
+                    >
+                        <div data-extensions-host-compat-slot="regex_container" />
+                    </div>
                 </div>
             </div>
         </WorkspacePanelShell>

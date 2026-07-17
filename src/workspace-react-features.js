@@ -22,7 +22,8 @@ export function isReactBackgroundLibraryPanelEnabled() {
 }
 
 export function isReactExtensionsHostPanelEnabled() {
-    return isReactWorkspacePanelEnabled('extensionsHost');
+    // Extensions Host is React sole-owner for visible host controls; product flag is retired.
+    return true;
 }
 
 export function isReactCharacterAuthoringPanelEnabled() {

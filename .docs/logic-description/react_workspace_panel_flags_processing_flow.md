@@ -150,7 +150,7 @@ The processing outputs are:
 2. If `reactPanels.mainChatMessageList` is false, clean up the guarded main-chat React host and return `false` before reading its bridge state.
 3. If `reactPanels.worldInfo` is false, return `false` before calling `ensureWorldInfoReactHost()` or building World Info bridge state.
 4. If `reactPanels.backgroundLibrary` is false, return `false` before calling `ensureBackgroundLibraryReactHost()` or building Background Library bridge state.
-5. If `reactPanels.extensionsHost` is false, return `false` before calling `ensureExtensionsHostReactHost()` or building Extensions Host bridge state.
+5. `reactPanels.extensionsHost` is always true (sole owner). Missing workspace-panels builds fail closed; there is no product flag-off legacy host restore path.
 6. Continue to host creation only for the panel whose flag is enabled.
 
 ### Create the guarded main-chat React host

@@ -170,11 +170,19 @@ import {
     toggleExtensionsHostNotifyUpdates,
     openExtensionsHostManager,
     openExtensionsHostInstaller,
+    retryDeferredExtensionsHostLoad,
     updateExtensionsHostApiUrl,
     updateExtensionsHostApiKey,
     connectExtensionsHostApi,
     setExtensionsHostAutoconnectEnabled,
+    getExtensionHostSession,
+    getDeferredExtensionLoaderState,
+    ensureExtensionCompatibilitySlots,
 } from './scripts/extensions.js';
+import {
+    EXTENSION_COMPATIBILITY_SLOTS,
+    getExtensionCompatibilitySlotManager,
+} from './scripts/extension-compatibility-slots.js';
 import { COMMENT_NAME_DEFAULT, CONNECT_API_MAP, executeSlashCommandsOnChatInput, getMainChatSlashCommandAutoCompleteState, initDefaultSlashCommands, initSlashCommandAutoComplete, isExecutingCommandsFromChatInput, pauseScriptExecution, selectMainChatSlashCommandOption, setMainChatSlashCommandReactOwnerEnabled, stopScriptExecution, UNIQUE_APIS } from './scripts/slash-commands.js';
 import {
     createMainChatQuietTransportDecision,
@@ -392,7 +400,7 @@ export function getWorkspaceReactFeatures() {
             mainChatMessageList: false,
             worldInfo: true,
             backgroundLibrary: true,
-            extensionsHost: false,
+            extensionsHost: true,
             characterAuthoring: true,
             groupAuthoring: true,
         },
@@ -2765,6 +2773,7 @@ function hideLegacyBackgroundGallery(hidden) {
     }
 
     const legacySelectors = [
+        '#bg-header-fixed',
         '#bg_tabs',
         '#bg_menu_content',
         '#bg_custom_content',
@@ -2897,7 +2906,7 @@ function getBackgroundLibraryReactBridge() {
                 case 'applyBackgroundSort':
                     return applyBackgroundLibrarySort(payload?.sortValue ?? '');
                 case 'uploadBackground':
-                    return requestBackgroundUploadSelection();
+                    return requestBackgroundUploadSelection(payload?.source ?? 'global');
                 case 'selectBackground':
                     return selectBackgroundLibraryItem(payload?.id ?? '', payload?.source ?? '');
                 case 'lockBackground':
@@ -2969,6 +2978,7 @@ function ensureExtensionsHostReactHost() {
 
     let host = document.getElementById(EXTENSIONS_HOST_REACT_HOST_ID);
     if (host) {
+        hideLegacyExtensionsHostControls(true);
         return host;
     }
 
@@ -2983,7 +2993,84 @@ function ensureExtensionsHostReactHost() {
         extensionsPanel.prepend(host);
     }
 
+    hideLegacyExtensionsHostControls(true);
     return host;
+}
+
+/**
+ * Hide legacy visible notify/manage/install/Extras chrome when React owns the host surface.
+ * Protected mount slots (#extensions_settings, #regex_container, wand menu) stay reachable.
+ * @param {boolean} hidden
+ */
+function hideLegacyExtensionsHostControls(hidden) {
+    const extensionsPanel = document.getElementById('rm_extensions_block');
+    const host = document.getElementById(EXTENSIONS_HOST_REACT_HOST_ID);
+    if (!(extensionsPanel instanceof HTMLElement)) {
+        return;
+    }
+
+    const protectedIds = new Set([
+        'extensions_settings',
+        'extensions_settings2',
+        'regex_container',
+        'extensionsMenuButton',
+        'extensionsMenu',
+        EXTENSIONS_HOST_REACT_HOST_ID,
+    ]);
+
+    const legacySelectors = [
+        '#extensions_notify_updates',
+        'label[for="extensions_notify_updates"]',
+        '#extensions_details',
+        '#third_party_extension_button',
+        '#extensions_status',
+        'label[for="extensions_autoconnect"]',
+        '#extensions_autoconnect',
+        '#extensions_url',
+        '#extensions_api_key',
+        '#extensions_connect',
+        '.extensions_url_block',
+    ];
+
+    for (const selector of legacySelectors) {
+        extensionsPanel.querySelectorAll(selector).forEach((node) => {
+            if (!(node instanceof HTMLElement) || node === host || host?.contains(node)) {
+                return;
+            }
+            if (protectedIds.has(node.id)) {
+                return;
+            }
+            // Keep inputs in DOM for service/bridge helpers, but hide them from the visible surface.
+            node.hidden = hidden;
+            node.setAttribute('aria-hidden', hidden ? 'true' : 'false');
+            if (hidden) {
+                node.setAttribute('inert', '');
+            } else {
+                node.removeAttribute('inert');
+            }
+            node.dataset.legacyExtensionsHiddenByReact = hidden ? 'true' : 'false';
+        });
+    }
+
+    // Hide the deprecated Extras heading row chrome without removing status nodes used by bridge state.
+    extensionsPanel.querySelectorAll('h4').forEach((heading) => {
+        if (!(heading instanceof HTMLElement)) {
+            return;
+        }
+        if (heading.textContent?.includes('Extras API')) {
+            heading.hidden = hidden;
+            heading.setAttribute('aria-hidden', hidden ? 'true' : 'false');
+            if (hidden) {
+                heading.setAttribute('inert', '');
+            } else {
+                heading.removeAttribute('inert');
+            }
+            heading.dataset.legacyExtensionsHiddenByReact = hidden ? 'true' : 'false';
+        }
+    });
+
+    extensionsPanel.classList.toggle('extensions-drawer-react-owned', hidden);
+    extensionsPanel.dataset.extensionsHostVisibleOwner = hidden ? 'react' : 'legacy';
 }
 
 function getExtensionsHostReactBridgeState(stateOverrides = {}) {
@@ -2998,6 +3085,13 @@ function getExtensionsHostReactBridgeState(stateOverrides = {}) {
     const extensionsConnect = document.getElementById('extensions_connect');
     const extensionsAutoconnect = document.getElementById('extensions_autoconnect');
     const deferredPlaceholder = document.getElementById('extensions_startup_loading');
+    const session = typeof getExtensionHostSession === 'function' ? getExtensionHostSession() : null;
+    const sessionSnapshot = session && typeof session.getHostStateSnapshot === 'function'
+        ? session.getHostStateSnapshot()
+        : null;
+    const deferredState = stateOverrides.deferredState
+        ?? sessionSnapshot?.deferredState
+        ?? (typeof getDeferredExtensionLoaderState === 'function' ? getDeferredExtensionLoaderState() : 'idle');
 
     return {
         extensionsSettingsPresent: Boolean(extensionsSettings),
@@ -3014,19 +3108,28 @@ function getExtensionsHostReactBridgeState(stateOverrides = {}) {
         autoconnectEnabled: extensionsAutoconnect?.checked === true,
         extrasStatusText: extensionsStatus?.textContent?.trim() ?? '',
         mountPointStatuses: getExtensionsHostReactMountPointStatuses(),
-        deferredState: stateOverrides.deferredState ?? 'idle',
+        deferredState,
         deferredPlaceholderPresent: Boolean(deferredPlaceholder),
+        // Session snapshot remains available for lifecycle-owned fields above.
+        sessionDeferredState: sessionSnapshot?.deferredState ?? null,
+        slotGeneration: getExtensionCompatibilitySlotManager()?.getGeneration?.() ?? 0,
     };
 }
 
 function getExtensionsHostReactMountPointStatuses() {
-    return [
-        { id: 'extensions_settings', label: 'Settings column', ready: Boolean(document.getElementById('extensions_settings')) },
-        { id: 'extensions_settings2', label: 'Settings column 2', ready: Boolean(document.getElementById('extensions_settings2')) },
-        { id: 'regex_container', label: 'Regex container', ready: Boolean(document.getElementById('regex_container')) },
-        { id: 'extensionsMenuButton', label: 'Wand button', ready: Boolean(document.getElementById('extensionsMenuButton')) },
-        { id: 'extensionsMenu', label: 'Wand menu', ready: Boolean(document.getElementById('extensionsMenu')) },
-    ];
+    const manager = getExtensionCompatibilitySlotManager();
+    if (manager) {
+        return manager.getStatus().map(status => ({
+            id: status.id,
+            label: status.label,
+            ready: status.ready,
+        }));
+    }
+    return EXTENSION_COMPATIBILITY_SLOTS.map(slot => ({
+        id: slot.id,
+        label: slot.label,
+        ready: Boolean(document.getElementById(slot.id)),
+    }));
 }
 
 function getExtensionsHostReactBridge() {
@@ -3049,6 +3152,10 @@ function getExtensionsHostReactBridge() {
                     return connectExtensionsHostApi();
                 case 'toggleAutoconnect':
                     return setExtensionsHostAutoconnectEnabled(payload?.enabled ?? !document.getElementById('extensions_autoconnect')?.checked);
+                case 'ensureExtensionCompatibilitySlots':
+                    return ensureExtensionCompatibilitySlots(payload || {});
+                case 'retryDeferredExtensions':
+                    return retryDeferredExtensionsHostLoad();
                 default:
                     console.warn('Unknown Extensions Host React action', action);
                     return undefined;
@@ -3064,7 +3171,7 @@ function getExtensionsHostReactBridge() {
 }
 
 async function mountReactExtensionsHostPanel(stateOverrides = {}) {
-    return mountWorkspacePanelHost({
+    const result = await mountWorkspacePanelHost({
         kind: 'extensionsHost',
         ensureContainer: ensureExtensionsHostReactHost,
         getState: overrides => getExtensionsHostReactBridgeState(overrides ?? stateOverrides),
@@ -3072,6 +3179,11 @@ async function mountReactExtensionsHostPanel(stateOverrides = {}) {
         features: getWorkspaceReactFeatures(),
         stateOverrides,
     });
+    if (result?.mounted) {
+        hideLegacyExtensionsHostControls(true);
+        ensureExtensionCompatibilitySlots({ owner: 'react-extensions-host' });
+    }
+    return result;
 }
 const handleReactExtensionsHostStateChange = createWorkspacePanelStateChangeHandler((stateOverrides) => {
     void mountReactExtensionsHostPanel(stateOverrides);

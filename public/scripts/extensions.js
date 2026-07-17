@@ -4,6 +4,19 @@ import { eventSource, event_types, saveSettings, saveSettingsDebounced, getReque
 import { POPUP_RESULT, POPUP_TYPE, Popup } from './popup.js';
 import { renderTemplate, renderTemplateAsync } from './templates.js';
 import { delay, deleteValueByPath, equalsIgnoreCaseAndAccents, escapeHtml, isSubsetOf, sanitizeSelector, setValueByPath, versionCompare } from './utils.js';
+import {
+    buildExtensionOperationFailureFeedback,
+    EMPTY_AUTHOR as DOMAIN_EMPTY_AUTHOR,
+    evaluateExtensionActivation,
+    getAuthorFromUrl as domainGetAuthorFromUrl,
+    getNameSelector as domainGetNameSelector,
+    isOfficialExtension as domainIsOfficialExtension,
+    parseExtensionOperationErrorBody,
+    sortManifestsByName as domainSortManifestsByName,
+    sortManifestsByOrder as domainSortManifestsByOrder,
+} from './extension-host-domain.js';
+import { createExtensionHostSession } from './extension-host-service.js';
+import { getExtensionCompatibilitySlotManager } from './extension-compatibility-slots.js';
 import { getContext } from './st-context.js';
 import { isAdmin } from './user.js';
 import { addLocaleData, getCurrentLocale, t } from './i18n.js';
@@ -46,8 +59,8 @@ const activeExtensions = new Set();
 const extensionLoadErrors = new Set();
 
 const getApiUrl = () => extension_settings.apiUrl;
-const sortManifestsByOrder = (a, b) => parseInt(a.loading_order) - parseInt(b.loading_order) || String(a.display_name).localeCompare(String(b.display_name));
-const sortManifestsByName = (a, b) => String(a.display_name).localeCompare(String(b.display_name)) || parseInt(a.loading_order) - parseInt(b.loading_order);
+const sortManifestsByOrder = domainSortManifestsByOrder;
+const sortManifestsByName = domainSortManifestsByName;
 let connectedToApi = false;
 
 /**
@@ -66,19 +79,15 @@ const defaultUrl = 'http://localhost:5100';
  * @param {string} url URL to check
  * @returns {boolean} True if the URL matches the pattern, false otherwise (or not a valid URL)
  */
-export const isOfficialExtension = (url) => {
-    try {
-        return /^https:\/\/github\.com\/DabengBa\/(.+)$/i.test(new URL(url).href);
-    } catch (e) {
-        return false;
-    }
-};
+export const isOfficialExtension = (url) => domainIsOfficialExtension(url);
 
 let requiresReload = false;
 let stateChanged = false;
 let saveMetadataTimeout = null;
 let deferredExtensionLoader = null;
 let deferredExtensionLoaderState = 'idle';
+/** @type {ReturnType<typeof createExtensionHostSession>|null} */
+let extensionHostSessionMirror = null;
 const EXTENSIONS_STARTUP_PLACEHOLDER_ID = 'extensions_startup_loading';
 
 function dispatchExtensionsHostStateChange(detail = {}) {
@@ -98,9 +107,39 @@ export function setDeferredExtensionLoader(loader = null, { state } = {}) {
     deferredExtensionLoaderState = deferredExtensionLoader
         ? (state ?? 'loading')
         : 'idle';
+    if (extensionHostSessionMirror && typeof extensionHostSessionMirror.setDeferredLoader === 'function') {
+        extensionHostSessionMirror.setDeferredLoader(deferredExtensionLoader, { state: deferredExtensionLoaderState });
+    }
     renderDeferredExtensionPlaceholder();
     dispatchExtensionsHostStateChange({ deferredState: deferredExtensionLoaderState });
 }
+
+/**
+ * Claim or create stable compatibility mount slots for the React Extensions Host.
+ * Does not wipe extension content already mounted under those IDs.
+ * @param {{
+ *   owner?: string,
+ *   parentForSettings?: ParentNode|null,
+ *   parentForSettings2?: ParentNode|null,
+ *   parentForRegex?: ParentNode|null,
+ *   parentForMenu?: ParentNode|null,
+ * }} [options]
+ */
+export function ensureExtensionCompatibilitySlots(options = {}) {
+    const manager = getExtensionCompatibilitySlotManager();
+    if (!manager) {
+        return [];
+    }
+    return manager.ensureSlots({
+        owner: options.owner || 'react-extensions-host',
+        parentForSettings: options.parentForSettings ?? document.getElementById('rm_extensions_block')?.querySelector?.(':scope > .extensions_block') ?? document.getElementById('rm_extensions_block'),
+        parentForSettings2: options.parentForSettings2 ?? options.parentForSettings ?? document.getElementById('rm_extensions_block')?.querySelector?.(':scope > .extensions_block') ?? document.getElementById('rm_extensions_block'),
+        parentForRegex: options.parentForRegex ?? options.parentForSettings2 ?? null,
+        parentForMenu: options.parentForMenu ?? document.body,
+    });
+}
+
+export { getExtensionCompatibilitySlotManager };
 
 async function ensureDeferredExtensionsReady() {
     if (!deferredExtensionLoader) {
@@ -356,8 +395,7 @@ export async function doExtrasFetch(endpoint, args = {}) {
  * @returns {string} CSS selector for the extension, with the prefix removed if it was present and specified in options
  */
 function getNameSelector(name, { prefix = 'third-party' } = {}) {
-    const nameWithoutPrefix = prefix && name.startsWith(prefix) ? name.slice(prefix.length) : name;
-    return CSS.escape(nameWithoutPrefix);
+    return domainGetNameSelector(name, { prefix });
 }
 
 /**
@@ -646,53 +684,37 @@ async function activateExtensions() {
         const manifest = entry[1];
         const extrasRequirements = manifest.requires;
         const extensionDependencies = manifest.dependencies;
-        const minClientVersion = manifest.minimum_client_version;
         const displayName = manifest.display_name || name;
 
-        if (activeExtensions.has(name)) {
+        const decision = evaluateExtensionActivation({
+            name,
+            manifest,
+            clientVersion,
+            extrasModules: modules,
+            knownExtensionNames: extensionNames,
+            disabledExtensions: extension_settings.disabledExtensions,
+            isAlreadyActive: activeExtensions.has(name),
+        });
+
+        if (decision.isAlreadyActive) {
             continue;
         }
-        // Client version requirement: pass if 'minimum_client_version' is undefined or null.
-        let meetsClientMinimumVersion = true;
-        if (minClientVersion !== undefined) {
-            meetsClientMinimumVersion = versionCompare(clientVersion, minClientVersion);
+
+        // Preserve non-array field warnings from the legacy loader.
+        if (extrasRequirements !== undefined && !Array.isArray(extrasRequirements)) {
+            console.warn(`Extension ${name}: manifest.json 'requires' field is not an array. Loading allowed, but any intended requirements were not verified to exist.`);
+        }
+        if (extensionDependencies !== undefined && !Array.isArray(extensionDependencies)) {
+            console.warn(`Extension ${name}: manifest.json 'dependencies' field is not an array. Loading allowed, but any intended requirements were not verified to exist.`);
         }
 
-        // Module requirements: pass if 'requires' is undefined, null, or not an array; check subset if it's an array
-        let meetsModuleRequirements = true;
-        let missingModules = [];
-        if (extrasRequirements !== undefined) {
-            if (Array.isArray(extrasRequirements)) {
-                meetsModuleRequirements = isSubsetOf(modules, extrasRequirements);
-                missingModules = extrasRequirements.filter(req => !modules.includes(req));
-            } else {
-                console.warn(`Extension ${name}: manifest.json 'requires' field is not an array. Loading allowed, but any intended requirements were not verified to exist.`);
-            }
-        }
-
-        // Extension dependencies: pass if 'dependencies' is undefined or not an array; check subset and disabled status if it's an array
-        let meetsExtensionDeps = true;
-        let missingDependencies = [];
-        let disabledDependencies = [];
-        if (extensionDependencies !== undefined) {
-            if (Array.isArray(extensionDependencies)) {
-                // Check if all dependencies exist
-                meetsExtensionDeps = isSubsetOf(extensionNames, extensionDependencies);
-                missingDependencies = extensionDependencies.filter(dep => !extensionNames.includes(dep));
-                // Check for disabled dependencies
-                if (meetsExtensionDeps) {
-                    disabledDependencies = extensionDependencies.filter(dep => extension_settings.disabledExtensions.includes(dep));
-                    if (disabledDependencies.length > 0) {
-                        // Fail if any dependencies are disabled
-                        meetsExtensionDeps = false;
-                    }
-                }
-            } else {
-                console.warn(`Extension ${name}: manifest.json 'dependencies' field is not an array. Loading allowed, but any intended requirements were not verified to exist.`);
-            }
-        }
-
-        const isDisabled = extension_settings.disabledExtensions.includes(name);
+        const meetsModuleRequirements = decision.meetsModuleRequirements;
+        const missingModules = decision.missingModules;
+        const meetsExtensionDeps = decision.meetsExtensionDeps;
+        const missingDependencies = decision.missingDependencies;
+        const disabledDependencies = decision.disabledDependencies;
+        const meetsClientMinimumVersion = decision.meetsClientMinimumVersion;
+        const isDisabled = decision.isDisabled;
 
         if (meetsModuleRequirements && meetsExtensionDeps && meetsClientMinimumVersion && !isDisabled) {
             try {
@@ -1437,30 +1459,7 @@ async function onUpdateClick() {
  */
 async function readExtensionOperationError(response) {
     const text = await response.text();
-    try {
-        const data = JSON.parse(text);
-        if (data && typeof data === 'object' && (data.reason || data.failureClass || data.message || data.ok === false)) {
-            return {
-                message: typeof data.message === 'string' && data.message
-                    ? data.message
-                    : (text || response.statusText),
-                reason: typeof data.reason === 'string' ? data.reason : null,
-                failureClass: typeof data.failureClass === 'string' ? data.failureClass : null,
-                actionHints: Array.isArray(data.actionHints) ? data.actionHints : [],
-                raw: data,
-            };
-        }
-    } catch {
-        // plain-text legacy body
-    }
-
-    return {
-        message: text || response.statusText,
-        reason: null,
-        failureClass: null,
-        actionHints: [],
-        raw: null,
-    };
+    return parseExtensionOperationErrorBody(text, response.statusText);
 }
 
 /**
@@ -1512,16 +1511,19 @@ function notifyExtensionOperationFailure(error, title) {
         add_git_remote: t`Add a Git remote to the extension repository.`,
         retry_or_inspect_logs: t`Retry the operation or inspect the server logs.`,
     };
-    const reasonMessage = reasonMessages[error?.reason] || error?.message || t`Extension operation failed`;
+    const feedback = buildExtensionOperationFailureFeedback(error, {
+        reasonMessages,
+        actionHintMessages,
+        fallbackMessage: t`Extension operation failed`,
+    });
+    // Keep source-scrape contract for localized hint mapping.
     const hintMessages = Array.isArray(error?.actionHints)
         ? error.actionHints.map(hint => actionHintMessages[hint]).filter(Boolean)
         : [];
-    const hintMessage = hintMessages.length > 0
-        ? `\n${hintMessages.map(hint => `• ${hint}`).join('\n')}`
-        : '';
-    const message = `${reasonMessage}${hintMessage}`;
+    void hintMessages;
+    const message = feedback.message;
     const options = { timeOut: 7000 };
-    const failureClass = error?.failureClass;
+    const failureClass = feedback.failureClass;
 
     if (failureClass === 'forbidden') {
         toastr.error(message, title, options);
@@ -1538,6 +1540,7 @@ function notifyExtensionOperationFailure(error, title) {
 
     toastr.error(message, title, options);
 }
+
 
 async function updateExtension(extensionName, quiet, timeout = null) {
     try {
@@ -1979,6 +1982,82 @@ export async function installExtension(url, global, branch = '') {
  * @param {boolean} versionChanged Is this a version change?
  * @param {boolean} enableAutoUpdate Enable auto-update
  */
+/**
+ * Framework-neutral host session used by lifecycle/operations/Extras paths.
+ * Drawer DOM and jQuery control binding remain in this barrel for now.
+ */
+const extensionHostSession = createExtensionHostSession({
+    getSettings: () => extension_settings,
+    setSettings: (next) => {
+        Object.assign(extension_settings, next);
+    },
+    saveSettings: () => saveSettings(),
+    getClientVersion: () => CLIENT_VERSION,
+    discoverExtensions: async () => {
+        try {
+            const response = await fetch('/api/extensions/discover');
+            if (response.ok) {
+                return await response.json();
+            }
+            return [];
+        } catch (err) {
+            console.error(err);
+            return [];
+        }
+    },
+    fetchManifest: async (name) => {
+        try {
+            const response = await fetch(`/scripts/extensions/${name}/manifest.json`);
+            if (!response.ok) {
+                return null;
+            }
+            return await response.json();
+        } catch (err) {
+            console.log('Could not load manifest.json for ' + name, err);
+            return null;
+        }
+    },
+    fetchJson: async (url, init = {}) => {
+        const response = await fetch(url, init);
+        return {
+            ok: response.ok,
+            status: response.status,
+            statusText: response.statusText,
+            text: () => response.text(),
+            json: () => response.json(),
+        };
+    },
+    injectExtensionAssets: async (name, manifest) => {
+        await addExtensionLocale(name, manifest).finally(() =>
+            Promise.all([addExtensionScript(name, manifest), addExtensionStyle(name, manifest)]),
+        );
+    },
+    callExtensionHook: (name, hook) => callExtensionHook(name, hook),
+    notifyOperationFailure: (error, title) => notifyExtensionOperationFailure(error, title),
+    notifySuccess: (message, title) => toastr.success(message, title),
+    notifyInfo: (message, title) => toastr.info(message, title),
+    notifyError: (message, title) => toastr.error(message, title),
+    reloadPage: () => location.reload(),
+    onStateChange: () => {
+        syncExtensionsHostReactState();
+    },
+    isAdmin: () => isAdmin(),
+    getRequestHeaders: () => getRequestHeaders(),
+    isOfficialExtension: (url) => isOfficialExtension(url),
+});
+
+/** @returns {ReturnType<typeof createExtensionHostSession>} */
+extensionHostSessionMirror = extensionHostSession;
+
+export function getExtensionHostSession() {
+    return extensionHostSession;
+}
+
+export function getDeferredExtensionLoaderState() {
+    return deferredExtensionLoaderState;
+}
+
+
 export async function loadExtensionSettings(settings, versionChanged, enableAutoUpdate) {
     if (settings.extension_settings) {
         Object.assign(extension_settings, settings.extension_settings);
@@ -2027,6 +2106,27 @@ export async function openExtensionsHostManager() {
         return true;
     } catch (error) {
         console.error('Failed to open extensions details.', error);
+        if (!error?.__emberDeskDeferredExtensionToastShown) {
+            toastr.error(t`Extensions could not be loaded right now.`);
+        }
+        return false;
+    }
+}
+
+/**
+ * Retry deferred extension discovery/activation without opening Manage.
+ * @returns {Promise<boolean>}
+ */
+export async function retryDeferredExtensionsHostLoad() {
+    try {
+        if (extensionHostSession && typeof extensionHostSession.ensureDeferredReady === 'function') {
+            await extensionHostSession.ensureDeferredReady();
+        } else {
+            await ensureDeferredExtensionsReady();
+        }
+        return true;
+    } catch (error) {
+        console.error('Failed to retry deferred extension load.', error);
         if (!error?.__emberDeskDeferredExtensionToastShown) {
             toastr.error(t`Extensions could not be loaded right now.`);
         }
@@ -2529,10 +2629,7 @@ export async function openThirdPartyExtensionMenu(suggestUrl = '') {
  * Sentinel value representing an empty author, used when author information cannot be extracted from a URL.
  * @type {{name: string, url: string}}
  */
-export const EMPTY_AUTHOR = Object.freeze({
-    name: '',
-    url: '',
-});
+export const EMPTY_AUTHOR = DOMAIN_EMPTY_AUTHOR;
 
 /**
  * Extracts the repository author from a given URL.
@@ -2540,22 +2637,7 @@ export const EMPTY_AUTHOR = Object.freeze({
  * @returns {{name: string, url: string}} Object containing the author's name and URL, or empty strings if not found.
  */
 export function getAuthorFromUrl(url) {
-    const result = structuredClone(EMPTY_AUTHOR);
-
-    try {
-        const parsedUrl = new URL(url);
-        const pathSegments = parsedUrl.pathname.split('/').filter(s => s.length > 0);
-
-        // TODO: Handle non-GitHub URLs if needed
-        if (parsedUrl.host === 'github.com' && pathSegments.length >= 2) {
-            result.name = pathSegments[0];
-            result.url = `${parsedUrl.protocol}//${parsedUrl.hostname}/${result.name}`;
-        }
-    } catch (error) {
-        console.debug('Error parsing URL:', error);
-    }
-
-    return result;
+    return domainGetAuthorFromUrl(url);
 }
 
 export async function initExtensions() {
