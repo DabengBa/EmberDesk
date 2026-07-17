@@ -255,6 +255,53 @@ describe('extension host domain and services', () => {
         expect(installResult.ok).toBe(true);
         expect(hooks.some(h => h.hook === 'install')).toBe(true);
 
+        const moveBodies = [];
+        const moveSession = serviceModule.createExtensionHostSession({
+            getSettings: () => settings,
+            setSettings: (next) => Object.assign(settings, next),
+            saveSettings: async () => {},
+            getClientVersion: () => '1.0.0',
+            discoverExtensions: async () => [],
+            fetchManifest: async () => null,
+            fetchJson: async (url, init = {}) => {
+                if (String(url).includes('/api/extensions/move')) {
+                    moveBodies.push(JSON.parse(init.body));
+                    return {
+                        ok: true,
+                        status: 204,
+                        statusText: 'No Content',
+                        text: async () => '',
+                        json: async () => ({}),
+                    };
+                }
+                return {
+                    ok: false,
+                    status: 404,
+                    statusText: 'Not Found',
+                    text: async () => '',
+                    json: async () => ({}),
+                };
+            },
+            injectExtensionAssets: async () => {},
+            getRequestHeaders: () => ({ 'X-CSRF-Token': 't' }),
+            notifySuccess: () => {},
+            notifyOperationFailure: () => {},
+        });
+        const moveLocalToGlobal = await moveSession.moveExtension('demo', { source: 'local', destination: 'global' });
+        expect(moveLocalToGlobal.ok).toBe(true);
+        expect(moveBodies[0]).toEqual({
+            extensionName: 'demo',
+            source: 'local',
+            destination: 'global',
+        });
+        // legacy boolean form maps destination scope without inventing a `global` body field
+        await moveSession.moveExtension('demo', { global: false });
+        expect(moveBodies[1]).toEqual({
+            extensionName: 'demo',
+            source: 'global',
+            destination: 'local',
+        });
+
         await session.enableExtension('third-party/demo', { reload: false });
         expect(settings.disabledExtensions).not.toContain('third-party/demo');
         expect(saveCount).toBeGreaterThan(0);
@@ -423,10 +470,11 @@ describe('extension compatibility slots', () => {
         const scriptSource = read('public/script.js');
         const extensionsSource = read('public/scripts/extensions.js');
 
-        expect(workspacePanelSource).toContain('data-extensions-host-compat-slot=');
-        expect(workspacePanelSource).toContain('data-extensions-host-compat-slot="extensions_settings"');
-        expect(workspacePanelSource).toContain('data-extensions-host-compat-slot="extensions_settings2"');
-        expect(workspacePanelSource).toContain('data-extensions-host-compat-slot="regex_container"');
+        // Lifecycle markers only — no empty React placeholders that pretend to own mount IDs.
+        expect(workspacePanelSource).toContain('data-extensions-host-react-workflow="compatibility-slots"');
+        expect(workspacePanelSource).toContain('data-extensions-host-compat-owner="react-lifecycle"');
+        expect(workspacePanelSource).not.toContain('data-extensions-host-compat-slot="extensions_settings"');
+        expect(workspacePanelSource).not.toContain('data-extensions-host-compat-slot="regex_container"');
         expect(workspacePanelSource).toContain('ensureExtensionCompatibilitySlots');
         expect(workspacePanelSource).toContain('retryDeferredExtensions');
         expect(workspacePanelSource).toContain('legacyBoundary="react-owned-slots-lifecycle"');
@@ -436,6 +484,9 @@ describe('extension compatibility slots', () => {
 
         expect(scriptSource).toContain('getExtensionHostSession');
         expect(scriptSource).toContain('extension-compatibility-slots');
+        // Hide legacy chrome only after a successful React mount; restore on failure.
+        expect(scriptSource).toContain('if (result?.mounted)');
+        expect(scriptSource).toContain('hideLegacyExtensionsHostControls(false)');
         // Retry must re-run deferred load, not open Manage as a substitute.
         expect(scriptSource).toContain("case 'retryDeferredExtensions'");
         expect(scriptSource).toContain('return retryDeferredExtensionsHostLoad()');
@@ -444,5 +495,7 @@ describe('extension compatibility slots', () => {
         expect(extensionsSource).toContain('getExtensionCompatibilitySlotManager');
         expect(extensionsSource).toContain('ensureExtensionCompatibilitySlots');
         expect(extensionsSource).toContain('export async function retryDeferredExtensionsHostLoad()');
+        // Retry uses barrel ensure path so module/session deferred state stay mirrored.
+        expect(extensionsSource).toMatch(/retryDeferredExtensionsHostLoad[\s\S]*ensureDeferredExtensionsReady/);
     });
 });

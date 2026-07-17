@@ -2115,18 +2115,21 @@ export async function openExtensionsHostManager() {
 
 /**
  * Retry deferred extension discovery/activation without opening Manage.
+ * Always goes through the module deferred loader so barrel state and session mirror stay aligned.
  * @returns {Promise<boolean>}
  */
 export async function retryDeferredExtensionsHostLoad() {
     try {
-        if (extensionHostSession && typeof extensionHostSession.ensureDeferredReady === 'function') {
-            await extensionHostSession.ensureDeferredReady();
-        } else {
-            await ensureDeferredExtensionsReady();
-        }
+        // Prefer the barrel path: setDeferredExtensionLoader mirrors into the session.
+        // Session-only ensureDeferredReady would desync module deferredExtensionLoaderState
+        // used by Manage and getDeferredExtensionLoaderState().
+        await ensureDeferredExtensionsReady();
         return true;
     } catch (error) {
         console.error('Failed to retry deferred extension load.', error);
+        if (deferredExtensionLoader && deferredExtensionLoaderState !== 'failed') {
+            setDeferredExtensionLoader(deferredExtensionLoader, { state: 'failed' });
+        }
         if (!error?.__emberDeskDeferredExtensionToastShown) {
             toastr.error(t`Extensions could not be loaded right now.`);
         }

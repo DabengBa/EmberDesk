@@ -62,3 +62,13 @@ Doc IDs: feature.extension_panel_open, term.shared_browser_library, page.chat_wo
 
 - [x] Review complete
 - [x] Review: R-01 Retry mapped to Manage not deferred reload (severity: medium; scope: bridge/retry; details: evidence/review.md#r-01) — fixed and revalidated
+
+### Post-wrap multi-agent code-review (2026-07-17)
+
+- [x] Review: R-02 Service move API used wrong body (`global` instead of source/destination) (severity: high; scope: extension-host-service; evidence: public/scripts/extension-host-service.js moveExtension; proof: unit moveBodies)
+- [x] Review: R-03 Hide legacy chrome before successful React mount left empty host on failure (severity: high; scope: public/script.js ensure/mount; proof: unit source + restore path)
+- [x] Review: R-04 Deferred retry dual-state desync via session-only ensureDeferredReady (severity: medium; scope: extensions.js retry; proof: unit regex ensureDeferredExtensionsReady)
+- [x] Review: R-05 Empty React compat-slot placeholders + tests locking dead markup (severity: medium; scope: workspace-panels + tests; proof: unit)
+- [x] Review: R-06 Legacy Extensions header row / Extras heading not fully hidden (severity: medium; scope: hideLegacy; proof: structural hide selectors)
+- [x] Review: R-07 E2E false-green open/manage/slash paths (severity: medium; scope: e2e; proof: tightened assertions; e2e 4 passed)
+

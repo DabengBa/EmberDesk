@@ -539,17 +539,38 @@ export function createExtensionHostSession(deps) {
     }
 
     /**
+     * Move an extension between local and global scopes.
+     * Endpoint contract: `{ extensionName, source, destination }` (not a boolean `global` flag).
      * @param {string} extensionName
-     * @param {{global?: boolean}} [options]
+     * @param {{source?: string, destination?: string, global?: boolean}} [options]
+     *   Prefer `source`/`destination`. Legacy `global: true` means move local→global;
+     *   `global: false` means move global→local when source/destination are omitted.
      */
-    async function moveExtension(extensionName, { global = false } = {}) {
+    async function moveExtension(extensionName, { source, destination, global } = {}) {
         try {
+            let resolvedSource = source;
+            let resolvedDestination = destination;
+            if (!resolvedSource || !resolvedDestination) {
+                // Map optional boolean form to the real endpoint scopes.
+                if (global === true) {
+                    resolvedSource = resolvedSource || 'local';
+                    resolvedDestination = resolvedDestination || 'global';
+                } else if (global === false) {
+                    resolvedSource = resolvedSource || 'global';
+                    resolvedDestination = resolvedDestination || 'local';
+                } else {
+                    resolvedSource = resolvedSource || 'local';
+                    resolvedDestination = resolvedDestination || 'global';
+                }
+            }
+
             const response = await deps.fetchJson('/api/extensions/move', {
                 method: 'POST',
                 headers: getRequestHeaders(),
                 body: JSON.stringify({
                     extensionName,
-                    global,
+                    source: resolvedSource,
+                    destination: resolvedDestination,
                 }),
             });
             if (!response.ok) {
@@ -566,7 +587,11 @@ export function createExtensionHostSession(deps) {
             if (typeof deps.notifySuccess === 'function') {
                 deps.notifySuccess(`Extension ${extensionName} moved`);
             }
-            return { ok: true, data: await response.json().catch(() => ({})) };
+            // 204 No Content is valid; avoid forcing json parse.
+            const data = typeof response.json === 'function'
+                ? await response.json().catch(() => ({}))
+                : {};
+            return { ok: true, data };
         } catch (error) {
             console.error('Error:', error);
             return { ok: false, message: String(error?.message || error) };

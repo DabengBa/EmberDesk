@@ -3115,8 +3115,6 @@ function ExtensionsHostWorkspacePanel({ state, bridge }: { state?: unknown; brid
     const bridgeState = asExtensionsHostState(state);
     const status = getExtensionsHostPanelStatus(bridgeState);
     const formDefaults = useMemo(() => buildExtensionsHostPanelFormDefaults(bridgeState), [bridgeState]);
-    const settingsColumnRef = useRef<HTMLDivElement | null>(null);
-    const settingsColumn2Ref = useRef<HTMLDivElement | null>(null);
     const extensionsHostForm = useForm({
         defaultValues: formDefaults,
         validators: {
@@ -3276,22 +3274,15 @@ function ExtensionsHostWorkspacePanel({ state, bridge }: { state?: unknown; brid
                     </button>
                     <output>{bridgeState.extrasStatusText || 'Not connected...'}</output>
                 </div>
+                {/* Protected mount IDs remain in established drawer DOM under React lifecycle
+                    (ensureExtensionCompatibilitySlots). Do not render empty React placeholders
+                    for those IDs — reparenting into React would destroy extension content on unmount. */}
                 <div
                     className="flex-container flexFlowColumn gap8"
                     data-extensions-host-react-workflow="compatibility-slots"
-                >
-                    {/* Protected mount IDs stay in established drawer DOM; React owns lifecycle via ensureExtensionCompatibilitySlots. */}
-                    <div
-                        ref={settingsColumnRef}
-                        data-extensions-host-compat-slot="extensions_settings"
-                    />
-                    <div
-                        ref={settingsColumn2Ref}
-                        data-extensions-host-compat-slot="extensions_settings2"
-                    >
-                        <div data-extensions-host-compat-slot="regex_container" />
-                    </div>
-                </div>
+                    data-extensions-host-compat-owner="react-lifecycle"
+                    aria-hidden="true"
+                />
             </div>
         </WorkspacePanelShell>
     );

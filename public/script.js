@@ -2978,7 +2978,7 @@ function ensureExtensionsHostReactHost() {
 
     let host = document.getElementById(EXTENSIONS_HOST_REACT_HOST_ID);
     if (host) {
-        hideLegacyExtensionsHostControls(true);
+        // Do not hide legacy chrome until React content has mounted successfully.
         return host;
     }
 
@@ -2993,7 +2993,6 @@ function ensureExtensionsHostReactHost() {
         extensionsPanel.prepend(host);
     }
 
-    hideLegacyExtensionsHostControls(true);
     return host;
 }
 
@@ -3052,12 +3051,33 @@ function hideLegacyExtensionsHostControls(hidden) {
         });
     }
 
+    // Hide the legacy header chrome (duplicate "Extensions" h3 + control row) when React owns the surface.
+    // Prefer structural selectors over English heading text so translated UIs still hide correctly.
+    extensionsPanel.querySelectorAll(':scope > .extensions_block > .alignitemscenter.flex-container.wide100p').forEach((row) => {
+        if (!(row instanceof HTMLElement) || host?.contains(row)) {
+            return;
+        }
+        if (row.querySelector('#extensions_details, #third_party_extension_button, #extensions_notify_updates')) {
+            row.hidden = hidden;
+            row.setAttribute('aria-hidden', hidden ? 'true' : 'false');
+            if (hidden) {
+                row.setAttribute('inert', '');
+            } else {
+                row.removeAttribute('inert');
+            }
+            row.dataset.legacyExtensionsHiddenByReact = hidden ? 'true' : 'false';
+        }
+    });
+
     // Hide the deprecated Extras heading row chrome without removing status nodes used by bridge state.
     extensionsPanel.querySelectorAll('h4').forEach((heading) => {
         if (!(heading instanceof HTMLElement)) {
             return;
         }
-        if (heading.textContent?.includes('Extras API')) {
+        // Match by i18n key or English fallback so translations still hide.
+        const isExtrasHeading = heading.querySelector('[data-i18n="Extras API:"], [data-i18n="(DEPRECATED)"]')
+            || /Extras API/i.test(heading.textContent || '');
+        if (isExtrasHeading) {
             heading.hidden = hidden;
             heading.setAttribute('aria-hidden', hidden ? 'true' : 'false');
             if (hidden) {
@@ -3182,6 +3202,9 @@ async function mountReactExtensionsHostPanel(stateOverrides = {}) {
     if (result?.mounted) {
         hideLegacyExtensionsHostControls(true);
         ensureExtensionCompatibilitySlots({ owner: 'react-extensions-host' });
+    } else {
+        // Bundle/mount failure must not leave users with a blank host and no Manage/Install.
+        hideLegacyExtensionsHostControls(false);
     }
     return result;
 }

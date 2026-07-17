@@ -44,7 +44,7 @@ describe('React workspace panels bridge helpers', () => {
                 mainChatMessageList: false,
                 worldInfo: true,
                 backgroundLibrary: true,
-                extensionsHost: false,
+                extensionsHost: true,
                 characterAuthoring: true,
                 groupAuthoring: true,
             },
@@ -68,14 +68,14 @@ describe('React workspace panels bridge helpers', () => {
                 mainChatMessageList: true,
                 worldInfo: true,
                 backgroundLibrary: false,
-                extensionsHost: false,
+                extensionsHost: true,
             },
         };
 
         expect(isReactWorkspacePanelEnabled('worldInfo', features)).toBe(true);
         expect(isReactWorkspacePanelEnabled('mainChatMessageList', features)).toBe(true);
         expect(isReactWorkspacePanelEnabled('backgroundLibrary', features)).toBe(false);
-        expect(isReactWorkspacePanelEnabled('extensionsHost', features)).toBe(false);
+        expect(isReactWorkspacePanelEnabled('extensionsHost', features)).toBe(true);
     });
 
     test('keeps internal workspace panel mount result constants and helpers aligned', () => {
@@ -894,6 +894,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('async function mountReactBackgroundLibraryPanel(');
         expect(scriptSource).toContain('function hideLegacyBackgroundGallery(');
         expect(scriptSource).toContain("dataset.backgroundLibraryVisibleOwner = hidden ? 'react' : 'legacy'");
+        expect(scriptSource).toContain("'#bg-header-fixed'");
         expect(scriptSource).toContain("data-doc-id', 'feature.background_library_panel'");
         expect(scriptSource).toContain('kind: \'backgroundLibrary\'');
         expect(scriptSource).toContain('getState: overrides => getBackgroundLibraryReactBridgeState(overrides ?? stateOverrides)');
@@ -907,6 +908,9 @@ describe('React workspace panels bridge helpers', () => {
 
         expect(workspacePanelSource).toContain('interface BackgroundLibraryWorkspacePanelState');
         expect(workspacePanelSource).toContain('function BackgroundLibraryWorkspacePanel');
+        expect(workspacePanelSource).toContain('title="背景"');
+        expect(workspacePanelSource).toContain('className="workspace-panel-background-preview"');
+        expect(workspacePanelSource).toContain('style={{ backgroundImage: item.url }}');
         expect(workspacePanelSource).toContain('kind="backgroundLibrary"');
         expect(workspacePanelSource).toContain("{ id: 'global-gallery', label: 'Global gallery', ready: bridgeState.systemContainerPresent }");
         expect(workspacePanelSource).toContain("{ id: 'chat-gallery', label: 'Chat gallery', ready: bridgeState.chatContainerPresent }");
@@ -961,13 +965,14 @@ describe('React workspace panels bridge helpers', () => {
         expect(backgroundsSource).toContain('syncBackgroundLibraryReactState();');
         expect(backgroundsSource).toContain('export function applyBackgroundLibraryFilter(filterQuery)');
         expect(backgroundsSource).toContain('export function applyBackgroundLibrarySort(sortValue)');
-        expect(backgroundsSource).toContain('export function requestBackgroundUploadSelection()');
-        expect(backgroundsSource).toContain('export function selectBackgroundLibraryItem(backgroundId, source)');
+        expect(backgroundsSource).toContain("export function requestBackgroundUploadSelection(source = 'global')");
+        expect(backgroundsSource).toContain('export async function selectBackgroundLibraryItem(backgroundId, source)');
         expect(backgroundsSource).toContain('export function lockCurrentBackground()');
         expect(backgroundsSource).toContain('export function unlockCurrentBackground()');
         expect(backgroundsSource).toContain('export async function runAutoBackgroundSelection()');
         expect(backgroundsSource).toContain('export async function refreshBackgroundLibrary()');
-        expect(backgroundsSource).toContain('return applyBackgroundSelection(backgroundElement, { respectGroupSelectionMode: false });');
+        expect(backgroundsSource).toContain('await ensureBackgroundLibrarySession().selectBackground(');
+        expect(backgroundsSource).not.toContain('const candidates = normalizedSource === \'chat\'');
         expect(backgroundsSource).toContain('onLockBackgroundClick();');
         expect(backgroundsSource).toContain('onUnlockBackgroundClick();');
         expect(backgroundsSource).toContain('return applyBackgroundSelection(option.element, { respectGroupSelectionMode: false })');
@@ -980,15 +985,21 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('const backgroundLibraryActionMutation = useMutation({');
         expect(workspacePanelSource).toContain('data-background-library-react-control="filter"');
         expect(workspacePanelSource).toContain('data-background-library-react-control="sort"');
-        expect(workspacePanelSource).toContain('data-background-library-react-action="upload"');
+        expect(workspacePanelSource).not.toContain('data-background-library-react-action="upload"');
         expect(workspacePanelSource).toContain('data-background-library-react-action="lock"');
         expect(workspacePanelSource).toContain('data-background-library-react-action="unlock"');
         expect(workspacePanelSource).toContain('data-background-library-react-gallery={source}');
         expect(workspacePanelSource).toContain('<BackgroundGallery source="global" items={systemBackgrounds} actionMutation={backgroundLibraryActionMutation} />');
         expect(workspacePanelSource).toContain('<BackgroundGallery source="chat" items={chatBackgrounds} actionMutation={backgroundLibraryActionMutation} />');
-        expect(workspacePanelSource).toContain('className="flex-container flexFlowColumn gap4 workspace-panel-background-item"');
+        expect(workspacePanelSource).toContain('className="workspace-panel-background-item"');
+        expect(workspacePanelSource).toContain('className="workspace-panel-background-details"');
         expect(workspacePanelSource).toContain('data-background-library-react-item={item.id}');
-        expect(workspacePanelSource).toContain('backgroundLibraryActionMutation.mutate({ action: \'uploadBackground\' })');
+        expect(workspacePanelSource).toContain("action: 'uploadBackground',");
+        expect(workspacePanelSource).toContain("payload: { source: 'global' },");
+        expect(workspacePanelSource).toContain("payload: { source: 'chat' },");
+        expect(workspacePanelSource).toContain('data-background-library-react-action="upload-global"');
+        expect(workspacePanelSource).toContain('data-background-library-react-action="upload-chat"');
+        expect(scriptSource).toContain("return requestBackgroundUploadSelection(payload?.source ?? 'global');");
         expect(workspacePanelSource).toContain('backgroundLibraryActionMutation.mutate({ action: \'lockBackground\' })');
         expect(workspacePanelSource).toContain('backgroundLibraryActionMutation.mutate({ action: \'unlockBackground\' })');
         expect(scriptSource).toContain('getBackgroundLibraryServicePanelState');
@@ -1023,6 +1034,9 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('extensionsMenuPresent: Boolean(extensionsMenu)');
         expect(scriptSource).toContain('extrasApiControlsPresent: Boolean(extensionsStatus && extensionsUrl && extensionsApiKey && extensionsConnect && extensionsAutoconnect)');
         expect(scriptSource).toContain('async function mountReactExtensionsHostPanel(');
+        expect(scriptSource).toContain('function hideLegacyExtensionsHostControls(');
+        expect(scriptSource).toContain("dataset.extensionsHostVisibleOwner = hidden ? 'react' : 'legacy'");
+        expect(scriptSource).toContain('hideLegacyExtensionsHostControls(true)');
         expect(scriptSource).toContain('return mountWorkspacePanelHost({');
         expect(scriptSource).toContain('kind: \'extensionsHost\'');
         expect(scriptSource).toContain('getState: overrides => getExtensionsHostReactBridgeState(overrides ?? stateOverrides)');
@@ -1047,7 +1061,13 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain("{ id: 'extensions-menu', label: 'Wand menu', ready: bridgeState.extensionsMenuPresent }");
         expect(workspacePanelSource).toContain("{ id: 'extras-api', label: 'Extras API', ready: bridgeState.extrasApiControlsPresent }");
         expect(workspacePanelSource).not.toContain('data-extensions-host-bridge-state={stateId}');
-        expect(workspacePanelSource).toContain('legacyBoundary="mount-points-loader-wand-regex-aliases"');
+        expect(workspacePanelSource).toContain('legacyBoundary="react-owned-slots-lifecycle"');
+        // Lifecycle marker only; protected mount nodes stay outside React JSX.
+        expect(workspacePanelSource).toContain('data-extensions-host-react-workflow="compatibility-slots"');
+        expect(workspacePanelSource).toContain('data-extensions-host-compat-owner="react-lifecycle"');
+        expect(workspacePanelSource).not.toContain('data-extensions-host-compat-slot="extensions_settings"');
+        expect(workspacePanelSource).toContain('ensureExtensionCompatibilitySlots');
+        expect(workspacePanelSource).not.toContain('id="extensions_settings"');
     });
 
     

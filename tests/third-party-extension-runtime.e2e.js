@@ -77,7 +77,8 @@ test.describe('third-party extension runtime compatibility', () => {
                     });
                     observed.slashOk = result !== undefined;
                 } catch {
-                    observed.slashOk = true;
+                    // A thrown slash executor is a real compatibility failure.
+                    observed.slashOk = false;
                 }
             }
 

@@ -2,20 +2,11 @@ import { expect, test } from '@playwright/test';
 import { testSetup } from './frontend/frontent-test-utils.js';
 
 async function openExtensionsHost(page) {
+    // Sole-owner proof requires the React shell nav entry — do not fall back to legacy drawer toggle.
     const panelButton = page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'Extensions' });
-    // Prefer same-entry React shell entry (enabled for this proof suite).
-    if (await panelButton.count()) {
-        await panelButton.click({ timeout: 15_000 });
-        await expect(panelButton).toHaveAttribute('aria-pressed', 'true', { timeout: 15_000 }).catch(() => {});
-    } else {
-        // No shell chrome: open the established drawer by dispatching the drawer toggle click.
-        await page.evaluate(() => {
-            const toggle = document.querySelector('#extensions-settings-button .drawer-toggle');
-            if (toggle instanceof HTMLElement) {
-                toggle.click();
-            }
-        });
-    }
+    await expect(panelButton).toHaveCount(1, { timeout: 20_000 });
+    await panelButton.click({ timeout: 15_000 });
+    await expect(panelButton).toHaveAttribute('aria-pressed', 'true', { timeout: 15_000 });
     await expect(page.locator('#rm_extensions_block.openDrawer')).toBeVisible({ timeout: 20_000 });
     await expect.poll(async () => page.evaluate(() => {
         const host = document.getElementById('emberdesk-react-extensions-host-panel-host');
@@ -90,18 +81,16 @@ test.describe('extensions host sole owner', () => {
         await expect(manage).toBeVisible({ timeout: 20_000 });
         await manage.click({ timeout: 10_000 });
 
-        // Manage opens the established popup; either popup content or recovered deferred state is success.
-        const manageOutcome = await page.waitForFunction(() => {
+        // Manage must open the established popup; deferred-failure placeholder alone is not success.
+        await expect.poll(async () => page.evaluate(() => {
             const popup = document.querySelector('.popup .extensions_info, .popup:has(.extensions_info)');
-            const deferredFailed = document.getElementById('extensions_startup_loading');
-            return Boolean(popup) || Boolean(deferredFailed);
-        }, { timeout: 30_000 }).then(() => true).catch(() => false);
-
-        expect(manageOutcome).toBe(true);
+            return Boolean(popup);
+        }), { timeout: 30_000 }).toBe(true);
 
         const mountsRemain = await page.evaluate(() => ({
             settings: Boolean(document.getElementById('extensions_settings')),
             regex: Boolean(document.getElementById('regex_container')),
+            deferredPlaceholder: Boolean(document.getElementById('extensions_startup_loading')),
         }));
         expect(mountsRemain.settings).toBe(true);
         expect(mountsRemain.regex).toBe(true);
