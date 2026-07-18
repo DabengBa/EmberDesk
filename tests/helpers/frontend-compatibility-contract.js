@@ -239,10 +239,10 @@ export const compatibilityContractEntries = Object.freeze([
         id: 'message-row-and-extension-mutation',
         family: 'message-mutation',
         behavior: 'message rows remain identifiable and extension-owned TH-streaming / TH-render mutations are not swallowed by React owners',
-        currentProvider: 'main-chat rendering path',
-        replacementProvider: 'React main-chat owner that preserves extension lifecycle markers',
+        currentProvider: 'React main-chat rich-body owner with stable mutation-zone hosts and preserveLiveContent',
+        replacementProvider: 'React main-chat owner that preserves extension lifecycle markers via data-main-chat-mutation-zone hosts',
         proofCommand: 'bun run test:compat; bun run --cwd tests test:e2e -- third-party-extension-runtime.e2e.js --workers=1',
-        deletionReadiness: 'not-ready',
+        deletionReadiness: 'proof-pending',
     },
     {
         id: 'internal-react-compatibility-bridge',

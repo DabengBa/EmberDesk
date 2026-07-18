@@ -221,8 +221,9 @@ describe('chat message render descriptor', () => {
         })).toEqual(expect.objectContaining({
             rendererOwner: 'react',
             phase7Candidate: 'react-rich-body-owner',
-            fallback: 'legacy-rich-body-compatibility',
+            fallback: 'not-needed',
             reason: 'safe-finalized-row',
+            preserveLiveContent: false,
             protectedSurfaces: {
                 mesText: true,
                 reasoning: true,
@@ -233,26 +234,31 @@ describe('chat message render descriptor', () => {
             rowState: 'editing',
             hasMesText: true,
         })).toEqual(expect.objectContaining({
-            rendererOwner: 'legacy',
-            phase7Candidate: 'legacy-fallback-required',
+            rendererOwner: 'react',
+            phase7Candidate: 'react-rich-body-owner',
+            fallback: 'preserve-editing-live-content',
             reason: 'editing-row',
+            preserveLiveContent: true,
         }));
 
         expect(classifyChatMessageRendererContract({
             rowState: 'streaming',
             hasMesText: true,
         })).toEqual(expect.objectContaining({
-            rendererOwner: 'legacy',
-            phase7Candidate: 'legacy-fallback-required',
+            rendererOwner: 'react',
+            phase7Candidate: 'react-rich-body-owner',
+            fallback: 'preserve-streaming-live-content',
             reason: 'streaming-row',
+            preserveLiveContent: true,
         }));
 
         expect(classifyChatMessageRendererContract({
             rowState: 'finalized',
             hasMesText: false,
         })).toEqual(expect.objectContaining({
-            rendererOwner: 'legacy',
+            rendererOwner: 'unsupported',
             phase7Candidate: 'unsupported-with-reason',
+            fallback: 'unsupported-row-structure',
             reason: 'missing-mes-text',
         }));
 
@@ -261,9 +267,11 @@ describe('chat message render descriptor', () => {
             hasMesText: true,
             extensionMutated: true,
         })).toEqual(expect.objectContaining({
-            rendererOwner: 'legacy',
-            phase7Candidate: 'legacy-fallback-required',
+            rendererOwner: 'react',
+            phase7Candidate: 'react-rich-body-owner',
+            fallback: 'preserve-extension-mutation-zone',
             reason: 'extension-mutated-row',
+            preserveLiveContent: true,
         }));
 
         expect(buildMainChatRowLifecycleContract({
@@ -274,20 +282,20 @@ describe('chat message render descriptor', () => {
         })).toEqual({
             lifecycleOwner: 'react-message-list-controller',
             phase7Candidate: 'react-row-lifecycle-owner',
-            fallback: 'legacy-row-lifecycle-facade',
-            editingOwner: 'legacy',
-            streamingOwner: 'legacy',
-            unsafeOwner: 'legacy',
-            extensionMutatedOwner: 'legacy',
+            fallback: 'unsupported-unsafe-row-structure',
+            editingOwner: 'react',
+            streamingOwner: 'react',
+            unsafeOwner: 'unsupported',
+            extensionMutatedOwner: 'react',
             hasEditingRows: true,
             hasStreamingRows: true,
             hasUnsafeRows: true,
             hasExtensionMutatedRows: true,
-            reason: 'fail-closed-row-lifecycle-policy',
+            reason: 'react-row-lifecycle-sole-owner',
         });
     });
 
-    test('describes long-chat windowing contract with a React policy owner and a legacy load-more facade', async () => {
+    test('describes long-chat windowing contract with React as sole windowing and load-more owner', async () => {
         const { buildMainChatWindowingContract } = await importFreshDescriptorModule();
 
         expect(buildMainChatWindowingContract({
@@ -299,8 +307,8 @@ describe('chat message render descriptor', () => {
         })).toEqual({
             windowingOwner: 'react-message-list-controller',
             phase7Candidate: 'react-windowing-owner',
-            fallback: 'legacy-show-more-messages-facade',
-            loadMoreOwner: 'legacy',
+            fallback: 'not-needed',
+            loadMoreOwner: 'react',
             restoreOwner: 'react',
             renderedMessageIds: ['20', '21', '22'],
             totalMessageCount: 120,
@@ -320,6 +328,7 @@ describe('chat message render descriptor', () => {
             phase7Candidate: 'react-windowing-owner',
             loadMoreOwner: 'not-needed',
             restoreOwner: 'react',
+            fallback: 'not-needed',
             reason: 'full-chat-window',
         }));
     });

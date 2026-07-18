@@ -57,12 +57,13 @@ describe('workspace React panel flags', () => {
     test('injects all guarded workspace panel flags into the legacy shell payload', async () => {
         const featureBootstrapModule = await import(`../src/workspace-react-features.js?workspacePanelFlags=${Date.now()}-${Math.random()}`);
 
+        // Main Chat / World Info / Background / Extensions / Authoring are React sole-owners.
         expect(featureBootstrapModule.getWorkspaceReactFeatures()).toEqual({
             reactPages: {
                 settings: true,
             },
             reactPanels: {
-                mainChatMessageList: false,
+                mainChatMessageList: true,
                 worldInfo: true,
                 backgroundLibrary: true,
                 extensionsHost: true,
@@ -76,13 +77,14 @@ describe('workspace React panel flags', () => {
         });
 
         process.env.EMBERDESK_FEATURES_REACT_SHELL_TAKEOVER = 'true';
-        process.env.EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST = 'true';
-        process.env.EMBERDESK_FEATURES_REACT_PANELS_WORLDINFO = 'true';
-        process.env.EMBERDESK_FEATURES_REACT_PANELS_BACKGROUNDLIBRARY = 'true';
-        process.env.EMBERDESK_FEATURES_REACT_PANELS_EXTENSIONSHOST = 'true';
-        process.env.EMBERDESK_FEATURES_REACT_PANELS_CHARACTERAUTHORING = 'true';
-        process.env.EMBERDESK_FEATURES_REACT_PANELS_GROUPAUTHORING = 'true';
+        process.env.EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST = 'false';
+        process.env.EMBERDESK_FEATURES_REACT_PANELS_WORLDINFO = 'false';
+        process.env.EMBERDESK_FEATURES_REACT_PANELS_BACKGROUNDLIBRARY = 'false';
+        process.env.EMBERDESK_FEATURES_REACT_PANELS_EXTENSIONSHOST = 'false';
+        process.env.EMBERDESK_FEATURES_REACT_PANELS_CHARACTERAUTHORING = 'false';
+        process.env.EMBERDESK_FEATURES_REACT_PANELS_GROUPAUTHORING = 'false';
 
+        // Product flags for sole-owner panels are retired; env overrides must not re-enable dual-path.
         expect(featureBootstrapModule.getWorkspaceReactFeatures()).toEqual({
             reactPages: {
                 settings: true,
@@ -173,7 +175,7 @@ describe('workspace React panel flags', () => {
         expect(configSource).toContain('shell:');
         expect(configSource).toContain('takeover: false');
         expect(configSource).not.toContain('characterLibrary:');
-        expect(configSource).toContain('mainChatMessageList: false');
+        expect(configSource).toContain('mainChatMessageList: true');
         expect(configSource).not.toContain('worldInfo:');
         expect(configSource).toContain('backgroundLibrary: true');
         expect(configSource).toContain('extensionsHost: true');
@@ -195,6 +197,7 @@ describe('workspace React panel flags', () => {
         });
         expect(fullSuiteEnv).toMatchObject({
             EMBERDESK_FEATURES_REACT_SHELL_TAKEOVER: 'true',
+            EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST: 'true',
             EMBERDESK_FEATURES_REACT_PANELS_WORLDINFO: 'true',
             EMBERDESK_FEATURES_REACT_PANELS_BACKGROUNDLIBRARY: 'true',
             EMBERDESK_FEATURES_REACT_PANELS_EXTENSIONSHOST: 'true',
@@ -233,6 +236,7 @@ describe('workspace React panel flags', () => {
             EMBERDESK_FEATURES_REACT_PANELS_CHARACTERAUTHORING: 'true',
             EMBERDESK_FEATURES_REACT_PANELS_GROUPAUTHORING: 'true',
             EMBERDESK_FEATURES_REACT_PANELS_EXTENSIONSHOST: 'true',
+            EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST: 'true',
         });
     });
 

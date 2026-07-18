@@ -496,11 +496,13 @@ function createExactValuePattern(values) {
     return new RegExp(`^(?:${values.map(value => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`);
 }
 
-async function expectMainChatStreamingRendererStaysLegacy(page, messageId) {
+async function expectMainChatStreamingRendererStaysOnSameReactRow(page, messageId) {
     const row = page.locator(`#chat > .mes[mesid="${messageId}"]`);
     await expect(row).toHaveCount(1);
-    await expect(row).not.toHaveAttribute('data-main-chat-message-row-owner', 'react');
-    await expect(row).not.toHaveAttribute('data-main-chat-message-row', String(messageId));
+    // React sole-owns the streaming/finalized row; must not remount as a second owner.
+    await expect(row).toHaveAttribute('data-main-chat-message-row-owner', 'react');
+    await expect(row).toHaveAttribute('data-main-chat-message-row', String(messageId));
+    await expect(row).toHaveAttribute('data-main-chat-message-row-state', /^(?:streaming|finalized)$/);
 }
 
 async function expectMainChatComposerState(page, expectations = {}) {
@@ -659,7 +661,7 @@ test.describe('chat message streaming', () => {
         const streamingRow = assistantRowForGeneration(page, lastVisibleMessageIdBeforeGeneration);
         await expect(streamingRow.locator('.mes_text')).toContainText('Streaming');
         const messageId = await streamingRow.getAttribute('mesid');
-        await expectMainChatStreamingRendererStaysLegacy(page, Number(messageId));
+        await expectMainChatStreamingRendererStaysOnSameReactRow(page, Number(messageId));
         await expectMainChatStreamingTransportState(page, {
             tokenCountAtLeast: 1,
             messageId: Number(messageId),
@@ -907,7 +909,7 @@ test.describe('chat message streaming', () => {
             messageId: assistantMessageId,
             expectFallback: false,
         });
-        await expectMainChatStreamingRendererStaysLegacy(page, assistantMessageId);
+        await expectMainChatStreamingRendererStaysOnSameReactRow(page, assistantMessageId);
         await expect(streamingRow.locator('.mes_text')).toContainText('Unified composer transport.');
 
         await page.getByRole('button', { name: 'Abort request' }).click({ timeout: 5_000 });
@@ -994,7 +996,7 @@ test.describe('chat message streaming', () => {
             messageId: continuedMessageId,
             expectFallback: false,
         });
-        await expectMainChatStreamingRendererStaysLegacy(page, continuedMessageId);
+        await expectMainChatStreamingRendererStaysOnSameReactRow(page, continuedMessageId);
         await expect(continuedRow.locator('.mes_text')).toContainText('Continued via the unified service.');
 
         const stopped = await triggerStopGeneration(page, { throughDom: true });

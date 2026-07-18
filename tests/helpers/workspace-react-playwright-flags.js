@@ -63,6 +63,8 @@ export function applyWorkspaceReactPlaywrightFlagDefaults(env = process.env, arg
     env.EMBERDESK_FEATURES_REACT_PANELS_GROUPAUTHORING = 'true';
     // Extensions Host is sole-owner; always enable for e2e bootstrap compatibility.
     env.EMBERDESK_FEATURES_REACT_PANELS_EXTENSIONSHOST = 'true';
+    // Main Chat message list is sole-owner; always enable for e2e bootstrap compatibility.
+    env.EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST = 'true';
 
     if (shellProofEnabled) {
         env.EMBERDESK_FEATURES_REACT_SHELL_TAKEOVER ??= 'true';

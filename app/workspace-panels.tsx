@@ -436,8 +436,9 @@ interface MainChatPreparedVisibleTransportRequest {
 interface MainChatRichBodySnapshot {
     schema: typeof MAIN_CHAT_RICH_BODY_SNAPSHOT_SCHEMA;
     messageId: string;
-    state: 'finalized';
+    state: 'finalized' | 'editing' | 'streaming' | 'extension-mutated';
     eligible: true;
+    preserveLiveContent?: boolean;
     messageHtml: string;
     reasoningHtml: string;
     reasoningOpen?: boolean;
@@ -449,8 +450,9 @@ interface MainChatRichBodySnapshot {
 interface MainChatMessageRowSnapshot {
     schema: typeof MAIN_CHAT_MESSAGE_ROW_SNAPSHOT_SCHEMA;
     messageId: string;
-    state: 'finalized';
+    state: 'finalized' | 'editing' | 'streaming' | 'extension-mutated';
     eligible: true;
+    preserveLiveContent?: boolean;
     role: 'user' | 'character' | 'system';
     rootClassNames: string[];
     displayName: string;
@@ -523,8 +525,9 @@ const extensionsHostPanelFormSchema = z.object({
 const mainChatRichBodySnapshotSchema = z.object({
     schema: z.literal(MAIN_CHAT_RICH_BODY_SNAPSHOT_SCHEMA),
     messageId: z.string().min(1),
-    state: z.literal('finalized'),
+    state: z.enum(['finalized', 'editing', 'streaming', 'extension-mutated']),
     eligible: z.literal(true),
+    preserveLiveContent: z.boolean().optional(),
     messageHtml: z.string(),
     reasoningHtml: z.string(),
     reasoningOpen: z.boolean().optional(),
@@ -536,8 +539,9 @@ const mainChatRichBodySnapshotSchema = z.object({
 const mainChatMessageRowSnapshotSchema = z.object({
     schema: z.literal(MAIN_CHAT_MESSAGE_ROW_SNAPSHOT_SCHEMA),
     messageId: z.string().min(1),
-    state: z.literal('finalized'),
+    state: z.enum(['finalized', 'editing', 'streaming', 'extension-mutated']),
     eligible: z.literal(true),
+    preserveLiveContent: z.boolean().optional(),
     role: z.enum(['user', 'character', 'system']),
     rootClassNames: z.array(z.string()),
     displayName: z.string(),
@@ -745,33 +749,33 @@ const mainChatQuietTransportFallback: MainChatQuietTransportState = {
 };
 
 const mainChatWindowingContractFallback: MainChatWindowingContractState = {
-    windowingOwner: 'legacy',
-    phase7Candidate: '',
-    fallback: 'legacy',
-    loadMoreOwner: 'legacy',
-    restoreOwner: 'legacy',
+    windowingOwner: 'react-message-list-controller',
+    phase7Candidate: 'react-windowing-owner',
+    fallback: 'not-needed',
+    loadMoreOwner: 'react',
+    restoreOwner: 'react',
     renderedMessageIds: [],
     totalMessageCount: 0,
     showMoreVisible: false,
     anchorMessageId: null,
     scrollTop: 0,
     preservesDirectChildOrder: true,
-    reason: 'unknown',
+    reason: 'full-chat-window',
 };
 
 const mainChatRowLifecycleContractFallback: MainChatRowLifecycleContractState = {
-    lifecycleOwner: 'legacy',
-    phase7Candidate: '',
-    fallback: 'legacy',
-    editingOwner: 'legacy',
-    streamingOwner: 'legacy',
-    unsafeOwner: 'legacy',
-    extensionMutatedOwner: 'legacy',
+    lifecycleOwner: 'react-message-list-controller',
+    phase7Candidate: 'react-row-lifecycle-owner',
+    fallback: 'not-needed',
+    editingOwner: 'react',
+    streamingOwner: 'react',
+    unsafeOwner: 'not-needed',
+    extensionMutatedOwner: 'react',
     hasEditingRows: false,
     hasStreamingRows: false,
     hasUnsafeRows: false,
     hasExtensionMutatedRows: false,
-    reason: 'unknown',
+    reason: 'react-row-lifecycle-sole-owner',
 };
 
 const mainChatMessageListStateSchema = z.object({
@@ -1369,6 +1373,8 @@ function MainChatActiveTransportRowOwnerPortal({
 
         messageRow.dataset.mainChatActiveTransportOwner = 'react';
         messageRow.dataset.mainChatMessageRowOwner = 'react';
+        messageRow.dataset.mainChatMessageRowState = 'streaming';
+        messageRow.dataset.mainChatMessageRowPreserveLive = 'true';
         messageRow.dataset.mainChatMessageRow = String(runtime.activeMessageId ?? '');
         messageText.innerHTML = runtime.formattedMessageHtml ?? '';
 
@@ -1377,6 +1383,8 @@ function MainChatActiveTransportRowOwnerPortal({
             if (!finalizedRowOwned) {
                 delete messageRow.dataset.mainChatMessageRowOwner;
                 delete messageRow.dataset.mainChatMessageRow;
+                delete messageRow.dataset.mainChatMessageRowState;
+                delete messageRow.dataset.mainChatMessageRowPreserveLive;
             }
         };
     }, [finalizedRowOwned, messageRow, runtime.activeMessageId, runtime.formattedMessageHtml]);
@@ -1400,16 +1408,58 @@ function MainChatRichBodyOwnerPortal({
 
         targets.messageBlock.dataset.mainChatRichBodyOwner = 'react';
         targets.messageBlock.dataset.mainChatRichBodyRow = snapshot.messageId;
-        targets.reasoningDetails.open = snapshot.reasoningOpen ?? false;
-        targets.reasoningNode.innerHTML = snapshot.reasoningHtml;
-        targets.messageNode.innerHTML = snapshot.messageHtml;
-        targets.mediaNode.innerHTML = snapshot.mediaHtml;
-        targets.fileNode.innerHTML = snapshot.fileHtml;
-        targets.biasNode.innerHTML = snapshot.biasHtml;
+        targets.messageBlock.dataset.mainChatRichBodyState = snapshot.state;
+        targets.messageBlock.dataset.mainChatRichBodyPreserveLive = snapshot.preserveLiveContent ? 'true' : 'false';
+
+        // Stable imperative mutation hosts for third-party extensions (JS-Slash-Runner .TH-*).
+        // Host identity survives React ownership updates; content is replaced only when
+        // preserveLiveContent is false (finalized, non-extension rows).
+        const mutationHosts = [
+            targets.messageNode,
+            targets.reasoningNode,
+            targets.mediaNode,
+            targets.fileNode,
+            targets.biasNode,
+        ];
+        for (const host of mutationHosts) {
+            host.dataset.mainChatMutationZone = 'true';
+            host.dataset.mainChatMutationZoneRow = snapshot.messageId;
+            host.dataset.mainChatMutationZoneState = snapshot.state;
+        }
+        targets.messageNode.dataset.mainChatMutationZoneKind = 'mes_text';
+        targets.reasoningNode.dataset.mainChatMutationZoneKind = 'mes_reasoning';
+        targets.mediaNode.dataset.mainChatMutationZoneKind = 'mes_media_wrapper';
+        targets.fileNode.dataset.mainChatMutationZoneKind = 'mes_file_wrapper';
+        targets.biasNode.dataset.mainChatMutationZoneKind = 'mes_bias';
+
+        // Editing/streaming/extension-mutated rows keep live DOM (edit textarea, stream tokens, TH mutations).
+        // Also re-check live markers so a stale finalized snapshot cannot wipe extension mutations.
+        // React still owns the shell markers so the row is not remounted as a second lifecycle owner.
+        const liveExtensionMutation = Boolean(
+            messageRow.querySelector('.mes_streaming, .TH-streaming')
+            || targets.messageNode.querySelector('.TH-render')
+            || messageRow.querySelector('.edit_textarea, .reasoning_edit_textarea'),
+        );
+        if (!snapshot.preserveLiveContent && !liveExtensionMutation) {
+            targets.reasoningDetails.open = snapshot.reasoningOpen ?? false;
+            targets.reasoningNode.innerHTML = snapshot.reasoningHtml;
+            targets.messageNode.innerHTML = snapshot.messageHtml;
+            targets.mediaNode.innerHTML = snapshot.mediaHtml;
+            targets.fileNode.innerHTML = snapshot.fileHtml;
+            targets.biasNode.innerHTML = snapshot.biasHtml;
+        }
 
         return () => {
             delete targets.messageBlock.dataset.mainChatRichBodyOwner;
             delete targets.messageBlock.dataset.mainChatRichBodyRow;
+            delete targets.messageBlock.dataset.mainChatRichBodyState;
+            delete targets.messageBlock.dataset.mainChatRichBodyPreserveLive;
+            for (const host of mutationHosts) {
+                delete host.dataset.mainChatMutationZone;
+                delete host.dataset.mainChatMutationZoneRow;
+                delete host.dataset.mainChatMutationZoneState;
+                delete host.dataset.mainChatMutationZoneKind;
+            }
         };
     }, [
         snapshot.biasHtml,
@@ -1417,8 +1467,10 @@ function MainChatRichBodyOwnerPortal({
         snapshot.mediaHtml,
         snapshot.messageHtml,
         snapshot.messageId,
+        snapshot.preserveLiveContent,
         snapshot.reasoningHtml,
         snapshot.reasoningOpen,
+        snapshot.state,
         targets,
     ]);
 
@@ -1427,7 +1479,7 @@ function MainChatRichBodyOwnerPortal({
     }
 
     return (
-        <div hidden aria-hidden="true" />
+        <div hidden aria-hidden="true" data-main-chat-rich-body-mutation-zone="true" />
     );
 }
 
@@ -1445,12 +1497,16 @@ function MainChatMessageRowOwnerPortal({
     useLayoutEffect(() => {
         messageRow.dataset.mainChatMessageRowOwner = 'react';
         messageRow.dataset.mainChatMessageRow = snapshot.messageId;
+        messageRow.dataset.mainChatMessageRowState = snapshot.state;
+        messageRow.dataset.mainChatMessageRowPreserveLive = snapshot.preserveLiveContent ? 'true' : 'false';
 
         return () => {
             delete messageRow.dataset.mainChatMessageRowOwner;
             delete messageRow.dataset.mainChatMessageRow;
+            delete messageRow.dataset.mainChatMessageRowState;
+            delete messageRow.dataset.mainChatMessageRowPreserveLive;
         };
-    }, [messageRow, snapshot.messageId]);
+    }, [messageRow, snapshot.messageId, snapshot.preserveLiveContent, snapshot.state]);
 
     useLayoutEffect(() => {
         if (!targets || !snapshot.swipeShellEligible) {
@@ -3297,6 +3353,45 @@ function ExtensionsHostWorkspacePanel({ state, bridge }: { state?: unknown; brid
     );
 }
 
+function MainChatShowMoreOwnerPortal({
+    showMoreNode,
+    bridge,
+}: {
+    showMoreNode: HTMLElement | null | undefined;
+    bridge?: WorkspacePanelBridge;
+}) {
+    useLayoutEffect(() => {
+        if (!(showMoreNode instanceof HTMLElement) || !showMoreNode.isConnected) {
+            return;
+        }
+
+        const handleClick = (event: MouseEvent) => {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            event.stopPropagation();
+            void bridge?.dispatchAction?.('loadMoreMessages', {});
+        };
+
+        showMoreNode.dataset.mainChatWindowingOwner = 'react';
+        showMoreNode.dataset.mainChatLoadMoreOwner = 'react';
+        showMoreNode.addEventListener('click', handleClick, true);
+
+        return () => {
+            showMoreNode.removeEventListener('click', handleClick, true);
+            delete showMoreNode.dataset.mainChatWindowingOwner;
+            delete showMoreNode.dataset.mainChatLoadMoreOwner;
+        };
+    }, [bridge, showMoreNode]);
+
+    if (!(showMoreNode instanceof HTMLElement)) {
+        return null;
+    }
+
+    return (
+        <div hidden aria-hidden="true" data-main-chat-show-more-owner="react" />
+    );
+}
+
 function MainChatMessageListRestoreController({
     state,
     bridge,
@@ -3631,6 +3726,7 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
                 data-main-chat-row-lifecycle-extension-owner={bridgeState.rowLifecycleContract?.extensionMutatedOwner ?? 'legacy'}
             />
             <MainChatMessageListRestoreController key={bridgeState.chatId || 'main-chat-empty'} state={bridgeState} bridge={bridge} />
+            <MainChatShowMoreOwnerPortal showMoreNode={bridgeState.showMoreNode} bridge={bridge} />
             <MainChatComposerOwnerPortal
                 state={bridgeState}
                 bridge={bridge}

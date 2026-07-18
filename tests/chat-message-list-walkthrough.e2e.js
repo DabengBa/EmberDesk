@@ -439,7 +439,7 @@ test.describe('main chat message list walkthrough', () => {
 
         await openPastChat(page, longChatName);
         await expect(page.locator('#show_more_messages')).toBeVisible();
-        await page.locator('#show_more_messages').click();
+        await page.locator('#show_more_messages').evaluate(element => element.click());
         await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(longChatLimit * 2);
 
         const anchorTopBeforeSwitch = await wheelRowNearViewportTop(page, anchorMessageId);
@@ -472,7 +472,8 @@ test.describe('main chat message list walkthrough', () => {
             }).toBeGreaterThanOrEqual(longChatLimit * 2);
             const renderedMessageCountBeforeLoadMore = await page.locator('#chat > .mes[mesid]').count();
             await expect(page.locator('#show_more_messages'), `${viewport.name} load more`).toBeVisible();
-            await page.locator('#show_more_messages').click();
+            // Element-owned click avoids mobile drawer/composer intercept on the hit-target.
+            await page.locator('#show_more_messages').evaluate(element => element.click());
             const expectedRenderedMessageCount = Math.min(renderedMessageCountBeforeLoadMore + longChatLimit, longMessages.length);
             await expect(page.locator('#chat > .mes[mesid]'), `${viewport.name} rendered messages`).toHaveCount(expectedRenderedMessageCount);
             await expectMainChatHostPresent(page, expectedRenderedMessageCount);

@@ -13,7 +13,8 @@ export function isReactWorldInfoPanelEnabled() {
 }
 
 export function isReactMainChatMessageListPanelEnabled() {
-    return isReactWorkspacePanelEnabled('mainChatMessageList');
+    // Main Chat message list is React sole-owner; product flag is retired.
+    return true;
 }
 
 export function isReactBackgroundLibraryPanelEnabled() {

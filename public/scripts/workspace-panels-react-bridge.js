@@ -25,7 +25,7 @@ export function getDefaultWorkspaceReactFeatures() {
             settings: true,
         },
         reactPanels: {
-            mainChatMessageList: false,
+            mainChatMessageList: true,
             worldInfo: true,
             backgroundLibrary: true,
             extensionsHost: true,

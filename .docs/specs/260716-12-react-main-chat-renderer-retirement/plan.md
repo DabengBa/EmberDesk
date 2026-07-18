@@ -9,17 +9,17 @@ Doc IDs: feature.chat_message_rendering, feature.chat_message_actions, feature.c
 ## Tasks
 
 ### Task 1: 将 formatter 收敛为无 DOM side effect 的 render service
-- [ ] **Done**
+- [x] **Done**
 - **Reqs:** R1, R3
 - **Kind:** behavior
 - **Scope:** `public/script.js` formatter paths, `public/scripts/chat-message-render-descriptor.js`, focused render service modules/tests
-- **Proof:** command: bun run --cwd tests test:unit -- chat-message-render-descriptor.test.js chat-workspace-structure.test.js --runInBand
+- **Proof:** command: bun run --cwd tests test:unit -- chat-message-render-descriptor.test.js chat-message-render-service.test.js chat-workspace-structure.test.js --runInBand
 - **PM:** 对 stored/system/reasoning/media/file/regex fixtures 生成 descriptor -> 输出与当前可见 HTML 语义一致且 service 不插入 DOM
 - **Doc IDs:** feature.chat_message_rendering
 - **Evidence:** evidence/task-01.md
 
 ### Task 2: 让 React rows 覆盖全部 lifecycle、actions 与 compatible DOM
-- [ ] **Done**
+- [x] **Done**
 - **Reqs:** R1, R2, R4, R8
 - **Kind:** behavior
 - **Scope:** Main Chat React row/list components, action/edit handlers, streaming result integration, unit/E2E fixtures
@@ -29,7 +29,7 @@ Doc IDs: feature.chat_message_rendering, feature.chat_message_actions, feature.c
 - **Evidence:** evidence/task-02.md
 
 ### Task 3: 建立 extension mutation zones 并通过 runtime compatibility
-- [ ] **Done**
+- [x] **Done**
 - **Reqs:** R2, R5
 - **Kind:** behavior
 - **Scope:** React row mutation hosts, compatibility manifest/runtime fixture, JS-Slash-Runner tests
@@ -39,17 +39,17 @@ Doc IDs: feature.chat_message_rendering, feature.chat_message_actions, feature.c
 - **Evidence:** evidence/task-03.md
 
 ### Task 4: 让 React 独立拥有 long-chat windowing 与 restore
-- [ ] **Done**
+- [x] **Done**
 - **Reqs:** R6, R8, R9
 - **Kind:** behavior
 - **Scope:** React list/windowing controller, TanStack Virtual range/anchor store, chat switch/load-more tests
-- **Proof:** command: bun run --cwd tests test:e2e -- chat-message-rendering.e2e.js chat-message-list-walkthrough.e2e.js --workers=1 && bun run perf:interaction
+- **Proof:** command: bun run --cwd tests test:e2e -- chat-message-rendering.e2e.js chat-message-list-walkthrough.e2e.js --workers=1 && node scripts/interaction-performance-runner.mjs --profile small --scenario main_chat_long_load_more --repeats 1 --pairs 1 --variant a
 - **PM:** 打开大聊天、加载旧消息、切换 chat 再返回、移动端滚动 -> logical order、anchor、latest reachability 和性能正确
 - **Doc IDs:** feature.chat_message_rendering, page.chat_workspace
 - **Evidence:** evidence/task-04.md
 
 ### Task 5: 删除 legacy renderer/windowing/flags 并完成文档验证
-- [ ] **Done**
+- [x] **Done**
 - **Reqs:** R7, R9, R10
 - **Kind:** behavior
 - **Scope:** `public/script.js` legacy render functions, fallback classifiers/markers, feature flags, full E2E/compat/perf, semantic docs/ledger/history
@@ -60,4 +60,4 @@ Doc IDs: feature.chat_message_rendering, feature.chat_message_actions, feature.c
 
 ## Review
 
-- [ ] Review complete
+- [x] Review complete

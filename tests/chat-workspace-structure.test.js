@@ -186,6 +186,35 @@ describe('chat workspace structure', () => {
         expect(getTagByClass(indexHtml, 'mes_img_swipe_right')).toContain('mes_img_swipe_right');
     });
 
+    test('routes message body formatting through the framework-neutral render service without DOM insertion', () => {
+        const scriptSource = readRepoFile('public/script.js');
+        const serviceSource = readRepoFile('public/scripts/chat-message-render-service.js');
+
+        expectContainsMarkers(serviceSource, [
+            'export const RENDER_SERVICE_OWNER = \'render-service\';',
+            'export function buildChatMessageRichBodyRender(',
+            'insertsDom: false',
+            'messageHtml',
+            'reasoningHtml',
+            'mediaHtml',
+            'fileHtml',
+            'biasHtml',
+        ], { contractName: 'chat message render service surface' });
+        expect(serviceSource).not.toContain('document.createElement');
+        expect(serviceSource).not.toContain('innerHTML');
+        expect(serviceSource).not.toMatch(/\$\(/);
+        expect(serviceSource).not.toMatch(/\bjQuery\s*\(/);
+
+        expectContainsMarkers(scriptSource, [
+            'buildChatMessageRichBodyRender',
+            'function buildChatMessageRichBody(message, { messageId = chat.indexOf(message) } = {}) {',
+            'formatMessage: messageFormatting',
+            'return buildChatMessageRichBody(message, { messageId }).messageHtml;',
+            'const richBody = buildChatMessageRichBody(mes, { messageId });',
+            'messageElement.find(\'.mes_bias\').html(richBody.biasHtml);',
+        ], { contractName: 'script.js render service delegation' });
+    });
+
     test('refreshes React main-chat snapshots after async media attachments render', () => {
         const scriptSource = readRepoFile('public/script.js');
 
@@ -333,11 +362,13 @@ describe('chat workspace structure', () => {
 
     test('routes visible main chat generation through bounded auto recovery attempts', () => {
         const scriptSource = readRepoFile('public/script.js');
+        const commandServiceSource = readRepoFile('public/scripts/chat-generation-command-service.js');
         const lifecycleSource = readRepoFile('public/scripts/chat-generation-lifecycle.js');
 
-        expect(scriptSource).toContain('createGenerationLifecyclePlan({');
-        expect(scriptSource).toContain('mainApi: main_api');
-        expect(scriptSource).toContain("fallbackProvider: attempt.fallbackProvider");
+        // Transport retirement owns lifecycle planning in the generation command service;
+        // script.js still applies failure decisions and recovery UI side effects.
+        expect(commandServiceSource).toContain('createGenerationLifecyclePlan({');
+        expect(commandServiceSource).toContain('getGenerationFailureDecision({');
         expect(scriptSource).toContain('getGenerationFailureDecision({');
         expect(scriptSource).toContain('failureDecision.shouldRestoreAttemptMessage');
         expect(scriptSource).toContain('hasFallbackProviderForGeneration({');

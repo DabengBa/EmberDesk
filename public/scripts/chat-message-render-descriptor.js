@@ -2,7 +2,8 @@ import { MAIN_CHAT_RICH_BODY_RENDERER_REASONS } from './main-chat-bridge-contrac
 
 /**
  * Builds pure render decisions for a stored, finalized chat message row.
- * DOM mutation, formatting, avatar resolution, and streaming updates stay with public/script.js.
+ * Rich-body HTML is owned by chat-message-render-service.js (no DOM insertion).
+ * Avatar resolution and row DOM application remain with callers (script.js / React).
  *
  * @param {object} message Chat message object
  * @param {object} options Options
@@ -107,7 +108,8 @@ export function buildChatMessageRowPopulation(descriptor, {
 
 /**
  * Classifies the current renderer ownership contract for a message row.
- * Safe finalized rows may be React-owned while excluded rows stay on the legacy fallback.
+ * React owns finalized, editing, streaming, and extension-mutated rows when structure is present.
+ * Live content for non-finalized families is preserved rather than overwritten.
  *
  * @param {object} options DOM-derived row safety facts
  * @param {'finalized'|'editing'|'streaming'|'unsafe'} [options.rowState='finalized'] Current row lifecycle state
@@ -126,37 +128,70 @@ export function classifyChatMessageRendererContract({
         return createRendererContract('unsupported-with-reason', MAIN_CHAT_RICH_BODY_RENDERER_REASONS.MISSING_MES_TEXT);
     }
 
+    if (rowState === 'unsafe') {
+        return createRendererContract('unsupported-with-reason', MAIN_CHAT_RICH_BODY_RENDERER_REASONS.UNSAFE_ROW);
+    }
+
+    // Extension-mutated rows remain React-owned shells with preserved live body content.
+    // Mutation-zone survival is enforced by not overwriting protected hosts (Task 3).
     if (extensionMutated) {
-        return createRendererContract('legacy-fallback-required', MAIN_CHAT_RICH_BODY_RENDERER_REASONS.EXTENSION_MUTATED_ROW);
+        return {
+            rendererOwner: 'react',
+            phase7Candidate: 'react-rich-body-owner',
+            fallback: 'preserve-extension-mutation-zone',
+            reason: MAIN_CHAT_RICH_BODY_RENDERER_REASONS.EXTENSION_MUTATED_ROW,
+            protectedSurfaces: {
+                mesText: true,
+                reasoning: Boolean(hasProtectedReasoning),
+            },
+            preserveLiveContent: true,
+        };
     }
 
     if (rowState === 'editing') {
-        return createRendererContract('legacy-fallback-required', MAIN_CHAT_RICH_BODY_RENDERER_REASONS.EDITING_ROW);
+        return {
+            rendererOwner: 'react',
+            phase7Candidate: 'react-rich-body-owner',
+            fallback: 'preserve-editing-live-content',
+            reason: MAIN_CHAT_RICH_BODY_RENDERER_REASONS.EDITING_ROW,
+            protectedSurfaces: {
+                mesText: true,
+                reasoning: Boolean(hasProtectedReasoning),
+            },
+            preserveLiveContent: true,
+        };
     }
 
     if (rowState === 'streaming') {
-        return createRendererContract('legacy-fallback-required', MAIN_CHAT_RICH_BODY_RENDERER_REASONS.STREAMING_ROW);
-    }
-
-    if (rowState === 'unsafe') {
-        return createRendererContract('unsupported-with-reason', MAIN_CHAT_RICH_BODY_RENDERER_REASONS.UNSAFE_ROW);
+        return {
+            rendererOwner: 'react',
+            phase7Candidate: 'react-rich-body-owner',
+            fallback: 'preserve-streaming-live-content',
+            reason: MAIN_CHAT_RICH_BODY_RENDERER_REASONS.STREAMING_ROW,
+            protectedSurfaces: {
+                mesText: true,
+                reasoning: Boolean(hasProtectedReasoning),
+            },
+            preserveLiveContent: true,
+        };
     }
 
     return {
         rendererOwner: 'react',
         phase7Candidate: 'react-rich-body-owner',
-        fallback: 'legacy-rich-body-compatibility',
+        fallback: 'not-needed',
         reason: MAIN_CHAT_RICH_BODY_RENDERER_REASONS.SAFE_FINALIZED_ROW,
         protectedSurfaces: {
             mesText: true,
             reasoning: Boolean(hasProtectedReasoning),
         },
+        preserveLiveContent: false,
     };
 }
 
 /**
- * Describes the final owner policy for non-finalized or excluded row lifecycle families.
- * React keeps the message-list controller boundary while excluded families stay fail-closed on legacy facades.
+ * Describes the final owner policy for all main-chat row lifecycle families.
+ * React is the sole row lifecycle owner; only structurally unsafe rows remain unsupported.
  *
  * @param {object} options Presence flags for row lifecycle families
  * @param {boolean} [options.hasEditingRows=false] Whether editing rows are currently present
@@ -174,23 +209,23 @@ export function buildMainChatRowLifecycleContract({
     return {
         lifecycleOwner: 'react-message-list-controller',
         phase7Candidate: 'react-row-lifecycle-owner',
-        fallback: 'legacy-row-lifecycle-facade',
-        editingOwner: 'legacy',
-        streamingOwner: 'legacy',
-        unsafeOwner: 'legacy',
-        extensionMutatedOwner: 'legacy',
+        fallback: hasUnsafeRows ? 'unsupported-unsafe-row-structure' : 'not-needed',
+        editingOwner: 'react',
+        streamingOwner: 'react',
+        unsafeOwner: hasUnsafeRows ? 'unsupported' : 'not-needed',
+        extensionMutatedOwner: 'react',
         hasEditingRows: Boolean(hasEditingRows),
         hasStreamingRows: Boolean(hasStreamingRows),
         hasUnsafeRows: Boolean(hasUnsafeRows),
         hasExtensionMutatedRows: Boolean(hasExtensionMutatedRows),
-        reason: 'fail-closed-row-lifecycle-policy',
+        reason: 'react-row-lifecycle-sole-owner',
     };
 }
 
 /**
- * Describes the current long-chat windowing contract without changing ownership.
+ * Describes the long-chat windowing contract with React as sole owner.
  *
- * @param {object} options Windowing facts from the legacy chat DOM
+ * @param {object} options Windowing facts from the chat DOM / bridge
  * @param {string[]} [options.renderedMessageIds=[]] Direct-child .mes ids currently rendered
  * @param {number} [options.totalMessageCount=0] Total chat message count
  * @param {boolean} [options.showMoreVisible=false] Whether #show_more_messages is available
@@ -216,8 +251,8 @@ export function buildMainChatWindowingContract({
     return {
         windowingOwner: 'react-message-list-controller',
         phase7Candidate: 'react-windowing-owner',
-        fallback: isLongChatWindow ? 'legacy-show-more-messages-facade' : 'not-needed',
-        loadMoreOwner: isLongChatWindow ? 'legacy' : 'not-needed',
+        fallback: 'not-needed',
+        loadMoreOwner: isLongChatWindow ? 'react' : 'not-needed',
         restoreOwner: 'react',
         renderedMessageIds: normalizedRenderedIds,
         totalMessageCount: normalizedTotal,
@@ -231,9 +266,11 @@ export function buildMainChatWindowingContract({
 
 function createRendererContract(phase7Candidate, reason) {
     return {
-        rendererOwner: 'legacy',
+        // Structurally unsupported rows stay unowned rather than restoring a
+        // product dual-path legacy renderer. React remains the sole list owner.
+        rendererOwner: 'unsupported',
         phase7Candidate,
-        fallback: 'legacy-messageFormatting',
+        fallback: 'unsupported-row-structure',
         reason,
     };
 }

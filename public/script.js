@@ -306,6 +306,9 @@ import {
     buildMainChatRowLifecycleContract,
     buildMainChatWindowingContract,
 } from './scripts/chat-message-render-descriptor.js';
+import {
+    buildChatMessageRichBodyRender,
+} from './scripts/chat-message-render-service.js';
 import { getStreamingControlState } from './scripts/chat-streaming-control-state.js';
 import { getMainChatComposerState } from './scripts/main-chat-composer-state.js';
 import { getMainChatSlashCommandState } from './scripts/main-chat-slash-command-state.js';
@@ -396,7 +399,7 @@ export function getWorkspaceReactFeatures() {
             settings: true,
         },
         reactPanels: {
-            mainChatMessageList: false,
+            mainChatMessageList: true,
             worldInfo: true,
             backgroundLibrary: true,
             extensionsHost: true,
@@ -2261,22 +2264,12 @@ function isMainChatRichBodyEligible(messageRow, messageId = Number(messageRow?.g
         return false;
     }
 
-    if (!chat[messageId] || Number(this_edit_mes_id) === messageId) {
+    if (!chat[messageId]) {
         return false;
     }
 
-    if (messageRow.querySelector('.edit_textarea, .reasoning_edit_textarea')) {
-        return false;
-    }
-
-    if (streamingProcessor && !streamingProcessor.isStopped && !streamingProcessor.isFinished && streamingProcessor.messageId === messageId) {
-        return false;
-    }
-
-    if (hasMainChatRichBodyExtensionMutation(messageRow)) {
-        return false;
-    }
-
+    // Structurally complete rows are React-owned across finalized/editing/streaming/extension states.
+    // Live content is preserved by snapshot state + portal (no overwrite while editing/streaming/extension-mutated).
     return Boolean(
         messageRow.querySelector('.mes_block')
         && messageRow.querySelector('.mes_reasoning_details')
@@ -2286,6 +2279,23 @@ function isMainChatRichBodyEligible(messageRow, messageId = Number(messageRow?.g
         && messageRow.querySelector('.mes_file_wrapper')
         && messageRow.querySelector('.mes_bias'),
     );
+}
+
+function getMainChatRichBodyRowState(messageRow, messageId = Number(messageRow?.getAttribute?.('mesid'))) {
+    if (hasMainChatEditingLifecycle(messageRow, messageId)) {
+        return 'editing';
+    }
+    if (hasMainChatStreamingLifecycle(messageRow, messageId)) {
+        return 'streaming';
+    }
+    if (hasMainChatExtensionMutationMarker(messageRow)) {
+        return 'extension-mutated';
+    }
+    return 'finalized';
+}
+
+function shouldPreserveMainChatRichBodyLiveContent(rowState) {
+    return rowState === 'editing' || rowState === 'streaming' || rowState === 'extension-mutated';
 }
 
 function hasMainChatRichBodyExtensionMutation(messageRow) {
@@ -2368,12 +2378,15 @@ function buildMainChatRichBodySnapshot(messageRow, {
         return null;
     }
 
+    const rowState = getMainChatRichBodyRowState(messageRow, messageId);
+    const preserveLiveContent = shouldPreserveMainChatRichBodyLiveContent(rowState);
     const reasoningDetails = messageRow.querySelector('.mes_reasoning_details');
     return {
         schema: schema,
         messageId: String(messageId),
-        state: 'finalized',
+        state: rowState,
         eligible: true,
+        preserveLiveContent,
         messageHtml: messageRow.querySelector('.mes_text')?.innerHTML ?? '',
         reasoningHtml: messageRow.querySelector('.mes_reasoning')?.innerHTML ?? '',
         reasoningOpen: reasoningDetails instanceof HTMLDetailsElement ? reasoningDetails.open : false,
@@ -2417,8 +2430,9 @@ function buildMainChatMessageRowSnapshot(messageRow, {
     return {
         schema: schema,
         messageId: String(messageId),
-        state: 'finalized',
+        state: richBodySnapshot.state,
         eligible: true,
+        preserveLiveContent: Boolean(richBodySnapshot.preserveLiveContent),
         role: messageRow.getAttribute('is_user') === 'true'
             ? 'user'
             : messageRow.getAttribute('is_system') === 'true'
@@ -2615,6 +2629,13 @@ function getMainChatMessageListReactBridge() {
                 case 'openCharacterLibrary':
                     await openWorkspaceShellCharacterLibrary();
                     break;
+                case 'loadMoreMessages':
+                    await loadEarlierChatMessages(
+                        Number.isInteger(Number(payload?.messagesToLoad))
+                            ? Number(payload.messagesToLoad)
+                            : null,
+                    );
+                    break;
                 case 'loadMoreUntilMessage': {
                     const anchorMessageId = String(payload?.anchorMessageId ?? '');
                     if (!anchorMessageId) {
@@ -2624,7 +2645,7 @@ function getMainChatMessageListReactBridge() {
                     let anchorMessageRow = document.querySelector(`#chat > .mes[mesid="${CSS.escape(anchorMessageId)}"]`);
                     let showMoreButton = document.getElementById('show_more_messages');
                     while (!anchorMessageRow && showMoreButton instanceof HTMLElement) {
-                        await showMoreMessages();
+                        await loadEarlierChatMessages();
                         anchorMessageRow = document.querySelector(`#chat > .mes[mesid="${CSS.escape(anchorMessageId)}"]`);
                         showMoreButton = document.getElementById('show_more_messages');
                     }
@@ -5118,7 +5139,13 @@ export async function replaceCurrentChat() {
     }
 }
 
-export async function showMoreMessages(messagesToLoad = null) {
+/**
+ * React-owned long-chat load-earlier implementation.
+ * Inserts older message rows and preserves scroll anchor behavior.
+ * @param {number|null} [messagesToLoad=null]
+ * @returns {Promise<void>}
+ */
+export async function loadEarlierChatMessages(messagesToLoad = null) {
     const firstDisplayedMesId = chatElement.children('.mes').first().attr('mesid');
     const firstDisplayedMessage = chatElement.children('.mes').first();
     let messageId = Number(firstDisplayedMesId);
@@ -5144,8 +5171,8 @@ export async function showMoreMessages(messagesToLoad = null) {
         .map(messageElement => messageElement?.[0] instanceof HTMLElement ? messageElement[0] : null)
         .filter(Boolean);
 
-    // Insert older rows ahead of the current first message so legacy load-more
-    // keeps chronological DOM order and its scroll compensation remains stable.
+    // Insert older rows ahead of the current first message so load-more keeps
+    // chronological DOM order and scroll compensation remains stable.
     if (firstDisplayedMessage[0] instanceof HTMLElement && messageNodes.length > 0) {
         firstDisplayedMessage[0].before(...messageNodes);
     } else if (showMoreButton[0]) {
@@ -5166,6 +5193,17 @@ export async function showMoreMessages(messagesToLoad = null) {
 
     applyStylePins();
     await eventSource.emit(event_types.MORE_MESSAGES_LOADED);
+    void mountReactMainChatMessageListPanel();
+}
+
+/**
+ * Compatibility alias for callers that still name load-earlier as showMoreMessages.
+ * React windowing owns the policy; this delegates to loadEarlierChatMessages.
+ * @param {number|null} [messagesToLoad=null]
+ * @returns {Promise<void>}
+ */
+export async function showMoreMessages(messagesToLoad = null) {
+    return loadEarlierChatMessages(messagesToLoad);
 }
 
 function clearGenerationAutoRecoveryStatus(messageId) {
@@ -6414,19 +6452,24 @@ function updateMessageItemizedPromptButton(message, { messageId = chat.indexOf(m
  * @returns {string} Formatted message HTML
  */
 function getMessageTextHTML(message, { messageId = chat.indexOf(message) }) {
-    // if mes.extra.uses_system_ui is true, set an override on the sanitizer options
-    /** @type {Partial<DOMPurify.Config>} */
-    const sanitizerOverrides = message.extra?.uses_system_ui ? { MESSAGE_ALLOW_SYSTEM_UI: true } : {};
+    return buildChatMessageRichBody(message, { messageId }).messageHtml;
+}
 
-    return messageFormatting(
-        message.extra?.display_text || message.mes,
-        message.name,
-        message.is_system,
-        message.is_user,
+/**
+ * Builds pure rich-body HTML via the framework-neutral render service.
+ * The service does not insert DOM; callers apply the returned HTML strings.
+ * @param {ChatMessage} message
+ * @param {object} options
+ * @param {number} [options.messageId]
+ * @returns {ReturnType<typeof buildChatMessageRichBodyRender>}
+ */
+function buildChatMessageRichBody(message, { messageId = chat.indexOf(message) } = {}) {
+    return buildChatMessageRichBodyRender(message, {
         messageId,
-        sanitizerOverrides,
-        false,
-    );
+        formatMessage: messageFormatting,
+        mediaDisplay: getMediaDisplay(message),
+        mediaIndex: getMediaIndex(message),
+    });
 }
 
 /**
@@ -6534,7 +6577,8 @@ export function updateMessageElement(mes, { messageId = chat.length - 1, message
     const timestamp = momentDate.isValid() ? momentDate.format('LL LT') : '';
     const renderDescriptor = buildChatMessageRenderDescriptor(mes, { messageId, timestamp });
     const timestampTitle = `${mes.extra?.api ? mes.extra.api + ' - ' : ''}${mes.extra?.model ?? ''}`;
-    const messageHTML = getMessageTextHTML(mes, { messageId });
+    const richBody = buildChatMessageRichBody(mes, { messageId });
+    const messageHTML = richBody.messageHtml;
     const { timerValue, timerTitle } = formatGenerationTimer(mes.gen_started, mes.gen_finished, mes.extra?.token_count, mes.extra?.reasoning_duration, mes.extra?.time_to_first_token);
     const rowPopulation = buildChatMessageRowPopulation(renderDescriptor, {
         avatarImg,
@@ -6555,9 +6599,8 @@ export function updateMessageElement(mes, { messageId = chat.length - 1, message
     rowPopulation.timer.value && messageElement.find('.mes_timer').attr('title', rowPopulation.timer.title).text(rowPopulation.timer.value);
     rowPopulation.bookmarkLink && updateBookmarkDisplay(messageElement);
 
-    if (mes.extra?.bias !== '') {
-        const bias = messageFormatting(mes.extra?.bias, '', false, false, -1, {}, false);
-        messageElement.find('.mes_bias').html(bias);
+    if (richBody.biasHtml) {
+        messageElement.find('.mes_bias').html(richBody.biasHtml);
     }
 
     updateReasoningUI(messageElement);
@@ -16881,10 +16924,12 @@ jQuery(async function () {
         $('#avatar-and-name-block').slideToggle();
     });
 
+    // Compatibility fallback click path. React MainChatShowMoreOwnerPortal owns the
+    // primary load-more control when the message-list panel is mounted (capture phase).
     $(document).on('click', '#show_more_messages', async function (event) {
         event.stopPropagation();
         event.preventDefault();
-        await showMoreMessages();
+        await loadEarlierChatMessages();
     });
 
     $(document).on('click', '.open_characters_library', async function () {

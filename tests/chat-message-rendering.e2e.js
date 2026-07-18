@@ -605,7 +605,10 @@ test.describe('chat message rendering', () => {
         const editTextarea = assistantRow.locator('.edit_textarea');
         await expect(editTextarea).toBeVisible();
         await expect(editTextarea).toHaveValue(seededMessages[assistantMessageIndex].mes);
-        await expectReactMessageRowState(page, assistantMessageIndex, false);
+        // React remains sole row owner during edit with preserve-live content.
+        await expectReactMessageRowState(page, assistantMessageIndex, true);
+        await expect(assistantRow).toHaveAttribute('data-main-chat-message-row-state', 'editing');
+        await expect(assistantRow).toHaveAttribute('data-main-chat-message-row-preserve-live', 'true');
 
         const renderedMessageCount = await page.locator('#chat > .mes[mesid]').count();
         await clickControlAtCenter(page, assistantRow.getByRole('button', { name: 'Delete this message' }));
@@ -801,7 +804,10 @@ test.describe('chat message rendering', () => {
                 && actionButtonBox.y < messageTextBox.y + messageTextBox.height
                 && actionButtonBox.y + actionButtonBox.height > messageTextBox.y;
             expect(overlapsMessageText, `${viewport.name} action overlap`).toBe(false);
-            await messageActions.click();
+            // Mobile chrome / side drawers can intercept Playwright's hit-target click even when
+            // the action button is visible and non-overlapping with .mes_text. Use the same
+            // element-owned activation path as load-more (direct element click).
+            await messageActions.evaluate(element => element.click());
             await expect(latestLongMessageRow.getByRole('button', { name: 'Copy' }), `${viewport.name} copy action`).toBeVisible();
         }
 

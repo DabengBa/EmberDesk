@@ -38,10 +38,10 @@ function read(relativePath) {
 }
 
 describe('React workspace panels bridge helpers', () => {
-    test('uses a default disabled feature payload for all workspace panel islands', () => {
+    test('uses a default sole-owner feature payload for retired workspace panel islands', () => {
         expect(getDefaultWorkspaceReactFeatures()).toEqual({
             reactPanels: {
-                mainChatMessageList: false,
+                mainChatMessageList: true,
                 worldInfo: true,
                 backgroundLibrary: true,
                 extensionsHost: true,
@@ -58,7 +58,7 @@ describe('React workspace panels bridge helpers', () => {
         });
 
         expect(isReactWorkspacePanelEnabled('worldInfo')).toBe(true);
-        expect(isReactWorkspacePanelEnabled('mainChatMessageList')).toBe(false);
+        expect(isReactWorkspacePanelEnabled('mainChatMessageList')).toBe(true);
         expect(isReactWorkspaceShellTakeoverEnabled()).toBe(false);
     });
 
@@ -363,19 +363,20 @@ describe('React workspace panels bridge helpers', () => {
         const scriptSource = read('public/script.js');
         const groupChatsSource = read('public/scripts/group-chats.js');
 
-        expect(configSource).toContain('mainChatMessageList: false');
+        expect(configSource).toContain('mainChatMessageList: true');
         expect(configSource).not.toContain('characterAuthoring:');
         expect(configSource).not.toContain('groupAuthoring:');
         expect(packageSource).toContain('"build:react:workspace-panels": "vite build --mode workspace-panels"');
         expect(seedScriptSource).toContain('EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST');
         expect(seedScriptSource).toContain("['mainChatMessageList', process.env.EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST]");
         expect(workspaceFeatureSource).toContain('mainChatMessageList: isReactMainChatMessageListPanelEnabled()');
-        expect(workspaceFeatureSource).toContain('return isReactWorkspacePanelEnabled(\'mainChatMessageList\');');
-        expect(bridgeSource).toContain('mainChatMessageList: false');
+        expect(workspaceFeatureSource).toContain('// Main Chat message list is React sole-owner; product flag is retired.');
+        expect(workspaceFeatureSource).toContain('return true;');
+        expect(bridgeSource).toContain('mainChatMessageList: true');
         expect(bridgeSource).toContain('characterAuthoring: true');
         expect(bridgeSource).toContain('groupAuthoring: true');
         expect(workspacePanelSource).toContain('type WorkspacePanelKind = \'worldInfo\' | \'backgroundLibrary\' | \'extensionsHost\' | \'mainChatMessageList\' | \'characterAuthoring\' | \'groupAuthoring\';');
-        expect(scriptSource).toContain('mainChatMessageList: false');
+        expect(scriptSource).toContain('mainChatMessageList: true');
         expect(scriptSource).toContain('characterAuthoring: true');
         expect(scriptSource).toContain('groupAuthoring: true');
     });
@@ -1298,6 +1299,12 @@ test('renders an Extensions Host workflow through React-owned controls and expli
         expect(workspacePanelSource).toContain('data-main-chat-windowing-restore-owner={bridgeState.windowingContract?.restoreOwner ?? \'legacy\'}');
         expect(workspacePanelSource).toContain('data-main-chat-windowing-fallback={bridgeState.windowingContract?.fallback ?? \'legacy\'}');
         expect(workspacePanelSource).toContain('data-main-chat-windowing-reason={bridgeState.windowingContract?.reason ?? \'unknown\'}');
+        expect(workspacePanelSource).toContain('function MainChatShowMoreOwnerPortal(');
+        expect(workspacePanelSource).toContain("bridge?.dispatchAction?.('loadMoreMessages', {})");
+        expect(workspacePanelSource).toContain("showMoreNode.dataset.mainChatLoadMoreOwner = 'react'");
+        expect(scriptSource).toContain('export async function loadEarlierChatMessages');
+        expect(scriptSource).toContain("case 'loadMoreMessages':");
+
         expect(workspacePanelSource).toContain('data-main-chat-row-lifecycle-owner={bridgeState.rowLifecycleContract?.lifecycleOwner ?? \'legacy\'}');
         expect(workspacePanelSource).toContain('data-main-chat-row-lifecycle-editing-owner={bridgeState.rowLifecycleContract?.editingOwner ?? \'legacy\'}');
         expect(workspacePanelSource).toContain('data-main-chat-row-lifecycle-streaming-owner={bridgeState.rowLifecycleContract?.streamingOwner ?? \'legacy\'}');
@@ -1320,14 +1327,17 @@ test('renders an Extensions Host workflow through React-owned controls and expli
         expect(workspacePanelSource).toContain('anchorTo: shouldAnchorPrependedHistoryWindow ? \'start\' : \'end\',');
     });
 
-    test('defines a finalized rich-body snapshot contract for main-chat rows and validates row eligibility', () => {
+    test('defines a multi-lifecycle rich-body snapshot contract for main-chat rows and validates row eligibility', () => {
         const scriptSource = read('public/script.js');
         const workspacePanelSource = read('app/workspace-panels.tsx');
 
         expect(scriptSource).toContain('function buildMainChatRichBodySnapshot(');
         expect(scriptSource).toContain('function isMainChatRichBodyEligible(');
+        expect(scriptSource).toContain('function getMainChatRichBodyRowState(');
+        expect(scriptSource).toContain('function shouldPreserveMainChatRichBodyLiveContent(');
         expect(scriptSource).toContain('richBodySnapshots:');
         expect(scriptSource).toContain('eligible:');
+        expect(scriptSource).toContain('preserveLiveContent');
         expect(scriptSource).toContain('messageHtml:');
         expect(scriptSource).toContain('reasoningHtml:');
         expect(scriptSource).toContain('mediaHtml:');
@@ -1340,9 +1350,11 @@ test('renders an Extensions Host workflow through React-owned controls and expli
         expect(scriptSource).toContain("messageText.querySelector('.TH-render')");
 
         expect(workspacePanelSource).toContain('const mainChatRichBodySnapshotSchema = z.object(');
+        expect(workspacePanelSource).toContain("state: z.enum(['finalized', 'editing', 'streaming', 'extension-mutated'])");
         expect(workspacePanelSource).toContain('interface MainChatRichBodySnapshot');
         expect(workspacePanelSource).toContain('richBodySnapshots?: MainChatRichBodySnapshot[];');
         expect(workspacePanelSource).toContain('function MainChatRichBodyOwnerPortal(');
+        expect(workspacePanelSource).toContain('if (!snapshot.preserveLiveContent && !liveExtensionMutation)');
         expect(workspacePanelSource).toContain('targets.messageNode.innerHTML = snapshot.messageHtml;');
         expect(workspacePanelSource).toContain('targets.reasoningNode.innerHTML = snapshot.reasoningHtml;');
         expect(workspacePanelSource).toContain('targets.mediaNode.innerHTML = snapshot.mediaHtml;');
@@ -1351,6 +1363,12 @@ test('renders an Extensions Host workflow through React-owned controls and expli
         expect(workspacePanelSource).toContain('targets.reasoningDetails.open = snapshot.reasoningOpen ?? false;');
         expect(workspacePanelSource).toContain('targets.messageBlock.dataset.mainChatRichBodyOwner = \'react\'');
         expect(workspacePanelSource).toContain('targets.messageBlock.dataset.mainChatRichBodyRow = snapshot.messageId');
+        expect(workspacePanelSource).toContain('targets.messageBlock.dataset.mainChatRichBodyState = snapshot.state;');
+        expect(workspacePanelSource).toContain('targets.messageBlock.dataset.mainChatRichBodyPreserveLive = snapshot.preserveLiveContent ? \'true\' : \'false\';');
+        expect(workspacePanelSource).toContain('host.dataset.mainChatMutationZone = \'true\'');
+        expect(workspacePanelSource).toContain('targets.messageNode.dataset.mainChatMutationZoneKind = \'mes_text\'');
+        expect(workspacePanelSource).toContain("messageRow.querySelector('.mes_streaming, .TH-streaming')");
+        expect(workspacePanelSource).toContain("targets.messageNode.querySelector('.TH-render')");
     });
 
     test('defines a visible message-action owner contract for safe main-chat rows', () => {
@@ -1408,6 +1426,11 @@ test('renders an Extensions Host workflow through React-owned controls and expli
         expect(workspacePanelSource).toContain('function canReactOwnMainChatMessageRow(');
         expect(workspacePanelSource).toContain('messageRow.dataset.mainChatMessageRowOwner = \'react\';');
         expect(workspacePanelSource).toContain('messageRow.dataset.mainChatMessageRow = snapshot.messageId;');
+        expect(workspacePanelSource).toContain('messageRow.dataset.mainChatMessageRowState = snapshot.state;');
+        expect(workspacePanelSource).toContain('messageRow.dataset.mainChatMessageRowPreserveLive = snapshot.preserveLiveContent ? \'true\' : \'false\';');
+        expect(workspacePanelSource).toContain("editingOwner: 'react'");
+        expect(workspacePanelSource).toContain("streamingOwner: 'react'");
+        expect(workspacePanelSource).toContain("extensionMutatedOwner: 'react'");
     });
 
     test('publishes main-chat layout shell ownership without taking message row structure', () => {

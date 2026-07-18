@@ -122,7 +122,7 @@ features:
   react:
     pages:
     panels:
-      mainChatMessageList: false
+      mainChatMessageList: true
       backgroundLibrary: true
       extensionsHost: true
     shell:
