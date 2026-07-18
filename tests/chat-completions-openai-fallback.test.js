@@ -39,6 +39,7 @@ async function withServer(app, callback) {
     try {
         return await callback(url);
     } finally {
+        server.closeAllConnections();
         await new Promise(resolve => server.close(resolve));
     }
 }
@@ -105,6 +106,7 @@ describe('OpenAI-compatible fallback chat completions backend', () => {
             });
 
             expect(response.status).toBe(200);
+            await response.text();
         });
 
         expect(readSecretMock).toHaveBeenCalledWith({ root: 'unused' }, 'api_key_openai_fallback', undefined);

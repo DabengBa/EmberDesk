@@ -1,0 +1,4 @@
+contract_version = 1
+feature_slug = "react-workspace-shell-retirement"
+brief = ".docs/tech/briefs/260716-13-react-workspace-shell-retirement.md"
+doc_ids = ["feature.next_workspace_shell", "page.chat_workspace"]

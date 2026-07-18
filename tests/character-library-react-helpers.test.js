@@ -90,10 +90,13 @@ describe('character library React panel scaffold', () => {
         expect(scriptSource).toContain('updateCharacterLibraryToolbar');
         expect(scriptSource).toContain('applySearchQuery(searchQuery)');
         expect(scriptSource).toContain('applySortOption(sortValue)');
-        expect(scriptSource).toContain('createEntityElement(entity)');
         expect(scriptSource).toContain('mountReactCharacterLibraryPanel');
         expect(scriptSource).toContain('mountReactCharacterLibraryToolbar');
         expect(scriptSource).toContain('renderCharacterListPageReact');
+        expect(scriptSource).toContain('void openGroupById(String(id));');
+        expect(scriptSource).toContain("chooseBogusFolder($('#rm_print_characters_block'), 'back');");
+        expect(scriptSource).not.toContain("document.getElementById('BogusFolderBack')?.click()");
+        expect(scriptSource).not.toContain('createEntityElement(entity)');
     });
 
     test('preserves structured /api/characters/all overflow errors for the legacy popup path', async () => {

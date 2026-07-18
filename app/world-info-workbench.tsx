@@ -593,6 +593,7 @@ export function WorldInfoWorkbenchPanel({
     const sortOptions = bridgeState.sortOptions ?? [];
     const entrySummaries = bridgeState.entrySummaries ?? [];
     const selectedWorldName = bridgeState.selectedWorldName || '';
+    const activeSearchQuery = String(bridgeState.searchQuery ?? '').trim();
     const globalNames = bridgeState.globalActiveNames ?? [];
     const globalCount = bridgeState.globalActiveCount ?? globalNames.length;
     const recoveryActions: Array<{ id: string; label: string; disabled?: boolean; onClick: () => void }> = [];
@@ -635,6 +636,11 @@ export function WorldInfoWorkbenchPanel({
         });
     };
 
+    const clearSearch = () => {
+        worldInfoForm.setFieldValue('searchQuery', '');
+        worldInfoActionMutation.mutate({ action: 'applySearchQuery', payload: { searchQuery: '' } });
+    };
+
     const showListPane = !isNarrow || mobileView === 'list';
     const showEditorPane = !isNarrow || mobileView === 'editor';
 
@@ -654,6 +660,24 @@ export function WorldInfoWorkbenchPanel({
             >
                 <div className="wi-workbench-global" data-world-info-react-global="summary">
                     <div className="wi-workbench-global-summary">
+                        <label className="wi-workbench-field">
+                            <span>全局启用</span>
+                            <select
+                                className="text_pole"
+                                multiple
+                                aria-label="选择全局启用的世界书"
+                                data-world-info-react-control="global-world-select"
+                                value={globalNames}
+                                onChange={event => {
+                                    const names = Array.from(event.currentTarget.selectedOptions, option => option.value);
+                                    worldInfoActionMutation.mutate({ action: 'setGlobalWorlds', payload: { names } });
+                                }}
+                            >
+                                {worldNames.map(world => (
+                                    <option key={world.value} value={world.label}>{world.label}</option>
+                                ))}
+                            </select>
+                        </label>
                         <span>{globalSummary}</span>
                         <button
                             type="button"
@@ -822,7 +846,21 @@ export function WorldInfoWorkbenchPanel({
                                 </button>
                             )) : (
                                 <div className="wi-workbench-empty" data-world-info-react-empty="entries">
-                                    {selectedWorldName ? '此世界书还没有条目' : '请先选择或创建世界书'}
+                                    {selectedWorldName ? (
+                                        activeSearchQuery ? (
+                                            <>
+                                                <span>没有匹配“{activeSearchQuery}”的条目</span>
+                                                <button
+                                                    type="button"
+                                                    className="menu_button wi-workbench-empty-action"
+                                                    data-world-info-react-action="clear-search"
+                                                    onClick={clearSearch}
+                                                >
+                                                    清除搜索
+                                                </button>
+                                            </>
+                                        ) : '此世界书还没有条目'
+                                    ) : '请先选择或创建世界书'}
                                 </div>
                             )}
                         </div>

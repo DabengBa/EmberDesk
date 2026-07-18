@@ -500,7 +500,7 @@ function withVirtualWhitespace(text, span) {
  *
  * Callers:
  * - Generate:onSuccess via saveLogprobsForActiveMessage, for non-streaming text completion
- * - StreamingProcessor:onFinishStreaming, for streaming text completion
+ * - GenerationStreamSession:onFinishStreaming, for streaming text completion
  * - sendOpenAIRequest, for non-streaming chat completion
  *
  * @param {TokenLogprobs[]} logprobs - array of logprobs data for each token

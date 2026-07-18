@@ -1282,7 +1282,7 @@ async function moveAttachment(attachment, source, callback) {
  */
 export async function deleteAttachment(attachment, source, callback, confirm = true) {
     if (confirm) {
-        const result = await callGenericPopup('Are you sure you want to delete this attachment?', POPUP_TYPE.CONFIRM);
+        const result = await callGenericPopup(t`Are you sure you want to delete this attachment?`, POPUP_TYPE.CONFIRM);
 
         if (result !== POPUP_RESULT.AFFIRMATIVE) {
             return;

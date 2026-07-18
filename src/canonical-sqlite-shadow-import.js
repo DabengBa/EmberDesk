@@ -239,7 +239,7 @@ function normalizePersistedAuditState(row) {
     }
 
     return {
-        ok: !Boolean(row.blocking),
+        ok: !row.blocking,
         blocking: Boolean(row.blocking),
         reason: row.reason ? String(row.reason) : null,
         status: String(row.status),
@@ -332,7 +332,7 @@ export function persistCanonicalAuditStatus(db, auditResult, { scope = 'characte
     });
 
     return {
-        ok: !Boolean(persistedState.blocking),
+        ok: !persistedState.blocking,
         blocking: Boolean(persistedState.blocking),
         reason: persistedState.reason,
         status: persistedState.status,

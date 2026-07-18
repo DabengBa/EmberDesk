@@ -25,6 +25,10 @@ import {
     persistCanonicalAuditStatus,
     runCanonicalShadowImport,
 } from '../src/canonical-sqlite-shadow-import.js';
+import {
+    auditCanonicalChatShadowImport,
+    runCanonicalChatShadowImport,
+} from '../src/canonical-chat-shadow-import.js';
 import { parse as parseCharacterCard, write as writeCharacterCardPngData } from '../src/character-card-parser.js';
 import encodePngChunks from '../src/png/encode.js';
 import { setConfigFilePath } from '../src/util.js';
@@ -189,6 +193,27 @@ function seedCanonicalCharacterForTests(db, avatarFilename = 'alpha.png') {
             character_id, chat_count, chat_size_bytes, date_last_chat_ms, stats_updated_at_ms
         ) VALUES (?, ?, ?, ?, ?)
     `).run(`char-${path.parse(avatarFilename).name}`, 0, 0, 0, 0);
+}
+
+async function prepareCanonicalChatWriteAudit({ db, directories, handle }) {
+    const featureFlags = {
+        enabled: true,
+        shadowImport: true,
+        reads: true,
+        writes: true,
+        strict: false,
+    };
+    await runCanonicalChatShadowImport({
+        handle,
+        directories,
+        db,
+        featureFlags,
+    });
+    await auditCanonicalChatShadowImport({
+        handle,
+        directories,
+        db,
+    });
 }
 
 /**
@@ -1524,6 +1549,11 @@ describe('character index', () => {
                 blocking: false,
                 entries: [],
             }, { auditedAtMs: 1735689602000 });
+            await prepareCanonicalChatWriteAudit({
+                db,
+                directories,
+                handle: `chat-test-${path.basename(directories.root)}`,
+            });
 
             const response = await invokeChatSave(directories, 'alpha.png', 'first', [
                 { name: 'Alpha', mes: 'hello' },
@@ -1659,6 +1689,11 @@ describe('character index', () => {
             writeChatFile(directories.root, 'alpha.png', 'first.jsonl', '{"name":"Alpha"}');
             db.prepare('UPDATE character_chat_stats SET chat_count = ?, chat_size_bytes = ?, date_last_chat_ms = ?, stats_updated_at_ms = ? WHERE character_id = ?')
                 .run(1, 16, 100, 101, 'char-alpha');
+            await prepareCanonicalChatWriteAudit({
+                db,
+                directories,
+                handle: 'default-user',
+            });
 
             const response = await invokeChatDelete(directories, 'alpha.png', 'first');
 
@@ -1690,6 +1725,11 @@ describe('character index', () => {
         try {
             seedCanonicalCharacterForTests(db, 'alpha.png');
             writeChatFile(directories.root, 'alpha.png', 'first.jsonl', '{"name":"Alpha"}');
+            await prepareCanonicalChatWriteAudit({
+                db,
+                directories,
+                handle: 'default-user',
+            });
 
             const response = await invokeChatRename(directories, 'alpha.png', 'first.jsonl', 'renamed.jsonl');
 
@@ -1730,6 +1770,11 @@ describe('character index', () => {
         const { manager, db } = openCanonicalDbForTests(directories);
         try {
             seedCanonicalCharacterForTests(db, 'alpha.png');
+            await prepareCanonicalChatWriteAudit({
+                db,
+                directories,
+                handle: 'default-user',
+            });
 
             const response = await invokeChatImport(directories, 'alpha.png', uploadFile);
 
@@ -1757,6 +1802,11 @@ describe('character index', () => {
         const { manager, db } = openCanonicalDbForTests(directories);
         try {
             seedCanonicalCharacterForTests(db, 'alpha.png');
+            await prepareCanonicalChatWriteAudit({
+                db,
+                directories,
+                handle: `chat-test-${path.basename(directories.root)}`,
+            });
 
             const response = await invokeGroupChatSave(directories, 'group-1', [
                 { name: 'Alpha', mes: 'hello group' },

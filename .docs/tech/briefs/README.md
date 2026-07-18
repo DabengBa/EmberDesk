@@ -22,7 +22,7 @@ Delete or avoid adding briefs that are:
 
 | Brief | Why it remains |
 |---|---|
-| `260713-01-comprehensive-database-authority-roadmap.md` | Records the comprehensive authority goal and the 2026-07-14 code-fact correction: canonical JSON documents may own low-frequency domains, global extensions remain outside per-user DB authority, chat is staged, and vectors stay derived. |
+| `260713-01-comprehensive-database-authority-roadmap.md` | Records the comprehensive authority goal and the 2026-07-14 code-fact correction; its vector-derived conclusion is historical after the 2026-07-15 retirement decision. |
 | `260713-01-canonical-storage-control-plane.md` | Preserves the shared per-slice rollout, audit, repair, rollback, and operator-control intent. |
 | `260713-02-canonical-settings-document-authority.md` | Preserves settings document, revision, snapshot, and compatibility-payload boundaries. |
 | `260713-03-canonical-secrets-authority.md` | Preserves the independent `SecretManager`, masking, exposure, and no-false-encryption constraints. |
@@ -36,7 +36,20 @@ Delete or avoid adding briefs that are:
 | `260714-03-canonical-chat-authority-cutover.md` | Preserves full-payload DB-first chat authority and JSONL projection/rollback constraints without server pagination. |
 | `260714-04-canonical-chat-query-recovery.md` | Preserves search/recent, attachment, backup/restore, repair, and Node 26 proof requirements. |
 | `260714-05-extension-operation-safety.md` | Preserves filesystem/Git authority and safe extension mutation preflight/result contracts. |
-| `260714-06-derived-vector-index-hardening.md` | Preserves stable source reference, atomic generation, fallback, invalidation, and rebuild constraints for derived vectors. |
+| `260714-06-derived-vector-index-hardening.md` | Superseded record of the abandoned derived-generation hardening direction. |
+| `260715-01-built-in-vector-retirement.md` | Preserves the approved removal boundary: delete first-party vector runtime while retaining old derived data, World Info field round-trip, Data Bank attachments, and protected extension surfaces. |
+| `260716-02-react-legacy-retirement.md` | Preserves the approved successor direction: React becomes the sole runtime owner for already migrated surfaces while user workflows and supported extension/automation behavior remain intact. |
+| `260716-03-react-login-setup-retirement.md` | Preserves the standalone-page cutover boundary for removing legacy Login and Setup implementations only after React owns their complete behavior. |
+| `260716-04-react-compatibility-contract-baseline.md` | Preserves the provider-neutral compatibility proof required before extension-sensitive React retirement slices may delete legacy owners. |
+| `260716-05-react-character-library-retirement.md` | Preserves Character Library behavior, identity selectors, extension hooks, and bulk workflow requirements across the React-only cutover. |
+| `260716-06-react-character-group-authoring-retirement.md` | Preserves full character and group authoring behavior while replacing legacy forms and save orchestration with React ownership. |
+| `260716-07-react-settings-retirement.md` | Preserves complete settings and provider-configuration behavior while retiring legacy drawers and same-version fallback. |
+| `260716-08-react-world-info-retirement.md` | Preserves World Info editing, regex, import/export, automation, and protected browser-import contracts during React ownership cutover. |
+| `260716-09-react-background-library-retirement.md` | Preserves Background Library browsing, mutation, selection, extension, and automation behavior while deleting its legacy UI owner. |
+| `260716-10-react-extensions-host-retirement.md` | Preserves supported extension mounts, scripts, events, slash/regex behavior, and browser imports while React replaces the legacy host. |
+| `260716-11-react-main-chat-transport-retirement.md` | Preserves the complete generation lifecycle and provider matrix while moving Main Chat transport ownership out of the legacy shell. |
+| `260716-12-react-main-chat-renderer-retirement.md` | Preserves message rendering, editing, streaming, long-chat, actions, and extension mutation behavior while deleting the legacy renderer. |
+| `260716-13-react-workspace-shell-retirement.md` | Preserves final workspace navigation, layout, drawer coordination, startup, and extension-hosting behavior during the last shell cutover. |
 | `260605-01-character-list-page-slice-helper.md` | Preserves the delivered boundary for the character-list page-slice helper: pure snapshot slicing moved to render-state while DOM and pagination plugin ownership stayed in `public/script.js`. |
 | `260605-02-character-route-service-extraction.md` | Preserves the user-approved route-service boundary and UX-facing constraints behind the character read-service extraction. |
 | `260605-03-character-route-performance-proof.md` | Records why the third closure slice became Node 26 route/perf/UX evidence instead of another route extraction. |

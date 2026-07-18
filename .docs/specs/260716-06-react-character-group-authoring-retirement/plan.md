@@ -70,3 +70,9 @@ Doc IDs: feature.group_authoring, feature.character_library_panel, page.chat_wor
 - [x] Doc-ID gate: `bun run docs:check` green.
 - [x] Frontend review: structure-led full-field form with sticky primary Save/Cancel hierarchy retained; danger Delete separated; member reorder remains non-drag; avatar file input added for direct write path.
 - [x] Review complete
+- [x] Review: group creation now persists `hideMutedSprites`; `tests/groups-route-authoring.test.js` exercises the create route and its file projection.
+- [x] Review: group edit now rejects non-2xx responses and the authoring adapter restores its optimistic in-memory mutation, preserving a retryable dirty draft.
+- [x] Review: saving disables the authoring fieldset, so a response cannot overwrite input made during the pending request; failed authoring actions no longer remount and discard the draft.
+- [x] Review: World Info and Alternate Greetings remount from the active React draft, so opening a legacy-compatible popup cannot reset unsaved character edits.
+- [x] Review: React group authoring now exposes all character candidates instead of truncating at 12, and owns assignment/removal of existing group tags without reopening the hidden tag host.
+- [ ] Evidence gap: Playwright authoring E2E remains unexecuted on this host because Chromium `headless_shell` is unavailable. Delete, mobile reachability, avatar-upload, and slow-response flows still need browser proof on a provisioned runner.

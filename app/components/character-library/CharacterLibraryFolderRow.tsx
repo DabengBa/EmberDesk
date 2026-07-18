@@ -28,18 +28,19 @@ export function CharacterLibraryFolderRow({
         <div
             className={className}
             id={`BogusFolder${id}`}
-            // setAttribute for legacy tagid below
             data-tagid={String(id)}
+            {...{ tagid: String(id) }}
             role="button"
             tabIndex={0}
-            ref={(node) => {
-                if (node) {
-                    node.setAttribute('tagid', String(id));
-                }
+            onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onOpen?.(id);
             }}
             onKeyDown={(event) => {
                 if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault();
+                    event.stopPropagation();
                     onOpen?.(id);
                 }
             }}

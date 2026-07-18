@@ -166,6 +166,7 @@ router.post('/create', (request, response) => {
         members: request.body.members ?? [],
         avatar_url: request.body.avatar_url,
         allow_self_responses: !!request.body.allow_self_responses,
+        hideMutedSprites: !!request.body.hideMutedSprites,
         activation_strategy: request.body.activation_strategy ?? 0,
         generation_mode: request.body.generation_mode ?? 0,
         disabled_members: request.body.disabled_members ?? [],

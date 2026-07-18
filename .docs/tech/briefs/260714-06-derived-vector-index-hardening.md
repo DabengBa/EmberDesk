@@ -4,11 +4,14 @@ source: user
 confirmed: true
 last_updated: 2026-07-14
 feature_slug: derived-vector-index-hardening
-status: active
-active_process_dir: .docs/specs/260714-06-derived-vector-index-hardening
+status: superseded
 ---
 
 # Derived Vector Index Hardening Intent
+
+> 2026-07-15：本方向已被
+> `260715-01-built-in-vector-retirement.md` 取代。用户确认 EmberDesk 不再需要第一方
+> vector runtime，因此不再实施 generation hardening。
 
 ## 目标结果
 
@@ -39,4 +42,3 @@ corruption recovery 消除索引漂移与半构建风险。
 - `src/vectors/`
 - `public/scripts/extensions/vectors/`
 - `.docs/db/pages/chat-workspace.md`
-

@@ -22,6 +22,10 @@
     background-color: var(--SmartThemeQuoteColor);
 }
 
+#rm_print_characters_block.group_overlay_mode_select .character_select.character_selected .ch_name {
+    color: var(--SmartThemeBodyColor);
+}
+
 #rm_print_characters_block.group_overlay_mode_select .character_select .bulk_select_checkbox {
     visibility: hidden;
     height: 0 !important;

@@ -17,17 +17,17 @@ function buildRepairKey(locator, operation) {
     ].join(':');
 }
 
-function listStringLeaves(value) {
+function listStringLeaves(value, fieldPath = []) {
     if (typeof value === 'string') {
-        return [value];
+        return [{ value, fieldPath }];
     }
     if (Array.isArray(value)) {
-        return value.flatMap(entry => listStringLeaves(entry));
+        return value.flatMap((entry, index) => listStringLeaves(entry, [...fieldPath, index]));
     }
     if (!value || typeof value !== 'object') {
         return [];
     }
-    return Object.values(value).flatMap(entry => listStringLeaves(entry));
+    return Object.entries(value).flatMap(([key, entry]) => listStringLeaves(entry, [...fieldPath, key]));
 }
 
 function isManagedAttachmentCandidate(value) {
@@ -53,9 +53,12 @@ function findFirstUnregisteredAttachmentPath(db, payload) {
     }
 
     for (const message of payload.slice(1)) {
-        for (const value of listStringLeaves(message)) {
-            if (isManagedAttachmentCandidate(value) && !managedPaths.has(String(value))) {
-                return String(value);
+        for (const leaf of listStringLeaves(message)) {
+            // Chat text may mention a path; only structured fields can be attachments.
+            if (leaf.fieldPath[0] !== 'mes'
+                && isManagedAttachmentCandidate(leaf.value)
+                && !managedPaths.has(String(leaf.value))) {
+                return String(leaf.value);
             }
         }
     }

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 
@@ -24,6 +25,11 @@ import {
     runCanonicalWorldInfoAudit,
 } from '../src/canonical-sqlite-operator.js';
 import { collectCanonicalManagedMediaGarbage } from '../src/endpoints/canonical-managed-media-write-service.js';
+import {
+    createCanonicalChatBackup,
+    getCanonicalChatRestoreStatus,
+    restoreCanonicalChatBackup,
+} from '../src/endpoints/canonical-chat-backup-restore-service.js';
 import { getUserDirectories } from '../src/user-directories.js';
 
 const manager = createCanonicalSqliteManager({ logger: { info() {}, warn() {} } });
@@ -51,6 +57,9 @@ function printUsage() {
         '                       Replay managed-media projection for one or more repair keys',
         '  repair-chat-projection',
         '                       Replay canonical chat projection for one or more repair keys',
+        '  backup-chat          Write a canonical chat backup bundle to --backup-file',
+        '  restore-chat         Restore a canonical chat backup bundle from --backup-file',
+        '  chat-restore-status  Print the latest canonical chat restore status',
         '  gc-managed-media     Collect unreferenced tombstoned managed media (dry-run by default)',
         '  rebuild-chat-stats   Rebuild canonical chat stats from JSONL chat files',
         '  explain-blockers     Summarize rollout / rollback blockers for a phase',
@@ -61,6 +70,7 @@ function printUsage() {
         '  --avatar <avatar>    Repeatable for rebuild-chat-stats',
         '  --phase <phase>      reads | writes | chatStats for explain-blockers/status',
         '  --slice <key>        characters | world_info | settings | secrets | managed_media | chats for status/audit/repair/blockers',
+        '  --backup-file <path> Required for backup-chat and restore-chat',
         '  --apply              Allow gc-managed-media to delete eligible managed files',
         '  --feature <k=v>      Repeatable feature flag override for explain-blockers/status',
         '  --json               Print JSON output',
@@ -85,6 +95,7 @@ function parseArgs(argv) {
         phase: 'writes',
         featureFlags: {},
         slice: null,
+        backupFile: null,
         apply: false,
     };
 
@@ -117,6 +128,9 @@ function parseArgs(argv) {
             case '--slice':
                 options.slice = argv[++index] ?? null;
                 break;
+            case '--backup-file':
+                options.backupFile = argv[++index] ?? null;
+                break;
             case '--apply':
                 options.apply = true;
                 break;
@@ -142,6 +156,13 @@ function ensureRequired(options) {
     if (!options.dataRoot || !options.handle) {
         throw new Error('Both --data-root and --handle are required.');
     }
+}
+
+function getBackupFilePath(options) {
+    if (!options.backupFile) {
+        throw new Error('--backup-file is required for this command.');
+    }
+    return path.resolve(options.backupFile);
 }
 
 function openContext(options) {
@@ -307,6 +328,24 @@ function formatAudit(result) {
     return `${lines.join('\n')}\n`;
 }
 
+function formatChatBackup(result) {
+    return [
+        'Canonical chat backup',
+        `file: ${result.backupFile}`,
+        `sessions: ${result.sessionCount}`,
+        `open repairs: ${result.openRepairCount}`,
+    ].join('\n') + '\n';
+}
+
+function formatChatRestore(result) {
+    return [
+        'Canonical chat restore',
+        `status: ${result.status}`,
+        `restore id: ${result.restoreId ?? ''}`,
+        ...(result.reasonCode ? [`reason: ${result.reasonCode}`] : []),
+    ].join('\n') + '\n';
+}
+
 async function main() {
     const options = parseArgs(process.argv.slice(2));
     if (options.help) {
@@ -389,6 +428,43 @@ async function main() {
             });
             formatter = formatRepairProjection;
             break;
+        case 'backup-chat': {
+            const backupFile = getBackupFilePath(options);
+            const backup = createCanonicalChatBackup({ db });
+            fs.writeFileSync(backupFile, JSON.stringify(backup, null, 2), {
+                encoding: 'utf8',
+                flag: 'wx',
+            });
+            result = {
+                ok: true,
+                backupFile,
+                sessionCount: backup.sessions.length,
+                openRepairCount: backup.projectionState.openRepairCount,
+            };
+            formatter = formatChatBackup;
+            break;
+        }
+        case 'restore-chat': {
+            const backupFile = getBackupFilePath(options);
+            let backup;
+            try {
+                backup = JSON.parse(fs.readFileSync(backupFile, 'utf8'));
+            } catch (error) {
+                throw new Error(`Unable to read canonical chat backup: ${String(error?.message ?? error ?? '')}`);
+            }
+            result = await restoreCanonicalChatBackup({
+                db,
+                backup,
+                handle: options.handle,
+                directories,
+            });
+            formatter = formatChatRestore;
+            break;
+        }
+        case 'chat-restore-status':
+            result = getCanonicalChatRestoreStatus(db);
+            formatter = formatChatRestore;
+            break;
         case 'gc-managed-media':
             result = await collectCanonicalManagedMediaGarbage({
                 handle: options.handle,
@@ -453,7 +529,7 @@ async function main() {
         : formatter(result));
 
     // status is a report command: blocked slice readiness is still a successful query.
-    if ((options.command === 'audit' || options.command === 'audit-world-info' || options.command === 'repair-projection' || options.command === 'repair-world-info-projection' || options.command === 'repair-secret-projection' || options.command === 'repair-managed-media-projection' || options.command === 'repair-chat-projection' || options.command === 'gc-managed-media' || options.command === 'explain-blockers' || options.command === 'audit-slice' || options.command === 'repair-slice') && result.ok === false) {
+    if ((options.command === 'audit' || options.command === 'audit-world-info' || options.command === 'repair-projection' || options.command === 'repair-world-info-projection' || options.command === 'repair-secret-projection' || options.command === 'repair-managed-media-projection' || options.command === 'repair-chat-projection' || options.command === 'restore-chat' || options.command === 'gc-managed-media' || options.command === 'explain-blockers' || options.command === 'audit-slice' || options.command === 'repair-slice') && result.ok === false) {
         process.exitCode = 1;
     }
 }

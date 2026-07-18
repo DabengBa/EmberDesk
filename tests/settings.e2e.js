@@ -98,32 +98,11 @@ test.describe('React settings sole-owner page', () => {
         await expect(themeField).toBeVisible({ timeout: 30_000 });
         await themeField.fill('E2E Theme');
 
-        // If zod still blocks save, fall back to direct API persistence check for secret isolation + unit-covered save path.
         const saveButton = page.locator('button[type="submit"]');
-        if (await saveButton.isEnabled()) {
-            await saveButton.click();
-            const status = page.locator('.settings-status');
-            await expect(status.first()).toBeVisible({ timeout: 30_000 });
-            const statusText = await status.first().innerText();
-            if (/已保存/.test(statusText)) {
-                const after = await getSettingsPayload(page);
-                expect(after.status).toBe(200);
-                expect(JSON.stringify(after.settings)).not.toMatch(/BEGIN PRIVATE KEY/);
-                expect(after.settings?.power_user?.theme).toBe('E2E Theme');
-                await page.reload();
-                await openSettings(page);
-                await selectTab(page, 'User Interface');
-                await expect(page.getByRole('textbox', { name: /Theme/ })).toHaveValue('E2E Theme', { timeout: 30_000 });
-                return;
-            }
-        }
+        await expect(saveButton).toBeEnabled({ timeout: 30_000 });
+        await saveButton.click();
+        await expect(page.locator('.settings-status--success')).toContainText('设置已保存', { timeout: 30_000 });
 
-        // Direct API persistence + secret isolation still prove R4/R5 when client validation blocks save.
-        const current = await getSettingsPayload(page);
-        const next = structuredClone(current.settings);
-        next.power_user = { ...(next.power_user || {}), theme: 'E2E Theme' };
-        const saved = await saveSettingsDocument(page, next, current.settingsRevision);
-        expect(saved.status).toBeLessThan(400);
         const after = await getSettingsPayload(page);
         expect(after.settings?.power_user?.theme).toBe('E2E Theme');
         expect(JSON.stringify(after.settings)).not.toMatch(/BEGIN PRIVATE KEY/);
@@ -137,6 +116,11 @@ test.describe('React settings sole-owner page', () => {
         await testSetup.awaitST({ page });
         await openSettings(page);
 
+        await selectTab(page, 'User Interface');
+        const themeField = page.getByRole('textbox', { name: /Theme/ });
+        const draftTheme = `Local draft ${Date.now()}`;
+        await themeField.fill(draftTheme);
+
         const initial = await getSettingsPayload(page);
         const concurrentSettings = structuredClone(initial.settings);
         concurrentSettings.power_user = {
@@ -148,25 +132,23 @@ test.describe('React settings sole-owner page', () => {
 
         const afterConcurrent = await getSettingsPayload(page);
         const currentRevision = afterConcurrent.settingsRevision;
-        const stale = structuredClone(initial.settings);
-        stale.power_user = { ...(stale.power_user || {}), theme: `Stale-${Date.now()}` };
 
         if (currentRevision == null) {
             // File-authority / compat LWW path: server may not enforce revision yet.
             // Still prove the React page remains usable and does not show fake success banners.
-            await selectTab(page, 'User Interface');
-            await expect(page.getByRole('textbox', { name: /Theme/ })).toBeVisible();
+            await expect(themeField).toHaveValue(draftTheme);
             await expect(page.locator('.settings-status--success')).toHaveCount(0);
             return;
         }
 
-        const staleRevision = Number(currentRevision) > 0 ? Number(currentRevision) - 1 : 0;
-        const conflict = await saveSettingsDocument(page, stale, staleRevision);
-        expect(conflict.status).toBe(409);
+        const saveButton = page.locator('button[type="submit"]');
+        await expect(saveButton).toBeEnabled({ timeout: 30_000 });
+        await saveButton.click();
 
-        await selectTab(page, 'User Interface');
-        await expect(page.getByRole('textbox', { name: /Theme/ })).toBeVisible();
-        await expect(page.locator('.settings-page')).toBeVisible();
+        await expect(page.getByText(/本地草稿仍保留/)).toBeVisible({ timeout: 30_000 });
+        await expect(themeField).toHaveValue(draftTheme);
+        await expect(page.getByRole('button', { name: '重新加载当前设置', exact: true })).toBeVisible();
+        await expect(saveButton).toBeDisabled();
     });
 
     test('desktop and mobile viewports keep save controls reachable', async ({ page }) => {
@@ -181,6 +163,7 @@ test.describe('React settings sole-owner page', () => {
             await expect(page.locator('button[type="submit"]')).toBeVisible();
             await expect(page.locator('.settings-workspace-link')).toBeVisible();
             await page.keyboard.press('Tab');
+            await expect(page.locator(':focus')).toBeVisible();
         }
     });
 });

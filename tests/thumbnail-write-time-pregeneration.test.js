@@ -48,6 +48,7 @@ async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled 
 
     jest.unstable_mockModule('../src/util.js', () => ({
         deepMerge: (target, source) => ({ ...target, ...source }),
+        getConfig: () => ({}),
         humanizedDateTime: () => '2026-05-13',
         tryParse: () => undefined,
         MemoryLimitedMap: class MemoryLimitedMap extends Map {
@@ -67,6 +68,7 @@ async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled 
                     return defaultValue;
             }
         },
+        keyToEnv: key => String(key).replace(/[.-]/g, '_').toUpperCase(),
         mutateJsonString: value => value,
         clientRelativePath: (_root, inputPath) => inputPath,
         getUniqueName: (baseName) => baseName,

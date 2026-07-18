@@ -66,12 +66,20 @@ Doc IDs: page.settings, page.api_configuration, page.chat_workspace, feature.cha
 - [x] Review: R-01 string numeric enums blocked form save validation (severity: high; scope: task-1/3; fixed: coerce in buildSettingsFormDefaults + z.coerce on key fields)
 - [x] Review: R-02 Vertex service-account deferred to legacy drawer (severity: high; scope: task-2; fixed: full mode uses vertexai_service_account_json secrets path)
 - [x] Review: R-03 settings flag fallback to workspace (severity: high; scope: task-4; fixed: sole-owner 503 missing-build, shell always navigates /settings)
+- [x] Review: R-04 sparse settings save materialized every missing default (severity: high; scope: task-1; fixed: compare form values with the loaded baseline and write only changed bindings, while retaining the Vertex source dependency mapping; proof: settings-react-route.test.js)
+- [x] Review: R-05 revision conflict discarded the local draft (severity: high; scope: task-5; fixed: retain the draft, disable save, and require explicit reload before merge/retry; proof: settings.e2e.js)
+- [x] Review: R-06 connection profile only persisted an ID and did not apply the existing profile workflow (severity: high; scope: task-2; fixed: named profile selector plus one-time workspace marker consumed by Connection Manager's existing application path; proof: settings-react-route.test.js)
+- [x] Review: R-07 direct legacy top-bar drawer toggles still opened Settings/API/Formatting forms outside the React shell (severity: high; scope: task-4; fixed: capture-phase route handoff to /settings tabs while retaining compatibility hosts; proof: settings-react-route.test.js)
+- [x] Review: R-08 roadmap referenced a non-committed retirement brief (severity: medium; scope: documentation; fixed: durable ADR-0012 and legacy-cutover-ledger references only; proof: docs:check/docs:build)
 
 ### Residual risks
-- Playwright browser host instability prevented full green E2E re-run after conflict-case tuning; unit + docs + build green. Re-run `settings.e2e.js` and `workspace-shell-panel-navigation.e2e.js` on a machine with matching Playwright chromium.
-- Legacy drawer DOM hosts remain in `public/index.html` for compatibility; not product entry points.
+- Legacy drawer DOM hosts remain in `public/index.html` for compatibility, but their direct Settings/API/Formatting toggles now route to React Settings.
+- This environment uses Node.js 24.16.0; the project release-runtime contract is Node.js 26.3.0, so the local runtime checks are diagnostic rather than release proof.
 
 ### Validation re-run
-- settings-react-route.test.js PASS (9)
-- docs:check PASS
-- build:react PASS
+- TDD red: `settings-react-route.test.js` failed before the sparse-save, Vertex-default, profile, conflict, and direct-drawer fixes.
+- `bun run --cwd tests test:unit -- settings-react-route.test.js settings-get-route.test.js canonical-settings-store.test.js secrets-input-map.test.js provider-secret-field-state.test.js --runInBand` PASS (38); Jest reported the project's existing post-result async-handle warning and was stopped after results.
+- `bun run --cwd tests test:e2e -- settings.e2e.js --workers=1` PASS (3).
+- `bun run build:react` PASS.
+- `bun run test:compat` PASS (12).
+- `bun run docs:check && bun run docs:build` PASS; topology contains 30 nodes and 236 edges with no explicit orphan/island report.

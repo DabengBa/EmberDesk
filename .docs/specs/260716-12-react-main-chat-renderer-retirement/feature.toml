@@ -1,0 +1,4 @@
+contract_version = 1
+feature_slug = "react-main-chat-renderer-retirement"
+brief = ".docs/tech/briefs/260716-12-react-main-chat-renderer-retirement.md"
+doc_ids = ["feature.chat_message_rendering", "feature.chat_message_actions", "feature.chat_generation_auto_recovery", "page.chat_workspace"]

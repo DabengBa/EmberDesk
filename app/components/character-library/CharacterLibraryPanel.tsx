@@ -8,7 +8,10 @@ import {
     CharacterLibraryEmptyBlock,
     CharacterLibraryHiddenBlock,
 } from './CharacterLibraryStatusBlocks';
-import { projectCharacterEntityToRowModel } from '@/lib/character-library-row-helpers';
+import {
+    projectCharacterEntityToRowModel,
+    type CharacterLibraryTagModel,
+} from '@/lib/character-library-row-helpers';
 
 export interface CharacterLibraryPanelEntity {
     type: string;
@@ -24,6 +27,10 @@ export interface CharacterLibraryPanelEntity {
     folderIconClass?: string;
     folderColor?: string;
     folderColor2?: string;
+    tags?: CharacterLibraryTagModel[];
+    assistantAvatar?: string | null;
+    auxFieldName?: string;
+    showAvatarUrl?: boolean;
 }
 
 export interface CharacterLibraryPanelRenderPlan {
@@ -56,8 +63,6 @@ export interface CharacterLibraryPanelBridge {
     onBackFolder?(): void;
     onClearFilters?(): void;
     onBulkToggleCharacter?(id: string | number, checked: boolean): void;
-    /** Optional: remaining non-row DOM hosts (toolbar only). Kept for transition. */
-    createEntityElement?(entity: CharacterLibraryPanelEntity): HTMLElement | Promise<HTMLElement | null> | null;
 }
 
 interface EntityRowProps {
@@ -82,6 +87,10 @@ function EntityRow({
             item: entity.item,
         }, {
             activeCharacterId,
+            assistantAvatar: entity.assistantAvatar,
+            auxFieldName: entity.auxFieldName,
+            showAvatarUrl: entity.showAvatarUrl,
+            resolveTags: () => entity.tags ?? [],
             resolveAvatarUrl: (avatar) => {
                 if (avatar === 'none') {
                     return String(entity.item?.avatarUrl ?? '');
@@ -113,6 +122,7 @@ function EntityRow({
                 memberCount={entity.memberCount}
                 isFav={Boolean(item.fav)}
                 avatarHtml={entity.avatarHtml}
+                tags={entity.tags}
                 onSelect={(id) => bridge.onSelectGroup?.(id)}
             />
         );

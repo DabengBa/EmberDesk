@@ -30,10 +30,11 @@ last_updated: 2026-06-24
 ### Domain 1: Phase 7 spec set must close the roadmap
 
 - **User expectation:** Phase 7 的 spec 集不是局部补丁，而是 roadmap 最后一批 active implementation specs；这些 specs 全部交付后，roadmap 剩余开发工作应视为完成。
-- **Current status:** delivered. Phase 7 dated specs `260623-05` through `260623-14` 已完成 full owner cutover 与最终决策闭环；roadmap 现已把 React 现代化状态更新为“开发完成，进入兼容维护”。
+- **Current status:** delivered as the guarded-island/compatibility-closeout baseline. Its former “roadmap closing” claim is superseded for already migrated surfaces by the 2026-07-16 retirement program in [ADR-0012](../../adr/0012-react-migrated-surface-legacy-retirement.md).
 - **Change history:**
   - 2026-06-23: 创建本 brief，并把“完成这些 specs 即完成 roadmap”固定为本次 spec set 的最高约束。
   - 2026-06-24: `260623-05` through `260623-14` 全部完成 delivery、review、文档同步与 roadmap closeout，进入归档入口收口。
+  - 2026-07-16: 产品确认不把 compatibility facade / rollback owner 作为已迁移 React surface 的最终形态；后续删除工作由新的 React legacy-retirement brief 和 ADR-0012 承接，不重写已交付 Phase 4-6 输入。
 - **Implementation traceability:** delivered through the 2026-06-23 Phase 7 dated delivery set; durable closure in `.docs/tech/react-modernization-roadmap.md`, `.docs/PROJECT_HISTORY.md`, `.docs/specs/react-phase7-full-owner-cutover/README.md`, `.docs/adr/0007-react-page-islands-with-legacy-fallbacks.md`; delivery status `delivered roadmap-closing Phase 7 spec set`.
 
 ### Domain 2: Prior completed phases are fixed inputs, not redesign targets
@@ -53,7 +54,7 @@ last_updated: 2026-06-24
 ### Domain 4: Main-chat and shell/global must be narrowed into smaller spec slices
 
 - **User expectation:** 现有 Phase 7 Sprint 5 / 6 / 7 太宽，不应继续作为单块实现说明；spec set 需要按当前 proof boundary 拆成更窄的 transport, renderer/windowing, globals, workspace-shell 子步。
-- **Current status:** delivered. Main-chat transport 已按 visible compat、quiet/background 两个子步闭环；renderer 已按 rich-body owner 与 windowing/row lifecycle 两个子步闭环；globals/export 与 workspace shell 以最终 freeze/support decision 收口，而不是继续保留宽泛 sprint 占位。
+- **Current status:** delivered as a narrow-owner baseline. The former freeze/support decision is no longer the destination for migrated surfaces: future work must replace the retained behavior with React-era owners and compatibility contracts under ADR-0012, rather than delete behavior or retain legacy implementation indefinitely.
 - **Change history:**
   - 2026-06-23: 创建本 brief，并把 Phase 7 默认拆法固定为“保留 surface 顺序，但把最宽的 sprint 再拆细”。
   - 2026-06-24: `260623-09` through `260623-14` 全部完成交付，原宽口 Sprint 5 / 6 / 7 已由可验证的窄 spec slices 取代。

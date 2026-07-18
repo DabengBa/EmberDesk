@@ -34,7 +34,7 @@ describe('validation gate selector', () => {
         expect(result.advisoryOnly).toBe(true);
         expect(result.commands).toEqual(expect.arrayContaining([
             expect.objectContaining({
-                command: 'bun run --cwd tests test:unit -- canonical-sqlite-cli.test.js canonical-sqlite-operator.test.js canonical-sqlite-rollout-contract.test.js canonical-sqlite-shadow-import.test.js character-read-service.test.js character-write-service.test.js --runInBand',
+                command: 'bun run --cwd tests test:unit -- canonical-storage-slice-registry.test.js canonical-sqlite-cli.test.js canonical-sqlite-operator.test.js canonical-sqlite-rollout-contract.test.js canonical-sqlite-shadow-import.test.js character-read-service.test.js character-write-service.test.js --runInBand',
                 required: true,
                 sources: expect.arrayContaining(['.docs/adr/0011-canonical-per-user-sqlite-storage.md']),
             }),
@@ -118,7 +118,7 @@ describe('validation gate selector', () => {
         ]));
 
         expect(formatted).toContain('Validation Gate Selector (advisory-only)');
-        expect(formatted).toContain('[required] bun run --cwd tests test:unit -- canonical-sqlite-cli.test.js canonical-sqlite-operator.test.js canonical-sqlite-rollout-contract.test.js canonical-sqlite-shadow-import.test.js character-read-service.test.js character-write-service.test.js --runInBand');
+        expect(formatted).toContain('[required] bun run --cwd tests test:unit -- canonical-storage-slice-registry.test.js canonical-sqlite-cli.test.js canonical-sqlite-operator.test.js canonical-sqlite-rollout-contract.test.js canonical-sqlite-shadow-import.test.js character-read-service.test.js character-write-service.test.js --runInBand');
         expect(formatted).toContain('[required] bun run docs:check');
         expect(formatted).toContain('final diff review may add or remove validation');
     });
@@ -129,7 +129,7 @@ describe('validation gate selector', () => {
             'scripts/canonical-sqlite-repair.mjs',
         ]);
 
-        expect(commands).toContain('bun run --cwd tests test:unit -- canonical-sqlite-cli.test.js canonical-sqlite-operator.test.js canonical-sqlite-rollout-contract.test.js canonical-sqlite-shadow-import.test.js character-read-service.test.js character-write-service.test.js --runInBand');
+        expect(commands).toContain('bun run --cwd tests test:unit -- canonical-storage-slice-registry.test.js canonical-sqlite-cli.test.js canonical-sqlite-operator.test.js canonical-sqlite-rollout-contract.test.js canonical-sqlite-shadow-import.test.js character-read-service.test.js character-write-service.test.js --runInBand');
     });
 
     test('selects the derived-cache gate for owning tech docs and retirement wording', () => {

@@ -77,7 +77,7 @@ Failure modes:
 - Moving formatter logic can affect markdown, regex, comments, system messages, reasoning, and extension-visible HTML.
 - Row identity changes can break first-party actions and extension-adjacent scripts.
 
-### Phase 7 Sprint 6 Rich-Body Owner Contract
+### Current Rich-Body Owner Contract
 
 `public/scripts/chat-message-render-descriptor.js` now records the current rich-body, row-lifecycle, and long-chat windowing contracts, and `public/script.js` plus `app/workspace-panels.tsx` apply the approved cutover for safe finalized rows without introducing a second renderer stack. `buildChatMessageRenderDescriptor()` and `buildChatMessageRowPopulation()` still describe stable row metadata. `classifyChatMessageRendererContract()` now classifies the current owner state as:
 
@@ -89,7 +89,7 @@ For the approved safe finalized row family, the legacy formatter path still prod
 
 Rows with extension-owned mutation markers such as `.mes_streaming`, `.TH-streaming`, or `.TH-render` fail closed back to the legacy owner so `JS-Slash-Runner` and similar third-party mutations are not silently swallowed by the React rich-body path.
 
-`buildMainChatRowLifecycleContract()` now freezes the remaining non-finalized or excluded row families under one explicit policy instead of an implicit mixed owner:
+`buildMainChatRowLifecycleContract()` now records the remaining non-finalized or excluded row families under one explicit current-code policy instead of an implicit mixed owner:
 
 - the React message-list controller is the single lifecycle policy owner
 - editing rows, active streaming rows, structurally unsafe rows, and extension-mutated rows remain on explicit legacy facades
@@ -115,16 +115,16 @@ UX gap:
 
 - Search, jump-to-message, range indicators, and context summaries remain future UX candidates. The current proof covers bounded rendering, load-more position stability, and latest-row reachability without a separate return-to-newest control.
 
-### Phase 7 Sprint 6 Cutover Checklist
+### Retirement Gate
 
-Phase 7 Sprint 6 now closes with these explicit owner boundaries:
+The current code has these explicit owner boundaries. They are the baseline for final-wave retirement, not its completed state:
 
 - safe finalized rows are the only approved React rich-body owner class
-- editing rows, streaming rows, extension-mutated rows, unsafe rows, and rows missing `.mes_text` keep explicit legacy fallback or receive a later ADR-backed cutover decision
+- editing rows, streaming rows, extension-mutated rows, unsafe rows, and rows missing `.mes_text` still keep explicit legacy ownership
 - `.mes_text`, `.mes[mesid]`, `.mes_reasoning_details`, `.mes_media_wrapper`, `.mes_file_wrapper`, swipe controls, and visible action shell reachability keep compatibility proof
 - long-chat windows preserve direct-child `.mes[mesid]` order, `#show_more_messages` reachability, reading-position restore, and mobile load-more access
 - the hidden controller records `data-main-chat-windowing-*` and `data-main-chat-row-lifecycle-*` markers so the final fallback split is auditable instead of implicit
-- `bun run test:compat`, the React-flagged `chat-message-rendering.e2e.js` / `chat-message-layout.e2e.js` / `chat-message-list-walkthrough.e2e.js` / `chat-message-streaming.e2e.js` gate, and `bun run perf:interaction` stay green before removing any remaining legacy windowing facade
+- [ADR-0012](../adr/0012-react-migrated-surface-legacy-retirement.md) permits removal only when React covers every listed row family and long-chat algorithm while these proof gates remain green; same-version legacy fallback is not the release rollback mechanism
 
 ### User Message Append
 

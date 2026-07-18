@@ -177,6 +177,7 @@ describe('frontend shared library boundary', () => {
         tmpRoots.push(dataRoot);
         tmpRoots.push(webpackRoot);
         globalThis.DATA_ROOT = dataRoot;
+        fs.writeFileSync(path.join(webpackRoot, 'package.json'), '{"type":"module"}\n', 'utf8');
 
         const config = getPublicLibConfig({ webpackRoot });
         await runWebpack(config);

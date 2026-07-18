@@ -129,7 +129,8 @@ class Notepad {
             return;
         }
 
-        const file = new File([text], `Notepad - ${fileName}.txt`, { type: 'text/plain' });
+        const normalizedFileName = fileName.endsWith('.txt') ? fileName : `${fileName}.txt`;
+        const file = new File([text], normalizedFileName, { type: 'text/plain' });
         return [file];
     }
 }

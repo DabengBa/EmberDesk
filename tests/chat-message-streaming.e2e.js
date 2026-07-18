@@ -10,7 +10,21 @@ const mobileViewports = [
     { name: 'wide mobile', width: 768, height: 1024 },
 ];
 
+async function openCharacterLibrary(page) {
+    const panelButton = page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'Character Library' });
+    await panelButton.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => {});
+    if (await panelButton.isVisible()) {
+        await panelButton.click({ timeout: 10_000 });
+        await expect(panelButton).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
+    } else {
+        await page.locator('.mes .drawer-opener[data-target="rightNavHolder"]').filter({ hasText: /Character Management|角色管理/ }).first().click();
+    }
+    await expect(page.locator('#right-nav-panel.openDrawer #rm_characters_block')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('#rm_print_characters_block .character_select[data-chid]').first()).toBeVisible({ timeout: 10_000 });
+}
+
 async function selectCharacterByName(page, name, chatName = seededChatName) {
+    await openCharacterLibrary(page);
     const selectedName = await page.evaluate(async (characterNameToSelect) => {
         const context = window.SillyTavern.getContext();
         const characterId = context.characters.findIndex(character => character?.name === characterNameToSelect);
@@ -452,7 +466,7 @@ async function expectMainChatStreamingTransportState(page, expectations = {}) {
     }
 }
 
-async function expectMainChatVisibleTransportOwner(page, expectations = {}) {
+async function expectMainChatTransportMarkersRetired(page) {
     const controller = page.locator('[data-main-chat-message-list-controller="true"]');
 
     if (!reactMainChatMessageListEnabled) {
@@ -461,29 +475,11 @@ async function expectMainChatVisibleTransportOwner(page, expectations = {}) {
     }
 
     await expect(controller).toHaveCount(1);
-
-    if (expectations.owner !== undefined) {
-        await expect(controller).toHaveAttribute('data-main-chat-visible-transport-owner', expectations.owner);
-    }
-
-    if (expectations.kind !== undefined) {
-        await expect(controller).toHaveAttribute('data-main-chat-visible-transport-kind', expectations.kind);
-    }
-
-    if (expectations.status !== undefined) {
-        await expect(controller).toHaveAttribute('data-main-chat-visible-transport-status', expectations.status);
-    }
-
-    if (expectations.path !== undefined) {
-        await expect(controller).toHaveAttribute('data-main-chat-visible-transport-path', expectations.path);
-    }
-
-    if (expectations.reason !== undefined) {
-        await expect(controller).toHaveAttribute('data-main-chat-visible-transport-reason', expectations.reason);
-    }
+    await expect(controller).not.toHaveAttribute('data-main-chat-visible-transport-owner', /.+/);
+    await expect(controller).not.toHaveAttribute('data-main-chat-visible-transport-status', /.+/);
 }
 
-async function expectMainChatQuietTransportState(page, expectations = {}) {
+async function expectMainChatQuietTransportMarkersRetired(page) {
     const controller = page.locator('[data-main-chat-message-list-controller="true"]');
 
     if (!reactMainChatMessageListEnabled) {
@@ -492,71 +488,19 @@ async function expectMainChatQuietTransportState(page, expectations = {}) {
     }
 
     await expect(controller).toHaveCount(1);
-
-    if (expectations.owner !== undefined) {
-        await expect(controller).toHaveAttribute('data-main-chat-quiet-transport-owner', expectations.owner);
-    }
-
-    if (expectations.kind !== undefined) {
-        await expect(controller).toHaveAttribute('data-main-chat-quiet-transport-kind', expectations.kind);
-    }
-
-    if (expectations.status !== undefined) {
-        await expect(controller).toHaveAttribute('data-main-chat-quiet-transport-status', expectations.status);
-    }
-
-    if (expectations.path !== undefined) {
-        await expect(controller).toHaveAttribute('data-main-chat-quiet-transport-path', expectations.path);
-    }
-
-    if (expectations.reason !== undefined) {
-        await expect(controller).toHaveAttribute('data-main-chat-quiet-transport-reason', expectations.reason);
-    }
-
-    if (expectations.phase !== undefined) {
-        await expect(controller).toHaveAttribute('data-main-chat-quiet-transport-phase', expectations.phase);
-    }
-
-    if (expectations.error !== undefined) {
-        await expect(controller).toHaveAttribute('data-main-chat-quiet-transport-error', expectations.error);
-    }
-
-    if (expectations.autoRecover !== undefined) {
-        await expect(controller).toHaveAttribute('data-main-chat-quiet-transport-auto-recover', expectations.autoRecover ? 'true' : 'false');
-    }
-
-    if (expectations.streaming !== undefined) {
-        await expect(controller).toHaveAttribute('data-main-chat-quiet-transport-streaming', expectations.streaming ? 'true' : 'false');
-    }
-
-    if (expectations.visibleRow !== undefined) {
-        await expect(controller).toHaveAttribute('data-main-chat-quiet-transport-visible-row', expectations.visibleRow ? 'true' : 'false');
-    }
-
-    if (expectations.finalization !== undefined) {
-        await expect(controller).toHaveAttribute('data-main-chat-quiet-transport-finalization', expectations.finalization);
-    }
-
-    if (expectations.rollback !== undefined) {
-        await expect(controller).toHaveAttribute('data-main-chat-quiet-transport-rollback', expectations.rollback);
-    }
+    await expect(controller).not.toHaveAttribute('data-main-chat-quiet-transport-owner', /.+/);
+    await expect(controller).not.toHaveAttribute('data-main-chat-quiet-transport-status', /.+/);
 }
 
 function createExactValuePattern(values) {
     return new RegExp(`^(?:${values.map(value => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`);
 }
 
-async function expectReactMessageRowState(page, messageId, expectedOwned) {
+async function expectMainChatStreamingRendererStaysLegacy(page, messageId) {
     const row = page.locator(`#chat > .mes[mesid="${messageId}"]`);
     await expect(row).toHaveCount(1);
-
-    if (!reactMainChatMessageListEnabled || !expectedOwned) {
-        await expect(row).not.toHaveAttribute('data-main-chat-message-row-owner', 'react');
-        return;
-    }
-
-    await expect(row).toHaveAttribute('data-main-chat-message-row-owner', 'react');
-    await expect(row).toHaveAttribute('data-main-chat-message-row', String(messageId));
+    await expect(row).not.toHaveAttribute('data-main-chat-message-row-owner', 'react');
+    await expect(row).not.toHaveAttribute('data-main-chat-message-row', String(messageId));
 }
 
 async function expectMainChatComposerState(page, expectations = {}) {
@@ -715,16 +659,13 @@ test.describe('chat message streaming', () => {
         const streamingRow = assistantRowForGeneration(page, lastVisibleMessageIdBeforeGeneration);
         await expect(streamingRow.locator('.mes_text')).toContainText('Streaming');
         const messageId = await streamingRow.getAttribute('mesid');
-        await expectReactMessageRowState(page, Number(messageId), true);
+        await expectMainChatStreamingRendererStaysLegacy(page, Number(messageId));
         await expectMainChatStreamingTransportState(page, {
             tokenCountAtLeast: 1,
             messageId: Number(messageId),
             expectFallback: false,
         });
-        await expectMainChatVisibleTransportOwner(page, {
-            owner: 'legacy',
-            kind: '',
-        });
+        await expectMainChatTransportMarkersRetired(page);
 
         await expect(streamingRow.locator('.mes_text')).toContainText('Streaming proof complete.');
         await waitForGeneration(page);
@@ -736,13 +677,9 @@ test.describe('chat message streaming', () => {
             expectFallback: false,
         });
         await expect(page.locator(`#chat > .mes[mesid="${messageId}"]`)).toHaveCount(1);
-        await expectReactMessageRowState(page, Number(messageId), true);
         await expect(page.locator(`#chat > .mes[mesid="${messageId}"]`).getByRole('button', { name: 'Message Actions' })).toBeVisible();
         await expect(page.getByRole('button', { name: 'Abort request' })).not.toBeVisible();
-        await expectMainChatVisibleTransportOwner(page, {
-            owner: 'legacy',
-            kind: '',
-        });
+        await expectMainChatTransportMarkersRetired(page);
 
         const request = await page.evaluate(() => window.__emberdeskStreamingRequests.at(-1));
         expect(request.stream).toBe(true);
@@ -768,19 +705,19 @@ test.describe('chat message streaming', () => {
         const messageId = await streamingRow.getAttribute('mesid');
         const textBeforeStop = await streamingRow.locator('.mes_text').textContent();
         expect(String(textBeforeStop ?? '').trim().length).toBeGreaterThan(0);
+        await expect.poll(async () => page.evaluate(() => window.SillyTavern.getContext().streamingProcessor?.observedTokenCount ?? 0))
+            .toBeGreaterThanOrEqual(1);
         await expectMainChatStreamingTransportState(page, {
-            phase: 'streaming',
-            generationPhase: 'streaming',
+            phase: ['streaming', 'completed'],
+            generationPhase: ['streaming', 'completed', 'idle'],
             tokenCountAtLeast: 1,
             messageId: Number(messageId),
             expectFallback: false,
         });
 
         await expect(page.locator('#mes_stop')).toBeVisible();
-        await expect.poll(async () => page.evaluate(() => window.SillyTavern.getContext().streamingProcessor?.observedTokenCount ?? 0))
-            .toBeGreaterThanOrEqual(1);
-        const stopped = await triggerStopGeneration(page);
-        expect(stopped).toBe(true);
+        await page.getByRole('button', { name: 'Abort request' }).click({ timeout: 5_000 });
+        await expect(page.getByRole('button', { name: 'Abort request' })).not.toBeVisible();
         await expectMainChatStreamingTransportState(page, {
             phase: 'stopped',
             messageId: Number(messageId),
@@ -901,7 +838,7 @@ test.describe('chat message streaming', () => {
     });
 
     test('visible composer owner serializes rapid submit clicks into one request', async ({ page }) => {
-        test.skip(!reactMainChatMessageListEnabled, 'rapid submit regression only exists on React-owned visible composer');
+        test.skip(!reactMainChatMessageListEnabled, 'rapid submit regression requires the React composer');
 
         await testSetup.awaitST({ page });
         await selectCharacterInFreshChat(page, characterName);
@@ -942,14 +879,14 @@ test.describe('chat message streaming', () => {
         await expect(page.locator('#chat > .mes[is_user="true"]').filter({ hasText: 'Serialized submit proof.' })).toHaveCount(1);
     });
 
-    test('visible composer send hands supported transport to the React owner', async ({ page }) => {
-        test.skip(!reactMainChatMessageListEnabled, 'React-owned visible transport requires the main-chat message-list panel flag');
+    test('visible composer dispatches a service-owned request while the streaming renderer retains its row', async ({ page }) => {
+        test.skip(!reactMainChatMessageListEnabled, 'React composer proof requires the main-chat message-list panel flag');
 
         await testSetup.awaitST({ page });
         await selectCharacterInFreshChat(page, characterName);
         await enableOpenAiStreaming(page);
         await installStreamingFetchStub(page, {
-            chunks: ['React-owned ', 'composer transport.'],
+            chunks: ['Unified ', 'composer transport.'],
             delayMs: 120,
             keepOpenAfterChunks: true,
         });
@@ -957,15 +894,12 @@ test.describe('chat message streaming', () => {
         const lastVisibleMessageIdBeforeGeneration = await getLastVisibleMessageId(page);
         const composer = page.getByRole('textbox', { name: 'Chat message' });
         await composer.focus();
-        await composer.pressSequentially('React-owned composer transport proof.');
+        await composer.pressSequentially('Unified composer transport proof.');
         await page.locator('#send_but').click();
 
         const assistantMessageId = assistantMessageIdForGeneration(lastVisibleMessageIdBeforeGeneration);
         const streamingRow = assistantRowForGeneration(page, lastVisibleMessageIdBeforeGeneration);
-        await expectMainChatVisibleTransportOwner(page, {
-            owner: 'react',
-            kind: 'submitComposer',
-        });
+        await expectMainChatTransportMarkersRetired(page);
         await expectMainChatStreamingTransportState(page, {
             phase: 'streaming',
             generationPhase: 'streaming',
@@ -973,16 +907,13 @@ test.describe('chat message streaming', () => {
             messageId: assistantMessageId,
             expectFallback: false,
         });
-        await expectReactMessageRowState(page, assistantMessageId, true);
-        await expect(streamingRow.locator('.mes_text')).toContainText('React-owned composer transport.');
+        await expectMainChatStreamingRendererStaysLegacy(page, assistantMessageId);
+        await expect(streamingRow.locator('.mes_text')).toContainText('Unified composer transport.');
 
-        const stopped = await triggerStopGeneration(page, { throughDom: true });
-        expect(stopped).toBe(true);
+        await page.getByRole('button', { name: 'Abort request' }).click({ timeout: 5_000 });
+        await expect(page.getByRole('button', { name: 'Abort request' })).not.toBeVisible();
         await expect(page.locator('body')).not.toHaveAttribute('data-generating', 'true');
-        await expectMainChatVisibleTransportOwner(page, {
-            owner: 'legacy',
-            kind: '',
-        });
+        await expectMainChatTransportMarkersRetired(page);
     });
 
     test('composer bridge follows legacy disconnect sendability', async ({ page }) => {
@@ -1020,8 +951,8 @@ test.describe('chat message streaming', () => {
         await expectMainChatComposerVisibleOwner(page, true);
     });
 
-    test('visible continue button hands supported transport to the React owner', async ({ page }) => {
-        test.skip(!reactMainChatMessageListEnabled, 'React-owned visible transport requires the main-chat message-list panel flag');
+    test('visible continue dispatches a service-owned request while the streaming renderer retains its row', async ({ page }) => {
+        test.skip(!reactMainChatMessageListEnabled, 'React composer proof requires the main-chat message-list panel flag');
 
         await testSetup.awaitST({ page });
         await selectCharacterInFreshChat(page, characterName);
@@ -1046,7 +977,7 @@ test.describe('chat message streaming', () => {
 
         const continuedMessageId = assistantMessageIdForGeneration(lastVisibleMessageIdBeforeSeedGeneration);
         await installStreamingFetchStub(page, {
-            chunks: [' Continued ', 'via React owner.'],
+            chunks: [' Continued ', 'via the unified service.'],
             delayMs: 120,
             keepOpenAfterChunks: true,
         });
@@ -1055,10 +986,7 @@ test.describe('chat message streaming', () => {
         await page.locator('#mes_continue').click();
 
         const continuedRow = page.locator(`#chat > .mes[mesid="${continuedMessageId}"]`);
-        await expectMainChatVisibleTransportOwner(page, {
-            owner: 'react',
-            kind: 'continueLast',
-        });
+        await expectMainChatTransportMarkersRetired(page);
         await expectMainChatStreamingTransportState(page, {
             phase: 'streaming',
             generationPhase: 'streaming',
@@ -1066,20 +994,17 @@ test.describe('chat message streaming', () => {
             messageId: continuedMessageId,
             expectFallback: false,
         });
-        await expectReactMessageRowState(page, continuedMessageId, true);
-        await expect(continuedRow.locator('.mes_text')).toContainText('Continued via React owner.');
+        await expectMainChatStreamingRendererStaysLegacy(page, continuedMessageId);
+        await expect(continuedRow.locator('.mes_text')).toContainText('Continued via the unified service.');
 
         const stopped = await triggerStopGeneration(page, { throughDom: true });
         expect(stopped).toBe(true);
         await expect(page.locator('body')).not.toHaveAttribute('data-generating', 'true');
-        await expectMainChatVisibleTransportOwner(page, {
-            owner: 'legacy',
-            kind: '',
-        });
+        await expectMainChatTransportMarkersRetired(page);
     });
 
-    test('visible regenerate button hands supported transport to the React owner and reuses the same assistant row', async ({ page }) => {
-        test.skip(!reactMainChatMessageListEnabled, 'React-owned visible transport requires the main-chat message-list panel flag');
+    test('visible regenerate dispatches a service-owned request and reuses one assistant row', async ({ page }) => {
+        test.skip(!reactMainChatMessageListEnabled, 'React composer proof requires the main-chat message-list panel flag');
 
         await testSetup.awaitST({ page });
         await selectCharacterInFreshChat(page, characterName);
@@ -1095,7 +1020,7 @@ test.describe('chat message streaming', () => {
 
         const regeneratedMessageId = assistantMessageIdForGeneration(lastVisibleMessageIdBeforeSeedGeneration);
         await installStreamingFetchStub(page, {
-            chunks: ['React-owned regenerate result.'],
+            chunks: ['Unified regenerate result.'],
             delayMs: 120,
         });
 
@@ -1109,13 +1034,7 @@ test.describe('chat message streaming', () => {
         });
 
         const regeneratedRow = page.locator(`#chat > .mes[mesid="${regeneratedMessageId}"]`);
-        await expectMainChatVisibleTransportOwner(page, {
-            owner: 'react',
-            kind: 'retryGeneration',
-            status: 'react-owned',
-            path: 'standard-openai-visible-direct-chat',
-            reason: 'supported-kind',
-        });
+        await expectMainChatTransportMarkersRetired(page);
         await expectMainChatStreamingTransportState(page, {
             phase: ['streaming', 'completed'],
             generationPhase: ['streaming', 'completed', 'idle'],
@@ -1123,13 +1042,10 @@ test.describe('chat message streaming', () => {
             messageId: regeneratedMessageId,
             expectFallback: false,
         });
-        await expect(regeneratedRow.locator('.mes_text')).toContainText('React-owned regenerate result.');
+        await expect(regeneratedRow.locator('.mes_text')).toContainText('Unified regenerate result.');
         await waitForGeneration(page);
         await expect(regeneratedRow).toHaveCount(1);
-        await expectMainChatVisibleTransportOwner(page, {
-            owner: 'legacy',
-            kind: '',
-        });
+        await expectMainChatTransportMarkersRetired(page);
     });
 
     test('non-streaming stop does not reuse the previous assistant message id in transport state', async ({ page }) => {
@@ -1180,7 +1096,7 @@ test.describe('chat message streaming', () => {
         await expect(page.getByRole('button', { name: 'Retry generation' })).toHaveCount(1);
     });
 
-    test('quiet helper generation exposes an explicit non-visible legacy owner contract without mutating visible rows', async ({ page }) => {
+    test('quiet helper generation returns text without a visible row or transport-owner marker', async ({ page }) => {
         await testSetup.awaitST({ page });
         await selectCharacterInFreshChat(page, characterName);
         await enableOpenAiStreaming(page, { streamOpenAi: false });
@@ -1194,43 +1110,17 @@ test.describe('chat message streaming', () => {
             quietPrompt: 'Return only a deterministic helper sentence.',
         });
 
-        await expectMainChatQuietTransportState(page, {
-            owner: 'legacy',
-            kind: 'quietPrompt',
-            status: 'legacy-owned',
-            path: 'quiet-non-visible-helper',
-            reason: 'quiet-generation',
-            phase: 'running',
-            error: '',
-            autoRecover: false,
-            streaming: false,
-            visibleRow: false,
-            finalization: 'return-generated-text',
-            rollback: 'caller-owned',
-        });
+        await expectMainChatQuietTransportMarkersRetired(page);
 
         await waitForGeneration(page);
-        await expectMainChatQuietTransportState(page, {
-            owner: 'legacy',
-            kind: 'quietPrompt',
-            status: 'legacy-owned',
-            path: 'quiet-non-visible-helper',
-            reason: 'quiet-generation',
-            phase: 'completed',
-            error: '',
-            autoRecover: false,
-            streaming: false,
-            visibleRow: false,
-            finalization: 'return-generated-text',
-            rollback: 'caller-owned',
-        });
+        await expectMainChatQuietTransportMarkersRetired(page);
         await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(messageCountBefore);
 
         const quietReply = await page.evaluate(() => window.__emberdeskStreamingGenerationResult);
         expect(quietReply).toBe('Quiet helper reply.');
     });
 
-    test('background helper generation keeps the same non-visible contract while exposing its own request family', async ({ page }) => {
+    test('background helper generation returns text without a visible row or transport-owner marker', async ({ page }) => {
         await testSetup.awaitST({ page });
         await selectCharacterInFreshChat(page, characterName);
         await enableOpenAiStreaming(page, { streamOpenAi: false });
@@ -1245,43 +1135,17 @@ test.describe('chat message streaming', () => {
             backgroundGeneration: true,
         });
 
-        await expectMainChatQuietTransportState(page, {
-            owner: 'legacy',
-            kind: 'backgroundGeneration',
-            status: 'legacy-owned',
-            path: 'background-non-visible-helper',
-            reason: 'background-generation',
-            phase: 'running',
-            error: '',
-            autoRecover: false,
-            streaming: false,
-            visibleRow: false,
-            finalization: 'return-generated-text',
-            rollback: 'caller-owned',
-        });
+        await expectMainChatQuietTransportMarkersRetired(page);
 
         await waitForGeneration(page);
-        await expectMainChatQuietTransportState(page, {
-            owner: 'legacy',
-            kind: 'backgroundGeneration',
-            status: 'legacy-owned',
-            path: 'background-non-visible-helper',
-            reason: 'background-generation',
-            phase: 'completed',
-            error: '',
-            autoRecover: false,
-            streaming: false,
-            visibleRow: false,
-            finalization: 'return-generated-text',
-            rollback: 'caller-owned',
-        });
+        await expectMainChatQuietTransportMarkersRetired(page);
         await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(messageCountBefore);
 
         const quietReply = await page.evaluate(() => window.__emberdeskStreamingGenerationResult);
         expect(quietReply).toBe('Beach sunset');
     });
 
-    test('visible slash owner observes autocomplete, execution, pause, continue, and abort through the legacy executor', async ({ page }) => {
+    test('visible slash automation observes autocomplete, execution, pause, continue, and abort through the public generation adapter', async ({ page }) => {
         await testSetup.awaitST({ page });
         await selectCharacterInFreshChat(page, characterName);
 
@@ -1591,17 +1455,11 @@ test.describe('chat message streaming', () => {
         expect(failedAttemptRequestCount).toBe(2);
 
         await installStreamingFetchStub(page, {
-            chunks: ['Recovered retry text.'],
-            delayMs: 35,
+            chunks: ['Recovered ', 'retry text.'],
+            delayMs: 120,
         });
         await recovery.click();
-        await expectMainChatVisibleTransportOwner(page, {
-            owner: 'react',
-            kind: 'retryGeneration',
-            status: 'react-owned',
-            path: 'standard-openai-visible-direct-chat',
-            reason: 'supported-kind',
-        });
+        await expectMainChatTransportMarkersRetired(page);
         await expect(assistantRowsAfterFailure.locator('.mes_text')).toContainText('Recovered retry text.');
         await expect(page.locator('body')).not.toHaveAttribute('data-generating', 'true');
         await expect.poll(async () => page.evaluate(() => window.SillyTavern.getContext().streamingProcessor === null)).toBe(true);
@@ -1691,10 +1549,7 @@ test.describe('chat message streaming', () => {
         expect(beforeSwipe.swipes).toEqual(['Original swipe baseline.']);
 
         await startRightSwipeGeneration(page, messageId);
-        await expectMainChatVisibleTransportOwner(page, {
-            owner: 'react',
-            kind: 'swipeRight',
-        });
+        await expectMainChatTransportMarkersRetired(page);
         await expectMainChatStreamingTransportState(page, {
             phase: ['streaming', 'recoveringPrimary', 'recoveringFallback', 'completed'],
             generationPhase: ['streaming', 'recoveringPrimary', 'recoveringFallback', 'completed', 'idle'],

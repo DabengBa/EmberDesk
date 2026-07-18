@@ -28,7 +28,7 @@ export function getDefaultWorkspaceReactFeatures() {
             mainChatMessageList: false,
             worldInfo: true,
             backgroundLibrary: true,
-            extensionsHost: false,
+            extensionsHost: true,
             characterAuthoring: true,
             groupAuthoring: true,
         },

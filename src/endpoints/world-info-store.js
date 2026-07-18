@@ -258,7 +258,7 @@ export function markCanonicalWorldInfoBookDeleted(db, {
     `).run(
         Number(deletedAtMs),
         Number(deletedAtMs),
-            normalizeCanonicalWorldInfoName(name),
+        normalizeCanonicalWorldInfoName(name),
     );
 }
 

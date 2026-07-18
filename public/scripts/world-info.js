@@ -1701,6 +1701,7 @@ export function applyWorldInfoSearchQuery(searchQuery) {
     const normalizedQuery = String(searchQuery ?? '');
     const session = getWorldInfoWorkbenchSession();
     session.applySearchQuery(normalizedQuery);
+    session.applySortOption(normalizedQuery ? '14' : String(accountStorage.getItem(SORT_ORDER_KEY) || '0'));
     // Keep legacy filter/DOM in sync for non-React consumers while dual-path exists.
     $('#world_info_search').val(normalizedQuery);
     worldInfoFilter.setFilterData(FILTER_TYPES.WORLD_INFO_SEARCH, normalizedQuery);
@@ -1717,6 +1718,24 @@ export function applyWorldInfoSortOption(sortValue) {
     updateEditor(navigation_option.none);
 }
 
+/**
+ * Updates globally activated World Info books without replaying the legacy selector.
+ * @param {string[]} names
+ * @returns {string[]}
+ */
+export function setWorldInfoGlobalActiveNames(names) {
+    const validNames = new Set(Array.isArray(world_names) ? world_names : []);
+    selected_world_info = Array.from(new Set(
+        (Array.isArray(names) ? names : [])
+            .map(name => String(name ?? ''))
+            .filter(name => validNames.has(name)),
+    ));
+    worldInfoWorkbenchSession?.setSelectedWorldInfo(selected_world_info);
+    saveSettingsDebounced();
+    void eventSource.emit(event_types.WORLDINFO_SETTINGS_UPDATED);
+    return [...selected_world_info];
+}
+
 export async function createWorldInfoEntryFromEditor() {
     const worldName = getSelectedWorldInfoEditorName();
     if (!worldName) {
@@ -1729,11 +1748,16 @@ export async function createWorldInfoEntryFromEditor() {
     }
 
     const entry = createWorldInfoEntry(worldName, data);
-    if (entry) {
-        updateEditor(entry.uid);
+    if (!entry) {
+        return null;
     }
 
-    return entry ?? null;
+    await saveWorldInfo(worldName, data, true);
+    const session = getWorldInfoWorkbenchSession();
+    await session.selectWorldName(worldName);
+    await session.selectEntry(entry.uid);
+    worldInfoWorkbenchSelectedEntryUid = session.getSelectedEntryUid();
+    return entry;
 }
 
 export async function promptToCreateWorldInfo() {
@@ -1995,8 +2019,11 @@ function getWorldInfoWorkbenchSession() {
         worldInfoWorkbenchSession = createWorldInfoWorkbenchSession({
             worldNames: Array.isArray(world_names) ? world_names : [],
             selectedWorldInfo: Array.isArray(selected_world_info) ? selected_world_info : [],
+            initialSortValue: String(accountStorage.getItem(SORT_ORDER_KEY) || '0'),
             loadWorldInfo,
             saveWorldInfo,
+            applyFilters: (entries) => worldInfoFilter.applyFilters(entries),
+            getSearchScore: (uid) => worldInfoFilter.getScore(FILTER_TYPES.WORLD_INFO_SEARCH, uid),
             setOriginalDataValue: setWIOriginalDataValue,
         });
     }
@@ -6796,6 +6823,9 @@ export async function importWorldInfoFiles(files) {
         const summary = summarizeWorldInfoBatchImport(results);
         completed = true;
         setWorldImportBusy(false);
+        if (results.some(result => result.status === 'success')) {
+            void eventSource.emit(event_types.WORLDINFO_SETTINGS_UPDATED);
+        }
         showWorldInfoBatchImportSummary(summary);
         return results;
     } finally {

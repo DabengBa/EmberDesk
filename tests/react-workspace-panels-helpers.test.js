@@ -514,11 +514,11 @@ describe('React workspace panels bridge helpers', () => {
         expect(styleSource).toContain('width: 100%;');
     });
 
-    test('bridges an explicit quiet/background legacy owner contract through the main-chat controller shell', () => {
+    test('routes quiet/background requests through the generation service without owner markers', () => {
         const scriptSource = read('public/script.js');
         const workspacePanelSource = read('app/workspace-panels.tsx');
 
-        expect(scriptSource).toContain('createMainChatQuietTransportDecision');
+        expect(scriptSource).toContain('createGenerationCommand({');
         expect(scriptSource).toContain('createQuietGenerationLifecycleContract');
         expect(scriptSource).toContain('function getMainChatQuietTransportStore()');
         expect(scriptSource).toContain('function getMainChatQuietTransportBridgeState()');
@@ -530,10 +530,7 @@ describe('React workspace panels bridge helpers', () => {
 
         expect(workspacePanelSource).toContain('interface MainChatQuietTransportState');
         expect(workspacePanelSource).toContain('const mainChatQuietTransportSchema = z.object({');
-        expect(workspacePanelSource).toContain('data-main-chat-quiet-transport-owner={quietTransportBridgeState.quietTransportOwner}');
-        expect(workspacePanelSource).toContain('data-main-chat-quiet-transport-phase={quietTransportBridgeState.quietTransportPhase}');
-        expect(workspacePanelSource).toContain('data-main-chat-quiet-transport-finalization={quietTransportBridgeState.quietTransportFinalization}');
-        expect(workspacePanelSource).toContain('data-main-chat-quiet-transport-rollback={quietTransportBridgeState.quietTransportRollback}');
+        expect(workspacePanelSource).not.toContain('data-main-chat-quiet-transport-');
     });
 
     test('loads the shared workspace panels bundle once and resets the cache after failure', async () => {
@@ -1252,7 +1249,7 @@ test('renders an Extensions Host workflow through React-owned controls and expli
         expect(workspacePanelSource).toContain('const mainChatSlashCommandSchema = z.object(');
         expect(workspacePanelSource).toContain('const mainChatSlashUiSchema = z.object(');
         expect(workspacePanelSource).toContain('const visibleTransportMutation = useMutation({');
-        expect(workspacePanelSource).toContain('const visibleTransportBridgeState = deriveReactVisibleTransportBridgeState({');
+        expect(workspacePanelSource).toContain('return await bridge?.dispatchAction?.(\'triggerVisibleGeneration\', payload);');
         expect(workspacePanelSource).toContain('const mainChatComposerFallback: MainChatComposerState = {');
         expect(workspacePanelSource).toContain('const mainChatSlashCommandFallback: MainChatSlashCommandState = {');
         expect(workspacePanelSource).toContain('const mainChatSlashUiFallback: MainChatSlashUiState = {');
@@ -1295,11 +1292,7 @@ test('renders an Extensions Host workflow through React-owned controls and expli
         expect(workspacePanelSource).toContain('data-main-chat-streaming-transport-tokens={effectiveStreamingTransport.observedTokenCount ?? 0}');
         expect(workspacePanelSource).toContain('data-main-chat-streaming-transport-message-id={effectiveStreamingTransport.activeMessageId ?? \'\'}');
         expect(workspacePanelSource).toContain('data-main-chat-streaming-transport-fallback={effectiveStreamingTransport.fromFallbackAttempt ? \'true\' : \'false\'}');
-        expect(workspacePanelSource).toContain('data-main-chat-visible-transport-owner={visibleTransportBridgeState.visibleTransportOwner}');
-        expect(workspacePanelSource).toContain('data-main-chat-visible-transport-kind={visibleTransportBridgeState.visibleTransportKind}');
-        expect(workspacePanelSource).toContain('data-main-chat-visible-transport-status={visibleTransportBridgeState.visibleTransportStatus}');
-        expect(workspacePanelSource).toContain('data-main-chat-visible-transport-path={visibleTransportBridgeState.visibleTransportPath}');
-        expect(workspacePanelSource).toContain('data-main-chat-visible-transport-reason={visibleTransportBridgeState.visibleTransportReason}');
+        expect(workspacePanelSource).not.toContain('data-main-chat-visible-transport-');
         expect(workspacePanelSource).toContain('data-main-chat-windowing-owner={bridgeState.windowingContract?.windowingOwner ?? \'legacy\'}');
         expect(workspacePanelSource).toContain('data-main-chat-windowing-load-more-owner={bridgeState.windowingContract?.loadMoreOwner ?? \'legacy\'}');
         expect(workspacePanelSource).toContain('data-main-chat-windowing-restore-owner={bridgeState.windowingContract?.restoreOwner ?? \'legacy\'}');
@@ -1310,12 +1303,8 @@ test('renders an Extensions Host workflow through React-owned controls and expli
         expect(workspacePanelSource).toContain('data-main-chat-row-lifecycle-streaming-owner={bridgeState.rowLifecycleContract?.streamingOwner ?? \'legacy\'}');
         expect(workspacePanelSource).toContain('data-main-chat-row-lifecycle-unsafe-owner={bridgeState.rowLifecycleContract?.unsafeOwner ?? \'legacy\'}');
         expect(workspacePanelSource).toContain('data-main-chat-row-lifecycle-extension-owner={bridgeState.rowLifecycleContract?.extensionMutatedOwner ?? \'legacy\'}');
-        expect(workspacePanelSource).toContain('const prepared = await bridge?.dispatchAction?.(\'prepareVisibleGeneration\', payload)');
-        expect(workspacePanelSource).toContain('const [visibleTransportDecision, setVisibleTransportDecision] = useState<MainChatVisibleTransportDecisionState | null>(null);');
-        expect(workspacePanelSource).toContain('setVisibleTransportDecision(extractMainChatVisibleTransportDecision(prepared, String(payload.kind ?? \'\')));');
-        expect(workspacePanelSource).toContain('const visibleTransportGlobalExecutionInFlightRef = useRef(false);');
-        expect(workspacePanelSource).toContain('if (visibleTransportGlobalExecutionInFlightRef.current) {');
-        expect(workspacePanelSource).toContain('visibleTransportGlobalExecutionInFlightRef.current = true;');
+        expect(workspacePanelSource).not.toContain('prepareVisibleGeneration');
+        expect(workspacePanelSource).not.toContain('__emberDeskExecuteMainChatVisibleTransportRequest');
         expect(workspacePanelSource).toContain('onVisibleGeneration={async (payload) => {');
         expect(workspacePanelSource).toContain('await visibleTransportMutation.mutateAsync({');
         expect(workspacePanelSource).toContain('<MainChatSlashUiPortal state={bridgeState} bridge={bridge} />');

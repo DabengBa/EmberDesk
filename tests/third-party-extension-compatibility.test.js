@@ -197,23 +197,26 @@ describe('third-party extension compatibility boundary', () => {
     test('keeps generated character list rows compatible with legacy selector contracts', () => {
         const family = 'selectors';
         try {
-            const scriptSource = readPublicFile('script.js');
-            const rowSource = extractFunctionSource(scriptSource, 'buildCharacterRowHtml');
-            const bulkEditSource = readPublicFile('scripts', 'bulk-edit.js');
-            const enableBulkSelectSource = extractFunctionSource(bulkEditSource, 'enableBulkSelect');
-            const disableBulkSelectSource = extractFunctionSource(bulkEditSource, 'disableBulkSelect');
+            const characterLibraryRoot = path.resolve(publicRoot, '..', 'app', 'components', 'character-library');
+            const characterRowSource = fs.readFileSync(path.join(characterLibraryRoot, 'CharacterLibraryCharacterRow.tsx'), 'utf8');
+            const groupRowSource = fs.readFileSync(path.join(characterLibraryRoot, 'CharacterLibraryGroupRow.tsx'), 'utf8');
+            const folderRowSource = fs.readFileSync(path.join(characterLibraryRoot, 'CharacterLibraryFolderRow.tsx'), 'utf8');
+            const backBlockSource = fs.readFileSync(path.join(characterLibraryRoot, 'CharacterLibraryStatusBlocks.tsx'), 'utf8');
+            const rowHelperSource = fs.readFileSync(path.resolve(characterLibraryRoot, '..', '..', 'lib', 'character-library-row-helpers.ts'), 'utf8');
 
-            expect(rowSource).toMatch(/return `<div class="character_select entity_block flex-container wide100p alignitemsflexstart\$\{isFav \? ' is_fav' : ''\}\$\{isActive \? ' is_active' : ''\}" data-chid="\$\{id\}" chid="\$\{id\}" id="CharID\$\{id\}">/);
-            expect(rowSource).toMatch(/const isFav = item\.fav \|\| item\.fav == 'true';/);
-            expect(rowSource).toMatch(/<input class="ch_fav" value="\$\{isFav\}" hidden \/>/);
-            expect(rowSource).toMatch(/<div class="tags tags_inline">\$\{tagsHtml\}<\/div>/);
-            expect(rowSource).toMatch(/tagsHtml \+= `<span class="tag tag_placeholder"><span class="tag_name">\+\$\{tagsSkipped\}<\/span><\/span>`;/);
-            expect(scriptSource).toContain('$(document).on(\'click\', \'.character_select\'');
-            expect(enableBulkSelectSource).toMatch(/\$\(\'#rm_print_characters_block \.character_select\'\)\.each/);
-            expect(enableBulkSelectSource).toMatch(/const checkbox = \$\('<input type=\\'checkbox\\' class=\\'bulk_select_checkbox\\' aria-label=\\'Select character for bulk edit\\'>'\);/);
-            expect(enableBulkSelectSource).toContain('$(el).attr(\'aria-selected\', \'false\')');
-            expect(disableBulkSelectSource).toContain('$(\'.bulk_select_checkbox\').remove()');
-            expect(disableBulkSelectSource).toContain('$(\'#rm_print_characters_block .character_select\').removeAttr(\'aria-selected\')');
+            expect(rowHelperSource).toContain('character_select entity_block flex-container wide100p alignitemsflexstart');
+            expect(characterRowSource).toContain('data-chid={String(model.id)}');
+            expect(characterRowSource).toContain('{...{ chid: String(model.id) }}');
+            expect(characterRowSource).toContain('id={buildCharacterRowDomId(model.id)}');
+            expect(characterRowSource).toContain('className="ch_fav"');
+            expect(characterRowSource).toContain('className="tags tags_inline"');
+            expect(characterRowSource).toContain('className="bulk_select_checkbox"');
+            expect(characterRowSource).toContain('event.stopPropagation();');
+            expect(groupRowSource).toContain('group_select entity_block');
+            expect(folderRowSource).toContain('bogus_folder_select entity_block');
+            expect(folderRowSource).toContain('{...{ tagid: String(id) }}');
+            expect(backBlockSource).toContain("{...{ tagid: 'back' }}");
+            expect(backBlockSource).toContain('event.stopPropagation();');
         } catch (error) {
             throw new Error(formatContractFailure(family, error.message.replace(/^\[compat:[^\]]+\]\s*/, '')));
         }

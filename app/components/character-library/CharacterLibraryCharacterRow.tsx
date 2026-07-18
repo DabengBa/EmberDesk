@@ -1,4 +1,3 @@
-import { useEffect, useRef } from 'react';
 import {
     buildCharacterRowClassName,
     buildCharacterRowDomId,
@@ -21,44 +20,38 @@ export function CharacterLibraryCharacterRow({
     onSelect,
     onBulkToggle,
 }: CharacterLibraryCharacterRowProps) {
-    const rootRef = useRef<HTMLDivElement | null>(null);
     const { visible, skipped } = selectVisibleCharacterTags(model.tags ?? [], {
         tagsDisplayLimit: model.tagsDisplayLimit ?? 50,
+        shouldPrintTag: tag => Boolean(tag.forceVisible),
     });
     const className = [
         buildCharacterRowClassName({ isFav: model.isFav, isActive: model.isActive }),
         selected ? 'character_selected' : '',
     ].filter(Boolean).join(' ');
 
-    useEffect(() => {
-        const node = rootRef.current;
-        if (!node) {
-            return;
-        }
-        // Preserve the legacy attribute name used by extension-adjacent selectors.
-        node.setAttribute('chid', String(model.id));
-    }, [model.id]);
-
     return (
         <div
-            ref={rootRef}
             className={className}
             data-chid={String(model.id)}
+            {...{ chid: String(model.id) }}
             id={buildCharacterRowDomId(model.id)}
-            role="button"
+            role={bulkMode ? 'checkbox' : 'button'}
             tabIndex={0}
             aria-selected={bulkMode ? selected : undefined}
+            aria-checked={bulkMode ? selected : undefined}
             onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
                 if (bulkMode) {
-                    event.preventDefault();
-                    event.stopPropagation();
                     onBulkToggle?.(model.id, !selected);
+                    return;
                 }
-                // Non-bulk clicks bubble to the established document .character_select handler.
+                onSelect?.(model.id);
             }}
             onKeyDown={(event) => {
                 if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault();
+                    event.stopPropagation();
                     if (bulkMode) {
                         onBulkToggle?.(model.id, !selected);
                     } else {
@@ -73,6 +66,7 @@ export function CharacterLibraryCharacterRow({
                     className="bulk_select_checkbox"
                     aria-label="Select character for bulk edit"
                     checked={selected}
+                    aria-checked={selected}
                     onChange={(event) => {
                         event.stopPropagation();
                         onBulkToggle?.(model.id, event.target.checked);
@@ -107,7 +101,7 @@ export function CharacterLibraryCharacterRow({
                 </div>
                 <div className="tags tags_inline">
                     {visible.map(tag => (
-                        <span className="tag" id={`character-card-tag-${tag.id}`} key={tag.id}>
+                        <span className="tag" id={tag.id} key={tag.id}>
                             <span className="tag_name">{tag.name}</span>
                         </span>
                     ))}

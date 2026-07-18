@@ -135,14 +135,20 @@ describe('character list structure', () => {
 
     test('keeps generated character row selectors and active-state hooks stable', () => {
         const scriptSource = read('public/script.js');
-        const rowSource = extractFunctionSource(scriptSource, 'buildCharacterRowHtml');
+        const rowSource = read('app/components/character-library/CharacterLibraryCharacterRow.tsx');
+        const groupRowSource = read('app/components/character-library/CharacterLibraryGroupRow.tsx');
+        const folderRowSource = read('app/components/character-library/CharacterLibraryFolderRow.tsx');
 
-        expect(rowSource).toMatch(/return `<div class="character_select entity_block flex-container wide100p alignitemsflexstart\$\{isFav \? ' is_fav' : ''\}\$\{isActive \? ' is_active' : ''\}" data-chid="\$\{id\}" chid="\$\{id\}" id="CharID\$\{id\}">/);
-        expect(rowSource).toMatch(/<small class="entity_type_badge character_type_badge" data-i18n="Character">Character<\/small>/);
-        expect(rowSource).toMatch(/const isFav = item\.fav \|\| item\.fav == 'true';/);
-        expect(rowSource).toMatch(/const isActive = !selected_group && this_chid !== undefined && String\(this_chid\) === String\(id\);/);
-        expect(rowSource).toMatch(/<input class="ch_fav" value="\$\{isFav\}" hidden \/>/);
-        expect(rowSource).toMatch(/<div class="tags tags_inline">\$\{tagsHtml\}<\/div>/);
+        expect(rowSource).toContain('data-chid={String(model.id)}');
+        expect(rowSource).toContain('{...{ chid: String(model.id) }}');
+        expect(rowSource).toContain('id={buildCharacterRowDomId(model.id)}');
+        expect(rowSource).toContain('className="ch_fav"');
+        expect(rowSource).toContain('className="tags tags_inline"');
+        expect(rowSource).toContain('event.stopPropagation();');
+        expect(groupRowSource).toContain('className="entity_type_badge group_type_badge"');
+        expect(groupRowSource).toContain('data-grid={String(id)}');
+        expect(folderRowSource).toContain('className={className}');
+        expect(folderRowSource).toContain('{...{ tagid: String(id) }}');
         expect(scriptSource).toContain('$(\'#rm_print_characters_block .character_select\').removeClass(\'is_active\')');
         expect(scriptSource).toContain('$(`#CharID${chid}`).addClass(\'is_active\')');
 
@@ -153,8 +159,9 @@ describe('character list structure', () => {
     test('keeps character-library perf-only search measurement hook wired', () => {
         const scriptSource = read('public/script.js');
         const hookSource = extractFunctionSource(scriptSource, 'measureCharacterSearchForPerf');
+        const resetSource = extractFunctionSource(scriptSource, 'resetCharacterLibraryPanelForPerf');
 
-        expect(scriptSource).toMatch(/globalThis\.__emberDeskPerf = \{[\s\S]*measureCharacterSearchForPerf,[\s\S]*printCharacters,/);
+        expect(scriptSource).toMatch(/globalThis\.__emberDeskPerf = \{[\s\S]*measureCharacterSearchForPerf,[\s\S]*openCharacterLibraryForPerf: openWorkspaceShellCharacterLibrary,[\s\S]*resetCharacterLibraryPanelForPerf,[\s\S]*printCharacters,/);
         expect(hookSource).toContain('const timer = setTimeout(() => {');
         expect(hookSource).toContain('resolve(null);');
         expect(hookSource).toContain('pageLoaded: pageLoadedAt !== null');
@@ -162,6 +169,9 @@ describe('character list structure', () => {
         expect(hookSource).toContain('await printCharacters(false);');
         expect(hookSource).toContain('filterInputToBusyClearMs');
         expect(hookSource).toContain('filterInputToPageLoadedMs');
+        expect(resetSource).toContain('panelModule.unmountCharacterLibraryPanel();');
+        expect(resetSource).toContain('reactCharacterLibraryPanelMounted = false;');
+        expect(resetSource).toContain('reactCharacterLibraryToolbarMounted = false;');
     });
 
     test('keeps autocomplete resize handling safe before widgets finish initializing', () => {
@@ -188,20 +198,45 @@ describe('character list structure', () => {
         expect(runnerSource).not.toContain('firstItem.addEventListener(\'click\'');
     });
 
+    test('resets the first-interactive benchmark through the opened React-owned drawer', () => {
+        const runnerSource = read('scripts/interaction-performance-runner.mjs');
+        const invokeSource = extractFunctionSource(runnerSource, 'invokeCharacterLibraryScenario');
+
+        expect(invokeSource).toContain('await perfHooks.openCharacterLibraryForPerf();');
+        expect(invokeSource).toContain('normalizeCharacterLibraryDrawerGeometry(rightPanel);');
+        expect(invokeSource).toContain("document.body.querySelector(':scope > #top-settings-holder')");
+        expect(invokeSource).toContain('canonicalSettingsHolder.append(holder);');
+        expect(invokeSource).toContain("document.body.querySelector(':scope > #top-settings-holder > #rightNavHolder > #right-nav-panel')");
+        expect(invokeSource).toContain('const characterLibraryDrawer = await showCharacterLibrary();');
+        expect(invokeSource).toContain("listElement = characterLibraryDrawer.querySelector('#rm_print_characters_block');");
+        expect(invokeSource.indexOf('normalizeCharacterLibraryDrawerGeometry(rightPanel);'))
+            .toBeLessThan(invokeSource.indexOf('await perfHooks.openCharacterLibraryForPerf();'));
+        expect(invokeSource).toContain("rightPanel.classList.contains('openDrawer')");
+        expect(invokeSource).toContain('await perfHooks.resetCharacterLibraryPanelForPerf();');
+        expect(invokeSource).toContain('const restorePromise = printCharactersBounded(true);');
+        expect(invokeSource).toContain('const describeCharacterLibraryRenderState = () => {');
+        expect(invokeSource).toContain('drawerHeight: Math.round(drawerRect.height)');
+        expect(invokeSource).toContain('listHeight: Math.round(listRect.height)');
+        expect(invokeSource).toContain('reactPanelMounted: Boolean(listElement.querySelector(\'.character-library-react-panel\'))');
+        expect(invokeSource).toContain('listElement.querySelector(rowSelector), 10000');
+        expect(invokeSource).toContain('Character Library first-interactive render state:');
+        expect(invokeSource).not.toContain('const emptyFilterQuery');
+        expect(invokeSource).not.toContain('listElement.replaceChildren();');
+    });
+
     test('keeps empty, hidden, and tag-overflow list states wired to the character list', () => {
         const scriptSource = read('public/script.js');
         const printCharactersSource = extractFunctionSource(scriptSource, 'printCharacters');
         const renderCharacterListPageSource = extractFunctionSource(scriptSource, 'renderCharacterListPage');
-        const rowSource = extractFunctionSource(scriptSource, 'buildCharacterRowHtml');
+        const rowHelperSource = read('app/lib/character-library-row-helpers.ts');
+        const statusBlockSource = read('app/components/character-library/CharacterLibraryStatusBlocks.tsx');
         const renderStateSource = read('public/scripts/character-list-render-state.js');
-        const emptyBlockTemplate = read('public/scripts/templates/emptyBlock.html');
 
         expect(printCharactersSource).toContain('let pendingInitialFullRefresh = fullRefresh;');
         expect(printCharactersSource).toContain('const useFullRefresh = pendingInitialFullRefresh;');
         expect(printCharactersSource).toContain('pendingInitialFullRefresh = false;');
         expect(printCharactersSource).toContain('await renderCharacterListPage(data, { fullRefresh: useFullRefresh });');
         expect(renderCharacterListPageSource).toContain('createCharacterListPageRenderPlan({');
-        expect(scriptSource).toContain('createCharacterListPageReconcilePlan');
         expect(scriptSource).toContain('let currentCharacterListPageEntities = [];');
         expect(renderCharacterListPageSource).toContain('renderCharacterListPageReact');
         expect(scriptSource).toContain('Character list container #rm_print_characters_block is missing.');
@@ -209,17 +244,13 @@ describe('character list structure', () => {
         expect(scriptSource).toContain('Legacy list fallback is retired');
         expect(renderStateSource).toMatch(/const displayCount = pageEntities\.filter\(entity => entity\.type === 'character' \|\| entity\.type === 'group'\)\.length;/);
         expect(renderStateSource).toMatch(/const hiddenCount = \(totalCharacters \+ totalGroups\) - displayCount;/);
-        expect(scriptSource).toMatch(/const hasActiveCharacterListFilter = entitiesFilter\.hasAnyFilter\(\);/);
-        expect(scriptSource).toMatch(/const searchQuery = entitiesFilter\.getFilterData\(FILTER_TYPES\.SEARCH\);/);
-        expect(scriptSource).toMatch(/\.find\('\.clear_character_filters'\)\.on\('click'/);
         expect(scriptSource).toContain('$(\'#character_search_bar\').val(\'\').trigger(\'input\')');
         expect(scriptSource).toContain('$(\'.rm_tag_filter .clearAllFilters\').trigger(\'click\')');
-        expect(emptyBlockTemplate).toContain('class="empty_block_message"');
-        expect(emptyBlockTemplate).toContain('class="menu_button clear_character_filters"');
-        expect(emptyBlockTemplate).toContain('data-i18n="Clear search and filters"');
-        expect(rowSource).toMatch(/const DEFAULT_TAGS_LIMIT = 50;/);
-        expect(rowSource).toMatch(/let tagsSkipped = 0;/);
-        expect(rowSource).toMatch(/tagsHtml \+= `<span class="tag tag_placeholder"><span class="tag_name">\+\$\{tagsSkipped\}<\/span><\/span>`;/);
+        expect(statusBlockSource).toContain('className="empty_block_message"');
+        expect(statusBlockSource).toContain('className="menu_button clear_character_filters"');
+        expect(rowHelperSource).toContain('tagsDisplayLimit = 50');
+        expect(rowHelperSource).toContain('let skipped = 0;');
+        expect(rowHelperSource).toContain('return { visible, skipped };');
     });
 
     test('keeps character list controls readable on narrow screens', () => {
@@ -295,7 +326,7 @@ describe('character list structure', () => {
 
         expect(scriptSource).toContain('createCharacterDeleteReconcilePlan');
         expect(scriptSource).toContain('createCharacterBulkDeletePagePlan');
-        expect(scriptSource).toContain('syncCharacterListRowIdentity');
+        expect(scriptSource).not.toContain('syncCharacterListRowIdentity');
         expect(scriptSource).toContain('let isCharacterDeleteReconcileInProgress = false;');
         expect(scriptSource).toContain('let characterDeleteReconcileGeneration = 0;');
         expect(scriptSource).not.toContain('suppressCharacterDeleteListReprintUntil');
@@ -320,7 +351,8 @@ describe('character list structure', () => {
         expect(reconcileSource).toContain('const hasActiveFilter = entitiesFilter.hasAnyFilter();');
         expect(reconcileSource).toContain('const isBulkEdit = $(\'#rm_print_characters_block\').hasClass(\'bulk_select\');');
         expect(reconcileSource).toContain('isBulkEdit: isBulkEdit && !isBulkDeleteContext');
-        expect(reconcileSource).toContain('applyCharacterListPageRenderPlan({');
+        expect(reconcileSource).toContain('renderCharacterListPageReact(createCharacterLibraryPanelStateSnapshot({');
+        expect(reconcileSource).not.toContain('applyCharacterListPageRenderPlan');
         expect(reconcileSource).toContain('currentCharacterListPageEntities = plan.pageEntities;');
         expect(reconcileSource).toContain('updateCharacterListPaginationState(plan, afterSnapshot, { skipInitialCallback: true });');
         expect(reconcileSource).toContain('await eventSource.emit(event_types.CHARACTER_PAGE_LOADED);');
@@ -409,12 +441,13 @@ describe('character list structure', () => {
     test('keeps search feedback, grid labels, and bulk selection semantics wired', () => {
         const indexHtml = read('public/index.html');
         const scriptSource = read('public/script.js');
-        const bulkEditSource = read('public/scripts/bulk-edit.js');
         const overlaySource = read('public/scripts/BulkEditOverlay.js');
+        const overlayStyles = read('public/css/character-group-overlay.css');
         const stateSource = read('public/scripts/character-list-state.js');
         const styleSource = read('public/style.css');
         const zhCnLocale = read('public/locales/zh-cn.json');
         const powerUserSource = read('public/scripts/power-user.js');
+        const rowSource = read('app/components/character-library/CharacterLibraryCharacterRow.tsx');
 
         expect(indexHtml).toContain('id="character_search_status"');
         expect(indexHtml).toContain('data-i18n="Filtering characters…"');
@@ -432,15 +465,19 @@ describe('character list structure', () => {
         expect(scriptSource).toContain('setCharacterSearchBusy(false)');
         expect(scriptSource).toContain('updateCharListGridToggleLabel()');
         expect(scriptSource).toContain('power_user.charListGrid ? \'Character Toolbar List\' : \'Character Toolbar Grid\'');
-        expect(scriptSource).toContain('const desiredElementSet = new Set(desiredElements);');
-        expect(scriptSource).not.toContain('desiredElements.includes(child)');
+        expect(scriptSource).toContain('renderCharacterListPageReact');
+        expect(scriptSource).not.toContain('const desiredElementSet = new Set(desiredElements);');
         expect(powerUserSource).toContain('const instance = $(this).autocomplete(\'instance\');');
         expect(powerUserSource).toContain('if (!instance) {');
         expect(powerUserSource).not.toContain('$(this).autocomplete(\'widget\')[0].style.display');
-        expect(bulkEditSource).toMatch(/const checkbox = \$\('<input type=\\'checkbox\\' class=\\'bulk_select_checkbox\\' aria-label=\\'Select character for bulk edit\\'>'\);/);
-        expect(bulkEditSource).toContain('aria-describedby\': \'bulkSelectionHint\'');
-        expect(bulkEditSource).toContain('$(el).attr(\'role\', \'checkbox\')');
-        expect(bulkEditSource).toContain('$(el).attr(\'aria-checked\', \'false\')');
+        expect(rowSource).toContain('className="bulk_select_checkbox"');
+        expect(rowSource).toContain("role={bulkMode ? 'checkbox' : 'button'}");
+        expect(rowSource).toContain('aria-checked={bulkMode ? selected : undefined}');
+        expect(rowSource).toContain('aria-checked={selected}');
+        expect(scriptSource).toContain('const pageCharacterIds = currentCharacterListPageEntities');
+        expect(scriptSource).toContain(".filter(entity => entity?.type === 'character')");
+        expect(scriptSource).toContain('void syncReactCharacterLibraryToolbarState();');
+        expect(scriptSource).not.toContain("document.querySelectorAll('#rm_print_characters_block .character_select')");
         expect(overlaySource).toContain('character.setAttribute(\'aria-selected\', \'true\')');
         expect(overlaySource).toContain('character.setAttribute(\'aria-selected\', \'false\')');
         expect(overlaySource).toContain('character.setAttribute(\'aria-checked\', \'true\')');
@@ -452,6 +489,8 @@ describe('character list structure', () => {
         expect(overlaySource).toContain('t`Delete ${count} characters?`');
         expect(overlaySource).toContain('deleteContext: { source: \'bulk\', selectedCount: count }');
         expect(overlaySource).not.toContain('${t`Delete`} ${count} ${t`characters?`}');
+        expect(overlayStyles).toContain('#rm_print_characters_block.group_overlay_mode_select .character_select.character_selected .ch_name');
+        expect(overlayStyles).toContain('color: var(--SmartThemeBodyColor)');
         expect(stateSource).toContain('if (!selectedCount)');
         expect(stateSource).toContain('selectedCount.textContent = getBulkSelectionShortCountText(count);');
         expect(stateSource).toContain('selectedCount.setAttribute(\'aria-label\',');

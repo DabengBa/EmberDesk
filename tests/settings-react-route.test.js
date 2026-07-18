@@ -109,7 +109,7 @@ describe('settings React route flag', () => {
         expect(routeSource).not.toContain('settingsForm.reset(nextDefaults);');
         expect(routeSource).toContain('<settingsForm.Subscribe');
         expect(routeSource).toContain('selector={state => state.isPristine}');
-        expect(routeSource).toContain('disabled={isBusy || settingsQuery.isPending || isPristine}');
+        expect(routeSource).toContain('disabled={isBusy || settingsQuery.isPending || isPristine || hasRevisionConflict}');
         expect(routeSource).toContain("className={activeTab === 'general' ? 'block' : 'hidden'}");
         expect(routeSource).toContain("className={activeTab === 'providers' ? 'block' : 'hidden'}");
         expect(routeSource).toContain("className={activeTab === 'userInterface' ? 'block' : 'hidden'}");
@@ -689,6 +689,28 @@ describe('settings React route flag', () => {
         expect(routeSource).toContain("reasoningEffort: z.enum(['auto', 'low', 'medium', 'high', 'min', 'max', 'none', 'minimal', 'xhigh']),");
     });
 
+    test('saves only changed fields from a minimal settings document and keeps missing Vertex AI false', async () => {
+        const helperModule = await import(`../app/lib/settings-helpers.js?settingsSparse=${Date.now()}-${Math.random()}`);
+        const fixture = {
+            untouched: { keep: true },
+        };
+        const baseline = helperModule.buildSettingsFormDefaults(fixture);
+        expect(baseline.providers.useVertexAi).toBe(false);
+
+        const edited = structuredClone(baseline);
+        edited.userInterface.theme = 'Sparse Theme';
+        const saved = helperModule.buildSettingsSavePayload(fixture, edited, {
+            baselineFormValues: baseline,
+        });
+
+        expect(saved).toEqual({
+            untouched: { keep: true },
+            power_user: {
+                theme: 'Sparse Theme',
+            },
+        });
+    });
+
 
 
     test('advanced formatting sequences and context inject fields round-trip through React bindings', async () => {
@@ -789,6 +811,48 @@ describe('settings React route flag', () => {
         expect(JSON.stringify(saved)).not.toContain('BEGIN PRIVATE KEY');
         expect(JSON.stringify(saved)).not.toContain('vertexai_service_account_json');
         expect(helperModule.settingsCoverage.reactOwned.providers).toContain('extension_settings.connectionManager.selectedProfile');
+    });
+
+    test('offers named connection profiles plus a safe stale selection and defers profile application to the workspace', async () => {
+        const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'routes', 'settings.tsx'), 'utf8');
+        const connectionManagerSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'extensions', 'connection-manager', 'index.js'), 'utf8');
+        const helperModule = await import(`../app/lib/settings-helpers.js?settingsProfiles=${Date.now()}-${Math.random()}`);
+        const options = helperModule.getConnectionProfileOptions({
+            extension_settings: {
+                connectionManager: {
+                    selectedProfile: 'removed-profile',
+                    profiles: [
+                        { id: 'home', name: 'Home' },
+                    ],
+                },
+            },
+        });
+
+        expect(options).toEqual([
+            { value: '', label: 'No connection profile' },
+            { value: 'home', label: 'Home' },
+            { value: 'removed-profile', label: 'Unavailable profile (removed-profile)' },
+        ]);
+        expect(routeSource).toContain('getConnectionProfileOptions');
+        expect(routeSource).toContain("variant=\"select\"");
+        expect(routeSource).toContain("emberdesk-settings-apply-connection-profile");
+        expect(connectionManagerSource).toContain('selectConnectionProfile');
+        expect(connectionManagerSource).toContain('SETTINGS_PROFILE_APPLY_MARKER');
+        expect(connectionManagerSource).toContain('await applyConnectionProfile(profile)');
+    });
+
+    test('keeps a conflict draft until an explicit reload and routes legacy settings toggles to React Settings', () => {
+        const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'routes', 'settings.tsx'), 'utf8');
+        const scriptSource = fs.readFileSync(path.join(repoRoot, 'public', 'script.js'), 'utf8');
+
+        expect(routeSource).toContain('setHasRevisionConflict(true)');
+        expect(routeSource).toContain('重新加载当前设置');
+        expect(routeSource).toContain('disabled={isBusy || settingsQuery.isPending || isPristine || hasRevisionConflict}');
+        expect(scriptSource).toContain('LEGACY_SETTINGS_DRAWER_ROUTE_TARGETS');
+        expect(scriptSource).toContain("'#ai-config-button > .drawer-toggle': '/settings?tab=providers'");
+        expect(scriptSource).toContain("'#advanced-formatting-button > .drawer-toggle': '/settings?tab=advanced'");
+        expect(scriptSource).toContain("'#user-settings-button > .drawer-toggle': '/settings'");
+        expect(scriptSource).toContain('event.stopImmediatePropagation();');
     });
 
     test('redirects unauthenticated /settings requests to /login', async () => {

@@ -1,5 +1,0 @@
-contract_version = 1
-feature_slug = "canonical-chat-query-recovery"
-brief = ".docs/tech/briefs/260714-04-canonical-chat-query-recovery.md"
-doc_ids = ["page.chat_workspace", "feature.chat_message_rendering"]
-

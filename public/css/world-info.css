@@ -1495,6 +1495,18 @@ select.keyselect + span.select2-container .select2-selection--multiple {
     padding: 24px 12px;
     text-align: center;
     opacity: 0.7;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.wi-workbench-empty-action {
+    width: auto;
+    min-width: max-content;
+    flex: 0 0 auto;
+    margin: 0;
+    white-space: nowrap;
 }
 
 @media (max-width: 768px) {

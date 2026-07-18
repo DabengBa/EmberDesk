@@ -41,4 +41,20 @@ describe('background panel status (legacy controller retired)', () => {
     test('legacy controller module is deleted', () => {
         expect(fs.existsSync(path.join(repoRoot, 'public/scripts/background-panel-controller.js'))).toBe(false);
     });
+
+    test('React-owned background drawers force hidden compatibility controls out of layout', () => {
+        const styles = read('public/css/backgrounds.css');
+
+        expect(styles).toContain('#Backgrounds.bg-drawer-react-owned [data-legacy-background-hidden-by-react="true"]');
+        expect(styles).toContain('display: none !important;');
+    });
+
+    test('React gallery rows keep a visible background preview', () => {
+        const styles = read('public/style.css');
+
+        expect(styles).toContain('.workspace-panel-background-preview');
+        expect(styles).toContain('aspect-ratio: 16 / 9;');
+        expect(styles).toContain('.workspace-panel-background-actions .menu_button');
+        expect(styles).toContain('min-width: max-content;');
+    });
 });

@@ -274,7 +274,6 @@ describe('background domain and library services', () => {
         // Pure path/url helpers should not re-own encoding once extracted.
         expect(source).not.toMatch(/function getBackgroundPath\(fileUrl\) \{[\s\S]*?return `backgrounds\/\$\{encodeURIComponent/);
     });
-});
 
     test('backgrounds slash callbacks share the exported service-backed lock/unlock/auto helpers', () => {
         const source = read('public/scripts/backgrounds.js');
@@ -290,3 +289,19 @@ describe('background domain and library services', () => {
         const unlockCommandSlice = source.slice(source.indexOf("name: 'unlockbg'"), source.indexOf("name: 'autobg'"));
         expect(unlockCommandSlice).not.toContain('onUnlockBackgroundClick();');
     });
+
+    test('React facade selection and auto actions do not route through hidden gallery nodes', () => {
+        const source = read('public/scripts/backgrounds.js');
+        const selectStart = source.indexOf('export async function selectBackgroundLibraryItem');
+        const selectEnd = source.indexOf('export function lockCurrentBackground', selectStart);
+        const selectSlice = source.slice(selectStart, selectEnd);
+        const autoStart = source.indexOf('export async function runAutoBackgroundSelection');
+        const autoEnd = source.indexOf('export async function refreshBackgroundLibrary', autoStart);
+        const autoSlice = source.slice(autoStart, autoEnd);
+
+        expect(selectSlice).toContain('await ensureBackgroundLibrarySession().selectBackground(');
+        expect(selectSlice).not.toContain('document.querySelectorAll');
+        expect(selectSlice).not.toContain('applyBackgroundSelection(');
+        expect(autoSlice).not.toContain('selectBackgroundLibraryItem(');
+    });
+});

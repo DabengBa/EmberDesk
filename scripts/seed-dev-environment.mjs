@@ -395,7 +395,6 @@ async function seedGroups(characterRecords) {
 
 async function writeDevConfig() {
     const reactPanelFlags = [
-        ['characterLibrary', process.env.EMBERDESK_FEATURES_REACT_PANELS_CHARACTERLIBRARY],
         ['mainChatMessageList', process.env.EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST],
         ['worldInfo', process.env.EMBERDESK_FEATURES_REACT_PANELS_WORLDINFO],
         ['backgroundLibrary', process.env.EMBERDESK_FEATURES_REACT_PANELS_BACKGROUNDLIBRARY],

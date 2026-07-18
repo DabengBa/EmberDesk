@@ -16,6 +16,23 @@ test.describe('built-in vector retirement', () => {
         await page.locator('#extensionsMenuButton').click();
         await expect(page.locator('#manageAttachments')).toBeVisible();
         await expect(page.locator('body')).not.toContainText('Vector Storage');
+        await page.locator('#manageAttachments').click();
+        await expect(page.locator('[data-i18n="These files remain available to extensions that support attachments."]')).toBeVisible();
+        await page.locator('.globalAttachmentsTitle .openActionModalButton').click();
+        await page.getByText('Notepad', { exact: true }).click();
+        await page.locator('#notepadFileName').fill('vector-retirement-e2e-note.txt');
+        await page.locator('#notepadFileContent').fill('Data Bank remains available after vector retirement.');
+        await page.getByRole('button', { name: /Save|保存/ }).click();
+        await expect(page.getByText('vector-retirement-e2e-note.txt', { exact: true })).toBeVisible();
+        const attachmentRow = page.locator('.attachmentListItem:visible')
+            .filter({ hasText: 'vector-retirement-e2e-note.txt' });
+        await attachmentRow.locator('[title="Disable attachment"]').click();
+        await expect(attachmentRow.locator('[title="Enable attachment"]')).toBeVisible();
+        await attachmentRow.locator('[title="Enable attachment"]').click();
+        await attachmentRow.locator('[title="Delete attachment"]').click();
+        await expect(page.getByText(/Are you sure you want to delete this attachment\?|确定要删除此附件吗？/)).toBeVisible();
+        await page.getByRole('button', { name: /Yes|是|确定/ }).click();
+        await expect(page.getByText('vector-retirement-e2e-note.txt', { exact: true })).toHaveCount(0);
 
         const response = await page.evaluate(async () => {
             const csrf = await fetch('/csrf-token').then(response => response.json());

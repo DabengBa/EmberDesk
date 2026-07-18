@@ -89,7 +89,33 @@ function getUnexpectedConsoleErrors(errors) {
     });
 }
 
+async function openCharacterLibrary(page) {
+    const panelButton = page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'Character Library' });
+    await panelButton.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => {});
+    if (await panelButton.isVisible()) {
+        await panelButton.click({ timeout: 10_000 });
+        await expect(panelButton).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
+    } else {
+        await page.locator('.mes .drawer-opener[data-target="rightNavHolder"]').filter({ hasText: /Character Management|角色管理/ }).first().click();
+    }
+    await expect(page.locator('#right-nav-panel.openDrawer #rm_characters_block')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('#rm_print_characters_block .character_select[data-chid]').first()).toBeVisible({ timeout: 10_000 });
+}
+
+async function closeCharacterAuthoringAfterSelection(page) {
+    const authoringPanel = page.locator('[data-react-authoring-owner="characterAuthoring"]');
+    if (!await authoringPanel.isVisible()) {
+        return;
+    }
+
+    const activePanelButton = page.locator('.react-workspace-shell-nav-button[aria-pressed="true"]').first();
+    await expect(activePanelButton).toBeVisible();
+    await activePanelButton.click();
+    await expect(authoringPanel).toBeHidden();
+}
+
 async function selectCharacterByName(page, name) {
+    await openCharacterLibrary(page);
     const selectedName = await page.evaluate(async (characterNameToSelect) => {
         const context = window.SillyTavern.getContext();
         const characterId = context.characters.findIndex(character => character?.name === characterNameToSelect);
@@ -108,6 +134,7 @@ async function selectCharacterByName(page, name) {
         const character = context.characters[context.characterId];
         return character?.name === characterNameToSelect;
     }, name);
+    await closeCharacterAuthoringAfterSelection(page);
 }
 
 async function openChatAndMeasureFirstMessage(page, chatName, expectedFirstMessageText) {

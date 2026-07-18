@@ -208,8 +208,8 @@ export async function readCharacterListPayload({
     const data = await readCharactersFromFiles(directories, shallow, dependencies);
     return maybeAttachFallbackReason({
         ...wrapSnapshot(data, {
-        interactionPath: 'characters_all:filesystem',
-        latencyHint: 'slow',
+            interactionPath: 'characters_all:filesystem',
+            latencyHint: 'slow',
         }),
     }, canonicalState.fallbackReason);
 }
@@ -294,9 +294,8 @@ export async function readCharacterFullPayload({
     }
 
     const filePath = path.join(directories.characters, avatarUrl);
-    let fileStat;
     try {
-        fileStat = dependencies.statCharacterFile(filePath);
+        dependencies.statCharacterFile(filePath);
     } catch (error) {
         if (error?.code === 'ENOENT') {
             return {

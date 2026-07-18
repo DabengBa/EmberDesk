@@ -2,12 +2,19 @@
 created: 2026-07-13
 source: user
 confirmed: true
-last_updated: 2026-07-14
+last_updated: 2026-07-15
 feature_slug: canonical-vector-catalog-and-index
 status: superseded
 ---
 
 # Canonical Vector Catalog And Index Intent
+
+## 2026-07-15 结论
+
+用户已确认 EmberDesk 不再需要第一方 vector 功能。本 brief 的 canonical catalog 方案和
+2026-07-14 的 derived hardening 后继均被
+`260715-01-built-in-vector-retirement.md` 取代；当前只保留“旧索引是 derived state、不得在
+升级时当作 canonical user data 自动迁移或删除”的历史约束。
 
 ## 2026-07-14 结论
 
@@ -16,10 +23,9 @@ status: superseded
 把 chunk text 或 collection catalog 提升为 canonical user data 会制造第二份文本权威，
 并扩大 migration、backup 和删除一致性范围。
 
-后继可执行包是
-`.docs/specs/260714-06-derived-vector-index-hardening/`：只要求 derived build 引用稳定的
+当时的后继方向是 derived vector index hardening：只要求 derived build 引用稳定的
 canonical source IDs，具备 build identity、原子发布、last-complete fallback、
-invalidation 和 corruption recovery；Vectra、chunks 和 build manifests 仍可整体删除重建。
+invalidation 和 corruption recovery；该方向现已被 2026-07-15 的退役决定取代。
 
 旧 process directory 已在 2026-07-14 经用户确认后删除；当前结论仅由本 brief、后继
 derived-index brief、路线图和 owning docs 维护。

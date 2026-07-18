@@ -55,6 +55,14 @@ test.describe('world info workbench', () => {
         expect(diagnostics.workbenchRoot).toBe(true);
         await expect(page.locator('[data-world-info-react-workflow="workbench"]')).toBeVisible();
         await expect(page.locator('[data-world-info-react-layout="split"]')).toBeVisible();
+
+        const globalWorldSelect = page.locator('[data-world-info-react-control="global-world-select"]');
+        await expect(globalWorldSelect).toBeVisible();
+        const firstGlobalWorld = globalWorldSelect.locator('option').first();
+        await expect(firstGlobalWorld).toHaveCount(1);
+        const globalWorldName = await firstGlobalWorld.getAttribute('value');
+        await globalWorldSelect.selectOption([globalWorldName]);
+        await expect(globalWorldSelect).toHaveValues([globalWorldName]);
     });
 
     test('mobile list/editor states expose a single active pane', async ({ page }) => {
@@ -115,5 +123,24 @@ test.describe('world info workbench', () => {
         await expect(page.locator('[data-world-info-react-action="rename"]')).toHaveCount(0);
         await expect(page.locator('[data-world-info-react-action="duplicate"]')).toHaveCount(0);
         await expect(page.locator('[data-world-info-react-action="delete"]')).toHaveCount(0);
+    });
+
+    test('empty search results identify the active query and offer direct recovery', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await openWorldInfo(page);
+
+        const root = page.locator('[data-world-info-react-workflow="workbench"]');
+        test.skip(await root.count() === 0, 'React World Info panel not mounted in this environment');
+
+        await page.locator('[data-world-info-react-control="world-select"]').selectOption({ index: 1 });
+        await expect(page.locator('[data-world-info-react-entry]').first()).toBeVisible({ timeout: 10_000 });
+
+        const search = page.getByLabel('搜索条目');
+        await search.fill('does-not-match-any-entry');
+        await expect(page.locator('[data-world-info-react-empty="entries"]')).toContainText('没有匹配“does-not-match-any-entry”的条目');
+
+        await page.getByRole('button', { name: '清除搜索', exact: true }).click();
+        await expect(search).toHaveValue('');
+        await expect(page.locator('[data-world-info-react-entry]').first()).toBeVisible({ timeout: 10_000 });
     });
 });

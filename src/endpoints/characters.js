@@ -20,7 +20,7 @@ import { deepMerge, humanizedDateTime, tryParse, MemoryLimitedMap, getConfigValu
 import { TavernCardValidator } from '../validator/TavernCardValidator.js';
 import { parse, read, write } from '../character-card-parser.js';
 import { findCharactersBoundToWorldFromFiles, readWorldInfoFile, scanCharacterWorldBindingsFromFiles } from './worldinfo.js';
-import { calculateDataSize, processUnsetSentinels, toShallow, unsetPrivateFields } from './character-card-helpers.js';
+import { processUnsetSentinels, toShallow, unsetPrivateFields } from './character-card-helpers.js';
 import {
     processCharacterFileSnapshot,
     statCharacterSnapshotFile,
@@ -81,7 +81,6 @@ function applyInteractionPerfHeaders(response, pathName, startedAt, directories 
     const durationMs = Math.max(0, performance.now() - startedAt);
     response.set('X-EmberDesk-Interaction-Path', pathName);
     response.set('Server-Timing', `route;dur=${durationMs.toFixed(1)}`);
-
 }
 
 class DiskCache {

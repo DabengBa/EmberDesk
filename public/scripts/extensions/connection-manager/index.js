@@ -23,6 +23,7 @@ import { formatReasoning } from '/scripts/reasoning.js';
 const MODULE_NAME = 'connection-manager';
 const NONE = '<None>';
 const EMPTY = '<Empty>';
+const SETTINGS_PROFILE_APPLY_MARKER = 'emberdesk-settings-apply-connection-profile';
 
 const DEFAULT_SETTINGS = {
     profiles: [],
@@ -722,37 +723,48 @@ export async function init() {
     }
     toggleProfileSpecificButtons();
 
-    profiles.addEventListener('change', async function () {
-        const selectedProfile = profiles.selectedOptions[0];
-        if (!selectedProfile) {
-            // Safety net for preventing the command getting stuck
-            await eventSource.emit(event_types.CONNECTION_PROFILE_LOADED, NONE);
-            return;
-        }
+    const detailsContent = document.getElementById('connection_profile_details_content');
 
-        const profileId = selectedProfile.value;
-        extension_settings.connectionManager.selectedProfile = profileId;
+    async function selectConnectionProfile(profileId) {
+        const normalizedProfileId = profileId == null ? '' : String(profileId);
+        extension_settings.connectionManager.selectedProfile = normalizedProfileId;
         saveSettingsDebounced();
         await renderDetailsContent(detailsContent);
-
         toggleProfileSpecificButtons();
 
-        // None option selected
-        if (!profileId) {
+        if (!normalizedProfileId) {
             await eventSource.emit(event_types.CONNECTION_PROFILE_LOADED, NONE);
             return;
         }
 
-        const profile = extension_settings.connectionManager.profiles.find(p => p.id === profileId);
+        const profile = extension_settings.connectionManager.profiles.find(p => p.id === normalizedProfileId);
 
         if (!profile) {
-            console.log(`Profile not found: ${profileId}`);
+            console.log(`Profile not found: ${normalizedProfileId}`);
+            await eventSource.emit(event_types.CONNECTION_PROFILE_LOADED, NONE);
             return;
         }
 
         await applyConnectionProfile(profile);
         await eventSource.emit(event_types.CONNECTION_PROFILE_LOADED, profile.name);
+    }
+
+    profiles.addEventListener('change', async function () {
+        await selectConnectionProfile(profiles.value);
     });
+
+    try {
+        const pendingProfile = sessionStorage.getItem(SETTINGS_PROFILE_APPLY_MARKER);
+        if (pendingProfile !== null) {
+            sessionStorage.removeItem(SETTINGS_PROFILE_APPLY_MARKER);
+            const profileId = JSON.parse(pendingProfile);
+            if (typeof profileId === 'string') {
+                await selectConnectionProfile(profileId);
+            }
+        }
+    } catch {
+        // Session storage may be unavailable or contain an old malformed marker.
+    }
 
     const reloadButton = document.getElementById('reload_connection_profile');
     reloadButton.addEventListener('click', async () => {
@@ -885,7 +897,6 @@ export async function init() {
 
     /** @type {HTMLElement} */
     const viewDetails = document.getElementById('view_connection_profile');
-    const detailsContent = document.getElementById('connection_profile_details_content');
     viewDetails.addEventListener('click', async () => {
         viewDetails.classList.toggle('active');
         detailsContent.classList.toggle('hidden');

@@ -1,4 +1,0 @@
-contract_version = 1
-feature_slug = "built-in-vector-retirement"
-brief = ".docs/tech/briefs/260715-01-built-in-vector-retirement.md"
-doc_ids = ["feature.extension_panel_open", "feature.world_info_panel", "page.chat_workspace"]

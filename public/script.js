@@ -185,17 +185,9 @@ import {
 } from './scripts/extension-compatibility-slots.js';
 import { COMMENT_NAME_DEFAULT, CONNECT_API_MAP, executeSlashCommandsOnChatInput, getMainChatSlashCommandAutoCompleteState, initDefaultSlashCommands, initSlashCommandAutoComplete, isExecutingCommandsFromChatInput, pauseScriptExecution, selectMainChatSlashCommandOption, setMainChatSlashCommandReactOwnerEnabled, stopScriptExecution, UNIQUE_APIS } from './scripts/slash-commands.js';
 import {
-    createMainChatQuietTransportDecision,
-    createMainChatVisibleTransportDecision,
-    createMainChatVisibleTransportFallbackDecision,
-} from './scripts/main-chat-visible-transport-owner.js';
-import {
     MAIN_CHAT_MESSAGE_ACTION_SNAPSHOT_SCHEMA,
     MAIN_CHAT_MESSAGE_ROW_SNAPSHOT_SCHEMA,
     MAIN_CHAT_RICH_BODY_SNAPSHOT_SCHEMA,
-    MAIN_CHAT_VISIBLE_TRANSPORT_PATHS,
-    MAIN_CHAT_VISIBLE_TRANSPORT_REASONS,
-    MAIN_CHAT_VISIBLE_TRANSPORT_STATUSES,
 } from './scripts/main-chat-bridge-contract.js';
 import { initMacroAutoComplete } from './scripts/autocomplete/MacroAutoComplete.js';
 import {
@@ -223,7 +215,6 @@ import {
 import { checkOpenRouterAuth, initSecrets, readSecretState, secret_state, SECRET_KEYS } from './scripts/secrets.js';
 import {
     createQuietGenerationLifecycleContract,
-    createGenerationLifecyclePlan,
     getGenerationAttemptBaseline as getLifecycleGenerationAttemptBaseline,
     getGenerationFailureDecision,
     getGenerationRecoveryBaselineSwipeId,
@@ -233,6 +224,12 @@ import {
     getGenerationSuccessFinalization,
     hasFallbackProviderForGeneration,
 } from './scripts/chat-generation-lifecycle.js';
+import {
+    createGenerationCommand,
+    createGenerationCommandPlan,
+    createGenerationRequestEnvelope,
+    executeGenerationAttempts,
+} from './scripts/chat-generation-command-service.js';
 import { markdownExclusionExt } from './scripts/showdown-exclusion.js';
 import { markdownUnderscoreExt } from './scripts/showdown-underscore.js';
 import { NOTE_MODULE_NAME, initAuthorsNote, metadata_keys, setFloatingPrompt, shouldWIAddPrompt } from './scripts/authors-note.js';
@@ -387,6 +384,8 @@ if (globalThis.location?.pathname === '/' && globalThis.location?.search.include
         deleteCharacter,
         getPastCharacterChats,
         measureCharacterSearchForPerf,
+        openCharacterLibraryForPerf: openWorkspaceShellCharacterLibrary,
+        resetCharacterLibraryPanelForPerf,
         printCharacters,
     };
 }
@@ -2466,44 +2465,19 @@ async function runMainChatVisibleGenerationAction({ kind, messageId } = {}) {
     }
 }
 
-function isPreparedReactOwnedMainChatVisibleTransportRequest(value) {
-    return Boolean(value && typeof value === 'object' && value.owner === 'react');
-}
-
-function getMainChatVisibleTransportExecutor() {
-    return typeof globalThis.__emberDeskExecuteMainChatVisibleTransportRequest === 'function'
-        ? globalThis.__emberDeskExecuteMainChatVisibleTransportRequest
-        : null;
-}
-
-async function executePreparedMainChatVisibleTransportRequest(prepared) {
-    const executor = getMainChatVisibleTransportExecutor();
-    if (!executor || !isPreparedReactOwnedMainChatVisibleTransportRequest(prepared)) {
-        return prepared;
-    }
-
-    return await executor(prepared);
-}
-
 async function executeMainChatVisibleGenerationAction({ kind, messageId } = {}) {
     switch (kind) {
-        case 'retryGeneration': {
-            const executor = getMainChatVisibleTransportExecutor();
-            const result = await Generate('regenerate', {
-                visibleTransportHandoff: Boolean(executor),
-                visibleTransportKind: 'retryGeneration',
-            });
-            return isPreparedReactOwnedMainChatVisibleTransportRequest(result)
-                ? await executePreparedMainChatVisibleTransportRequest(result)
-                : result;
-        }
+        case 'submitComposer':
+            return await sendTextareaMessage();
+        case 'continueLast':
+            return await Generate('continue');
+        case 'retryGeneration':
+            return await Generate('regenerate');
         case 'swipeLeft':
             if (Number.isInteger(messageId) && messageId >= 0) {
                 return await swipe(null, SWIPE_DIRECTION.LEFT, {
                     repeated: false,
                     forceMesId: messageId,
-                    visibleTransportHandoff: true,
-                    visibleTransportKind: 'swipeLeft',
                 });
             }
             return undefined;
@@ -2512,49 +2486,11 @@ async function executeMainChatVisibleGenerationAction({ kind, messageId } = {}) 
                 return await swipe(null, SWIPE_DIRECTION.RIGHT, {
                     repeated: false,
                     forceMesId: messageId,
-                    visibleTransportHandoff: true,
-                    visibleTransportKind: 'swipeRight',
                 });
             }
             return undefined;
         default:
             return await runMainChatVisibleGenerationAction({ kind, messageId });
-    }
-}
-
-async function prepareMainChatVisibleGenerationAction({ kind, messageId } = {}) {
-    const decision = createMainChatVisibleTransportDecision({
-        kind,
-        mainApi: main_api,
-        selectedGroup: Boolean(selected_group),
-        dryRun: false,
-        depth: 0,
-    });
-
-    if (decision.owner !== 'react') {
-        await runMainChatVisibleGenerationAction({ kind, messageId });
-        return decision;
-    }
-
-    switch (kind) {
-        case 'submitComposer': {
-            const prepared = await sendTextareaMessage({ visibleTransportHandoff: true });
-            return isPreparedReactOwnedMainChatVisibleTransportRequest(prepared)
-                ? { ...prepared, status: decision.status, path: decision.path, reason: decision.reason }
-                : createMainChatVisibleTransportFallbackDecision(decision);
-        }
-        case 'continueLast': {
-            const prepared = await Generate('continue', { visibleTransportHandoff: true });
-            return isPreparedReactOwnedMainChatVisibleTransportRequest(prepared)
-                ? { ...prepared, status: decision.status, path: decision.path, reason: decision.reason }
-                : createMainChatVisibleTransportFallbackDecision(decision);
-        }
-        default:
-            await runMainChatVisibleGenerationAction({ kind, messageId });
-            return {
-                ...decision,
-                owner: 'legacy',
-            };
     }
 }
 
@@ -2594,6 +2530,7 @@ function getMainChatMessageListReactBridgeState() {
     const rightSendForm = document.getElementById('rightSendForm');
     const sendTextarea = document.getElementById('send_textarea');
     const sendButton = document.getElementById('send_but');
+    const stopButton = document.getElementById('mes_stop');
     const continueButton = document.getElementById('mes_continue');
     const regenerateButton = document.getElementById('option_regenerate');
     const messageRowSnapshots = messageRows
@@ -2660,6 +2597,7 @@ function getMainChatMessageListReactBridgeState() {
         rightSendForm,
         sendTextarea,
         sendButton,
+        stopButton,
         continueButton,
         regenerateButton,
         composerValue: sendTextarea instanceof HTMLTextAreaElement ? sendTextarea.value : '',
@@ -2699,16 +2637,14 @@ function getMainChatMessageListReactBridge() {
                 case 'selectSlashAutocompleteOption':
                     selectMainChatSlashCommandOption(Number(payload?.index));
                     break;
-                case 'prepareVisibleGeneration':
-                    return await prepareMainChatVisibleGenerationAction({
-                        kind: String(payload?.kind ?? ''),
-                        messageId: normalizedMessageId,
-                    });
                 case 'triggerVisibleGeneration':
                     await executeMainChatVisibleGenerationAction({
                         kind: String(payload?.kind ?? ''),
                         messageId: normalizedMessageId,
                     });
+                    break;
+                case 'stopVisibleGeneration':
+                    stopGeneration();
                     break;
                 case 'toggleMessageActionsShell':
                     runMainChatVisibleMessageActionsShellAction({
@@ -3031,6 +2967,21 @@ function hideLegacyExtensionsHostControls(hidden) {
         '.extensions_url_block',
     ];
 
+    const setLegacyChromeVisibility = (node) => {
+        node.hidden = hidden;
+        node.setAttribute('aria-hidden', hidden ? 'true' : 'false');
+        if (hidden) {
+            // Legacy layout utilities use display: flex !important, which overrides
+            // the browser's default [hidden] rule unless we hide with equal priority.
+            node.style.setProperty('display', 'none', 'important');
+            node.setAttribute('inert', '');
+        } else {
+            node.style.removeProperty('display');
+            node.removeAttribute('inert');
+        }
+        node.dataset.legacyExtensionsHiddenByReact = hidden ? 'true' : 'false';
+    };
+
     for (const selector of legacySelectors) {
         extensionsPanel.querySelectorAll(selector).forEach((node) => {
             if (!(node instanceof HTMLElement) || node === host || host?.contains(node)) {
@@ -3040,14 +2991,7 @@ function hideLegacyExtensionsHostControls(hidden) {
                 return;
             }
             // Keep inputs in DOM for service/bridge helpers, but hide them from the visible surface.
-            node.hidden = hidden;
-            node.setAttribute('aria-hidden', hidden ? 'true' : 'false');
-            if (hidden) {
-                node.setAttribute('inert', '');
-            } else {
-                node.removeAttribute('inert');
-            }
-            node.dataset.legacyExtensionsHiddenByReact = hidden ? 'true' : 'false';
+            setLegacyChromeVisibility(node);
         });
     }
 
@@ -3058,14 +3002,7 @@ function hideLegacyExtensionsHostControls(hidden) {
             return;
         }
         if (row.querySelector('#extensions_details, #third_party_extension_button, #extensions_notify_updates')) {
-            row.hidden = hidden;
-            row.setAttribute('aria-hidden', hidden ? 'true' : 'false');
-            if (hidden) {
-                row.setAttribute('inert', '');
-            } else {
-                row.removeAttribute('inert');
-            }
-            row.dataset.legacyExtensionsHiddenByReact = hidden ? 'true' : 'false';
+            setLegacyChromeVisibility(row);
         }
     });
 
@@ -3078,14 +3015,7 @@ function hideLegacyExtensionsHostControls(hidden) {
         const isExtrasHeading = heading.querySelector('[data-i18n="Extras API:"], [data-i18n="(DEPRECATED)"]')
             || /Extras API/i.test(heading.textContent || '');
         if (isExtrasHeading) {
-            heading.hidden = hidden;
-            heading.setAttribute('aria-hidden', hidden ? 'true' : 'false');
-            if (hidden) {
-                heading.setAttribute('inert', '');
-            } else {
-                heading.removeAttribute('inert');
-            }
-            heading.dataset.legacyExtensionsHiddenByReact = hidden ? 'true' : 'false';
+            setLegacyChromeVisibility(heading);
         }
     });
 
@@ -3650,6 +3580,18 @@ async function renderCharacterListPageReact(state) {
     return mountReactCharacterLibraryPanel(state);
 }
 
+async function resetCharacterLibraryPanelForPerf() {
+    const listElement = document.getElementById('rm_print_characters_block');
+    if (!listElement) {
+        throw new Error('Character list element is unavailable.');
+    }
+
+    const panelModule = await loadReactCharacterLibraryPanelModule();
+    panelModule.unmountCharacterLibraryPanel();
+    reactCharacterLibraryPanelMounted = false;
+    reactCharacterLibraryToolbarMounted = false;
+}
+
 function getPerfInteractionTrace() {
     return globalThis.__emberDeskPerf?.interactionTrace ?? null;
 }
@@ -3908,7 +3850,7 @@ let dialogueResolve = null;
 let dialogueCloseStop = false;
 /** @type {ChatMetadata} */
 export let chat_metadata = {};
-/** @type {StreamingProcessor} */
+/** @type {GenerationStreamSession} */
 export let streamingProcessor = null;
 let crop_data = undefined;
 let is_delete_mode = false;
@@ -5711,7 +5653,7 @@ export async function reloadCurrentChatUnsafe() {
 /**
  * Send the message currently typed into the chat box.
  */
-export async function sendTextareaMessage({ visibleTransportHandoff = false } = {}) {
+export async function sendTextareaMessage() {
     // don't proceed during swipeGenerate()
     if (swipeState == SWIPE_STATE.EDITING) {
         toastr.warning(t`Confirm the edit to start a generation.`, t`You cannot send a message during a swipe-edit.`);
@@ -5743,7 +5685,7 @@ export async function sendTextareaMessage({ visibleTransportHandoff = false } = 
         await newAssistantChat({ temporary: false });
     }
 
-    let generation = await Generate(generateType, { visibleTransportHandoff });
+    let generation = await Generate(generateType);
     showSwipeButtons();
     return generation;
 }
@@ -7035,7 +6977,10 @@ export async function generateQuietPrompt({ quietPrompt = '', quietToLoud = fals
     }
 
     const responseLengthCustomized = typeof responseLength === 'number' && responseLength > 0;
-    const quietTransportDecision = createMainChatQuietTransportDecision({
+    const quietTransportDecision = createGenerationCommand({
+        kind: backgroundGeneration ? 'backgroundGeneration' : quietToLoud ? 'quietToLoud' : 'quietPrompt',
+        mainApi: main_api,
+        quietPrompt: true,
         quietToLoud: quietToLoud ?? false,
         backgroundGeneration: backgroundGeneration ?? false,
     });
@@ -7054,6 +6999,7 @@ export async function generateQuietPrompt({ quietPrompt = '', quietToLoud = fals
         const generateOptions = {
             quiet_prompt: quietPrompt ?? '',
             quietToLoud: quietToLoud ?? false,
+            backgroundGeneration: backgroundGeneration ?? false,
             skipWIAN: skipWIAN ?? false,
             force_name2: true,
             quietImage: quietImage ?? null,
@@ -7511,7 +7457,7 @@ function hideStopButton() {
     }
 }
 
-class StreamingProcessor {
+class GenerationStreamSession {
     /**
      * Creates a new streaming processor.
      * @param {string} type Generation type
@@ -7562,8 +7508,6 @@ class StreamingProcessor {
         this.observedTokenCount = 0;
         this.observedChunkCount = 0;
         this.fromFallbackAttempt = false;
-        this.reactVisibleTransportOwned = false;
-        this.reactVisibleTransportHooks = null;
     }
 
     /**
@@ -7599,23 +7543,6 @@ class StreamingProcessor {
         unblockGeneration();
     }
 
-    emitReactVisibleTransportState(phase, overrides = {}) {
-        if (!this.reactVisibleTransportOwned || !this.reactVisibleTransportHooks?.onTransportState) {
-            return;
-        }
-
-        this.reactVisibleTransportHooks.onTransportState({
-            phase,
-            activeMessageId: Number.isInteger(this.messageId) && this.messageId >= 0 ? this.messageId : null,
-            observedTokenCount: this.observedTokenCount ?? 0,
-            observedChunkCount: this.observedChunkCount ?? 0,
-            fromFallbackAttempt: Boolean(this.fromFallbackAttempt),
-            recoverable: phase === 'error' || phase === 'stopped',
-            errorLabel: null,
-            ...overrides,
-        });
-    }
-
     async onStartStreaming(text) {
         const continueOnReasoning = !!(this.type === 'continue' && this.promptReasoning.prefixReasoning);
         if (continueOnReasoning) {
@@ -7632,13 +7559,9 @@ class StreamingProcessor {
             messageId = chat.length - 1;
             await this.#checkDomElements(messageId, continueOnReasoning);
             this.markUIGenStarted();
-            if (this.reactVisibleTransportOwned) {
-                void mountReactMainChatMessageListPanel();
-            }
         }
         hideSwipeButtons({ hideCounters: true });
         scrollChatToBottom({ waitForFrame: true });
-        this.emitReactVisibleTransportState('connecting');
         return messageId;
     }
 
@@ -7723,12 +7646,7 @@ class StreamingProcessor {
                 {},
                 false,
             );
-            if (this.reactVisibleTransportOwned && this.reactVisibleTransportHooks?.onMessageHtml) {
-                this.reactVisibleTransportHooks.onMessageHtml({
-                    messageId,
-                    formattedMessageHtml: formattedText,
-                });
-            } else if (this.messageTextDom instanceof HTMLElement) {
+            if (this.messageTextDom instanceof HTMLElement) {
                 if (power_user.stream_fade_in) {
                     applyStreamFadeIn(this.messageTextDom, formattedText);
                 } else {
@@ -7744,8 +7662,6 @@ class StreamingProcessor {
 
             this.setFirstSwipe(messageId);
         }
-
-        this.emitReactVisibleTransportState(isFinal ? 'finalizing' : 'streaming');
 
         if (!scrollLock) {
             scrollChatToBottom({ waitForFrame: true });
@@ -7763,7 +7679,6 @@ class StreamingProcessor {
      */
     async finalizeIntermediaryMessage(messageId, text, { unlockUI = true }) {
         this.isFinalizing = true;
-        this.emitReactVisibleTransportState('finalizing');
         void mountReactMainChatMessageListPanel();
         await this.onProgressStreaming(messageId, text, true);
         const messageElement = chatElement.find(`.mes[mesid="${messageId}"]`);
@@ -7816,7 +7731,6 @@ class StreamingProcessor {
 
         updateSwipeCounter(messageId, { message, messageElement });
         this.isFinalizing = false;
-        this.emitReactVisibleTransportState('completed', { recoverable: false });
         void mountReactMainChatMessageListPanel();
     }
 
@@ -7841,15 +7755,7 @@ class StreamingProcessor {
         }
 
         this.markUIGenStopped();
-        this.emitReactVisibleTransportState('error', {
-            recoverable: !suppressRecovery,
-            errorLabel: 'stream connection closed before completion',
-        });
         if (suppressRecovery) {
-            return;
-        }
-
-        if (this.reactVisibleTransportOwned) {
             return;
         }
 
@@ -7881,7 +7787,6 @@ class StreamingProcessor {
         this.isStopped = true;
         this.isFinalizing = false;
         this.isFinished = true;
-        this.emitReactVisibleTransportState('stopped', { recoverable: true });
         rememberMainChatStreamingTransportProcessorTerminal(this, 'stopped');
         void mountReactMainChatMessageListPanel();
     }
@@ -8285,7 +8190,36 @@ function removeLastMessage() {
  * @param {boolean} dryRun Whether to actually generate a message or just assemble the prompt
  * @returns {Promise<any>} Returns a promise that resolves when the text is done generating.
  */
-export async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, force_chid, signal, quietImage, quietName, jsonSchema = null, depth = 0, visibleTransportHandoff = false, visibleTransportKind = null } = {}, dryRun = false) {
+export async function Generate(type, options = {}, dryRun = false) {
+    const generationEnvelope = createGenerationRequestEnvelope({
+        type,
+        options,
+        dryRun,
+        mainApi: main_api,
+        selectedGroup: Boolean(selected_group),
+    });
+    return executeGenerationRequestInShell(generationEnvelope);
+}
+
+async function executeGenerationRequestInShell(generationEnvelope) {
+    let {
+        type,
+        options,
+        dryRun,
+    } = generationEnvelope;
+    let {
+        automatic_trigger,
+        force_name2,
+        quiet_prompt,
+        quietToLoud,
+        skipWIAN,
+        force_chid,
+        signal,
+        quietImage,
+        quietName,
+        jsonSchema = null,
+        depth = 0,
+    } = options;
     console.log('Generate entered');
     setGenerationProgress(0);
     generation_started = new Date();
@@ -9322,11 +9256,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
 
         console.debug(`pushed prompt bits to itemizedPrompts array. Length is now: ${itemizedPrompts.length}`);
 
-        const lifecyclePlan = createGenerationLifecyclePlan({
-            type,
-            mainApi: main_api,
-            dryRun,
-            depth,
+        const lifecyclePlan = createGenerationCommandPlan(generationEnvelope.command, {
             fallbackReady: hasFallbackProviderForGeneration({
                 settings: oai_settings,
                 secretState: secret_state,
@@ -9375,31 +9305,17 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
             return activeRecoveryMessageId;
         };
 
-        const runGenerationAttempt = async (attempt, attemptIndex, visibleTransportHooks = null) => {
+        const runGenerationAttempt = async (attempt, attemptIndex) => {
             const isIntermediateAttempt = attemptIndex < attempts.length - 1;
             const requestOptions = {
                 jsonSchema,
                 fallbackProvider: attempt.fallbackProvider,
             };
 
-            if (visibleTransportHooks?.onTransportState) {
-                visibleTransportHooks.onTransportState({
-                    phase: 'connecting',
-                    activeMessageId: activeRecoveryMessageId,
-                    observedTokenCount: 0,
-                    observedChunkCount: 0,
-                    fromFallbackAttempt: Boolean(attempt.fallbackProvider),
-                    recoverable: isIntermediateAttempt,
-                    errorLabel: null,
-                });
-            }
-
             if (isStreamingEnabled() && type !== 'quiet') {
                 const attemptContinueMessage = promptReasoning.removePrefix(continue_mag);
-                streamingProcessor = new StreamingProcessor(type, force_name2, generation_started, attemptContinueMessage, promptReasoning);
+                streamingProcessor = new GenerationStreamSession(type, force_name2, generation_started, attemptContinueMessage, promptReasoning);
                 streamingProcessor.suppressErrorRecovery = isIntermediateAttempt;
-                streamingProcessor.reactVisibleTransportOwned = Boolean(visibleTransportHooks);
-                streamingProcessor.reactVisibleTransportHooks = visibleTransportHooks;
                 streamingProcessor.fromFallbackAttempt = Boolean(attempt.fallbackProvider);
                 if (activeRecoveryMessageId !== null && activeRecoveryMessageId >= 0) {
                     streamingProcessor.messageId = activeRecoveryMessageId;
@@ -9541,71 +9457,20 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
             };
         };
 
-        async function executeVisibleAttempts() {
-            let lastException = null;
-
-            for (let attemptIndex = 0; attemptIndex < attempts.length; attemptIndex++) {
-                const attempt = attempts[attemptIndex];
-
-                await prepareRetryAttempt(attempt, attemptIndex);
-
-                try {
-                    const result = await runGenerationAttempt(attempt, attemptIndex);
-                    clearGenerationAutoRecoveryStatus(activeRecoveryMessageId ?? chat.length - 1);
-                    return result;
-                } catch (exception) {
-                    lastException = exception;
-                    const failure = await handleAttemptFailure(exception, attempt, attemptIndex);
-                    if (failure.action !== 'retry') {
-                        throw failure.exception;
-                    }
-                }
-            }
-
-            throw lastException;
-        }
-
-        const handoffOwnership = visibleTransportHandoff
-            ? createMainChatVisibleTransportDecision({
-                kind: visibleTransportKind ?? (type === 'continue' ? 'continueLast' : 'submitComposer'),
-                mainApi: main_api,
-                selectedGroup: Boolean(selected_group),
-                dryRun,
-                depth,
-            })
-            : {
-                owner: 'legacy',
-                kind: visibleTransportKind ?? (type === 'continue' ? 'continueLast' : 'submitComposer'),
-                status: MAIN_CHAT_VISIBLE_TRANSPORT_STATUSES.LEGACY_FALLBACK,
-                path: MAIN_CHAT_VISIBLE_TRANSPORT_PATHS.LEGACY_VISIBLE_TRANSPORT_FALLBACK,
-                reason: MAIN_CHAT_VISIBLE_TRANSPORT_REASONS.LEGACY_EXECUTED,
-            };
-
-        if (handoffOwnership.owner === 'react') {
-            return {
-                owner: 'react',
-                kind: handoffOwnership.kind,
-                status: handoffOwnership.status,
-                path: handoffOwnership.path,
-                reason: handoffOwnership.reason,
-                attempts,
-                prepareRetryAttempt,
-                runAttempt: (attempt, attemptIndex, visibleTransportHooks = null) => runGenerationAttempt(attempt, attemptIndex, visibleTransportHooks),
-                handleFailure: (exception, attempt, attemptIndex) => handleAttemptFailure(exception, attempt, attemptIndex),
-                finalizeSuccess: onSuccess,
-                finalizeError: onError,
-            };
-        }
-
-        return executeVisibleAttempts();
+        return executeGenerationAttempts({
+            attempts,
+            prepareRetryAttempt,
+            runAttempt: async (attempt, attemptIndex) => {
+                const result = await runGenerationAttempt(attempt, attemptIndex);
+                clearGenerationAutoRecoveryStatus(activeRecoveryMessageId ?? chat.length - 1);
+                return result;
+            },
+            handleFailure: handleAttemptFailure,
+        });
     }
 
     try {
         const generationResult = await finishGenerating();
-        if (isPreparedReactOwnedMainChatVisibleTransportRequest(generationResult)) {
-            return generationResult;
-        }
-
         return await onSuccess(generationResult);
     } catch (exception) {
         return onError(exception);
@@ -14089,8 +13954,6 @@ export async function swipe(event, direction, {
     forceMesId,
     forceSwipeId,
     forceDuration,
-    visibleTransportHandoff = false,
-    visibleTransportKind = '',
 } = {}) {
     if (chat.length === 0) {
         console.warn('Swipe was called on an empty chat.');
@@ -14456,16 +14319,7 @@ export async function swipe(event, direction, {
 
         if (run_generate && !is_send_press) {
             is_send_press = true;
-            generation = (async () => {
-                const executor = getMainChatVisibleTransportExecutor();
-                const result = await Generate('swipe', {
-                    visibleTransportHandoff: Boolean(visibleTransportHandoff && executor),
-                    visibleTransportKind,
-                });
-                return isPreparedReactOwnedMainChatVisibleTransportRequest(result)
-                    ? await executePreparedMainChatVisibleTransportRequest(result)
-                    : result;
-            })();
+            generation = Generate('swipe');
         }
 
         //Swipe in from the opposite side.

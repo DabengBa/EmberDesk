@@ -7,10 +7,8 @@ export const SUPPORTED_REACT_VISIBLE_GENERATION_KINDS = Object.freeze([
 ]);
 
 export const MAIN_CHAT_VISIBLE_TRANSPORT_STATUSES = Object.freeze({
-    REACT_OWNED: 'react-owned',
-    LEGACY_FALLBACK: 'legacy-fallback',
+    SERVICE_OWNED: 'service-owned',
     UNSUPPORTED_WITH_REASON: 'unsupported-with-reason',
-    LEGACY_OWNED: 'legacy-owned',
 });
 
 export const MAIN_CHAT_VISIBLE_TRANSPORT_PATHS = Object.freeze({
@@ -25,7 +23,6 @@ export const MAIN_CHAT_VISIBLE_TRANSPORT_PATHS = Object.freeze({
     QUIET_NON_VISIBLE_HELPER: 'quiet-non-visible-helper',
     QUIET_TO_LOUD_NON_VISIBLE_HELPER: 'quiet-to-loud-non-visible-helper',
     BACKGROUND_NON_VISIBLE_HELPER: 'background-non-visible-helper',
-    LEGACY_VISIBLE_TRANSPORT_FALLBACK: 'legacy-visible-transport-fallback',
 });
 
 export const MAIN_CHAT_VISIBLE_TRANSPORT_REASONS = Object.freeze({
@@ -38,7 +35,6 @@ export const MAIN_CHAT_VISIBLE_TRANSPORT_REASONS = Object.freeze({
     BACKGROUND_GENERATION: 'background-generation',
     UNSUPPORTED_KIND: 'unsupported-kind',
     QUIET_TO_LOUD: 'quiet-to-loud',
-    LEGACY_EXECUTED: 'legacy-executed',
 });
 
 export const MAIN_CHAT_RICH_BODY_RENDERER_REASONS = Object.freeze({

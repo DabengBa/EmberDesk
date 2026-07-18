@@ -23,6 +23,7 @@ describe('group authoring facade', () => {
             auto_mode_delay: 7,
             generation_mode_join_prefix: '## <FIELDNAME>',
             generation_mode_join_suffix: '</FIELDNAME>',
+            tagIds: ['night-shift'],
         });
 
         expect(draft).toEqual(expect.objectContaining({
@@ -39,6 +40,7 @@ describe('group authoring facade', () => {
             autoModeDelay: 7,
             joinPrefix: '## <FIELDNAME>',
             joinSuffix: '</FIELDNAME>',
+            tagIds: ['night-shift'],
         }));
     });
 
@@ -51,6 +53,7 @@ describe('group authoring facade', () => {
         expect(validateGroupAuthoringDraft(draft)).toEqual({
             valid: false,
             fieldErrors: {
+                name: 'Name is required',
                 members: 'Add at least one member',
             },
         });
@@ -69,6 +72,7 @@ describe('group authoring facade', () => {
         expect(createGroupAuthoringSaveModel(movedAgain)).toMatchObject({
             name: 'Night Shift',
             members: ['C.png', 'A.png', 'B.png'],
+            tag_ids: [],
         });
     });
 
@@ -114,6 +118,7 @@ describe('group authoring facade', () => {
                 auto_mode_delay: 5,
                 generation_mode_join_prefix: '',
                 generation_mode_join_suffix: '',
+                tag_ids: [],
             },
         });
 

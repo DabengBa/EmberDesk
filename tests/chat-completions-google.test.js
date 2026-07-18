@@ -38,6 +38,7 @@ async function withServer(app, callback) {
     try {
         return await callback(url);
     } finally {
+        server.closeAllConnections();
         await new Promise(resolve => server.close(resolve));
     }
 }
@@ -89,7 +90,7 @@ describe('Google chat completions backend', () => {
         fetchMock.mockResolvedValue(createGoogleResponse({}));
 
         await withServer(createApp(router), async url => {
-            await fetch(`${url}/api/backends/chat-completions/generate`, {
+            const response = await fetch(`${url}/api/backends/chat-completions/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -99,6 +100,7 @@ describe('Google chat completions backend', () => {
                     stream: true,
                 }),
             });
+            await response.text();
         });
 
         expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -128,6 +130,7 @@ describe('Google chat completions backend', () => {
             });
 
             expect(response.status).toBe(200);
+            await response.text();
         });
 
         expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -141,7 +144,7 @@ describe('Google chat completions backend', () => {
         fetchMock.mockResolvedValue(createGoogleResponse({}));
 
         await withServer(createApp(router), async url => {
-            await fetch(`${url}/api/backends/chat-completions/generate`, {
+            const response = await fetch(`${url}/api/backends/chat-completions/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -154,6 +157,7 @@ describe('Google chat completions backend', () => {
                     stream: true,
                 }),
             });
+            await response.text();
         });
 
         expect(fetchMock).toHaveBeenCalledTimes(1);

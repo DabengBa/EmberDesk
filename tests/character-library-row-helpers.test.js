@@ -27,13 +27,18 @@ describe('character library React row helpers', () => {
         expect(rowSource).toContain('className="ch_fav"');
         expect(rowSource).toContain('className="tags tags_inline"');
         expect(rowSource).toContain('className="bulk_select_checkbox"');
-        expect(rowSource).toContain("setAttribute('chid'");
         expect(rowSource).toContain('data-chid={String(model.id)}');
+        expect(rowSource).toContain('{...{ chid: String(model.id) }}');
         expect(rowSource).toContain('character_selected');
+        expect(rowSource).toContain('event.stopPropagation();');
+        expect(rowSource).toContain('onSelect?.(model.id);');
+        expect(rowSource).toContain('shouldPrintTag: tag => Boolean(tag.forceVisible)');
+        expect(helperSource).toContain('forceVisible?: boolean;');
 
         expect(panelSource).toContain('CharacterLibraryCharacterRow');
         expect(panelSource).toContain('projectCharacterEntityToRowModel');
         expect(panelSource).toContain("entity.type === 'character' && entity.item");
+        expect(panelSource).toContain('resolveTags: () => entity.tags ?? []');
     });
 
     test('keeps protected selector contract names available for retirement gate', () => {

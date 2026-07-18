@@ -1,5 +1,0 @@
-contract_version = 1
-feature_slug = "extension-operation-safety"
-brief = ".docs/tech/briefs/260714-05-extension-operation-safety.md"
-doc_ids = ["feature.extension_panel_open", "term.shared_browser_library"]
-

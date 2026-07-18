@@ -70,6 +70,14 @@ test.describe('extensions host sole owner', () => {
         await expect(page.locator('[data-extensions-host-react-workflow="host-actions"]')).toBeVisible();
         await expect(page.locator('#extensions_settings')).toBeAttached();
         await expect(page.locator('#regex_container')).toBeAttached();
+        await expect(page.locator('#extensions_details')).toBeHidden();
+        await expect(page.locator('#third_party_extension_button')).toBeHidden();
+        await expect(page.locator('#extensions_notify_updates')).toBeHidden();
+        await expect(page.locator('#extensions_autoconnect')).toBeHidden();
+        await expect(page.locator('#extensions_url')).toBeHidden();
+        await expect(page.locator('#extensions_api_key')).toBeHidden();
+        await expect(page.locator('#extensions_connect')).toBeHidden();
+        await expect(page.locator('#rm_extensions_block > .extensions_block > .alignitemscenter.flex-container.wide100p:has(#extensions_details)')).toBeHidden();
     });
 
     test('manage action remains available through react host without removing protected mounts', async ({ page }) => {

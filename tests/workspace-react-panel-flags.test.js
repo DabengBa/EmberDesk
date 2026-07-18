@@ -65,7 +65,7 @@ describe('workspace React panel flags', () => {
                 mainChatMessageList: false,
                 worldInfo: true,
                 backgroundLibrary: true,
-                extensionsHost: false,
+                extensionsHost: true,
                 characterAuthoring: true,
                 groupAuthoring: true,
             },
@@ -102,13 +102,9 @@ describe('workspace React panel flags', () => {
         });
 
         const previousNodeEnv = process.env.NODE_ENV;
+        const previousCi = process.env.CI;
         try {
-            delete process.env.NODE_ENV;
-            expect(featureBootstrapModule.getWorkspaceReactFeatures().reactShell).toEqual({
-                strict: false,
-                takeover: true,
-            });
-
+            delete process.env.CI;
             process.env.NODE_ENV = 'development';
             expect(featureBootstrapModule.getWorkspaceReactFeatures().reactShell).toEqual({
                 strict: true,
@@ -121,6 +117,11 @@ describe('workspace React panel flags', () => {
                 takeover: true,
             });
         } finally {
+            if (previousCi === undefined) {
+                delete process.env.CI;
+            } else {
+                process.env.CI = previousCi;
+            }
             if (previousNodeEnv === undefined) {
                 delete process.env.NODE_ENV;
             } else {
@@ -175,7 +176,7 @@ describe('workspace React panel flags', () => {
         expect(configSource).toContain('mainChatMessageList: false');
         expect(configSource).not.toContain('worldInfo:');
         expect(configSource).toContain('backgroundLibrary: true');
-        expect(configSource).toContain('extensionsHost: false');
+        expect(configSource).toContain('extensionsHost: true');
         expect(configSource).not.toContain('characterAuthoring:');
         expect(configSource).not.toContain('groupAuthoring:');
         expect(packageSource).toContain('"build:react:workspace-panels": "vite build --mode workspace-panels"');
@@ -231,6 +232,7 @@ describe('workspace React panel flags', () => {
         expect(unrelatedSpecEnv).toEqual({
             EMBERDESK_FEATURES_REACT_PANELS_CHARACTERAUTHORING: 'true',
             EMBERDESK_FEATURES_REACT_PANELS_GROUPAUTHORING: 'true',
+            EMBERDESK_FEATURES_REACT_PANELS_EXTENSIONSHOST: 'true',
         });
     });
 

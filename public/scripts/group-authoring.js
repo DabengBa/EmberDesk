@@ -12,6 +12,7 @@ const GROUP_FIELD_DEFAULTS = Object.freeze({
     autoModeDelay: 5,
     joinPrefix: '',
     joinSuffix: '',
+    tagIds: [],
 });
 
 function cloneArray(value) {
@@ -43,11 +44,15 @@ export function createGroupAuthoringDraft(group = {}, options = {}) {
         autoModeDelay: normalizeNumber(group?.auto_mode_delay, GROUP_FIELD_DEFAULTS.autoModeDelay),
         joinPrefix: normalizeString(group?.generation_mode_join_prefix || GROUP_FIELD_DEFAULTS.joinPrefix),
         joinSuffix: normalizeString(group?.generation_mode_join_suffix || GROUP_FIELD_DEFAULTS.joinSuffix),
+        tagIds: cloneArray(group?.tagIds),
     };
 }
 
 export function validateGroupAuthoringDraft(draft) {
     const fieldErrors = {};
+    if (!normalizeString(draft?.name).trim()) {
+        fieldErrors.name = 'Name is required';
+    }
     if (!Array.isArray(draft?.members) || draft.members.length === 0) {
         fieldErrors.members = 'Add at least one member';
     }
@@ -106,6 +111,7 @@ export function createGroupAuthoringSaveModel(draft) {
         auto_mode_delay: normalizeNumber(draft?.autoModeDelay, GROUP_FIELD_DEFAULTS.autoModeDelay),
         generation_mode_join_prefix: normalizeString(draft?.joinPrefix),
         generation_mode_join_suffix: normalizeString(draft?.joinSuffix),
+        tag_ids: cloneArray(draft?.tagIds),
     };
 }
 

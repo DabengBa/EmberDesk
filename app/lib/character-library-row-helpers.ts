@@ -7,6 +7,7 @@ export interface CharacterLibraryTagModel {
     id: string;
     name: string;
     hiddenOnCard?: boolean;
+    forceVisible?: boolean;
 }
 
 export interface CharacterLibraryCharacterRowModel {

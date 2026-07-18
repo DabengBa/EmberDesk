@@ -71,4 +71,10 @@ Doc IDs: feature.extension_panel_open, term.shared_browser_library, page.chat_wo
 - [x] Review: R-05 Empty React compat-slot placeholders + tests locking dead markup (severity: medium; scope: workspace-panels + tests; proof: unit)
 - [x] Review: R-06 Legacy Extensions header row / Extras heading not fully hidden (severity: medium; scope: hideLegacy; proof: structural hide selectors)
 - [x] Review: R-07 E2E false-green open/manage/slash paths (severity: medium; scope: e2e; proof: tightened assertions; e2e 4 passed)
+- [x] Review: R-08 `hidden` was overridden by legacy layout utilities, leaving legacy Manage/Install/Extras controls visibly duplicated beside the React host (severity: high; scope: `hideLegacyExtensionsHostControls`; evidence: `/tmp/ux-walkthrough-extensions-20260717/artifacts/timeline-5000.png`; proof: fail-then-pass `extensions-host.e2e.js`, desktop/mobile screenshot walkthrough) — fixed with priority `display: none`, while compatibility slots remain attached.
 
+### UX walkthrough follow-up (2026-07-17)
+
+- [x] Doc ID gate: `bun run docs:check` passed; `feature.extension_panel_open` and `page.chat_workspace` remain topologically linked with no semantic-doc change required.
+- [x] TDD/proof: strengthened the sole-owner E2E from attribute checks to browser visibility assertions; it failed before R-08 and passed after the fix.
+- [x] Revalidation: `bun run --cwd tests test:unit -- react-workspace-panels-helpers.test.js --runInBand`, `bun run test:compat`, and focused `extensions-host.e2e.js` passed. Isolated desktop/mobile screenshots confirm one visible React operation surface, Manage close recovery, and a panel-local Extras failure state.

@@ -1,6 +1,12 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
+import { sync as writeFileAtomicSync } from 'write-file-atomic';
+
 import { withCanonicalTransaction } from '../canonical-sqlite.js';
 import { getCanonicalMigrationStatus } from '../canonical-sqlite-migrations.js';
 import { invalidateCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
+import { auditCanonicalChatShadowImport } from '../canonical-chat-shadow-import.js';
 import {
     createCanonicalChatSessionRecord,
     listOpenCanonicalChatProjectionRepairs,
@@ -9,6 +15,7 @@ import {
     serializeCanonicalChatSession,
 } from './canonical-chat-store.js';
 import { parseCanonicalChatJsonl } from './canonical-chat-write-service.js';
+import { resolveCanonicalChatProjectionPath } from './canonical-chat-projection-path.js';
 
 export const CANONICAL_CHAT_BACKUP_MANIFEST_VERSION = 1;
 export const CANONICAL_CHAT_ATTACHMENT_MANIFEST_VERSION = 1;
@@ -19,8 +26,9 @@ function listAttachmentManifestEntries(db) {
             reference.blob_id,
             media.compatibility_path
         FROM chat_attachment_refs AS reference
-        LEFT JOIN media_references AS media
+        JOIN media_references AS media
             ON media.blob_id = reference.blob_id
+            AND media.compatibility_path = json_extract(reference.compatibility_json, '$.path')
             AND media.deleted_at_ms IS NULL
         ORDER BY reference.blob_id ASC, media.compatibility_path ASC
     `).all().map(row => ({
@@ -47,6 +55,7 @@ function createBackupSessionRows(db) {
         ownerType: String(session.owner_type),
         ownerId: String(session.owner_id),
         sourcePath: String(session.source_path),
+        sourceMtimeMs: Number(session.source_mtime_ms),
         jsonl: serializeCanonicalChatSession(db, String(session.id)),
     }));
 }
@@ -125,6 +134,15 @@ function validateBackupShape(backup) {
         || !Array.isArray(backup.attachmentManifest.entries)) {
         return { ok: false, reasonCode: 'incomplete_attachment_manifest' };
     }
+    const repairKeys = backup.projectionState.repairKeys;
+    const recordedRepairKeys = backup.projectionRepairs?.map(repair => repair?.repairKey);
+    if (!Number.isInteger(backup.projectionState.openRepairCount)
+        || !Array.isArray(repairKeys)
+        || !Array.isArray(recordedRepairKeys)
+        || backup.projectionState.openRepairCount !== recordedRepairKeys.length
+        || JSON.stringify([...repairKeys].sort()) !== JSON.stringify([...recordedRepairKeys].sort())) {
+        return { ok: false, reasonCode: 'incomplete_projection_state' };
+    }
     return { ok: true };
 }
 
@@ -135,10 +153,14 @@ function validateAttachmentManifest(db, attachmentManifest) {
         }
         const active = db.prepare(`
             SELECT 1
-            FROM media_references
-            WHERE blob_id = ?
-                AND compatibility_path = ?
-                AND deleted_at_ms IS NULL
+            FROM media_references AS media
+            JOIN managed_blobs AS blob
+                ON blob.id = media.blob_id
+                AND blob.lifecycle_state = 'active'
+                AND blob.deleted_at_ms IS NULL
+            WHERE media.blob_id = ?
+                AND media.compatibility_path = ?
+                AND media.deleted_at_ms IS NULL
             LIMIT 1
         `).get(String(entry.blobId), String(entry.compatibilityPath));
         if (!active) {
@@ -155,20 +177,120 @@ function validateAttachmentManifest(db, attachmentManifest) {
     return { ok: true };
 }
 
-function stageBackupSessions(db, backup) {
+function stageBackupSessions(db, backup, directories, nowMs) {
     return backup.sessions.map(session => {
         const locator = {
             ownerType: String(session.ownerType),
             ownerId: String(session.ownerId),
             sourcePath: String(session.sourcePath),
         };
+        resolveCanonicalChatProjectionPath({
+            directories,
+            ...locator,
+        });
         const payload = parseCanonicalChatJsonl(session.jsonl);
-        return createCanonicalChatSessionRecord(db, {
+        const record = createCanonicalChatSessionRecord(db, {
             locator,
             payload,
-            nowMs: Date.now(),
+            nowMs,
         });
+        const sourceMtimeMs = Number(session.sourceMtimeMs);
+        if (Number.isFinite(sourceMtimeMs) && sourceMtimeMs >= 0) {
+            record.sourceMtimeMs = sourceMtimeMs;
+        }
+        return record;
     });
+}
+
+function recordRestoreProjectionFailure(db, {
+    record,
+    operation,
+    error,
+    nowMs,
+}) {
+    recordCanonicalChatProjectionRepair(db, {
+        repairKey: [
+            'chat',
+            record.ownerType,
+            record.ownerId,
+            encodeURIComponent(record.sourcePath),
+            operation,
+        ].join(':'),
+        sessionId: operation === 'delete' ? null : record.id,
+        locator: {
+            ownerType: record.ownerType,
+            ownerId: record.ownerId,
+            sourcePath: record.sourcePath,
+        },
+        operation,
+        reason: 'restore_projection_failed',
+        details: {
+            message: String(error?.message ?? error ?? ''),
+        },
+        nowMs,
+    });
+}
+
+function projectRestoredSessions(db, {
+    directories,
+    previousSessions,
+    stagedRecords,
+    nowMs,
+}) {
+    const restoredPaths = new Set(stagedRecords.map(record => record.sourcePath));
+    const failures = [];
+
+    for (const record of stagedRecords) {
+        try {
+            const filePath = resolveCanonicalChatProjectionPath({
+                directories,
+                ownerType: record.ownerType,
+                ownerId: record.ownerId,
+                sourcePath: record.sourcePath,
+            });
+            fs.mkdirSync(path.dirname(filePath), { recursive: true });
+            writeFileAtomicSync(filePath, record.sourceJsonl, 'utf8');
+        } catch (error) {
+            failures.push({ operation: 'restore', sourcePath: record.sourcePath });
+            recordRestoreProjectionFailure(db, {
+                record,
+                operation: 'restore',
+                error,
+                nowMs,
+            });
+        }
+    }
+
+    for (const session of previousSessions) {
+        if (restoredPaths.has(String(session.source_path))) {
+            continue;
+        }
+        const record = {
+            id: String(session.id),
+            ownerType: String(session.owner_type),
+            ownerId: String(session.owner_id),
+            sourcePath: String(session.source_path),
+        };
+        try {
+            const filePath = resolveCanonicalChatProjectionPath({
+                directories,
+                ownerType: record.ownerType,
+                ownerId: record.ownerId,
+                sourcePath: record.sourcePath,
+            });
+            fs.rmSync(filePath, { force: true });
+        } catch (error) {
+            failures.push({ operation: 'delete', sourcePath: record.sourcePath });
+            recordRestoreProjectionFailure(db, {
+                record,
+                operation: 'delete',
+                error,
+                nowMs,
+            });
+        }
+    }
+
+    return failures;
 }
 
 function restoreProjectionRepairs(db, repairs, nowMs) {
@@ -335,9 +457,11 @@ export function getCanonicalChatRestoreStatus(db) {
     }
 }
 
-export function restoreCanonicalChatBackup({
+export async function restoreCanonicalChatBackup({
     db,
     backup,
+    handle,
+    directories,
     nowMs = Date.now(),
 }) {
     const restoreId = `chat-restore-${Number(nowMs)}`;
@@ -386,7 +510,7 @@ export function restoreCanonicalChatBackup({
 
     let stagedRecords;
     try {
-        stagedRecords = stageBackupSessions(db, backup);
+        stagedRecords = stageBackupSessions(db, backup, directories, nowMs);
     } catch (error) {
         writeRestoreStatus(db, {
             restoreId,
@@ -409,6 +533,7 @@ export function restoreCanonicalChatBackup({
     }
 
     try {
+        const previousSessions = listCanonicalChatSessions(db);
         writeRestoreStatus(db, {
             restoreId,
             manifestVersion: backup.manifestVersion,
@@ -424,12 +549,63 @@ export function restoreCanonicalChatBackup({
             }
             restoreProjectionRepairs(txnDb, backup.projectionRepairs, nowMs);
         });
-        invalidateCanonicalAuditStatus(db, {
-            scope: 'chats',
-            handle: null,
-            reason: 'audit_stale_after_chat_restore',
-            source: 'canonical_chat_backup_restore',
+        const projectionFailures = projectRestoredSessions(db, {
+            directories,
+            previousSessions,
+            stagedRecords,
+            nowMs,
         });
+        if (projectionFailures.length > 0) {
+            invalidateCanonicalAuditStatus(db, {
+                scope: 'chats',
+                handle,
+                reason: 'audit_stale_after_chat_restore_projection_failure',
+                source: 'canonical_chat_backup_restore',
+            });
+            writeRestoreStatus(db, {
+                restoreId,
+                manifestVersion: backup.manifestVersion,
+                backupCreatedAtMs: backup.createdAtMs,
+                status: 'failed',
+                reasonCode: 'restore_projection_failed',
+                details: { projectionFailures },
+                nowMs,
+                finishedAtMs: nowMs,
+            });
+            return {
+                ok: false,
+                status: 'failed',
+                reasonCode: 'restore_projection_failed',
+                restoreId,
+            };
+        }
+        const audit = await auditCanonicalChatShadowImport({
+            handle,
+            directories,
+            db,
+            auditedAtMs: nowMs,
+        });
+        if (!audit.ok) {
+            writeRestoreStatus(db, {
+                restoreId,
+                manifestVersion: backup.manifestVersion,
+                backupCreatedAtMs: backup.createdAtMs,
+                status: 'failed',
+                reasonCode: 'restore_audit_failed',
+                details: {
+                    reason: audit.reason,
+                    entryCount: audit.entries.length,
+                },
+                nowMs,
+                finishedAtMs: nowMs,
+            });
+            return {
+                ok: false,
+                status: 'failed',
+                reasonCode: 'restore_audit_failed',
+                restoreId,
+            };
+        }
         writeRestoreStatus(db, {
             restoreId,
             manifestVersion: backup.manifestVersion,

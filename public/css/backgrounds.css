@@ -50,6 +50,11 @@
     padding: 0;
 }
 
+/* React owns the visible gallery; legacy nodes remain only as compatibility scaffolding. */
+#Backgrounds.bg-drawer-react-owned [data-legacy-background-hidden-by-react="true"] {
+    display: none !important;
+}
+
 #bg-header-fixed {
     flex-shrink: 0;
     padding: 5px;

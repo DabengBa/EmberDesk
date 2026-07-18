@@ -25,8 +25,12 @@ Let users act on an already rendered chat message through discoverable row contr
 - Danger actions keep clear accessible names and must not visually outrank normal copy/edit actions.
 - A failed generation row may expose a retry action only after [Chat Generation Auto Recovery](feature.chat_generation_auto_recovery) has exhausted automatic attempts; using it must not resubmit the already-rendered user message as a duplicate row.
 - Safe rows may show a React-owned visible action shell or the ordinary fallback shell, but the user-facing controls, mobile reachability, and compatibility hooks remain the same; unsafe or editing rows fall back cleanly.
-- Save, regenerate, retry, and swipe results persist as one complete chat result without changing action ownership, action availability, row controls, or extension hooks. Storage compatibility repair and rollback remain maintainer workflows rather than visible message actions.
+- Save, regenerate, retry, and swipe results persist as one complete chat result without changing action availability, row controls, or extension hooks. Regenerate, retry, and swipe use the same generation command path as composer actions. Storage compatibility repair and rollback remain maintainer workflows rather than visible message actions.
 - The main-chat React shell may coordinate composer/action-rail placement on the existing `#send_form` and `#nonQRFormItems` containers, but row action semantics, valid-action decisions, and compatibility hooks remain governed by the message-action surface.
+
+## Generation Action Boundary
+
+Visible message actions dispatch commands only. The shared generation service owns the request lifecycle and result; message rendering ownership remains a separate boundary.
 
 ## Semantic Interaction IDs
 
@@ -51,7 +55,7 @@ Let users act on an already rendered chat message through discoverable row contr
 
 - Visible row controls, action priority, accessible names, focus behavior, mobile reachability, retry CTA, and row-level result are primary evidence.
 - Protected selectors such as `#chat > .mes`, `.mes_text`, `.mes[mesid]`, swipe, reasoning, media, and file wrappers are compatibility evidence only when visible actions remain correct.
-- React owner markers and bridge calls support migration proof but do not change the user-visible action contract.
+- Controller diagnostics support migration proof but do not change the user-visible action contract.
 - Main-chat layout/status markers support placement proof only; they do not replace visible role/name or row-action execution evidence.
 
 ## Failure Signals

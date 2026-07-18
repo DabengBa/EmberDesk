@@ -1,4 +1,0 @@
-contract_version = 1
-feature_slug = "canonical-chat-authority-cutover"
-brief = ".docs/tech/briefs/260714-03-canonical-chat-authority-cutover.md"
-doc_ids = ["page.chat_workspace", "feature.chat_message_rendering", "feature.chat_message_actions"]

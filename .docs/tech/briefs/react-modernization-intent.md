@@ -70,11 +70,18 @@
 
 ## 假设
 
-- 用户已批准从 jQuery 迁移到 React 生态；早期迁移边界已由 [ADR-0007](../../adr/0007-react-page-islands-with-legacy-fallbacks.md) 正式确认
+- 用户已批准从 jQuery 迁移到 React 生态；早期迁移边界由 [ADR-0007](../../adr/0007-react-page-islands-with-legacy-fallbacks.md) 记录，已迁移 surface 的最终退出目标由 [ADR-0012](../../adr/0012-react-migrated-surface-legacy-retirement.md) 确认
 - 团队具备 React 19、TypeScript、TanStack 生态的技能储备（或愿意培训）
 - 12-18 个月的迁移周期可接受
 - 迁移期间 React 和 jQuery 共存的复杂性可管理
 - 第三方扩展开发者愿意配合兼容性迁移（6 个月窗口期）
+
+### 当前方向补记（2026-07-16）
+
+- 已迁移到 React 的页面和工作区 surface 不再以“长期保留 legacy fallback”为最终状态；React 必须在功能完整、用户行为等价、扩展/自动化契约可用后成为唯一 runtime owner。
+- 兼容性是外部行为要求，不是保留 jQuery、hidden DOM host、legacy action facade 或 feature-flag fallback 的理由。
+- 回滚使用上一个发布版本，不在同一发布版本中保留 legacy runtime。
+- 本补记不把尚未进入 React 迁移的 surface 自动纳入，也不授权 `/workspace-next` 或全站 SPA 重写。
 
 ## Durable Documentation Organization
 

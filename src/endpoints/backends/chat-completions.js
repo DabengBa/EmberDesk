@@ -91,10 +91,11 @@ async function sendClaudeRequest(request, response) {
 
     try {
         const controller = new AbortController();
-        request.socket.removeAllListeners('close');
-        request.socket.on('close', function () {
+        const abortRequest = () => {
             controller.abort();
-        });
+        };
+        request.socket.once('close', abortRequest);
+        response.once('finish', () => request.socket.removeListener('close', abortRequest));
         const additionalHeaders = {};
         const betaHeaders = ['output-128k-2025-02-19', 'context-1m-2025-08-07'];
         const useTools = Array.isArray(request.body.tools) && request.body.tools.length > 0;
@@ -472,10 +473,11 @@ async function sendMakerSuiteRequest(request, response) {
 
     try {
         const controller = new AbortController();
-        request.socket.removeAllListeners('close');
-        request.socket.on('close', function () {
+        const abortRequest = () => {
             controller.abort();
-        });
+        };
+        request.socket.once('close', abortRequest);
+        response.once('finish', () => request.socket.removeListener('close', abortRequest));
 
         const apiVersion = getConfigValue('gemini.apiVersion', 'v1beta');
         const responseType = (stream ? 'streamGenerateContent' : 'generateContent');
@@ -905,10 +907,11 @@ router.post('/generate', async function (request, response) {
         const endpointUrl = `${apiUrl}/chat/completions`;
 
         const controller = new AbortController();
-        request.socket.removeAllListeners('close');
-        request.socket.on('close', function () {
+        const abortRequest = () => {
             controller.abort();
-        });
+        };
+        request.socket.once('close', abortRequest);
+        response.once('finish', () => request.socket.removeListener('close', abortRequest));
 
         if (Array.isArray(request.body.tools) && request.body.tools.length > 0) {
             bodyParams['tools'] = request.body.tools;

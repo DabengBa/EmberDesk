@@ -20,6 +20,7 @@ import {
     buildSettingsSavePayload,
     chatDisplayOptions,
     defaultSettingsFormValues,
+    getConnectionProfileOptions,
     getProviderModelFieldConfig,
     getValueAtPath,
     imageOverswipeOptions,
@@ -32,7 +33,6 @@ import {
     reasoningEffortOptions,
     sendOnEnterOptions,
     settingsCoverage,
-    settingsOwnerInventory,
     settingsTabDefinitions,
     tagImportSettingOptions,
     toastPositionOptions,
@@ -318,6 +318,7 @@ function SettingsPage() {
     });
     const [pageError, setPageError] = useState('');
     const [saveStatus, setSaveStatus] = useState<{ kind: 'success' | 'info'; message: string } | null>(null);
+    const [hasRevisionConflict, setHasRevisionConflict] = useState(false);
     const [showDiagnostics, setShowDiagnostics] = useState(false);
     const [providerSecretInput, setProviderSecretInput] = useState('');
     const [fallbackSecretInput, setFallbackSecretInput] = useState('');
@@ -428,6 +429,11 @@ function SettingsPage() {
                 return;
             }
 
+            if (hasRevisionConflict) {
+                setPageError('设置已在其他会话中更新。请先重新加载当前设置，再合并并保存草稿。');
+                return;
+            }
+
             setPageError('');
             setSaveStatus(null);
 
@@ -449,8 +455,12 @@ function SettingsPage() {
             }
 
             const csrfToken = await ensureCsrfToken();
+            const baselineFormValues = buildSettingsFormDefaults(parsedPayload.settings);
+            const connectionProfileChanged = values.providers.connectionProfileId
+                !== baselineFormValues.providers.connectionProfileId;
             const payload = buildSettingsSavePayload(parsedPayload.settings, values, {
                 settingsRevision: parsedPayload.settingsRevision,
+                baselineFormValues,
             });
             const response = await fetch('/api/settings/save', {
                 method: 'POST',
@@ -463,17 +473,24 @@ function SettingsPage() {
 
             if (!response.ok) {
                 if (response.status === 409) {
-                    await refetchSettings();
-                    throw new MessageError('设置已被其他会话更新，已重新加载，请确认后再保存。');
+                    setHasRevisionConflict(true);
+                    throw new MessageError('设置已被其他会话更新；本地草稿仍保留。请重新加载当前设置后合并并再次保存。');
                 }
                 throw new MessageError('设置保存失败。');
             }
 
             await refetchSettings();
+            setHasRevisionConflict(false);
             setSaveStatus({ kind: 'success', message: '设置已保存。返回 Workspace 后将与刷新后一致地加载。' });
             try {
                 window.sessionStorage.setItem('emberdesk-settings-saved-at', String(Date.now()));
                 window.sessionStorage.setItem('emberdesk-settings-revision', String(parsedPayload.settingsRevision ?? ''));
+                if (connectionProfileChanged) {
+                    window.sessionStorage.setItem(
+                        'emberdesk-settings-apply-connection-profile',
+                        JSON.stringify(values.providers.connectionProfileId),
+                    );
+                }
             } catch {
                 // sessionStorage may be unavailable in private contexts
             }
@@ -528,9 +545,6 @@ function SettingsPage() {
         },
         secretKey: currentSecretKey,
     });
-    const vertexAiFullMode = providerSource === 'makersuite'
-        && settingsFormValues.providers.useVertexAi
-        && settingsFormValues.providers.vertexaiAuthMode === 'full';
     const fallbackProviderReady = hasFallbackProviderSettings({
         fallback_provider_enabled: settingsFormValues.providers.fallbackProviderEnabled,
         fallback_provider_base_url: settingsFormValues.providers.fallbackProviderBaseUrl,
@@ -601,14 +615,14 @@ function SettingsPage() {
     });
 
     useEffect(() => {
-        if (!parsedPayload) {
+        if (!parsedPayload || hasRevisionConflict) {
             return;
         }
 
         const nextDefaults = buildSettingsFormDefaults(parsedPayload.settings);
         settingsForm.reset(nextDefaults, { keepDefaultValues: true });
         setPageError('');
-    }, [parsedPayload?.rawSettings]);
+    }, [hasRevisionConflict, parsedPayload?.rawSettings]);
 
     useEffect(() => {
         if (!saveStatus) {
@@ -635,11 +649,31 @@ function SettingsPage() {
     }, [settingsData]);
 
     const isBusy = saveMutation.isPending || secretsQuery.isPending || providerSecretMutation.isPending;
+    const connectionProfileOptions = useMemo(
+        () => getConnectionProfileOptions(parsedPayload?.settings ?? {}),
+        [parsedPayload?.rawSettings],
+    );
 
     function clearTransientState() {
         saveMutation.reset();
         setSaveStatus(null);
         setPageError('');
+    }
+
+    async function reloadCurrentSettings() {
+        setPageError('');
+        setSaveStatus(null);
+        saveMutation.reset();
+
+        const result = await refetchSettings();
+        if (result.error || !result.data) {
+            setPageError(result.error instanceof Error ? result.error.message : '无法重新加载当前设置。');
+            return;
+        }
+
+        const refreshedPayload = parseSettingsPayload(result.data);
+        settingsForm.reset(buildSettingsFormDefaults(refreshedPayload.settings), { keepDefaultValues: true });
+        setHasRevisionConflict(false);
     }
 
     async function handleProviderSecretAction(options: {
@@ -707,6 +741,20 @@ function SettingsPage() {
                         {pageError && (
                             <div className="settings-status settings-status--error">
                                 {pageError}
+                            </div>
+                        )}
+
+                        {hasRevisionConflict && (
+                            <div className="settings-status settings-status--error">
+                                <p>当前草稿基于过期版本，尚未丢失。重新加载会放弃本地草稿，并显示当前保存的设置。</p>
+                                <button
+                                    type="button"
+                                    className="settings-button settings-button--secondary"
+                                    onClick={() => void reloadCurrentSettings()}
+                                    disabled={isBusy}
+                                >
+                                    重新加载当前设置
+                                </button>
                             </div>
                         )}
 
@@ -1454,8 +1502,10 @@ function SettingsPage() {
                                     <SettingField
                                         form={settingsForm}
                                         name="providers.connectionProfileId"
-                                        label="Connection Profile Id"
-                                        description="Settings path binding for providers.connectionProfileId."
+                                        label="Connection Profile"
+                                        description="Returning to Workspace applies the selected profile through Connection Manager."
+                                        variant="select"
+                                        options={connectionProfileOptions}
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
@@ -2991,7 +3041,7 @@ function SettingsPage() {
                                         <button
                                             type="submit"
                                             className="settings-button settings-button--primary"
-                                            disabled={isBusy || settingsQuery.isPending || isPristine}
+                                            disabled={isBusy || settingsQuery.isPending || isPristine || hasRevisionConflict}
                                         >
                                             {saveMutation.isPending ? '保存中...' : isPristine ? '修改后可保存' : '保存设置'}
                                         </button>
@@ -3051,8 +3101,7 @@ function SettingsPage() {
                                 <div className="settings-diagnostics-group">
                                     <h3 className="settings-diagnostics-title">Legacy-owned</h3>
                                     <ul className="settings-diagnostics-list">
-                                        {/* specialized surfaces remain outside /settings: */ void settingsOwnerInventory.specializedSurfaces}
-                                        {settingsCoverage.legacyOwned.map(path => (
+                                            {settingsCoverage.legacyOwned.map(path => (
                                             <li key={path}>{path}</li>
                                         ))}
                                     </ul>

@@ -64,6 +64,7 @@ export function createWorkspacePanelActionBridge({
     dispatchAction,
     remount,
     shouldRemount = () => true,
+    shouldRemountOnError = shouldRemount,
 }) {
     return {
         dispatchAction(action, payload = {}) {
@@ -73,7 +74,7 @@ export function createWorkspacePanelActionBridge({
                 }
                 return actionResult;
             }, error => {
-                if (shouldRemount(undefined, action, payload)) {
+                if (shouldRemountOnError(error, action, payload)) {
                     remount();
                 }
                 throw error;

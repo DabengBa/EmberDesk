@@ -21,7 +21,6 @@ import {
     CANONICAL_SECRETS_AUDIT_SCOPE,
     getCanonicalSecretsProjection,
 } from './canonical-secrets-shadow-import.js';
-import { isPathUnderParent } from './util.js';
 import {
     buildCanonicalRollbackBlockers,
     listOpenProjectionRepairs,
@@ -56,6 +55,7 @@ import {
     resolveCanonicalChatProjectionRepair,
     serializeCanonicalChatSession,
 } from './endpoints/canonical-chat-store.js';
+import { resolveCanonicalChatProjectionPath } from './endpoints/canonical-chat-projection-path.js';
 import {
     buildCharacterFileSnapshotRow,
     calculateCharacterChatStats,
@@ -700,18 +700,24 @@ export async function repairCanonicalWorldInfoProjection({ db, directories, repa
     };
 }
 
-function getCanonicalChatProjectionPath(directories, sourcePath) {
-    const filePath = path.resolve(directories.root, String(sourcePath));
-    if (!isPathUnderParent(directories.root, filePath)) {
-        throw new Error(`Canonical chat projection path escapes user root: ${sourcePath}`);
-    }
-    return filePath;
+function getCanonicalChatProjectionPath(directories, sourcePath, ownerType, ownerId) {
+    return resolveCanonicalChatProjectionPath({
+        directories,
+        ownerType,
+        ownerId,
+        sourcePath,
+    });
 }
 
 function repairSingleCanonicalChatProjection({ db, directories, repair, nowMs = Date.now() }) {
     const operation = repair.operation;
     try {
-        const filePath = getCanonicalChatProjectionPath(directories, repair.sourcePath);
+        const filePath = getCanonicalChatProjectionPath(
+            directories,
+            repair.sourcePath,
+            repair.ownerType,
+            repair.ownerId,
+        );
         if (operation === 'delete') {
             fs.rmSync(filePath, { force: true });
         } else {
@@ -736,7 +742,12 @@ function repairSingleCanonicalChatProjection({ db, directories, repair, nowMs = 
             writeFileAtomicSync(filePath, jsonl, 'utf8');
 
             if (operation === 'rename' && repair.details?.previousSourcePath) {
-                const previousPath = getCanonicalChatProjectionPath(directories, repair.details.previousSourcePath);
+                const previousPath = getCanonicalChatProjectionPath(
+                    directories,
+                    repair.details.previousSourcePath,
+                    repair.ownerType,
+                    repair.ownerId,
+                );
                 if (previousPath !== filePath) {
                     fs.rmSync(previousPath, { force: true });
                 }

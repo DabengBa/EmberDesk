@@ -141,6 +141,77 @@ describe('canonical chat route authority', () => {
         expect(response.body).toEqual(canonicalPayload);
     });
 
+    test('serves canonical search and recent results after a clean audit even when JSONL changes out of band', async () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-canonical-chat-route-'));
+        roots.push(root);
+        const directories = {
+            root,
+            storage: path.join(root, 'storage'),
+            characters: path.join(root, 'characters'),
+            chats: path.join(root, 'chats'),
+            groups: path.join(root, 'groups'),
+            groupChats: path.join(root, 'group chats'),
+        };
+        for (const directory of Object.values(directories)) {
+            fs.mkdirSync(directory, { recursive: true });
+        }
+        fs.writeFileSync(path.join(directories.characters, 'alice.png'), 'avatar', 'utf8');
+        const chatDirectory = path.join(directories.chats, 'alice');
+        fs.mkdirSync(chatDirectory, { recursive: true });
+        const chatPath = path.join(chatDirectory, 'first.jsonl');
+        const canonicalPayload = [
+            { chat_metadata: { integrity: 'canonical' } },
+            { name: 'User', send_date: '2026-01-01T00:00:00.000Z', mes: 'Canonical search term' },
+        ];
+        fs.writeFileSync(chatPath, canonicalPayload.map(line => JSON.stringify(line)).join('\n'), 'utf8');
+
+        const db = canonicalSqliteManager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        runCanonicalMigrations(db);
+        await runCanonicalChatShadowImport({
+            handle: 'alice',
+            directories,
+            db,
+            featureFlags: { enabled: true, shadowImport: true, strict: false },
+        });
+        await auditCanonicalChatShadowImport({ handle: 'alice', directories, db });
+
+        fs.writeFileSync(chatPath, [
+            '{"chat_metadata":{"integrity":"external"}}',
+            '{"name":"User","mes":"Do not return this JSONL payload"}',
+        ].join('\n'), 'utf8');
+
+        const searchResponse = makeResponse();
+        await getRouteHandler('/search')({
+            body: { avatar_url: 'alice.png', query: 'canonical search' },
+            user: { directories, profile: { handle: 'alice' } },
+        }, searchResponse);
+        expect(searchResponse.body).toEqual([
+            expect.objectContaining({
+                file_name: 'first',
+                preview_message: 'Canonical search term',
+                last_mes: '2026-01-01T00:00:00.000Z',
+            }),
+        ]);
+
+        const recentResponse = makeResponse();
+        await getRouteHandler('/recent')({
+            body: { max: 10, metadata: true },
+            user: { directories, profile: { handle: 'alice' } },
+        }, recentResponse);
+        expect(recentResponse.body).toEqual([
+            expect.objectContaining({
+                file_name: 'first.jsonl',
+                mes: 'Canonical search term',
+                chat_metadata: { integrity: 'canonical' },
+                avatar: 'alice.png',
+            }),
+        ]);
+    });
+
     test('commits /save to canonical rows before projecting the JSONL compatibility file', async () => {
         const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-canonical-chat-route-'));
         roots.push(root);

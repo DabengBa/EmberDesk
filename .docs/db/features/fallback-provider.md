@@ -13,7 +13,7 @@ related: [page.api_configuration, feature.connection_profile]
 
 ## Purpose
 
-Let a user configure an optional second OpenAI-compatible endpoint that automatic visible-chat recovery may use after the primary provider retry is exhausted.
+Let a user configure an optional second OpenAI-compatible endpoint that eligible visible-chat recovery may use after the primary provider retry is exhausted.
 
 ## User-Visible Contract
 
@@ -22,6 +22,7 @@ Let a user configure an optional second OpenAI-compatible endpoint that automati
 - The section shows enough readiness state and warning copy for the user to understand that fallback can create extra API requests and cost.
 - The fallback API key is handled as a dedicated secret; after save, the UI must not expose the raw secret as plain settings text.
 - If saving the fallback key fails, the typed value remains available in the input so the user can retry or copy it instead of losing the secret.
+- Quiet and background helpers do not consume this fallback: they return text without a visible assistant row or automatic recovery.
 
 ## Semantic Interaction IDs
 

@@ -50,4 +50,14 @@ Doc IDs: feature.character_library_panel, page.chat_workspace
 
 ## Review
 
+- [x] High — delete incremental reconciliation now re-renders the React panel state instead of rebuilding legacy list rows (`public/script.js`; R4/R6).
+- [x] High — React folder back navigation now invokes `chooseBogusFolder(..., 'back')` directly and stops propagation, preventing recursive/self-delegated back handling (`public/script.js`, `CharacterLibraryStatusBlocks.tsx`; R3).
+- [x] Medium — React character and group rows now project card tags and preserve required tag visibility/identity semantics (`public/script.js`, `app/components/character-library/*`; R2/R5).
+- [x] Medium — React character, group, and folder interactions now use direct component callbacks with propagation stopped; list-row clicks no longer depend on document-level legacy delegation (`app/components/character-library/*`; R3).
+- [x] Medium — retired Character Library flag/module/bootstrap/build-path wiring was removed; the E2E server always builds the sole-owner bundle (`default/config.yaml`, `src/workspace-react-features.js`, tests/helpers; R6).
+- [x] Documentation now describes the fail-closed sole-owner release contract, not a legacy fallback (`feature.character_library_panel`, `page.chat_workspace`; R8).
+- [x] Validation: focused unit suite (9 suites / 104 tests), compatibility gate, Character Library React bundle, semantic-doc check (30 docs), and welcome Character Management E2E all passed. The E2E result is diagnostic because this workspace has Node `24.16.0`; the required Node `26.3.0` release proof is unavailable locally.
+- [x] Doc-ID gate: semantic documentation topology is clean (`bun run docs:check`).
+- [x] Major UX regression — Bulk “All” now selects all current-page character entities from React state rather than only mounted virtual rows; visually verified from 13 to 48 selected on the 50-entity fixture (two rows are groups).
+- [x] Medium UX regression — selected favourite-card titles now retain `--SmartThemeBodyColor`, preventing the favourite highlight from matching the orange bulk-selection background; visually verified at 375px.
 - [x] Review complete

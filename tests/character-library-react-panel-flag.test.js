@@ -32,7 +32,7 @@ describe('character library React sole owner', () => {
         expect(fs.existsSync(path.join(repoRoot, 'app/components/character-library/HostedDomSlot.tsx'))).toBe(true);
     });
 
-    test('keeps workspace feature bootstrap compatibility while list ownership is always React', async () => {
+    test('removes the retired character-library product flag from workspace bootstrap', async () => {
         const featureBootstrapModule = await import(`../src/workspace-react-features.js?workspaceFeatures=${Date.now()}-${Math.random()}`);
         const source = read('public/script.js');
         const serverMainSource = read('src/server-main.js');
@@ -50,20 +50,22 @@ describe('character library React sole owner', () => {
 
         const renderedHtml = featureBootstrapModule.injectWorkspaceReactFeatures(baseHtml, {
             reactPanels: {
-                characterLibrary: true,
+                mainChatMessageList: false,
             },
         });
 
         expect(renderedHtml).toContain('window.__emberDeskWorkspaceFeatures');
-        expect(renderedHtml).toContain('"characterLibrary":true');
+        expect(renderedHtml).not.toContain('"characterLibrary"');
         expect(source).toContain('globalThis.__emberDeskWorkspaceFeatures');
+        expect(source).not.toContain('characterLibrary: false');
         expect(serverMainSource).toContain('injectWorkspaceReactFeatures');
         expect(serverMainSource).toContain('getWorkspaceReactFeatures');
     });
 
-    test('documents character library as enabled by default in config', () => {
+    test('removes retired character-library config and feature module', () => {
         const configSource = read('default/config.yaml');
         expect(configSource).toContain('panels:');
-        expect(configSource).toContain('characterLibrary: true');
+        expect(configSource).not.toContain('characterLibrary:');
+        expect(fs.existsSync(path.join(repoRoot, 'src/react-character-library-feature.js'))).toBe(false);
     });
 });

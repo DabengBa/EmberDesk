@@ -21,10 +21,8 @@ describe('main chat bridge contract', () => {
             'swipeRight',
         ]);
         expect(MAIN_CHAT_VISIBLE_TRANSPORT_STATUSES).toEqual({
-            REACT_OWNED: 'react-owned',
-            LEGACY_FALLBACK: 'legacy-fallback',
+            SERVICE_OWNED: 'service-owned',
             UNSUPPORTED_WITH_REASON: 'unsupported-with-reason',
-            LEGACY_OWNED: 'legacy-owned',
         });
         expect(MAIN_CHAT_VISIBLE_TRANSPORT_PATHS).toEqual(expect.objectContaining({
             STANDARD_OPENAI_VISIBLE_DIRECT_CHAT: 'standard-openai-visible-direct-chat',

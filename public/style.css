@@ -5680,6 +5680,23 @@ h5 {
     margin: 0;
 }
 
+.select_chat_empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-height: 120px;
+    padding: 20px;
+    text-align: center;
+    opacity: 0.75;
+}
+
+.select_chat_empty .menu_button {
+    min-width: max-content;
+    white-space: nowrap;
+}
+
 .select_chat_block_wrapper {
     cursor: pointer;
 }
@@ -6684,7 +6701,42 @@ body[data-react-workspace-shell-chrome="mounted"] #chat[data-main-chat-layout-ow
 }
 
 .emberdesk-react-authoring-panel-host {
+    flex: 1 1 100%;
+    min-width: 0;
+    max-width: 100%;
+    align-self: stretch;
     margin: 0 4px 10px;
+}
+
+.workspace-panel-background-item {
+    display: grid;
+    grid-template-columns: minmax(96px, 0.35fr) minmax(0, 1fr);
+    gap: 8px;
+    align-items: start;
+}
+
+.workspace-panel-background-preview {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 5px;
+    background-color: var(--SmartThemeBlurTintColor);
+    background-position: center;
+    background-size: cover;
+}
+
+.workspace-panel-background-details {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.workspace-panel-background-actions .menu_button,
+.workspace-panel-background-details > .flex-container .menu_button {
+    flex: 0 0 auto;
+    min-width: max-content;
+    white-space: nowrap;
 }
 
 .react-authoring-panel {
@@ -6811,8 +6863,16 @@ body[data-react-workspace-shell-chrome="mounted"] #chat[data-main-chat-layout-ow
     flex-wrap: wrap;
     gap: 5px;
     align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    margin-inline: -6px;
     border-top: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 48%, transparent);
-    padding-top: 8px;
+    padding: 8px 6px 6px;
+    background:
+        linear-gradient(color-mix(in srgb, var(--SmartThemeBlurTintColor) 86%, transparent), color-mix(in srgb, var(--SmartThemeBlurTintColor) 86%, transparent)),
+        color-mix(in srgb, black 88%, var(--SmartThemeBodyColor) 12%);
+    box-shadow: 0 8px 18px color-mix(in srgb, black 22%, transparent);
 }
 
 .react-authoring-panel-actions .react-authoring-save {
@@ -6870,18 +6930,6 @@ body[data-react-workspace-shell-chrome="mounted"] #chat[data-main-chat-layout-ow
 
     .react-authoring-candidates {
         max-height: min(180px, 28dvh);
-    }
-
-    .react-authoring-panel-actions {
-        position: sticky;
-        bottom: 0;
-        z-index: 2;
-        margin-inline: -6px;
-        padding: 8px 6px 6px;
-        background:
-            linear-gradient(color-mix(in srgb, var(--SmartThemeBlurTintColor) 86%, transparent), color-mix(in srgb, var(--SmartThemeBlurTintColor) 86%, transparent)),
-            color-mix(in srgb, black 88%, var(--SmartThemeBodyColor) 12%);
-        box-shadow: 0 -8px 18px color-mix(in srgb, black 22%, transparent);
     }
 
     #right-nav-panel.openDrawer:has([data-react-authoring-owner]) {

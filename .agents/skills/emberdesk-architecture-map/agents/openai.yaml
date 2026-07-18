@@ -1,4 +1,0 @@
-interface:
-  display_name: "EmberDesk Architecture Map"
-  short_description: "Navigate EmberDesk architecture, boundaries, and docs."
-  default_prompt: "Use this when you need to understand EmberDesk architecture, entry points, module boundaries, or semantic docs before changing code."

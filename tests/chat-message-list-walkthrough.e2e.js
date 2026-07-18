@@ -17,7 +17,7 @@ const characterName = 'Dev Character 001';
 const chatFolder = 'dev-character-001';
 const seededChatName = 'Dev Character 001 Session 01';
 const alternateChatName = 'Dev Character 001 Session 02';
-const longChatName = 'Dev Character 001 Long Rendering Proof';
+const longChatName = 'Dev Character 001 Long Walkthrough Proof';
 const reasoningChatName = 'Dev Character 001 Reasoning Walkthrough';
 const reactMainChatMessageListEnabled = process.env.EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST === 'true';
 const seededChatPath = path.join(userRoot, 'chats', chatFolder, `${seededChatName}.jsonl`);
@@ -145,16 +145,32 @@ async function setChatTruncation(page, truncationLimit) {
 }
 
 async function openCharacterManagement(page) {
-    const openCharacterManagementButton = page.getByRole('button', { name: 'Open Character Management' });
     const characterList = page.locator('#rm_characters_block');
 
     if (await characterList.isVisible()) {
         return;
     }
 
-    await expect(openCharacterManagementButton).toBeVisible();
-    await openCharacterManagementButton.click();
-    await expect(characterList).toBeVisible();
+    const panelButton = page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'Character Library' });
+    if (await panelButton.isVisible()) {
+        await panelButton.click({ timeout: 10_000 });
+        await expect(panelButton).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
+    } else {
+        await page.locator('.mes .drawer-opener[data-target="rightNavHolder"]').filter({ hasText: /Character Management|角色管理/ }).first().click();
+    }
+    await expect(page.locator('#right-nav-panel.openDrawer #rm_characters_block')).toBeVisible({ timeout: 10_000 });
+}
+
+async function closeCharacterAuthoringAfterSelection(page) {
+    const authoringPanel = page.locator('[data-react-authoring-owner="characterAuthoring"]');
+    if (!await authoringPanel.isVisible()) {
+        return;
+    }
+
+    const activePanelButton = page.locator('.react-workspace-shell-nav-button[aria-pressed="true"]').first();
+    await expect(activePanelButton).toBeVisible();
+    await activePanelButton.click();
+    await expect(authoringPanel).toBeHidden();
 }
 
 async function selectCharacterFromVisibleList(page, name) {
@@ -162,7 +178,11 @@ async function selectCharacterFromVisibleList(page, name) {
     const characterCard = page.locator('#rm_print_characters_block .character_select').filter({ hasText: name }).first();
     await expect(characterCard).toBeVisible();
     await characterCard.click();
-    await expect(characterCard).toHaveClass(/is_active/);
+    await expect.poll(async () => page.evaluate((characterName) => {
+        const context = window.SillyTavern.getContext();
+        return context.characters[context.characterId]?.name === characterName;
+    }, name)).toBe(true);
+    await closeCharacterAuthoringAfterSelection(page);
     await expect(page.locator('#options_button')).toBeVisible();
 }
 
@@ -332,11 +352,34 @@ test.describe('main chat message list walkthrough', () => {
         await openPastChat(page, longChatName);
         await expect(page.locator('#show_more_messages')).toBeVisible();
         await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(longChatLimit);
-        await page.locator('#show_more_messages').click();
+        await page.locator('#show_more_messages').evaluate(element => element.click());
         await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(longChatLimit * 2);
         await expectMainChatHostPresent(page, longChatLimit * 2);
         await expect(page.locator('#jump_to_latest_message')).toHaveCount(0);
         await expect(page.locator(`#chat > .mes[mesid="${longMessages.length - 1}"] .mes_text`)).toContainText(longMessages.at(-1).mes);
+
+        expect(getUnexpectedConsoleErrors(consoleErrors)).toEqual([]);
+    });
+
+    test('chat history search explains a zero-match result and lets the user recover', async ({ page }) => {
+        const consoleErrors = createConsoleErrorCollector(page);
+
+        await testSetup.awaitST({ page });
+        await selectCharacterFromVisibleList(page, characterName);
+        await openPastChatsPopup(page);
+
+        const search = page.locator('#select_chat_search');
+        const noMatches = page.locator('#select_chat_empty');
+        await search.fill('walkthrough query with no matching chat');
+        await expect(page.locator('#select_chat_div .select_chat_block')).toHaveCount(0);
+        await expect(noMatches).toBeVisible();
+        await expect(noMatches).toContainText('No chats match your search.');
+
+        const clearSearchButton = noMatches.getByRole('button', { name: 'Clear search' });
+        await expect(clearSearchButton).toHaveCSS('white-space', 'nowrap');
+        await clearSearchButton.click();
+        await expect(search).toHaveValue('');
+        await expect(page.locator('#select_chat_div .select_chat_block').first()).toBeVisible();
 
         expect(getUnexpectedConsoleErrors(consoleErrors)).toEqual([]);
     });

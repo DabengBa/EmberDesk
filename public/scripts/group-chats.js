@@ -173,11 +173,14 @@ function setAutoModeWorker() {
  * @param {boolean} reload Whether to reload characters after saving
  */
 async function _save(group, reload = true) {
-    await fetch('/api/groups/edit', {
+    const response = await fetch('/api/groups/edit', {
         method: 'POST',
         headers: getRequestHeaders(),
         body: JSON.stringify(group),
     });
+    if (!response.ok) {
+        throw new Error(`Group save failed with status ${response.status}`);
+    }
     if (reload) {
         await getCharacters();
     }

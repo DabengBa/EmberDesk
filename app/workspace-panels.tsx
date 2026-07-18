@@ -26,10 +26,6 @@ import {
     updateMainChatObservation,
 } from './stores/main-chat-observation-store.js';
 import {
-    deriveReactQuietTransportBridgeState,
-    deriveReactVisibleTransportBridgeState,
-} from '../public/scripts/main-chat-visible-transport-owner.js';
-import {
     MAIN_CHAT_MESSAGE_ACTION_SNAPSHOT_SCHEMA,
     MAIN_CHAT_MESSAGE_ROW_SNAPSHOT_SCHEMA,
     MAIN_CHAT_RICH_BODY_SNAPSHOT_SCHEMA,
@@ -245,6 +241,7 @@ interface MainChatMessageListWorkspacePanelState {
     rightSendForm?: HTMLElement | null;
     sendTextarea?: HTMLTextAreaElement | null;
     sendButton?: HTMLElement | null;
+    stopButton?: HTMLElement | null;
     continueButton?: HTMLElement | null;
     regenerateButton?: HTMLElement | null;
     composerValue?: string;
@@ -1212,7 +1209,7 @@ function createMainChatVisibleTransportRuntime(kind: string): MainChatVisibleTra
     return {
         owner: 'react',
         kind,
-        supportStatus: MAIN_CHAT_VISIBLE_TRANSPORT_STATUSES.REACT_OWNED,
+        supportStatus: MAIN_CHAT_VISIBLE_TRANSPORT_STATUSES.SERVICE_OWNED,
         supportPath: MAIN_CHAT_VISIBLE_TRANSPORT_PATHS.STANDARD_OPENAI_VISIBLE_DIRECT_CHAT,
         supportReason: MAIN_CHAT_VISIBLE_TRANSPORT_REASONS.SUPPORTED_KIND,
         phase: 'connecting',
@@ -1638,6 +1635,7 @@ function getMainChatComposerTargets(state: MainChatMessageListWorkspacePanelStat
 
     const continueButton = state.continueButton instanceof HTMLElement ? state.continueButton : null;
     const regenerateButton = state.regenerateButton instanceof HTMLElement ? state.regenerateButton : null;
+    const stopButton = state.stopButton instanceof HTMLElement ? state.stopButton : null;
 
     return {
         nonQrFormItems,
@@ -1646,6 +1644,7 @@ function getMainChatComposerTargets(state: MainChatMessageListWorkspacePanelStat
         rightSendForm,
         sendForm,
         sendButton,
+        stopButton,
         continueButton,
         regenerateButton,
     };
@@ -1760,6 +1759,14 @@ function MainChatComposerOwnerPortal({
             restoreComposerFocus();
             void runSerializedComposerAction({ kind: 'submitComposer' });
         };
+        const handleStopButtonClick = (event: MouseEvent) => {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            event.stopPropagation();
+            window.setTimeout(() => {
+                void bridge?.dispatchAction?.('stopVisibleGeneration');
+            }, 0);
+        };
         const handleContinueButtonClick = (event: MouseEvent) => {
             event.preventDefault();
             event.stopImmediatePropagation();
@@ -1779,6 +1786,7 @@ function MainChatComposerOwnerPortal({
         targets.sendTextarea.addEventListener('input', syncComposerField);
         targets.sendTextarea.addEventListener('keydown', handleTextareaKeyDown, true);
         targets.sendButton.addEventListener('click', handleSendButtonClick, true);
+        targets.stopButton?.addEventListener('click', handleStopButtonClick, true);
         targets.continueButton?.addEventListener('click', handleContinueButtonClick, true);
         targets.regenerateButton?.addEventListener('click', handleRegenerateButtonClick, true);
 
@@ -1786,6 +1794,7 @@ function MainChatComposerOwnerPortal({
             targets.sendTextarea.removeEventListener('input', syncComposerField);
             targets.sendTextarea.removeEventListener('keydown', handleTextareaKeyDown, true);
             targets.sendButton.removeEventListener('click', handleSendButtonClick, true);
+            targets.stopButton?.removeEventListener('click', handleStopButtonClick, true);
             targets.continueButton?.removeEventListener('click', handleContinueButtonClick, true);
             targets.regenerateButton?.removeEventListener('click', handleRegenerateButtonClick, true);
         };
@@ -3480,8 +3489,6 @@ function MainChatMessageListRestoreController({
 function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown; bridge?: WorkspacePanelBridge }) {
     const bridgeState = asMainChatMessageListState(state);
     const [reactVisibleTransportRuntime, setReactVisibleTransportRuntime] = useState<MainChatVisibleTransportRuntimeState | null>(null);
-    const [visibleTransportDecision, setVisibleTransportDecision] = useState<MainChatVisibleTransportDecisionState | null>(null);
-    const visibleTransportGlobalExecutionInFlightRef = useRef(false);
     const messageRowMap = useMemo(() => {
         const rows = new Map<string, HTMLElement>();
 
@@ -3523,145 +3530,15 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
             )
         ));
     }, [bridgeState.messageActionSnapshots, messageRowMap]);
-    const executePreparedVisibleTransportRequest = useCallback(async (
-        prepared: MainChatPreparedVisibleTransportRequest | undefined,
-        payload: { kind: string; messageId?: number },
-    ) => {
-        try {
-            const kind = String(payload.kind ?? '');
-            if (!prepared || prepared.owner !== 'react' || !prepared.runAttempt || !prepared.handleFailure || !prepared.finalizeSuccess) {
-                setReactVisibleTransportRuntime(null);
-                return prepared;
-            }
-
-            const attempts = Array.isArray(prepared.attempts) ? prepared.attempts : [];
-            setReactVisibleTransportRuntime({
-                ...createMainChatVisibleTransportRuntime(kind),
-                supportStatus: prepared.status ?? MAIN_CHAT_VISIBLE_TRANSPORT_STATUSES.REACT_OWNED,
-                supportPath: prepared.path ?? MAIN_CHAT_VISIBLE_TRANSPORT_PATHS.STANDARD_OPENAI_VISIBLE_DIRECT_CHAT,
-                supportReason: prepared.reason ?? MAIN_CHAT_VISIBLE_TRANSPORT_REASONS.SUPPORTED_KIND,
-            });
-
-            for (let attemptIndex = 0; attemptIndex < attempts.length; attemptIndex += 1) {
-                const attempt = attempts[attemptIndex];
-                const recoveryPhase = attempt.label === 'fallback' ? 'recoveringFallback' : 'recoveringPrimary';
-
-                if (attemptIndex > 0) {
-                    await prepared.prepareRetryAttempt?.(attempt, attemptIndex);
-                    setReactVisibleTransportRuntime((current) => ({
-                        ...(current ?? createMainChatVisibleTransportRuntime(kind)),
-                        kind,
-                        phase: recoveryPhase,
-                        fromFallbackAttempt: attempt.fallbackProvider === true,
-                        recoverable: true,
-                        failureRetryVisible: false,
-                        failureNoticeVisible: false,
-                        recoveryStatusLabel: attempt.status || null,
-                        errorLabel: null,
-                        formattedMessageHtml: '',
-                    }));
-                }
-
-                try {
-                    const result = await prepared.runAttempt(attempt, attemptIndex, {
-                        onMessageHtml: ({ messageId, formattedMessageHtml }) => {
-                            setReactVisibleTransportRuntime((current) => ({
-                                ...(current ?? createMainChatVisibleTransportRuntime(kind)),
-                                kind,
-                                phase: 'streaming',
-                                activeMessageId: messageId,
-                                formattedMessageHtml,
-                            }));
-                        },
-                        onTransportState: (partial) => {
-                            setReactVisibleTransportRuntime((current) => ({
-                                ...(current ?? createMainChatVisibleTransportRuntime(kind)),
-                                ...partial,
-                                kind,
-                                owner: 'react',
-                            }));
-                        },
-                    });
-                    setReactVisibleTransportRuntime((current) => current
-                        ? {
-                            ...current,
-                            phase: 'completed',
-                            recoveryStatusLabel: null,
-                            errorLabel: null,
-                            failureRetryVisible: false,
-                            failureNoticeVisible: false,
-                        }
-                        : current);
-                    return await prepared.finalizeSuccess(result);
-                } catch (exception) {
-                    const failure = await prepared.handleFailure(exception, attempt, attemptIndex);
-                    if (failure.action === 'retry') {
-                        continue;
-                    }
-
-                    const errorMessage = String((failure.exception as { message?: unknown })?.message ?? failure.exception ?? '');
-                    const stopped = isReactVisibleTransportStopException(failure.exception);
-                    setReactVisibleTransportRuntime((current) => current
-                        ? {
-                            ...current,
-                            phase: stopped ? 'stopped' : 'error',
-                            recoverable: !stopped,
-                            recoveryStatusLabel: null,
-                            errorLabel: stopped ? null : errorMessage,
-                            failureRetryVisible: !stopped,
-                            failureNoticeVisible: !stopped,
-                            formattedMessageHtml: stopped ? current.formattedMessageHtml : '',
-                        }
-                        : current);
-                    await prepared.finalizeError?.(failure.exception);
-                    return failure.exception;
-                }
-            }
-
-            return undefined;
-        } finally {
-            scheduleMainChatVisibleTransportRuntimeSettle(setReactVisibleTransportRuntime);
-        }
-    }, []);
     const visibleTransportMutation = useMutation({
         mutationFn: async (payload: { kind: string; messageId?: number }) => {
-            const prepared = await bridge?.dispatchAction?.('prepareVisibleGeneration', payload) as MainChatPreparedVisibleTransportRequest | undefined;
-            setVisibleTransportDecision(extractMainChatVisibleTransportDecision(prepared, String(payload.kind ?? '')));
-            return await executePreparedVisibleTransportRequest(prepared, payload);
+            return await bridge?.dispatchAction?.('triggerVisibleGeneration', payload);
         },
         retry: false,
         onSettled: () => {
             scheduleMainChatVisibleTransportRuntimeSettle(setReactVisibleTransportRuntime);
         },
     });
-
-    useEffect(() => {
-        const scope = globalThis as typeof globalThis & {
-            __emberDeskExecuteMainChatVisibleTransportRequest?: (
-                prepared: MainChatPreparedVisibleTransportRequest,
-            ) => Promise<unknown>;
-        };
-
-        scope.__emberDeskExecuteMainChatVisibleTransportRequest = async (prepared) => {
-            if (visibleTransportGlobalExecutionInFlightRef.current) {
-                return undefined;
-            }
-
-            visibleTransportGlobalExecutionInFlightRef.current = true;
-            try {
-                setVisibleTransportDecision(extractMainChatVisibleTransportDecision(prepared, String(prepared.kind ?? '')));
-                return await executePreparedVisibleTransportRequest(prepared, {
-                    kind: String(prepared.kind ?? ''),
-                });
-            } finally {
-                visibleTransportGlobalExecutionInFlightRef.current = false;
-            }
-        };
-
-        return () => {
-            delete scope.__emberDeskExecuteMainChatVisibleTransportRequest;
-        };
-    }, [executePreparedVisibleTransportRequest]);
 
     const rawActiveRuntimeMessageRow = getMainChatActiveRuntimeMessageRow(
         messageRowMap,
@@ -3692,16 +3569,6 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
         effectiveReactVisibleTransportRuntime,
         bridgeState.streamingTransport ?? mainChatStreamingTransportFallback,
     );
-    const visibleTransportBridgeState = deriveReactVisibleTransportBridgeState({
-        runtime: effectiveReactVisibleTransportRuntime,
-        decision: visibleTransportDecision,
-        generationControl: effectiveGenerationControl,
-        streamingTransport: effectiveStreamingTransport,
-    });
-    const quietTransportBridgeState = deriveReactQuietTransportBridgeState({
-        runtime: bridgeState.quietTransport ?? mainChatQuietTransportFallback,
-        contract: bridgeState.quietTransport ?? mainChatQuietTransportFallback,
-    });
     const mainChatLocalStatus = getMainChatLocalStatus(bridgeState, effectiveGenerationControl);
     const mainChatLocalStatusLabel = getMainChatLocalStatusLabel(mainChatLocalStatus, effectiveGenerationControl);
 
@@ -3752,11 +3619,6 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
                 data-main-chat-streaming-transport-tokens={effectiveStreamingTransport.observedTokenCount ?? 0}
                 data-main-chat-streaming-transport-message-id={effectiveStreamingTransport.activeMessageId ?? ''}
                 data-main-chat-streaming-transport-fallback={effectiveStreamingTransport.fromFallbackAttempt ? 'true' : 'false'}
-                data-main-chat-visible-transport-owner={visibleTransportBridgeState.visibleTransportOwner}
-                data-main-chat-visible-transport-kind={visibleTransportBridgeState.visibleTransportKind}
-                data-main-chat-visible-transport-status={visibleTransportBridgeState.visibleTransportStatus}
-                data-main-chat-visible-transport-path={visibleTransportBridgeState.visibleTransportPath}
-                data-main-chat-visible-transport-reason={visibleTransportBridgeState.visibleTransportReason}
                 data-main-chat-windowing-owner={bridgeState.windowingContract?.windowingOwner ?? 'legacy'}
                 data-main-chat-windowing-load-more-owner={bridgeState.windowingContract?.loadMoreOwner ?? 'legacy'}
                 data-main-chat-windowing-restore-owner={bridgeState.windowingContract?.restoreOwner ?? 'legacy'}
@@ -3767,18 +3629,6 @@ function MainChatMessageListWorkspacePanel({ state, bridge }: { state?: unknown;
                 data-main-chat-row-lifecycle-streaming-owner={bridgeState.rowLifecycleContract?.streamingOwner ?? 'legacy'}
                 data-main-chat-row-lifecycle-unsafe-owner={bridgeState.rowLifecycleContract?.unsafeOwner ?? 'legacy'}
                 data-main-chat-row-lifecycle-extension-owner={bridgeState.rowLifecycleContract?.extensionMutatedOwner ?? 'legacy'}
-                data-main-chat-quiet-transport-owner={quietTransportBridgeState.quietTransportOwner}
-                data-main-chat-quiet-transport-kind={quietTransportBridgeState.quietTransportKind}
-                data-main-chat-quiet-transport-status={quietTransportBridgeState.quietTransportStatus}
-                data-main-chat-quiet-transport-path={quietTransportBridgeState.quietTransportPath}
-                data-main-chat-quiet-transport-reason={quietTransportBridgeState.quietTransportReason}
-                data-main-chat-quiet-transport-phase={quietTransportBridgeState.quietTransportPhase}
-                data-main-chat-quiet-transport-error={quietTransportBridgeState.quietTransportError}
-                data-main-chat-quiet-transport-auto-recover={quietTransportBridgeState.quietTransportAutoRecover ? 'true' : 'false'}
-                data-main-chat-quiet-transport-streaming={quietTransportBridgeState.quietTransportUsesStreaming ? 'true' : 'false'}
-                data-main-chat-quiet-transport-visible-row={quietTransportBridgeState.quietTransportBindsVisibleRow ? 'true' : 'false'}
-                data-main-chat-quiet-transport-finalization={quietTransportBridgeState.quietTransportFinalization}
-                data-main-chat-quiet-transport-rollback={quietTransportBridgeState.quietTransportRollback}
             />
             <MainChatMessageListRestoreController key={bridgeState.chatId || 'main-chat-empty'} state={bridgeState} bridge={bridge} />
             <MainChatComposerOwnerPortal

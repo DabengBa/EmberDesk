@@ -5,7 +5,10 @@ import path from 'node:path';
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
 import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
-import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import {
+    CANONICAL_SQLITE_MIGRATIONS,
+    runCanonicalMigrations,
+} from '../src/canonical-sqlite-migrations.js';
 import {
     auditCanonicalShadowImport,
     getPersistedCanonicalAuditStatus,
@@ -810,7 +813,7 @@ describe('canonical sqlite shadow import', () => {
             migrationStatus: expect.objectContaining({
                 ok: true,
                 currentVersion: 0,
-                targetVersion: 2,
+                targetVersion: CANONICAL_SQLITE_MIGRATIONS.at(-1).version,
             }),
         }));
         expect(getPersistedCanonicalAuditStatus(db)).toEqual(expect.objectContaining({

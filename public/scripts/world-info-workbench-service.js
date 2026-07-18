@@ -69,6 +69,7 @@ export function buildWorldInfoWorldOptions(worldNames, selectedWorldName = '') {
 export function buildWorldInfoReactPanelState(snapshot, meta = {}) {
     const worldNames = Array.isArray(meta.worldNames) ? meta.worldNames : [];
     const selectedWorldName = snapshot?.editorWorldName || '';
+    const searchQuery = String(meta.searchQuery ?? '');
     const resolvedIndex = selectedWorldName && worldNames.includes(selectedWorldName)
         ? String(worldNames.indexOf(selectedWorldName))
         : '';
@@ -85,12 +86,12 @@ export function buildWorldInfoReactPanelState(snapshot, meta = {}) {
         selectedWorldIndex: resolvedIndex,
         entryCount: snapshot?.entryCount ?? 0,
         entrySummaries: Array.isArray(snapshot?.entrySummaries) ? snapshot.entrySummaries : [],
-        searchQuery: String(meta.searchQuery ?? ''),
+        searchQuery,
         sortValue: String(meta.sortValue ?? '0'),
         sortOptions: (meta.sortOptions ?? WORLD_INFO_DEFAULT_SORT_OPTIONS).map(option => ({
             value: option.value,
             label: option.label,
-            hidden: Boolean(option.hidden),
+            hidden: Boolean(option.hidden) && !searchQuery,
         })),
         canCreateEntry: Boolean(selectedWorldName),
         exportMenuPresent: true,
@@ -112,12 +113,14 @@ export function buildWorldInfoReactPanelState(snapshot, meta = {}) {
  * @typedef {object} WorldInfoWorkbenchSessionDeps
  * @property {string[]} worldNames
  * @property {string[]} [selectedWorldInfo]
+ * @property {string} [initialSortValue]
  * @property {(name: string) => Promise<object|null|undefined>} loadWorldInfo
  * @property {(name: string, data: object, immediately?: boolean) => Promise<void>} [saveWorldInfo]
  * @property {() => ({sortField?: string, sortOrder?: string, sortRule?: string}|null)} [getSortOption]
  * @property {() => string} [getSearchQuery]
  * @property {(entry: object, query: string) => boolean} [matchesSearch]
  * @property {(entries: any[]) => any[]} [applyFilters]
+ * @property {(uid: string|number) => number|undefined} [getSearchScore]
  * @property {(data: object, uid: any, key: string, value: any) => void} [setOriginalDataValue]
  */
 
@@ -169,6 +172,7 @@ export function createWorldInfoWorkbenchSession(deps) {
         if (selectedValue === '') {
             selectedWorldName = '';
             selectedEntryUid = '';
+            searchQuery = '';
             return;
         }
 
@@ -180,11 +184,15 @@ export function createWorldInfoWorkbenchSession(deps) {
         if (!worldName) {
             selectedWorldName = '';
             selectedEntryUid = '';
+            searchQuery = '';
             return;
         }
 
         selectedWorldName = worldName;
         selectedEntryUid = '';
+        // Preserve legacy editor semantics: selecting another book starts with
+        // an unfiltered entry list instead of carrying a query across books.
+        searchQuery = '';
         // Warm cache via repository; ignore payload.
         await deps.loadWorldInfo(worldName);
     }
@@ -296,6 +304,7 @@ export function createWorldInfoWorkbenchSession(deps) {
         const entriesArray = buildWorldInfoEntryList(data.entries, {
             applyFilters: resolveFilters(),
             customSort: resolveSortOption(),
+            getSearchScore: deps.getSearchScore,
         });
 
         return entriesArray.map(entry => buildWorldInfoWorkbenchEntrySummary(entry));

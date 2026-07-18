@@ -706,7 +706,7 @@ async function invokeCharacterLibraryScenario(page, scenarioName) {
             throw new Error('printCharacters is unavailable on EmberDesk perf hooks.');
         }
 
-        const listElement = document.querySelector('#rm_print_characters_block');
+        let listElement = document.querySelector('#rm_print_characters_block');
         if (!listElement) {
             throw new Error('Character list element is unavailable.');
         }
@@ -722,6 +722,22 @@ async function invokeCharacterLibraryScenario(page, scenarioName) {
             renderedCharacterCount: listElement.querySelectorAll('.character_select').length,
             renderedGroupCount: listElement.querySelectorAll('.group_select').length,
         });
+        const describeCharacterLibraryRenderState = () => {
+            const rightPanel = document.body.querySelector(':scope > #top-settings-holder > #rightNavHolder > #right-nav-panel');
+            const drawerRect = rightPanel?.getBoundingClientRect() ?? new DOMRect();
+            const listRect = listElement.getBoundingClientRect();
+            return {
+                drawerClassName: rightPanel?.className ?? null,
+                drawerDisplay: rightPanel ? getComputedStyle(rightPanel).display : null,
+                drawerHeight: Math.round(drawerRect.height),
+                drawerWidth: Math.round(drawerRect.width),
+                listChildCount: listElement.childElementCount,
+                listHeight: Math.round(listRect.height),
+                listWidth: Math.round(listRect.width),
+                reactPanelMounted: Boolean(listElement.querySelector('.character-library-react-panel')),
+                ...countRows(),
+            };
+        };
         const waitForCondition = async (predicate, timeoutMs = 120000) => {
             const startedAt = performance.now();
             while (performance.now() - startedAt < timeoutMs) {
@@ -761,23 +777,54 @@ async function invokeCharacterLibraryScenario(page, scenarioName) {
             10000,
             null,
         );
+        const normalizeCharacterLibraryDrawerGeometry = (rightPanel) => {
+            const holder = rightPanel.parentElement;
+            const canonicalSettingsHolder = document.body.querySelector(':scope > #top-settings-holder');
+            if (holder instanceof HTMLElement
+                && canonicalSettingsHolder instanceof HTMLElement
+                && holder.parentElement !== canonicalSettingsHolder) {
+                canonicalSettingsHolder.append(holder);
+            }
+        };
         const showCharacterLibrary = async () => {
-            document.querySelector('#rm_button_characters')?.click();
+            let rightPanel = document.getElementById('right-nav-panel');
+            if (!rightPanel || typeof perfHooks.openCharacterLibraryForPerf !== 'function') {
+                throw new Error('Character Library perf open action is unavailable.');
+            }
+
+            normalizeCharacterLibraryDrawerGeometry(rightPanel);
+            rightPanel = document.body.querySelector(':scope > #top-settings-holder > #rightNavHolder > #right-nav-panel');
+            if (!(rightPanel instanceof HTMLElement)) {
+                throw new Error('Character Library canonical drawer is unavailable.');
+            }
+            await perfHooks.openCharacterLibraryForPerf();
+            const opened = await waitForCondition(() => rightPanel.classList.contains('openDrawer'), 10000);
+            if (!opened) {
+                throw new Error(`Character Library drawer did not open. ${JSON.stringify(describeCharacterLibraryRenderState())}`);
+            }
             await nextFrame();
+            return rightPanel;
         };
 
-        await showCharacterLibrary();
+        const characterLibraryDrawer = await showCharacterLibrary();
+        listElement = characterLibraryDrawer.querySelector('#rm_print_characters_block');
+        if (!(listElement instanceof HTMLElement)) {
+            throw new Error('Character Library canonical list element is unavailable.');
+        }
 
         if (targetScenario === 'character_library_first_interactive') {
             context.accountStorage?.setItem?.('Characters_PerPage', '1000');
+            if (typeof perfHooks.resetCharacterLibraryPanelForPerf !== 'function') {
+                throw new Error('resetCharacterLibraryPanelForPerf is unavailable on EmberDesk perf hooks.');
+            }
 
+            await perfHooks.resetCharacterLibraryPanelForPerf();
             const pageLoadedPromise = waitForCharacterPageLoaded();
-            listElement.replaceChildren();
             const startedAt = performance.now();
-            const printPromise = printCharactersBounded(true);
-            const firstItem = await waitForCondition(() => listElement.querySelector(rowSelector));
+            const restorePromise = printCharactersBounded(true);
+            const firstItem = await waitForCondition(() => listElement.querySelector(rowSelector), 10000);
             if (!firstItem) {
-                throw new Error('Timed out waiting for the first character-library row.');
+                throw new Error(`Timed out waiting for the first character-library row. Character Library first-interactive render state: ${JSON.stringify(describeCharacterLibraryRenderState())}`);
             }
 
             const firstListItemVisibleMs = performance.now() - startedAt;
@@ -796,7 +843,7 @@ async function invokeCharacterLibraryScenario(page, scenarioName) {
             const firstListItemClickable = selectedFirstItem !== null;
             const firstListItemClickableMs = performance.now() - startedAt;
 
-            await printPromise;
+            await restorePromise;
             const pageLoadedAt = await pageLoadedPromise;
             await nextFrame();
             const browserMs = performance.now() - startedAt;

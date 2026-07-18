@@ -8,6 +8,7 @@ It owns transient dock state, status normalization, and compatibility-snapshot b
 
 ## Architecture And Constraints
 
+- This note describes the current staged implementation, not the approved final ownership. Under [ADR-0012](../adr/0012-react-migrated-surface-legacy-retirement.md), the same-entry shell is a final-wave retirement surface: it cannot remove legacy drawer coordination until migrated panels and main chat no longer need it.
 - `src/workspace-react-features.js` exposes `reactPages.settings`, independent panel flags, and `reactShell.{takeover,strict}` to the legacy workspace HTML before response send.
 - `public/script.js` remains the runtime owner for opening and closing existing drawers and invoking the current panel facades. The React shell never bypasses that path with a second panel behavior implementation.
 - `app/workspace-panels.tsx` owns the visible React chrome, navigation entry metadata, local dock loading/result bookkeeping, status normalization, and shell-facing data attributes.
@@ -77,3 +78,4 @@ Related deeper docs:
 
 - [React Workspace Panel Flags Processing Flow](../logic-description/react_workspace_panel_flags_processing_flow.md)
 - [ADR-0007: React page and panel islands with legacy fallbacks](../adr/0007-react-page-islands-with-legacy-fallbacks.md)
+- [ADR-0012: Retire Legacy Runtime Owners From Migrated React Surfaces](../adr/0012-react-migrated-surface-legacy-retirement.md)

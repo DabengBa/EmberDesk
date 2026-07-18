@@ -245,4 +245,36 @@ describe('canonical chat write service', () => {
 
         manager.dispose();
     });
+
+    test('does not treat message text as an unregistered managed attachment path', async () => {
+        const directories = makeDirectories();
+        const manager = createCanonicalSqliteManager({ logger: { info() {}, warn() {} } });
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        runCanonicalMigrations(db, { nowMs: 1735689600000 });
+
+        const result = writeCanonicalChatPayload({
+            db,
+            locator: {
+                ownerType: 'character',
+                ownerId: 'alice',
+                sourcePath: 'chats/alice/first.jsonl',
+            },
+            payload: [
+                { chat_metadata: { integrity: 'clean' } },
+                { name: 'User', mes: 'files/unregistered.txt is only text in this message.' },
+            ],
+            projectJsonl() {},
+            nowMs: 1735689601000,
+        });
+
+        expect(result).toEqual(expect.objectContaining({
+            ok: true,
+            authorityCommitted: true,
+        }));
+        manager.dispose();
+    });
 });

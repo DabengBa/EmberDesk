@@ -241,7 +241,7 @@ export const ReasoningState = {
 
 /**
  * Handles reasoning-specific logic and DOM updates for messages.
- * This class is used inside the {@link StreamingProcessor} to manage reasoning states and UI updates.
+ * This class is used inside the {@link GenerationStreamSession} to manage reasoning states and UI updates.
  */
 export class ReasoningHandler {
     /** @type {boolean} True if the model supports reasoning, but hides the reasoning output */

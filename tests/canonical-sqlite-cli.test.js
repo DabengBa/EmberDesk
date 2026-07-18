@@ -112,9 +112,13 @@ describe('canonical sqlite CLI scripts', () => {
         expect(repairHelp).toContain('repair-managed-media-projection');
         expect(repairHelp).toContain('repair-chat-projection');
         expect(repairHelp).toContain('list-chat-repairs');
+        expect(repairHelp).toContain('backup-chat');
+        expect(repairHelp).toContain('restore-chat');
+        expect(repairHelp).toContain('chat-restore-status');
         expect(repairHelp).toContain('gc-managed-media');
         expect(repairHelp).toContain('status');
         expect(repairHelp).toContain('--slice');
+        expect(repairHelp).toContain('--backup-file');
     });
 
     test('runs a clean managed media audit through the audit CLI', async () => {
@@ -428,6 +432,103 @@ describe('canonical sqlite CLI scripts', () => {
                 status: 'blocked',
                 blocker: 'repair_not_found',
             })],
+        }));
+    });
+
+    test('creates, restores, and reports a canonical chat backup through the repair CLI', async () => {
+        const dataRoot = makeRoot();
+        const directories = createDirectories(path.join(dataRoot, 'alice'));
+        const backupFile = path.join(dataRoot, 'canonical-chat-backup.json');
+        const manager = createManager();
+        writeChatFile(directories, 'alice.png', 'first.jsonl', [
+            '{"chat_metadata":{"integrity":"clean"}}',
+            '{"name":"User","mes":"Before"}',
+        ].join('\n'));
+
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        runCanonicalMigrations(db, { nowMs: 1735689600000 });
+        await runCanonicalChatShadowImport({
+            handle: 'alice',
+            directories,
+            db,
+            featureFlags: { enabled: true, shadowImport: true, strict: false },
+            nowMs: 1735689600000,
+        });
+        manager.dispose();
+
+        const backupOutput = execFileSync('node', [
+            'scripts/canonical-sqlite-repair.mjs',
+            'backup-chat',
+            '--data-root', dataRoot,
+            '--handle', 'alice',
+            '--backup-file', backupFile,
+            '--json',
+        ], {
+            cwd: repoRoot,
+            encoding: 'utf8',
+        });
+        expect(JSON.parse(backupOutput)).toEqual(expect.objectContaining({
+            ok: true,
+            backupFile,
+            sessionCount: 1,
+        }));
+
+        const currentManager = createManager();
+        const currentDb = currentManager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        writeCanonicalChatPayload({
+            db: currentDb,
+            locator: {
+                ownerType: 'character',
+                ownerId: 'alice',
+                sourcePath: 'chats/alice/first.jsonl',
+            },
+            payload: [
+                { chat_metadata: { integrity: 'clean', updated: true } },
+                { name: 'User', mes: 'After' },
+            ],
+            projectJsonl(jsonl) {
+                fs.writeFileSync(path.join(directories.chats, 'alice', 'first.jsonl'), jsonl, 'utf8');
+            },
+            nowMs: 1735689601000,
+        });
+        currentManager.dispose();
+
+        const restoreOutput = execFileSync('node', [
+            'scripts/canonical-sqlite-repair.mjs',
+            'restore-chat',
+            '--data-root', dataRoot,
+            '--handle', 'alice',
+            '--backup-file', backupFile,
+            '--json',
+        ], {
+            cwd: repoRoot,
+            encoding: 'utf8',
+        });
+        expect(JSON.parse(restoreOutput)).toEqual(expect.objectContaining({
+            ok: true,
+            status: 'restored',
+        }));
+
+        const statusOutput = execFileSync('node', [
+            'scripts/canonical-sqlite-repair.mjs',
+            'chat-restore-status',
+            '--data-root', dataRoot,
+            '--handle', 'alice',
+            '--json',
+        ], {
+            cwd: repoRoot,
+            encoding: 'utf8',
+        });
+        expect(JSON.parse(statusOutput)).toEqual(expect.objectContaining({
+            status: 'restored',
         }));
     });
 

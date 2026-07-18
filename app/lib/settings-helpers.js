@@ -415,7 +415,7 @@ function mapUseVertexAiToFormValue(value, settings) {
         return true;
     }
 
-    return value;
+    return value === true || value === 'true' || value === 1 || value === '1';
 }
 
 const fieldBindings = [
@@ -443,6 +443,7 @@ const fieldBindings = [
         settingsPath: 'oai_settings.chat_completion_source',
         toForm: mapChatCompletionSourceToFormValue,
         toSettings: mapChatCompletionSourceToSettingsValue,
+        saveWhenFormPathsChanged: ['providers.useVertexAi'],
     },
     { tab: 'providers', formPath: 'providers.openaiModel', settingsPath: 'oai_settings.openai_model' },
     { tab: 'providers', formPath: 'providers.claudeModel', settingsPath: 'oai_settings.claude_model' },
@@ -838,18 +839,74 @@ export function buildSettingsFormDefaults(settings) {
     return defaults;
 }
 
+export function getConnectionProfileOptions(settings) {
+    const profiles = getValueAtPath(settings, 'extension_settings.connectionManager.profiles', []);
+    const selectedProfile = getValueAtPath(settings, 'extension_settings.connectionManager.selectedProfile', null);
+    const profileOptions = [];
+    const profileIds = new Set();
+
+    if (Array.isArray(profiles)) {
+        for (const profile of profiles) {
+            const id = profile?.id == null ? '' : String(profile.id);
+            if (!id || profileIds.has(id)) {
+                continue;
+            }
+
+            profileIds.add(id);
+            profileOptions.push({
+                value: id,
+                label: String(profile?.name || id),
+            });
+        }
+    }
+
+    const staleProfileId = selectedProfile == null ? '' : String(selectedProfile);
+    return [
+        { value: '', label: 'No connection profile' },
+        ...profileOptions.sort((left, right) => left.label.localeCompare(right.label)),
+        ...(staleProfileId && !profileIds.has(staleProfileId)
+            ? [{ value: staleProfileId, label: `Unavailable profile (${staleProfileId})` }]
+            : []),
+    ];
+}
+
+function areFormValuesEqual(left, right) {
+    if (Object.is(left, right)) {
+        return true;
+    }
+
+    if (!left || !right || typeof left !== 'object' || typeof right !== 'object') {
+        return false;
+    }
+
+    return JSON.stringify(left) === JSON.stringify(right);
+}
+
 /**
  * @param {object} baseSettings
  * @param {object} formValues
- * @param {{ settingsRevision?: number | null }} [options]
+ * @param {{ settingsRevision?: number | null, baselineFormValues?: object | null }} [options]
  */
-export function buildSettingsSavePayload(baseSettings, formValues, { settingsRevision = null } = {}) {
+export function buildSettingsSavePayload(baseSettings, formValues, { settingsRevision = null, baselineFormValues = null } = {}) {
     const nextSettings = structuredClone(baseSettings && typeof baseSettings === 'object' ? baseSettings : {});
 
     for (const binding of fieldBindings) {
         const formValue = getValueAtPath(formValues, binding.formPath);
+        const baselineValue = baselineFormValues
+            ? getValueAtPath(baselineFormValues, binding.formPath)
+            : undefined;
+        const saveWhenDependencyChanged = baselineFormValues
+            && Array.isArray(binding.saveWhenFormPathsChanged)
+            && binding.saveWhenFormPathsChanged.some(path => !areFormValuesEqual(
+                getValueAtPath(formValues, path),
+                getValueAtPath(baselineFormValues, path),
+            ));
         // Partial form objects (tests or progressive UI) must not wipe unbound paths with undefined.
         if (formValue === undefined && typeof binding.toSettings !== 'function') {
+            continue;
+        }
+
+        if (baselineFormValues && areFormValuesEqual(formValue, baselineValue) && !saveWhenDependencyChanged) {
             continue;
         }
 

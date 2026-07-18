@@ -40,17 +40,18 @@ export function CharacterLibraryBackBlock({ onBack }: { onBack?: () => void }) {
         <div
             className="bogus_folder_select bogus_folder_select_back flex-container wide100p alignitemsflexstart"
             id="BogusFolderBack"
+            {...{ tagid: 'back' }}
             role="button"
             tabIndex={0}
-            ref={(node) => {
-                if (node) {
-                    node.setAttribute('tagid', 'back');
-                }
+            onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onBack?.();
             }}
-            onClick={() => onBack?.()}
             onKeyDown={(event) => {
                 if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault();
+                    event.stopPropagation();
                     onBack?.();
                 }
             }}

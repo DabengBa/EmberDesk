@@ -49,6 +49,19 @@
     padding: 20px;
 }
 
+.settings-page-header-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.settings-workspace-link {
+    text-decoration: none;
+    white-space: nowrap;
+}
+
 .settings-page-header {
     margin-bottom: 15px;
 }

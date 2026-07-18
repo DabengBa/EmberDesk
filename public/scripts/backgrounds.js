@@ -44,6 +44,8 @@ let folderList = [];
 let imageFolderMap = {};
 /** @type {string|null} Currently active folder drill-in, or null for root */
 let activeFolderId = null;
+/** @type {'global'|'chat'|null} Explicit source chosen by the React upload action. */
+let pendingBackgroundUploadSource = null;
 /** @type {Set<string>} Selected system backgrounds for group folder actions */
 const selectedSystemBackgroundFiles = new Set();
 /** @type {boolean} Whether click-to-select mode is active for system backgrounds */
@@ -1088,7 +1090,7 @@ function getFilteredImages() {
  */
 function onFolderDrillIn(folderId) {
     const folder = folderList.find(f => f.id === folderId);
-    if (!folder) return;
+    if (!folder) return false;
 
     clearBackgroundGroupSelection();
     activeFolderId = folderId;
@@ -1103,6 +1105,7 @@ function onFolderDrillIn(folderId) {
     // Render only this folder's images
     renderSystemBackgrounds(getFilteredImages());
     syncBackgroundSelectionUi();
+    return true;
 }
 
 /**
@@ -1688,30 +1691,30 @@ async function onBackgroundUploadSelected(e) {
         return;
     }
 
-    for (const file of input.files) {
-        if (file.size === 0) {
-            continue;
-        }
+    const uploadSource = pendingBackgroundUploadSource
+        ?? (getActiveBackgroundTab() === BG_SOURCES.CHAT ? 'chat' : 'global');
 
-        const formData = new FormData();
-        formData.append('avatar', file);
-
-        await convertFileIfVideo(formData);
-        switch (getActiveBackgroundTab()) {
-            case BG_SOURCES.GLOBAL:
-                await uploadBackground(formData);
-                break;
-            case BG_SOURCES.CHAT:
-                await uploadChatBackground(formData);
-                break;
-            default:
-                console.error('Unknown background source type');
+    try {
+        for (const file of input.files) {
+            if (file.size === 0) {
                 continue;
-        }
-    }
+            }
 
-    // Allow re-uploading the same file again by clearing the input value
-    input.value = '';
+            const formData = new FormData();
+            formData.append('avatar', file);
+
+            await convertFileIfVideo(formData);
+            if (uploadSource === 'chat') {
+                await uploadChatBackground(formData);
+            } else {
+                await uploadBackground(formData);
+            }
+        }
+    } finally {
+        pendingBackgroundUploadSource = null;
+        // Allow re-uploading the same file again by clearing the input value.
+        input.value = '';
+    }
 }
 
 /**
@@ -1911,29 +1914,23 @@ export function applyBackgroundLibrarySort(sortValue) {
     onBackgroundFilterInput();
 }
 
-export function requestBackgroundUploadSelection() {
+export function requestBackgroundUploadSelection(source = 'global') {
+    pendingBackgroundUploadSource = source === 'chat' ? 'chat' : 'global';
     document.getElementById('add_bg_button')?.click();
     return true;
 }
 
-export function selectBackgroundLibraryItem(backgroundId, source) {
+export async function selectBackgroundLibraryItem(backgroundId, source) {
     const normalizedBackgroundId = String(backgroundId ?? '');
-    const normalizedSource = String(source ?? '');
-    const candidates = normalizedSource === 'chat'
-        ? document.querySelectorAll('#bg_custom_content .bg_example')
-        : document.querySelectorAll('#bg_menu_content .bg_example');
-    const backgroundElement = Array.from(candidates)
-        .find(element => element.getAttribute('bgfile') === normalizedBackgroundId);
-    if (!backgroundElement) {
-        // No legacy gallery node: service is the sole selection owner.
-        void ensureBackgroundLibrarySession().selectBackground(
-            normalizedBackgroundId,
-            normalizedSource === 'chat' ? 'chat' : 'global',
-        );
-        syncBackgroundSelectionUi();
-        return true;
+    const result = await ensureBackgroundLibrarySession().selectBackground(
+        normalizedBackgroundId,
+        source === 'chat' ? 'chat' : 'global',
+    );
+    if (!result?.ok) {
+        return false;
     }
-    return applyBackgroundSelection(backgroundElement, { respectGroupSelectionMode: false });
+    syncBackgroundSelectionUi();
+    return true;
 }
 
 export function lockCurrentBackground() {
@@ -1966,10 +1963,7 @@ export function unlockCurrentBackground() {
 export async function runAutoBackgroundSelection() {
     const serviceResult = await ensureBackgroundLibrarySession().runAutoBackgroundSelection();
     if (serviceResult?.ok) {
-        // Apply selection to settings/visuals via existing select path for identity consistency.
-        if (serviceResult.name) {
-            selectBackgroundLibraryItem(serviceResult.name, 'global');
-        }
+        syncBackgroundSelectionUi();
         return true;
     }
     // Fall back to the established AI command path when the service cannot resolve a match.
@@ -2039,15 +2033,10 @@ export async function deleteBackgroundLibraryItem(backgroundId, source = 'global
 }
 
 export function enterBackgroundLibraryFolder(folderId) {
-    const result = ensureBackgroundLibrarySession().enterFolder(folderId);
-    if (result?.ok) {
-        onFolderDrillIn(folderId);
-    }
-    return Boolean(result?.ok);
+    return Boolean(onFolderDrillIn(folderId));
 }
 
 export function exitBackgroundLibraryFolder() {
-    ensureBackgroundLibrarySession().exitFolder();
     onBackToFolders();
     return true;
 }
