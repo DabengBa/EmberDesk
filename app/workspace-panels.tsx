@@ -1376,7 +1376,16 @@ function MainChatActiveTransportRowOwnerPortal({
         messageRow.dataset.mainChatMessageRowState = 'streaming';
         messageRow.dataset.mainChatMessageRowPreserveLive = 'true';
         messageRow.dataset.mainChatMessageRow = String(runtime.activeMessageId ?? '');
-        messageText.innerHTML = runtime.formattedMessageHtml ?? '';
+
+        // Never clobber extension-owned streaming/render mutations during token updates.
+        const liveExtensionMutation = Boolean(
+            messageRow.querySelector('.mes_streaming, .TH-streaming')
+            || messageText.querySelector('.TH-render'),
+        );
+        const nextHtml = runtime.formattedMessageHtml ?? '';
+        if (!liveExtensionMutation && messageText.innerHTML !== nextHtml) {
+            messageText.innerHTML = nextHtml;
+        }
 
         return () => {
             delete messageRow.dataset.mainChatActiveTransportOwner;
@@ -1435,18 +1444,32 @@ function MainChatRichBodyOwnerPortal({
         // Editing/streaming/extension-mutated rows keep live DOM (edit textarea, stream tokens, TH mutations).
         // Also re-check live markers so a stale finalized snapshot cannot wipe extension mutations.
         // React still owns the shell markers so the row is not remounted as a second lifecycle owner.
+        // Skip identical HTML rewrites: snapshot HTML is captured from the same live nodes, and
+        // reassigning innerHTML destroys code-copy listeners, media element identity, and AudioPlayer.
         const liveExtensionMutation = Boolean(
             messageRow.querySelector('.mes_streaming, .TH-streaming')
             || targets.messageNode.querySelector('.TH-render')
             || messageRow.querySelector('.edit_textarea, .reasoning_edit_textarea'),
         );
         if (!snapshot.preserveLiveContent && !liveExtensionMutation) {
-            targets.reasoningDetails.open = snapshot.reasoningOpen ?? false;
-            targets.reasoningNode.innerHTML = snapshot.reasoningHtml;
-            targets.messageNode.innerHTML = snapshot.messageHtml;
-            targets.mediaNode.innerHTML = snapshot.mediaHtml;
-            targets.fileNode.innerHTML = snapshot.fileHtml;
-            targets.biasNode.innerHTML = snapshot.biasHtml;
+            if (targets.reasoningDetails.open !== Boolean(snapshot.reasoningOpen)) {
+                targets.reasoningDetails.open = snapshot.reasoningOpen ?? false;
+            }
+            if (targets.reasoningNode.innerHTML !== snapshot.reasoningHtml) {
+                targets.reasoningNode.innerHTML = snapshot.reasoningHtml;
+            }
+            if (targets.messageNode.innerHTML !== snapshot.messageHtml) {
+                targets.messageNode.innerHTML = snapshot.messageHtml;
+            }
+            if (targets.mediaNode.innerHTML !== snapshot.mediaHtml) {
+                targets.mediaNode.innerHTML = snapshot.mediaHtml;
+            }
+            if (targets.fileNode.innerHTML !== snapshot.fileHtml) {
+                targets.fileNode.innerHTML = snapshot.fileHtml;
+            }
+            if (targets.biasNode.innerHTML !== snapshot.biasHtml) {
+                targets.biasNode.innerHTML = snapshot.biasHtml;
+            }
         }
 
         return () => {

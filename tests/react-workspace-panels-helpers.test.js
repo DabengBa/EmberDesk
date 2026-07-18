@@ -363,7 +363,7 @@ describe('React workspace panels bridge helpers', () => {
         const scriptSource = read('public/script.js');
         const groupChatsSource = read('public/scripts/group-chats.js');
 
-        expect(configSource).toContain('mainChatMessageList: true');
+        expect(configSource).not.toContain('mainChatMessageList:');
         expect(configSource).not.toContain('characterAuthoring:');
         expect(configSource).not.toContain('groupAuthoring:');
         expect(packageSource).toContain('"build:react:workspace-panels": "vite build --mode workspace-panels"');
@@ -1355,6 +1355,8 @@ test('renders an Extensions Host workflow through React-owned controls and expli
         expect(workspacePanelSource).toContain('richBodySnapshots?: MainChatRichBodySnapshot[];');
         expect(workspacePanelSource).toContain('function MainChatRichBodyOwnerPortal(');
         expect(workspacePanelSource).toContain('if (!snapshot.preserveLiveContent && !liveExtensionMutation)');
+        expect(workspacePanelSource).toContain('targets.messageNode.innerHTML !== snapshot.messageHtml');
+        expect(workspacePanelSource).toContain('Never clobber extension-owned streaming/render mutations during token updates.');
         expect(workspacePanelSource).toContain('targets.messageNode.innerHTML = snapshot.messageHtml;');
         expect(workspacePanelSource).toContain('targets.reasoningNode.innerHTML = snapshot.reasoningHtml;');
         expect(workspacePanelSource).toContain('targets.mediaNode.innerHTML = snapshot.mediaHtml;');

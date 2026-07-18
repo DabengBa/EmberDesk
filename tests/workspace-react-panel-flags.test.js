@@ -175,7 +175,7 @@ describe('workspace React panel flags', () => {
         expect(configSource).toContain('shell:');
         expect(configSource).toContain('takeover: false');
         expect(configSource).not.toContain('characterLibrary:');
-        expect(configSource).toContain('mainChatMessageList: true');
+        expect(configSource).not.toContain('mainChatMessageList:');
         expect(configSource).not.toContain('worldInfo:');
         expect(configSource).toContain('backgroundLibrary: true');
         expect(configSource).toContain('extensionsHost: true');
@@ -238,6 +238,13 @@ describe('workspace React panel flags', () => {
             EMBERDESK_FEATURES_REACT_PANELS_EXTENSIONSHOST: 'true',
             EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST: 'true',
         });
+
+        // Sole-owner main-chat flag must overwrite a preexisting false env value.
+        const retiredFlagEnv = {
+            EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST: 'false',
+        };
+        applyWorkspaceReactPlaywrightFlagDefaults(retiredFlagEnv, ['playwright', 'test', 'login.e2e.js']);
+        expect(retiredFlagEnv.EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST).toBe('true');
     });
 
     test('always builds the React character-library bundle and only flags guarded workspace panels', () => {

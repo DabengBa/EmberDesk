@@ -22,11 +22,13 @@ export function buildChatMessageRenderDescriptor(message, { messageId, timestamp
     const flags = {
         hasForcedAvatar: forcedAvatar,
         hasReasoning: hasMeaningfulValue(extra.reasoning),
-        hasMedia: hasMeaningfulValue(extra.image)
+        hasMedia: hasMeaningfulValue(extra.media)
+            || hasMeaningfulValue(extra.image)
             || hasMeaningfulValue(extra.image_url)
             || hasMeaningfulValue(extra.imageUrl)
             || hasMeaningfulValue(extra.images)
-            || hasMeaningfulValue(extra.image_urls),
+            || hasMeaningfulValue(extra.image_urls)
+            || hasMeaningfulValue(extra.video),
         hasAttachment: hasMeaningfulValue(extra.file) || hasMeaningfulValue(extra.files),
         hasDisplayText: typeof extra.display_text === 'string',
         hasBias: extra.bias !== undefined && extra.bias !== '',

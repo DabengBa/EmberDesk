@@ -122,7 +122,7 @@ features:
   react:
     pages:
     panels:
-      mainChatMessageList: true
+      # mainChatMessageList product flag retired (React sole-owner; always enabled in workspace bootstrap)
       backgroundLibrary: true
       extensionsHost: true
     shell:

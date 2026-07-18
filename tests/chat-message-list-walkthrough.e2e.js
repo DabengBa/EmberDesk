@@ -439,6 +439,7 @@ test.describe('main chat message list walkthrough', () => {
 
         await openPastChat(page, longChatName);
         await expect(page.locator('#show_more_messages')).toBeVisible();
+        await expect(page.locator('#show_more_messages')).toHaveAttribute('data-main-chat-load-more-owner', 'react');
         await page.locator('#show_more_messages').evaluate(element => element.click());
         await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(longChatLimit * 2);
 
@@ -472,6 +473,7 @@ test.describe('main chat message list walkthrough', () => {
             }).toBeGreaterThanOrEqual(longChatLimit * 2);
             const renderedMessageCountBeforeLoadMore = await page.locator('#chat > .mes[mesid]').count();
             await expect(page.locator('#show_more_messages'), `${viewport.name} load more`).toBeVisible();
+            await expect(page.locator('#show_more_messages'), `${viewport.name} react load-more owner`).toHaveAttribute('data-main-chat-load-more-owner', 'react');
             // Element-owned click avoids mobile drawer/composer intercept on the hit-target.
             await page.locator('#show_more_messages').evaluate(element => element.click());
             const expectedRenderedMessageCount = Math.min(renderedMessageCountBeforeLoadMore + longChatLimit, longMessages.length);

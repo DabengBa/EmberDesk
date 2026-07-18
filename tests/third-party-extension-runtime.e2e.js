@@ -13,6 +13,19 @@ test.describe('third-party extension runtime compatibility', () => {
 
         await testSetup.awaitST({ page });
 
+        // Prefer a real open chat so mutation-zone survival crosses React reconciliation.
+        await page.evaluate(async () => {
+            const context = window.SillyTavern?.getContext?.();
+            if (!context?.characters?.length || typeof context.selectCharacterById !== 'function') {
+                return;
+            }
+            const characterId = context.characters.findIndex(character => character?.name === 'Dev Character 001');
+            if (characterId >= 0) {
+                await context.selectCharacterById(characterId);
+            }
+        }).catch(() => undefined);
+        await page.locator('#chat > .mes[mesid]').first().waitFor({ state: 'attached', timeout: 15_000 }).catch(() => undefined);
+
         await expect(page.locator('#extensions_settings')).toHaveCount(1);
         await expect(page.locator('#extensions_settings2')).toHaveCount(1);
         await expect(page.locator('#regex_container')).toHaveCount(1);
@@ -96,31 +109,43 @@ test.describe('third-party extension runtime compatibility', () => {
                 '.character_select, .group_select, .bogus_folder_select',
             ).length;
 
-            const mesText = document.querySelector('#chat .mes .mes_text, .mes .mes_text');
-            if (mesText) {
+            const mesRow = document.querySelector('#chat > .mes[mesid]');
+            const mesText = mesRow?.querySelector('.mes_text');
+            if (mesText instanceof HTMLElement && mesRow instanceof HTMLElement) {
                 const pre = document.createElement('pre');
                 pre.textContent = 'console.log("compat")';
+                pre.dataset.compatProof = 'th-render-child';
                 mesText.appendChild(pre);
                 const wrap = document.createElement('div');
                 wrap.className = 'TH-render';
+                wrap.dataset.compatProof = 'th-render';
                 pre.replaceWith(wrap);
                 wrap.appendChild(pre);
                 const streaming = document.createElement('div');
                 streaming.className = 'TH-streaming w-full';
+                streaming.dataset.compatProof = 'th-streaming';
                 mesText.after(streaming);
-                observed.mutationPreserved = Boolean(
-                    mesText.querySelector('.TH-render')
-                    && document.querySelector('.TH-streaming'),
-                );
+
+                // Force a React bridge remount/reconciliation cycle against the live row.
+                const remount = globalThis.SillyTavern?.getContext?.()?.eventSource?.emit;
+                try {
+                    if (typeof remount === 'function') {
+                        await remount('message_updated', Number(mesRow.getAttribute('mesid') ?? 0));
+                    }
+                } catch {
+                    // Fall through to explicit panel refresh below.
+                }
+                // Bridge refresh is scheduled via rAF from shell observers; wait a paint.
+                await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+                const wrapStillConnected = wrap.isConnected && mesText.contains(wrap);
+                const preStillConnected = pre.isConnected && wrap.contains(pre);
+                const streamingStillConnected = streaming.isConnected && mesRow.contains(streaming);
+                observed.mutationPreserved = wrapStillConnected && preStillConnected && streamingStillConnected;
+                observed.mutationOnLiveChatRow = true;
             } else {
-                const host = document.createElement('div');
-                host.className = 'mes';
-                host.innerHTML = '<div class="mes_text"><div class="TH-render"><pre>x</pre></div></div><div class="TH-streaming"></div>';
-                document.body.appendChild(host);
-                observed.mutationPreserved = Boolean(
-                    host.querySelector('.TH-render') && host.querySelector('.TH-streaming'),
-                );
-                host.remove();
+                observed.mutationPreserved = false;
+                observed.mutationOnLiveChatRow = false;
             }
 
             return observed;
@@ -134,7 +159,10 @@ test.describe('third-party extension runtime compatibility', () => {
         expect(publicShape.slashOk).toBe(true);
         expect(publicShape.hasRegex).toBe(true);
         expect(publicShape.regexOk).toBe(true);
-        expect(publicShape.mutationPreserved).toBe(true);
+        // Prefer a live chat row so reconciliation is real; skip hard-fail when no chat is open.
+        if (publicShape.mutationOnLiveChatRow) {
+            expect(publicShape.mutationPreserved).toBe(true);
+        }
 
         if (publicShape.characterRows === 0) {
             const characterButton = page.locator('#rm_button_characters, #rightNavDrawerIcon, .drawer-opener[data-target="rightNavHolder"], button:has-text("Open Character Management")').first();

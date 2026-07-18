@@ -110,6 +110,17 @@ describe('chat message render descriptor', () => {
             }),
         }));
 
+        // Canonical media array (post-migration) must set hasMedia without legacy image fields.
+        expect(buildChatMessageRenderDescriptor(createMessage({
+            extra: {
+                media: [{ type: 'image', url: 'canonical.png' }],
+            },
+        }), { messageId: 31 })).toEqual(expect.objectContaining({
+            flags: expect.objectContaining({
+                hasMedia: true,
+            }),
+        }));
+
         expect(buildChatMessageRenderDescriptor(createMessage({
             extra: {
                 error: 'Provider failed',
