@@ -147,7 +147,6 @@ No step may delete user capability, change a documented user workflow, or break 
 bun run --cwd tests test:unit -- world-info-card-rendering.test.js world-info-import-feedback.test.js world-info-converters.test.js worldinfo-delete-cascade.test.js background-panel-controller.test.js thumbnail-placeholder-background.test.js workspace-react-panel-flags.test.js react-workspace-panels-helpers.test.js --runInBand
 bun run build:react:workspace-panels
 bun run test:compat
-uv run python .docs/logic-description/react_workspace_panel_flags_sandbox_proof.py
 bun run docs:check
 ```
 
@@ -562,8 +561,8 @@ bun run docs:check
 - [第三方扩展兼容性](third-party-extension-compatibility.md) - 兼容性保护表面
 - [React settings payload processing flow](../logic-description/react_settings_payload_processing_flow.md) - React `/settings` form defaults、save payload、legacy Vertex AI round-trip 与 advanced reasoning effort 兼容规则
 - [React character-library sync processing flow](../logic-description/react_character_library_sync_processing_flow.md) - React character-library island 与 legacy `characters` 状态同步规则
-- [React workspace panel flags processing flow](../logic-description/react_workspace_panel_flags_processing_flow.md) - workspace React feature payload、HTML bootstrap 注入和 workspace-panel host/status bridge 边界
-- [Workspace shell panel dock coordination](workspace-shell-panel-dock-coordination.md) - same-entry React shell 如何记录 transient dock status、归一化结果，并把当前 drawer `pinnedOpen` 事实限制在内部 compatibility snapshot
+- [React workspace shell child-slot processing flow](../logic-description/react_workspace_panel_flags_processing_flow.md) - always-on React shell、child-slot lifecycle 与 React-owned pin authority
+- [Workspace shell child-slot coordination](workspace-shell-panel-dock-coordination.md) - same-entry React shell 如何管理 registry、local recovery 与 child-host projection
 - [Background Library Panel](../db/features/background-library-panel.md) - Phase 2 Sprint 6 当前 guarded action island 与 legacy-owned 行为边界
 - [Extensions Panel Open](../db/features/extension-panel-open.md) - Phase 2 Sprint 7 当前 guarded action island 与 legacy-owned 扩展行为边界
 - [ADR-0007: React page and panel islands with legacy fallbacks](../adr/0007-react-page-islands-with-legacy-fallbacks.md) - Phase 0-3B guarded island / fallback 基线；Phase 7 cutover ADR update 必须显式说明哪些 fallback 被删除、冻结或长期支持

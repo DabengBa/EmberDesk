@@ -22,12 +22,6 @@ import {
     decideWorkspacePanelHostLifecycle,
     mountWorkspacePanelHost,
 } from '../public/scripts/workspace-panel-host-controller.js';
-import {
-    WORKSPACE_SHELL_TAKEOVER_FAILURE_REASONS,
-    WORKSPACE_SHELL_TAKEOVER_STATUSES,
-    decideWorkspaceShellTakeover,
-    isReactWorkspaceShellTakeoverEnabled,
-} from '../public/scripts/workspace-shell-takeover-contract.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -51,15 +45,10 @@ describe('React workspace panels bridge helpers', () => {
             reactPages: {
                 settings: true,
             },
-            reactShell: {
-                strict: false,
-                takeover: false,
-            },
         });
 
         expect(isReactWorkspacePanelEnabled('worldInfo')).toBe(true);
         expect(isReactWorkspacePanelEnabled('mainChatMessageList')).toBe(true);
-        expect(isReactWorkspaceShellTakeoverEnabled()).toBe(false);
     });
 
     test('reads individual panel enablement without enabling unrelated panels', () => {
@@ -102,106 +91,16 @@ describe('React workspace panels bridge helpers', () => {
         });
     });
 
-    test('decides same-entry shell takeover with strict failures separated from production safety fallback', () => {
-        expect(WORKSPACE_SHELL_TAKEOVER_STATUSES).toEqual({
-            DISABLED: 'disabled',
-            FAILED: 'failed',
-            READY: 'ready',
-            ROLLBACK: 'rollback',
-        });
-        expect(WORKSPACE_SHELL_TAKEOVER_FAILURE_REASONS).toEqual({
-            BUNDLE_LOAD_FAILED: 'bundle-load-failed',
-            FEATURE_DISABLED: 'feature-disabled',
-            INVALID_PAYLOAD: 'invalid-payload',
-            MISSING_HOST: 'missing-host',
-            MOUNT_FAILED: 'mount-failed',
-            ROLLBACK_REQUESTED: 'rollback-requested',
-        });
-
-        expect(decideWorkspaceShellTakeover({
-            features: { reactShell: { takeover: false } },
-            hasHost: true,
-        })).toEqual({
-            reason: 'feature-disabled',
-            status: 'disabled',
-            takeover: false,
-        });
-
-        expect(decideWorkspaceShellTakeover({
-            features: { reactShell: { takeover: true } },
-            hasHost: true,
-        })).toEqual({
-            status: 'ready',
-            takeover: true,
-        });
-
-        expect(() => decideWorkspaceShellTakeover({
-            features: { reactShell: { takeover: true } },
-            hasHost: false,
-            strict: true,
-        })).toThrow('React workspace shell takeover required but failed: missing-host');
-
-        expect(() => decideWorkspaceShellTakeover({
-            features: { reactShell: { strict: true, takeover: 'true' } },
-            hasHost: true,
-        })).toThrow('React workspace shell takeover required but failed: invalid-payload');
-
-        expect(decideWorkspaceShellTakeover({
-            features: { reactShell: { takeover: true } },
-            hasHost: false,
-            strict: false,
-        })).toEqual({
-            reason: 'missing-host',
-            status: 'failed',
-            takeover: false,
-        });
-
-        expect(() => decideWorkspaceShellTakeover({
-            features: { reactShell: { strict: true, takeover: true } },
-            hasHost: false,
-        })).toThrow('React workspace shell takeover required but failed: missing-host');
-
-        expect(decideWorkspaceShellTakeover({
-            failureReason: WORKSPACE_SHELL_TAKEOVER_FAILURE_REASONS.BUNDLE_LOAD_FAILED,
-            features: { reactShell: { takeover: true } },
-            hasHost: true,
-            strict: false,
-        })).toEqual({
-            reason: 'bundle-load-failed',
-            status: 'failed',
-            takeover: false,
-        });
-
-        expect(() => decideWorkspaceShellTakeover({
-            failureReason: WORKSPACE_SHELL_TAKEOVER_FAILURE_REASONS.MOUNT_FAILED,
-            features: { reactShell: { takeover: true } },
-            hasHost: true,
-            strict: true,
-        })).toThrow('React workspace shell takeover required but failed: mount-failed');
-
-        expect(decideWorkspaceShellTakeover({
-            features: { reactShell: { takeover: true } },
-            hasHost: true,
-            rollback: true,
-        })).toEqual({
-            reason: 'rollback-requested',
-            status: 'rollback',
-            takeover: false,
-        });
-    });
-
-    test('wires same-entry shell takeover diagnostics without replacing the legacy workspace shell', () => {
+    test('mounts the required same-entry React shell without a fallback contract', () => {
         const scriptSource = read('public/script.js');
+        const bridgeSource = read('public/scripts/workspace-panels-react-bridge.js');
 
-        expect(scriptSource).toContain("from './scripts/workspace-shell-takeover-contract.js';");
-        expect(scriptSource).toContain('const WORKSPACE_SHELL_TAKEOVER_MARKER_ID = \'emberdesk-react-shell-takeover-foundation\';');
-        expect(scriptSource).toContain('function publishWorkspaceShellTakeoverDiagnostic');
-        expect(scriptSource).toContain('decideWorkspaceShellTakeover({');
-        expect(scriptSource).toContain('strict,');
-        expect(scriptSource).toContain('if (!document.body)');
-        expect(scriptSource).toContain('data-react-workspace-shell-takeover-status');
-        expect(scriptSource).toContain('data-react-workspace-shell-takeover-reason');
-        expect(scriptSource).toContain('publishWorkspaceShellTakeoverDiagnostic();');
+        expect(scriptSource).toContain('async function mountReactWorkspaceShellChromeHost');
+        expect(scriptSource).toContain('hideLegacyWorkspaceChromeForReact();');
+        expect(scriptSource).not.toContain('workspace-shell-takeover-contract');
+        expect(scriptSource).not.toContain('publishWorkspaceShellTakeoverDiagnostic');
+        expect(bridgeSource).not.toContain('workspace-shell-takeover-contract');
+        expect(bridgeSource).not.toContain('Falling back to legacy chrome');
         expect(scriptSource).not.toContain('document.body.innerHTML =');
     });
 
@@ -238,7 +137,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).not.toContain("await openWorkspaceShellDrawer('user-settings-block');");
     });
 
-    test('coordinates React shell panel entries with transient dock state and legacy fallback results', () => {
+    test('coordinates React shell panel entries through slot lifecycle state', () => {
         const scriptSource = read('public/script.js');
         const workspacePanelStoreSource = read('app/stores/workspace-panel-store.js');
         const workspacePanelSource = read('app/workspace-panels.tsx');
@@ -257,6 +156,7 @@ describe('React workspace panels bridge helpers', () => {
 
         expect(workspacePanelSource).toContain('recordWorkspacePanelDockIntent,');
         expect(workspacePanelSource).toContain('recordWorkspacePanelDockClose,');
+        expect(workspacePanelSource).toContain('recordWorkspacePanelDockPin,');
         expect(workspacePanelSource).toContain('recordWorkspacePanelDockResult,');
         expect(workspacePanelSource).toContain('getWorkspacePanelDockSnapshot,');
         expect(workspacePanelSource).toContain('subscribeWorkspacePanelDock,');
@@ -273,23 +173,27 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('recordWorkspacePanelDockIntent(entry.panelKind);');
         expect(workspacePanelSource).toContain('recordWorkspacePanelDockResult(entry.panelKind, {');
         expect(workspacePanelSource).toContain('fallbackReason: getWorkspacePanelDockFallbackReason(result),');
-        expect(workspacePanelSource).toContain('locked: Boolean(asWorkspacePanelDockDispatchResult(result).locked),');
-        expect(workspacePanelSource).toContain('pinned: Boolean(asWorkspacePanelDockDispatchResult(result).pinned),');
+        expect(workspacePanelSource).not.toContain('locked: Boolean(asWorkspacePanelDockDispatchResult(result).locked),');
+        expect(workspacePanelSource).not.toContain('pinned: Boolean(asWorkspacePanelDockDispatchResult(result).pinned),');
         expect(workspacePanelSource).toContain('status: normalizeWorkspacePanelDockStatus(result),');
         expect(workspacePanelSource).toContain('data-workspace-shell-panel-entry={entry.panelKind}');
         expect(workspacePanelSource).toContain('data-workspace-shell-panel-active={isPanelEntryActive ? \'true\' : \'false\'}');
-        expect(workspacePanelSource).toContain("? `${isPanelEntryActive && dockSnapshot.activePanelStatus !== 'error' ? 'Close' : 'Open'} ${entry.label}`");
+        expect(workspacePanelSource).toContain("const isPinned = Boolean(entry.panelKind && dockSnapshot.pinnedPanelKinds.includes(entry.panelKind));");
+        expect(workspacePanelSource).toContain("? `${isPanelEntryActive && dockSnapshot.activePanelStatus !== 'error' && !isPinned ? 'Close' : 'Open'} ${entry.label}`");
         expect(workspacePanelSource).toContain('aria-label={panelActionLabel}');
         expect(workspacePanelSource).toContain('title={panelActionLabel}');
         expect(workspacePanelSource).toContain('aria-pressed={entry.panelKind ? isPanelEntryActive : undefined}');
         expect(workspacePanelSource).toContain('event.stopPropagation();');
-        expect(workspacePanelSource).toContain("if (entry.panelKind && isPanelEntryActive && dockSnapshot.activePanelStatus !== 'error') {");
+        expect(workspacePanelSource).toContain("if (entry.panelKind && isPanelEntryActive && dockSnapshot.activePanelStatus !== 'error' && !isPinned) {");
         expect(workspacePanelSource).toContain("void closePanel(entry);");
-        expect(workspacePanelSource).toContain("window.setTimeout(() => {\n                                    void dispatchAction(entry);\n                                }, 0);");
+        expect(workspacePanelSource).toContain('void dispatchAction(entry);');
         expect(workspacePanelSource).toContain('data-workspace-panel-dock-status={dockSnapshot.activePanelStatus}');
         expect(workspacePanelSource).toContain('getWorkspacePanelDockKindLabel(dockSnapshot.activePanelKind)');
         expect(workspacePanelSource).toContain('getWorkspacePanelDockStatusLabel(dockSnapshot.activePanelStatus)');
         expect(scriptSource).toContain('async dispatchAction(action, payload = {}) {\n            await waitForWorkspaceShellPanelOpenTask();');
+        expect(scriptSource).toContain("case 'activateWorkspaceShellSlot':");
+        expect(scriptSource).toContain("case 'deactivateWorkspaceShellSlot':");
+        expect(scriptSource).toContain("case 'setWorkspaceShellSlotPinned':");
         expect(scriptSource).toContain("case 'openCharacterLibrary':");
         expect(workspacePanelSource).toContain("panelKind: 'characterLibrary'");
         expect(scriptSource).toContain("case 'openWorldInfo':");
@@ -298,28 +202,24 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain("void ensureWorkspaceShellDeferredPanel('world-info-body');");
         expect(scriptSource.indexOf('await waitForWorkspaceShellPanelOpenTask();')).toBeLessThan(scriptSource.indexOf("const worldInfoMount = await mountReactWorldInfoPanel();"));
         expect(scriptSource.indexOf("const worldInfoMount = await mountReactWorldInfoPanel();")).toBeLessThan(scriptSource.indexOf("void ensureWorkspaceShellDeferredPanel('world-info-body');"));
-        expect(scriptSource.indexOf("await openWorkspaceShellDrawer('WorldInfo');")).toBeLessThan(scriptSource.indexOf("const worldInfoMount = await mountReactWorldInfoPanel();"));
+        expect(scriptSource.indexOf("await openWorkspaceChildSlotHost('WorldInfo');")).toBeLessThan(scriptSource.indexOf("const worldInfoMount = await mountReactWorldInfoPanel();"));
         expect(scriptSource.indexOf("const worldInfoMount = await mountReactWorldInfoPanel();")).toBeLessThan(scriptSource.indexOf("return createWorkspaceShellPanelResult('worldInfo', worldInfoMount);"));
-        expect(scriptSource.indexOf("await openWorkspaceShellDrawer('Backgrounds');")).toBeLessThan(scriptSource.indexOf("return createWorkspaceShellPanelResult('backgroundLibrary', await mountReactBackgroundLibraryPanel());"));
-        expect(scriptSource.indexOf("await openWorkspaceShellDrawer('rm_extensions_block');")).toBeLessThan(scriptSource.indexOf("return createWorkspaceShellPanelResult('extensionsHost', await mountReactExtensionsHostPanel());"));
-        expect(scriptSource).toContain('function openWorkspaceShellDrawerImmediate(drawerId)');
+        expect(scriptSource.indexOf("await openWorkspaceChildSlotHost('Backgrounds');")).toBeLessThan(scriptSource.indexOf("return createWorkspaceShellPanelResult('backgroundLibrary', await mountReactBackgroundLibraryPanel());"));
+        expect(scriptSource.indexOf("await openWorkspaceChildSlotHost('rm_extensions_block');")).toBeLessThan(scriptSource.indexOf("return createWorkspaceShellPanelResult('extensionsHost', await mountReactExtensionsHostPanel());"));
+        expect(scriptSource).toContain('function openWorkspaceChildSlotHostImmediate(hostId)');
         expect(scriptSource).toContain("drawer.style.opacity = '1';");
-        expect(scriptSource).toContain('function closeWorkspaceShellDrawer(drawerId)');
-        expect(scriptSource).toContain('function closeWorkspaceShellPanel(kind)');
-        expect(scriptSource).toContain('function getWorkspaceShellPanelDrawerId(kind)');
-        expect(scriptSource).toContain("aiConfig: 'left-nav-panel'");
-        expect(scriptSource).toContain("advancedFormatting: 'AdvancedFormatting'");
-        expect(scriptSource).toContain("settings: 'user-settings-block'");
+        expect(scriptSource).toContain('function closeWorkspaceChildSlotHost(hostId, { force = false } = {})');
+        expect(scriptSource).toContain('function deactivateWorkspaceChildSlotByKind(slotKey, options = {})');
+        expect(scriptSource).toContain('function getWorkspaceChildSlotHostId(slotKey)');
         expect(scriptSource).toContain("groupChats: 'right-nav-panel'");
-        expect(scriptSource).toContain('function selectRightMenuImmediate(selectedMenuId)');
+        expect(scriptSource).toContain('function showWorkspaceChildSlotContent(selectedMenuId)');
         expect(scriptSource).toContain('async function openWorkspaceShellCharacterLibrary()');
-        expect(scriptSource).toContain("openWorkspaceShellDrawerImmediate('right-nav-panel');");
-        expect(scriptSource).toContain("if (menu_type !== 'characters') {\n        selected_button = 'characters';\n        setMenuType('characters');\n        selectRightMenuImmediate('rm_characters_block');");
+        expect(scriptSource).toContain("openWorkspaceChildSlotHostImmediate('right-nav-panel');");
+        expect(scriptSource).toContain("if (menu_type !== 'characters') {\n        selected_button = 'characters';\n        setMenuType('characters');\n        showWorkspaceChildSlotContent('rm_characters_block');");
         expect(scriptSource.match(/openWorkspaceShellCharacterLibrary\(\) \{[\s\S]*?\n\}/)?.[0] ?? '').not.toContain("$('#rm_button_characters').trigger('click');");
-        expect(scriptSource.match(/openWorkspaceShellCharacterLibrary\(\) \{[\s\S]*?\n\}/)?.[0] ?? '').not.toContain("openWorkspaceShellDrawer('right-nav-panel')");
+        expect(scriptSource.match(/openWorkspaceShellCharacterLibrary\(\) \{[\s\S]*?\n\}/)?.[0] ?? '').not.toContain("openWorkspaceChildSlotHost('right-nav-panel')");
         expect(scriptSource.match(/openWorkspaceShellCharacterLibrary\(\) \{[\s\S]*?\n\}/)?.[0] ?? '').not.toContain('printCharacters(');
         expect(scriptSource).toContain("case 'openCharacterLibrary':\n                    return openWorkspaceShellCharacterLibrary();");
-        expect(scriptSource).toContain("case 'closeWorkspacePanel':\n                    return closeWorkspaceShellPanel(payload?.kind);");
         expect(scriptSource).toContain("case 'openCharacterLibrary':\n                    await openWorkspaceShellCharacterLibrary();");
         expect(workspacePanelSource).toContain("panelKind: 'worldInfo'");
         expect(scriptSource).toContain("case 'openBackgrounds':");
@@ -327,9 +227,9 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain("case 'openExtensions':");
         expect(workspacePanelSource).toContain("panelKind: 'extensionsHost'");
         expect(scriptSource).toContain('return createWorkspaceShellPanelResult(');
-        expect(scriptSource).toContain('function getWorkspaceShellPanelDockState(kind)');
-        expect(scriptSource).toContain('locked: dockState.locked,');
-        expect(scriptSource).toContain('pinned: dockState.pinned,');
+        expect(scriptSource).not.toContain('getWorkspaceShellPanelDockState');
+        expect(scriptSource).not.toContain('locked: dockState.locked,');
+        expect(scriptSource).not.toContain('pinned: dockState.pinned,');
         expect(scriptSource).toContain("return createWorkspaceShellPanelResult('characterLibrary',");
         expect(scriptSource).toContain("return createWorkspaceShellPanelResult('worldInfo', worldInfoMount);");
         expect(scriptSource).toContain("return createWorkspaceShellPanelResult('backgroundLibrary', await mountReactBackgroundLibraryPanel());");
@@ -353,6 +253,38 @@ describe('React workspace panels bridge helpers', () => {
         expect(styleSource).toContain('.react-workspace-panel-dock-status[data-workspace-panel-dock-status="disabled"]');
     });
 
+    test('publishes explicit React shell child-slot contracts before dispatching feature-local capabilities', () => {
+        const workspacePanelSource = read('app/workspace-panels.tsx');
+        const workspacePanelStoreSource = read('app/stores/workspace-panel-store.js');
+        const scriptSource = read('public/script.js');
+
+        expect(workspacePanelStoreSource).toContain('export const WORKSPACE_SHELL_CHILD_SLOTS');
+        expect(workspacePanelStoreSource).toContain('export function getWorkspaceShellChildSlot(slotKey)');
+        expect(workspacePanelSource).toContain('WORKSPACE_SHELL_CHILD_SLOTS');
+        expect(workspacePanelSource).toContain('slotKey:');
+        expect(workspacePanelSource).toContain('data-workspace-shell-child-slot={entry.slotKey}');
+        expect(workspacePanelSource).toContain('getWorkspaceShellChildSlot(entry.slotKey)');
+        expect(workspacePanelSource).toContain("'activateWorkspaceShellSlot', { slotKey: entry.slotKey }");
+        expect(workspacePanelSource).toContain("'deactivateWorkspaceShellSlot', { slotKey: entry.slotKey }");
+        expect(workspacePanelSource).toContain('recordWorkspacePanelDockPin(entry.panelKind, !isPinned);');
+        expect(workspacePanelSource).not.toContain('pinned: Boolean(asWorkspacePanelDockDispatchResult(result).pinned)');
+        expect(scriptSource).toContain('async function activateWorkspaceShellSlot(slotKey)');
+        expect(scriptSource).toContain('function deactivateWorkspaceShellSlot(slotKey)');
+        expect(scriptSource).toContain('function setWorkspaceShellSlotPinned(slotKey, pinned)');
+        expect(scriptSource).toContain("case 'setWorkspaceShellSlotPinned':");
+        expect(scriptSource).toContain("case 'activateWorkspaceShellSlot':");
+        expect(scriptSource).toContain("case 'deactivateWorkspaceShellSlot':");
+    });
+
+    test('keeps a failed child slot recoverable without replacing the shell or chat layout', () => {
+        const workspacePanelSource = read('app/workspace-panels.tsx');
+
+        expect(workspacePanelSource).toContain('data-workspace-shell-slot-recovery={dockSnapshot.activePanelKind}');
+        expect(workspacePanelSource).toContain('data-workspace-shell-slot-recovery-action="retry"');
+        expect(workspacePanelSource).toContain('void dispatchAction(recoveryEntry);');
+        expect(workspacePanelSource).toContain("dockSnapshot.activePanelStatus === 'error'");
+    });
+
     test('ships a main-chat message-list panel contract through the shared workspace panel asset', () => {
         const configSource = read('default/config.yaml');
         const packageSource = read('package.json');
@@ -367,9 +299,8 @@ describe('React workspace panels bridge helpers', () => {
         expect(configSource).not.toContain('characterAuthoring:');
         expect(configSource).not.toContain('groupAuthoring:');
         expect(packageSource).toContain('"build:react:workspace-panels": "vite build --mode workspace-panels"');
-        expect(seedScriptSource).toContain('EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST');
-        expect(seedScriptSource).toContain("['mainChatMessageList', process.env.EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST]");
-        expect(workspaceFeatureSource).toContain('mainChatMessageList: isReactMainChatMessageListPanelEnabled()');
+        expect(seedScriptSource).not.toContain('EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST');
+        expect(seedScriptSource).not.toContain('features:');
         expect(workspaceFeatureSource).toContain('// Main Chat message list is React sole-owner; product flag is retired.');
         expect(workspaceFeatureSource).toContain('return true;');
         expect(bridgeSource).toContain('mainChatMessageList: true');

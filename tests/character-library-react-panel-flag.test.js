@@ -32,34 +32,14 @@ describe('character library React sole owner', () => {
         expect(fs.existsSync(path.join(repoRoot, 'app/components/character-library/HostedDomSlot.tsx'))).toBe(true);
     });
 
-    test('removes the retired character-library product flag from workspace bootstrap', async () => {
-        const featureBootstrapModule = await import(`../src/workspace-react-features.js?workspaceFeatures=${Date.now()}-${Math.random()}`);
+    test('removes the retired character-library product flag and workspace bootstrap payload', () => {
         const source = read('public/script.js');
         const serverMainSource = read('src/server-main.js');
-        const baseHtml = [
-            '<!DOCTYPE html>',
-            '<html lang="zh-CN">',
-            '<head>',
-            '  <meta charset="UTF-8" />',
-            '  <title>EmberDesk</title>',
-            '</head>',
-            '<body><div id="sheld"></div></body>',
-            '</html>',
-            '',
-        ].join('\n');
 
-        const renderedHtml = featureBootstrapModule.injectWorkspaceReactFeatures(baseHtml, {
-            reactPanels: {
-                mainChatMessageList: false,
-            },
-        });
-
-        expect(renderedHtml).toContain('window.__emberDeskWorkspaceFeatures');
-        expect(renderedHtml).not.toContain('"characterLibrary"');
-        expect(source).toContain('globalThis.__emberDeskWorkspaceFeatures');
         expect(source).not.toContain('characterLibrary: false');
-        expect(serverMainSource).toContain('injectWorkspaceReactFeatures');
-        expect(serverMainSource).toContain('getWorkspaceReactFeatures');
+        expect(source).not.toContain('__emberDeskWorkspaceFeatures');
+        expect(serverMainSource).not.toContain('injectWorkspaceReactFeatures');
+        expect(serverMainSource).not.toContain('getWorkspaceReactFeatures');
     });
 
     test('removes retired character-library config and feature module', () => {

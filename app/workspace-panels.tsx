@@ -1,4 +1,4 @@
-import { StrictMode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Fragment, StrictMode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
@@ -13,13 +13,16 @@ import {
 } from './compat/global-compatibility-bridge.js';
 import {
     getWorkspacePanelDockSnapshot,
+    getWorkspaceShellChildSlot,
     recordWorkspacePanelDockIntent,
     recordWorkspacePanelDockClose,
+    recordWorkspacePanelDockPin,
     recordWorkspacePanelDockResult,
     recordWorkspacePanelMount,
     recordWorkspacePanelUnmount,
     recordWorkspacePanelUpdate,
     subscribeWorkspacePanelDock,
+    WORKSPACE_SHELL_CHILD_SLOTS,
 } from './stores/workspace-panel-store.js';
 import {
     resetMainChatObservationStore,
@@ -146,6 +149,7 @@ interface WorkspaceShellNavigationEntry {
     icon: string;
     label: string;
     panelKind?: WorkspaceDockPanelKind;
+    slotKey?: keyof typeof WORKSPACE_SHELL_CHILD_SLOTS;
 }
 
 type WorldInfoWorkspacePanelState = WorldInfoWorkbenchPanelState;
@@ -3920,13 +3924,13 @@ function WorkspacePanelRoot({ kind, bridge }: { kind: WorkspacePanelKind; bridge
 const workspaceShellNavigationEntries: WorkspaceShellNavigationEntry[] = [
     { action: 'openAIConfig', icon: 'fa-sliders', label: 'AI Config', panelKind: 'aiConfig' },
     { action: 'openFormatting', icon: 'fa-font', label: 'Formatting', panelKind: 'advancedFormatting' },
-    { action: 'openCharacterLibrary', icon: 'fa-address-book', label: 'Character Library', panelKind: 'characterLibrary' },
-    { action: 'openWorldInfo', icon: 'fa-book-atlas', label: 'World Info', panelKind: 'worldInfo' },
-    { action: 'openBackgrounds', icon: 'fa-image', label: 'Backgrounds', panelKind: 'backgroundLibrary' },
-    { action: 'openExtensions', icon: 'fa-cubes', label: 'Extensions', panelKind: 'extensionsHost' },
+    { action: 'openCharacterLibrary', icon: 'fa-address-book', label: 'Character Library', panelKind: 'characterLibrary', slotKey: 'characterLibrary' },
+    { action: 'openWorldInfo', icon: 'fa-book-atlas', label: 'World Info', panelKind: 'worldInfo', slotKey: 'worldInfo' },
+    { action: 'openBackgrounds', icon: 'fa-image', label: 'Backgrounds', panelKind: 'backgroundLibrary', slotKey: 'backgroundLibrary' },
+    { action: 'openExtensions', icon: 'fa-cubes', label: 'Extensions', panelKind: 'extensionsHost', slotKey: 'extensionsHost' },
     { action: 'openSettings', icon: 'fa-gear', label: 'Settings', panelKind: 'settings' },
-    { action: 'openGroupChats', icon: 'fa-users', label: 'Group Chats', panelKind: 'groupChats' },
-    { action: 'openCharacterAuthoring', icon: 'fa-user-pen', label: 'Character Authoring', panelKind: 'characterAuthoring' },
+    { action: 'openGroupChats', icon: 'fa-users', label: 'Group Chats', panelKind: 'groupChats', slotKey: 'groupChats' },
+    { action: 'openCharacterAuthoring', icon: 'fa-user-pen', label: 'Character Authoring', panelKind: 'characterAuthoring', slotKey: 'characterAuthoring' },
 ];
 
 function asWorkspacePanelDockDispatchResult(result: unknown): WorkspacePanelDockDispatchResult {
@@ -4072,6 +4076,9 @@ function ReactWorkspaceShellChrome({
     const messageCount = Number.isFinite(state.messageCount) ? state.messageCount : 0;
     const dockSnapshot = useWorkspacePanelDockSnapshot();
     const panelDispatchSequenceRef = useRef(0);
+    const recoveryEntry = dockSnapshot.activePanelKind
+        ? workspaceShellNavigationEntries.find(entry => entry.panelKind === dockSnapshot.activePanelKind) ?? null
+        : null;
 
     const dispatchAction = useCallback(async (entry: WorkspaceShellNavigationEntry) => {
         const dispatchSequence = panelDispatchSequenceRef.current + 1;
@@ -4081,15 +4088,15 @@ function ReactWorkspaceShellChrome({
         }
 
         try {
-            const result = await bridge?.dispatchAction?.(entry.action);
+            const result = entry.slotKey
+                ? await bridge?.dispatchAction?.('activateWorkspaceShellSlot', { slotKey: entry.slotKey })
+                : await bridge?.dispatchAction?.(entry.action);
             if (entry.panelKind) {
                 if (panelDispatchSequenceRef.current !== dispatchSequence) {
                     return;
                 }
                 recordWorkspacePanelDockResult(entry.panelKind, {
                     fallbackReason: getWorkspacePanelDockFallbackReason(result),
-                    locked: Boolean(asWorkspacePanelDockDispatchResult(result).locked),
-                    pinned: Boolean(asWorkspacePanelDockDispatchResult(result).pinned),
                     status: normalizeWorkspacePanelDockStatus(result),
                 });
             }
@@ -4115,15 +4122,15 @@ function ReactWorkspaceShellChrome({
         const dispatchSequence = panelDispatchSequenceRef.current + 1;
         panelDispatchSequenceRef.current = dispatchSequence;
         try {
-            const result = await bridge?.dispatchAction?.('closeWorkspacePanel', { kind: entry.panelKind });
+            if (entry.slotKey) {
+                await bridge?.dispatchAction?.('deactivateWorkspaceShellSlot', { slotKey: entry.slotKey });
+            } else {
+                await bridge?.dispatchAction?.('closeWorkspacePanel', { kind: entry.panelKind });
+            }
             if (panelDispatchSequenceRef.current !== dispatchSequence) {
                 return;
             }
-            recordWorkspacePanelDockClose(entry.panelKind, {
-                locked: Boolean(asWorkspacePanelDockDispatchResult(result).locked),
-                pinned: Boolean(asWorkspacePanelDockDispatchResult(result).pinned),
-                status: normalizeWorkspacePanelDockStatus(result),
-            });
+            recordWorkspacePanelDockClose(entry.panelKind);
         } catch (error) {
             if (panelDispatchSequenceRef.current !== dispatchSequence) {
                 return;
@@ -4133,6 +4140,26 @@ function ReactWorkspaceShellChrome({
                 status: 'error',
             });
             console.warn('React workspace shell panel close failed.', error);
+        }
+    }, [bridge]);
+
+    const togglePanelPin = useCallback(async (entry: WorkspaceShellNavigationEntry, isPinned: boolean) => {
+        if (!entry.panelKind || !entry.slotKey) {
+            return;
+        }
+
+        try {
+            await bridge?.dispatchAction?.('setWorkspaceShellSlotPinned', {
+                pinned: !isPinned,
+                slotKey: entry.slotKey,
+            });
+            recordWorkspacePanelDockPin(entry.panelKind, !isPinned);
+        } catch (error) {
+            recordWorkspacePanelDockResult(entry.panelKind, {
+                fallbackReason: 'pin-failed',
+                status: 'error',
+            });
+            console.warn('React workspace shell panel pin failed.', error);
         }
     }, [bridge]);
 
@@ -4156,37 +4183,56 @@ function ReactWorkspaceShellChrome({
             <nav className="react-workspace-shell-nav" aria-label="Workspace navigation">
                 {workspaceShellNavigationEntries.map(entry => {
                     const isPanelEntryActive = Boolean(entry.panelKind && dockSnapshot.activePanelKind === entry.panelKind);
+                    const isPinned = Boolean(entry.panelKind && dockSnapshot.pinnedPanelKinds.includes(entry.panelKind));
                     const panelActionLabel = entry.panelKind
-                        ? `${isPanelEntryActive && dockSnapshot.activePanelStatus !== 'error' ? 'Close' : 'Open'} ${entry.label}`
+                        ? `${isPanelEntryActive && dockSnapshot.activePanelStatus !== 'error' && !isPinned ? 'Close' : 'Open'} ${entry.label}`
                         : entry.label;
+                    const childSlot = entry.slotKey ? getWorkspaceShellChildSlot(entry.slotKey) : null;
 
                     return (
-                        <button
-                            key={entry.action}
-                            type="button"
-                            className="react-workspace-shell-nav-button"
-                            aria-label={panelActionLabel}
-                            title={panelActionLabel}
-                            aria-pressed={entry.panelKind ? isPanelEntryActive : undefined}
-                            data-workspace-shell-panel-entry={entry.panelKind}
-                            data-workspace-shell-panel-active={isPanelEntryActive ? 'true' : 'false'}
-                            onClick={(event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                if (entry.panelKind && isPanelEntryActive && dockSnapshot.activePanelStatus !== 'error') {
+                        <Fragment key={entry.action}>
+                            <button
+                                type="button"
+                                className="react-workspace-shell-nav-button"
+                                aria-label={panelActionLabel}
+                                title={panelActionLabel}
+                                aria-pressed={entry.panelKind ? isPanelEntryActive : undefined}
+                                data-workspace-shell-panel-entry={entry.panelKind}
+                                data-workspace-shell-panel-active={isPanelEntryActive ? 'true' : 'false'}
+                                data-workspace-shell-child-slot={entry.slotKey}
+                                data-workspace-shell-child-slot-owner={childSlot?.contentOwner}
+                                onClick={(event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    if (entry.panelKind && isPanelEntryActive && dockSnapshot.activePanelStatus !== 'error' && !isPinned) {
+                                        window.setTimeout(() => {
+                                            void closePanel(entry);
+                                        }, 0);
+                                        return;
+                                    }
                                     window.setTimeout(() => {
-                                        void closePanel(entry);
+                                        void dispatchAction(entry);
                                     }, 0);
-                                    return;
-                                }
-                                window.setTimeout(() => {
-                                    void dispatchAction(entry);
-                                }, 0);
-                            }}
-                        >
-                            <i className={`fa-solid ${entry.icon}`} aria-hidden="true" />
-                            <span>{entry.label}</span>
-                        </button>
+                                }}
+                            >
+                                <i className={`fa-solid ${entry.icon}`} aria-hidden="true" />
+                                <span>{entry.label}</span>
+                            </button>
+                            {entry.panelKind && entry.slotKey && isPanelEntryActive ? (
+                                <button
+                                    type="button"
+                                    className="react-workspace-shell-pin-button"
+                                    aria-label={`${isPinned ? 'Unpin' : 'Pin'} ${entry.label}`}
+                                    aria-pressed={isPinned}
+                                    data-workspace-shell-panel-pin={entry.panelKind}
+                                    onClick={() => {
+                                        void togglePanelPin(entry, isPinned);
+                                    }}
+                                >
+                                    <i className="fa-solid fa-thumbtack" aria-hidden="true" />
+                                </button>
+                            ) : null}
+                        </Fragment>
                     );
                 })}
             </nav>
@@ -4200,6 +4246,23 @@ function ReactWorkspaceShellChrome({
                         data-workspace-panel-dock-status={dockSnapshot.activePanelStatus}
                     >
                         {getWorkspacePanelDockKindLabel(dockSnapshot.activePanelKind)} {getWorkspacePanelDockStatusLabel(dockSnapshot.activePanelStatus)}
+                    </span>
+                ) : null}
+                {dockSnapshot.activePanelStatus === 'error' && recoveryEntry ? (
+                    <span
+                        className="react-workspace-shell-slot-recovery"
+                        data-workspace-shell-slot-recovery={dockSnapshot.activePanelKind}
+                    >
+                        <button
+                            type="button"
+                            className="react-workspace-shell-slot-recovery-action"
+                            data-workspace-shell-slot-recovery-action="retry"
+                            onClick={() => {
+                                void dispatchAction(recoveryEntry);
+                            }}
+                        >
+                            Retry
+                        </button>
                     </span>
                 ) : null}
             </section>

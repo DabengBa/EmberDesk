@@ -95,6 +95,43 @@ test.describe('workspace shell panel navigation', () => {
         await expect(page.locator('#right-nav-panel')).toHaveClass(/openDrawer/);
     });
 
+    test('React shell owns a slot pin through refocus, unpin, and close', async ({ page }) => {
+        await testSetup.awaitST({ page });
+
+        const panelButton = page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'Character Library' });
+        await panelButton.click({ timeout: 10_000 });
+        await expect(panelButton).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
+
+        const pinButton = page.locator('[data-workspace-shell-panel-pin="characterLibrary"]');
+        await expect(pinButton).toBeVisible({ timeout: 10_000 });
+        await pinButton.click();
+        await expect(pinButton).toHaveAttribute('aria-pressed', 'true');
+
+        await panelButton.click();
+        await expect(panelButton).toHaveAttribute('aria-pressed', 'true');
+        await expect(page.locator('#right-nav-panel')).toHaveClass(/openDrawer/);
+
+        await pinButton.click();
+        await expect(pinButton).toHaveAttribute('aria-pressed', 'false');
+        await panelButton.click();
+        await expect(panelButton).toHaveAttribute('aria-pressed', 'false', { timeout: 10_000 });
+        await expect(page.locator('#right-nav-panel')).toHaveClass(/closedDrawer/);
+    });
+
+    test('isolates a missing child-slot failure without losing shell navigation or composer reachability', async ({ page }) => {
+        await testSetup.awaitST({ page });
+
+        await page.evaluate(() => {
+            document.getElementById('WorldInfo')?.remove();
+        });
+
+        await page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'World Info' }).click();
+        await expect(page.locator('[data-workspace-shell-slot-recovery="worldInfo"]')).toBeVisible({ timeout: 10_000 });
+        await expect(page.locator('[data-workspace-shell-slot-recovery-action="retry"]')).toBeVisible();
+        await expect(page.locator('.react-workspace-shell-nav')).toBeVisible();
+        await expect(page.locator('#send_textarea')).toBeVisible();
+    });
+
     test('legacy-hosted panel entries close and reopen from the same shell button', async ({ page }) => {
         await testSetup.awaitST({ page });
 
@@ -119,18 +156,24 @@ test.describe('workspace shell panel navigation', () => {
         }
     });
 
-    test('legacy-hosted panel switching preserves legacy form values', async ({ page }) => {
+    test('slot switching preserves visible React group-authoring form values', async ({ page }) => {
         test.setTimeout(90_000);
         await testSetup.awaitST({ page });
 
-        // AI Config / Formatting are React /settings routes, not drawer form hosts.
-        // Keep this case on remaining same-route drawer panels and verify drawer state survives switches.
+        await openShellPanel(page, 'Character Library');
+        await page.locator('[title*="Show only groups"], [aria-label*="Show only groups"]').first().click();
+        const group = page.locator('#rm_print_characters_block .group_select[data-grid]').first();
+        await expect(group).toBeVisible({ timeout: 15_000 });
+        await group.click();
+
         await openShellPanel(page, 'Group Chats');
         await expect(page.locator('#right-nav-panel.openDrawer #rm_group_chats_block')).toBeVisible({ timeout: 15_000 });
-        const groupName = page.locator('#rm_group_chats_block #group_name, #rm_group_chats_block input').first();
-        if (await groupName.count()) {
-            await groupName.fill('shell-preserve-group');
-        }
+        const groupAuthoringPanel = page.locator('[data-react-authoring-owner="groupAuthoring"]');
+        await expect(groupAuthoringPanel).toBeVisible({ timeout: 15_000 });
+        await expect(groupAuthoringPanel).toHaveAttribute('data-react-authoring-mode', 'edit');
+        const groupName = groupAuthoringPanel.locator('[data-react-authoring-field="name"] input');
+        const selectedGroupName = await groupName.inputValue();
+        expect(selectedGroupName).not.toBe('');
 
         await openShellPanel(page, 'Extensions');
         await expect(page.locator('#rm_extensions_block.openDrawer')).toBeVisible({ timeout: 15_000 });
@@ -138,9 +181,7 @@ test.describe('workspace shell panel navigation', () => {
 
         await openShellPanel(page, 'Group Chats');
         await expect(page.locator('#right-nav-panel.openDrawer #rm_group_chats_block')).toBeVisible({ timeout: 15_000 });
-        if (await groupName.count()) {
-            await expect(groupName).toHaveValue('shell-preserve-group');
-        }
+        await expect(groupName).toHaveValue(selectedGroupName);
     });
 
     test('panel entries stay responsive when switching from character library to world info immediately', async ({ page }) => {

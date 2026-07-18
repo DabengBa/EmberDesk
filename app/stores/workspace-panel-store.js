@@ -21,8 +21,59 @@ export const WORKSPACE_PANEL_DOCK_KINDS = Object.freeze([
     'characterAuthoring',
 ]);
 
+/**
+ * Legacy DOM may remain a feature-local content or compatibility host while the
+ * React shell owns navigation and lifecycle. These contracts deliberately omit
+ * drawer/open/pinned selectors: those are no longer shell state inputs.
+ */
+export const WORKSPACE_SHELL_CHILD_SLOTS = Object.freeze({
+    characterLibrary: Object.freeze({
+        accessibleName: 'Character Library',
+        allowedCapabilities: Object.freeze(['selectCharacter', 'refreshLibrary']),
+        contentOwner: 'character-library',
+        mountTarget: '#rm_print_characters_block',
+    }),
+    worldInfo: Object.freeze({
+        accessibleName: 'World Info',
+        allowedCapabilities: Object.freeze(['refreshWorldInfo', 'openWorldEditor']),
+        contentOwner: 'world-info-workbench',
+        mountTarget: '#WorldInfo',
+    }),
+    backgroundLibrary: Object.freeze({
+        accessibleName: 'Backgrounds',
+        allowedCapabilities: Object.freeze(['refreshBackgrounds', 'selectBackground']),
+        contentOwner: 'background-library',
+        mountTarget: '#Backgrounds',
+    }),
+    extensionsHost: Object.freeze({
+        accessibleName: 'Extensions',
+        allowedCapabilities: Object.freeze(['manageExtensions', 'refreshExtensions']),
+        contentOwner: 'extensions-host',
+        mountTarget: '#rm_extensions_block',
+    }),
+    groupChats: Object.freeze({
+        accessibleName: 'Group Chats',
+        allowedCapabilities: Object.freeze(['editGroup']),
+        contentOwner: 'group-authoring',
+        mountTarget: '#rm_group_chats_block',
+    }),
+    characterAuthoring: Object.freeze({
+        accessibleName: 'Character Authoring',
+        allowedCapabilities: Object.freeze(['editCharacter']),
+        contentOwner: 'character-authoring',
+        mountTarget: '#rm_ch_create_block',
+    }),
+    mainChat: Object.freeze({
+        accessibleName: 'Main Chat',
+        allowedCapabilities: Object.freeze(['loadMoreMessages', 'submitComposer']),
+        contentOwner: 'main-chat',
+        mountTarget: '#chat, #send_form, #nonQRFormItems',
+    }),
+});
+
 const SUPPORTED_PANEL_KINDS = new Set(WORKSPACE_PANEL_KINDS);
 const SUPPORTED_PANEL_DOCK_KINDS = new Set(WORKSPACE_PANEL_DOCK_KINDS);
+const SUPPORTED_WORKSPACE_SHELL_CHILD_SLOT_KEYS = new Set(Object.keys(WORKSPACE_SHELL_CHILD_SLOTS));
 
 const WORKSPACE_PANEL_DOCK_STATUSES = new Set([
     'idle',
@@ -97,6 +148,14 @@ export function getWorkspacePanelSnapshot(kind) {
 
 export function getWorkspacePanelDockSnapshot() {
     return workspacePanelStore.getState().dock;
+}
+
+export function getWorkspaceShellChildSlot(slotKey) {
+    if (!SUPPORTED_WORKSPACE_SHELL_CHILD_SLOT_KEYS.has(slotKey)) {
+        throw new Error(`Unsupported workspace shell child slot: ${String(slotKey)}`);
+    }
+
+    return WORKSPACE_SHELL_CHILD_SLOTS[slotKey];
 }
 
 function setWorkspacePanelSnapshot(kind, snapshot) {
@@ -208,6 +267,23 @@ export function recordWorkspacePanelDockResult(kind, result = {}) {
         locked: result.locked,
         pinned: result.pinned,
         status: result.status ?? 'success',
+    });
+}
+
+/**
+ * React shell owns the pinned state and projects it to the child slot only
+ * after the store transition succeeds.
+ * @param {string} kind
+ * @param {boolean} pinned
+ */
+export function recordWorkspacePanelDockPin(kind, pinned) {
+    assertWorkspacePanelDockKind(kind);
+    const currentDock = getWorkspacePanelDockSnapshot();
+    setWorkspacePanelDockSnapshot(kind, {
+        fallbackReason: currentDock.activePanelKind === kind ? currentDock.fallbackReason : null,
+        locked: pinned,
+        pinned,
+        status: currentDock.activePanelKind === kind ? currentDock.activePanelStatus : 'success',
     });
 }
 

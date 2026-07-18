@@ -803,24 +803,6 @@ hr {
     opacity: 0.8;
 }
 
-/*TOPPER margin*/
-
-#top-bar {
-    width: var(--sheldWidth);
-    margin: 0 auto;
-    left: 0;
-    right: 0;
-    display: inline-block;
-    height: var(--bottomFormBlockSize);
-    position: absolute;
-    /* border-bottom: 1px solid var(--SmartThemeBorderColor); */
-    box-shadow: 0 2px 20px 0 var(--black70a);
-    backdrop-filter: blur(var(--SmartThemeBlurStrength));
-    background-color: var(--SmartThemeBlurTintColor);
-    -webkit-backdrop-filter: blur(var(--SmartThemeBlurStrength));
-    z-index: 3005;
-}
-
 #sheld {
     display: flex;
     flex-direction: column;
@@ -6660,6 +6642,33 @@ body[data-react-workspace-shell-chrome="mounted"] #chat[data-main-chat-layout-ow
     outline-offset: 2px;
 }
 
+.react-workspace-shell-pin-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    margin-left: -7px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    color: var(--SmartThemeBodyColor);
+    background: transparent;
+    cursor: pointer;
+}
+
+.react-workspace-shell-pin-button:hover,
+.react-workspace-shell-pin-button:focus-visible,
+.react-workspace-shell-pin-button[aria-pressed="true"] {
+    border-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 52%, transparent);
+    color: var(--SmartThemeQuoteColor);
+    background-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 14%, transparent);
+}
+
+.react-workspace-shell-pin-button:focus-visible {
+    outline: 1px solid var(--interactable-outline-color);
+    outline-offset: 2px;
+}
+
 .react-workspace-shell-status {
     display: inline-flex;
     min-width: 0;
@@ -6698,6 +6707,22 @@ body[data-react-workspace-shell-chrome="mounted"] #chat[data-main-chat-layout-ow
     border-color: color-mix(in srgb, var(--SmartThemeBodyColor) 28%, transparent);
     background-color: color-mix(in srgb, var(--SmartThemeBodyColor) 8%, transparent);
     opacity: 0.74;
+}
+
+.react-workspace-shell-slot-recovery-action {
+    border: 0;
+    padding: 0;
+    color: var(--SmartThemeQuoteColor);
+    background: transparent;
+    font: inherit;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.react-workspace-shell-slot-recovery-action:focus-visible {
+    outline: 1px solid var(--interactable-outline-color);
+    outline-offset: 2px;
 }
 
 .emberdesk-react-authoring-panel-host {

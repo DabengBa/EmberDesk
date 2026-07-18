@@ -78,7 +78,6 @@ import {
 } from './util.js';
 import { UPLOADS_DIRECTORY } from './constants.js';
 import { REACT_LOGIN_BASE_PATH } from './react-login-feature.js';
-import { getWorkspaceReactFeatures, injectWorkspaceReactFeatures } from './workspace-react-features.js';
 
 // Routers
 import { router as usersPublicRouter } from './endpoints/users-public.js';
@@ -112,7 +111,6 @@ const app = express();
 const startupProfiler = createServerStartupProfiler(process.env.EMBERDESK_STARTUP_PROFILE);
 let webpackMiddleware;
 const publicRoot = path.join(serverDirectory, 'public');
-const workspaceIndexPath = path.join(publicRoot, 'index.html');
 
 /**
  * Phase 2: Register Express middleware and static file routes.
@@ -241,12 +239,6 @@ async function registerMiddleware(app, cli) {
             const query = request.url.split('?')[1];
             const redirectUrl = query ? `/login?${query}` : '/login';
             return response.redirect(redirectUrl);
-        }
-
-        const workspaceIndexHtml = safeReadFileSync(workspaceIndexPath);
-        if (typeof workspaceIndexHtml === 'string') {
-            response.type('html');
-            return response.send(injectWorkspaceReactFeatures(workspaceIndexHtml, getWorkspaceReactFeatures()));
         }
 
         return response.sendFile('index.html', { root: publicRoot });

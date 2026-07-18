@@ -79,6 +79,12 @@ Consequences:
 
 2026-07-05 Panel dock coordination update:
 
+2026-07-18 Workspace shell retirement update:
+
+- ADR-0012 retirement criteria are now satisfied for the root workspace shell. React always owns the same-entry `/` chrome, navigation, lifecycle, pin state, layout markers, and local recovery status.
+- `features.react.shell.takeover`, strict-mode handling, inline workspace feature bootstrap, same-version legacy shell fallback, takeover diagnostics, and shell drawer adapters are retired.
+- Declared child slots retain only feature-local content and protected compatibility DOM. Release rollback is a previous application version, not a flag-off or mount-failure legacy shell path.
+
 - The same-entry React workspace chrome now coordinates Character Library, World Info, Backgrounds, and Extensions through a transient dock snapshot owned by `app/stores/workspace-panel-store.js`, with visible chrome actions still routed through the legacy drawer and facade owners in `public/script.js`.
 - The shell records an optimistic `loading` intent before each panel action and then normalizes the settled result to `disabled`, `loading`, `empty`, `success`, or `error` without creating a second owner for World Info, Background, Extensions, or character-library behavior.
 - Current drawer `pinnedOpen` facts are copied into transient `locked` / `pinned` metadata for compatibility snapshots and focused proof, but the visible shell chrome only shows active-panel and dock-status feedback; it does not render separate pinned/locked badges.

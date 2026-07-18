@@ -2,10 +2,9 @@
 created: 2026-07-16
 source: user
 confirmed: true
-last_updated: 2026-07-16
+last_updated: 2026-07-18
 feature_slug: react-workspace-shell-retirement
-status: active
-active_process_dir: .docs/specs/260716-13-react-workspace-shell-retirement
+status: delivered
 ---
 
 # React Workspace Shell Retirement Intent
@@ -37,12 +36,18 @@ active_process_dir: .docs/specs/260716-13-react-workspace-shell-retirement
 
 - 2026-07-16：创建 final-wave Workspace Shell retirement 包。
 
+## 交付追溯
+
+- React workspace shell：`app/workspace-panels.tsx`、`app/stores/workspace-panel-store.js`、`public/script.js`。
+- Owning docs：[Next Workspace Shell](../../db/features/next-workspace-shell.md)、[Chat Workspace](../../db/pages/chat-workspace.md)、[Workspace Shell Child-Slot Coordination](../workspace-shell-panel-dock-coordination.md)。
+- Durable decision record：[ADR-0007](../../adr/0007-react-page-islands-with-legacy-fallbacks.md)。
+- Verification: focused unit, compatibility, workspace bundle, semantic docs, and Playwright navigation/chat/extension-runtime gates passed on 2026-07-18.
+
 ## 参考资料
 
 - `app/workspace-panels.tsx`
 - `app/stores/workspace-panel-store.js`
 - `app/compat/global-compatibility-bridge.js`
 - `public/script.js`
-- `src/workspace-react-features.js`
 - `tests/workspace-shell-panel-navigation.e2e.js`
 - `.docs/db/features/next-workspace-shell.md`

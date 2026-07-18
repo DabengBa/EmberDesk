@@ -125,8 +125,6 @@ features:
       # mainChatMessageList product flag retired (React sole-owner; always enabled in workspace bootstrap)
       backgroundLibrary: true
       extensionsHost: true
-    shell:
-      takeover: false
 
 # -- SSO LOGIN CONFIGURATION --
 sso:

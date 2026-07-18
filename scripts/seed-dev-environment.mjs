@@ -394,19 +394,6 @@ async function seedGroups(characterRecords) {
 }
 
 async function writeDevConfig() {
-    const reactPanelFlags = [
-        ['mainChatMessageList', process.env.EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST],
-        ['worldInfo', process.env.EMBERDESK_FEATURES_REACT_PANELS_WORLDINFO],
-        ['backgroundLibrary', process.env.EMBERDESK_FEATURES_REACT_PANELS_BACKGROUNDLIBRARY],
-        ['extensionsHost', process.env.EMBERDESK_FEATURES_REACT_PANELS_EXTENSIONSHOST],
-        ['characterAuthoring', process.env.EMBERDESK_FEATURES_REACT_PANELS_CHARACTERAUTHORING],
-        ['groupAuthoring', process.env.EMBERDESK_FEATURES_REACT_PANELS_GROUPAUTHORING],
-    ].filter(([, value]) => value === 'true' || value === 'false');
-    const reactShellFlags = [
-        ['takeover', process.env.EMBERDESK_FEATURES_REACT_SHELL_TAKEOVER],
-        ['strict', process.env.EMBERDESK_FEATURES_REACT_SHELL_STRICT],
-    ].filter(([, value]) => value === 'true' || value === 'false');
-
     const config = [
         `dataRoot: ${normalizePathForYaml(dataRoot)}`,
         'listen: false',
@@ -420,24 +407,6 @@ async function writeDevConfig() {
         'skipContentCheck: true',
         'logging:',
         '  minLogLevel: 1',
-        ...(reactPanelFlags.length > 0 || reactShellFlags.length > 0
-            ? [
-                'features:',
-                '  react:',
-                ...(reactPanelFlags.length > 0
-                    ? [
-                        '    panels:',
-                        ...reactPanelFlags.map(([key, value]) => `      ${key}: ${value}`),
-                    ]
-                    : []),
-                ...(reactShellFlags.length > 0
-                    ? [
-                        '    shell:',
-                        ...reactShellFlags.map(([key, value]) => `      ${key}: ${value}`),
-                    ]
-                    : []),
-            ]
-            : []),
     ].join('\n');
 
     await fs.promises.writeFile(configPath, `${config}\n`, 'utf8');

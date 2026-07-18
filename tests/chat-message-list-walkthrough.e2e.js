@@ -19,7 +19,7 @@ const seededChatName = 'Dev Character 001 Session 01';
 const alternateChatName = 'Dev Character 001 Session 02';
 const longChatName = 'Dev Character 001 Long Walkthrough Proof';
 const reasoningChatName = 'Dev Character 001 Reasoning Walkthrough';
-const reactMainChatMessageListEnabled = process.env.EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST === 'true';
+const reactMainChatMessageListEnabled = true;
 const seededChatPath = path.join(userRoot, 'chats', chatFolder, `${seededChatName}.jsonl`);
 const longChatPath = path.join(userRoot, 'chats', chatFolder, `${longChatName}.jsonl`);
 const reasoningChatPath = path.join(userRoot, 'chats', chatFolder, `${reasoningChatName}.jsonl`);
@@ -152,11 +152,16 @@ async function openCharacterManagement(page) {
     }
 
     const panelButton = page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'Character Library' });
+    const legacyOpener = page.locator('.mes .drawer-opener[data-target="rightNavHolder"]').filter({ hasText: /Character Management|角色管理/ }).first();
+    await expect.poll(async () => (
+        await panelButton.isVisible() || await legacyOpener.isVisible()
+    ), { timeout: 10_000 }).toBe(true);
+
     if (await panelButton.isVisible()) {
         await panelButton.click({ timeout: 10_000 });
         await expect(panelButton).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
     } else {
-        await page.locator('.mes .drawer-opener[data-target="rightNavHolder"]').filter({ hasText: /Character Management|角色管理/ }).first().click();
+        await legacyOpener.click();
     }
     await expect(page.locator('#right-nav-panel.openDrawer #rm_characters_block')).toBeVisible({ timeout: 10_000 });
 }

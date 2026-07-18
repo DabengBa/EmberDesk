@@ -370,10 +370,6 @@ import {
     projectCharacterLibraryQueryAgainstDeletedAvatars,
 } from './scripts/character-library-query-helpers.js';
 import { mountReactWorkspaceShellChrome } from './scripts/workspace-panels-react-bridge.js';
-import {
-    WORKSPACE_SHELL_TAKEOVER_STATUSES,
-    decideWorkspaceShellTakeover,
-} from './scripts/workspace-shell-takeover-contract.js';
 import { runDeleteCharacterClosePreflight } from './scripts/delete-character-preflight.js';
 
 // API OBJECT FOR EXTERNAL WIRING
@@ -394,7 +390,7 @@ if (globalThis.location?.pathname === '/' && globalThis.location?.search.include
 }
 
 export function getWorkspaceReactFeatures() {
-    return globalThis.__emberDeskWorkspaceFeatures ?? {
+    return {
         reactPages: {
             settings: true,
         },
@@ -405,10 +401,6 @@ export function getWorkspaceReactFeatures() {
             extensionsHost: true,
             characterAuthoring: true,
             groupAuthoring: true,
-        },
-        reactShell: {
-            strict: false,
-            takeover: false,
         },
     };
 }
@@ -453,9 +445,8 @@ const LEGACY_SETTINGS_DRAWER_ROUTE_TARGETS = {
     '#advanced-formatting-button > .drawer-toggle': '/settings?tab=advanced',
     '#user-settings-button > .drawer-toggle': '/settings',
 };
-const WORKSPACE_SHELL_TAKEOVER_MARKER_ID = 'emberdesk-react-shell-takeover-foundation';
 const WORKSPACE_SHELL_CHROME_HOST_ID = 'emberdesk-react-workspace-shell-chrome-host';
-const LEGACY_WORKSPACE_CHROME_SELECTOR = '#top-bar, #ai-config-button > .drawer-toggle, #advanced-formatting-button > .drawer-toggle, #user-settings-button > .drawer-toggle, .drawer-opener[data-target="rightNavHolder"], .drawer-opener[data-target="extensions-settings-button"]';
+const WORKSPACE_SHELL_RETIRED_CHROME_SELECTOR = '#top-bar, #ai-config-button > .drawer-toggle, #advanced-formatting-button > .drawer-toggle, #user-settings-button > .drawer-toggle, .drawer-opener[data-target="rightNavHolder"], .drawer-opener[data-target="extensions-settings-button"]';
 
 document.addEventListener('click', event => {
     const clickTarget = event.target;
@@ -510,46 +501,6 @@ function getReactCharacterLibraryPanelAssetPath() {
     return `${REACT_CHARACTER_LIBRARY_PANEL_ASSET_PATH}?v=${encodeURIComponent(String(cacheKey))}`;
 }
 
-export function publishWorkspaceShellTakeoverDiagnostic({
-    strict,
-    rollback = false,
-    failureReason = undefined,
-} = {}) {
-    const result = decideWorkspaceShellTakeover({
-        failureReason,
-        features: getWorkspaceReactFeatures(),
-        hasHost: Boolean(document.body),
-        rollback,
-        strict,
-    });
-
-    if (!document.body) {
-        return result;
-    }
-
-    let marker = document.getElementById(WORKSPACE_SHELL_TAKEOVER_MARKER_ID);
-    if (!marker) {
-        marker = document.createElement('div');
-        marker.id = WORKSPACE_SHELL_TAKEOVER_MARKER_ID;
-        marker.hidden = true;
-        document.body.append(marker);
-    }
-
-    marker.dataset.reactWorkspaceShellTakeoverStatus = result.status;
-    marker.dataset.reactWorkspaceShellTakeoverEnabled = String(result.takeover);
-
-    if (result.reason) {
-        marker.dataset.reactWorkspaceShellTakeoverReason = result.reason;
-        marker.setAttribute('data-react-workspace-shell-takeover-reason', result.reason);
-    } else {
-        delete marker.dataset.reactWorkspaceShellTakeoverReason;
-        marker.removeAttribute('data-react-workspace-shell-takeover-reason');
-    }
-
-    marker.setAttribute('data-react-workspace-shell-takeover-status', result.status);
-    return result;
-}
-
 function ensureWorkspaceShellChromeHost() {
     let host = document.getElementById(WORKSPACE_SHELL_CHROME_HOST_ID);
     if (host) {
@@ -560,7 +511,11 @@ function ensureWorkspaceShellChromeHost() {
     host.id = WORKSPACE_SHELL_CHROME_HOST_ID;
     host.setAttribute('data-doc-id', 'feature.next_workspace_shell page.chat_workspace');
     const sheld = document.getElementById('sheld');
-    document.body.insertBefore(host, sheld ?? document.body.firstElementChild);
+    if (sheld?.parentElement) {
+        sheld.parentElement.insertBefore(host, sheld);
+    } else {
+        document.body.prepend(host);
+    }
     return host;
 }
 
@@ -603,7 +558,7 @@ function getWorkspaceShellChromeState(statusLabel = 'Workspace ready') {
 
 function hideLegacyWorkspaceChromeForReact() {
     document.body.dataset.reactWorkspaceShellChrome = 'mounted';
-    document.querySelectorAll(LEGACY_WORKSPACE_CHROME_SELECTOR).forEach((element) => {
+    document.querySelectorAll(WORKSPACE_SHELL_RETIRED_CHROME_SELECTOR).forEach((element) => {
         if (!(element instanceof HTMLElement)) {
             return;
         }
@@ -613,37 +568,27 @@ function hideLegacyWorkspaceChromeForReact() {
     });
 }
 
-function restoreLegacyWorkspaceChromeFromReact() {
-    delete document.body.dataset.reactWorkspaceShellChrome;
-    document.querySelectorAll('[data-legacy-workspace-chrome-hidden-by-react="true"]').forEach((element) => {
-        if (!(element instanceof HTMLElement)) {
-            return;
-        }
-        delete element.dataset.legacyWorkspaceChromeHiddenByReact;
-        element.hidden = false;
-    });
-}
-
-async function openWorkspaceShellDrawer(drawerId) {
-    const drawer = document.getElementById(drawerId);
-    const drawerToggle = drawer?.closest('.drawer')?.querySelector(':scope > .drawer-toggle');
-    if (!(drawer instanceof HTMLElement) || !(drawerToggle instanceof HTMLElement)) {
+async function openWorkspaceChildSlotHost(hostId) {
+    const drawer = document.getElementById(hostId);
+    if (!(drawer instanceof HTMLElement)) {
         return;
     }
 
-    if (!drawer.classList.contains('openDrawer')) {
-        await doNavbarIconClick.call(drawerToggle);
-    }
+    openWorkspaceChildSlotHostImmediate(hostId);
 }
 
-function closeWorkspaceShellDrawer(drawerId) {
-    const drawer = document.getElementById(drawerId);
+function closeWorkspaceChildSlotHost(hostId, { force = false } = {}) {
+    const drawer = document.getElementById(hostId);
     const drawerRoot = drawer?.closest('.drawer');
     const drawerIcon = drawerRoot?.querySelector('.drawer-icon');
-    if (!(drawer instanceof HTMLElement) || drawer.classList.contains('pinnedOpen')) {
+    if (!(drawer instanceof HTMLElement) || (!force && drawer.classList.contains('pinnedOpen'))) {
         return false;
     }
 
+    if (force) {
+        drawer.classList.remove('pinnedOpen');
+        drawerIcon?.classList.remove('drawerPinnedOpen');
+    }
     drawer.classList.remove('openDrawer');
     drawer.classList.add('closedDrawer');
     drawerIcon?.classList.remove('openIcon');
@@ -651,8 +596,8 @@ function closeWorkspaceShellDrawer(drawerId) {
     return true;
 }
 
-function openWorkspaceShellDrawerImmediate(drawerId) {
-    const drawer = document.getElementById(drawerId);
+function openWorkspaceChildSlotHostImmediate(hostId) {
+    const drawer = document.getElementById(hostId);
     const drawerRoot = drawer?.closest('.drawer');
     const drawerIcon = drawerRoot?.querySelector('.drawer-icon');
     if (!(drawer instanceof HTMLElement)) {
@@ -679,7 +624,7 @@ function openWorkspaceShellDrawerImmediate(drawerId) {
     drawerIcon?.classList.remove('closedIcon');
 }
 
-function selectRightMenuImmediate(selectedMenuId) {
+function showWorkspaceChildSlotContent(selectedMenuId) {
     const normalizedMenuId = String(selectedMenuId ?? '').replace('#', '');
     const displayModes = {
         rm_group_chats_block: 'flex',
@@ -714,82 +659,58 @@ function waitForWorkspaceShellPanelOpenTask() {
     return new Promise(resolve => setTimeout(resolve, 0));
 }
 
-function getWorkspaceShellPanelDockState(kind) {
-    const drawerId = getWorkspaceShellPanelDrawerId(kind);
-    const drawer = drawerId ? document.getElementById(drawerId) : null;
-    const pinned = drawer?.classList.contains('pinnedOpen') === true;
-
+function getWorkspaceChildSlotHostId(slotKey) {
     return {
-        locked: pinned,
-        pinned,
-    };
-}
-
-function getWorkspaceShellPanelDrawerId(kind) {
-    return {
-        aiConfig: 'left-nav-panel',
-        advancedFormatting: 'AdvancedFormatting',
         characterLibrary: 'right-nav-panel',
         worldInfo: 'WorldInfo',
         backgroundLibrary: 'Backgrounds',
         extensionsHost: 'rm_extensions_block',
-        settings: 'user-settings-block',
         groupChats: 'right-nav-panel',
         characterAuthoring: 'right-nav-panel',
-    }[kind];
+    }[slotKey];
 }
 
-function closeWorkspaceShellPanel(kind) {
-    const drawerId = getWorkspaceShellPanelDrawerId(kind);
-    const beforeCloseDockState = getWorkspaceShellPanelDockState(kind);
-    const closed = drawerId ? closeWorkspaceShellDrawer(drawerId) : false;
-    const afterCloseDockState = getWorkspaceShellPanelDockState(kind);
-    const stillOpen = !closed && (beforeCloseDockState.pinned || afterCloseDockState.pinned);
+function deactivateWorkspaceChildSlotByKind(slotKey, options = {}) {
+    const hostId = getWorkspaceChildSlotHostId(slotKey);
+    const closed = hostId ? closeWorkspaceChildSlotHost(hostId, options) : false;
     return {
-        kind,
-        locked: stillOpen ? afterCloseDockState.locked : false,
+        kind: slotKey,
         mounted: false,
-        pinned: stillOpen ? afterCloseDockState.pinned : false,
-        status: stillOpen ? 'mounted' : closed ? 'closed' : 'idle',
+        status: closed ? 'closed' : 'idle',
     };
 }
 
 function createWorkspaceShellPanelResult(kind, resultOrMounted) {
-    const dockState = getWorkspaceShellPanelDockState(kind);
     if (resultOrMounted && typeof resultOrMounted === 'object') {
-        return {
-            ...resultOrMounted,
-            locked: dockState.locked,
-            pinned: dockState.pinned,
-        };
+        return resultOrMounted;
     }
 
     return resultOrMounted
-        ? { kind, locked: dockState.locked, mounted: true, pinned: dockState.pinned, status: 'mounted' }
-        : { kind, locked: dockState.locked, mounted: false, pinned: dockState.pinned, reason: 'feature-disabled', status: 'fallback' };
+        ? { kind, mounted: true, status: 'mounted' }
+        : { kind, mounted: false, reason: 'feature-disabled', status: 'fallback' };
 }
 
 async function openWorkspaceShellCharacterLibrary() {
-    openWorkspaceShellDrawerImmediate('right-nav-panel');
+    openWorkspaceChildSlotHostImmediate('right-nav-panel');
     if (menu_type !== 'characters') {
         selected_button = 'characters';
         setMenuType('characters');
-        selectRightMenuImmediate('rm_characters_block');
+        showWorkspaceChildSlotContent('rm_characters_block');
     }
 
     return createWorkspaceShellPanelResult('characterLibrary', isReactCharacterLibraryPanelEnabled());
 }
 
 async function openWorkspaceShellGroupChats() {
-    openWorkspaceShellDrawerImmediate('right-nav-panel');
+    openWorkspaceChildSlotHostImmediate('right-nav-panel');
     selected_button = 'group_chats';
     setMenuType('group_chats');
-    selectRightMenuImmediate('rm_group_chats_block');
+    showWorkspaceChildSlotContent('rm_group_chats_block');
     return createWorkspaceShellPanelResult('groupChats', await mountReactGroupAuthoringPanel());
 }
 
 async function openWorkspaceShellCharacterAuthoring() {
-    openWorkspaceShellDrawerImmediate('right-nav-panel');
+    openWorkspaceChildSlotHostImmediate('right-nav-panel');
     const hasSelectedCharacter = this_chid !== undefined && characters[this_chid];
     selected_button = hasSelectedCharacter ? 'character_edit' : 'create';
     setMenuType(hasSelectedCharacter ? 'character_edit' : 'create');
@@ -798,8 +719,59 @@ async function openWorkspaceShellCharacterAuthoring() {
     } else {
         select_rm_create({ switchMenu: false });
     }
-    selectRightMenuImmediate('rm_ch_create_block');
+    showWorkspaceChildSlotContent('rm_ch_create_block');
     return createWorkspaceShellPanelResult('characterAuthoring', await mountReactCharacterAuthoringPanel());
+}
+
+async function activateWorkspaceShellSlot(slotKey) {
+    switch (slotKey) {
+        case 'characterLibrary':
+            return openWorkspaceShellCharacterLibrary();
+        case 'worldInfo':
+            return getWorkspaceShellChromeBridge().dispatchAction('openWorldInfo');
+        case 'backgroundLibrary':
+            return getWorkspaceShellChromeBridge().dispatchAction('openBackgrounds');
+        case 'extensionsHost':
+            return getWorkspaceShellChromeBridge().dispatchAction('openExtensions');
+        case 'groupChats':
+            return openWorkspaceShellGroupChats();
+        case 'characterAuthoring':
+            return openWorkspaceShellCharacterAuthoring();
+        default:
+            throw new Error(`Unsupported workspace shell slot: ${String(slotKey)}`);
+    }
+}
+
+function deactivateWorkspaceShellSlot(slotKey) {
+    const kind = {
+        characterLibrary: 'characterLibrary',
+        worldInfo: 'worldInfo',
+        backgroundLibrary: 'backgroundLibrary',
+        extensionsHost: 'extensionsHost',
+        groupChats: 'groupChats',
+        characterAuthoring: 'characterAuthoring',
+    }[slotKey];
+
+    if (!kind) {
+        throw new Error(`Unsupported workspace shell slot: ${String(slotKey)}`);
+    }
+
+    return deactivateWorkspaceChildSlotByKind(slotKey, { force: true });
+}
+
+function setWorkspaceShellSlotPinned(slotKey, pinned) {
+    const kind = slotKey;
+    const drawerId = getWorkspaceChildSlotHostId(slotKey);
+    const drawer = drawerId ? document.getElementById(drawerId) : null;
+    const drawerIcon = drawer?.closest('.drawer')?.querySelector('.drawer-icon');
+
+    if (!(drawer instanceof HTMLElement)) {
+        throw new Error(`Workspace shell slot has no mount target: ${String(slotKey)}`);
+    }
+
+    drawer.classList.toggle('pinnedOpen', Boolean(pinned));
+    drawerIcon?.classList.toggle('drawerPinnedOpen', Boolean(pinned));
+    return { kind, mounted: true, status: 'mounted' };
 }
 
 function getWorkspaceShellChromeBridge() {
@@ -808,6 +780,12 @@ function getWorkspaceShellChromeBridge() {
             await waitForWorkspaceShellPanelOpenTask();
 
             switch (action) {
+                case 'activateWorkspaceShellSlot':
+                    return activateWorkspaceShellSlot(payload?.slotKey);
+                case 'deactivateWorkspaceShellSlot':
+                    return deactivateWorkspaceShellSlot(payload?.slotKey);
+                case 'setWorkspaceShellSlotPinned':
+                    return setWorkspaceShellSlotPinned(payload?.slotKey, payload?.pinned);
                 case 'openAIConfig':
                     window.location.assign('/settings?tab=providers');
                     return createWorkspaceShellPanelResult('aiConfig', { kind: 'aiConfig', mounted: false, status: 'success' });
@@ -818,22 +796,20 @@ function getWorkspaceShellChromeBridge() {
                     return openWorkspaceShellCharacterLibrary();
                 case 'openWorldInfo':
                     // React sole-owner: open drawer and mount workbench; deferred body is hidden activation-rules DOM only.
-                    await openWorkspaceShellDrawer('WorldInfo');
+                    await openWorkspaceChildSlotHost('WorldInfo');
                     await waitForWorkspaceShellPanelOpenTask();
                     const worldInfoMount = await mountReactWorldInfoPanel();
                     void ensureWorkspaceShellDeferredPanel('world-info-body');
                     return createWorkspaceShellPanelResult('worldInfo', worldInfoMount);
                 case 'openBackgrounds':
                     // React sole-owner: open drawer and mount Background Library; legacy gallery remains hidden compatibility DOM.
-                    await openWorkspaceShellDrawer('Backgrounds');
+                    await openWorkspaceChildSlotHost('Backgrounds');
                     await waitForWorkspaceShellPanelOpenTask();
                     return createWorkspaceShellPanelResult('backgroundLibrary', await mountReactBackgroundLibraryPanel());
                 case 'openExtensions':
-                    await openWorkspaceShellDrawer('rm_extensions_block');
+                    await openWorkspaceChildSlotHost('rm_extensions_block');
                     await waitForWorkspaceShellPanelOpenTask();
                     return createWorkspaceShellPanelResult('extensionsHost', await mountReactExtensionsHostPanel());
-                case 'closeWorkspacePanel':
-                    return closeWorkspaceShellPanel(payload?.kind);
                 case 'openSettings':
                     window.location.assign('/settings');
                     return createWorkspaceShellPanelResult('settings', { kind: 'settings', mounted: false, status: 'success' });
@@ -849,15 +825,10 @@ function getWorkspaceShellChromeBridge() {
 }
 
 async function mountReactWorkspaceShellChromeHost(statusLabel = 'Workspace ready') {
-    const readyResult = publishWorkspaceShellTakeoverDiagnostic();
-    if (readyResult.status !== WORKSPACE_SHELL_TAKEOVER_STATUSES.READY) {
-        restoreLegacyWorkspaceChromeFromReact();
-        return readyResult;
-    }
-
     const host = ensureWorkspaceShellChromeHost();
     host.dataset.reactWorkspaceShellChromeStatus = 'loading';
     host.setAttribute('data-react-workspace-shell-chrome-status', 'loading');
+    hideLegacyWorkspaceChromeForReact();
 
     const result = await mountReactWorkspaceShellChrome({
         container: host,
@@ -868,13 +839,6 @@ async function mountReactWorkspaceShellChromeHost(statusLabel = 'Workspace ready
 
     host.dataset.reactWorkspaceShellChromeStatus = result.status;
     host.setAttribute('data-react-workspace-shell-chrome-status', result.status);
-
-    if (result.status === WORKSPACE_SHELL_TAKEOVER_STATUSES.READY) {
-        hideLegacyWorkspaceChromeForReact();
-    } else {
-        restoreLegacyWorkspaceChromeFromReact();
-        publishWorkspaceShellTakeoverDiagnostic({ failureReason: result.reason });
-    }
 
     return result;
 }
@@ -16050,6 +16014,10 @@ jQuery(async function () {
             var topBar = document.getElementById('top-bar');
             var topSettingsHolder = document.getElementById('top-settings-holder');
             var divchat = document.getElementById('chat');
+
+            if (!topBar || !topSettingsHolder || !divchat) {
+                return;
+            }
 
             //if (checkBox.checked) {
             if (topBar.style.display === 'none') {

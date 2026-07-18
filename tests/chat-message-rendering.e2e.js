@@ -18,7 +18,7 @@ const chatFolder = 'dev-character-001';
 const seededChatName = 'Dev Character 001 Session 01';
 const longChatName = 'Dev Character 001 Long Rendering Proof';
 const mobileLongChatName = 'Dev Character 001 Mobile Long Rendering Proof';
-const reactMainChatMessageListEnabled = process.env.EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST === 'true';
+const reactMainChatMessageListEnabled = true;
 const seededChatPath = path.join(userRoot, 'chats', chatFolder, `${seededChatName}.jsonl`);
 const longChatPath = path.join(userRoot, 'chats', chatFolder, `${longChatName}.jsonl`);
 const mobileLongChatPath = path.join(userRoot, 'chats', chatFolder, `${mobileLongChatName}.jsonl`);
@@ -201,7 +201,7 @@ async function expectReactMessageActionState(page, messageId, expectations = {})
             const messageButtons = row?.querySelector('.mes_buttons');
 
             return {
-                featureEnabled: Boolean(window.__emberDeskWorkspaceFeatures?.reactPanels?.mainChatMessageList),
+                featureEnabled: true,
                 hostPresent: Boolean(host),
                 hostChildElementCount: host?.childElementCount ?? 0,
                 controllerDataset: controller instanceof HTMLElement ? { ...controller.dataset } : null,
@@ -287,7 +287,7 @@ async function expectReactRichBodyState(page, messageId) {
             const row = document.querySelector(`#chat > .mes[mesid="${targetMessageId}"]`);
 
             return {
-                featureEnabled: Boolean(window.__emberDeskWorkspaceFeatures?.reactPanels?.mainChatMessageList),
+                featureEnabled: true,
                 hostPresent: Boolean(host),
                 hostChildElementCount: host?.childElementCount ?? 0,
                 controllerDataset: controller instanceof HTMLElement ? { ...controller.dataset } : null,

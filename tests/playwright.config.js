@@ -2,8 +2,6 @@ import { fileURLToPath } from 'node:url';
 
 import { defineConfig } from '@playwright/test';
 import {
-    applyWorkspaceReactPlaywrightFlagDefaults,
-    hasEnabledWorkspaceReactPlaywrightFlag,
     shouldBuildCharacterLibraryPanel,
     shouldBuildWorkspacePanels,
 } from './helpers/workspace-react-playwright-flags.js';
@@ -16,9 +14,7 @@ const configPath = process.env.PLAYWRIGHT_CONFIG_PATH ?? '.tmp/playwright-e2e-co
 const testUser = process.env.PLAYWRIGHT_USER ?? 'playwright-e2e';
 const testPassword = process.env.PLAYWRIGHT_PASSWORD ?? 'playwright';
 const chromeExecutablePath = process.env.PLAYWRIGHT_CHROME_EXECUTABLE || undefined;
-applyWorkspaceReactPlaywrightFlagDefaults(process.env, process.argv);
-const shouldReuseExistingServer = !hasEnabledWorkspaceReactPlaywrightFlag(process.env)
-    && !process.env.CI
+const shouldReuseExistingServer = !process.env.CI
     && process.env.PLAYWRIGHT_REUSE_SERVER !== '0';
 const webServerCommand = [
     shouldBuildCharacterLibraryPanel(process.env) ? 'bun run build:react:character-library' : null,

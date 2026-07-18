@@ -3,13 +3,6 @@ import {
     createWorkspacePanelFallbackResult,
     createWorkspacePanelMountedResult,
 } from './workspace-panel-mount-contract.js';
-import {
-    WORKSPACE_SHELL_TAKEOVER_FAILURE_REASONS,
-    createWorkspaceShellTakeoverDisabledResult,
-    createWorkspaceShellTakeoverFailedResult,
-    createWorkspaceShellTakeoverReadyResult,
-    isReactWorkspaceShellTakeoverEnabled,
-} from './workspace-shell-takeover-contract.js';
 
 export const REACT_WORKSPACE_PANELS_ASSET_PATH = '/react/login/assets/workspace-panels.js';
 const REACT_WORKSPACE_PANELS_ASSET_CACHE_KEY = Date.now().toString(36);
@@ -32,14 +25,10 @@ export function getDefaultWorkspaceReactFeatures() {
             characterAuthoring: true,
             groupAuthoring: true,
         },
-        reactShell: {
-            strict: false,
-            takeover: false,
-        },
     };
 }
 
-export function isReactWorkspacePanelEnabled(kind, features = globalThis.__emberDeskWorkspaceFeatures ?? getDefaultWorkspaceReactFeatures()) {
+export function isReactWorkspacePanelEnabled(kind, features = getDefaultWorkspaceReactFeatures()) {
     return Boolean(features?.reactPanels?.[kind]);
 }
 
@@ -101,34 +90,29 @@ export async function mountReactWorkspaceShellChrome({
     container,
     state,
     bridge,
-    features,
     loadModule = loadWorkspacePanelsModule,
     onError = (error, reason) => {
-        const action = reason === WORKSPACE_SHELL_TAKEOVER_FAILURE_REASONS.MOUNT_FAILED ? 'mount' : 'load';
-        console.warn(`React workspace shell chrome failed to ${action}. Falling back to legacy chrome.`, error);
+        const action = reason === 'mount-failed' ? 'mount' : 'load';
+        console.error(`React workspace shell chrome failed to ${action}. The release build is invalid.`, error);
     },
 }) {
-    if (!isReactWorkspaceShellTakeoverEnabled(features)) {
-        return createWorkspaceShellTakeoverDisabledResult();
-    }
-
     if (!container) {
-        return createWorkspaceShellTakeoverFailedResult(WORKSPACE_SHELL_TAKEOVER_FAILURE_REASONS.MISSING_HOST);
+        return { reason: 'missing-host', status: 'failed' };
     }
 
     let panelModule;
     try {
         panelModule = await loadModule();
     } catch (error) {
-        onError(error, WORKSPACE_SHELL_TAKEOVER_FAILURE_REASONS.BUNDLE_LOAD_FAILED);
-        return createWorkspaceShellTakeoverFailedResult(WORKSPACE_SHELL_TAKEOVER_FAILURE_REASONS.BUNDLE_LOAD_FAILED);
+        onError(error, 'bundle-load-failed');
+        return { reason: 'bundle-load-failed', status: 'failed' };
     }
 
     try {
         panelModule.mountWorkspaceShellChrome(container, { state, bridge });
-        return createWorkspaceShellTakeoverReadyResult();
+        return { status: 'mounted' };
     } catch (error) {
-        onError(error, WORKSPACE_SHELL_TAKEOVER_FAILURE_REASONS.MOUNT_FAILED);
-        return createWorkspaceShellTakeoverFailedResult(WORKSPACE_SHELL_TAKEOVER_FAILURE_REASONS.MOUNT_FAILED);
+        onError(error, 'mount-failed');
+        return { reason: 'mount-failed', status: 'failed' };
     }
 }

@@ -5,13 +5,16 @@ import {
     getWorkspacePanelSnapshot,
     recordWorkspacePanelDockIntent,
     recordWorkspacePanelDockClose,
+    recordWorkspacePanelDockPin,
     recordWorkspacePanelDockResult,
     recordWorkspacePanelMount,
+    getWorkspaceShellChildSlot,
     recordWorkspacePanelUnmount,
     recordWorkspacePanelUpdate,
     resetWorkspacePanelStore,
     subscribeWorkspacePanelDock,
     subscribeWorkspacePanel,
+    WORKSPACE_SHELL_CHILD_SLOTS,
     WORKSPACE_PANEL_KINDS,
     WORKSPACE_PANEL_DOCK_KINDS,
 } from '../app/stores/workspace-panel-store.js';
@@ -44,6 +47,32 @@ describe('React state stores', () => {
             'groupChats',
             'characterAuthoring',
         ]);
+    });
+
+    test('declares explicit child-slot contracts without making legacy drawer state shell authority', () => {
+        expect(WORKSPACE_SHELL_CHILD_SLOTS).toEqual(expect.objectContaining({
+            characterLibrary: expect.objectContaining({
+                accessibleName: 'Character Library',
+                contentOwner: 'character-library',
+                mountTarget: '#rm_print_characters_block',
+            }),
+            worldInfo: expect.objectContaining({
+                accessibleName: 'World Info',
+                contentOwner: 'world-info-workbench',
+                mountTarget: '#WorldInfo',
+            }),
+            mainChat: expect.objectContaining({
+                accessibleName: 'Main Chat',
+                contentOwner: 'main-chat',
+                mountTarget: '#chat, #send_form, #nonQRFormItems',
+            }),
+        }));
+
+        expect(getWorkspaceShellChildSlot('extensionsHost')).toEqual(expect.objectContaining({
+            accessibleName: 'Extensions',
+            contentOwner: 'extensions-host',
+        }));
+        expect(() => getWorkspaceShellChildSlot('unknownSlot')).toThrow('Unsupported workspace shell child slot');
     });
 
     test('records workspace panel lifecycle without requiring DOM globals', () => {
@@ -235,6 +264,26 @@ describe('React state stores', () => {
             lockedPanelKinds: ['characterLibrary'],
             openPanelKinds: ['characterLibrary'],
             pinnedPanelKinds: ['characterLibrary'],
+        });
+    });
+
+    test('records React-owned dock pin state independently from child-slot results', () => {
+        resetWorkspacePanelStore();
+
+        recordWorkspacePanelDockIntent('worldInfo');
+        recordWorkspacePanelDockPin('worldInfo', true);
+        recordWorkspacePanelDockResult('worldInfo', { status: 'success' });
+
+        expect(getWorkspacePanelDockSnapshot()).toMatchObject({
+            activePanelKind: 'worldInfo',
+            lockedPanelKinds: ['worldInfo'],
+            pinnedPanelKinds: ['worldInfo'],
+        });
+
+        recordWorkspacePanelDockPin('worldInfo', false);
+        expect(getWorkspacePanelDockSnapshot()).toMatchObject({
+            lockedPanelKinds: [],
+            pinnedPanelKinds: [],
         });
     });
 

@@ -25,32 +25,31 @@ describe('chat workspace structure', () => {
         expect(loaderCss).toContain('overflow-wrap: anywhere;');
     });
 
-    test('keeps same-entry shell takeover diagnostics hidden from the visible workspace', () => {
+    test('retires same-version shell takeover flags and fallback diagnostics', () => {
         const scriptSource = readRepoFile('public/script.js');
+        const bridgeSource = readRepoFile('public/scripts/workspace-panels-react-bridge.js');
+        const featureSource = readRepoFile('src/react-feature-flags.js');
+        const workspaceFeaturesSource = readRepoFile('src/workspace-react-features.js');
 
-        expectContainsMarkers(scriptSource, [
-            'WORKSPACE_SHELL_TAKEOVER_MARKER_ID',
-            'marker.hidden = true;',
-            'data-react-workspace-shell-takeover-status',
-            'data-react-workspace-shell-takeover-reason',
-            'publishWorkspaceShellTakeoverDiagnostic();',
-        ], { contractName: 'same-entry shell takeover diagnostic marker' });
+        expect(scriptSource).not.toContain('workspace-shell-takeover-contract');
+        expect(scriptSource).not.toContain('WorkspaceShellTakeover');
+        expect(bridgeSource).not.toContain('workspace-shell-takeover-contract');
+        expect(bridgeSource).not.toContain('Falling back to legacy chrome');
+        expect(featureSource).not.toContain('features.react.shell');
+        expect(workspaceFeaturesSource).not.toContain('reactShell');
+        expect(workspaceFeaturesSource).not.toContain('__emberDeskWorkspaceFeatures');
         expect(scriptSource).not.toContain('workspace-next');
         expect(scriptSource).not.toContain('/workspace-next');
     });
 
-    test('mounts React workspace chrome without hiding protected drawer contents', () => {
+    test('mounts React workspace chrome without legacy shell drawer adapters', () => {
         const scriptSource = readRepoFile('public/script.js');
         const styleSource = readRepoFile('public/style.css');
 
         expectContainsMarkers(scriptSource, [
             'WORKSPACE_SHELL_CHROME_HOST_ID',
             'ensureWorkspaceShellChromeHost',
-            'LEGACY_WORKSPACE_CHROME_SELECTOR',
-            '#top-bar, #ai-config-button > .drawer-toggle, #advanced-formatting-button > .drawer-toggle, #user-settings-button > .drawer-toggle, .drawer-opener[data-target="rightNavHolder"], .drawer-opener[data-target="extensions-settings-button"]',
             'data-react-workspace-shell-chrome-status',
-            'data-legacy-workspace-chrome-hidden-by-react',
-            'openWorkspaceShellDrawer',
             "case 'openAIConfig':",
             "window.location.assign('/settings?tab=providers');",
             "case 'openFormatting':",
@@ -58,6 +57,13 @@ describe('chat workspace structure', () => {
             "case 'openSettings':",
             "window.location.assign('/settings');",
         ], { contractName: 'same-entry React workspace chrome host' });
+        expect(scriptSource).not.toContain('openWorkspaceShellDrawer');
+        expect(scriptSource).not.toContain('closeWorkspaceShellPanel');
+        expect(scriptSource).not.toContain('getWorkspaceShellPanelDockState');
+        expect(scriptSource).not.toContain('getWorkspaceShellPanelDrawerId');
+        expect(scriptSource.match(/async function openWorkspaceChildSlotHost\([\s\S]*?\n\}/)?.[0] ?? '')
+            .not.toContain('doNavbarIconClick.call(drawerToggle)');
+        expect(scriptSource).toContain('sheld.parentElement.insertBefore(host, sheld);');
         expect(scriptSource).not.toContain('#top-settings-holder > .drawer > .drawer-toggle');
         expect(scriptSource).not.toContain('#top-settings-holder[hidden]');
         expect(scriptSource).not.toContain('document.getElementById(\'top-settings-holder\').hidden = true');
