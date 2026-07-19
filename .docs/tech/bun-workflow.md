@@ -43,7 +43,9 @@ Use Vite build scripts for frontend build proof:
 
 Docker and release install verification also use Bun:
 
-- Docker copies Bun from `oven/bun:1.3.14-alpine` and runs `bun install --frozen-lockfile --production --no-progress`.
+- Docker copies Bun from `oven/bun:1.3.14-alpine`.
+- Image build installs the full Bun dependency tree first (`NODE_ENV=development bun install --frozen-lockfile --no-progress`) so Vite can prebuild React page/panel bundles, then reinstalls production-only dependencies after `build:react`, `build:react:character-library`, and `build:react:workspace-panels` succeed and `app/dist` is verified.
+- The runtime image must contain `app/dist/index.html` plus the character-library and workspace-panels assets; without them `/login`, `/setup`, and `/settings` return HTTP 503.
 - PR workflows install with `bun ci --ignore-scripts`.
 - npm release workflow installs production dependencies with Bun, then keeps `npm publish` only for registry publication.
 
@@ -67,7 +69,7 @@ Validated migration surfaces should include:
 - `bun run test:unit`.
 - `bun run test:e2e` when runtime or startup compatibility must be proven end to end.
 - `docker run --rm node:26.3.0-alpine3.23 node --version`.
-- `docker build .` through Bun production install and the current legacy `docker/build-lib.js` Webpack precompile. Frontend build proof for touched browser surfaces should still use the Vite build script first; removing the Docker Webpack precompile is a separate build-path change.
+- `docker build .` through full Bun install, legacy `docker/build-lib.js` Webpack precompile, React Vite prebuilds (`build:react`, `build:react:character-library`, `build:react:workspace-panels`), production prune, and `app/dist` verification. Frontend build proof for touched browser surfaces should still use the Vite build script first; removing the Docker Webpack precompile is a separate build-path change.
 
 Known local boundary:
 

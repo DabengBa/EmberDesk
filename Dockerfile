@@ -21,9 +21,11 @@ ENV NODE_ENV=production
 # Bundle app source and set ownership
 COPY --chown=node:node . ./
 
+# Install full dependency tree first so Vite (devDependency) can build React assets.
+# Reinstall production-only packages after the precompile steps below.
 RUN \
-  echo "*** Install Bun packages ***" && \
-  bun install --frozen-lockfile --production --no-progress
+  echo "*** Install Bun packages (including build tooling) ***" && \
+  NODE_ENV=development bun install --frozen-lockfile --no-progress
 
 # Create config directory and link config.yaml. Added hardcoded dirs(constants.js?)
 # that must be present for Non-Root Mode and volumeless docker runs.
@@ -37,6 +39,24 @@ RUN \
 RUN \
   echo "*** Run Webpack ***" && \
   node "./docker/build-lib.js"
+
+# Pre-compile React page and panel bundles required at runtime.
+# Login/setup/settings need app/dist/index.html; panel islands need their assets.
+# Build order matters: login may empty app/dist; panel modes keep emptyOutDir=false.
+RUN \
+  echo "*** Build React page and panel bundles ***" && \
+  bun run build:react && \
+  bun run build:react:character-library && \
+  bun run build:react:workspace-panels && \
+  test -f app/dist/index.html && \
+  test -f app/dist/assets/character-library-panel.js && \
+  test -f app/dist/assets/workspace-panels.js
+
+# Drop build-time tooling from the runtime image.
+RUN \
+  echo "*** Prune to production dependencies ***" && \
+  rm -rf node_modules && \
+  bun install --frozen-lockfile --production --no-progress
 
 # Set the entrypoint script and cleanup
 RUN \
