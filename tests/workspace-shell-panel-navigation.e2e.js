@@ -203,6 +203,7 @@ test.describe('workspace shell panel navigation', () => {
         });
     });
     test('opens Settings shell entry as in-workspace overlay instead of leaving chat', async ({ page }) => {
+        test.setTimeout(120_000);
         await testSetup.awaitST({ page });
         const settingsButton = page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'Settings' });
         await settingsButton.click({ timeout: 10_000 });
@@ -211,6 +212,27 @@ test.describe('workspace shell panel navigation', () => {
         await expect(page.locator('[data-settings-overlay="true"] .settings-page')).toBeVisible({ timeout: 15_000 });
         await expect(page.locator('#user-settings-block.openDrawer')).toHaveCount(0);
         await expect(settingsButton).toHaveAttribute('aria-pressed', 'true');
+        const userInterfaceTab = page.locator('[data-settings-overlay="true"] .settings-tab').filter({ hasText: 'User Interface' });
+        await userInterfaceTab.click();
+        await expect(userInterfaceTab).toHaveAttribute('data-active', 'true');
+        const confirmDeleteToggle = page.locator('[data-settings-overlay="true"] #settings-userInterface-confirmMessageDelete');
+        await expect(confirmDeleteToggle).toBeVisible();
+        const shouldConfirmDelete = !(await confirmDeleteToggle.isChecked());
+        await confirmDeleteToggle.focus();
+        await page.keyboard.press('Space');
+        await expect(confirmDeleteToggle).toHaveJSProperty('checked', shouldConfirmDelete);
+        const saveButton = page.locator('[data-settings-overlay="true"] button[type="submit"]');
+        await expect(saveButton).toBeEnabled();
+        await saveButton.focus();
+        await page.keyboard.press('Enter');
+        await expect(page.locator('[data-settings-overlay="true"] .settings-status--success')).toContainText('Saved', { timeout: 30_000 });
+        await page.keyboard.press('Escape');
+        await expect(page.locator('[data-settings-overlay="true"]')).toHaveCount(0, { timeout: 15_000 });
+        await expect(settingsButton).toBeFocused();
+        await expect(settingsButton).toHaveAttribute('aria-pressed', 'false');
+
+        await settingsButton.click({ timeout: 10_000 });
+        await expect(page.locator('[data-settings-overlay="true"]')).toBeVisible({ timeout: 15_000 });
         await settingsButton.click({ timeout: 10_000 });
         await expect(page.locator('[data-settings-overlay="true"]')).toHaveCount(0, { timeout: 15_000 });
         await expect(settingsButton).toHaveAttribute('aria-pressed', 'false');
@@ -228,11 +250,37 @@ test.describe('workspace shell panel navigation', () => {
 
         await page.keyboard.press('Escape');
         await expect(page.locator('[data-settings-overlay="true"]')).toHaveCount(0, { timeout: 10_000 });
+        await expect(aiConfigButton).toBeFocused();
 
         const formattingButton = page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'Formatting' });
         await formattingButton.click({ timeout: 10_000 });
         await expect(page).toHaveURL(/\/(?:\?|$)/);
         await expect(page.locator('[data-settings-overlay="true"]')).toBeVisible({ timeout: 15_000 });
         await expect(page.locator('[data-settings-overlay="true"] .settings-tab[data-active="true"]')).toHaveText(/Advanced/i);
+
+        await aiConfigButton.focus();
+        await page.keyboard.press('Tab');
+        await expect(page.locator('[data-settings-overlay="true"] :focus')).toBeVisible();
+    });
+
+    test('keeps a reopened Settings overlay mounted when a deferred close is superseded', async ({ page }) => {
+        await testSetup.awaitST({ page });
+
+        const settingsButton = page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'Settings' });
+        const aiConfigButton = page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'AI Config' });
+        await settingsButton.click({ timeout: 10_000 });
+        await expect(page.locator('[data-settings-overlay="true"]')).toBeVisible({ timeout: 15_000 });
+
+        await page.evaluate(() => {
+            const buttons = Array.from(document.querySelectorAll('.react-workspace-shell-nav-button'));
+            const settings = buttons.find(button => button.textContent?.trim() === 'Settings');
+            const aiConfig = buttons.find(button => button.textContent?.trim() === 'AI Config');
+            settings?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+            aiConfig?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        });
+
+        await expect(page.locator('[data-settings-overlay="true"]')).toBeVisible({ timeout: 15_000 });
+        await expect(page.locator('[data-settings-overlay="true"] .settings-tab[data-active="true"]')).toHaveText(/Providers/i);
+        await expect(aiConfigButton).toHaveAttribute('aria-pressed', 'true');
     });
 });

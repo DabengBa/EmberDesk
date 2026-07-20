@@ -1,6 +1,6 @@
 import { useForm, useStore } from '@tanstack/react-form';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { startTransition, useEffect, useMemo, useState } from 'react';
 import { z } from 'zod';
 import { hasFallbackProviderSettings } from '../../../public/scripts/chat-generation-auto-recovery.js';
 import {
@@ -329,6 +329,7 @@ export function SettingsSurface({
 }: SettingsSurfaceProps) {
     const isOverlay = variant === 'overlay';
     const [activeTab, setActiveTab] = useState(() => resolveInitialSettingsTab(initialTab));
+    const [isSettingsFormReady, setIsSettingsFormReady] = useState(false);
     const [pageError, setPageError] = useState('');
     const [saveStatus, setSaveStatus] = useState<{ kind: 'success' | 'info'; message: string } | null>(null);
     const [hasRevisionConflict, setHasRevisionConflict] = useState(false);
@@ -336,11 +337,21 @@ export function SettingsSurface({
     const [providerSecretInput, setProviderSecretInput] = useState('');
     const [fallbackSecretInput, setFallbackSecretInput] = useState('');
 
+    function openSettingsTab(tabId: string) {
+        if (tabId === activeTab) {
+            return;
+        }
+        // Dense tab bodies are non-urgent; leave the shell responsive while they mount.
+        startTransition(() => {
+            setActiveTab(tabId);
+        });
+    }
+
     useEffect(() => {
         if (!isOverlay) {
             return;
         }
-        setActiveTab(resolveInitialSettingsTab(initialTab));
+        openSettingsTab(resolveInitialSettingsTab(initialTab));
     }, [initialTab, isOverlay]);
 
     const csrfTokenQuery = useQuery({
@@ -466,7 +477,8 @@ export function SettingsSurface({
         },
     });
 
-    const settingsFormValues = useStore(settingsForm.store, state => state.values);
+    // Provider-only derived state must not rerender a dense active tab on every unrelated field edit.
+    const providerSettingsValues = useStore(settingsForm.store, state => state.values.providers);
 
     const saveMutation = useMutation({
         mutationFn: async (values: typeof defaultSettingsFormValues) => {
@@ -501,7 +513,7 @@ export function SettingsSurface({
 
             await refetchSettings();
             setHasRevisionConflict(false);
-            setSaveStatus({ kind: 'success', message: '设置已保存。返回 Workspace 后将与刷新后一致地加载。' });
+            setSaveStatus({ kind: 'success', message: 'Saved' });
             try {
                 window.sessionStorage.setItem('emberdesk-settings-saved-at', String(Date.now()));
                 window.sessionStorage.setItem('emberdesk-settings-revision', String(parsedPayload.settingsRevision ?? ''));
@@ -519,7 +531,7 @@ export function SettingsSurface({
         retry: false,
     });
 
-    const providerSource = settingsFormValues.providers.chatCompletionSource;
+    const providerSource = providerSettingsValues.chatCompletionSource;
     const providerModelField = useMemo(() => getProviderModelFieldConfig(providerSource), [providerSource]);
     const providerSettingsSnapshot = ((parsedPayload
         ? getValueAtPath(parsedPayload.settings, 'oai_settings')
@@ -527,9 +539,9 @@ export function SettingsSurface({
     const providerSecretKey = providerSecretKeyBySource[providerSource as keyof typeof providerSecretKeyBySource] ?? null;
     const currentSecretKey = resolveProviderSecretKeyForSettings({
         settings: {
-            reverse_proxy: settingsFormValues.providers.reverseProxy,
-            use_vertexai: settingsFormValues.providers.useVertexAi,
-            vertexai_auth_mode: settingsFormValues.providers.vertexaiAuthMode,
+            reverse_proxy: providerSettingsValues.reverseProxy,
+            use_vertexai: providerSettingsValues.useVertexAi,
+            vertexai_auth_mode: providerSettingsValues.vertexaiAuthMode,
         },
         source: providerSource,
         secretKey: providerSecretKey,
@@ -544,10 +556,10 @@ export function SettingsSurface({
     const unifiedKeyFieldState = getUnifiedKeyFieldState({
         settings: {
             ...providerSettingsSnapshot,
-            reverse_proxy: settingsFormValues.providers.reverseProxy,
-            proxy_password: settingsFormValues.providers.proxyPassword,
-            use_vertexai: settingsFormValues.providers.useVertexAi,
-            vertexai_auth_mode: settingsFormValues.providers.vertexaiAuthMode,
+            reverse_proxy: providerSettingsValues.reverseProxy,
+            proxy_password: providerSettingsValues.proxyPassword,
+            use_vertexai: providerSettingsValues.useVertexAi,
+            vertexai_auth_mode: providerSettingsValues.vertexaiAuthMode,
         },
         source: providerSource,
         secretKey: currentSecretKey,
@@ -561,14 +573,14 @@ export function SettingsSurface({
 
     const directSecretMode = canUseDirectProviderSecret({
         settings: {
-            reverse_proxy: settingsFormValues.providers.reverseProxy,
+            reverse_proxy: providerSettingsValues.reverseProxy,
         },
         secretKey: currentSecretKey,
     });
     const fallbackProviderReady = hasFallbackProviderSettings({
-        fallback_provider_enabled: settingsFormValues.providers.fallbackProviderEnabled,
-        fallback_provider_base_url: settingsFormValues.providers.fallbackProviderBaseUrl,
-        fallback_provider_model: settingsFormValues.providers.fallbackProviderModel,
+        fallback_provider_enabled: providerSettingsValues.fallbackProviderEnabled,
+        fallback_provider_base_url: providerSettingsValues.fallbackProviderBaseUrl,
+        fallback_provider_model: providerSettingsValues.fallbackProviderModel,
     }, secretsData, fallbackSecretKey);
 
     const providerSecretMutation = useMutation({
@@ -636,12 +648,16 @@ export function SettingsSurface({
 
     useEffect(() => {
         if (!parsedPayload || hasRevisionConflict) {
+            if (!parsedPayload) {
+                setIsSettingsFormReady(false);
+            }
             return;
         }
 
         const nextDefaults = buildSettingsFormDefaults(parsedPayload.settings);
         settingsForm.reset(nextDefaults, { keepDefaultValues: true });
         setPageError('');
+        setIsSettingsFormReady(true);
     }, [hasRevisionConflict, parsedPayload?.rawSettings]);
 
     useEffect(() => {
@@ -723,7 +739,7 @@ export function SettingsSurface({
         }
     }
 
-    const activeFallbackStatus = settingsFormValues.providers.fallbackProviderEnabled
+    const activeFallbackStatus = providerSettingsValues.fallbackProviderEnabled
         ? (fallbackProviderReady ? 'Ready' : 'Needs setup')
         : 'Disabled';
 
@@ -771,7 +787,7 @@ export function SettingsSurface({
                     <SettingsTabs
                         tabs={settingsTabDefinitions}
                         activeTab={activeTab}
-                        onChange={setActiveTab}
+                        onChange={openSettingsTab}
                         showDescription={!isOverlay}
                     />
 
@@ -811,6 +827,7 @@ export function SettingsSurface({
                             </output>
                         )}
 
+                        {isSettingsFormReady ? (
                         <form
                             className="settings-form"
                             onSubmit={(event) => {
@@ -819,7 +836,9 @@ export function SettingsSurface({
                                 void settingsForm.handleSubmit();
                             }}
                         >
-                            <div className={activeTab === 'general' ? 'block' : 'hidden'}>
+                            <div className="settings-tab-panel">
+                            {activeTab === 'general' ? (
+                            <div>
                                 <SettingsSection
                                     title="Generation Defaults"
                                     description="主 chat-completion path 的上下文、采样、reasoning 和 continue 行为。"
@@ -1205,8 +1224,10 @@ export function SettingsSurface({
                                     />
 </SettingsSection>
                             </div>
+                            ) : null}
 
-                            <div className={activeTab === 'providers' ? 'block' : 'hidden'}>
+                            {activeTab === 'providers' ? (
+                            <div>
                                 <SettingsSection
                                     title="Provider Routing"
                                     description="主 provider 路由、fallback provider、Vertex AI 和自定义连接字段。"
@@ -1345,7 +1366,7 @@ export function SettingsSurface({
                                         label="Fallback Base URL"
                                         description="Fallback provider endpoint。"
                                         placeholder="https://api.openai.com/v1"
-                                        disabled={isBusy || !settingsFormValues.providers.fallbackProviderEnabled}
+                                        disabled={isBusy || !providerSettingsValues.fallbackProviderEnabled}
                                         onValueChange={clearTransientState}
                                     />
                                     <SettingField
@@ -1354,7 +1375,7 @@ export function SettingsSurface({
                                         label="Fallback Model"
                                         description="Fallback provider 使用的模型。"
                                         placeholder="gpt-4.1-mini"
-                                        disabled={isBusy || !settingsFormValues.providers.fallbackProviderEnabled}
+                                        disabled={isBusy || !providerSettingsValues.fallbackProviderEnabled}
                                         onValueChange={clearTransientState}
                                     />
                                     <div className="settings-inline-panel">
@@ -1478,7 +1499,7 @@ export function SettingsSurface({
                                                 className="settings-input"
                                                 placeholder="Fallback API Key"
                                                 value={fallbackSecretInput}
-                                                disabled={providerSecretMutation.isPending || !settingsFormValues.providers.fallbackProviderEnabled}
+                                                disabled={providerSecretMutation.isPending || !providerSettingsValues.fallbackProviderEnabled}
                                                 onChange={event => {
                                                     setFallbackSecretInput(event.target.value);
                                                     setSaveStatus(null);
@@ -1488,7 +1509,7 @@ export function SettingsSurface({
                                             <button
                                                 type="button"
                                                 className="settings-button settings-button--primary"
-                                                disabled={providerSecretMutation.isPending || !settingsFormValues.providers.fallbackProviderEnabled}
+                                                disabled={providerSecretMutation.isPending || !providerSettingsValues.fallbackProviderEnabled}
                                                 onClick={() => {
                                                     void handleProviderSecretAction({
                                                         key: fallbackSecretKey,
@@ -1504,7 +1525,7 @@ export function SettingsSurface({
                                             <button
                                                 type="button"
                                                 className="settings-button settings-button--secondary"
-                                                disabled={providerSecretMutation.isPending || !settingsFormValues.providers.fallbackProviderEnabled}
+                                                disabled={providerSecretMutation.isPending || !providerSettingsValues.fallbackProviderEnabled}
                                                 onClick={() => {
                                                     void handleProviderSecretAction({
                                                         key: fallbackSecretKey,
@@ -1555,8 +1576,10 @@ export function SettingsSurface({
                                     />
 </SettingsSection>
                             </div>
+                            ) : null}
 
-                            <div className={activeTab === 'userInterface' ? 'block' : 'hidden'}>
+                            {activeTab === 'userInterface' ? (
+                            <div>
                                 <SettingsSection
                                     title="Workspace Preferences"
                                     description="主题、布局、通知位置以及聊天显示密度。"
@@ -2254,8 +2277,10 @@ export function SettingsSurface({
                                     />
 </SettingsSection>
                             </div>
+                            ) : null}
 
-                            <div className={activeTab === 'advanced' ? 'block' : 'hidden'}>
+                            {activeTab === 'advanced' ? (
+                            <div>
                                 <SettingsSection
                                     title="Prompt, Templates, And Power-User Controls"
                                     description="模板、stop strings、tokenizer、auto-swipe、auto-continue 和 STscript 设置。"
@@ -3075,6 +3100,8 @@ export function SettingsSurface({
                                     />
 </SettingsSection>
                             </div>
+                            ) : null}
+                            </div>
 
                             <div className="settings-save-bar">
                                 <p className="settings-save-note">
@@ -3093,6 +3120,7 @@ export function SettingsSurface({
                                 </settingsForm.Subscribe>
                             </div>
                         </form>
+                        ) : null}
                     </div>
                 </section>
 

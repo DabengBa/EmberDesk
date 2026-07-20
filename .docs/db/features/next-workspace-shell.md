@@ -27,7 +27,7 @@ Give users one modern, compact workspace frame for current context and primary n
 
 - Opening `/` shows the React-owned workspace chrome instead of competing legacy and React top navigation.
 - The chrome summarizes the current context in understandable terms for no active chat, temporary Assistant chat, normal character chat, and group chat.
-- Primary entries for AI Config, Formatting, Character Library, World Info, Backgrounds, Extensions, Settings, and Group Chats are reachable by role/name and route through the existing workspace behavior or the existing Settings route.
+- Primary entries for AI Config, Formatting, Character Library, World Info, Backgrounds, Extensions, Settings, and Group Chats are reachable by role/name and use the existing workspace behavior or the shared Settings overlay.
 - Settings opens the React [Settings](page.settings) surface as an in-workspace overlay; `/settings` remains a deep-link full-page mount of the same owner.
 - AI Config opens Settings overlay on the Providers tab and Formatting opens Settings overlay on the Advanced tab; provider, secret, and formatting fields are edited on the same React Settings surface rather than in workspace drawers.
 - Group Chats keeps the same right-drawer entry point. Character Library owns entry into the React character creation and editing surface, so character authoring is not a separate top-level navigation concern.

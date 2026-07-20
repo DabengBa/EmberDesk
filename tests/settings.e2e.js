@@ -101,7 +101,7 @@ test.describe('React settings sole-owner page', () => {
         const saveButton = page.locator('button[type="submit"]');
         await expect(saveButton).toBeEnabled({ timeout: 30_000 });
         await saveButton.click();
-        await expect(page.locator('.settings-status--success')).toContainText('设置已保存', { timeout: 30_000 });
+        await expect(page.locator('.settings-status--success')).toContainText('Saved', { timeout: 30_000 });
 
         const after = await getSettingsPayload(page);
         expect(after.settings?.power_user?.theme).toBe('E2E Theme');

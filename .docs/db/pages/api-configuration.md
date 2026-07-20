@@ -14,7 +14,7 @@ related: [page.settings, page.chat_workspace, feature.custom_base_url, feature.c
 
 ## Page Purpose
 
-This page exists so a user can configure how EmberDesk connects to an LLM API provider: which provider to use, which model to target, and what credentials and endpoint to use for the connection. User-facing general provider, secret, Vertex service-account, and connection-profile selection workflows are owned by [Settings](page.settings). This drawer DOM may still exist for compatibility hosts, but workspace shell AI Config navigation now opens `/settings?tab=providers`.
+This page exists so a user can configure how EmberDesk connects to an LLM API provider: which provider to use, which model to target, and what credentials and endpoint to use for the connection. User-facing general provider, secret, Vertex service-account, and connection-profile selection workflows are owned by [Settings](page.settings). This drawer DOM may still exist for compatibility hosts, but workspace shell AI Config opens the shared Settings overlay on Providers; `/settings?tab=providers` remains the full-page deep link.
 
 ## Page Structure (UI Layout)
 
@@ -51,8 +51,8 @@ This page exists so a user can configure how EmberDesk connects to an LLM API pr
 - **Secret visibility**: ordinary page state shows only masked values and saved/missing status. Full values remain unavailable unless the server explicitly allows the existing narrow exposure path.
 - **Legacy settings**: old `proxies[]` and `selected_proxy` fields in settings files are silently ignored on load and dropped on next save; legacy main API values such as `kobold`, `koboldhorde`, `novel`, `poe`, and `textgenerationwebui` are redirected to the OpenAI chat-completion path during settings load.
 - **Fallback provider state**: the optional fallback provider lives in the same drawer, persists as ordinary settings plus a dedicated server-side secret, preserves the entered fallback key when save fails, stays independent from connection profile capture/apply behavior, and keeps its advanced fields visually collapsed until the fallback toggle is enabled.
-- **React settings overlap**: when `/settings` is available, users can edit the Sprint 3 React-owned provider slice there; this drawer still owns service-account JSON, connection-profile capture/apply behavior, deeper provider profile details, and any provider fields not listed in the React settings coverage ledger.
-- **Workspace shell entry state**: when the React workspace chrome is mounted, its AI Config entry opens and closes this existing drawer from the shell navigation. The shell does not take ownership of provider secrets, custom base URL fields, connection profiles, API key placeholders, or unsaved values inside the drawer.
+- **React settings overlap**: users edit the React-owned provider slice through the same [Settings](page.settings) owner, mounted as a workspace overlay or at `/settings`; this drawer still owns service-account JSON, connection-profile capture/apply behavior, deeper provider profile details, and any provider fields not listed in the React settings coverage ledger.
+- **Workspace shell entry state**: when the React workspace chrome is mounted, its AI Config entry opens and closes the shared Settings overlay on Providers. The shell does not take ownership of provider secrets, custom base URL fields, connection profiles, API key placeholders, or unsaved values inside that owner.
 - **Vertex AI boundary**: React `/settings` owns Vertex AI Express metadata and the Vertex API-key secret state; full Service Account JSON remains in this legacy drawer.
 - **Legacy provider compatibility**: users who already had Google Vertex AI selected through the legacy drawer can open React [Settings](page.settings) and see it as Google with Vertex AI enabled, then save without silently downgrading it to normal Google.
 

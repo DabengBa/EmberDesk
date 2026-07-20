@@ -773,13 +773,12 @@ function setWorkspaceShellSlotPinned(slotKey, pinned) {
 }
 
 
-let workspaceSettingsOverlayOpen = false;
-let workspaceSettingsOverlayTab = null;
 let workspaceSettingsOverlayPanelKind = 'settings';
+let workspaceSettingsOverlayCloseGeneration = 0;
 
 async function openWorkspaceSettingsOverlay({ tab = null, panelKind = 'settings' } = {}) {
-    workspaceSettingsOverlayOpen = true;
-    workspaceSettingsOverlayTab = tab;
+    // A new open invalidates any deferred close queued by a previous shell click.
+    workspaceSettingsOverlayCloseGeneration += 1;
     workspaceSettingsOverlayPanelKind = panelKind;
     const result = await mountReactSettingsOverlay({
         initialTab: tab,
@@ -798,11 +797,15 @@ async function openWorkspaceSettingsOverlay({ tab = null, panelKind = 'settings'
 
 async function closeWorkspaceSettingsOverlay() {
     const panelKind = workspaceSettingsOverlayPanelKind || 'settings';
-    workspaceSettingsOverlayOpen = false;
-    workspaceSettingsOverlayTab = null;
+    const closeGeneration = workspaceSettingsOverlayCloseGeneration + 1;
+    workspaceSettingsOverlayCloseGeneration = closeGeneration;
     // Defer unmount so the originating click/keyboard event can finish cleanly.
     await new Promise(resolve => {
         window.setTimeout(() => {
+            if (closeGeneration !== workspaceSettingsOverlayCloseGeneration) {
+                resolve();
+                return;
+            }
             void unmountReactSettingsOverlay().finally(resolve);
         }, 0);
     });

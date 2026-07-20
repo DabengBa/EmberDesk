@@ -33,7 +33,7 @@ Authenticated users complete supported settings work on `/settings` instead of w
 - `feature.custom_base_url`: reverse proxy / custom URL and secret routing in Providers.
 - `feature.fallback_provider`: fallback provider configuration and dedicated fallback secret in Providers.
 - `page.api_configuration`: historical workspace drawer surface; user-facing general configuration is owned by this page.
-- `page.chat_workspace`: workspace shell navigates Settings / AI Config / Formatting into this route.
+- `page.chat_workspace`: workspace shell mounts Settings / AI Config / Formatting as this shared surface's overlay variant.
 
 ## Included Features
 

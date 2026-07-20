@@ -9009,8 +9009,30 @@ body:not(.movingUI) .drawer-content.maximized {
 }
 
 .settings-page--overlay .settings-main-panel {
-    overflow: auto;
+    display: flex;
+    min-height: 0;
     max-height: 100%;
+    overflow: hidden;
+    flex-direction: column;
+}
+
+.settings-page--overlay .settings-stack,
+.settings-page--overlay .settings-form {
+    display: flex;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+}
+
+.settings-page--overlay .settings-tab-panel {
+    min-height: 0;
+    overflow: auto;
+    padding-right: 2px;
+    flex: 1 1 auto;
+}
+
+.settings-page--overlay .settings-save-bar {
+    flex: 0 0 auto;
 }
 
 .settings-page-title--overlay {
@@ -9029,11 +9051,21 @@ body:not(.movingUI) .drawer-content.maximized {
     white-space: nowrap;
 }
 
-.settings-overlay-backdrop {
+#emberdesk-react-settings-overlay-host {
     position: fixed;
     inset: 0;
-    top: var(--topBarBlockSize, 40px);
     z-index: 4150;
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+}
+
+.settings-overlay-backdrop {
+    position: absolute;
+    inset: 0;
+    top: var(--topBarBlockSize, 40px);
+    z-index: 0;
+    pointer-events: auto;
     background: color-mix(in srgb, var(--SmartThemeBlurTintColor, rgb(23, 23, 23)) 72%, transparent);
     backdrop-filter: blur(calc(var(--SmartThemeBlurStrength, 10) * 2px));
     -webkit-backdrop-filter: blur(calc(var(--SmartThemeBlurStrength, 10) * 2px));
@@ -9041,14 +9073,12 @@ body:not(.movingUI) .drawer-content.maximized {
 }
 
 .settings-overlay {
-    position: fixed;
-    z-index: 4200;
+    position: relative;
+    z-index: 1;
     /* shell chrome stays at 4300 so nav toggle remains clickable */
-    top: 50%;
-    left: 50%;
     width: min(92vw, 1180px);
     height: min(92dvh, 880px);
-    transform: translate(-50%, -50%);
+    pointer-events: auto;
     border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor, rgba(0,0,0,0.5)) 72%, var(--SmartThemeBodyColor, rgb(220,220,210)) 12%);
     border-radius: 10px;
     overflow: hidden;
@@ -9072,12 +9102,16 @@ body:not(.movingUI) .drawer-content.maximized {
 }
 
 @media (max-width: 639px) {
+    #emberdesk-react-settings-overlay-host {
+        display: block;
+    }
+
     .settings-overlay {
+        position: absolute;
         top: var(--topBarBlockSize, 40px);
         left: 0;
         width: 100vw;
         height: calc(100dvh - var(--topBarBlockSize, 40px));
-        transform: none;
         border-radius: 0;
         animation: settings-overlay-fade-in 150ms ease-out both;
     }

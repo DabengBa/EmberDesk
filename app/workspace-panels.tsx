@@ -513,6 +513,7 @@ interface SettingsOverlayMount {
     host: HTMLElement;
     backdrop: HTMLElement;
     dialog: HTMLElement;
+    returnFocusTo: HTMLElement | null;
     initialTab: string | null;
     panelKind: WorkspaceDockPanelKind;
     onRequestClose?: () => void;
@@ -4231,8 +4232,12 @@ function SettingsOverlayHost({
             if (event.key !== 'Tab' || !host) {
                 return;
             }
+            const dialog = host.querySelector<HTMLElement>('[data-settings-overlay="true"]');
+            if (!dialog) {
+                return;
+            }
             const focusable = Array.from(
-                host.querySelectorAll<HTMLElement>(
+                dialog.querySelectorAll<HTMLElement>(
                     'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
                 ),
             ).filter(node => !node.hasAttribute('disabled') && node.getAttribute('aria-hidden') !== 'true');
@@ -4242,7 +4247,10 @@ function SettingsOverlayHost({
             const first = focusable[0];
             const last = focusable[focusable.length - 1];
             const active = document.activeElement as HTMLElement | null;
-            if (event.shiftKey && active === first) {
+            if (!active || !dialog.contains(active)) {
+                event.preventDefault();
+                (event.shiftKey ? last : first).focus();
+            } else if (event.shiftKey && active === first) {
                 event.preventDefault();
                 last.focus();
             } else if (!event.shiftKey && active === last) {
@@ -4316,6 +4324,8 @@ export function mountSettingsOverlay(options: {
         return { kind: panelKind, mounted: true, status: 'mounted' as const };
     }
 
+    const activeElement = document.activeElement;
+    const returnFocusTo = activeElement instanceof HTMLElement ? activeElement : null;
     const host = document.createElement('div');
     host.id = 'emberdesk-react-settings-overlay-host';
     host.setAttribute('data-react-settings-overlay-host', 'true');
@@ -4326,6 +4336,7 @@ export function mountSettingsOverlay(options: {
         host,
         backdrop: host,
         dialog: host,
+        returnFocusTo,
         initialTab,
         panelKind,
         onRequestClose: options.onRequestClose,
@@ -4342,9 +4353,13 @@ export function unmountSettingsOverlay() {
     if (!mountedSettingsOverlay) {
         return;
     }
-    mountedSettingsOverlay.root.unmount();
-    mountedSettingsOverlay.host.remove();
+    const { host, returnFocusTo, root } = mountedSettingsOverlay;
+    root.unmount();
+    host.remove();
     mountedSettingsOverlay = null;
+    if (returnFocusTo?.isConnected) {
+        returnFocusTo.focus({ preventScroll: true });
+    }
     if (mountedPanels.size === 0 && !mountedShellChrome) {
         detachGlobalCompatibilityBridge();
     }
