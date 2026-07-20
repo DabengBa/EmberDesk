@@ -8,9 +8,10 @@ type SettingsTabsProps = {
     tabs: SettingsTab[];
     activeTab: string;
     onChange: (tabId: string) => void;
+    showDescription?: boolean;
 };
 
-export function SettingsTabs({ tabs, activeTab, onChange }: SettingsTabsProps) {
+export function SettingsTabs({ tabs, activeTab, onChange, showDescription = true }: SettingsTabsProps) {
     const currentTab = tabs.find(tab => tab.id === activeTab) ?? tabs[0];
 
     return (
@@ -33,7 +34,13 @@ export function SettingsTabs({ tabs, activeTab, onChange }: SettingsTabsProps) {
                 })}
             </div>
 
-            <p className="settings-tabs-description">{currentTab?.description}</p>
+            {showDescription ? (
+                <p className="settings-tabs-description">{currentTab?.description}</p>
+            ) : (
+                <p className="settings-tabs-description settings-tabs-description--visually-hidden">
+                    {currentTab?.description}
+                </p>
+            )}
         </div>
     );
 }

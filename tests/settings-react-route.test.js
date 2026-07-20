@@ -92,7 +92,8 @@ async function createSettingsRouteApp({ isLoggedIn = true, reactLoginDistRoot } 
 
 describe('settings React route flag', () => {
     test('wires the React settings route through TanStack Form, Query, and Zod while preserving untouched settings fields', async () => {
-        const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'routes', 'settings.tsx'), 'utf8');
+        const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'settings', 'SettingsSurface.tsx'), 'utf8');
+        const pageRouteSource = fs.readFileSync(path.join(repoRoot, 'app', 'routes', 'settings.tsx'), 'utf8');
         const settingFieldSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'settings', 'SettingField.tsx'), 'utf8');
         const helperModule = await import(`../app/lib/settings-helpers.js?settingsHelpers=${Date.now()}-${Math.random()}`);
 
@@ -100,6 +101,8 @@ describe('settings React route flag', () => {
         expect(routeSource).toContain("import { useMutation, useQuery } from '@tanstack/react-query';");
         expect(routeSource).toContain("import { z } from 'zod';");
         expect(routeSource).toContain('const settingsQuery = useQuery(');
+        expect(pageRouteSource).toContain('SettingsSurface');
+        expect(pageRouteSource).toContain("variant=\"page\"");
         expect(routeSource).toContain('const secretsQuery = useQuery(');
         expect(routeSource).toContain('const saveMutation = useMutation(');
         expect(routeSource).toContain('const settingsForm = useForm(');
@@ -653,7 +656,8 @@ describe('settings React route flag', () => {
     });
 
     test('keeps legacy Vertex AI and advanced reasoning effort values saveable through the React form', async () => {
-        const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'routes', 'settings.tsx'), 'utf8');
+        const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'settings', 'SettingsSurface.tsx'), 'utf8');
+        const pageRouteSource = fs.readFileSync(path.join(repoRoot, 'app', 'routes', 'settings.tsx'), 'utf8');
         const helperModule = await import(`../app/lib/settings-helpers.js?settingsCompat=${Date.now()}-${Math.random()}`);
         const parsed = helperModule.parseSettingsPayload({
             settings: JSON.stringify({
@@ -715,7 +719,8 @@ describe('settings React route flag', () => {
 
     test('advanced formatting sequences and context inject fields round-trip through React bindings', async () => {
         const helperModule = await import(`../app/lib/settings-helpers.js?settingsAf=${Date.now()}-${Math.random()}`);
-        const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'routes', 'settings.tsx'), 'utf8');
+        const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'settings', 'SettingsSurface.tsx'), 'utf8');
+        const pageRouteSource = fs.readFileSync(path.join(repoRoot, 'app', 'routes', 'settings.tsx'), 'utf8');
         expect(routeSource).toContain('settings-workspace-link');
         expect(routeSource).toContain('emberdesk-settings-saved-at');
         expect(helperModule.settingsCoverage.reactOwned.advanced).toEqual(expect.arrayContaining([
@@ -761,7 +766,8 @@ describe('settings React route flag', () => {
     });
 
     test('wires Vertex service account and connection profile selection without putting secrets into settings JSON', async () => {
-        const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'routes', 'settings.tsx'), 'utf8');
+        const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'settings', 'SettingsSurface.tsx'), 'utf8');
+        const pageRouteSource = fs.readFileSync(path.join(repoRoot, 'app', 'routes', 'settings.tsx'), 'utf8');
         const helperModule = await import(`../app/lib/settings-helpers.js?settingsSecrets=${Date.now()}-${Math.random()}`);
         const secretHelpers = await import(`../public/scripts/provider-secret-field-state.js?settingsSecrets=${Date.now()}-${Math.random()}`);
 
@@ -814,7 +820,8 @@ describe('settings React route flag', () => {
     });
 
     test('offers named connection profiles plus a safe stale selection and defers profile application to the workspace', async () => {
-        const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'routes', 'settings.tsx'), 'utf8');
+        const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'settings', 'SettingsSurface.tsx'), 'utf8');
+        const pageRouteSource = fs.readFileSync(path.join(repoRoot, 'app', 'routes', 'settings.tsx'), 'utf8');
         const connectionManagerSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'extensions', 'connection-manager', 'index.js'), 'utf8');
         const helperModule = await import(`../app/lib/settings-helpers.js?settingsProfiles=${Date.now()}-${Math.random()}`);
         const options = helperModule.getConnectionProfileOptions({
@@ -842,7 +849,8 @@ describe('settings React route flag', () => {
     });
 
     test('keeps a conflict draft until an explicit reload and routes legacy settings toggles to React Settings', () => {
-        const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'routes', 'settings.tsx'), 'utf8');
+        const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'settings', 'SettingsSurface.tsx'), 'utf8');
+        const pageRouteSource = fs.readFileSync(path.join(repoRoot, 'app', 'routes', 'settings.tsx'), 'utf8');
         const scriptSource = fs.readFileSync(path.join(repoRoot, 'public', 'script.js'), 'utf8');
 
         expect(routeSource).toContain('setHasRevisionConflict(true)');
@@ -853,6 +861,8 @@ describe('settings React route flag', () => {
         expect(scriptSource).toContain("'#advanced-formatting-button > .drawer-toggle': '/settings?tab=advanced'");
         expect(scriptSource).toContain("'#user-settings-button > .drawer-toggle': '/settings'");
         expect(scriptSource).toContain('event.stopImmediatePropagation();');
+        expect(scriptSource).toContain('openWorkspaceSettingsOverlay');
+        expect(scriptSource).not.toContain("window.location.assign('/settings");
     });
 
     test('redirects unauthenticated /settings requests to /login', async () => {

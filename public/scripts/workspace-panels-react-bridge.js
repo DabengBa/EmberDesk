@@ -116,3 +116,45 @@ export async function mountReactWorkspaceShellChrome({
         return { reason: 'mount-failed', status: 'failed' };
     }
 }
+
+export async function mountReactSettingsOverlay({
+    initialTab = null,
+    panelKind = 'settings',
+    onRequestClose,
+    loadModule = loadWorkspacePanelsModule,
+    onError = (error, reason) => {
+        console.error(`React settings overlay failed to ${reason}.`, error);
+    },
+} = {}) {
+    let panelModule;
+    try {
+        panelModule = await loadModule();
+    } catch (error) {
+        onError(error, 'bundle-load-failed');
+        return { kind: 'settings', mounted: false, status: 'error', reason: 'bundle-load-failed' };
+    }
+
+    try {
+        return panelModule.mountSettingsOverlay({ initialTab, panelKind, onRequestClose }) ?? {
+            kind: 'settings',
+            mounted: true,
+            status: 'mounted',
+        };
+    } catch (error) {
+        onError(error, 'mount-failed');
+        return { kind: 'settings', mounted: false, status: 'error', reason: 'mount-failed' };
+    }
+}
+
+export async function unmountReactSettingsOverlay({
+    loadModule = loadWorkspacePanelsModule,
+} = {}) {
+    try {
+        const panelModule = await loadModule();
+        panelModule.unmountSettingsOverlay?.();
+        return { kind: 'settings', mounted: false, status: 'success' };
+    } catch (error) {
+        console.warn('React settings overlay failed to unmount.', error);
+        return { kind: 'settings', mounted: false, status: 'error', reason: 'unmount-failed' };
+    }
+}

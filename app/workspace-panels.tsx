@@ -52,6 +52,8 @@ import {
     type WorldInfoReactSortOption as WorldInfoWorkbenchSortOption,
     type WorldInfoReactWorldOption as WorldInfoWorkbenchWorldOption,
 } from './world-info-workbench';
+import { SettingsSurface } from './components/settings/SettingsSurface';
+import './styles/settings-surface.css';
 
 export type WorkspacePanelKind = 'worldInfo' | 'backgroundLibrary' | 'extensionsHost' | 'mainChatMessageList' | 'characterAuthoring' | 'groupAuthoring';
 type WorkspaceDockPanelKind =
@@ -119,12 +121,7 @@ interface WorkspaceShellChromeMountOptions {
 interface WorkspaceShellChromeState {
     activeContext?: 'none' | 'assistant' | 'character' | 'group';
     contextTitle?: string;
-    contextSubtitle?: string;
-    chatTitle?: string;
-    messageCount?: number;
-    temporaryChat?: boolean;
     status?: 'loading' | 'empty' | 'success' | 'error';
-    statusLabel?: string;
 }
 
 interface WorkspacePanelLegacySlot {
@@ -510,6 +507,19 @@ function getMainChatMessageListScrollSnapshotStore() {
 const queryClient = new QueryClient();
 const mountedPanels = new Map<WorkspacePanelKind, WorkspacePanelMount>();
 let mountedShellChrome: WorkspaceShellChromeMount | null = null;
+
+interface SettingsOverlayMount {
+    root: Root;
+    host: HTMLElement;
+    backdrop: HTMLElement;
+    dialog: HTMLElement;
+    initialTab: string | null;
+    panelKind: WorkspaceDockPanelKind;
+    onRequestClose?: () => void;
+}
+
+let mountedSettingsOverlay: SettingsOverlayMount | null = null;
+
 const mainChatMessageListScrollSnapshots = getMainChatMessageListScrollSnapshotStore();
 const MAIN_CHAT_VIRTUAL_INDEX_ATTRIBUTE = 'data-main-chat-virtual-index';
 const MAIN_CHAT_SCROLL_RESTORE_THRESHOLD_PX = 12;
@@ -3930,7 +3940,6 @@ const workspaceShellNavigationEntries: WorkspaceShellNavigationEntry[] = [
     { action: 'openExtensions', icon: 'fa-cubes', label: 'Extensions', panelKind: 'extensionsHost', slotKey: 'extensionsHost' },
     { action: 'openSettings', icon: 'fa-gear', label: 'Settings', panelKind: 'settings' },
     { action: 'openGroupChats', icon: 'fa-users', label: 'Group Chats', panelKind: 'groupChats', slotKey: 'groupChats' },
-    { action: 'openCharacterAuthoring', icon: 'fa-user-pen', label: 'Character Authoring', panelKind: 'characterAuthoring', slotKey: 'characterAuthoring' },
 ];
 
 function asWorkspacePanelDockDispatchResult(result: unknown): WorkspacePanelDockDispatchResult {
@@ -3974,49 +3983,6 @@ function normalizeWorkspacePanelDockStatus(result: unknown) {
     return 'success';
 }
 
-function getWorkspacePanelDockKindLabel(kind: WorkspaceDockPanelKind) {
-    switch (kind) {
-        case 'aiConfig':
-            return 'AI Config';
-        case 'advancedFormatting':
-            return 'Formatting';
-        case 'characterLibrary':
-            return 'Character Library';
-        case 'worldInfo':
-            return 'World Info';
-        case 'backgroundLibrary':
-            return 'Backgrounds';
-        case 'extensionsHost':
-            return 'Extensions';
-        case 'settings':
-            return 'Settings';
-        case 'groupChats':
-            return 'Group Chats';
-        case 'characterAuthoring':
-            return 'Character Authoring';
-        default:
-            return 'Workspace panel';
-    }
-}
-
-function getWorkspacePanelDockStatusLabel(status: WorkspacePanelDockStatus) {
-    switch (status) {
-        case 'loading':
-            return 'opening';
-        case 'empty':
-            return 'needs setup';
-        case 'error':
-            return 'needs attention';
-        case 'disabled':
-            return 'using legacy panel';
-        case 'idle':
-            return 'idle';
-        case 'success':
-        default:
-            return 'ready';
-    }
-}
-
 function getWorkspacePanelVisibleStatusLabel(status: WorkspacePanelStatus) {
     switch (status) {
         case 'loading':
@@ -4045,22 +4011,6 @@ function useWorkspacePanelDockSnapshot() {
     return dockSnapshot;
 }
 
-function getWorkspaceShellContextLabel(state: WorkspaceShellChromeState) {
-    if (state.activeContext === 'group') {
-        return 'Group chat';
-    }
-
-    if (state.activeContext === 'character') {
-        return 'Character chat';
-    }
-
-    if (state.activeContext === 'assistant') {
-        return 'Assistant chat';
-    }
-
-    return 'No active chat';
-}
-
 function ReactWorkspaceShellChrome({
     state = {},
     bridge,
@@ -4069,16 +4019,9 @@ function ReactWorkspaceShellChrome({
     bridge?: WorkspacePanelBridge;
 }) {
     const contextTitle = state.contextTitle?.trim() || 'Choose a character';
-    const contextSubtitle = state.contextSubtitle?.trim() || getWorkspaceShellContextLabel(state);
-    const chatTitle = state.chatTitle?.trim() || 'No chat selected';
     const status = state.status ?? (state.activeContext === 'none' ? 'empty' : 'success');
-    const statusLabel = state.statusLabel ?? (status === 'empty' ? 'Ready for a character' : 'Workspace ready');
-    const messageCount = Number.isFinite(state.messageCount) ? state.messageCount : 0;
     const dockSnapshot = useWorkspacePanelDockSnapshot();
     const panelDispatchSequenceRef = useRef(0);
-    const recoveryEntry = dockSnapshot.activePanelKind
-        ? workspaceShellNavigationEntries.find(entry => entry.panelKind === dockSnapshot.activePanelKind) ?? null
-        : null;
 
     const dispatchAction = useCallback(async (entry: WorkspaceShellNavigationEntry) => {
         const dispatchSequence = panelDispatchSequenceRef.current + 1;
@@ -4172,13 +4115,7 @@ function ReactWorkspaceShellChrome({
             data-doc-id="feature.next_workspace_shell page.chat_workspace"
         >
             <section className="react-workspace-shell-context" aria-label="Current workspace context">
-                <div className="react-workspace-shell-kicker">{contextSubtitle}</div>
                 <div className="react-workspace-shell-title">{contextTitle}</div>
-                <div className="react-workspace-shell-meta">
-                    <span>{chatTitle}</span>
-                    <span>{messageCount} messages</span>
-                    {state.temporaryChat ? <span>Temporary chat</span> : null}
-                </div>
             </section>
             <nav className="react-workspace-shell-nav" aria-label="Workspace navigation">
                 {workspaceShellNavigationEntries.map(entry => {
@@ -4236,36 +4173,6 @@ function ReactWorkspaceShellChrome({
                     );
                 })}
             </nav>
-            <section className="react-workspace-shell-status" aria-live="polite">
-                <span className="react-workspace-shell-status-dot" aria-hidden="true" />
-                <span>{statusLabel}</span>
-                {dockSnapshot.activePanelKind ? (
-                    <span
-                        className="react-workspace-panel-dock-status"
-                        data-workspace-panel-dock-kind={dockSnapshot.activePanelKind}
-                        data-workspace-panel-dock-status={dockSnapshot.activePanelStatus}
-                    >
-                        {getWorkspacePanelDockKindLabel(dockSnapshot.activePanelKind)} {getWorkspacePanelDockStatusLabel(dockSnapshot.activePanelStatus)}
-                    </span>
-                ) : null}
-                {dockSnapshot.activePanelStatus === 'error' && recoveryEntry ? (
-                    <span
-                        className="react-workspace-shell-slot-recovery"
-                        data-workspace-shell-slot-recovery={dockSnapshot.activePanelKind}
-                    >
-                        <button
-                            type="button"
-                            className="react-workspace-shell-slot-recovery-action"
-                            data-workspace-shell-slot-recovery-action="retry"
-                            onClick={() => {
-                                void dispatchAction(recoveryEntry);
-                            }}
-                        >
-                            Retry
-                        </button>
-                    </span>
-                ) : null}
-            </section>
         </header>
     );
 }
@@ -4293,6 +4200,154 @@ function renderIntoPanel(mount: WorkspacePanelMount) {
             </QueryClientProvider>
         </StrictMode>,
     );
+}
+
+
+function SettingsOverlayHost({
+    initialTab,
+    panelKind,
+    onRequestClose,
+}: {
+    initialTab?: string | null;
+    panelKind: WorkspaceDockPanelKind;
+    onRequestClose?: () => void;
+}) {
+    const handleClose = useCallback(() => {
+        recordWorkspacePanelDockClose(panelKind);
+        onRequestClose?.();
+    }, [onRequestClose, panelKind]);
+
+    useEffect(() => {
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        const host = document.getElementById('emberdesk-react-settings-overlay-host');
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                event.stopPropagation();
+                handleClose();
+                return;
+            }
+            if (event.key !== 'Tab' || !host) {
+                return;
+            }
+            const focusable = Array.from(
+                host.querySelectorAll<HTMLElement>(
+                    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+                ),
+            ).filter(node => !node.hasAttribute('disabled') && node.getAttribute('aria-hidden') !== 'true');
+            if (focusable.length === 0) {
+                return;
+            }
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            const active = document.activeElement as HTMLElement | null;
+            if (event.shiftKey && active === first) {
+                event.preventDefault();
+                last.focus();
+            } else if (!event.shiftKey && active === last) {
+                event.preventDefault();
+                first.focus();
+            }
+        };
+        window.addEventListener('keydown', onKeyDown, true);
+        return () => {
+            document.body.style.overflow = previousOverflow;
+            window.removeEventListener('keydown', onKeyDown, true);
+        };
+    }, [handleClose]);
+
+    return (
+        <>
+            <div
+                className="settings-overlay-backdrop"
+                data-settings-overlay-backdrop="true"
+                onClick={() => handleClose()}
+            />
+            <div
+                className="settings-overlay"
+                data-settings-overlay="true"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Settings"
+                tabIndex={-1}
+                data-doc-id="page.settings feature.next_workspace_shell"
+            >
+                <SettingsSurface
+                    variant="overlay"
+                    initialTab={initialTab}
+                    onRequestClose={handleClose}
+                />
+            </div>
+        </>
+    );
+}
+
+function renderSettingsOverlay(mount: SettingsOverlayMount) {
+    mount.root.render(
+        <StrictMode>
+            <QueryClientProvider client={queryClient}>
+                <SettingsOverlayHost
+                    initialTab={mount.initialTab}
+                    panelKind={mount.panelKind}
+                    onRequestClose={mount.onRequestClose}
+                />
+            </QueryClientProvider>
+        </StrictMode>,
+    );
+}
+
+export function mountSettingsOverlay(options: {
+    initialTab?: string | null;
+    panelKind?: WorkspaceDockPanelKind;
+    onRequestClose?: () => void;
+} = {}) {
+    attachGlobalCompatibilityBridge();
+    const initialTab = typeof options.initialTab === 'string' ? options.initialTab : null;
+    const panelKind: WorkspaceDockPanelKind =
+        options.panelKind === 'aiConfig' || options.panelKind === 'advancedFormatting'
+            ? options.panelKind
+            : 'settings';
+    if (mountedSettingsOverlay) {
+        mountedSettingsOverlay.initialTab = initialTab;
+        mountedSettingsOverlay.panelKind = panelKind;
+        mountedSettingsOverlay.onRequestClose = options.onRequestClose;
+        renderSettingsOverlay(mountedSettingsOverlay);
+        return { kind: panelKind, mounted: true, status: 'mounted' as const };
+    }
+
+    const host = document.createElement('div');
+    host.id = 'emberdesk-react-settings-overlay-host';
+    host.setAttribute('data-react-settings-overlay-host', 'true');
+    document.body.appendChild(host);
+
+    mountedSettingsOverlay = {
+        root: createRoot(host),
+        host,
+        backdrop: host,
+        dialog: host,
+        initialTab,
+        panelKind,
+        onRequestClose: options.onRequestClose,
+    };
+    renderSettingsOverlay(mountedSettingsOverlay);
+    queueMicrotask(() => {
+        const dialog = host.querySelector<HTMLElement>('[data-settings-overlay="true"]');
+        dialog?.focus();
+    });
+    return { kind: panelKind, mounted: true, status: 'mounted' as const };
+}
+
+export function unmountSettingsOverlay() {
+    if (!mountedSettingsOverlay) {
+        return;
+    }
+    mountedSettingsOverlay.root.unmount();
+    mountedSettingsOverlay.host.remove();
+    mountedSettingsOverlay = null;
+    if (mountedPanels.size === 0 && !mountedShellChrome) {
+        detachGlobalCompatibilityBridge();
+    }
 }
 
 export function mountWorkspacePanel(kind: WorkspacePanelKind, container: HTMLElement, options: WorkspacePanelMountOptions = {}) {

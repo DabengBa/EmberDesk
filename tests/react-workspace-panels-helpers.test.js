@@ -114,8 +114,12 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('mountReactWorkspaceShellChrome');
         expect(scriptSource).toContain('data-react-workspace-shell-chrome-status');
         expect(scriptSource).toContain('data-legacy-workspace-chrome-hidden-by-react');
+        expect(scriptSource).toContain("? 'EmberDesk'");
         expect(scriptSource).not.toContain('workspace-next');
         expect(scriptSource).not.toContain('/workspace-next');
+        expect(scriptSource).not.toContain('contextSubtitle:');
+        expect(scriptSource).not.toContain('chatTitle,');
+        expect(scriptSource).not.toContain('temporaryChat:');
 
         expect(bridgeSource).toContain('mountReactWorkspaceShellChrome');
         expect(bridgeSource).toContain('panelModule.mountWorkspaceShellChrome');
@@ -124,17 +128,28 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('AI Config');
         expect(workspacePanelSource).toContain('Formatting');
         expect(workspacePanelSource).toContain('Character Library');
+        expect(workspacePanelSource).not.toContain("{ action: 'openCharacterAuthoring'");
+        expect(workspacePanelSource).not.toContain('Workspace ready');
+        expect(workspacePanelSource).not.toContain('react-workspace-shell-status-dot');
+        expect(workspacePanelSource).not.toContain('react-workspace-shell-kicker');
+        expect(workspacePanelSource).not.toContain('react-workspace-shell-meta');
+        expect(workspacePanelSource).not.toContain('react-workspace-shell-status');
+        expect(workspacePanelSource).not.toContain('react-workspace-panel-dock-status');
+        expect(workspacePanelSource).not.toContain('No chat selected');
         expect(workspacePanelSource).toContain('World Info');
         expect(workspacePanelSource).toContain('Backgrounds');
         expect(workspacePanelSource).toContain('Extensions');
         expect(workspacePanelSource).toContain('Settings');
         expect(scriptSource).toContain("case 'openAIConfig':");
-        expect(scriptSource).toContain("window.location.assign('/settings?tab=providers');");
+        expect(scriptSource).toContain("openWorkspaceSettingsOverlay");
+        expect(scriptSource).toContain("tab: 'providers'");
         expect(scriptSource).toContain("case 'openFormatting':");
-        expect(scriptSource).toContain("window.location.assign('/settings?tab=advanced');");
+        expect(scriptSource).toContain("tab: 'advanced'");
         expect(scriptSource).toContain("case 'openSettings':");
-        expect(scriptSource).toContain("window.location.assign('/settings');");
+        expect(scriptSource).not.toContain("window.location.assign('/settings");
         expect(scriptSource).not.toContain("await openWorkspaceShellDrawer('user-settings-block');");
+        expect(workspacePanelSource).toContain('data-settings-overlay');
+        expect(workspacePanelSource).toContain('SettingsSurface');
     });
 
     test('coordinates React shell panel entries through slot lifecycle state', () => {
@@ -163,8 +178,6 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('panelKind?: WorkspaceDockPanelKind;');
         expect(workspacePanelSource).toContain('function useWorkspacePanelDockSnapshot()');
         expect(workspacePanelSource).toContain('function normalizeWorkspacePanelDockStatus(');
-        expect(workspacePanelSource).toContain('function getWorkspacePanelDockKindLabel(');
-        expect(workspacePanelSource).toContain('function getWorkspacePanelDockStatusLabel(');
         expect(workspacePanelSource).toContain('function getWorkspacePanelVisibleStatusLabel(');
         expect(workspacePanelSource).toContain('const dockSnapshot = useWorkspacePanelDockSnapshot();');
         expect(workspacePanelSource).toContain('const panelDispatchSequenceRef = useRef(0);');
@@ -187,9 +200,6 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain("if (entry.panelKind && isPanelEntryActive && dockSnapshot.activePanelStatus !== 'error' && !isPinned) {");
         expect(workspacePanelSource).toContain("void closePanel(entry);");
         expect(workspacePanelSource).toContain('void dispatchAction(entry);');
-        expect(workspacePanelSource).toContain('data-workspace-panel-dock-status={dockSnapshot.activePanelStatus}');
-        expect(workspacePanelSource).toContain('getWorkspacePanelDockKindLabel(dockSnapshot.activePanelKind)');
-        expect(workspacePanelSource).toContain('getWorkspacePanelDockStatusLabel(dockSnapshot.activePanelStatus)');
         expect(scriptSource).toContain('async dispatchAction(action, payload = {}) {\n            await waitForWorkspaceShellPanelOpenTask();');
         expect(scriptSource).toContain("case 'activateWorkspaceShellSlot':");
         expect(scriptSource).toContain("case 'deactivateWorkspaceShellSlot':");
@@ -234,13 +244,12 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain("return createWorkspaceShellPanelResult('worldInfo', worldInfoMount);");
         expect(scriptSource).toContain("return createWorkspaceShellPanelResult('backgroundLibrary', await mountReactBackgroundLibraryPanel());");
         expect(scriptSource).toContain("return createWorkspaceShellPanelResult('extensionsHost', await mountReactExtensionsHostPanel());");
-        expect(scriptSource).toContain("case 'openAIConfig':\n                    window.location.assign('/settings?tab=providers');");
-        expect(scriptSource).toContain("return createWorkspaceShellPanelResult('aiConfig', { kind: 'aiConfig', mounted: false, status: 'success' });");
-        expect(scriptSource).toContain("case 'openFormatting':\n                    window.location.assign('/settings?tab=advanced');");
-        expect(scriptSource).toContain("return createWorkspaceShellPanelResult('advancedFormatting', { kind: 'advancedFormatting', mounted: false, status: 'success' });");
-        expect(scriptSource).toContain("return createWorkspaceShellPanelResult('settings', { kind: 'settings', mounted: false, status: 'success' });");
+        expect(scriptSource).toContain("case 'openAIConfig':");
+        expect(scriptSource).toContain("openWorkspaceSettingsOverlay");
+        expect(scriptSource).toContain("case 'openFormatting':");
         const openSettingsBranch = scriptSource.match(/case 'openSettings':[\s\S]*?case 'openGroupChats':/)?.[0] ?? '';
-        expect(openSettingsBranch).toContain("window.location.assign('/settings');");
+        expect(openSettingsBranch).toContain('openWorkspaceSettingsOverlay');
+        expect(openSettingsBranch).not.toContain("window.location.assign('/settings');");
         expect(openSettingsBranch).not.toContain("openWorkspaceShellDrawer('user-settings-block')");
         expect(openSettingsBranch).not.toContain('reactPages?.settings');
         expect(scriptSource).toContain("case 'openGroupChats':\n                    return openWorkspaceShellGroupChats();");
@@ -248,9 +257,9 @@ describe('React workspace panels bridge helpers', () => {
 
         const styleSource = read('public/style.css');
         expect(styleSource).toContain('.react-workspace-shell-nav-button[data-workspace-shell-panel-active="true"]');
-        expect(styleSource).toContain('.react-workspace-panel-dock-status');
-        expect(styleSource).toContain('.react-workspace-panel-dock-status[data-workspace-panel-dock-status="error"]');
-        expect(styleSource).toContain('.react-workspace-panel-dock-status[data-workspace-panel-dock-status="disabled"]');
+        expect(styleSource).not.toMatch(/\.react-workspace-shell-nav\s*\{[^}]*overflow-x:\s*auto/);
+        expect(styleSource).not.toContain('.react-workspace-shell-status');
+        expect(styleSource).not.toContain('.react-workspace-panel-dock-status');
     });
 
     test('publishes explicit React shell child-slot contracts before dispatching feature-local capabilities', () => {
@@ -279,10 +288,8 @@ describe('React workspace panels bridge helpers', () => {
     test('keeps a failed child slot recoverable without replacing the shell or chat layout', () => {
         const workspacePanelSource = read('app/workspace-panels.tsx');
 
-        expect(workspacePanelSource).toContain('data-workspace-shell-slot-recovery={dockSnapshot.activePanelKind}');
-        expect(workspacePanelSource).toContain('data-workspace-shell-slot-recovery-action="retry"');
-        expect(workspacePanelSource).toContain('void dispatchAction(recoveryEntry);');
-        expect(workspacePanelSource).toContain("dockSnapshot.activePanelStatus === 'error'");
+        expect(workspacePanelSource).not.toContain('data-workspace-shell-slot-recovery=');
+        expect(workspacePanelSource).not.toContain('data-workspace-shell-slot-recovery-action="retry"');
     });
 
     test('ships a main-chat message-list panel contract through the shared workspace panel asset', () => {

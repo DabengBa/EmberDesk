@@ -14,7 +14,7 @@ related: [page.api_configuration, page.chat_workspace, feature.chat_completion_s
 
 ## Page Purpose
 
-Authenticated users complete supported settings work on `/settings` instead of workspace Settings / AI Config / Advanced Formatting drawers. Workspace shell entries navigate here. Missing React build returns a clear rebuild error rather than a legacy drawer fallback.
+Authenticated users complete supported settings work on `/settings` instead of workspace Settings / AI Config / Advanced Formatting drawers. Workspace shell entries open the same React Settings surface as an in-workspace overlay; `/settings` remains the deep-link and full-page mount. Missing React build returns a clear rebuild error rather than a legacy drawer fallback.
 
 ## Page Structure (UI Layout)
 
@@ -45,7 +45,7 @@ Authenticated users complete supported settings work on `/settings` instead of w
 
 - **Sole-owner route state**: authenticated `/settings` always serves the React settings shell when the React app build exists.
 - **Missing-build state**: absent `app/dist` returns HTTP 503 with rebuild instructions; there is no redirect into workspace legacy settings drawers.
-- **Workspace navigation state**: shell and direct legacy top-bar Settings entries navigate to this route; Settings opens `/settings`, AI Config/API Connections opens `/settings?tab=providers`, and Formatting opens `/settings?tab=advanced`.
+- **Workspace navigation state**: shell Settings / AI Config / Formatting open the same React Settings surface as an in-workspace overlay (AI Config → Providers tab, Formatting → Advanced tab) without leaving `/`. Direct `/settings` and `/settings?tab=...` remain full-page mounts for deep links, refresh, and share.
 - **Auth state**: unauthenticated users are redirected to login.
 - **Dirty / busy / error states**: save is disabled until dirty; save/secret actions expose busy and error feedback without fake success.
 - **Save state**: save posts a document-compatible payload and rewrites only changed bound fields; unknown document fields round-trip without materializing unrelated defaults.
@@ -56,9 +56,10 @@ Authenticated users complete supported settings work on `/settings` instead of w
 
 ## Navigation
 
-- Primary entry: `/settings` for authenticated users.
-- Workspace chrome: Settings / AI Config / Formatting navigate into this page.
-- Return: header link back to [Chat Workspace](page.chat_workspace).
+- Primary daily entry: workspace shell overlay on [Chat Workspace](page.chat_workspace).
+- Deep-link / full-page entry: `/settings` for authenticated users.
+- Workspace chrome: Settings / AI Config / Formatting open the overlay with the matching tab.
+- Full-page return: header link back to [Chat Workspace](page.chat_workspace); overlay uses a close control instead.
 
 ## Canonical Settings Document Authority
 

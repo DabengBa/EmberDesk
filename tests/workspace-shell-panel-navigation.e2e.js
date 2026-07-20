@@ -12,45 +12,26 @@ async function clickShellPanel(page, label) {
     await page.locator('.react-workspace-shell-nav-button').filter({ hasText: label }).click({ timeout: 10_000 });
 }
 
-async function expectActivePanel(page, label, status) {
-    const expectedStatuses = Array.isArray(status) ? status : [status];
+async function expectActivePanel(page, label) {
     await expect.poll(async () => page.evaluate(() => ({
         active: document.querySelector('[data-workspace-shell-panel-active="true"]')?.textContent?.trim() ?? null,
-        status: document.querySelector('.react-workspace-panel-dock-status')?.textContent?.trim() ?? null,
-    })), { timeout: 10_000 }).toEqual(expect.objectContaining({ active: label }));
-    await expect.poll(async () => page.evaluate(() => (
-        document.querySelector('.react-workspace-panel-dock-status')?.textContent?.trim() ?? null
-    )), { timeout: 10_000 }).toBeOneOf(expectedStatuses);
-}
-
-expect.extend({
-    toBeOneOf(received, expectedValues) {
-        const pass = expectedValues.includes(received);
-        return {
-            pass,
-            message: () => `expected ${this.utils.printReceived(received)} to be one of ${this.utils.printExpected(expectedValues)}`,
-        };
-    },
-});
-
-function readyOrLegacyStatus(label) {
-    return [`${label} ready`, `${label} using legacy panel`];
+    })), { timeout: 10_000 }).toEqual({ active: label });
 }
 
 async function expectNoActivePanel(page) {
     await expect.poll(async () => page.evaluate(() => ({
         activeCount: document.querySelectorAll('[data-workspace-shell-panel-active="true"]').length,
-        status: document.querySelector('.react-workspace-panel-dock-status')?.textContent?.trim() ?? null,
-    })), { timeout: 10_000 }).toEqual({ activeCount: 0, status: null });
+        statusCount: document.querySelectorAll('.react-workspace-panel-dock-status').length,
+    })), { timeout: 10_000 }).toEqual({ activeCount: 0, statusCount: 0 });
 }
 
 async function expectShellPanelVisible(page, entry) {
-    await expectActivePanel(page, entry.label, entry.status ?? readyOrLegacyStatus(entry.label));
+    await expectActivePanel(page, entry.label);
     await expect(page.locator(entry.visibleSelector)).toBeVisible({ timeout: 10_000 });
 }
 
 test.describe('workspace shell panel navigation', () => {
-    test('all registry entries expose unified pressed state and short ready status', async ({ page }) => {
+    test('primary registry entries expose unified pressed state without redundant status copy', async ({ page }) => {
         test.setTimeout(120_000);
         await testSetup.awaitST({ page });
 
@@ -60,7 +41,6 @@ test.describe('workspace shell panel navigation', () => {
             { label: 'Backgrounds', visibleSelector: '#Backgrounds.openDrawer' },
             { label: 'Extensions', visibleSelector: '#rm_extensions_block.openDrawer' },
             { label: 'Group Chats', visibleSelector: '#right-nav-panel.openDrawer #rm_group_chats_block' },
-            { label: 'Character Authoring', visibleSelector: '#right-nav-panel.openDrawer #rm_ch_create_block' },
         ];
 
         for (const entry of registryEntries) {
@@ -70,20 +50,22 @@ test.describe('workspace shell panel navigation', () => {
 
             await clickShellPanel(page, entry.label);
             await expect(panelButton).toHaveAttribute('aria-pressed', 'true', { timeout: 15_000 });
-            await expectActivePanel(page, entry.label, entry.status ?? readyOrLegacyStatus(entry.label));
+            await expectActivePanel(page, entry.label);
             await expect(page.locator(entry.visibleSelector)).toBeVisible({ timeout: 15_000 });
 
             await clickShellPanel(page, entry.label);
             await expect(panelButton).toHaveAttribute('aria-pressed', 'false', { timeout: 15_000 });
             await expectNoActivePanel(page);
         }
+
+        await expect(page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'Character Authoring' })).toHaveCount(0);
     });
 
     test('panel entries can close and reopen the same panel', async ({ page }) => {
         await testSetup.awaitST({ page });
 
         await clickShellPanel(page, 'Character Library');
-        await expectActivePanel(page, 'Character Library', readyOrLegacyStatus('Character Library'));
+        await expectActivePanel(page, 'Character Library');
         await expect(page.locator('#right-nav-panel')).toHaveClass(/openDrawer/);
 
         await clickShellPanel(page, 'Character Library');
@@ -91,7 +73,7 @@ test.describe('workspace shell panel navigation', () => {
         await expect(page.locator('#right-nav-panel')).toHaveClass(/closedDrawer/);
 
         await clickShellPanel(page, 'Character Library');
-        await expectActivePanel(page, 'Character Library', readyOrLegacyStatus('Character Library'));
+        await expectActivePanel(page, 'Character Library');
         await expect(page.locator('#right-nav-panel')).toHaveClass(/openDrawer/);
     });
 
@@ -118,7 +100,7 @@ test.describe('workspace shell panel navigation', () => {
         await expect(page.locator('#right-nav-panel')).toHaveClass(/closedDrawer/);
     });
 
-    test('isolates a missing child-slot failure without losing shell navigation or composer reachability', async ({ page }) => {
+    test('isolates a missing child-slot failure without adding shell status copy', async ({ page }) => {
         await testSetup.awaitST({ page });
 
         await page.evaluate(() => {
@@ -126,8 +108,7 @@ test.describe('workspace shell panel navigation', () => {
         });
 
         await page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'World Info' }).click();
-        await expect(page.locator('[data-workspace-shell-slot-recovery="worldInfo"]')).toBeVisible({ timeout: 10_000 });
-        await expect(page.locator('[data-workspace-shell-slot-recovery-action="retry"]')).toBeVisible();
+        await expect(page.locator('.react-workspace-shell-status, .react-workspace-panel-dock-status')).toHaveCount(0);
         await expect(page.locator('.react-workspace-shell-nav')).toBeVisible();
         await expect(page.locator('#send_textarea')).toBeVisible();
     });
@@ -193,11 +174,9 @@ test.describe('workspace shell panel navigation', () => {
         await expect.poll(async () => page.evaluate(() => ({
             readyState: document.readyState,
             active: document.querySelector('[data-workspace-shell-panel-active="true"]')?.textContent?.trim(),
-            status: document.querySelector('.react-workspace-panel-dock-status')?.textContent?.trim(),
         })), { timeout: 10_000 }).toEqual({
             readyState: 'complete',
             active: 'World Info',
-            status: expect.stringMatching(/^World Info (ready|using legacy panel)$/),
         });
     });
 
@@ -219,38 +198,41 @@ test.describe('workspace shell panel navigation', () => {
         await openShellPanel(page, 'Character Library');
         await expect.poll(async () => page.evaluate(() => ({
             active: document.querySelector('[data-workspace-shell-panel-active="true"]')?.textContent?.trim(),
-            status: document.querySelector('.react-workspace-panel-dock-status')?.textContent?.trim(),
         })), { timeout: 10_000 }).toEqual({
             active: 'Character Library',
-            status: expect.stringMatching(/^Character Library (ready|using legacy panel)$/),
         });
     });
-    test('navigates Settings shell entry to /settings instead of opening legacy drawers', async ({ page }) => {
+    test('opens Settings shell entry as in-workspace overlay instead of leaving chat', async ({ page }) => {
         await testSetup.awaitST({ page });
-        await Promise.all([
-            page.waitForURL(/\/settings(?:\?|$)/, { timeout: 15_000 }),
-            page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'Settings' }).click({ timeout: 10_000 }),
-        ]);
-        await expect(page).toHaveURL(/\/settings(?:\?|$)/);
-        await expect(page.locator('main.settings-page')).toBeVisible({ timeout: 15_000 });
+        const settingsButton = page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'Settings' });
+        await settingsButton.click({ timeout: 10_000 });
+        await expect(page).toHaveURL(/\/(?:\?|$)/);
+        await expect(page.locator('[data-settings-overlay="true"]')).toBeVisible({ timeout: 15_000 });
+        await expect(page.locator('[data-settings-overlay="true"] .settings-page')).toBeVisible({ timeout: 15_000 });
         await expect(page.locator('#user-settings-block.openDrawer')).toHaveCount(0);
+        await expect(settingsButton).toHaveAttribute('aria-pressed', 'true');
+        await settingsButton.click({ timeout: 10_000 });
+        await expect(page.locator('[data-settings-overlay="true"]')).toHaveCount(0, { timeout: 15_000 });
+        await expect(settingsButton).toHaveAttribute('aria-pressed', 'false');
+        await expect(page.locator('#send_textarea')).toBeVisible();
     });
 
-    test('navigates AI Config and Formatting shell entries into React settings tabs', async ({ page }) => {
+    test('opens AI Config and Formatting shell entries into overlay tabs without route jump', async ({ page }) => {
         await testSetup.awaitST({ page });
 
-        await Promise.all([
-            page.waitForURL(/\/settings\?tab=providers(?:&|$)/, { timeout: 15_000 }),
-            page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'AI Config' }).click({ timeout: 10_000 }),
-        ]);
-        await expect(page).toHaveURL(/tab=providers/);
+        const aiConfigButton = page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'AI Config' });
+        await aiConfigButton.click({ timeout: 10_000 });
+        await expect(page).toHaveURL(/\/(?:\?|$)/);
+        await expect(page.locator('[data-settings-overlay="true"]')).toBeVisible({ timeout: 15_000 });
+        await expect(page.locator('[data-settings-overlay="true"] .settings-tab[data-active="true"]')).toHaveText(/Providers/i);
 
-        await page.goto('/');
-        await testSetup.awaitST({ page });
-        await Promise.all([
-            page.waitForURL(/\/settings\?tab=advanced(?:&|$)/, { timeout: 15_000 }),
-            page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'Formatting' }).click({ timeout: 10_000 }),
-        ]);
-        await expect(page).toHaveURL(/tab=advanced/);
+        await page.keyboard.press('Escape');
+        await expect(page.locator('[data-settings-overlay="true"]')).toHaveCount(0, { timeout: 10_000 });
+
+        const formattingButton = page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'Formatting' });
+        await formattingButton.click({ timeout: 10_000 });
+        await expect(page).toHaveURL(/\/(?:\?|$)/);
+        await expect(page.locator('[data-settings-overlay="true"]')).toBeVisible({ timeout: 15_000 });
+        await expect(page.locator('[data-settings-overlay="true"] .settings-tab[data-active="true"]')).toHaveText(/Advanced/i);
     });
 });

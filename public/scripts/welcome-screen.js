@@ -13,7 +13,6 @@ import {
     getThumbnailUrl,
     is_send_press,
     neutralCharacterName,
-    newAssistantChat,
     printCharactersDebounced,
     selectCharacterById,
     system_avatar,
@@ -149,7 +148,6 @@ function sendWelcomePrompt() {
 async function sendWelcomePanel() {
     try {
         const chatElement = document.getElementById('chat');
-        const sendTextArea = document.getElementById('send_textarea');
         if (!chatElement) {
             console.error('Chat element not found');
             return;
@@ -159,14 +157,6 @@ async function sendWelcomePanel() {
         };
         const template = await renderTemplateAsync('welcomePanel', templateData);
         const fragment = document.createRange().createContextualFragment(template);
-        fragment.querySelectorAll('button.openTemporaryChat').forEach((button) => {
-            button.addEventListener('click', async () => {
-                await newAssistantChat({ temporary: true });
-                if (sendTextArea instanceof HTMLTextAreaElement) {
-                    sendTextArea.focus();
-                }
-            });
-        });
         chatElement.append(fragment.firstChild);
     } catch (error) {
         console.error('Welcome screen error:', error);

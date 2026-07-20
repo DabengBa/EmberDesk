@@ -13,9 +13,15 @@ describe('welcome panel structure', () => {
         expect(welcomePanel).toContain('class="welcomePanel"');
         expect(welcomePanel).toContain('class="welcomeHeaderLogo"');
         expect(welcomePanel).toContain('class="welcomeHeaderVersionDisplay"');
-        expect(welcomePanel).toContain('class="openTemporaryChat menu_button menu_button_icon"');
 
         expectNotContainsMarkers(welcomePanel, [
+            'Docs',
+            'GitHub',
+            'Discord',
+            'Temporary Chat',
+            'welcomeShortcuts',
+            'welcomeShortcutsSeparator',
+            'openTemporaryChat',
             'recentChatsTitle',
             'Recent Chats',
             'recentChatsSettings',
@@ -30,5 +36,7 @@ describe('welcome panel structure', () => {
 
         expect(welcomeScreenSource).not.toContain('await getRecentChats()');
         expect(welcomeScreenSource).not.toContain('sendWelcomePanel(recentChats');
+        expect(welcomeScreenSource).not.toContain('button.openTemporaryChat');
+        expect(welcomeScreenSource).not.toContain('newAssistantChat({ temporary: true })');
     });
 });

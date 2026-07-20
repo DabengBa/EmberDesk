@@ -5,8 +5,8 @@
 .welcomePanel {
     display: flex;
     flex-direction: column;
-    gap: 5px;
-    padding: 10px;
+    align-items: flex-start;
+    padding: 12px 14px;
     width: 100%;
 }
 
@@ -33,13 +33,6 @@ body.hideChatAvatars .welcomePanel .recentChatList .recentChat .avatar {
     display: none;
 }
 
-.welcomePanel .welcomeHeader {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: flex-end;
-}
-
 .welcomePanel .recentChatsTitle {
     flex-grow: 1;
     font-size: calc(var(--mainFontSize) * 1.15);
@@ -48,37 +41,31 @@ body.hideChatAvatars .welcomePanel .recentChatList .recentChat .avatar {
 
 .welcomePanel .welcomeHeaderTitle {
     margin: 0;
-    flex-grow: 1;
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: 10px;
+    gap: 9px;
+    min-height: 42px;
+    padding: 6px 12px 6px 7px;
+    border: 1px solid color-mix(in srgb, var(--SmartThemeQuoteColor) 34%, var(--SmartThemeBorderColor) 66%);
+    border-radius: 12px;
+    background:
+        linear-gradient(135deg, color-mix(in srgb, var(--SmartThemeQuoteColor) 18%, transparent), transparent 62%),
+        color-mix(in srgb, var(--SmartThemeBlurTintColor) 92%, var(--black50a) 8%);
+    box-shadow: 0 10px 28px color-mix(in srgb, var(--black70a) 52%, transparent);
 }
 
 .welcomePanel .welcomeHeaderVersionDisplay {
-    font-size: calc(var(--mainFontSize) * 1.3);
-    font-weight: 600;
-    flex-grow: 1;
+    color: var(--SmartThemeBodyColor);
+    font-size: calc(var(--mainFontSize) * 1.05);
+    font-weight: 700;
+    letter-spacing: 0.01em;
 }
 
 .welcomePanel .welcomeHeaderLogo {
     width: 30px;
     height: 30px;
-}
-
-.welcomePanel .welcomeShortcuts {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: center;
-    gap: 5px;
-}
-
-.welcomePanel .welcomeShortcuts .welcomeShortcutsSeparator {
-    margin: 0 2px;
-    color: var(--SmartThemeBorderColor);
-    font-size: calc(var(--mainFontSize) * 1.1);
+    filter: drop-shadow(0 0 8px color-mix(in srgb, var(--SmartThemeQuoteColor) 58%, transparent));
 }
 
 .welcomeRecent .recentChatList {
@@ -231,10 +218,4 @@ body.big-avatars .welcomeRecent .recentChatList .recentChat .chatMessageContaine
     position: absolute;
     opacity: 0.8;
     color: var(--SmartThemeQuoteColor);
-}
-
-@media screen and (max-width: 1000px) {
-    .welcomePanel .welcomeShortcuts a span {
-        display: none;
-    }
 }

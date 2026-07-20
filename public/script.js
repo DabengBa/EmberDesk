@@ -369,7 +369,7 @@ import {
     parseCharacterLibraryFetchResponse,
     projectCharacterLibraryQueryAgainstDeletedAvatars,
 } from './scripts/character-library-query-helpers.js';
-import { mountReactWorkspaceShellChrome } from './scripts/workspace-panels-react-bridge.js';
+import { mountReactWorkspaceShellChrome, mountReactSettingsOverlay, unmountReactSettingsOverlay } from './scripts/workspace-panels-react-bridge.js';
 import { runDeleteCharacterClosePreflight } from './scripts/delete-character-preflight.js';
 
 // API OBJECT FOR EXTERNAL WIRING
@@ -466,7 +466,11 @@ document.addEventListener('click', event => {
 
         event.preventDefault();
         event.stopImmediatePropagation();
-        window.location.assign(route);
+        const tab = new URL(route, window.location.origin).searchParams.get('tab');
+        void openWorkspaceSettingsOverlay({
+            tab: tab || null,
+            panelKind: route.includes('advanced') ? 'advancedFormatting' : (route.includes('providers') ? 'aiConfig' : 'settings'),
+        });
         return;
     }
 }, true);
@@ -531,7 +535,7 @@ function getWorkspaceShellActiveContext() {
     return typeof name2 === 'string' && name2.trim() ? 'assistant' : 'none';
 }
 
-function getWorkspaceShellChromeState(statusLabel = 'Workspace ready') {
+function getWorkspaceShellChromeState() {
     const activeContext = getWorkspaceShellActiveContext();
     const group = selected_group ? groups.find(x => x.id == selected_group) : null;
     const character = this_chid !== undefined ? characters[this_chid] : null;
@@ -540,19 +544,13 @@ function getWorkspaceShellChromeState(statusLabel = 'Workspace ready') {
         : activeContext === 'character'
             ? (character?.name || name2 || 'Character')
             : activeContext === 'assistant'
-                ? (name2 || 'Assistant')
+                ? 'EmberDesk'
                 : '';
-    const chatTitle = getCurrentChatId() || character?.chat || group?.chat_id || '';
 
     return {
         activeContext,
         contextTitle,
-        contextSubtitle: activeContext === 'none' ? 'No active chat' : activeContext === 'group' ? 'Group chat' : activeContext === 'character' ? 'Character chat' : 'Assistant chat',
-        chatTitle,
-        messageCount: Array.isArray(chat) ? chat.length : 0,
-        temporaryChat: document.getElementById('temporary_chat_status')?.hidden === false,
         status: activeContext === 'none' ? 'empty' : 'success',
-        statusLabel,
     };
 }
 
@@ -774,6 +772,47 @@ function setWorkspaceShellSlotPinned(slotKey, pinned) {
     return { kind, mounted: true, status: 'mounted' };
 }
 
+
+let workspaceSettingsOverlayOpen = false;
+let workspaceSettingsOverlayTab = null;
+let workspaceSettingsOverlayPanelKind = 'settings';
+
+async function openWorkspaceSettingsOverlay({ tab = null, panelKind = 'settings' } = {}) {
+    workspaceSettingsOverlayOpen = true;
+    workspaceSettingsOverlayTab = tab;
+    workspaceSettingsOverlayPanelKind = panelKind;
+    const result = await mountReactSettingsOverlay({
+        initialTab: tab,
+        panelKind,
+        onRequestClose: () => {
+            void closeWorkspaceSettingsOverlay();
+        },
+    });
+    return createWorkspaceShellPanelResult(panelKind, {
+        kind: panelKind,
+        mounted: result?.mounted !== false,
+        status: result?.status === 'error' ? 'error' : 'success',
+        reason: result?.reason,
+    });
+}
+
+async function closeWorkspaceSettingsOverlay() {
+    const panelKind = workspaceSettingsOverlayPanelKind || 'settings';
+    workspaceSettingsOverlayOpen = false;
+    workspaceSettingsOverlayTab = null;
+    // Defer unmount so the originating click/keyboard event can finish cleanly.
+    await new Promise(resolve => {
+        window.setTimeout(() => {
+            void unmountReactSettingsOverlay().finally(resolve);
+        }, 0);
+    });
+    return createWorkspaceShellPanelResult(panelKind, {
+        kind: panelKind,
+        mounted: false,
+        status: 'success',
+    });
+}
+
 function getWorkspaceShellChromeBridge() {
     return {
         async dispatchAction(action, payload = {}) {
@@ -787,11 +826,9 @@ function getWorkspaceShellChromeBridge() {
                 case 'setWorkspaceShellSlotPinned':
                     return setWorkspaceShellSlotPinned(payload?.slotKey, payload?.pinned);
                 case 'openAIConfig':
-                    window.location.assign('/settings?tab=providers');
-                    return createWorkspaceShellPanelResult('aiConfig', { kind: 'aiConfig', mounted: false, status: 'success' });
+                    return openWorkspaceSettingsOverlay({ tab: 'providers', panelKind: 'aiConfig' });
                 case 'openFormatting':
-                    window.location.assign('/settings?tab=advanced');
-                    return createWorkspaceShellPanelResult('advancedFormatting', { kind: 'advancedFormatting', mounted: false, status: 'success' });
+                    return openWorkspaceSettingsOverlay({ tab: 'advanced', panelKind: 'advancedFormatting' });
                 case 'openCharacterLibrary':
                     return openWorkspaceShellCharacterLibrary();
                 case 'openWorldInfo':
@@ -811,8 +848,12 @@ function getWorkspaceShellChromeBridge() {
                     await waitForWorkspaceShellPanelOpenTask();
                     return createWorkspaceShellPanelResult('extensionsHost', await mountReactExtensionsHostPanel());
                 case 'openSettings':
-                    window.location.assign('/settings');
-                    return createWorkspaceShellPanelResult('settings', { kind: 'settings', mounted: false, status: 'success' });
+                    return openWorkspaceSettingsOverlay({ tab: null, panelKind: 'settings' });
+                case 'closeWorkspacePanel':
+                    if (payload?.kind === 'settings' || payload?.kind === 'aiConfig' || payload?.kind === 'advancedFormatting') {
+                        return closeWorkspaceSettingsOverlay();
+                    }
+                    return createWorkspaceShellPanelResult(payload?.kind || 'settings', { kind: payload?.kind || 'settings', mounted: false, status: 'success' });
                 case 'openGroupChats':
                     return openWorkspaceShellGroupChats();
                 case 'openCharacterAuthoring':
@@ -824,7 +865,7 @@ function getWorkspaceShellChromeBridge() {
     };
 }
 
-async function mountReactWorkspaceShellChromeHost(statusLabel = 'Workspace ready') {
+async function mountReactWorkspaceShellChromeHost() {
     const host = ensureWorkspaceShellChromeHost();
     host.dataset.reactWorkspaceShellChromeStatus = 'loading';
     host.setAttribute('data-react-workspace-shell-chrome-status', 'loading');
@@ -832,7 +873,7 @@ async function mountReactWorkspaceShellChromeHost(statusLabel = 'Workspace ready
 
     const result = await mountReactWorkspaceShellChrome({
         container: host,
-        state: getWorkspaceShellChromeState(statusLabel),
+        state: getWorkspaceShellChromeState(),
         bridge: getWorkspaceShellChromeBridge(),
         features: getWorkspaceReactFeatures(),
     });
