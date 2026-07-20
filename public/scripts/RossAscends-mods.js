@@ -408,12 +408,6 @@ function OpenNavPanels() {
             $('#rightNavDrawerIcon').trigger('click');
         }
 
-        //auto-open L nav if locked and previously open
-        if (accountStorage.getItem('LNavLockOn') == 'true' && accountStorage.getItem('LNavOpened') == 'true') {
-            console.debug('RA -- clicking left nav to open');
-            $('#leftNavDrawerIcon').trigger('click');
-        }
-
         //auto-open WI if locked and previously open
         if (accountStorage.getItem('WINavLockOn') == 'true' && accountStorage.getItem('WINavOpened') == 'true') {
             console.debug('RA -- clicking WI to open');

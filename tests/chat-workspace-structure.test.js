@@ -77,6 +77,17 @@ describe('chat workspace structure', () => {
         expect(styleSource).toContain('body[data-react-workspace-shell-chrome="mounted"] .drawer-opener[data-target="extensions-settings-button"]');
     });
 
+    test('does not restore the legacy left AI config drawer on startup', () => {
+        const rossAscendsSource = readRepoFile('public/scripts/RossAscends-mods.js');
+        const openNavPanels = rossAscendsSource.match(/function OpenNavPanels\(\) \{[\s\S]*?\n\}/)?.[0] ?? '';
+
+        expect(openNavPanels).not.toContain("accountStorage.getItem('LNavLockOn')");
+        expect(openNavPanels).not.toContain("accountStorage.getItem('LNavOpened')");
+        expect(openNavPanels).not.toContain("$('#leftNavDrawerIcon').trigger('click')");
+        expect(openNavPanels).toContain("accountStorage.getItem('NavLockOn')");
+        expect(openNavPanels).toContain("accountStorage.getItem('WINavLockOn')");
+    });
+
     test('lets React own main-chat outer layout without wrapping protected rows', () => {
         const workspacePanelSource = readRepoFile('app/workspace-panels.tsx');
         const styleSource = readRepoFile('public/style.css');
