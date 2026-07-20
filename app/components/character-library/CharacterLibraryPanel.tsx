@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { CharacterLibraryCharacterRow } from './CharacterLibraryCharacterRow';
 import { CharacterLibraryFolderRow } from './CharacterLibraryFolderRow';
@@ -12,6 +12,11 @@ import {
     projectCharacterEntityToRowModel,
     type CharacterLibraryTagModel,
 } from '@/lib/character-library-row-helpers';
+import {
+    getCharacterLibraryGridColumnCount,
+    getCharacterLibraryGridRowCount,
+    getCharacterLibraryGridRowRange,
+} from '@/lib/character-library-grid-helpers.js';
 
 export interface CharacterLibraryPanelEntity {
     type: string;
@@ -50,6 +55,7 @@ export interface CharacterLibraryPanelState {
     renderPlan: CharacterLibraryPanelRenderPlan;
     estimatedRowHeight?: number;
     scrollElement: HTMLElement | null;
+    isGrid?: boolean;
     bulkMode?: boolean;
     selectedCharacterIds?: Array<string | number>;
     activeCharacterId?: string | number | null;
@@ -150,15 +156,46 @@ function EntityRow({
 
 export function CharacterLibraryPanel({ bridge, state }: { bridge: CharacterLibraryPanelBridge; state: CharacterLibraryPanelState; }) {
     const scrollElementRef = useRef<HTMLElement | null>(state.scrollElement);
+    const isGrid = Boolean(state.isGrid);
+    const [gridColumnCount, setGridColumnCount] = useState(() => (
+        getCharacterLibraryGridColumnCount(state.scrollElement?.clientWidth)
+    ));
+
     useEffect(() => {
         scrollElementRef.current = state.scrollElement;
     }, [state.scrollElement]);
+
+    useEffect(() => {
+        const scrollElement = state.scrollElement;
+        if (!isGrid || !scrollElement) {
+            setGridColumnCount(1);
+            return;
+        }
+
+        const updateGridColumnCount = () => {
+            const nextColumnCount = getCharacterLibraryGridColumnCount(scrollElement.clientWidth);
+            setGridColumnCount(currentColumnCount => (
+                currentColumnCount === nextColumnCount ? currentColumnCount : nextColumnCount
+            ));
+        };
+        updateGridColumnCount();
+
+        if (typeof ResizeObserver === 'undefined') {
+            return;
+        }
+
+        const observer = new ResizeObserver(updateGridColumnCount);
+        observer.observe(scrollElement);
+        return () => observer.disconnect();
+    }, [isGrid, state.scrollElement]);
 
     const estimatedRowHeight = state.estimatedRowHeight ?? 112;
     const bulkMode = Boolean(state.bulkMode);
     const selectedCharacterIds = state.selectedCharacterIds ?? [];
     const virtualizer = useVirtualizer({
-        count: state.pageEntities.length,
+        count: isGrid
+            ? getCharacterLibraryGridRowCount(state.pageEntities.length, gridColumnCount)
+            : state.pageEntities.length,
         getScrollElement: () => scrollElementRef.current,
         estimateSize: () => estimatedRowHeight,
         overscan: 6,
@@ -185,33 +222,48 @@ export function CharacterLibraryPanel({ bridge, state }: { bridge: CharacterLibr
                 : null}
             {showVirtualRows ? (
                 <div
-                    className="character-library-react-panel"
+                    className={`character-library-react-panel${isGrid ? ' character-library-react-panel--grid' : ''}`}
                     style={{ height: `${totalSize}px`, position: 'relative', width: '100%' }}
                 >
                     {virtualItems.map(item => {
                         const entity = state.pageEntities[item.index];
-                        if (!entity) {
+                        const rowRange = isGrid
+                            ? getCharacterLibraryGridRowRange(item.index, gridColumnCount)
+                            : { start: item.index, end: item.index + 1 };
+                        const rowEntities = isGrid
+                            ? state.pageEntities.slice(rowRange.start, rowRange.end)
+                            : (entity ? [entity] : []);
+                        if (rowEntities.length === 0) {
                             return null;
                         }
 
                         return (
                             <div
-                                key={entity.renderKey ?? `${entity.type}:${entity.id}`}
+                                key={rowEntities[0]?.renderKey ?? `${rowEntities[0]?.type}:${rowEntities[0]?.id}`}
+                                className="character-library-react-panel__row"
                                 style={{
                                     position: 'absolute',
                                     top: 0,
                                     left: 0,
                                     width: '100%',
                                     transform: `translateY(${item.start}px)`,
+                                    gridTemplateColumns: isGrid ? `repeat(${gridColumnCount}, minmax(0, 1fr))` : undefined,
                                 }}
                             >
-                                <EntityRow
-                                    bridge={bridge}
-                                    entity={entity}
-                                    bulkMode={bulkMode}
-                                    selectedCharacterIds={selectedCharacterIds}
-                                    activeCharacterId={state.activeCharacterId}
-                                />
+                                {rowEntities.map(rowEntity => (
+                                    <div
+                                        className="character-library-react-panel__cell"
+                                        key={rowEntity.renderKey ?? `${rowEntity.type}:${rowEntity.id}`}
+                                    >
+                                        <EntityRow
+                                            bridge={bridge}
+                                            entity={rowEntity}
+                                            bulkMode={bulkMode}
+                                            selectedCharacterIds={selectedCharacterIds}
+                                            activeCharacterId={state.activeCharacterId}
+                                        />
+                                    </div>
+                                ))}
                             </div>
                         );
                     })}

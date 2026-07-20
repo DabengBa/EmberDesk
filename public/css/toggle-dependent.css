@@ -159,6 +159,84 @@ body.charListGrid #rm_print_characters_block .ch_additional_info {
     display: none;
 }
 
+/* React virtualizes grid rows so card cells can pack without full-width gaps. */
+body.charListGrid #rm_print_characters_block {
+    display: block;
+    padding: 3px;
+}
+
+body.charListGrid #rm_print_characters_block .character-library-react-panel--grid {
+    min-width: 0;
+}
+
+body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .character-library-react-panel__row {
+    display: grid;
+    gap: 8px;
+    align-items: stretch;
+    padding: 1px;
+}
+
+body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .character-library-react-panel__cell {
+    min-width: 0;
+}
+
+body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .bogus_folder_select,
+body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .character_select,
+body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .group_select {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: calc(var(--mainFontSize) * 9.3);
+    max-width: none;
+    margin: 0;
+    padding: 6px 5px;
+    align-items: center !important;
+    justify-content: center;
+    gap: 5px;
+    border-color: color-mix(in srgb, var(--SmartThemeBorderColor) 72%, transparent);
+    background-color: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
+}
+
+body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .character_select_container,
+body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .group_select_container {
+    max-width: none;
+}
+
+body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .bogus_folder_select .avatar,
+body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .character_select .avatar,
+body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .group_select .avatar {
+    width: calc(var(--mainFontSize) * 4.3);
+    height: calc(var(--mainFontSize) * 4.3);
+    flex: 0 0 auto;
+}
+
+body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .bogus_folder_select .ch_name,
+body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .character_select .ch_name,
+body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .group_select .ch_name {
+    display: -webkit-box;
+    max-width: none;
+    min-height: calc(var(--mainFontSize) * 2);
+    overflow: hidden;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
+body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .bogus_folder_select:hover,
+body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .character_select:hover,
+body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .group_select:hover {
+    background-color: color-mix(in srgb, var(--SmartThemeBodyColor) 10%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .bogus_folder_select,
+    body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .character_select,
+    body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .group_select {
+        transition: none;
+    }
+}
+
 /*big avatars mode page-wide changes*/
 
 body.big-avatars .character_select .avatar,

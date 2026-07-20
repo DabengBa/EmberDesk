@@ -41,7 +41,8 @@ describe('character library React panel scaffold', () => {
         expect(panelSource).not.toContain('import { useQuery } from \'@tanstack/react-query\';');
         expect(panelSource).not.toContain('refetchOnMount');
         expect(panelSource).not.toContain('syncCharactersFromQuery');
-        expect(panelSource).toContain('count: state.pageEntities.length');
+        expect(panelSource).toContain('getCharacterLibraryGridRowCount(state.pageEntities.length, gridColumnCount)');
+        expect(panelSource).toContain(': state.pageEntities.length');
         expect(panelSource).toContain('getScrollElement: () => scrollElementRef.current');
         expect(toolbarSource).toContain('import { useForm } from \'@tanstack/react-form\';');
         expect(toolbarSource).toContain('characterLibraryToolbarSchema');
@@ -57,6 +58,7 @@ describe('character library React panel scaffold', () => {
         expect(toolbarSource).toContain('role="status"');
         expect(toolbarSource).toContain('aria-label={bulkSelectedLabel}');
         expect(toolbarSource).toContain('disabled={state.bulkSelectedCount === 0}');
+        expect(toolbarSource).toContain('className="character-library-toolbar-filters"');
         expect(helperSource).toContain('export const characterLibraryToolbarSchema = z.object(');
         expect(helperSource).toContain('export function getCharacterLibraryBulkSelectionShortText(');
         expect(helperSource).toContain('locale.toLowerCase().startsWith(\'zh\')');
@@ -70,6 +72,18 @@ describe('character library React panel scaffold', () => {
         expect(panelSource).toContain('CharacterLibraryBackBlock');
         expect(panelSource).toContain('CharacterLibraryCharacterRow');
         expect(panelSource).toContain('const entity = state.pageEntities[item.index];');
+    });
+
+    test('virtualizes grid cards by row instead of leaving full-width item gaps', () => {
+        const panelSource = read('app/components/character-library/CharacterLibraryPanel.tsx');
+        const scriptSource = read('public/script.js');
+
+        expect(panelSource).toContain('getCharacterLibraryGridColumnCount');
+        expect(panelSource).toContain('getCharacterLibraryGridRowCount');
+        expect(panelSource).toContain('getCharacterLibraryGridRowRange');
+        expect(panelSource).toContain("character-library-react-panel--grid");
+        expect(panelSource).toContain('gridColumnCount');
+        expect(scriptSource).toContain('isGrid: Boolean(power_user.charListGrid)');
     });
 
     test('bridges the legacy workspace shell into the React character-library panel bundle', () => {
