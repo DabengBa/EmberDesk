@@ -285,18 +285,9 @@ async function RA_autoloadchat() {
     }
 
     if (active_group !== null && active_group !== undefined) {
-        if (active_character) {
-            console.warn('Active character and active group are both set. Only active character will be loaded. Resetting active group.');
-            setActiveGroup(null);
-            saveSettingsDebounced();
-        } else {
-            const result = await openGroupById(String(active_group));
-            if (!result) {
-                setActiveGroup(null);
-                saveSettingsDebounced();
-                console.warn(`Currently active group with ID ${active_group} not found. Resetting to no active group.`);
-            }
-        }
+        // Group chat retirement: never restore a group session.
+        setActiveGroup(null);
+        saveSettingsDebounced();
     }
 }
 

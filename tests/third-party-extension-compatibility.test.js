@@ -199,7 +199,8 @@ describe('third-party extension compatibility boundary', () => {
         try {
             const characterLibraryRoot = path.resolve(publicRoot, '..', 'app', 'components', 'character-library');
             const characterRowSource = fs.readFileSync(path.join(characterLibraryRoot, 'CharacterLibraryCharacterRow.tsx'), 'utf8');
-            const groupRowSource = fs.readFileSync(path.join(characterLibraryRoot, 'CharacterLibraryGroupRow.tsx'), 'utf8');
+            const groupRowPath = path.join(characterLibraryRoot, 'CharacterLibraryGroupRow.tsx');
+            expect(fs.existsSync(groupRowPath)).toBe(false);
             const folderRowSource = fs.readFileSync(path.join(characterLibraryRoot, 'CharacterLibraryFolderRow.tsx'), 'utf8');
             const backBlockSource = fs.readFileSync(path.join(characterLibraryRoot, 'CharacterLibraryStatusBlocks.tsx'), 'utf8');
             const rowHelperSource = fs.readFileSync(path.resolve(characterLibraryRoot, '..', '..', 'lib', 'character-library-row-helpers.ts'), 'utf8');
@@ -212,7 +213,7 @@ describe('third-party extension compatibility boundary', () => {
             expect(characterRowSource).toContain('className="tags tags_inline"');
             expect(characterRowSource).toContain('className="bulk_select_checkbox"');
             expect(characterRowSource).toContain('event.stopPropagation();');
-            expect(groupRowSource).toContain('group_select entity_block');
+            // .group_select product rows retired with group chat removal
             expect(folderRowSource).toContain('bogus_folder_select entity_block');
             expect(folderRowSource).toContain('{...{ tagid: String(id) }}');
             expect(backBlockSource).toContain("{...{ tagid: 'back' }}");

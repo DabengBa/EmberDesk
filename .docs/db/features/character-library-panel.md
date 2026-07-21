@@ -17,6 +17,8 @@ Let users browse, search, filter, sort, bulk-select, and choose [character cards
 
 ## User-Visible Contract
 
+- Group create controls and group rows are retired with product group-chat removal; the library lists characters and folder/tag entities only.
+
 - Protected row selectors and identity attributes are gated by the `selectors` contract family in `tests/helpers/frontend-compatibility-contract.js` before legacy list-owner deletion.
 
 - The character-library entry point stays inside [Chat Workspace](page.chat_workspace); the guarded React panel is the normal visible owner for list/search/sort/bulk browsing state, as the sole runtime owner. Bundle-missing fails closed with a visible error; rollback is a previous application version deploy.
@@ -24,7 +26,7 @@ Let users browse, search, filter, sort, bulk-select, and choose [character cards
 - Opening an existing character from the library keeps the established workspace selection behavior, and Character Authoring in the right drawer is a React sole-owner surface for create/edit fields and direct API save; the legacy form stays hidden and is not a product rollback path.
 - When the Character Management lock is enabled, the character-library panel remains open while users open supporting drawers such as World Info; when it is not locked, opening another drawer may close it to keep the workspace uncluttered.
 - The panel remains usable for large libraries by keeping pagination, virtualized visible rows for very large page sizes, lazy avatar behavior, and steady-state reopen performance focused on the current browsing task. Grid view virtualizes card rows rather than full-width individual items, reflows between one and three columns as the drawer changes width, and keeps card labels compact without artificial vertical gaps.
-- Character rows show current card metadata, avatars, tags, favorite state, last-chat summaries, and mixed character/group/folder identity without changing the user's list definition during search, sort, filtering, or pagination.
+- Character rows show current card metadata, avatars, tags, favorite state, last-chat summaries, and character/folder identity without changing the user's list definition during search, sort, filtering, or pagination.
 - The visible library contract stays the same during normal browsing and maintenance recovery; users should not have to rebuild or understand hidden cache/index state to browse current cards, and the retired character-index sidecar is not a user-visible maintenance step.
 - Search, sort, tag filters, page size changes, and pagination should update the visible list without unnecessary clear-and-rebuild churn when the next page is unambiguous; ambiguous states may fall back to a full refresh for correctness.
 - Character row identity remains stable for browsing, active-card state, bulk selection, and compatible extension selectors.

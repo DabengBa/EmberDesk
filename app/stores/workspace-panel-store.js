@@ -6,7 +6,6 @@ export const WORKSPACE_PANEL_KINDS = Object.freeze([
     'extensionsHost',
     'mainChatMessageList',
     'characterAuthoring',
-    'groupAuthoring',
 ]);
 
 export const WORKSPACE_PANEL_DOCK_KINDS = Object.freeze([
@@ -17,7 +16,6 @@ export const WORKSPACE_PANEL_DOCK_KINDS = Object.freeze([
     'backgroundLibrary',
     'extensionsHost',
     'settings',
-    'groupChats',
     'characterAuthoring',
 ]);
 
@@ -50,12 +48,6 @@ export const WORKSPACE_SHELL_CHILD_SLOTS = Object.freeze({
         allowedCapabilities: Object.freeze(['manageExtensions', 'refreshExtensions']),
         contentOwner: 'extensions-host',
         mountTarget: '#rm_extensions_block',
-    }),
-    groupChats: Object.freeze({
-        accessibleName: 'Group Chats',
-        allowedCapabilities: Object.freeze(['editGroup']),
-        contentOwner: 'group-authoring',
-        mountTarget: '#rm_group_chats_block',
     }),
     characterAuthoring: Object.freeze({
         accessibleName: 'Character Authoring',

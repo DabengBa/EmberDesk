@@ -115,7 +115,6 @@ export const requiredRegexPlacements = Object.freeze({
 
 export const characterRowSelectors = Object.freeze([
     '.character_select',
-    '.group_select',
     '.bogus_folder_select',
     '[data-chid]',
     '[chid]',

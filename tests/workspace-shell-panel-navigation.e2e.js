@@ -40,7 +40,6 @@ test.describe('workspace shell panel navigation', () => {
             { label: 'World Info', visibleSelector: '#WorldInfo.openDrawer' },
             { label: 'Backgrounds', visibleSelector: '#Backgrounds.openDrawer' },
             { label: 'Extensions', visibleSelector: '#rm_extensions_block.openDrawer' },
-            { label: 'Group Chats', visibleSelector: '#right-nav-panel.openDrawer #rm_group_chats_block' },
         ];
 
         for (const entry of registryEntries) {
@@ -117,7 +116,6 @@ test.describe('workspace shell panel navigation', () => {
         await testSetup.awaitST({ page });
 
         const legacyHostedEntries = [
-            { label: 'Group Chats', visibleSelector: '#right-nav-panel.openDrawer #rm_group_chats_block' },
         ];
 
         for (const entry of legacyHostedEntries) {
@@ -137,32 +135,9 @@ test.describe('workspace shell panel navigation', () => {
         }
     });
 
-    test('slot switching preserves visible React group-authoring form values', async ({ page }) => {
-        test.setTimeout(90_000);
-        await testSetup.awaitST({ page });
-
-        await openShellPanel(page, 'Character Library');
-        await page.locator('[title*="Show only groups"], [aria-label*="Show only groups"]').first().click();
-        const group = page.locator('#rm_print_characters_block .group_select[data-grid]').first();
-        await expect(group).toBeVisible({ timeout: 15_000 });
-        await group.click();
-
-        await openShellPanel(page, 'Group Chats');
-        await expect(page.locator('#right-nav-panel.openDrawer #rm_group_chats_block')).toBeVisible({ timeout: 15_000 });
-        const groupAuthoringPanel = page.locator('[data-react-authoring-owner="groupAuthoring"]');
-        await expect(groupAuthoringPanel).toBeVisible({ timeout: 15_000 });
-        await expect(groupAuthoringPanel).toHaveAttribute('data-react-authoring-mode', 'edit');
-        const groupName = groupAuthoringPanel.locator('[data-react-authoring-field="name"] input');
-        const selectedGroupName = await groupName.inputValue();
-        expect(selectedGroupName).not.toBe('');
-
-        await openShellPanel(page, 'Extensions');
-        await expect(page.locator('#rm_extensions_block.openDrawer')).toBeVisible({ timeout: 15_000 });
-        await expect(page.locator('#extensions_settings')).toBeAttached();
-
-        await openShellPanel(page, 'Group Chats');
-        await expect(page.locator('#right-nav-panel.openDrawer #rm_group_chats_block')).toBeVisible({ timeout: 15_000 });
-        await expect(groupName).toHaveValue(selectedGroupName);
+    test('shell no longer offers Group Chats after retirement', async ({ page }) => {
+        await testSetup(page);
+        await expect(page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'Group Chats' })).toHaveCount(0);
     });
 
     test('panel entries stay responsive when switching from character library to world info immediately', async ({ page }) => {

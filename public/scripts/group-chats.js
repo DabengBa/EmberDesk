@@ -276,70 +276,8 @@ async function validateGroup(group) {
  * @returns {Promise<void>} A promise that resolves when the chat messages have been loaded.
  */
 export async function getGroupChat(groupId, reload = false) {
-    const group = groups.find((x) => x.id === groupId);
-    if (!group) {
-        console.warn('Group not found', groupId);
-        return;
-    }
-
-    // Run validation before any loading
-    await validateGroup(group);
-    await unshallowGroupMembers(groupId);
-
-    const chat_id = group.chat_id;
-    const data = await loadGroupChat(chat_id);
-    const metadata = data?.[0]?.chat_metadata ?? {};
-    const freshChat = !metadata.tainted && (!Array.isArray(data) || !data.length);
-
-    // Remove chat file header if present
-    if (Array.isArray(data) && data.length && Object.hasOwn(data[0], 'chat_metadata')) {
-        data.shift();
-    }
-
-    // Add integrity slug if missing
-    if (!metadata.integrity) {
-        metadata.integrity = uuidv4();
-    }
-
-    await loadItemizedPrompts(getCurrentChatId());
-
-    if (group && Array.isArray(group.members) && freshChat) {
-        chat.splice(0, chat.length);
-        chatElement.find('.mes').remove();
-        for (let member of group.members) {
-            const character = characters.find(x => x.avatar === member || x.name === member);
-            if (!character) {
-                continue;
-            }
-
-            const mes = await getFirstCharacterMessage(character);
-
-            // No first message
-            if (!(mes?.mes)) {
-                continue;
-            }
-
-            chat.push(mes);
-            await eventSource.emit(event_types.MESSAGE_RECEIVED, (chat.length - 1), 'first_message');
-            addOneMessage(mes);
-            await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, (chat.length - 1), 'first_message');
-        }
-        await saveGroupChat(groupId, false);
-    } else if (Array.isArray(data) && data.length) {
-        chat.splice(0, chat.length, ...data);
-        chat.forEach(ensureMessageMediaIsArray);
-        chatElement.find('.mes').remove();
-        await printMessages();
-    }
-
-    updateChatMetadata(metadata, true);
-
-    if (reload) {
-        select_group_chats(groupId, true);
-    }
-
-    await eventSource.emit(event_types.CHAT_CHANGED, getCurrentChatId());
-    if (freshChat) await eventSource.emit(event_types.GROUP_CHAT_CREATED);
+    console.warn('getGroupChat retired', groupId, reload);
+    return;
 }
 
 /**
@@ -779,40 +717,9 @@ export async function renameGroupMember(oldAvatar, newAvatar, newName) {
  * Fetches all groups from the server and processes them.
  */
 async function getGroups() {
-    const response = await fetch('/api/groups/all', {
-        method: 'POST',
-        headers: getRequestHeaders({ omitContentType: true }),
-    });
-
-    if (response.ok) {
-        /** @type {Group[]} */
-        const data = await response.json();
-        groups = data.slice();
-
-        // Convert groups to new format
-        for (const group of groups) {
-            if (typeof group.id === 'number') {
-                group.id = String(group.id);
-            }
-            if (group.disabled_members == undefined) {
-                group.disabled_members = [];
-            }
-            if (group.chat_id == undefined) {
-                group.chat_id = group.id;
-                group.chats = [group.id];
-                group.members = group.members
-                    .map(x => characters.find(y => y.name == x)?.avatar)
-                    .filter(x => x)
-                    .filter(onlyUnique);
-            }
-            if (typeof group.chat_id === 'number') {
-                group.chat_id = String(group.chat_id);
-            }
-            if (Array.isArray(group.chats) && group.chats.some(x => typeof x === 'number')) {
-                group.chats = group.chats.map(x => String(x));
-            }
-        }
-    }
+    groups.splice(0, groups.length);
+    selected_group = null;
+    return [];
 }
 
 /**
@@ -966,152 +873,12 @@ function getGroupChatNames(groupId) {
  * @returns {Promise<string|void>} Generated text or nothing if no generation occurred
  */
 async function generateGroupWrapper(byAutoMode, type = null, params = {}) {
-    function throwIfAborted() {
-        if (params.signal instanceof AbortSignal && params.signal.aborted) {
-            throw new Error('AbortSignal was fired. Group generation stopped');
-        }
+    console.warn('generateGroupWrapper retired', { byAutoMode, type });
+    if (typeof toastr !== 'undefined') {
+        toastr.error('Group chats have been removed from EmberDesk.');
     }
-
-    if (online_status === 'no_connection') {
-        is_group_generating = false;
-        setSendButtonState(false);
-        return Promise.resolve();
-    }
-
-    if (is_group_generating) {
-        return Promise.resolve();
-    }
-
-    // Auto-navigate back to group menu
-    if (menu_type !== 'group_edit') {
-        select_group_chats(selected_group, false);
-        await delay(1);
-    }
-
-    /** @type {any} Caution: JS war crimes ahead */
-    let textResult = '';
-    const group = groups.find((x) => x.id === selected_group);
-
-    if (!group || !Array.isArray(group.members) || !group.members.length) {
-        sendSystemMessage(system_message_types.EMPTY, '', { isSmallSys: true });
-        return Promise.resolve();
-    }
-
-    try {
-        await unshallowGroupMembers(selected_group);
-
-        throwIfAborted();
-        hideSwipeButtons();
-        is_group_generating = true;
-        setCharacterName('');
-        setCharacterId(undefined);
-        const userInput = String($('#send_textarea').val());
-
-        // id of this specific batch for regeneration purposes
-        group_generation_id = Date.now();
-        const lastMessage = chat[chat.length - 1];
-        let activationText = '';
-        let isUserInput = false;
-
-        if (userInput?.length && !byAutoMode) {
-            isUserInput = true;
-            activationText = userInput;
-        } else {
-            if (lastMessage && !lastMessage.is_system) {
-                activationText = lastMessage.mes;
-            }
-        }
-
-        const activationStrategy = Number(group.activation_strategy ?? group_activation_strategy.NATURAL);
-        const enabledMembers = group.members.filter(x => !group.disabled_members.includes(x));
-        let activatedMembers = [];
-
-        if (params && typeof params.force_chid == 'number') {
-            activatedMembers = [params.force_chid];
-        } else if (type === 'quiet') {
-            activatedMembers = activateSwipe(group.members, { allowSystem: true }).slice(0, 1);
-
-            if (activatedMembers.length === 0) {
-                activatedMembers = activateListOrder(group.members.slice(0, 1));
-            }
-        } else if (type === 'swipe' || type === 'continue') {
-            activatedMembers = activateSwipe(group.members, { allowSystem: false });
-
-            if (activatedMembers.length === 0) {
-                toastr.warning(t`Deleted group member swiped. To get a reply, add them back to the group.`);
-                throw new Error('Deleted group member swiped');
-            }
-        } else if (type === 'impersonate') {
-            activatedMembers = activateImpersonate(group.members);
-        } else if (activationStrategy === group_activation_strategy.NATURAL) {
-            activatedMembers = activateNaturalOrder(enabledMembers, activationText, lastMessage, group.allow_self_responses, isUserInput);
-        } else if (activationStrategy === group_activation_strategy.LIST) {
-            activatedMembers = activateListOrder(enabledMembers);
-        } else if (activationStrategy === group_activation_strategy.POOLED) {
-            activatedMembers = activatePooledOrder(enabledMembers, lastMessage, isUserInput);
-        } else if (activationStrategy === group_activation_strategy.MANUAL && !isUserInput) {
-            activatedMembers = shuffle(enabledMembers).slice(0, 1).map(x => characters.findIndex(y => y.avatar === x)).filter(x => x !== -1);
-        }
-
-        if (activatedMembers.length === 0) {
-            //toastr.warning('All group members are disabled. Enable at least one to get a reply.');
-
-            // Send user message as is
-            const bias = getBiasStrings(userInput, type);
-            await sendMessageAsUser(userInput, bias.messageBias);
-            await saveChatConditional();
-            $('#send_textarea').val('')[0].dispatchEvent(new Event('input', { bubbles: true }));
-        }
-        groupChatQueueOrder = new Map();
-
-        if (power_user.show_group_chat_queue) {
-            for (let i = 0; i < activatedMembers.length; ++i) {
-                groupChatQueueOrder.set(characters[activatedMembers[i]].avatar, i + 1);
-            }
-        }
-        await eventSource.emit(event_types.GROUP_WRAPPER_STARTED, { selected_group, type });
-        // now the real generation begins: cycle through every activated character
-        for (const chId of activatedMembers) {
-            throwIfAborted();
-            deactivateSendButtons();
-            setCharacterId(chId);
-            setCharacterName(characters[chId].name);
-            if (power_user.show_group_chat_queue) {
-                printGroupMembers();
-            }
-            await eventSource.emit(event_types.GROUP_MEMBER_DRAFTED, chId);
-
-            // Wait for generation to finish
-            const generateType = ['swipe', 'impersonate', 'quiet', 'continue'].includes(type) ? type : 'normal';
-            textResult = await Generate(generateType, { automatic_trigger: byAutoMode, ...(params || {}) });
-            let messageChunk = textResult?.messageChunk;
-
-            if (messageChunk) {
-                while (shouldAutoContinue(messageChunk, type === 'impersonate')) {
-                    textResult = await Generate('continue', { automatic_trigger: byAutoMode, ...(params || {}) });
-                    messageChunk = textResult?.messageChunk;
-                }
-            }
-            if (power_user.show_group_chat_queue) {
-                groupChatQueueOrder.delete(characters[chId].avatar);
-                groupChatQueueOrder.forEach((value, key, map) => map.set(key, value - 1));
-            }
-        }
-    } finally {
-        is_group_generating = false;
-        setSendButtonState(false);
-        setCharacterId(undefined);
-        if (power_user.show_group_chat_queue) {
-            groupChatQueueOrder = new Map();
-            printGroupMembers();
-        }
-        setCharacterName('');
-        activateSendButtons();
-        showSwipeButtons();
-        await eventSource.emit(event_types.GROUP_WRAPPER_FINISHED, { selected_group, type });
-    }
-
-    return Promise.resolve(textResult);
+    is_group_generating = false;
+    return Promise.resolve();
 }
 
 /**
@@ -1823,88 +1590,9 @@ function toggleHiddenControls(group, generationMode = null) {
  * @param {boolean} skipAnimation If true, skips the animation when selecting the group
  */
 function select_group_chats(groupId, skipAnimation) {
-    openGroupId = groupId;
-    newGroupMembers = [];
-    const group = openGroupId && groups.find((x) => x.id == openGroupId);
-    const groupName = group?.name ?? '';
-    const replyStrategy = Number(group?.activation_strategy ?? group_activation_strategy.NATURAL);
-    const generationMode = Number(group?.generation_mode ?? group_generation_mode.SWAP);
-
-    setMenuType(group ? 'group_edit' : 'group_create');
-    $('#group_avatar_preview').empty().append(getGroupAvatar(group));
-    $('#rm_group_restore_avatar').toggle(!!group && isValidImageUrl(group.avatar_url));
-    $('#rm_group_filter').val('').trigger('input');
-    $('#rm_group_members_filter').val('').trigger('input');
-    $('#rm_group_activation_strategy').val(replyStrategy);
-    $(`#rm_group_activation_strategy option[value="${replyStrategy}"]`).prop('selected', true);
-    $('#rm_group_generation_mode').val(generationMode);
-    $(`#rm_group_generation_mode option[value="${generationMode}"]`).prop('selected', true);
-    $('#rm_group_chat_name').val(groupName);
-
-    if (!skipAnimation) {
-        selectRightMenuWithAnimation('rm_group_chats_block');
-    }
-
-    // render tags
-    applyTagsOnGroupSelect(groupId);
-
-    // render characters list
-    printGroupCandidates();
-    printGroupMembers();
-
-    const groupHasMembers = !!$('#rm_group_members').children().length;
-    $('#rm_group_submit').prop('disabled', !groupHasMembers);
-    $('#rm_group_allow_self_responses').prop('checked', group && group.allow_self_responses);
-    $('#rm_group_hidemutedsprites').prop('checked', group && group.hideMutedSprites);
-    $('#rm_group_automode_delay').val(group?.auto_mode_delay ?? DEFAULT_AUTO_MODE_DELAY);
-
-    $('#rm_group_generation_mode_join_prefix').val(group?.generation_mode_join_prefix ?? '').attr('setting', 'generation_mode_join_prefix');
-    $('#rm_group_generation_mode_join_suffix').val(group?.generation_mode_join_suffix ?? '').attr('setting', 'generation_mode_join_suffix');
-    toggleHiddenControls(group, generationMode);
-
-    // bottom buttons
-    if (openGroupId) {
-        $('#rm_group_submit').hide();
-        $('#rm_group_delete').show();
-        $('#rm_group_scenario').show();
-        $('#group-metadata-controls .chat_lorebook_button').removeClass('disabled').prop('disabled', false);
-        $('#group_open_media_overrides').show();
-        const isMediaAllowed = isExternalMediaAllowed();
-        $('#group_media_allowed_icon').toggle(isMediaAllowed);
-        $('#group_media_forbidden_icon').toggle(!isMediaAllowed);
-    } else {
-        $('#rm_group_submit').show();
-        if ($('#groupAddMemberListToggle .inline-drawer-content').css('display') !== 'block') {
-            $('#groupAddMemberListToggle').trigger('click');
-        }
-        $('#rm_group_delete').hide();
-        $('#rm_group_scenario').hide();
-        $('#group-metadata-controls .chat_lorebook_button').addClass('disabled').prop('disabled', true);
-        $('#group_open_media_overrides').hide();
-    }
-
-    updateFavButtonState(group?.fav ?? false);
-    setAutoModeWorker();
-
-    // top bar
-    if (group) {
-        $('#rm_group_automode_label').show();
-        $('#rm_button_selected_ch').children('h2').text(groupName);
-    } else {
-        $('#rm_group_automode_label').hide();
-    }
-
-    // Toggle textbox sizes, as input events have not fired here
-    if (!CSS.supports('field-sizing', 'content')) {
-        $('#rm_group_chats_block .autoSetHeight').each(element => {
-            resetScrollHeight(element);
-        });
-    }
-
-    hideMutedSprites = group?.hideMutedSprites ?? false;
-    $('#rm_group_hidemutedsprites').prop('checked', hideMutedSprites);
-
-    eventSource.emit('groupSelected', { detail: { id: openGroupId, group: group } });
+    console.warn('select_group_chats retired', groupId);
+    selected_group = null;
+    return;
 }
 
 /**
@@ -2038,34 +1726,10 @@ function updateFavButtonState(state) {
  * @returns {Promise<boolean>} Whether the group was opened
  */
 export async function openGroupById(groupId) {
-    if (isChatSaving) {
-        toastr.info(t`Please wait until the chat is saved before switching characters.`, t`Your chat is still saving...`);
-        return false;
+    console.warn('openGroupById retired', groupId);
+    if (typeof toastr !== 'undefined') {
+        toastr.warning('Group chats have been removed from EmberDesk.');
     }
-
-    if (!groups.find(x => x.id === groupId)) {
-        console.log('Group not found', groupId);
-        return false;
-    }
-
-    if (!is_send_press && !is_group_generating) {
-        select_group_chats(groupId, false);
-
-        if (selected_group !== groupId) {
-            groupChatQueueOrder = new Map();
-            setCharacterId(undefined);
-            setCharacterName('');
-            resetSelectedGroup();
-            await clearChat({ clearData: true });
-            cancelTtsPlay();
-            selected_group = groupId;
-            setEditedMessageId(undefined);
-            updateChatMetadata({}, true);
-            await getGroupChat(groupId);
-            return true;
-        }
-    }
-
     return false;
 }
 
@@ -2215,20 +1879,8 @@ export async function getGroupPastChats(groupId) {
  * @returns {Promise<void>}
  */
 export async function openGroupChat(groupId, chatId) {
-    await waitUntilCondition(() => !isChatSaving, debounce_timeout.extended, 10);
-    const group = groups.find(x => x.id === groupId);
-
-    if (!group || !group.chats.includes(chatId)) {
-        return;
-    }
-
-    await clearChat({ clearData: true });
-    group.chat_id = chatId;
-    group.date_last_chat = Date.now();
-    updateChatMetadata({}, true);
-
-    await editGroup(groupId, true, false);
-    await getGroupChat(groupId);
+    console.warn('openGroupChat retired');
+    return false;
 }
 
 /**

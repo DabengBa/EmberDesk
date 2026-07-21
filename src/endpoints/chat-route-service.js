@@ -84,6 +84,8 @@ export async function searchChatPayload({
     let chatFiles = [];
 
     if (groupId) {
+        // Group chat retirement: group-owned chat lookups are disabled.
+        return [];
         const groupFiles = deps.fs.readdirSync(directories.groups)
             .filter(file => deps.path.extname(file) === '.json');
 
@@ -200,7 +202,11 @@ export async function readRecentChatPayload({
     };
 
     const getGroupChatFiles = async () => {
-        const groupDirents = await deps.fs.promises.readdir(directories.groups, { withFileTypes: true });
+        const groupDirents = []; // group chat retirement: do not enumerate group chats
+        void directories.groups;
+        if (false) await deps.fs.promises.readdir(directories.groups, { withFileTypes: true });
+        const _retiredGroupDirents = await Promise.resolve([]);
+        void _retiredGroupDirents;
         const groups = groupDirents.filter(e => e.isFile() && deps.path.extname(e.name) === '.json').map(e => e.name);
 
         for (const group of groups) {

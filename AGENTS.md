@@ -85,7 +85,7 @@ Use Node.js 26.3.0 for server release proof by default. Bun is the package manag
 
 - Do not broaden React, Vue, TypeScript application code, or SPA framework surfaces beyond approved feature-flagged React page/panel islands without explicit approval.
 - Login and Setup are React sole owners; do not reintroduce legacy `public/login.html` / `public/setup.html` controllers. Shared helpers remain in `public/scripts/login-shared.js` and `public/scripts/setup-shared.js`.
-- Preserve character-list identity selectors: `.character_select`, `.group_select`, `.bogus_folder_select`, `data-chid`, legacy `chid`, `id="CharID${chid}"`, `.character_selected`, `.bulk_select_checkbox`, `.tags_inline`, `.ch_fav`.
+- Preserve character-list identity selectors: `.character_select`, `.bogus_folder_select`, `data-chid`, legacy `chid`, `id="CharID${chid}"`, `.character_selected`, `.bulk_select_checkbox`, `.tags_inline`, `.ch_fav`.
 - Preserve protected extension surfaces and `@sillytavern/*` imports unless a migration plan updates code, docs, and compatibility tests together.
 - Run `bun run test:compat` around regex, Tavern Helper / JS-Slash-Runner, extension, slash-command, world-info regex, and character-list DOM work.
 

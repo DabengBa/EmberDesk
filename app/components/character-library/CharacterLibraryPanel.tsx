@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { CharacterLibraryCharacterRow } from './CharacterLibraryCharacterRow';
 import { CharacterLibraryFolderRow } from './CharacterLibraryFolderRow';
-import { CharacterLibraryGroupRow } from './CharacterLibraryGroupRow';
 import {
     CharacterLibraryBackBlock,
     CharacterLibraryEmptyBlock,
@@ -116,22 +115,6 @@ function EntityRow({
                 />
             );
         }
-    }
-
-    if (entity.type === 'group' && entity.item) {
-        const item = entity.item;
-        return (
-            <CharacterLibraryGroupRow
-                id={entity.id}
-                name={String(item.name ?? '')}
-                memberNames={entity.memberNames ?? []}
-                memberCount={entity.memberCount}
-                isFav={Boolean(item.fav)}
-                avatarHtml={entity.avatarHtml}
-                tags={entity.tags}
-                onSelect={(id) => bridge.onSelectGroup?.(id)}
-            />
-        );
     }
 
     if (entity.type === 'tag' && entity.item) {

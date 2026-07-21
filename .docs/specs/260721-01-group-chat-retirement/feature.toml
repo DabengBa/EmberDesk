@@ -1,0 +1,9 @@
+contract_version = 1
+feature_slug = "group-chat-retirement"
+brief = ".docs/tech/briefs/260721-01-group-chat-retirement.md"
+doc_ids = [
+  "feature.group_authoring",
+  "page.chat_workspace",
+  "feature.next_workspace_shell",
+  "feature.character_library_panel",
+]

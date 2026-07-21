@@ -40,9 +40,11 @@ import {
     createCharacterAuthoringSession,
     shouldApplyCharacterAuthoringSaveResult,
 } from '../public/scripts/character-authoring.js';
-import {
-    createGroupAuthoringSession,
-} from '../public/scripts/group-authoring.js';
+
+// Group chat retirement: group authoring helpers are no longer product-owned.
+function createGroupAuthoringSession(..._args: any[]): any {
+    throw new Error('group_chat_feature_removed');
+}
 import {
     WorldInfoWorkbenchPanel,
     buildWorldInfoPanelFormDefaults as buildWorldInfoWorkbenchFormDefaults,
@@ -55,7 +57,7 @@ import {
 import { SettingsSurface } from './components/settings/SettingsSurface';
 import './styles/settings-surface.css';
 
-export type WorkspacePanelKind = 'worldInfo' | 'backgroundLibrary' | 'extensionsHost' | 'mainChatMessageList' | 'characterAuthoring' | 'groupAuthoring';
+export type WorkspacePanelKind = 'worldInfo' | 'backgroundLibrary' | 'extensionsHost' | 'mainChatMessageList' | 'characterAuthoring';
 type WorkspaceDockPanelKind =
     | 'aiConfig'
     | 'advancedFormatting'
@@ -64,7 +66,6 @@ type WorkspaceDockPanelKind =
     | 'backgroundLibrary'
     | 'extensionsHost'
     | 'settings'
-    | 'groupChats'
     | 'characterAuthoring';
 
 interface WorkspacePanelMount {
@@ -3914,8 +3915,6 @@ function renderPanel(kind: WorkspacePanelKind, state?: unknown, bridge?: Workspa
             return <MainChatMessageListWorkspacePanel state={state} bridge={bridge} />;
         case 'characterAuthoring':
             return <AuthoringWorkspacePanel kind="characterAuthoring" state={state} bridge={bridge} />;
-        case 'groupAuthoring':
-            return <AuthoringWorkspacePanel kind="groupAuthoring" state={state} bridge={bridge} />;
         default:
             return <WorkspacePanelPlaceholder kind={kind} />;
     }
@@ -3940,7 +3939,6 @@ const workspaceShellNavigationEntries: WorkspaceShellNavigationEntry[] = [
     { action: 'openBackgrounds', icon: 'fa-image', label: 'Backgrounds', panelKind: 'backgroundLibrary', slotKey: 'backgroundLibrary' },
     { action: 'openExtensions', icon: 'fa-cubes', label: 'Extensions', panelKind: 'extensionsHost', slotKey: 'extensionsHost' },
     { action: 'openSettings', icon: 'fa-gear', label: 'Settings', panelKind: 'settings' },
-    { action: 'openGroupChats', icon: 'fa-users', label: 'Group Chats', panelKind: 'groupChats', slotKey: 'groupChats' },
 ];
 
 function asWorkspacePanelDockDispatchResult(result: unknown): WorkspacePanelDockDispatchResult {

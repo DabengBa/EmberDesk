@@ -113,12 +113,11 @@ describe('chat route service', () => {
         ]);
     });
 
-    test('searches group chat IDs while skipping corrupt group JSON and missing files', async () => {
+    test('ignores group chat search after group chat retirement', async () => {
         const directories = makeDirectories();
-        writeFile(path.join(directories.groups, 'broken.json'), '{');
         writeFile(path.join(directories.groups, 'target.json'), JSON.stringify({
             id: 'group-1',
-            chats: ['shared', 'missing'],
+            chats: ['shared'],
         }));
         writeFile(path.join(directories.groupChats, 'shared.jsonl'), '{"chat_metadata":{}}\n{"mes":"shared group memory"}');
 
@@ -130,14 +129,8 @@ describe('chat route service', () => {
             dependencies,
         });
 
-        expect(result).toEqual([
-            expect.objectContaining({
-                file_name: 'shared',
-                message_count: 1,
-                preview_message: 'shared group memory',
-            }),
-        ]);
-        expect(dependencies.warn).toHaveBeenCalledWith(expect.stringContaining('broken.json'), expect.anything(), expect.anything());
+        expect(result).toEqual([]);
+        expect(dependencies.getChatInfo).not.toHaveBeenCalled();
     });
 
     test('returns no character search results when the character chat directory is missing', async () => {
@@ -155,7 +148,7 @@ describe('chat route service', () => {
         expect(dependencies.getChatInfo).not.toHaveBeenCalled();
     });
 
-    test('returns recent character, group, and root chats with pinned chats first and metadata preserved', async () => {
+    test('returns recent character and root chats with pinned chats first and metadata preserved', async () => {
         const directories = makeDirectories();
         writeFile(path.join(directories.characters, 'Ada.png'), 'png');
         writeFile(path.join(directories.chats, 'Ada', 'ada-old.jsonl'), '{"chat_metadata":{}}\n{"mes":"ada old"}');
@@ -182,9 +175,9 @@ describe('chat route service', () => {
             dependencies,
         });
 
-        expect(result.map(chat => chat.file_name)).toEqual(['ada-old.jsonl', 'root.jsonl', 'group-chat.jsonl']);
+        expect(result.map(chat => chat.file_name)).toEqual(['ada-old.jsonl', 'root.jsonl']);
         expect(result[0]).toMatchObject({ avatar: 'Ada.png', chat_metadata: { title: 'ada-old' } });
-        expect(result[2]).toMatchObject({ group: 'group-1', chat_metadata: { title: 'group-chat' } });
+        expect(result.some(chat => chat.group === 'group-1')).toBe(false);
         expect(dependencies.getChatInfo).toHaveBeenCalledWith(expect.stringContaining('ada-old.jsonl'), { avatar: 'Ada.png' }, true);
     });
 });

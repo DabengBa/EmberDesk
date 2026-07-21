@@ -352,6 +352,7 @@ import {
     createWorkspacePanelStateChangeHandler,
     initWorkspacePanelDrawerBridge,
 } from './scripts/workspace-panel-host-controller.js';
+import { unmountReactWorkspacePanel } from './scripts/workspace-panels-react-bridge.js';
 import { registerWorldInfoShellContext } from './scripts/world-info-shell-context.js';
 import { getCharacterDeleteCandidates, removeCharactersFromState, shouldRefreshCharacterAfterEdit } from './scripts/character-list-state.js';
 import {
@@ -400,7 +401,7 @@ export function getWorkspaceReactFeatures() {
             backgroundLibrary: true,
             extensionsHost: true,
             characterAuthoring: true,
-            groupAuthoring: true,
+            groupAuthoring: false,
         },
     };
 }
@@ -700,11 +701,13 @@ async function openWorkspaceShellCharacterLibrary() {
 }
 
 async function openWorkspaceShellGroupChats() {
-    openWorkspaceChildSlotHostImmediate('right-nav-panel');
-    selected_button = 'group_chats';
-    setMenuType('group_chats');
-    showWorkspaceChildSlotContent('rm_group_chats_block');
-    return createWorkspaceShellPanelResult('groupChats', await mountReactGroupAuthoringPanel());
+    toastr?.warning?.(t`Group chats have been removed from EmberDesk.`);
+    return createWorkspaceShellPanelResult('groupChats', {
+        kind: 'groupChats',
+        mounted: false,
+        reason: 'group-chat-feature-removed',
+        status: 'error',
+    });
 }
 
 async function openWorkspaceShellCharacterAuthoring() {
@@ -858,7 +861,7 @@ function getWorkspaceShellChromeBridge() {
                     }
                     return createWorkspaceShellPanelResult(payload?.kind || 'settings', { kind: payload?.kind || 'settings', mounted: false, status: 'success' });
                 case 'openGroupChats':
-                    return openWorkspaceShellGroupChats();
+                    return openWorkspaceShellGroupChats(); // retired: always fails closed
                 case 'openCharacterAuthoring':
                     return openWorkspaceShellCharacterAuthoring();
                 default:
@@ -1949,8 +1952,13 @@ function getGroupAuthoringReactBridge() {
                 case 'saveGroupAuthoring':
                     return applyGroupAuthoringSaveModel(payload);
                 case 'cancelAuthoring':
-                    hideLegacyGroupAuthoringEditor(true);
-                    return openWorkspaceShellGroupChats();
+                    // Remount after the click completes so the controlled draft resets without
+                    // blocking the browser event loop.
+                    window.setTimeout(async () => {
+                        await unmountReactWorkspacePanel('groupAuthoring');
+                        await mountReactGroupAuthoringPanel();
+                    }, 0);
+                    return false;
                 case 'deleteAuthoring':
                     // Keep legacy host hidden; delete handler still uses the existing confirmation control.
                     hideLegacyGroupAuthoringEditor(true);
@@ -3140,8 +3148,10 @@ function getExtensionsHostReactBridge() {
                     return undefined;
             }
         },
-        shouldRemount(actionResult) {
-            return actionResult !== false;
+        shouldRemount(actionResult, action) {
+            // The React layout effect maintains compatibility slots on every mount.
+            // Remounting that maintenance action would create an endless mount loop.
+            return action !== 'ensureExtensionCompatibilitySlots' && actionResult !== false;
         },
         remount: () => {
             void mountReactExtensionsHostPanel();
@@ -4364,9 +4374,9 @@ export function setActiveCharacter(entityOrKey) {
  * Sets the currently active group.
  * @param {object|number|string} [entityOrKey] - An entity with id property (character, group, tag), or directly an id or tag key. If not provided, the active group is reset to `null`.
  */
-export function setActiveGroup(entityOrKey) {
-    active_group = entityOrKey ? getTagKeyForEntity(entityOrKey) : null;
-    if (active_group) active_character = null;
+export function setActiveGroup(_entityOrKey) {
+    // Group chat retirement: never persist or restore an active group.
+    active_group = null;
 }
 
 export function startStatusLoading() {
@@ -4843,7 +4853,7 @@ export function tagToEntity(tag) {
 export function getEntitiesList({ doFilter = false, doSort = true } = {}) {
     let entities = [
         ...characters.map((item, index) => characterToEntity(item, index)),
-        ...groups.map(item => groupToEntity(item)),
+        // Group chat retirement: do not surface group entities in the library list.
         ...(power_user.bogus_folders ? tags.filter(isBogusFolder).sort(compareTagsForSort).map(item => tagToEntity(item)) : []),
     ];
 
@@ -8320,36 +8330,14 @@ async function executeGenerationRequestInShell(generationEnvelope) {
         chat_metadata.tainted = true;
     }
 
-    if (selected_group && !is_group_generating) {
+    if (selected_group) {
+        console.warn('Group chat generation is retired');
         if (!dryRun) {
-            // Returns the promise that generateGroupWrapper returns; resolves when generation is done
-            return generateGroupWrapper(false, type, { quiet_prompt, force_chid, signal: abortController.signal, quietImage, jsonSchema });
+            toastr?.error?.(t`Group chats have been removed from EmberDesk.`);
+            unblockGeneration?.(type);
         }
-
-        const characterIndexMap = new Map(characters.map((char, index) => [char.avatar, index]));
-        const group = groups.find((x) => x.id === selected_group);
-
-        const enabledMembers = group.members.reduce((acc, member) => {
-            if (!group.disabled_members.includes(member) && !acc.includes(member)) {
-                acc.push(member);
-            }
-            return acc;
-        }, []);
-
-        const memberIds = enabledMembers
-            .map((member) => characterIndexMap.get(member))
-            .filter((index) => index !== undefined && index !== null);
-
-        if (memberIds.length > 0) {
-            if (menu_type != 'character_edit') setCharacterId(memberIds[0]);
-            setCharacterName('');
-        } else {
-            console.log('No enabled members found');
-            unblockGeneration(type);
-            return Promise.resolve();
-        }
+        return Promise.resolve();
     }
-
     //#########QUIET PROMPT STUFF##############
     // process quiet prompt params
     if (quiet_prompt) {
@@ -11966,7 +11954,7 @@ async function applyStartupSettingsCore(data, initLoaderHandle = null) {
 
         //Load the active character and group
         active_character = settings.active_character;
-        active_group = settings.active_group;
+        active_group = null;
 
         setWorldInfoSettings(settings.world_info_settings ?? settings, data);
 
@@ -16463,8 +16451,7 @@ jQuery(async function () {
     });
 
     $('#rm_button_group_chats').on('click', function () {
-        selected_button = 'group_chats';
-        select_group_chats(null, false);
+        toastr?.warning?.(t`Group chats have been removed from EmberDesk.`);
     });
 
     $('#rm_button_back_from_group').on('click', function () {

@@ -23,7 +23,7 @@ export function getDefaultWorkspaceReactFeatures() {
             backgroundLibrary: true,
             extensionsHost: true,
             characterAuthoring: true,
-            groupAuthoring: true,
+            groupAuthoring: false,
         },
     };
 }
@@ -83,6 +83,20 @@ export async function mountReactWorkspacePanel({
     } catch (error) {
         onError(error, kind, WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.MOUNT_FAILED);
         return createWorkspacePanelFallbackResult(kind, WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.MOUNT_FAILED);
+    }
+}
+
+export async function unmountReactWorkspacePanel(kind, {
+    loadModule = loadWorkspacePanelsModule,
+    onError = (error, panelKind) => {
+        console.warn(`React ${panelKind} workspace panel failed to unmount.`, error);
+    },
+} = {}) {
+    try {
+        const panelModule = await loadModule();
+        panelModule.unmountWorkspacePanel?.(kind);
+    } catch (error) {
+        onError(error, kind);
     }
 }
 

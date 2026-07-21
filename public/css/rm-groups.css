@@ -1,3 +1,11 @@
+/* Group chat product retirement: hide remaining legacy group UI. */
+#rm_group_chats_block,
+#rm_button_group_chats,
+.group_select,
+#option_convert_to_group {
+    display: none !important;
+}
+
 /* GROUP CHATS */
 
 .group_pagination {

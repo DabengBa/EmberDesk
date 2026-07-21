@@ -152,8 +152,7 @@ function readGroupChatMap(directories, deps) {
     const map = new Map();
     let groupFiles = [];
     try {
-        groupFiles = deps.fs.readdirSync(directories.groups)
-            .filter(file => deps.path.extname(file) === '.json');
+        groupFiles = []; // group chat retirement: do not read group definitions
     } catch {
         groupFiles = [];
     }
@@ -229,10 +228,11 @@ export async function searchCanonicalChatPayload({
     const matcher = createTextMatcher(query);
 
     if (groupId) {
+        // Group chat retirement: ignore group-owned query paths.
+        return [];
         let targetGroup = null;
         try {
-            const groupFiles = deps.fs.readdirSync(directories.groups)
-                .filter(file => deps.path.extname(file) === '.json');
+            const groupFiles = []; // group chat retirement: do not read group definitions
             for (const groupFile of groupFiles) {
                 try {
                     const groupData = JSON.parse(deps.fs.readFileSync(deps.path.join(directories.groups, groupFile), 'utf8'));

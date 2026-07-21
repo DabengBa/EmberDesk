@@ -78,7 +78,6 @@ export function CharacterLibraryToolbar({
                     <ToolbarActionButton label="New" icon="fa-plus" title="Create New Character" onClick={() => bridge.clickLegacyAction('rm_button_create')} />
                     <ToolbarActionButton label="File" icon="fa-file-arrow-up" compact title="Import Character from File" onClick={() => bridge.clickLegacyAction('character_import_button')} />
                     <ToolbarActionButton label="URL" icon="fa-link" compact title="Import content from external URL" onClick={() => bridge.clickLegacyAction('external_import_button')} />
-                    <ToolbarActionButton label="Group" icon="fa-user-group" compact title="Create New Chat Group" onClick={() => bridge.clickLegacyAction('rm_button_group_chats')} />
                     <HostedDomSlot factory={() => state.extensionButtonsElement} />
                 </div>
                 <div className="flex-container flexnowrap gap8 alignItemsCenter">

@@ -9,6 +9,7 @@ import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import _ from 'lodash';
 
 import validateAvatarUrlMiddleware from '../middleware/validateFileName.js';
+import { sendGroupChatRetired } from './group-chat-retirement.js';
 import {
     getConfigValue,
     humanizedDateTime,
@@ -612,6 +613,9 @@ export function writeChatProjection(jsonlData, filePath, handle, cardName, backu
 }
 
 router.post('/save', validateAvatarUrlMiddleware, async function (request, response) {
+    if (request.body?.is_group) {
+        return sendGroupChatRetired(response);
+    }
     try {
         const handle = request.user.profile?.handle ?? null;
         const cardName = String(request.body.avatar_url).replace('.png', '');
@@ -708,6 +712,9 @@ export function getChatData(chatFilePath) {
 }
 
 router.post('/get', validateAvatarUrlMiddleware, function (request, response) {
+    if (request.body?.is_group) {
+        return sendGroupChatRetired(response);
+    }
     try {
         const dirName = String(request.body.avatar_url).replace('.png', '');
         const directoryPath = path.join(request.user.directories.chats, dirName);
@@ -746,6 +753,9 @@ router.post('/get', validateAvatarUrlMiddleware, function (request, response) {
 });
 
 router.post('/rename', validateAvatarUrlMiddleware, async function (request, response) {
+    if (request.body?.is_group) {
+        return sendGroupChatRetired(response);
+    }
     try {
         if (!request.body || !request.body.original_file || !request.body.renamed_file) {
             return response.sendStatus(400);
@@ -835,6 +845,9 @@ router.post('/rename', validateAvatarUrlMiddleware, async function (request, res
 });
 
 router.post('/delete', validateAvatarUrlMiddleware, function (request, response) {
+    if (request.body?.is_group) {
+        return sendGroupChatRetired(response);
+    }
     try {
         if (!path.extname(request.body.chatfile)) {
             request.body.chatfile += '.jsonl';
@@ -903,6 +916,9 @@ router.post('/delete', validateAvatarUrlMiddleware, function (request, response)
 });
 
 router.post('/export', validateAvatarUrlMiddleware, async function (request, response) {
+    if (request.body?.is_group) {
+        return sendGroupChatRetired(response);
+    }
     if (!request.body.file || (!request.body.avatar_url && request.body.is_group === false)) {
         return response.sendStatus(400);
     }
@@ -981,58 +997,7 @@ router.post('/export', validateAvatarUrlMiddleware, async function (request, res
 });
 
 router.post('/group/import', function (request, response) {
-    try {
-        const filedata = request.file;
-
-        if (!filedata) {
-            return response.sendStatus(400);
-        }
-
-        const chatname = humanizedDateTime();
-        const pathToUpload = path.join(filedata.destination, filedata.filename);
-        const pathToNewFile = path.join(request.user.directories.groupChats, `${chatname}.jsonl`);
-        const writeState = getCanonicalChatWriteState(request);
-        if (writeState.blocked) {
-            return sendCanonicalChatWriteBlocked(response, writeState);
-        }
-        if (writeState.ok) {
-            const result = writeCanonicalChatPayload({
-                db: writeState.db,
-                locator: getCanonicalChatLocator(request.user.directories, {
-                    ownerType: 'group',
-                    ownerId: chatname,
-                    filePath: pathToNewFile,
-                }),
-                payload: parseCanonicalChatJsonl(fs.readFileSync(pathToUpload, 'utf8')),
-                operation: 'import',
-                projectJsonl(jsonlData) {
-                    writeFileAtomicSync(pathToNewFile, jsonlData, 'utf8');
-                },
-                onProjectionFailure() {
-                    invalidateCanonicalAuditStatus(writeState.db, {
-                        scope: getCanonicalStorageSlice('chats').auditScope,
-                        handle: getRequestHandle(request),
-                        reason: 'audit_stale_after_chat_projection_failure',
-                        source: 'chat:group-import',
-                    });
-                },
-            });
-            if (!result.ok) {
-                if (!result.authorityCommitted) {
-                    return sendCanonicalChatWriteRejected(response, result);
-                }
-                return response.send({ error: true, repairKey: result.repairKey });
-            }
-            fs.unlinkSync(pathToUpload);
-            return response.send({ res: chatname });
-        }
-        fs.copyFileSync(pathToUpload, pathToNewFile);
-        fs.unlinkSync(pathToUpload);
-        return response.send({ res: chatname });
-    } catch (error) {
-        console.error(error);
-        return response.send({ error: true });
-    }
+    return sendGroupChatRetired(response);
 });
 
 router.post('/import', validateAvatarUrlMiddleware, function (request, response) {
@@ -1142,175 +1107,20 @@ router.post('/import', validateAvatarUrlMiddleware, function (request, response)
     }
 });
 
-router.post('/group/get', (request, response) => {
-    if (!request.body || !request.body.id) {
-        return response.sendStatus(400);
-    }
-
-    const id = request.body.id;
-    const chatFilePath = path.join(request.user.directories.groupChats, sanitize(`${id}.jsonl`));
-    const canonical = readCanonicalChatRoutePayload(request, getCanonicalChatLocator(request.user.directories, {
-        ownerType: 'group',
-        ownerId: String(id),
-        filePath: chatFilePath,
-    }));
-    if (canonical.active) {
-        return response.send(canonical.payload ?? {});
-    }
-
-    return response.send(getChatData(chatFilePath));
+router.post('/group/get', function (request, response) {
+    return sendGroupChatRetired(response);
 });
 
-router.post('/group/info', async (request, response) => {
-    try {
-        if (!request.body || !request.body.id) {
-            return response.sendStatus(400);
-        }
-
-        const id = request.body.id;
-        const chatFilePath = path.join(request.user.directories.groupChats, sanitize(`${id}.jsonl`));
-
-        const chatInfo = await getChatInfo(chatFilePath);
-        return response.send(chatInfo);
-    } catch (error) {
-        console.error(error);
-        return response.sendStatus(500);
-    }
+router.post('/group/info', function (request, response) {
+    return sendGroupChatRetired(response);
 });
 
-router.post('/group/delete', (request, response) => {
-    try {
-        if (!request.body || !request.body.id) {
-            return response.sendStatus(400);
-        }
-
-        const id = request.body.id;
-        const chatFilePath = path.join(request.user.directories.groupChats, sanitize(`${id}.jsonl`));
-        const writeState = getCanonicalChatWriteState(request);
-        if (writeState.blocked) {
-            return sendCanonicalChatWriteBlocked(response, writeState);
-        }
-        if (writeState.ok) {
-            if (!fs.existsSync(chatFilePath)) {
-                console.error('The group chat file was not deleted.');
-                return response.sendStatus(400);
-            }
-            const result = deleteCanonicalChat({
-                db: writeState.db,
-                locator: getCanonicalChatLocator(request.user.directories, {
-                    ownerType: 'group',
-                    ownerId: String(id),
-                    filePath: chatFilePath,
-                }),
-                projectDelete() {
-                    if (!tryDeleteFile(chatFilePath)) {
-                        throw new Error('Group JSONL chat projection was not deleted.');
-                    }
-                },
-                onProjectionFailure() {
-                    invalidateCanonicalAuditStatus(writeState.db, {
-                        scope: getCanonicalStorageSlice('chats').auditScope,
-                        handle: getRequestHandle(request),
-                        reason: 'audit_stale_after_chat_projection_failure',
-                        source: 'chat:group-delete',
-                    });
-                },
-            });
-            if (!result.ok) {
-                if (!result.authorityCommitted) {
-                    return response.sendStatus(400);
-                }
-                return response.status(500).send({
-                    error: 'Failed to project canonical group chat deletion.',
-                    repairKey: result.repairKey,
-                });
-            }
-            return response.send({ ok: true });
-        }
-
-        //Return success if the file was deleted.
-        if (tryDeleteFile(chatFilePath)) {
-            return response.send({ ok: true });
-        } else {
-            console.error('The group chat file was not deleted.');
-            return response.sendStatus(400);
-        }
-    } catch (error) {
-        console.error(error);
-        return response.sendStatus(500);
-    }
+router.post('/group/delete', function (request, response) {
+    return sendGroupChatRetired(response);
 });
 
-router.post('/group/save', async function (request, response) {
-    try {
-        if (!request.body || !request.body.id) {
-            return response.sendStatus(400);
-        }
-
-        const id = request.body.id;
-        const handle = request.user.profile?.handle ?? null;
-        const chatFilePath = path.join(request.user.directories.groupChats, sanitize(`${id}.jsonl`));
-        const chatData = request.body.chat;
-
-        if (Array.isArray(chatData)) {
-            const writeState = getCanonicalChatWriteState(request);
-            if (writeState.blocked) {
-                return sendCanonicalChatWriteBlocked(response, writeState);
-            }
-            if (writeState.ok) {
-                await assertChatIntegrity(chatData, chatFilePath, request.body.force);
-                const result = writeCanonicalChatPayload({
-                    db: writeState.db,
-                    locator: getCanonicalChatLocator(request.user.directories, {
-                        ownerType: 'group',
-                        ownerId: String(id),
-                        filePath: chatFilePath,
-                    }),
-                    payload: chatData,
-                    operation: 'save',
-                    projectJsonl(jsonlData) {
-                        writeChatProjection(
-                            jsonlData,
-                            chatFilePath,
-                            handle,
-                            String(id),
-                            request.user.directories.backups,
-                        );
-                    },
-                    onProjectionFailure() {
-                        invalidateCanonicalAuditStatus(writeState.db, {
-                            scope: getCanonicalStorageSlice('chats').auditScope,
-                            handle,
-                            reason: 'audit_stale_after_chat_projection_failure',
-                            source: 'chat:group-save',
-                        });
-                    },
-                });
-                if (!result.ok) {
-                    if (!result.authorityCommitted) {
-                        return sendCanonicalChatWriteRejected(response, result);
-                    }
-                    return response.status(500).send({
-                        error: 'Failed to project canonical chat file.',
-                        repairKey: result.repairKey,
-                    });
-                }
-                return response.send({ ok: true });
-            }
-
-            await trySaveChat(chatData, chatFilePath, request.body.force, handle, String(id), request.user.directories.backups);
-            return response.send({ ok: true });
-        } else {
-            return response.status(400).send({ error: 'The request\'s body.chat is not an array.' });
-        }
-    } catch (error) {
-        if (error instanceof IntegrityMismatchError) {
-            console.error(error.message);
-            return response.status(400).send({ error: 'integrity' });
-        }
-        console.error(error);
-        return response.status(500).send({ error: 'An error has occurred, see the console logs for more information.' });
-    }
+router.post('/group/save', function (request, response) {
+    return sendGroupChatRetired(response);
 });
 
 router.post('/search', validateAvatarUrlMiddleware, async function (request, response) {

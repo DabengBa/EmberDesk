@@ -7,7 +7,7 @@ import express from 'express';
 
 import { router as groupsRouter } from '../src/endpoints/groups.js';
 
-describe('group authoring route', () => {
+describe('group authoring route retirement', () => {
     let server;
     let baseUrl;
     let directories;
@@ -20,6 +20,11 @@ describe('group authoring route', () => {
         };
         fs.mkdirSync(directories.groups);
         fs.mkdirSync(directories.groupChats);
+        fs.writeFileSync(
+            path.join(directories.groups, 'existing.json'),
+            JSON.stringify({ id: 'existing', name: 'Existing' }),
+            'utf8',
+        );
 
         const app = express();
         app.use(express.json());
@@ -40,40 +45,24 @@ describe('group authoring route', () => {
         fs.rmSync(path.dirname(directories.groups), { recursive: true, force: true });
     });
 
-    test('persists every React group-create authoring option', async () => {
+    test('rejects group create with stable 410 and leaves disk unchanged', async () => {
+        const before = fs.readFileSync(path.join(directories.groups, 'existing.json'), 'utf8');
         const response = await fetch(`${baseUrl}/api/groups/create`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 name: 'Night Shift',
                 members: ['A.png', 'B.png'],
-                avatar_url: '/user/avatars/night-shift.png',
-                allow_self_responses: true,
                 hideMutedSprites: true,
-                activation_strategy: 3,
-                generation_mode: 2,
-                disabled_members: ['B.png'],
-                fav: true,
-                chat_id: 'night-shift-chat',
-                chats: ['night-shift-chat'],
-                auto_mode_delay: 7,
-                generation_mode_join_prefix: '<members>',
-                generation_mode_join_suffix: '</members>',
             }),
         });
 
-        expect(response).toHaveProperty('ok', true);
-        const createdGroup = await response.json();
-        expect(createdGroup).toEqual(expect.objectContaining({
-            hideMutedSprites: true,
-        }));
-
-        const savedGroup = JSON.parse(fs.readFileSync(
-            path.join(directories.groups, `${createdGroup.id}.json`),
-            'utf8',
-        ));
-        expect(savedGroup).toEqual(expect.objectContaining({
-            hideMutedSprites: true,
-        }));
+        expect(response.status).toBe(410);
+        await expect(response.json()).resolves.toEqual({
+            error: 'group_chat_feature_removed',
+            message: 'Group chat functionality has been removed from EmberDesk.',
+        });
+        expect(fs.readFileSync(path.join(directories.groups, 'existing.json'), 'utf8')).toBe(before);
+        expect(fs.readdirSync(directories.groups)).toEqual(['existing.json']);
     });
 });

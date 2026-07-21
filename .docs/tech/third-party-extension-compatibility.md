@@ -172,7 +172,7 @@ Keep these selectors and identity attributes stable unless a migration plan upda
 - `#rm_characters_block`
 - `#rm_print_characters_block`
 - `.character_select`
-- `.group_select`
+- ~~`.group_select`~~ (retired with group chat product removal)
 - `.bogus_folder_select`
 - `.character_select[data-chid]`
 - `.character_select[chid]`

@@ -67,7 +67,6 @@ describe('character list structure', () => {
             'id="rm_button_create"',
             'id="character_import_button"',
             'id="external_import_button"',
-            'id="rm_button_group_chats"',
             'id="rm_buttons_container"',
             'id="character_sort_order"',
             'id="rm_button_search"',
@@ -95,7 +94,6 @@ describe('character list structure', () => {
             ['rm_button_create', 'Character Toolbar New', 'New', 'Create New Character'],
             ['character_import_button', 'Character Toolbar File', 'File', 'Import Character from File'],
             ['external_import_button', 'Character Toolbar URL', 'URL', 'Import content from external URL'],
-            ['rm_button_group_chats', 'Character Toolbar Group', 'Group', 'Create New Chat Group'],
             ['rm_button_search', 'Character Toolbar Find', 'Find', 'Toggle search bar'],
             ['charListGridToggle', 'Character Toolbar Grid', 'Grid', 'Toggle character grid view'],
             ['bulkEditButton', 'Character Toolbar Bulk', 'Bulk', 'Bulk edit characters'],
@@ -110,7 +108,6 @@ describe('character list structure', () => {
             ['rm_button_create', 'Create New Character'],
             ['character_import_button', 'Import Character from File'],
             ['external_import_button', 'Import content from external URL'],
-            ['rm_button_group_chats', 'Create New Chat Group'],
             ['rm_button_search', 'Toggle search bar'],
             ['charListGridToggle', 'Toggle character grid view'],
             ['bulkSelectAllButton', 'Bulk select all characters'],
@@ -136,7 +133,9 @@ describe('character list structure', () => {
     test('keeps generated character row selectors and active-state hooks stable', () => {
         const scriptSource = read('public/script.js');
         const rowSource = read('app/components/character-library/CharacterLibraryCharacterRow.tsx');
-        const groupRowSource = read('app/components/character-library/CharacterLibraryGroupRow.tsx');
+        const groupRowPath = path.join(repoRoot, 'app/components/character-library/CharacterLibraryGroupRow.tsx');
+        expect(fs.existsSync(groupRowPath)).toBe(false);
+        const groupRowSource = '';
         const folderRowSource = read('app/components/character-library/CharacterLibraryFolderRow.tsx');
 
         expect(rowSource).toContain('data-chid={String(model.id)}');
@@ -145,8 +144,8 @@ describe('character list structure', () => {
         expect(rowSource).toContain('className="ch_fav"');
         expect(rowSource).toContain('className="tags tags_inline"');
         expect(rowSource).toContain('event.stopPropagation();');
-        expect(groupRowSource).toContain('className="entity_type_badge group_type_badge"');
-        expect(groupRowSource).toContain('data-grid={String(id)}');
+        // retired group row component
+        // retired group row component
         expect(folderRowSource).toContain('className={className}');
         expect(folderRowSource).toContain('{...{ tagid: String(id) }}');
         expect(scriptSource).toContain('$(\'#rm_print_characters_block .character_select\').removeClass(\'is_active\')');
