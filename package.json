@@ -199,7 +199,7 @@
         "oxlint": "1.67.0",
         "postcss": "8.5.15",
         "tailwindcss": "4.3.0",
-        "typescript": "7.0.2",
+        "typescript": "6.0.3",
         "typescript-eslint": "8.60.1",
         "vite": "8.2.1"
     }

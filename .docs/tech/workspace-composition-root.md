@@ -120,4 +120,7 @@ pnpm run docs:check
 pnpm run docs:build
 ```
 
-The root ESLint configuration has a known local toolchain gap when `@typescript-eslint/typescript-estree` reads `Cjs`; that failure is not replaced by the focused contract proof and must be reported separately when it occurs.
+The root ESLint configuration loads with the adopted TypeScript 6.0.3 and
+`typescript-eslint@8.60.1` toolchain. A full root lint run still reports
+pre-existing legacy formatting and unused-code debt; that debt is separate
+from the focused composition-root contract proof and typecheck.
