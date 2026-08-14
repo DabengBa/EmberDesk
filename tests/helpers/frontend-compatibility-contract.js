@@ -1,6 +1,6 @@
 /**
  * Provider-neutral frontend compatibility contract manifest.
- * Test-only structured data used by `bun run test:compat` and retirement gates.
+ * Test-only structured data used by `pnpm run test:compat` and retirement gates.
  * Behavior is the contract; legacy file paths are current providers, not permanent APIs.
  */
 
@@ -168,7 +168,7 @@ export const compatibilityContractEntries = Object.freeze([
         behavior: 'globalThis.SillyTavern remains a supported public compatibility object without requiring the internal React bridge',
         currentProvider: 'public browser shell (script.js / lib boundary)',
         replacementProvider: 'same public object shape supplied by React-era shell without dual legacy owner',
-        proofCommand: 'bun run test:compat',
+        proofCommand: 'pnpm run test:compat',
         deletionReadiness: 'not-ready',
     },
     {
@@ -177,7 +177,7 @@ export const compatibilityContractEntries = Object.freeze([
         behavior: 'eventSource emitter methods and event_types values remain stable for Tavern Helper and other supported consumers',
         currentProvider: 'public/scripts/events.js',
         replacementProvider: 'compatible emitter and event-name table owned by the React-era workspace shell',
-        proofCommand: 'bun run test:compat',
+        proofCommand: 'pnpm run test:compat',
         deletionReadiness: 'not-ready',
     },
     {
@@ -186,7 +186,7 @@ export const compatibilityContractEntries = Object.freeze([
         behavior: '@sillytavern/* browser imports resolve into public modules used by JS-Slash-Runner',
         currentProvider: 'public/ module tree plus import maps / alias resolution',
         replacementProvider: 'stable browser import surface without requiring legacy page owners',
-        proofCommand: 'bun run test:compat',
+        proofCommand: 'pnpm run test:compat',
         deletionReadiness: 'not-ready',
     },
     {
@@ -195,7 +195,7 @@ export const compatibilityContractEntries = Object.freeze([
         behavior: '/lib.js remains the shared browser library compatibility boundary',
         currentProvider: 'public/lib.js build/serve boundary',
         replacementProvider: 'same public import boundary after Vite-owned builds',
-        proofCommand: 'bun run test:compat',
+        proofCommand: 'pnpm run test:compat',
         deletionReadiness: 'ready-when-replacement-proven',
     },
     {
@@ -204,7 +204,7 @@ export const compatibilityContractEntries = Object.freeze([
         behavior: 'slash-command public exports remain callable for compatible extensions and automation',
         currentProvider: 'public/scripts/slash-commands.js',
         replacementProvider: 'compatible slash registry/executor reachable from the same public exports',
-        proofCommand: 'bun run test:compat',
+        proofCommand: 'pnpm run test:compat',
         deletionReadiness: 'not-ready',
     },
     {
@@ -213,7 +213,7 @@ export const compatibilityContractEntries = Object.freeze([
         behavior: 'regex exports and regex_placement numeric values remain stable',
         currentProvider: 'public/scripts/extensions/regex/engine.js',
         replacementProvider: 'compatible regex provider with identical placement values',
-        proofCommand: 'bun run test:compat',
+        proofCommand: 'pnpm run test:compat',
         deletionReadiness: 'not-ready',
     },
     {
@@ -222,7 +222,7 @@ export const compatibilityContractEntries = Object.freeze([
         behavior: 'extension drawers, wand menu, and regex mount nodes remain present and loadable',
         currentProvider: 'public/index.html templates and public/scripts/extensions.js',
         replacementProvider: 'React-owned mount protocol that keeps extension content reachable',
-        proofCommand: 'bun run test:compat',
+        proofCommand: 'pnpm run test:compat',
         deletionReadiness: 'not-ready',
     },
     {
@@ -231,7 +231,7 @@ export const compatibilityContractEntries = Object.freeze([
         behavior: 'character/group/folder rows preserve protected selectors and identity attributes',
         currentProvider: 'character list renderer (legacy or React-owned compatible rows)',
         replacementProvider: 'React Character Library as sole row producer with the same selectors',
-        proofCommand: 'bun run test:compat; bun run --cwd tests test:unit -- character-list-structure.test.js --runInBand',
+        proofCommand: 'pnpm run test:compat; pnpm --dir tests run test:unit -- character-list-structure.test.js --runInBand',
         deletionReadiness: 'proof-pending',
     },
     {
@@ -240,7 +240,7 @@ export const compatibilityContractEntries = Object.freeze([
         behavior: 'message rows remain identifiable and extension-owned TH-streaming / TH-render mutations are not swallowed by React owners',
         currentProvider: 'React main-chat rich-body owner with stable mutation-zone hosts and preserveLiveContent',
         replacementProvider: 'React main-chat owner that preserves extension lifecycle markers via data-main-chat-mutation-zone hosts',
-        proofCommand: 'bun run test:compat; bun run --cwd tests test:e2e -- third-party-extension-runtime.e2e.js --workers=1',
+        proofCommand: 'pnpm run test:compat; pnpm --dir tests run test:e2e -- third-party-extension-runtime.e2e.js --workers=1',
         deletionReadiness: 'proof-pending',
     },
     {
@@ -249,7 +249,7 @@ export const compatibilityContractEntries = Object.freeze([
         behavior: 'internal React compatibility bridge must not become a public third-party API',
         currentProvider: 'app/compat/global-compatibility-bridge.js (first-party only)',
         replacementProvider: 'no public replacement; bridge remains internal-only',
-        proofCommand: 'bun run --cwd tests test:unit -- global-compatibility-bridge.test.js third-party-extension-compatibility.test.js --runInBand',
+        proofCommand: 'pnpm --dir tests run test:unit -- global-compatibility-bridge.test.js third-party-extension-compatibility.test.js --runInBand',
         deletionReadiness: 'ready-when-replacement-proven',
     },
 ]);

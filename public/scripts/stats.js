@@ -1,6 +1,7 @@
 // statsHelper.js
 import { moment } from '../lib.js';
-import { getRequestHeaders, characters, this_chid } from '../script.js';
+import { characters, this_chid } from '../script.js';
+import { getRequestHeaders } from './request-context.js';
 import { humanizeGenTime } from './RossAscends-mods.js';
 import { callGenericPopup, POPUP_TYPE } from './popup.js';
 import { registerDebugFunction } from './power-user.js';

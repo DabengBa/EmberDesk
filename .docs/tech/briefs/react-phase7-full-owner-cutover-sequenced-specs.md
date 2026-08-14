@@ -40,7 +40,7 @@ last_updated: 2026-06-24
 ### Domain 2: Prior completed phases are fixed inputs, not redesign targets
 
 - **User expectation:** Phase 7 不得把已完成的 Phase 4 / 5 / 6 又重新改写成前置实现阶段，也不得借 cutover 名义重新讨论 Hono/Drizzle/Phase 4 state foundation。
-- **Current status:** Phase 4 archive brief、Phase 5 ADR-0008/0009/0010、Phase 6 compatibility package 都已存在，并已在 roadmap / project history 中记为 durable inputs。
+- **Current status:** Phase 4 archive brief、Phase 5 ADR-0008/0009/0010、Phase 6 compatibility package 都已存在，并已在 roadmap / project history 中记为 durable inputs。ADR-0008 的 Hono route-island 决策后来由 ADR-0013 superseded；本 brief 只把它作为历史输入，不把它视为当前实现。
 - **Change history:** 2026-06-23 创建本 brief，并把 prior-phase outputs 固定成只读输入。
 - **Implementation traceability:** source docs `.docs/tech/react-modernization-roadmap.md`, `.docs/tech/briefs/react-phase4-state-management-sequenced-specs.md`, `.docs/tech/briefs/react-phase6-extension-compat-sequenced-specs.md`, `.docs/adr/0008-hono-route-island-under-express-host.md`, `.docs/adr/0009-derived-cache-sqlite-drizzle-decision.md`, `.docs/adr/0010-express-runtime-owner-boundary.md`; delivery status `input-frozen`.
 

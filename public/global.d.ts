@@ -170,7 +170,7 @@ declare global {
     var quickReplyApi: QuickReplyApi;
 
     var SillyTavern: {
-        getContext(): typeof getContext;
+        getContext(): ReturnType<typeof getContext>;
         llm: any;
         libs: typeof libs;
     };

@@ -50,9 +50,9 @@ The unified service includes direct, group, provider-specific, dry-run, nested, 
 Focused proof:
 
 ```bash
-bun run --cwd tests test:unit -- chat-generation-command-service.test.js chat-generation-lifecycle.test.js chat-generation-auto-recovery.test.js chat-completions-openai-fallback.test.js chat-completions-google.test.js main-chat-bridge-contract.test.js react-workspace-panels-helpers.test.js --runInBand
-bun run --cwd tests test:e2e -- chat-message-streaming.e2e.js third-party-extension-runtime.e2e.js --workers=1
-bun run test:compat
+pnpm --dir tests run test:unit -- chat-generation-command-service.test.js chat-generation-lifecycle.test.js chat-generation-auto-recovery.test.js chat-completions-openai-fallback.test.js chat-completions-google.test.js main-chat-bridge-contract.test.js react-workspace-panels-helpers.test.js --runInBand
+pnpm --dir tests run test:e2e -- chat-message-streaming.e2e.js third-party-extension-runtime.e2e.js --workers=1
+pnpm run test:compat
 ```
 
 The E2E proof covers primary failure fallback, stop exclusion from auto recovery, final manual recovery, continue baseline preservation, swipe baseline preservation, pre-token failure recovery, direct command dispatch from the React composer/actions, renderer compatibility during streaming, and mobile reachability.

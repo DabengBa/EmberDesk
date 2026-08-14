@@ -1,4 +1,5 @@
-import { abortStatusCheck, getRequestHeaders } from '../script.js';
+import { abortStatusCheck } from '../script.js';
+import { getRequestHeaders } from './request-context.js';
 
 const nai_tiers = {
     0: 'Paper',

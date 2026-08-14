@@ -1,5 +1,5 @@
 
-hidden = [".config", "package-lock.json"]
+hidden = [".config", "pnpm-lock.yaml"]
 run = "chmod 755 ./start.sh && ./start.sh"
 entrypoint = "server.js"
 
@@ -12,11 +12,11 @@ channel = "stable-22_11"
 
 [env]
 XDG_CONFIG_HOME = "/home/runner/$REPL_SLUG/.config"
-PATH = "/home/runner/$REPL_SLUG/.config/npm/node_global/bin:/home/runner/$REPL_SLUG/node_modules/.bin"
-npm_config_prefix = "/home/runner/$REPL_SLUG/.config/npm/node_global"
+PNPM_HOME = "/home/runner/$REPL_SLUG/.local/share/pnpm"
+PATH = "/home/runner/$REPL_SLUG/.local/share/pnpm:/home/runner/$REPL_SLUG/node_modules/.bin"
 
 [gitHubImport]
-requiredFiles = [".replit", "replit.nix", ".config", "package.json", "package-lock.json"]
+requiredFiles = [".replit", "replit.nix", ".config", "package.json", "pnpm-lock.yaml"]
 
 [packager]
 language = "nodejs"

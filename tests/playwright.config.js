@@ -17,8 +17,8 @@ const chromeExecutablePath = process.env.PLAYWRIGHT_CHROME_EXECUTABLE || undefin
 const shouldReuseExistingServer = !process.env.CI
     && process.env.PLAYWRIGHT_REUSE_SERVER !== '0';
 const webServerCommand = [
-    shouldBuildCharacterLibraryPanel(process.env) ? 'bun run build:react:character-library' : null,
-    shouldBuildWorkspacePanels(process.env) ? 'bun run build:react:workspace-panels' : null,
+    shouldBuildCharacterLibraryPanel(process.env) ? 'pnpm run build:react:character-library' : null,
+    shouldBuildWorkspacePanels(process.env) ? 'pnpm run build:react:workspace-panels' : null,
     `node scripts/seed-dev-environment.mjs --data-root "${dataRoot}" --config "${configPath}" --user-handle "${testUser}" --user-password "${testPassword}"`,
     `node server.js --configPath "${configPath}" --port ${port}`,
 ].filter(Boolean).join(' && ');

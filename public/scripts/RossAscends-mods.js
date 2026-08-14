@@ -14,7 +14,6 @@ import {
     getEntitiesList,
     buildAvatarList,
     selectCharacterById,
-    eventSource,
     menu_type,
     substituteParams,
     sendTextareaMessage,
@@ -22,6 +21,7 @@ import {
     isSwipingAllowed,
 } from '../script.js';
 
+import { eventSource } from './events.js';
 import {
     power_user,
     send_on_enter_options,

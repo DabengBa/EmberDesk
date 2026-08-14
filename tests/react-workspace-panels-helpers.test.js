@@ -770,8 +770,9 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('import { useForm } from \'@tanstack/react-form\';');
         expect(workspacePanelSource).toContain('import { z } from \'zod\';');
         expect(read('app/world-info-workbench.tsx')).toContain('const worldInfoPanelFormSchema = z.object(');
-        expect(read('app/world-info-workbench.tsx')).toContain('export function buildWorldInfoPanelFormDefaults');
-        expect(read('app/world-info-workbench.tsx')).toContain('export function getWorldInfoPanelStatus');
+        const worldInfoWorkbenchHelpersSource = read('app/lib/world-info-workbench-helpers.ts');
+        expect(worldInfoWorkbenchHelpersSource).toContain('export function buildWorldInfoPanelFormDefaults');
+        expect(worldInfoWorkbenchHelpersSource).toContain('export function getWorldInfoPanelStatus');
         expect(read('app/world-info-workbench.tsx')).toContain('const worldInfoActionMutation = useMutation({');
         expect(read('app/world-info-workbench.tsx')).toContain('data-world-info-react-control="world-select"');
         expect(read('app/world-info-workbench.tsx')).toContain('data-world-info-react-control="search"');
@@ -1409,6 +1410,14 @@ test('renders an Extensions Host workflow through React-owned controls and expli
         expect(workbenchSource).toContain('扫描规则');
         expect(workbenchSource).not.toContain('可向量化');
         expect(workbenchSource).not.toContain('Vectorized');
+    });
+
+    test('world info keeps internal panel diagnostics out of the user-visible drawer', () => {
+        const workspacePanelSource = read('app/workspace-panels.tsx');
+
+        expect(workspacePanelSource).toContain('hideDiagnostics = false');
+        expect(workspacePanelSource).toContain('{!hideDiagnostics && (slots.length > 0 || status !== \'idle\') ? (');
+        expect(workspacePanelSource).toContain('hideDiagnostics={true}');
     });
 
 });

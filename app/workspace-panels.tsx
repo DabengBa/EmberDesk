@@ -45,17 +45,29 @@ import {
 function createGroupAuthoringSession(..._args: any[]): any {
     throw new Error('group_chat_feature_removed');
 }
+
 import {
     WorldInfoWorkbenchPanel,
-    buildWorldInfoPanelFormDefaults as buildWorldInfoWorkbenchFormDefaults,
-    getWorldInfoPanelStatus as getWorldInfoWorkbenchPanelStatus,
     type WorldInfoWorkspacePanelState as WorldInfoWorkbenchPanelState,
     type WorldInfoReactEntrySummary as WorldInfoWorkbenchEntrySummary,
     type WorldInfoReactSortOption as WorldInfoWorkbenchSortOption,
     type WorldInfoReactWorldOption as WorldInfoWorkbenchWorldOption,
 } from './world-info-workbench';
+import {
+    buildWorldInfoPanelFormDefaults as buildWorldInfoWorkbenchFormDefaults,
+    getWorldInfoPanelStatus as getWorldInfoWorkbenchPanelStatus,
+} from './lib/world-info-workbench-helpers';
 import { SettingsSurface } from './components/settings/SettingsSurface';
 import './styles/settings-surface.css';
+
+function parseFiniteNumber(value: string): number | undefined {
+    if (value.trim() === '') {
+        return undefined;
+    }
+
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+}
 
 export type WorkspacePanelKind = 'worldInfo' | 'backgroundLibrary' | 'extensionsHost' | 'mainChatMessageList' | 'characterAuthoring';
 type WorkspaceDockPanelKind =
@@ -512,8 +524,6 @@ let mountedShellChrome: WorkspaceShellChromeMount | null = null;
 interface SettingsOverlayMount {
     root: Root;
     host: HTMLElement;
-    backdrop: HTMLElement;
-    dialog: HTMLElement;
     returnFocusTo: HTMLElement | null;
     initialTab: string | null;
     panelKind: WorkspaceDockPanelKind;
@@ -1944,7 +1954,7 @@ function MainChatSlashUiPortal({
                     <ul className="autoComplete">
                         {slashUi.options.map((option, index) => (
                             <li
-                                key={`${option.name}-${index}`}
+                                key={`${option.type}:${option.name}`}
                                 className={`item${option.selected ? ' selected' : ''}${option.selectable ? '' : ' not-selectable'}`}
                                 data-option-type={option.type}
                                 data-main-chat-slash-option={option.name}
@@ -2139,6 +2149,7 @@ function WorkspacePanelShell({
     status,
     actions = [],
     legacyBoundary,
+    hideDiagnostics = false,
     slots = [],
     children,
 }: {
@@ -2147,6 +2158,7 @@ function WorkspacePanelShell({
     status: WorkspacePanelStatus;
     actions?: WorkspacePanelRecoveryAction[];
     legacyBoundary?: string;
+    hideDiagnostics?: boolean;
     slots?: WorkspacePanelLegacySlot[];
     children: ReactNode;
 }) {
@@ -2196,7 +2208,7 @@ function WorkspacePanelShell({
                     </div>
                 ) : null}
                 {children}
-                {slots.length > 0 || status !== 'idle' ? (
+                {!hideDiagnostics && (slots.length > 0 || status !== 'idle') ? (
                     <details className="workspace-panel-diagnostics" data-workspace-panel-diagnostics={kind}>
                         <summary>Diagnostics</summary>
                         <div className="flex-container flexFlowColumn gap4">
@@ -2321,7 +2333,7 @@ function AuthoringWorkspacePanel({
     }, [initialSession]);
 
     const updateDraft = useCallback((patch: Record<string, unknown>) => {
-        setAuthoringSession(currentSession => currentSession.update(patch));
+        setAuthoringSession((currentSession: typeof initialSession) => currentSession.update(patch));
         setFieldErrors({});
     }, []);
 
@@ -2360,7 +2372,7 @@ function AuthoringWorkspacePanel({
 
     const cancelDraft = useCallback(() => {
         saveGenerationRef.current += 1;
-        setAuthoringSession(currentSession => currentSession.cancel());
+        setAuthoringSession((currentSession: typeof initialSession) => currentSession.cancel());
         setFieldErrors({});
         authoringActionMutation.mutate({ action: 'cancelAuthoring', payload: { kind } });
     }, [authoringActionMutation, kind]);
@@ -2401,7 +2413,7 @@ function AuthoringWorkspacePanel({
     const updateGroupSession = (
         update: (session: ReturnType<typeof createGroupAuthoringSession>) => ReturnType<typeof createGroupAuthoringSession>,
     ) => {
-        setAuthoringSession(currentSession => update(
+        setAuthoringSession((currentSession: typeof initialSession) => update(
             currentSession as ReturnType<typeof createGroupAuthoringSession>,
         ));
         setFieldErrors({});
@@ -2409,7 +2421,7 @@ function AuthoringWorkspacePanel({
 
     return (
         <WorkspacePanelShell
-            kind={kind}
+            kind={kind as WorkspacePanelKind}
             title={title}
             status={authoringActionMutation.isError ? 'error' : 'success'}
         >
@@ -2480,11 +2492,12 @@ function AuthoringWorkspacePanel({
                     </label>
                     {kind === 'characterAuthoring' ? (
                         <>
-                            <label className="react-authoring-field" data-react-authoring-field="avatar">
+                            <div className="react-authoring-field" data-react-authoring-field="avatar">
                                 <span>Avatar</span>
                                 <input
                                     className="text_pole"
                                     value={stringDraft('avatar')}
+                                    aria-label="Avatar filename"
                                     onChange={(event) => updateDraft({ avatar: event.target.value })}
                                     placeholder="Avatar filename"
                                 />
@@ -2505,7 +2518,7 @@ function AuthoringWorkspacePanel({
                                         }
                                     }}
                                 />
-                            </label>
+                            </div>
                             <label className="react-authoring-field" data-react-authoring-field="favorite">
                                 <span>Favorite</span>
                                 <input
@@ -2760,8 +2773,13 @@ function AuthoringWorkspacePanel({
                                     className="text_pole"
                                     type="number"
                                     min={1}
-                                    value={Number(draft.autoModeDelay ?? 5)}
-                                    onChange={(event) => updateDraft({ autoModeDelay: Number(event.target.value) })}
+                                    value={typeof draft.autoModeDelay === 'number' && Number.isFinite(draft.autoModeDelay) ? draft.autoModeDelay : 5}
+                                    onChange={(event) => {
+                                        const value = parseFiniteNumber(event.target.value);
+                                        if (value !== undefined) {
+                                            updateDraft({ autoModeDelay: value });
+                                        }
+                                    }}
                                 />
                             </label>
                             <label className="react-authoring-field" data-react-authoring-field="joinPrefix">
@@ -2869,10 +2887,6 @@ function AuthoringWorkspacePanel({
     );
 }
 
-function getWorldInfoPanelStatus(bridgeState: WorldInfoWorkspacePanelState): WorkspacePanelStatus {
-    return getWorldInfoWorkbenchPanelStatus(bridgeState);
-}
-
 function getBackgroundLibraryPanelStatus(bridgeState: BackgroundLibraryWorkspacePanelState): WorkspacePanelStatus {
     if (bridgeState.showLoading || bridgeState.status === 'loading') {
         return 'loading';
@@ -2927,6 +2941,7 @@ function WorldInfoWorkspacePanel({ state, bridge }: { state?: unknown; bridge?: 
                     status={status}
                     actions={recoveryActions}
                     legacyBoundary="activation-import-regex-prompt-delete"
+                    hideDiagnostics={true}
                     slots={[
                         { id: 'global-selector', label: 'Global selector', ready: bridgeState.globalSelectorPresent },
                         { id: 'editor-selector', label: 'Editor selector', ready: Boolean(bridgeState.editorSelectorPresent && bridgeState.selectorsSeparated) },
@@ -4215,11 +4230,18 @@ function SettingsOverlayHost({
         recordWorkspacePanelDockClose(panelKind);
         onRequestClose?.();
     }, [onRequestClose, panelKind]);
+    const dialogRef = useRef<HTMLDialogElement>(null);
+    const backdropRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         const previousOverflow = document.body.style.overflow;
         document.body.style.overflow = 'hidden';
-        const host = document.getElementById('emberdesk-react-settings-overlay-host');
+        const dialog = dialogRef.current;
+        const backdrop = backdropRef.current;
+        if (dialog && !dialog.open) {
+            dialog.show();
+            dialog.focus();
+        }
         const onKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'Escape') {
                 event.preventDefault();
@@ -4227,11 +4249,7 @@ function SettingsOverlayHost({
                 handleClose();
                 return;
             }
-            if (event.key !== 'Tab' || !host) {
-                return;
-            }
-            const dialog = host.querySelector<HTMLElement>('[data-settings-overlay="true"]');
-            if (!dialog) {
+            if (event.key !== 'Tab' || !dialog) {
                 return;
             }
             const focusable = Array.from(
@@ -4256,35 +4274,45 @@ function SettingsOverlayHost({
                 first.focus();
             }
         };
+        const onBackdropClick = () => handleClose();
         window.addEventListener('keydown', onKeyDown, true);
+        backdrop?.addEventListener('click', onBackdropClick);
+
         return () => {
             document.body.style.overflow = previousOverflow;
             window.removeEventListener('keydown', onKeyDown, true);
+            backdrop?.removeEventListener('click', onBackdropClick);
+            if (dialog?.open) {
+                dialog.close();
+            }
         };
     }, [handleClose]);
 
     return (
         <>
             <div
+                ref={backdropRef}
                 className="settings-overlay-backdrop"
                 data-settings-overlay-backdrop="true"
-                onClick={() => handleClose()}
             />
-            <div
+            <dialog
+                ref={dialogRef}
                 className="settings-overlay"
                 data-settings-overlay="true"
-                role="dialog"
-                aria-modal="true"
                 aria-label="Settings"
                 tabIndex={-1}
                 data-doc-id="page.settings feature.next_workspace_shell"
+                onCancel={(event) => {
+                    event.preventDefault();
+                    handleClose();
+                }}
             >
                 <SettingsSurface
                     variant="overlay"
                     initialTab={initialTab}
                     onRequestClose={handleClose}
                 />
-            </div>
+            </dialog>
         </>
     );
 }
@@ -4332,18 +4360,12 @@ export function mountSettingsOverlay(options: {
     mountedSettingsOverlay = {
         root: createRoot(host),
         host,
-        backdrop: host,
-        dialog: host,
         returnFocusTo,
         initialTab,
         panelKind,
         onRequestClose: options.onRequestClose,
     };
     renderSettingsOverlay(mountedSettingsOverlay);
-    queueMicrotask(() => {
-        const dialog = host.querySelector<HTMLElement>('[data-settings-overlay="true"]');
-        dialog?.focus();
-    });
     return { kind: panelKind, mounted: true, status: 'mounted' as const };
 }
 

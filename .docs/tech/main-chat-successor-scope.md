@@ -75,12 +75,12 @@ Any planned change to these surfaces needs focused compatibility proof and, when
 
 | Change Surface | Minimum Validation |
 |---|---|
-| Main-chat static DOM or action affordance | `bun run --cwd tests test:unit -- chat-workspace-structure.test.js third-party-extension-compatibility.test.js --runInBand` |
-| Stored message rendering | `bun run --cwd tests test:e2e -- chat-message-rendering.e2e.js` |
-| Message layout and role/name discovery | `bun run --cwd tests test:e2e -- chat-message-layout.e2e.js` |
-| Third-party compatibility surfaces | `bun run test:compat` |
-| Semantic docs | `bun run docs:check` |
-| Interaction performance evidence | `bun run --cwd tests test:unit -- interaction-performance-report.test.js --runInBand` plus the relevant runner scenario |
+| Main-chat static DOM or action affordance | `pnpm --dir tests run test:unit -- chat-workspace-structure.test.js third-party-extension-compatibility.test.js --runInBand` |
+| Stored message rendering | `pnpm --dir tests run test:e2e -- chat-message-rendering.e2e.js` |
+| Message layout and role/name discovery | `pnpm --dir tests run test:e2e -- chat-message-layout.e2e.js` |
+| Third-party compatibility surfaces | `pnpm run test:compat` |
+| Semantic docs | `pnpm run docs:check` |
+| Interaction performance evidence | `pnpm --dir tests run test:unit -- interaction-performance-report.test.js --runInBand` plus the relevant runner scenario |
 | Streaming proof | a local deterministic streaming E2E or a documented blocker if no honest local streaming hook exists |
 
 ## Successor Gate Classification Matrix
@@ -90,7 +90,7 @@ Use this gate before turning a main-chat follow-up idea into implementation work
 | Proposal Class | Route | Examples | Minimum Proof |
 |---|---|---|---|
 | Small successor brief | Durable brief plus focused delivery plan while active | provider-error retry copy, long-chat load-more proof, mobile reachability proof, message action priority, pure helper extraction | Focused unit or E2E for the touched behavior, plus the validation row for the touched surface. |
-| Compatibility-hardening brief | Durable brief plus explicit protected-surface proof while active | selector role/name hardening, extension import compatibility, message-row identity proof, `/lib.js` behavior proof | `bun run test:compat` plus focused structure/shared-library tests and semantic docs only when user-visible behavior changes. |
+| Compatibility-hardening brief | Durable brief plus explicit protected-surface proof while active | selector role/name hardening, extension import compatibility, message-row identity proof, `/lib.js` behavior proof | `pnpm run test:compat` plus focused structure/shared-library tests and semantic docs only when user-visible behavior changes. |
 | ADR-required | numbered `.docs/adr/` decision before implementation, or a successor proposal that explicitly leads to ADR | project memory, artifact/canvas side workspace, rich in-chat work block, RAG/knowledge stack, source-aware research mode, tool execution, MCP, code execution, scheduled automations, provider protocol rewrite, framework migration, `/lib.js` replacement, database-first canonical storage | ADR must cover data ownership, migration/recovery, extension compatibility, validation gates, security boundaries, pre-send scope disclosure, post-response usage evidence, and user-visible recovery behavior. |
 | Out of scope for main-chat successor | Do not implement in this workstream without a separate roadmap or product decision | SPA migration, TypeScript application migration, multi-user permissions, scheduled automations, canonical storage replacement, broad endpoint splits unrelated to main chat | No implementation. Preserve the frozen roadmap and open a separate design only after explicit approval. |
 

@@ -1,5 +1,6 @@
 import { getPresetManager } from './preset-manager.js';
-import { extractJsonFromData, extractMessageFromData, getRequestHeaders } from '../script.js';
+import { extractJsonFromData, extractMessageFromData } from '../script.js';
+import { getRequestHeaders } from './request-context.js';
 import { extractReasoningFromData } from './reasoning.js';
 import { getStreamingReply, tryParseStreamingError, createGenerationParameters, settingsToUpdate, oai_settings } from './openai.js';
 import EventSourceStream from './sse-stream.js';

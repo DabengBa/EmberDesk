@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useForm } from '@tanstack/react-form';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { z } from 'zod';
 import {
     buildHomeRedirectUrl,
@@ -83,7 +83,6 @@ function LoginPage() {
     const [recoveryError, setRecoveryError] = useState('');
     const [loginVisible, setLoginVisible] = useState(true);
     const [lockoutSeconds, setLockoutSeconds] = useState<number | null>(null);
-    const lockoutTimerRef = useRef<number | null>(null);
 
     const csrfTokenQuery = useQuery({
         queryKey: ['login', 'csrf-token'],
@@ -271,38 +270,33 @@ function LoginPage() {
     });
 
     useEffect(() => {
-        if (lockoutSeconds === null) {
+        if (lockoutSeconds === null || lockoutSeconds <= 1) {
+            setLoginError('');
             return;
         }
 
-        if (lockoutTimerRef.current !== null) {
-            window.clearInterval(lockoutTimerRef.current);
+        setLoginError(formatLockoutMessage(lockoutSeconds));
+    }, [lockoutSeconds]);
+
+    const isLockedOut = lockoutSeconds !== null;
+
+    useEffect(() => {
+        if (!isLockedOut) {
+            return;
         }
 
-        lockoutTimerRef.current = window.setInterval(() => {
+        const timerId = window.setInterval(() => {
             setLockoutSeconds(current => {
                 if (current === null || current <= 1) {
-                    if (lockoutTimerRef.current !== null) {
-                        window.clearInterval(lockoutTimerRef.current);
-                        lockoutTimerRef.current = null;
-                    }
-                    setLoginError('');
                     return null;
                 }
 
-                const nextValue = current - 1;
-                setLoginError(formatLockoutMessage(nextValue));
-                return nextValue;
+                return current - 1;
             });
         }, 1000);
 
-        return () => {
-            if (lockoutTimerRef.current !== null) {
-                window.clearInterval(lockoutTimerRef.current);
-                lockoutTimerRef.current = null;
-            }
-        };
-    }, [lockoutSeconds]);
+        return () => window.clearInterval(timerId);
+    }, [isLockedOut]);
 
     function showRecovery() {
         setLoginVisible(false);
@@ -332,7 +326,7 @@ function LoginPage() {
                 passwordVisible={passwordVisible}
                 loginVisible={loginVisible}
                 isSubmitting={loginMutation.isPending}
-                isLockedOut={lockoutSeconds !== null}
+                isLockedOut={isLockedOut}
                 errorMessage={loginError}
                 onHandleChange={() => {
                     loginMutation.reset();

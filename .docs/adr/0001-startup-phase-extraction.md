@@ -10,7 +10,7 @@ Replace the `.then()` chain with `async main()` and extract boot phases into nam
 
 ## Why
 
-Each boot phase shares module-level state (`app`, `cliArgs`, `webpackMiddleware`) through closure, so there is no seam to test one phase without running everything before it. The inline `exitProcess` closure captured `cleanupPlugins` from `loadPlugins` and could not be tested without process-level mocking. Extracting named functions with explicit parameters makes the startup sequence self-documenting and prepares it for isolated testing.
+Each boot phase shared module-level state through closure, so there was no seam to test one phase without running everything before it. The inline `exitProcess` closure captured `cleanupPlugins` from `loadPlugins` and could not be tested without process-level mocking. Extracting named functions with explicit parameters makes the startup sequence self-documenting and prepares it for isolated testing.
 
 The `collectCleanupResources` / `initRemainingServices` split ensures signal handlers are registered at the same point in the boot sequence as the original inline closure (after plugin loading, before request-filter initialization), preserving shutdown coverage during the remaining pre-listen tasks.
 

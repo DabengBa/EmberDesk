@@ -531,6 +531,42 @@ describe('settings React route flag', () => {
 
 
 
+    test('allows two-decimal Temperature values used by chat-completion presets', () => {
+        const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'settings', 'SettingsSurface.tsx'), 'utf8');
+        const temperatureField = routeSource.match(/name="general\.temperature"[\s\S]*?\/>/)?.[0] ?? '';
+
+        expect(temperatureField).toContain('step={0.01}');
+        expect(temperatureField).not.toContain('step={0.05}');
+    });
+
+    test('synchronizes React settings saves into the live legacy runtime objects', async () => {
+        const helperModule = await import(`../app/lib/settings-helpers.js?settingsRuntimeSync=${Date.now()}-${Math.random()}`);
+        const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'settings', 'SettingsSurface.tsx'), 'utf8');
+        const liveSettings = {
+            chatCompletionSettings: { temp_openai: 1 },
+            powerUserSettings: { fast_ui_mode: true },
+            extensionSettings: { stale: true },
+        };
+        const previousSillyTavern = globalThis.SillyTavern;
+        globalThis.SillyTavern = {
+            getContext: () => liveSettings,
+        };
+
+        try {
+            expect(helperModule.syncSettingsToLegacyRuntime({
+                oai_settings: { temp_openai: 0.37 },
+                power_user: { fast_ui_mode: false },
+                extension_settings: { stale: false },
+            })).toBe(true);
+            expect(liveSettings.chatCompletionSettings.temp_openai).toBe(0.37);
+            expect(liveSettings.powerUserSettings.fast_ui_mode).toBe(false);
+            expect(liveSettings.extensionSettings.stale).toBe(false);
+            expect(routeSource).toContain('syncSettingsToLegacyRuntime(payload);');
+        } finally {
+            globalThis.SillyTavern = previousSillyTavern;
+        }
+    });
+
     test('coerces string numeric enums into form numbers for lossless save validation', async () => {
         const helperModule = await import(`../app/lib/settings-helpers.js?settingsCoerce=${Date.now()}-${Math.random()}`);
         const defaults = helperModule.buildSettingsFormDefaults({

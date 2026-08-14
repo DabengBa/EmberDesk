@@ -34,54 +34,54 @@ describe('validation gate selector', () => {
         expect(result.advisoryOnly).toBe(true);
         expect(result.commands).toEqual(expect.arrayContaining([
             expect.objectContaining({
-                command: 'bun run --cwd tests test:unit -- canonical-storage-slice-registry.test.js canonical-sqlite-cli.test.js canonical-sqlite-operator.test.js canonical-sqlite-rollout-contract.test.js canonical-sqlite-shadow-import.test.js character-read-service.test.js character-write-service.test.js --runInBand',
+                command: 'pnpm --dir tests run test:unit -- canonical-storage-slice-registry.test.js canonical-sqlite-cli.test.js canonical-sqlite-operator.test.js canonical-sqlite-rollout-contract.test.js canonical-sqlite-shadow-import.test.js character-read-service.test.js character-write-service.test.js --runInBand',
                 required: true,
                 sources: expect.arrayContaining(['.docs/adr/0011-canonical-per-user-sqlite-storage.md']),
             }),
             expect.objectContaining({
-                command: 'bun run test:compat',
+                command: 'pnpm run test:compat',
                 required: true,
                 sources: expect.arrayContaining(['.docs/tech/third-party-extension-compatibility.md']),
             }),
             expect.objectContaining({
-                command: 'bun run --cwd tests test:unit -- express5-route-compatibility.test.js --runInBand',
+                command: 'pnpm --dir tests run test:unit -- express5-route-compatibility.test.js --runInBand',
                 required: true,
                 sources: expect.arrayContaining(['AGENTS.md']),
             }),
             expect.objectContaining({
-                command: 'bun run --cwd tests test:unit -- command-line.test.js startup-critical-path.test.js startup-loader.test.js --runInBand',
+                command: 'pnpm --dir tests run test:unit -- command-line.test.js startup-critical-path.test.js startup-loader.test.js --runInBand',
                 required: true,
                 sources: expect.arrayContaining(['.docs/tech/modernization-roadmap.md']),
             }),
             expect.objectContaining({
-                command: 'bun run --cwd tests test:unit -- user-auth.test.js user-storage.test.js user-directories.test.js user-migrations.test.js --runInBand',
+                command: 'pnpm --dir tests run test:unit -- user-auth.test.js user-storage.test.js user-directories.test.js user-migrations.test.js --runInBand',
                 required: true,
                 sources: expect.arrayContaining(['.docs/adr/0003-user-account-module-split.md']),
             }),
             expect.objectContaining({
-                command: 'bun run --cwd tests test:unit -- derived-cache-sqlite.test.js interaction-performance-index.test.js --runInBand',
+                command: 'pnpm --dir tests run test:unit -- derived-cache-sqlite.test.js interaction-performance-index.test.js --runInBand',
                 required: true,
                 sources: expect.arrayContaining(['.docs/adr/0009-derived-cache-sqlite-drizzle-decision.md']),
             }),
             expect.objectContaining({
-                command: 'bun run --cwd tests test:unit -- frontend-shared-library-boundary.test.js --runInBand',
+                command: 'pnpm --dir tests run test:unit -- frontend-shared-library-boundary.test.js --runInBand',
                 required: true,
                 sources: expect.arrayContaining(['.docs/tech/frontend-shared-library-boundary.md']),
             }),
             expect.objectContaining({
-                command: 'bun run docs:check',
+                command: 'pnpm run docs:check',
                 required: true,
                 sources: expect.arrayContaining(['AGENTS.md']),
             }),
             expect.objectContaining({
-                command: 'bun run --cwd tests test:unit -- react-workspace-panels-helpers.test.js workspace-react-panel-flags.test.js --runInBand',
+                command: 'pnpm --dir tests run test:unit -- react-workspace-panels-helpers.test.js workspace-react-panel-flags.test.js --runInBand',
                 required: true,
                 sources: expect.arrayContaining(['.docs/tech/react-modernization-roadmap.md']),
             }),
             expect.objectContaining({
-                command: 'bun run build:react:workspace-panels',
+                command: 'pnpm run build:react:workspace-panels',
                 required: false,
-                sources: expect.arrayContaining(['.docs/tech/bun-workflow.md']),
+                sources: expect.arrayContaining(['.docs/tech/pnpm-workflow.md']),
             }),
         ]));
         expect(result.notes).toContain('Advisory only: final diff review may add or remove validation based on actual changes.');
@@ -93,7 +93,7 @@ describe('validation gate selector', () => {
             'public/scripts/slash-commands.js',
         ]);
 
-        expect(commands).toEqual(['bun run test:compat']);
+        expect(commands).toEqual(['pnpm run test:compat']);
         expect(commands.join('\n')).not.toContain('bun test');
     });
 
@@ -118,8 +118,8 @@ describe('validation gate selector', () => {
         ]));
 
         expect(formatted).toContain('Validation Gate Selector (advisory-only)');
-        expect(formatted).toContain('[required] bun run --cwd tests test:unit -- canonical-storage-slice-registry.test.js canonical-sqlite-cli.test.js canonical-sqlite-operator.test.js canonical-sqlite-rollout-contract.test.js canonical-sqlite-shadow-import.test.js character-read-service.test.js character-write-service.test.js --runInBand');
-        expect(formatted).toContain('[required] bun run docs:check');
+        expect(formatted).toContain('[required] pnpm --dir tests run test:unit -- canonical-storage-slice-registry.test.js canonical-sqlite-cli.test.js canonical-sqlite-operator.test.js canonical-sqlite-rollout-contract.test.js canonical-sqlite-shadow-import.test.js character-read-service.test.js character-write-service.test.js --runInBand');
+        expect(formatted).toContain('[required] pnpm run docs:check');
         expect(formatted).toContain('final diff review may add or remove validation');
     });
 
@@ -129,7 +129,7 @@ describe('validation gate selector', () => {
             'scripts/canonical-sqlite-repair.mjs',
         ]);
 
-        expect(commands).toContain('bun run --cwd tests test:unit -- canonical-storage-slice-registry.test.js canonical-sqlite-cli.test.js canonical-sqlite-operator.test.js canonical-sqlite-rollout-contract.test.js canonical-sqlite-shadow-import.test.js character-read-service.test.js character-write-service.test.js --runInBand');
+        expect(commands).toContain('pnpm --dir tests run test:unit -- canonical-storage-slice-registry.test.js canonical-sqlite-cli.test.js canonical-sqlite-operator.test.js canonical-sqlite-rollout-contract.test.js canonical-sqlite-shadow-import.test.js character-read-service.test.js character-write-service.test.js --runInBand');
     });
 
     test('selects the derived-cache gate for owning tech docs and retirement wording', () => {
@@ -139,7 +139,7 @@ describe('validation gate selector', () => {
             'derived index retirement',
         ]);
 
-        expect(commands).toContain('bun run --cwd tests test:unit -- derived-cache-sqlite.test.js interaction-performance-index.test.js --runInBand');
+        expect(commands).toContain('pnpm --dir tests run test:unit -- derived-cache-sqlite.test.js interaction-performance-index.test.js --runInBand');
     });
 
     test('formats an empty advisory result defensively', () => {
@@ -161,8 +161,8 @@ describe('validation gate selector', () => {
         });
 
         expect(output).toContain('Validation Gate Selector (advisory-only)');
-        expect(output).toContain('[required] bun run test:compat');
-        expect(output).toContain('[required] bun run docs:check');
+        expect(output).toContain('[required] pnpm run test:compat');
+        expect(output).toContain('[required] pnpm run docs:check');
         expect(output).not.toContain('bun test');
     });
 });

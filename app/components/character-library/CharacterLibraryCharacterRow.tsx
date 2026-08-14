@@ -37,7 +37,7 @@ export function CharacterLibraryCharacterRow({
             id={buildCharacterRowDomId(model.id)}
             role={bulkMode ? 'checkbox' : 'button'}
             tabIndex={0}
-            aria-selected={bulkMode ? selected : undefined}
+            aria-pressed={!bulkMode ? selected : undefined}
             aria-checked={bulkMode ? selected : undefined}
             onClick={(event) => {
                 event.preventDefault();

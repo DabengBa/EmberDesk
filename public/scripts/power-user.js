@@ -6,10 +6,7 @@ import {
     characters,
     reloadMarkdownProcessor,
     reloadCurrentChat,
-    getRequestHeaders,
     substituteParams,
-    eventSource,
-    event_types,
     getCurrentChatId,
     printCharactersDebounced,
     setCharacterId,
@@ -32,6 +29,8 @@ import {
     deleteMessage,
     settingsReady,
 } from '../script.js';
+import { eventSource, event_types } from './events.js';
+import { getRequestHeaders } from './request-context.js';
 import { isMobile, initMovingUI, favsToHotswap } from './RossAscends-mods.js';
 import {
     groups,
@@ -1414,7 +1413,7 @@ function getExampleMessagesBehavior() {
 
 //MARK: loadPowerUser
 export async function loadPowerUserSettings(settings, data) {
-    const defaultStscript = JSON.parse(JSON.stringify(power_user.stscript));
+    const defaultStscript = structuredClone(power_user.stscript);
     // Load from settings.json
     if (settings.power_user !== undefined) {
         // Migrate old preference to a new setting

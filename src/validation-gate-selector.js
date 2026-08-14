@@ -4,12 +4,12 @@ const RULES = [
     {
         id: 'frontend-compatibility',
         required: true,
-        command: 'bun run test:compat',
+        command: 'pnpm run test:compat',
         reason: 'Frontend compatibility, regex, slash-command, extension, or protected DOM surface changed.',
         sources: [
             'AGENTS.md',
             '.docs/tech/third-party-extension-compatibility.md',
-            '.docs/tech/bun-workflow.md',
+            '.docs/tech/pnpm-workflow.md',
         ],
         matches(input) {
             return matchesAny(input, [
@@ -24,11 +24,11 @@ const RULES = [
     {
         id: 'react-workspace-panels',
         required: true,
-        command: 'bun run --cwd tests test:unit -- react-workspace-panels-helpers.test.js workspace-react-panel-flags.test.js --runInBand',
+        command: 'pnpm --dir tests run test:unit -- react-workspace-panels-helpers.test.js workspace-react-panel-flags.test.js --runInBand',
         reason: 'React workspace panel bridge, host lifecycle, or guarded panel flag surface changed.',
         sources: [
             '.docs/tech/react-modernization-roadmap.md',
-            '.docs/tech/bun-workflow.md',
+            '.docs/tech/pnpm-workflow.md',
             '.docs/tech/third-party-extension-compatibility.md',
         ],
         matches(input) {
@@ -47,10 +47,10 @@ const RULES = [
     {
         id: 'react-workspace-panel-bundle',
         required: false,
-        command: 'bun run build:react:workspace-panels',
+        command: 'pnpm run build:react:workspace-panels',
         reason: 'Workspace panel bundle entry or React panel implementation changed.',
         sources: [
-            '.docs/tech/bun-workflow.md',
+            '.docs/tech/pnpm-workflow.md',
             'package.json',
             'tests/playwright.config.js',
         ],
@@ -67,12 +67,12 @@ const RULES = [
     {
         id: 'express-route-order',
         required: true,
-        command: 'bun run --cwd tests test:unit -- express5-route-compatibility.test.js --runInBand',
+        command: 'pnpm --dir tests run test:unit -- express5-route-compatibility.test.js --runInBand',
         reason: 'Express route, middleware order, or route compatibility surface changed.',
         sources: [
             'AGENTS.md',
             '.docs/adr/0010-express-runtime-owner-boundary.md',
-            '.docs/adr/0008-hono-route-island-under-express-host.md',
+            '.docs/adr/0013-remove-obsolete-web-stack-experiments.md',
         ],
         matches(input) {
             return matchesAny(input, [
@@ -87,7 +87,7 @@ const RULES = [
     {
         id: 'startup-config',
         required: true,
-        command: 'bun run --cwd tests test:unit -- command-line.test.js startup-critical-path.test.js startup-loader.test.js --runInBand',
+        command: 'pnpm --dir tests run test:unit -- command-line.test.js startup-critical-path.test.js startup-loader.test.js --runInBand',
         reason: 'Startup, config resolution, server boot, or command-line parsing changed.',
         sources: [
             'AGENTS.md',
@@ -110,7 +110,7 @@ const RULES = [
     {
         id: 'user-auth-storage',
         required: true,
-        command: 'bun run --cwd tests test:unit -- user-auth.test.js user-storage.test.js user-directories.test.js user-migrations.test.js --runInBand',
+        command: 'pnpm --dir tests run test:unit -- user-auth.test.js user-storage.test.js user-directories.test.js user-migrations.test.js --runInBand',
         reason: 'User auth, storage, directory, or migration surface changed.',
         sources: [
             'AGENTS.md',
@@ -130,7 +130,7 @@ const RULES = [
     {
         id: 'canonical-storage-rollout',
         required: true,
-        command: 'bun run --cwd tests test:unit -- canonical-storage-slice-registry.test.js canonical-sqlite-cli.test.js canonical-sqlite-operator.test.js canonical-sqlite-rollout-contract.test.js canonical-sqlite-shadow-import.test.js character-read-service.test.js character-write-service.test.js --runInBand',
+        command: 'pnpm --dir tests run test:unit -- canonical-storage-slice-registry.test.js canonical-sqlite-cli.test.js canonical-sqlite-operator.test.js canonical-sqlite-rollout-contract.test.js canonical-sqlite-shadow-import.test.js character-read-service.test.js character-write-service.test.js --runInBand',
         reason: 'Canonical SQLite repair tooling, rollout contract, rollback blockers, or DB-first storage authority changed.',
         sources: [
             '.docs/adr/0011-canonical-per-user-sqlite-storage.md',
@@ -162,7 +162,7 @@ const RULES = [
     {
         id: 'derived-cache',
         required: true,
-        command: 'bun run --cwd tests test:unit -- derived-cache-sqlite.test.js interaction-performance-index.test.js --runInBand',
+        command: 'pnpm --dir tests run test:unit -- derived-cache-sqlite.test.js interaction-performance-index.test.js --runInBand',
         reason: 'Derived SQLite helper, retired character-index helper, or historical interaction performance cache proof changed.',
         sources: [
             '.docs/adr/0009-derived-cache-sqlite-drizzle-decision.md',
@@ -183,16 +183,15 @@ const RULES = [
     {
         id: 'shared-lib',
         required: true,
-        command: 'bun run --cwd tests test:unit -- frontend-shared-library-boundary.test.js --runInBand',
+        command: 'pnpm --dir tests run test:unit -- frontend-shared-library-boundary.test.js --runInBand',
         reason: 'Shared /lib.js source or browser compatibility boundary changed.',
         sources: [
             '.docs/tech/frontend-shared-library-boundary.md',
-            '.docs/tech/bun-workflow.md',
+            '.docs/tech/pnpm-workflow.md',
         ],
         matches(input) {
             return matchesAny(input, [
                 /^public\/lib\.js$/,
-                /^webpack\.config\.js$/,
                 /^\/?lib\.js$/i,
                 /^(shared library|shared browser library)$/i,
             ]);
@@ -201,7 +200,7 @@ const RULES = [
     {
         id: 'semantic-docs',
         required: true,
-        command: 'bun run docs:check',
+        command: 'pnpm run docs:check',
         reason: 'Semantic documentation database changed.',
         sources: [
             'AGENTS.md',

@@ -6,7 +6,7 @@ This runbook documents the Hostinger-hosted sttest deployment for EmberDesk. It 
 
 Related docs:
 
-- [bun-workflow.md](bun-workflow.md) - local package manager, runtime, and Docker install contract
+- [pnpm-workflow.md](pnpm-workflow.md) - local package manager, runtime, and Docker install contract
 - [server-startup-orchestration.md](server-startup-orchestration.md) - server boot phases after the container starts
 - [config-resolution.md](config-resolution.md) - config and data-root resolution consumed by the deployed server
 
@@ -144,8 +144,8 @@ This deployment runbook has no owning semantic product ID. Related user-facing s
 
 Operational binding points:
 
-- `Dockerfile` - production image build and Bun install behavior
-- `docker/build-lib.js` - browser library precompile during image build
+- `Dockerfile` - production image build and pnpm install behavior
+- `pnpm run build:lib` - Vite browser library precompile during image build
 - `src/healthcheck.js` - container healthcheck entry point
 - `server.js` - deployed process entry point
 - `src/server-main.js` - server boot orchestration inside the container

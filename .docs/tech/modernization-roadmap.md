@@ -14,8 +14,8 @@ Closure evidence:
 
 - Delivered slice history is recorded in `.docs/PROJECT_HISTORY.md`.
 - User intent and delivery traceability are recorded in `.docs/tech/briefs/260605-02-character-route-service-extraction.md` through `.docs/tech/briefs/260605-11-roadmap-freeze-successor-decision.md`.
-- Node.js 26.3.0 release validation passed for root/tests lint, compatibility, semantic docs, shared library, character route/index, Express route order, startup/config, user/auth/login/setup, and full unit suite.
-- Documentation topology closure passed `bun run docs:check` without changing `.docs/db` user-visible semantics.
+- Node.js 26.3.0 release validation passed historically for root/tests lint, compatibility, semantic docs, shared library, character route/index, Express route order, startup/config, user/auth/login/setup, and full unit suite.
+- Documentation topology closure passed `pnpm run docs:check` without changing `.docs/db` user-visible semantics.
 - Post-freeze successor evidence is recorded outside this roadmap in `.docs/PROJECT_HISTORY.md`, successor briefs, semantic docs, and owning compatibility docs. The main-chat successor proof set closed on 2026-06-08 and is owned by `.docs/tech/main-chat-successor-scope.md`, `.docs/tech/main-chat-baseline-validation.md`, `.docs/tech/main-chat-rendering-call-chain.md`, and `.docs/tech/main-chat-performance-evidence.md`.
 
 ## Goals
@@ -28,11 +28,11 @@ Closure evidence:
 
 ## Assumptions
 
-- Node.js 26.3.0 Current (`>=26.3.0 <27`) remains the supported application runtime.
-- Bun remains the package manager and script runner, not the default application runtime.
+- Node.js 26.7.0 Current (`>=26.7.0 <27`) is the supported application runtime.
+- pnpm is the package manager and script runner; Bun is not used for dependency management or bundling.
 - Express 5 remains the server framework.
 - The browser application remains HTML/CSS/jQuery during this roadmap.
-- Webpack remains scoped to the `/lib.js` shared browser-library boundary until a replacement proves the same contract.
+- Vite is the only `/lib.js` shared browser-library build path.
 - SQLite and DiskCache remain derived caches only; file-backed user data remains canonical.
 
 ## Open Questions
@@ -66,12 +66,12 @@ Execution record: [modernization-phase0-baseline.md](modernization-phase0-baseli
 1. Establish the current validation baseline.
    - Run focused commands for the touched area before each slice.
    - Keep known unrelated failures documented instead of hiding them behind broad rewrites.
-   - Use `bun run test:compat` as the mandatory gate for regex, extension, slash-command, message-rendering, world-info regex, and character-list DOM work.
+   - Use `pnpm run test:compat` as the mandatory gate for regex, extension, slash-command, message-rendering, world-info regex, and character-list DOM work.
 
 2. Keep documentation topology healthy.
    - Update `.docs/tech/` for implementation architecture.
    - Update `.docs/db/` only when user-visible pages, features, or terms change.
-   - Run `bun run docs:check` or `bun run docs:build` after semantic database changes.
+   - Run `pnpm run docs:check` or `pnpm run docs:build` after semantic database changes.
 
 3. Keep performance claims measurable.
    - Use existing startup and interaction runners before claiming a win.
@@ -81,7 +81,7 @@ Phase 0 result:
 
 - Whole-repo lint is green after excluding vendored third-party extension build artifacts and fixing first-party lint debt.
 - The core modernization gates are green locally: semantic docs, compatibility, Express route/order, shared browser library, startup/config, user/auth/setup/login, character-list focused tests, performance tooling tests, and full unit suite.
-- Historical Phase 0 proof ran under Node 25.4.0, while the project runtime contract is now Node.js 26.3.0 Current. Treat those historical results as useful diagnostic evidence, not release proof.
+- Historical Phase 0 proof ran under Node 25.4.0, while the project runtime contract is now Node.js 26.7.0 Current. Treat those historical results as useful diagnostic evidence, not release proof.
 - Full Playwright E2E and performance runners were skipped because Phase 0 did not change user-visible behavior or implement a performance slice.
 
 ### Phase 1: Complexity Mapping
@@ -193,7 +193,7 @@ Phase 1 result:
    - Run the application with Node by default.
    - Keep `src/electron` npm-owned until its lifecycle scripts and packaging are deliberately migrated.
 
-2. Keep Webpack until `/lib.js` replacement proof exists.
+2. Keep Vite as the only `/lib.js` build path.
    - Verify named exports and default export shape.
    - Verify legacy global shims.
    - Verify CommonJS interop such as `slideToggle`.
@@ -246,13 +246,13 @@ Phase 1 result:
 | Change Surface | Minimum Validation |
 |---|---|
 | Startup/config | Focused command-line and startup tests |
-| Express route/order | `bun run --cwd tests test:unit -- express5-route-compatibility.test.js --runInBand` |
+| Express route/order | `pnpm --dir tests run test:unit -- express5-route-compatibility.test.js --runInBand` |
 | User/auth/storage | Matching `user-*`, login/setup, and relevant E2E tests |
-| Frontend compatibility surface | `bun run test:compat` |
-| Shared browser library | `bun run test:unit -- frontend-shared-library-boundary.test.js --runInBand` |
+| Frontend compatibility surface | `pnpm run test:compat` |
+| Shared browser library | `pnpm --dir tests run test:unit -- frontend-shared-library-boundary.test.js --runInBand` |
 | Character-list state/rendering | Character-list state, render-state, and structure tests |
 | Performance change | Startup or interaction performance runner with scenario evidence |
-| Semantic docs | `bun run docs:check` or `bun run docs:build` |
+| Semantic docs | `pnpm run docs:check` or `pnpm run docs:build` |
 | Character route helper/service | Focused helper/route tests plus interaction-performance index tests if list/get/index behavior changes |
 | Character mutation side effects | Thumbnail write-time pregeneration tests and interaction-performance index proof that character mutations do not recreate or refresh the retired character-index sidecar |
 | Chat route helper/service | Focused chat endpoint/import/backup-helper tests plus interaction-performance index tests when chat aggregate authority or canonical audit invalidation changes |
@@ -261,7 +261,7 @@ Phase 1 result:
 
 ## Known Execution Gaps
 
-- Node.js 26.3.0 release validation proof now exists for the current modernization surfaces: root lint, tests lint, compatibility, semantic docs check, shared browser library, character route/index, Express route order, startup/config, user/auth/login/setup, and the full unit suite.
+- Historical Node.js 26.3.0 release validation proof covers the modernization surfaces listed here; current release proof must use the Node.js 26.7.0 contract.
 - Full Playwright E2E remains conditional. The 2026-06-05 release validation sweep skipped Playwright because the validation scope changed no visible browser behavior. Later focused browser follow-ups validated character-library entry affordance, chat send-form/options affordance, stored-message rendering, deterministic streaming, long-chat load-more stability, and message action discoverability through targeted E2E or runner proof. Continue running affected E2E or focused browser checks when a later slice changes a primary browser flow, page structure, CTA sequencing, or visible UI behavior.
 - Startup and interaction performance runners remain required before claiming latency wins.
 - Vendored third-party extension artifacts are intentionally excluded from whole-repo lint; do not auto-format or refactor them as first-party source.
@@ -277,18 +277,18 @@ Phase 1 result:
 - 2026-06-04: World-info batch import delivered. The import entry now accepts multiple selected files and dropped files, filters unsupported formats, caps batch size, pre-scans conflicts, offers skip/overwrite/ask-per-conflict choices, processes files sequentially through the existing single-file importer, supports cancel-remaining, and summarizes imported/failed/skipped/unprocessed results without changing converter output, world-info schema, editor card DOM identity, or `/api/worldinfo/import` payload shape.
 - 2026-06-04: World-info batch import review hardening delivered. Batch import now keeps result objects factory-owned, reports conflict pre-scan fallback to the user, uses a named busy-state option instead of positional `arguments`, exposes More-menu actions as keyboard-operable menu items, localizes new batch/overwrite feedback in `zh-cn`, and shows a checking-target progress state while overwrite confirmation is pending instead of claiming the file is already imported.
 - 2026-06-04: OpenAI/provider capability helper extraction delivered. `public/scripts/openai-provider-capabilities.js` now owns pure model, reasoning, verbosity, and media-support helpers, while `public/scripts/openai.js` keeps compatibility wrappers and request assembly. Focused unit tests now exercise structured descriptors and the current helper branches without changing provider UI or payload semantics.
-- 2026-06-04: Node 26.3.0 runtime contract delivered. The project runtime is Node.js 26.3.0 Current (`>=26.3.0 <27`), Bun remains the package manager and script runner, and local non-26 proof is diagnostic only. The workstation shell now resolves `node` to `v26.3.0`, so the blocker is no longer toolchain availability but rerunning the gates under the supported runtime.
+- 2026-06-04: Historical Node 26.3.0 runtime contract delivered. It was later superseded by the Node.js 26.7.0 contract and pnpm 11.20.0 package-manager contract; local non-contract proof is diagnostic only.
 - 2026-06-04: Derived SQLite sidecar helper foundation delivered. `src/derived-cache-sqlite.js` now owns reusable derived SQLite lifecycle, PRAGMA setup, status reporting, schema reset, dispose, and reset-threshold behavior, while the character index keeps business rules and canonical file-backed behavior. Focused proof lives in `tests/derived-cache-sqlite.test.js`.
-- 2026-06-04: oxlint fast-lane preflight delivered. Root `bun run lint:fast` now runs `oxlint src public *.js` with `.oxlintrc.json` preserving the existing ESLint ignored-path boundary. `bun run lint` remained the authoritative ESLint gate, and `bun run --cwd tests lint` was left as the known red baseline for the follow-up ESLint flat-config slice.
-- 2026-06-04: ESLint 10 flat config upgrade delivered. Root and tests linting now use `eslint.config.js` / `tests/eslint.config.js`, legacy `.eslintrc.cjs` files are retired, tests own their Jest and Playwright lint plugins directly, `bun run lint` and `bun run --cwd tests lint` both pass, and `bun run lint:fast` remains a non-authoritative oxlint preflight.
-- 2026-06-05: Node 26.3.0 release validation sweep completed. The working shell reported `node v26.3.0`, `npm 11.16.0`, `npx 11.16.0`, and Bun 1.3.14. Root lint, tests lint, compatibility, semantic docs check, shared-library proof, character route/index proof, Express route-order proof, startup/config proof, user/auth/login/setup proof, and the full unit suite passed under Node 26.3.0; the full unit suite covered 63 suites and 689 tests. Playwright was intentionally skipped because this validation scope changed no visible browser behavior.
+- 2026-06-04: oxlint fast-lane preflight delivered. Root `pnpm run lint:fast` now runs `oxlint src public *.js` with `.oxlintrc.json` preserving the existing ESLint ignored-path boundary. `pnpm run lint` remained the authoritative ESLint gate, and `pnpm --dir tests run lint` was left as the known red baseline for the follow-up ESLint flat-config slice.
+- 2026-06-04: ESLint 10 flat config upgrade delivered. Root and tests linting now use `eslint.config.js` / `tests/eslint.config.js`, legacy `.eslintrc.cjs` files are retired, tests own their Jest and Playwright lint plugins directly, `pnpm run lint` and `pnpm --dir tests run lint` both pass, and `pnpm run lint:fast` remains a non-authoritative oxlint preflight.
+- 2026-06-05: Historical Node 26.3.0 release validation sweep completed. The working shell reported `node v26.3.0`, `npm 11.16.0`, `npx 11.16.0`, and Bun 1.3.14. The listed lint, compatibility, docs, shared-library, route, startup/config, user/auth/setup, and unit gates passed at that historical runtime; Playwright was intentionally skipped because that validation scope changed no visible browser behavior.
 - 2026-06-05: Character-list page-slice helper delivered. `getCharacterListPageEntities()` now lives in `public/scripts/character-list-render-state.js`, preserving current `snapshot.entities` slicing semantics while leaving jQuery pagination, DOM patching, row identity, `CHARACTER_PAGE_LOADED`, and extension compatibility owned by `public/script.js`.
 - 2026-06-05: Chat route search/recent service delivered. `src/endpoints/chat-route-service.js` now owns deterministic `/api/chats/search` and `/api/chats/recent` assembly, including character/group/root chat discovery, query matching, pinned sorting, metadata flag propagation, and corrupt/missing-file skips. `src/endpoints/chats.js` keeps Express response handling, JSONL parsing through `getChatInfo()`, save/rename/delete/import/export response shapes, backup lifecycle, and chat-stat dirty marking.
 - 2026-06-05: Derived cache release hardening evidence closed. No code behavior changed; the release-risk matrix is covered by focused proof for unsupported `node:sqlite`, `force_off`, startup status, cache path guards, PRAGMA baseline, schema-version reset, corrupt DB rebuild, reset-threshold disable, keyed dispose, character-read filesystem fallback, circuit-disabled throw behavior, and `/api/characters/get` index refresh failures.
 - 2026-06-05: Background panel controller boundary delivered. `public/scripts/background-panel-controller.js` now owns root-scoped loading-state helper behavior for the background library panel, while `public/scripts/backgrounds.js` keeps request flow, upload/delete/rename/folder behavior, thumbnail handling, slash-command registration, selectors, and visible copy unchanged. Focused proof lives in `tests/background-panel-controller.test.js`.
 - 2026-06-05: Compatibility hardening pass delivered. `tests/third-party-extension-compatibility.test.js` now freezes slash-command public exports in addition to extension mount points, Tavern Helper assets, `@sillytavern/*` aliases, key module exports, event values, regex placement values, and character-list row identity. `tests/interaction-performance-index.test.js` now verifies character read-service envelope fields stay internal to the route layer.
-- 2026-06-05: Build dependency closure delivered. Node.js 26.3.0 remains the application runtime, Bun 1.3.14 remains package manager/script runner, Webpack remains scoped to `/lib.js`, ESLint remains the authoritative lint gate, oxlint remains a warning-only fast preflight, and no package, lockfile, build, Docker, or Electron lifecycle drift required a code change.
-- 2026-06-05: Documentation topology closure delivered. `.docs/tech/briefs/README.md` now indexes retained closure briefs as persistent intent records, and this roadmap now distinguishes durable briefs from spec-local `design.md`/`plan.md` process artifacts that are deleted during wrap-up. `.docs/db` semantics were unchanged and `bun run docs:check` stayed green.
+- 2026-06-05: Historical build dependency closure delivered. At that point Node.js 26.3.0, Bun 1.3.14, and Webpack `/lib.js` were the recorded roles; ADR-0013 later removed Webpack and the current runtime contract is Node.js 26.7.0. ESLint remains the authoritative lint gate and oxlint remains a warning-only fast preflight.
+- 2026-06-05: Documentation topology closure delivered. `.docs/tech/briefs/README.md` now indexes retained closure briefs as persistent intent records, and this roadmap now distinguishes durable briefs from spec-local `design.md`/`plan.md` process artifacts that are deleted during wrap-up. `.docs/db` semantics were unchanged and `pnpm run docs:check` stayed green.
 
 ## Recommended Next Work
 
@@ -340,11 +340,11 @@ Durable user intent for these steps lives in `.docs/tech/briefs/260605-02-charac
    - Treat any public-surface removal as a separate migration, not cleanup.
 
 7. Build and dependency closure.
-   - Delivered 2026-06-05: Keep Bun as package/script runner and Node as application runtime.
-   - Audit Webpack `/lib.js` boundary, oxlint fast-lane status, ESLint authority, and dependency drift without broad churn.
+   - Delivered 2026-06-05: The former Bun package/script-runner decision was superseded by pnpm 11.20.0; Node remains the application runtime.
+   - Audit the then-current Webpack `/lib.js` boundary, oxlint fast-lane status, ESLint authority, and dependency drift without broad churn.
 
 8. Release validation sweep.
-   - Delivered 2026-06-05: Run the current release gate under Node.js 26.3.0: lint, tests lint, docs build/check, compatibility, focused startup/config, route-order, shared-library, user/auth/setup/login, and full unit suite.
+   - Delivered 2026-06-05: Run the historical release gate under Node.js 26.3.0: lint, tests lint, docs build/check, compatibility, focused startup/config, route-order, shared-library, user/auth/setup/login, and full unit suite.
    - Run Playwright E2E only for release or UI slices where the route changed visible browser behavior.
 
 9. Documentation and topology closure.

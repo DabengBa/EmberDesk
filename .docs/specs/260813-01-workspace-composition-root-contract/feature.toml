@@ -1,0 +1,4 @@
+contract_version = 1
+feature_slug = "workspace-composition-root-contract"
+brief = ".docs/tech/briefs/260813-01-workspace-composition-root-contract.md"
+doc_ids = ["term.shared_browser_library", "feature.startup_bootstrap", "page.chat_workspace"]

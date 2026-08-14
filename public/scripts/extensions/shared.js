@@ -1,4 +1,5 @@
-import { CONNECT_API_MAP, createModelIcon, getRequestHeaders } from '../../script.js';
+import { CONNECT_API_MAP, createModelIcon } from '../../script.js';
+import { getRequestHeaders } from '../request-context.js';
 import { extension_settings, openThirdPartyExtensionMenu } from '../extensions.js';
 import { t } from '../i18n.js';
 import { oai_settings, ZAI_ENDPOINT } from '../openai.js';

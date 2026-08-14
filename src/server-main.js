@@ -46,7 +46,6 @@ import {
     migratePublicOverrides,
 } from './users.js';
 
-import getWebpackServeMiddleware from './middleware/webpack-serve.js';
 import getViteLibServeMiddleware from './middleware/vite-lib-serve.js';
 import { getReactLoginServeMiddleware } from './middleware/react-login-serve.js';
 import basicAuthMiddleware from './middleware/basicAuth.js';
@@ -109,7 +108,6 @@ https.globalAgent = new https.Agent({ keepAlive: cliArgs.enableKeepAlive });
 
 const app = express();
 const startupProfiler = createServerStartupProfiler(process.env.EMBERDESK_STARTUP_PROFILE);
-let webpackMiddleware;
 const publicRoot = path.join(serverDirectory, 'public');
 
 /**
@@ -261,8 +259,6 @@ async function registerMiddleware(app, cli) {
     // Host frontend assets
     const viteLibMiddleware = getViteLibServeMiddleware();
     app.use(viteLibMiddleware);
-    webpackMiddleware = getWebpackServeMiddleware();
-    app.use(webpackMiddleware);
     app.use(REACT_LOGIN_BASE_PATH, getReactLoginServeMiddleware());
     app.use(userCssMiddleware);
     app.use(express.static(path.join(serverDirectory, 'public'), {}));
@@ -340,7 +336,7 @@ async function collectCleanupResources() {
 }
 
 /**
- * Phase 4b: Initialize request filter, request proxy, and compile frontend.
+ * Phase 4b: Initialize request filter and request proxy.
  * Runs after cleanup resources and signal handlers are in place.
  * @returns {Promise<void>}
  */
@@ -358,7 +354,6 @@ async function initRemainingServices() {
 
     await startupProfiler.measure('initRequestProxy', () => Promise.resolve(initRequestProxy({ enabled: cliArgs.requestProxyEnabled, url: cliArgs.requestProxyUrl, bypass: cliArgs.requestProxyBypass, enableKeepAlive: cliArgs.enableKeepAlive, privateRequestFilterEnabled: requestFilterOptions.enabled })));
 
-    await startupProfiler.measure('webpackCompile', () => webpackMiddleware.runWebpackCompiler({ pruneCache: true }));
     startupProfiler.mark('preSetupTasks:end');
 }
 

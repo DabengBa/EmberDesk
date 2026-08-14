@@ -1,0 +1,5 @@
+minimumReleaseAge: 10080
+trustPolicy: no-downgrade
+trustPolicyExclude:
+  - protobufjs@6.11.6
+  - semver@6.3.1

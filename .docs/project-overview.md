@@ -26,11 +26,11 @@ It is not optimized for users who want a managed cloud product or a minimal one-
 
 ## Architecture And Boundaries
 
-- Runtime: Node.js 26.3.0 Current (`>=26.3.0 <27`)
-- Package manager and task runner: Bun 1.3.14
+- Runtime: Node.js 26.7.0 Current (`>=26.7.0 <27`)
+- Package manager and task runner: pnpm 12.0.0-rc.5
 - Server: Express-based API and startup pipeline
 - Frontend: HTML/CSS/jQuery compatibility substrate plus progressive React page/panel islands; the root `/` workspace shell boundary has been reopened as an opt-in same-entry React chrome/layout takeover path rather than a separate SPA route
-- Build: Bun-managed scripts plus Vite for shared browser library output, the shared React app, and guarded React panel bundles; Webpack remains a deprecated `/lib.js` fallback
+- Build: pnpm-managed scripts plus Vite for shared browser library output, the shared React app, and workspace panel bundles
 - Entry point: `server.js` -> `src/server-main.js`
 - React migration: `/login`, `/setup`, `/settings`, Character Library, Main Chat Message List, World Info, Background Library, Extensions Host, Character Authoring, Group Authoring, and the same-entry `/` shell have entered React migration. Their final destination is now React as sole runtime owner, not permanent guarded fallback; see [ADR-0012](adr/0012-react-migrated-surface-legacy-retirement.md). The program remains same-entry and does not introduce `/workspace-next`.
 - Workspace panel and shell bootstrap: the current payload and guarded bundles remain the migration baseline while retirement work is unfinished. Each migrated surface must replace its flag-off/build-failure branch, hidden host, and legacy action owner before declaring completion; release rollback is a previous application version rather than a live legacy path.
@@ -38,6 +38,7 @@ It is not optimized for users who want a managed cloud product or a minimal one-
 - Legacy cutover policy: [.docs/tech/legacy-cutover-ledger.md](tech/legacy-cutover-ledger.md) records the code-fact baseline and current deletion order: standalone React pages first, existing panel foundations next, and workspace-shell/main-chat owners last.
 - Main-chat React boundary: React is the sole runtime owner of the main-chat message list, composer, slash-status shell, actions, mutation zones, long-chat windowing, and reading-position restore inside `#chat`. One framework-neutral generation service owns request commands and lifecycle for visible and quiet/background families; framework-neutral `chat-message-render-service` produces formatted HTML without owning DOM insertion. Product list dual-path flags are retired. Public aliases such as `Generate()`, `printMessages`, and `showMoreMessages` remain thin compatibility adapters, not product dual-owner surfaces.
 - World Info facade boundary: `public/scripts/world-info.js` remains the World Info compatibility facade, while `public/scripts/world-info-shell-context.js` provides a narrow internal shell-context seam for startup-safe access to shell-owned state and `eventSource` methods.
+- Workspace composition boundary: `public/script.js` is the browser Workspace Composition Root and public compatibility entry. It installs the explicit `globalThis.SillyTavern` API, wires `events.js` and `request-context.js`, registers the World Info shell context, preserves approved compatibility exports, and calls `bootstrapWorkspace()`. It is not yet assembly-only; remaining domain state, DOM handlers, chat/generation behavior, and React bridge coordination stay in the root until separately verified extraction waves.
 - Storage authority boundary: [ADR-0011](adr/0011-canonical-per-user-sqlite-storage.md) provides the delivered per-user canonical SQLite foundation. Character metadata, character chat stats, full World Info, the settings document, secret records, and managed media now have gated canonical authority paths. The remaining storage sequence first maintains independent slice gates, then splits chat into foundation, authority cutover, and query/recovery packages. Persona records and extension preferences remain inside the revisioned settings document; extension discovery/worktrees remain filesystem/Git-owned because the global registry is server-wide; vector chunks and embeddings remain derived. SQLite owns structured identity, relationships, lifecycle, audit status, and file references where independent enforcement is needed, while large content stays in managed files. The executable sequence lives in [canonical-sqlite-storage-roadmap](tech/canonical-sqlite-storage-roadmap.md).
 - Canonical storage foundation: EmberDesk now includes a dedicated canonical SQLite manager at `src/canonical-sqlite.js`, a migration runner at `src/canonical-sqlite-migrations.js`, character, World Info, settings, secret, and managed-media shadow import/audit owners, a slice registry at `src/canonical-storage-slice-registry.js`, a rollout/rollback contract helper at `src/canonical-sqlite-rollout-contract.js`, multi-slice operator status/repair helpers at `src/canonical-sqlite-operator.js`, canonical repair CLI entry points at `scripts/canonical-sqlite-audit.mjs` and `scripts/canonical-sqlite-repair.mjs`, canonical query helpers at `src/endpoints/character-store.js`, `src/endpoints/world-info-store.js`, and managed-media read/write services. Per-user `storage` directories live under `DATA_ROOT/<handle>/storage`; global compatibility flags can be overridden by an optional descriptor-owned slice field, and operator status reports each effective source. This foundation is fail-closed: DB-first reads exist only after persisted audit summaries pass, canonical write paths can commit SQLite first while projecting compatibility files, and unresolved projection repairs block rollback claims until operator tooling clears or re-audits them.
 
@@ -47,7 +48,7 @@ Current architectural boundaries:
 - `src/` owns server routing, startup, data access, and operational utilities
 - `.docs/tech/` owns implementation and architecture notes
 - `.docs/db/` owns user-facing semantic product docs for pages, features, and terms
-- `tests/` owns Jest unit/compatibility coverage and Playwright E2E proof run through root Bun scripts
+- `tests/` owns Jest unit/compatibility coverage and Playwright E2E proof run through root pnpm scripts
 
 Key module structure:
 
@@ -70,6 +71,7 @@ Key module structure:
 - `src/endpoints/canonical-chat-backup-restore-service.js` — canonical chat backup bundle and validated restore owner that binds attachment manifests and records restore-journal state
 - `src/endpoints/character-store.js` — canonical character row helper that reconstructs route-compatible read payloads and now also normalizes DB-backed character metadata writes
 - `public/lib.js` — browser shared-library boundary for first-party modules and extensions; it preserves both source imports and bundled `/lib.js` output (see [frontend-shared-library-boundary](tech/frontend-shared-library-boundary.md) and [ADR-0006](adr/0006-preserve-dual-libjs-source-and-bundled-boundary.md))
+- `public/script.js` — browser composition root and compatibility entry for extracted contracts plus not-yet-migrated legacy workspace owners (see [workspace-composition-root](tech/workspace-composition-root.md) and [ADR-0014](adr/0014-workspace-composition-root.md))
 
 The project still carries substantial upstream SillyTavern structure. EmberDesk is in a transition stage, not a clean-room rewrite.
 
@@ -129,6 +131,7 @@ EmberDesk does not currently aim to:
 - Keep migrations incremental and reversible where practical.
 - Separate user-facing product semantics from implementation notes.
 - Keep `/lib.js` compatibility decisions centralized in `public/lib.js` and its boundary tests.
+- Keep `public/script.js` as the single browser composition root: extracted event/request/public API owners must remain in `public/scripts/`, first-party reverse imports may only shrink, and a clean reverse-import gate must not be described as an assembly-only rewrite.
 - Validate performance claims with repeatable tooling and browser evidence.
 - Do not let internal caches or indexes become canonical user-data sources by accident; canonical SQLite stores must live outside `_cache` and have explicit migration, audit, projection, and repair contracts.
 - Keep derived caches scoped to proven hot paths; do not broaden them into general persistence without an accepted ADR.

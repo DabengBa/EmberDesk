@@ -53,7 +53,7 @@ export function summarizeStartupPerformance(report) {
         bottleneckCandidates.push({
             bucket: 'server_cold_start',
             durationMs: serverReadyMs,
-            reason: 'Server startup waits for migrations, content checks, plugin loading, and Webpack compilation before listening.',
+            reason: 'Server startup waits for migrations, content checks, and plugin loading before listening.',
         });
     }
 

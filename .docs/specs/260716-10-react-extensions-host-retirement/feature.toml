@@ -1,4 +1,0 @@
-contract_version = 1
-feature_slug = "react-extensions-host-retirement"
-brief = ".docs/tech/briefs/260716-10-react-extensions-host-retirement.md"
-doc_ids = ["feature.extension_panel_open", "term.shared_browser_library", "page.chat_workspace"]

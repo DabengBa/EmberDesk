@@ -1,9 +1,0 @@
-contract_version = 1
-feature_slug = "settings-workspace-overlay"
-brief = ".docs/tech/briefs/260720-01-settings-workspace-overlay.md"
-doc_ids = [
-  "page.settings",
-  "page.chat_workspace",
-  "feature.next_workspace_shell",
-  "page.api_configuration",
-]

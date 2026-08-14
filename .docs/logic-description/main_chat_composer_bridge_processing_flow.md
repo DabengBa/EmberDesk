@@ -77,8 +77,8 @@ Hidden marker attributes include:
 Focused proof:
 
 ```bash
-bun run --cwd tests test:unit -- main-chat-composer-state.test.js react-workspace-panels-helpers.test.js --runInBand
-$env:EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST='true'; bun run --cwd tests test:e2e -- chat-message-streaming.e2e.js
+pnpm --dir tests run test:unit -- main-chat-composer-state.test.js react-workspace-panels-helpers.test.js --runInBand
+$env:EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST='true'; pnpm --dir tests run test:e2e -- chat-message-streaming.e2e.js
 ```
 
 The browser proof covers ordinary input, Shift+Enter newline, legacy send path, after-send clear, empty-submit no-op, stop/error recovery input, and mobile composer reachability.

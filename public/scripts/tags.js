@@ -8,11 +8,10 @@ import {
     entitiesFilter,
     printCharactersDebounced,
     buildAvatarList,
-    eventSource,
-    event_types,
     DEFAULT_PRINT_TIMEOUT,
     printCharacters,
 } from '../script.js';
+import { eventSource, event_types } from './events.js';
 import { FILTER_TYPES, FILTER_STATES, DEFAULT_FILTER_STATE, isFilterState, FilterHelper } from './filters.js';
 
 import { groupCandidatesFilter, groupMembersFilter, groups, selected_group } from './group-chats.js';

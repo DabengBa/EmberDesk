@@ -24,26 +24,26 @@ Date: 2026-06-29
 - User expectation: 先做可证明安全的低风险架构 quick cuts，不把 cleanup 扩大成新的迁移计划或行为改写。
 - Current status: delivered.
 - Change history:
-  - 2026-06-29: 记录 quick cuts 只允许删除零调用 deprecated helper、共享重复 resolver、保留 Webpack fallback 的实施边界。
+  - 2026-06-29: 记录 quick cuts 只允许删除零调用 deprecated helper、共享重复 resolver；当时仍把 Webpack fallback 排除在本切片之外。
   - 2026-06-30: 新增 `src/react-feature-flags.js` 统一 React page/panel flag 解析，保留现有导出名、配置 key 和默认值。
-  - 2026-06-30: 从 `src/util.js` 删除 repo 内零调用的 deprecated `setConfigValue()` 和 `makeHttp2Request()`，同时保留 `/lib.js` Webpack fallback 路径不变。
+  - 2026-06-30: 从 `src/util.js` 删除 repo 内零调用的 deprecated `setConfigValue()` 和 `makeHttp2Request()`；当时的 `/lib.js` Webpack fallback 仍保持不变，后来由 ADR-0013 删除。
 - Implementation traceability:
   - Code paths: `src/react-feature-flags.js`, `src/react-login-feature.js`, `src/react-setup-feature.js`, `src/react-settings-feature.js`, `src/react-character-library-feature.js`, `src/workspace-react-features.js`, `src/util.js`.
   - Tests: `tests/workspace-react-panel-flags.test.js`, `tests/character-library-react-panel-flag.test.js`, `tests/user-storage-config.test.js`, `tests/util.test.js`, `tests/util-pure.test.js`.
   - Owning docs: `.docs/tech/react-modernization-roadmap.md`, `.docs/tech/config-resolution.md`, `.docs/PROJECT_HISTORY.md`.
   - Commit / PR trace: archived in the current wrap-up commit.
-  - Delivery status: delivered without changing feature-flag semantics or Webpack fallback policy.
+  - Delivery status: delivered as a historical quick-cuts slice without changing feature-flag semantics; its Webpack fallback policy was later superseded by ADR-0013.
 
 ## Candidate Domains
 
 1. React feature flag wrapper：`src/react-login-feature.js`、`src/react-setup-feature.js`、`src/react-settings-feature.js`、`src/react-character-library-feature.js` 与 `src/workspace-react-features.js`。
 2. Deprecated util helpers：`src/util.js` 中已标记 deprecated 的 `setConfigValue()` 和 `makeHttp2Request()`。
-3. Webpack fallback：ADR-0006 仍保留 deprecated fallback / Docker precompile path，本切片只允许建立退出条件，不删除 fallback。
+3. Webpack fallback：历史上由 ADR-0006 保留；该实验已在 2026-08-07 由 ADR-0013 删除，本 brief 不再定义当前实现边界。
 
 ## Constraints
 
 - 不改变任何 feature flag 默认值、配置 key、route fallback 或 bundle-missing 行为。
-- 不删除 ADR-0006 仍承认的 Webpack fallback。
+- 不以本 quick-cuts brief 阻止后续已获批准的 Webpack 删除。
 - 不把 quick cuts 扩大成 `src/util.js` 机械拆分或 React workspace 架构重做。
 - 删除前必须有 `rg` 调用图或测试证明；无法证明零调用或等价替代时不删除。
 

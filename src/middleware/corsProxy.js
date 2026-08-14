@@ -51,7 +51,7 @@ function createCorsProxyAgent() {
  */
 async function forwardProxyRequest(targetUrl, req, res) {
     const bodyMethods = ['POST', 'PUT', 'PATCH'];
-    const headers = JSON.parse(JSON.stringify(req.headers));
+    const headers = structuredClone(req.headers);
     const headersToRemove = [
         'x-csrf-token', 'host', 'referer', 'origin', 'cookie',
         'x-forwarded-for', 'x-forwarded-protocol', 'x-forwarded-proto',

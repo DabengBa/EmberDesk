@@ -51,7 +51,6 @@ import {
     chat_metadata,
     updateChatMetadata,
     getThumbnailUrl,
-    getRequestHeaders,
     setMenuType,
     menu_type,
     select_selected_character,
@@ -62,8 +61,6 @@ import {
     saveChatConditional,
     deactivateSendButtons,
     activateSendButtons,
-    eventSource,
-    event_types,
     getCurrentChatId,
     setCharacterSettingsOverrides,
     system_avatar,
@@ -80,6 +77,8 @@ import {
     chatElement,
     ensureMessageMediaIsArray,
 } from '../script.js';
+import { eventSource, event_types } from './events.js';
+import { getRequestHeaders } from './request-context.js';
 import { printTagList, createTagMapFromList, applyTagsOnCharacterSelect, tag_map, applyTagsOnGroupSelect, printTagFilters, tag_filter_type } from './tags.js';
 import { FILTER_TYPES, FilterHelper } from './filters.js';
 import { isExternalMediaAllowed } from './chats.js';

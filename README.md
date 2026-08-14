@@ -12,10 +12,10 @@ A lightweight self-hosted LLM frontend, forked from [SillyTavern](https://github
 
 ```bash
 # Install dependencies
-npm install
+pnpm install
 
 # Start the server
-npm start
+pnpm start
 ```
 
 The server will start on the configured port (default: 8000). Open your browser and navigate to `http://localhost:8000`.
@@ -35,7 +35,7 @@ EmberDesk/
 
 ## Requirements
 
-- Node.js 26.3.0 Current (`>=26.3.0 <27`)
+- Node.js 26.7.0 Current (`>=26.7.0 <27`)
 
 ## Acknowledgments
 

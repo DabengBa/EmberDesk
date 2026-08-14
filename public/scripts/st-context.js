@@ -9,15 +9,12 @@ import {
     CONNECT_API_MAP,
     create_save,
     deactivateSendButtons,
-    event_types,
-    eventSource,
     extension_prompts,
     extractMessageFromData,
     Generate,
     generateQuietPrompt,
     getCharacters,
     getCurrentChatId,
-    getRequestHeaders,
     getThumbnailUrl,
     main_api,
     max_context,
@@ -69,6 +66,8 @@ import {
     getOneCharacter,
     getCharacterSource,
 } from '../script.js';
+import { eventSource, event_types } from './events.js';
+import { getRequestHeaders } from './request-context.js';
 import {
     extension_settings,
     getExtensionManifest,

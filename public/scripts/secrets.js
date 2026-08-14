@@ -1,5 +1,7 @@
 import { moment, sha256 } from '../lib.js';
-import { event_types, eventSource, getRequestHeaders, saveSettings } from '../script.js';
+import { saveSettings } from '../script.js';
+import { eventSource, event_types } from './events.js';
+import { getRequestHeaders } from './request-context.js';
 import { t } from './i18n.js';
 import { chat_completion_sources } from './openai.js';
 import { callGenericPopup, Popup, POPUP_RESULT, POPUP_TYPE } from './popup.js';

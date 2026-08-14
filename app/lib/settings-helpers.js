@@ -928,6 +928,41 @@ export function buildSettingsSavePayload(baseSettings, formValues, { settingsRev
     return nextSettings;
 }
 
+/**
+ * Keeps the legacy workspace runtime aligned after a React Settings save.
+ * The workspace still uses these identity-stable objects to build generation
+ * requests and to persist debounced legacy settings updates.
+ *
+ * @param {object} settings
+ * @returns {boolean}
+ */
+export function syncSettingsToLegacyRuntime(settings) {
+    const context = globalThis.SillyTavern?.getContext?.();
+    if (!context || typeof context !== 'object' || !settings || typeof settings !== 'object') {
+        return false;
+    }
+
+    const mappings = [
+        ['chatCompletionSettings', 'oai_settings'],
+        ['powerUserSettings', 'power_user'],
+        ['extensionSettings', 'extension_settings'],
+    ];
+    let synchronized = false;
+
+    for (const [runtimeKey, settingsKey] of mappings) {
+        const runtimeSettings = context[runtimeKey];
+        const savedSettings = settings[settingsKey];
+        if (!runtimeSettings || typeof runtimeSettings !== 'object' || !savedSettings || typeof savedSettings !== 'object') {
+            continue;
+        }
+
+        Object.assign(runtimeSettings, savedSettings);
+        synchronized = true;
+    }
+
+    return synchronized;
+}
+
 export function getFieldErrorMessage(errors) {
     if (!Array.isArray(errors) || errors.length === 0) {
         return '';

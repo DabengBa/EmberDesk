@@ -4,11 +4,8 @@ import {
     chat,
     displayVersion,
     doNewChat,
-    event_types,
-    eventSource,
     getCharacters,
     getCurrentChatId,
-    getRequestHeaders,
     getSystemMessageByType,
     getThumbnailUrl,
     is_send_press,
@@ -20,6 +17,8 @@ import {
     this_chid,
     unshallowCharacter,
 } from '../script.js';
+import { eventSource, event_types } from './events.js';
+import { getRequestHeaders } from './request-context.js';
 import { getRegexedString, regex_placement } from './extensions/regex/engine.js';
 import { is_group_generating } from './group-chats.js';
 import { t } from './i18n.js';

@@ -580,37 +580,37 @@ Code binding points:
 Docs-only Phase 0:
 
 ```bash
-bun run docs:check
+pnpm run docs:check
 ```
 
 Phase 1 focused tests:
 
 ```bash
-bun run --cwd tests test:unit -- canonical-sqlite-rollout-contract.test.js canonical-sqlite-shadow-import.test.js character-read-service.test.js character-write-service.test.js --runInBand
+pnpm --dir tests run test:unit -- canonical-sqlite-rollout-contract.test.js canonical-sqlite-shadow-import.test.js character-read-service.test.js character-write-service.test.js --runInBand
 ```
 
 Operator tooling and rollout-contract proof:
 
 ```bash
-bun run --cwd tests test:unit -- canonical-sqlite-cli.test.js canonical-sqlite-operator.test.js validation-gate-selector.test.js --runInBand
+pnpm --dir tests run test:unit -- canonical-sqlite-cli.test.js canonical-sqlite-operator.test.js validation-gate-selector.test.js --runInBand
 ```
 
 Derived-cache helper and retired sidecar proof:
 
 ```bash
-bun run --cwd tests test:unit -- derived-cache-sqlite.test.js interaction-performance-index.test.js --runInBand
+pnpm --dir tests run test:unit -- derived-cache-sqlite.test.js interaction-performance-index.test.js --runInBand
 ```
 
 Compatibility-sensitive checks when World Info binding or extension-visible character surfaces are touched:
 
 ```bash
-bun run --cwd tests test:unit -- canonical-world-info-store.test.js worldinfo-route-service.test.js canonical-sqlite-operator.test.js canonical-sqlite-cli.test.js --runInBand
-bun run --cwd tests test:unit -- worldinfo-delete-cascade.test.js world-info-shell-context.test.js --runInBand
-bun run test:compat
+pnpm --dir tests run test:unit -- canonical-world-info-store.test.js worldinfo-route-service.test.js canonical-sqlite-operator.test.js canonical-sqlite-cli.test.js --runInBand
+pnpm --dir tests run test:unit -- worldinfo-delete-cascade.test.js world-info-shell-context.test.js --runInBand
+pnpm run test:compat
 ```
 
 Route-order checks if startup or middleware registration becomes involved:
 
 ```bash
-bun run --cwd tests test:unit -- express5-route-compatibility.test.js --runInBand
+pnpm --dir tests run test:unit -- express5-route-compatibility.test.js --runInBand
 ```

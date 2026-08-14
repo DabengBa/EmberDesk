@@ -24,11 +24,11 @@
 | 路由 | TanStack Router | 已采用 | `app/client.tsx`、`app/router.tsx`、`app/routeTree.gen.ts` 和 `app/routes/*` 承载 `/login`、`/setup`、`/settings`。 |
 | 语言 | TypeScript 6 + React 19 | 已采用 | `app/**/*.{ts,tsx}`、`src/**/*`、`public/**/*` 纳入当前 TypeScript / ESLint 边界；迁移仍是渐进式。 |
 | Lint/格式化 | ESLint 10 + typescript-eslint | 已采用 | `eslint.config.js` 覆盖 `src`、`public`、`app` 与根 JS/TS 文件；Prettier 不作为当前强制 gate。 |
-| 包管理/运行 | Bun scripts + Node.js runtime | 已采用 | Bun 1.3.14 是包管理器和脚本 runner；应用运行时仍是 Node.js 26.3.0。 |
-| 构建 | Vite 8 + deprecated Webpack fallback | 已采用 | Vite 构建 `/lib.js`、共享 React app、character-library panel bundle，以及 workspace panel action-island bundle；Webpack 仅保留为 `/lib.js` deprecated fallback / Docker precompile path。 |
+| 包管理/运行 | pnpm scripts + Node.js runtime | 已采用 | pnpm 12.0.0-rc.5 是包管理器和脚本 runner；应用运行时是 Node.js 26.7.0。 |
+| 构建 | Vite 8 | 已采用 | Vite 构建 `/lib.js`、共享 React app、character-library panel bundle，以及 workspace panel action-island bundle。 |
 | 样式 | Tailwind CSS v4 + 既有 CSS | 已采用 | Tailwind v4 接入 React app；主工作区 legacy CSS 仍是现有页面和扩展兼容面的 owner。 |
 | UI 组件 | 本地 React 组件 | 已采用 | 当前代码使用 `app/components/*` 本地组件；shadcn/ui、Ant Design 尚未进入 `package.json`，不能写成已采用依赖。 |
-| API | Express 5 + narrow Hono route island | 当前保留 / 窄试点已完成 | Express 仍是 runtime owner；Phase 5 Sprint 1 只把 `POST /api/moving-ui/save` 迁到 Express 宿主下的 Hono route island，见 [ADR-0008](../adr/0008-hono-route-island-under-express-host.md) 与 [ADR-0010](../adr/0010-express-runtime-owner-boundary.md)。 |
+| API | Express 5 | 当前保留 | Express 是唯一的 runtime 和 route owner；`POST /api/moving-ui/save` 使用直接的 Express router，见 [ADR-0013](../adr/0013-remove-obsolete-web-stack-experiments.md) 与 [ADR-0010](../adr/0010-express-runtime-owner-boundary.md)。 |
 | 数据获取 | TanStack Query | 已采用 | React login/setup/settings、character-library panel、workspace panel shell，以及 World Info / Background Library / Extensions Host 的 guarded React state/action surfaces 已使用 TanStack Query。 |
 | 表单 | TanStack Form + Zod | 已采用 | React login/setup/settings、character-library toolbar、World Info controls、Background Library filter/sort controls 和 Extensions Host Extras controls 的 React-owned 表单/呈现态使用 TanStack Form + Zod；legacy-owned 控件可通过 host 边界保留。 |
 | 列表性能 | TanStack Virtual | 已采用 | Character Library panel 在大页尺寸下用 `@tanstack/react-virtual` 限制同时挂载行数；main-chat `mainChatMessageList` island 现在也用它做 headless measurement / snapshot / restore controller，但仍不渲染第二套可见消息列表。 |
@@ -71,10 +71,10 @@ No step may delete user capability, change a documented user workflow, or break 
 **当前执行状态**：
 - Phase 0 基础设施已落地到当前代码：`vite.config.ts` 同时承载 `/lib.js` 构建、共享 React app 构建、character-library panel bundle 和 workspace panel action-island bundle；`tsconfig.json` 覆盖 `app/**/*`、`src/**/*` 与 `public/**/*`；`eslint.config.js` 已把 `app/**/*.{ts,tsx}` 纳入 TS/TSX lint 边界。
 - React app shell 已存在于 `app/client.tsx`、`app/router.tsx`、`app/routes/*` 和 `app/routeTree.gen.ts`；Tailwind v4 通过 `tailwind.config.js`、`postcss.config.js` 与 `app/styles/globals.css` 接入 React app。
-- Webpack 只保留为 `/lib.js` deprecated fallback；当前主构建入口是 Vite。
+- Vite 是 `/lib.js` 的唯一构建入口。
 
 **Sprint 列表**：
-- ✅ Sprint 1: Vite 迁移（2 周，Vite 8 已作为 `/lib.js` 主构建，Webpack 保留 deprecated fallback）
+- ✅ Sprint 1: Vite 迁移（2 周，Vite 8 是 `/lib.js` 的唯一构建）
 - ✅ Sprint 2: TypeScript 配置（2 周，`tsconfig.json` 与 ESLint TS/TSX 边界已覆盖 React app）
 - ✅ Sprint 3: React 开发环境（2 周，React 19 + TanStack Router app shell 已承载 `/login`、`/setup`、`/settings`）
 - ✅ Sprint 4: Tailwind CSS 集成（2 周，Tailwind v4 / PostCSS 已接入 `app/styles/globals.css` 和 React route/component classes）
@@ -144,10 +144,10 @@ No step may delete user capability, change a documented user workflow, or break 
 
 **Sprint 4-7 验证门**：
 ```bash
-bun run --cwd tests test:unit -- world-info-card-rendering.test.js world-info-import-feedback.test.js world-info-converters.test.js worldinfo-delete-cascade.test.js background-panel-controller.test.js thumbnail-placeholder-background.test.js workspace-react-panel-flags.test.js react-workspace-panels-helpers.test.js --runInBand
-bun run build:react:workspace-panels
-bun run test:compat
-bun run docs:check
+pnpm --dir tests run test:unit -- world-info-card-rendering.test.js world-info-import-feedback.test.js world-info-converters.test.js worldinfo-delete-cascade.test.js background-panel-controller.test.js thumbnail-placeholder-background.test.js workspace-react-panel-flags.test.js react-workspace-panels-helpers.test.js --runInBand
+pnpm run build:react:workspace-panels
+pnpm run test:compat
+pnpm run docs:check
 ```
 
 ---
@@ -212,10 +212,10 @@ bun run docs:check
 
 **Phase 3B 验证门**：
 ```bash
-bun run --cwd tests test:e2e -- chat-message-rendering.e2e.js chat-message-layout.e2e.js chat-message-streaming.e2e.js
-bun run test:compat
-bun run perf:interaction
-bun run docs:check
+pnpm --dir tests run test:e2e -- chat-message-rendering.e2e.js chat-message-layout.e2e.js chat-message-streaming.e2e.js
+pnpm run test:compat
+pnpm run perf:interaction
+pnpm run docs:check
 ```
 
 **Phase 3 / 3B 后剩余项归属表**：
@@ -228,7 +228,7 @@ bun run docs:check
 | legacy `chat_truncation` / `#show_more_messages` load-more 算法 | `Phase 4B` 抽取 windowing contract，`Phase 7 Sprint 6` 完成 full owner cutover | 当前 React 只做 headless measurement / restore；Phase 4B 先证明 long-chat performance 和 compatibility，Phase 7 再移除 legacy load-more owner。 |
 | `globalThis.SillyTavern`、`eventSource`、`event_types`、jQuery globals | Phase 4 / Phase 6 建兼容层，Phase 7 已完成 closeout | 当前结论已关闭为 ledger/ADR 策略：`globalThis.SillyTavern` 与 `eventSource` / `event_types` 不再是默认 deletion candidates；未来若要缩窄，必须新开 spec/ADR。 |
 | third-party extension API、mount compatibility、migration guide | Phase 4 / Phase 6 建桥和维护，Phase 7 已完成 owner/fallback closeout | Extensions Host 的可见宿主已切换，但 protected mount points 和扩展兼容面已转入 freeze-supported / compatibility-facade policy，而不是继续作为未判定旧债。 |
-| Express route owner / typed API / derived-cache ORM | Phase 5（Sprint 1-3 已完成） | Hono 已完成一个 Express-hosted route-island proof；Drizzle 当前不采用；Express 继续保留为 runtime owner。 |
+| Express route owner / typed API / derived-cache ORM | Phase 5（Sprint 1-3 已完成） | 已移除 Hono route-island 实验；Drizzle 当前不采用；Express 继续保留为唯一 runtime owner。 |
 | 移除 guarded island fallback 或切 full SPA workspace | Phase 7 已完成 closeout | 当前不保留一个开放式“继续删 fallback”待办；具体 surface 以 `legacy-cutover-ledger.md` 为准，separate-route/full SPA shell 需要未来新 spec/ADR。 |
 
 ---
@@ -252,10 +252,10 @@ bun run docs:check
 
 **验证门**：
 ```bash
-bun run test:compat
-bun run --cwd tests test:unit -- main-chat-visible-transport-owner.test.js chat-generation-lifecycle.test.js react-workspace-panels-helpers.test.js --runInBand
-bun run --cwd tests test:e2e -- chat-message-rendering.e2e.js chat-message-layout.e2e.js chat-message-streaming.e2e.js
-bun run perf:interaction
+pnpm run test:compat
+pnpm --dir tests run test:unit -- main-chat-visible-transport-owner.test.js chat-generation-lifecycle.test.js react-workspace-panels-helpers.test.js --runInBand
+pnpm --dir tests run test:e2e -- chat-message-rendering.e2e.js chat-message-layout.e2e.js chat-message-streaming.e2e.js
+pnpm run perf:interaction
 ```
 
 **Phase 7 handoff 条件**：
@@ -267,38 +267,37 @@ bun run perf:interaction
 
 ### Phase 5: Typed API 与后端边界评估（3 个月）
 
-**目标**：评估并有限引入 typed API / route boundary 工具，而不是预设替换 Express；默认继续保持 Express 5 为 runtime owner，除非 ADR 和实证证明更进一步的切换值得做且可回滚
+**目标**：评估 typed API / route boundary 工具是否值得保留；当前结论是 Express 5 保持唯一 runtime 和 route owner
 
-📋 **归档记录**：[ADR-0008](../adr/0008-hono-route-island-under-express-host.md) · [ADR-0009](../adr/0009-derived-cache-sqlite-drizzle-decision.md) · [ADR-0010](../adr/0010-express-runtime-owner-boundary.md)
+📋 **归档记录**：[ADR-0013](../adr/0013-remove-obsolete-web-stack-experiments.md) · [ADR-0009](../adr/0009-derived-cache-sqlite-drizzle-decision.md) · [ADR-0010](../adr/0010-express-runtime-owner-boundary.md)
 
 **当前执行状态**：
-- `Sprint 1 / Hono route island`：已完成。`POST /api/moving-ui/save` 现在由 Express 宿主下的 Hono route island 拥有；body parsing、session、user、CSRF、auth wall、error/404 仍由 Express 宿主 owner 保留。见 [ADR-0008](../adr/0008-hono-route-island-under-express-host.md)。
+- `Sprint 1 / route-boundary experiment`：已完成并清理。`POST /api/moving-ui/save` 由直接的 Express router 拥有；Hono route-island 与桥接层已删除。见 [ADR-0013](../adr/0013-remove-obsolete-web-stack-experiments.md)。
 - `Sprint 2 / Drizzle decision gate`：已完成，结论为当前不采用 Drizzle。`character-index.sqlite` 继续使用 handwritten `node:sqlite` helper，derived-cache rebuild / fallback / reset-threshold contract 不变。见 [ADR-0009](../adr/0009-derived-cache-sqlite-drizzle-decision.md)。
-- `Sprint 3 / Express runtime owner gate`：已完成，结论为继续保留 Express 5 为 backend runtime owner。Hono route island proof 只授权窄 route owner 试点，不授权顶层 runtime replacement。见 [ADR-0010](../adr/0010-express-runtime-owner-boundary.md)。
+- `Sprint 3 / Express runtime owner gate`：已完成，结论为继续保留 Express 5 为唯一 backend runtime owner。见 [ADR-0010](../adr/0010-express-runtime-owner-boundary.md)。
 
 **Sprint 列表**：
-- ✅ [Sprint 1: Hono 路由搭建](../tech/briefs/react-phase5-sprint1-hono-route-shell-under-express-host.md)（3 周；落地为 `moving-ui/save` route island，见 [ADR-0008](../adr/0008-hono-route-island-under-express-host.md)）
+- ✅ Sprint 1: route-boundary experiment cleanup（移除 `moving-ui/save` Hono route island，保留直接 Express router，见 [ADR-0013](../adr/0013-remove-obsolete-web-stack-experiments.md)）
 - ✅ [Sprint 2: Drizzle derived-cache decision gate](../tech/briefs/react-phase5-sprint2-drizzle-derived-cache-decision-gate.md)（3 周；结论为当前不采用，见 [ADR-0009](../adr/0009-derived-cache-sqlite-drizzle-decision.md)）
 - ✅ [Sprint 3: Express retention / sunset decision gate](../tech/briefs/react-phase5-sprint3-express-retention-or-sunset-decision-gate.md)（2 周；结论为保留 Express runtime owner，见 [ADR-0010](../adr/0010-express-runtime-owner-boundary.md)）
 
 **进入条件与边界**：
-- Phase 5 先回答“值不值得做”和“能不能少做”，再决定是否引入 Hono / Drizzle；typed API 价值不等于必须替换 Express。
-- Hono 若进入实现，首选模式是 Express-hosted route island，而不是顶层 runtime replacement。任何更大范围切换都必须先有 ADR，证明 Express middleware order、sessions、CSRF、auth wall、static/public routes、private endpoints、uploads、plugin mounting、error/404 handlers 的兼容策略。
+- Phase 5 先回答“值不值得做”和“能不能少做”。当前不保留第二个路由框架；typed API 价值不等于引入新框架。
 - Drizzle 只能先接管 derived SQLite cache；file-backed user data 仍是正本。任何把 SQLite 升级为 canonical storage 的方案必须另起 ADR。
 - Express sunset 不是默认结果；若 route parity、rollback、plugin mounting 或 security middleware proof 不足，Phase 5 的有效结论可以是“保留 Express runtime owner，延期 sunset”。
-- `tests/express5-route-compatibility.test.js` 是宿主链保护门，不是 Hono parity 的充分证明；Hono route island 需要单独的 focused parity proof。
+- `tests/express5-route-compatibility.test.js` 是 Express 宿主链保护门；`tests/moving-ui-express-route.test.js` 保护直接路由的登录墙、验证和写入行为。
 
 **Phase 5 当前结论**：
-- EmberDesk 已证明一个可回滚的 Express-hosted Hono route island 模式，但没有把它提升为 backend runtime migration。
+- EmberDesk 已删除 Hono route-island 实验和 Webpack fallback；现有需求由 Vite 与 Express 直接满足。
 - EmberDesk 当前没有证据证明 Drizzle 在 `character-index.sqlite` derived-cache 切片上值得引入。
 - EmberDesk 当前没有证据证明 Express runtime owner 已可 sunset；后续若再讨论，只能以新 spec/ADR 和更宽的 parity proof 重新开启。
 
 **验证门**：
 ```bash
-bun run --cwd tests test:unit -- express5-route-compatibility.test.js --runInBand
-bun run test:unit
-bun run test:compat
-bun run docs:check
+pnpm --dir tests run test:unit -- express5-route-compatibility.test.js --runInBand
+pnpm run test:unit
+pnpm run test:compat
+pnpm run docs:check
 ```
 
 ---
@@ -321,7 +320,7 @@ bun run docs:check
 
 **退出条件**：
 - Phase 6 的完成不等于兼容层删除；它只提供 Phase 7 cutover 的前置证据。
-- 兼容层废弃、冻结或删除前必须有以 `JS-Slash-Runner` 为首要样本的扩展验证清单、迁移指南、废弃警告周期、用户可回滚方案和 `bun run test:compat` 通过记录。
+- 兼容层废弃、冻结或删除前必须有以 `JS-Slash-Runner` 为首要样本的扩展验证清单、迁移指南、废弃警告周期、用户可回滚方案和 `pnpm run test:compat` 通过记录。
 - `globalThis.SillyTavern`、`eventSource` / `event_types`、`@sillytavern/*` alias 的任一破坏性变更都必须走 Phase 6 兼容评审和 Phase 7 cutover gate，不得作为 Phase 4/5 的顺手清理。
 
 ---
@@ -357,16 +356,16 @@ bun run docs:check
 
 **关闭后验证门**：
 ```bash
-bun run build:lib
-bun run build:react
-bun run build:react:character-library
-bun run build:react:workspace-panels
-bun run test:unit
-bun run test:compat
-bun run --cwd tests test:e2e -- login.e2e.js chat-message-rendering.e2e.js chat-message-layout.e2e.js chat-message-streaming.e2e.js
-bun run perf:startup
-bun run perf:interaction
-bun run docs:check
+pnpm run build:lib
+pnpm run build:react
+pnpm run build:react:character-library
+pnpm run build:react:workspace-panels
+pnpm run test:unit
+pnpm run test:compat
+pnpm --dir tests run test:e2e -- login.e2e.js chat-message-rendering.e2e.js chat-message-layout.e2e.js chat-message-streaming.e2e.js
+pnpm run perf:startup
+pnpm run perf:interaction
+pnpm run docs:check
 ```
 
 **关闭后策略**：
@@ -381,18 +380,18 @@ bun run docs:check
 
 | 变更表面 | 最低验证要求 |
 |---|---|
-| 构建工具 | `bun run build:lib`；React page/panel 变更另跑 `bun run build:react`、`bun run build:react:character-library` 或 `bun run build:react:workspace-panels` |
-| TypeScript 配置 | `bun run lint` + `bun run test:unit` |
+| 构建工具 | `pnpm run build:lib`；React page/panel 变更另跑 `pnpm run build:react`、`pnpm run build:react:character-library` 或 `pnpm run build:react:workspace-panels` |
+| TypeScript 配置 | `pnpm run lint` + `pnpm run test:unit` |
 | React 页面迁移 | 对应页面的 E2E 测试通过 |
-| 角色库迁移 | `character-list-*.test.js` + `bun run test:compat` |
-| 主聊天迁移 | `chat-*.e2e.js` + `bun run test:compat` + `bun run perf:interaction` |
-| Phase 4A transport expansion | focused provider/transport unit tests + `chat-message-streaming.e2e.js` + `bun run test:compat` + rollback/fallback proof |
+| 角色库迁移 | `character-list-*.test.js` + `pnpm run test:compat` |
+| 主聊天迁移 | `chat-*.e2e.js` + `pnpm run test:compat` + `pnpm run perf:interaction` |
+| Phase 4A transport expansion | focused provider/transport unit tests + `chat-message-streaming.e2e.js` + `pnpm run test:compat` + rollback/fallback proof |
 | Phase 4B renderer extraction | `chat-message-rendering.e2e.js` + `chat-message-layout.e2e.js` + long-chat performance proof + extension compatibility proof |
-| Zustand/global bridge | store unit tests + compatibility bridge tests + `bun run test:compat` |
+| Zustand/global bridge | store unit tests + compatibility bridge tests + `pnpm run test:compat` |
 | API 路由迁移 | 对应 endpoint 单元测试 + Postman/curl 手动验证 |
-| 扩展兼容性 | `bun run test:compat` + 手动测试 3-5 个常用扩展 |
-| Phase 7 full owner cutover | 对应 surface focused unit/E2E + `bun run build:lib` + `bun run build:react` + `bun run build:react:character-library` / `bun run build:react:workspace-panels` + `bun run test:compat` + startup/interaction perf + docs/ADR cutover checklist |
-| 性能回归 | `bun run perf:startup` + `bun run perf:interaction` |
+| 扩展兼容性 | `pnpm run test:compat` + 手动测试 3-5 个常用扩展 |
+| Phase 7 full owner cutover | 对应 surface focused unit/E2E + `pnpm run build:lib` + `pnpm run build:react` + `pnpm run build:react:character-library` / `pnpm run build:react:workspace-panels` + `pnpm run test:compat` + startup/interaction perf + docs/ADR cutover checklist |
+| 性能回归 | `pnpm run perf:startup` + `pnpm run perf:interaction` |
 
 ## 风险与缓解
 
@@ -419,10 +418,10 @@ bun run docs:check
    - 理由：降低早期 React 化风险，保持 legacy rollback、扩展兼容边界和同入口迁移体验
    - 权衡：短期保留 React/jQuery 双实现、共享 build fallback，以及面板 bridge 复杂度
 
-3. **[ADR-0008: Hono route island under Express host](../adr/0008-hono-route-island-under-express-host.md)**
-   - 决策：仅在 Express 宿主下，以 `POST /api/moving-ui/save` 为首个 Hono route island 试点；不授权顶层 runtime replacement
-   - 理由：先验证 typed route ergonomics 能否在不打穿现有 host chain 的前提下带来真实收益
-   - 权衡：更好的 typed contract / RPC 体验 vs. 新框架引入、测试面扩大、宿主/子路由双栈复杂度
+3. **[ADR-0013: Remove obsolete web stack experiments](../adr/0013-remove-obsolete-web-stack-experiments.md)**
+   - 决策：删除 Webpack fallback 和 Hono route island；Vite 与 Express 分别成为唯一构建和路由实现
+   - 理由：当前需求不需要双栈，直接实现更小、更易验证
+   - 权衡：构建产物缺失直接 404，未来引入第二路由框架必须重新决策
 
 4. **[ADR-0009: Derived cache SQLite Drizzle decision](../adr/0009-derived-cache-sqlite-drizzle-decision.md)**
    - 决策：当前不为 `character-index.sqlite` derived-cache slice 引入 Drizzle，继续保留 handwritten `node:sqlite` helper
@@ -550,7 +549,7 @@ bun run docs:check
 
 未来规划绑定点：
 - future React-owned main-chat modules under `app/components/main-chat/*`, `app/lib/main-chat/*` and the matching TanStack Form / Query integration layer（Phase 4A / 4B 的 archived proof已经固定当前 owner split；exact file map for full cutover must be fixed by the Phase 7 transport / renderer specs and ADR updates）
-- `src/endpoints/*` 与未来经单独 spec/ADR 批准的 route-island helpers（Phase 5 当前只落地 `src/endpoints/moving-ui.js` 的 Hono island；未形成独立后端 Hono app 目录）
+- `src/endpoints/*`（Express 是唯一后端路由框架；任何引入第二路由框架的提案必须重新取得 ADR 批准）
 - Any future work that reopens character library, World Info, background library, extensions host, main-chat transport, main-chat renderer/windowing, workspace shell, or global compatibility exports must start from the completed Phase 7 ADR closeout and the 2026-07-01 Next Workspace Shell successor notes instead of treating those owner splits as unfinished roadmap debt.
 
 ## 相关文档
@@ -570,6 +569,6 @@ bun run docs:check
 
 ## 下一步行动
 
-1. **持续跑回归门**：后续维护继续以 `chat-message-rendering.e2e.js`、`chat-message-layout.e2e.js`、`chat-message-streaming.e2e.js`、focused unit proof、`bun run test:compat`、`bun run perf:startup` 和 `bun run perf:interaction` 保护已冻结的 owner split。
+1. **持续跑回归门**：后续维护继续以 `chat-message-rendering.e2e.js`、`chat-message-layout.e2e.js`、`chat-message-streaming.e2e.js`、focused unit proof、`pnpm run test:compat`、`pnpm run perf:startup` 和 `pnpm run perf:interaction` 保护已冻结的 owner split。
 2. **把当前 shell/global 结论当作基线而不是 backlog**：若未来有人想重开 separate-route/full SPA shell、删除 `globalThis.SillyTavern`、缩减 `eventSource` / `event_types`、或收窄 `@sillytavern/*`，必须新开 spec/ADR，并提供 replacement、migration note、rollback 与 `JS-Slash-Runner` 级证据。当前已批准的 Next Workspace Shell 是当前 `/` 的 same-entry takeover，不是 full SPA 旁路。
 3. **继续执行 TanStack 和兼容边界约束**：后续任何新增 React-owned 查询、mutation 或表单输入仍默认使用 TanStack Query + TanStack Form + Zod，且不得顺手扩张 `__emberDeskReactCompatibilityBridge` 或新增未文档化 public compatibility surface。

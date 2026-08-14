@@ -3,9 +3,6 @@ import { Fuse, lodash } from '../lib.js';
 import {
     amount_gen,
     characters,
-    eventSource,
-    event_types,
-    getRequestHeaders,
     main_api,
     max_context,
     online_status,
@@ -13,6 +10,8 @@ import {
     saveSettingsDebounced,
     this_chid,
 } from '../script.js';
+import { eventSource, event_types } from './events.js';
+import { getRequestHeaders } from './request-context.js';
 import { groups, selected_group } from './group-chats.js';
 import { t } from './i18n.js';
 import { instruct_presets } from './instruct-mode.js';

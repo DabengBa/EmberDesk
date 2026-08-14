@@ -15,11 +15,11 @@ This is a planning and execution record for [modernization-roadmap.md](moderniza
 
 Phase 1 assumes the current modernization contracts remain in force:
 
-- Node.js 26.3.0 Current (`>=26.3.0 <27`) is the application runtime contract.
-- Bun is the package manager and script runner.
+- Node.js 26.7.0 Current (`>=26.7.0 <27`) is the application runtime contract.
+- pnpm 11.20.0 is the package manager and script runner.
 - Express 5 remains the server framework.
 - The browser app remains HTML/CSS/jQuery.
-- Webpack remains scoped to the `/lib.js` browser shared-library boundary.
+- Vite is the only `/lib.js` browser shared-library build path.
 - Canonical user data stays file-backed; SQLite and `DiskCache` remain derived acceleration.
 
 ## Architecture And Constraints
@@ -93,7 +93,7 @@ Do not start with:
 
 Minimum proof for future slices:
 
-- `bun run test:compat` for any compatibility surface.
+- `pnpm run test:compat` for any compatibility surface.
 - Character-list state/render/structure tests for list state, pagination, delete, row identity, or bulk selection.
 - Focused Playwright proof for visible chat workspace or message behavior.
 - Startup focused tests when `APP_READY`, deferred panels, or startup sequencing changes.
@@ -135,7 +135,7 @@ Do not start with:
 Minimum proof for future slices:
 
 - `world-info-card-rendering.test.js` for editor card/template/UI structure.
-- `bun run test:compat` before touching regex, extension, slash-command, or world-info regex surfaces.
+- `pnpm run test:compat` before touching regex, extension, slash-command, or world-info regex surfaces.
 - Focused unit tests for pure conversion or prompt-activation helpers.
 - Playwright proof for user-visible editor workflows when DOM behavior changes.
 
@@ -173,7 +173,7 @@ Do not start with:
 
 Minimum proof for future slices:
 
-- `bun run test:compat` for public import/export, regex, or extension-adjacent changes.
+- `pnpm run test:compat` for public import/export, regex, or extension-adjacent changes.
 - Existing Macro slash-command E2E tests for parser/execution behavior.
 - New focused unit tests for extracted pure command helpers.
 - Browser proof if command execution changes visible chat input progress, pause, or stop UI.
@@ -259,7 +259,7 @@ Minimum proof for future slices:
 - Existing interaction performance index tests for index/list/get behavior.
 - `thumbnail-write-time-pregeneration.test.js` for write-time thumbnail side effects.
 - Focused route tests for any changed endpoint response or mutation behavior.
-- `bun run test:compat` when frontend-visible character-list DOM or exported shell behavior changes as part of a route slice.
+- `pnpm run test:compat` when frontend-visible character-list DOM or exported shell behavior changes as part of a route slice.
 
 ### `src/endpoints/chats.js`
 
@@ -346,18 +346,18 @@ Defer these until the smaller helpers above are already covered:
 
 | Future Slice | Minimum Validation |
 |---|---|
-| `public/script.js` character-list helper | `character-list-state.test.js`, `character-list-render-state.test.js`, `character-list-structure.test.js`, `bun run test:compat` when identity/export surfaces are touched |
-| `public/script.js` startup/readiness | startup focused tests plus `bun run test:compat` if exported events or globals change |
+| `public/script.js` character-list helper | `character-list-state.test.js`, `character-list-render-state.test.js`, `character-list-structure.test.js`, `pnpm run test:compat` when identity/export surfaces are touched |
+| `public/script.js` startup/readiness | startup focused tests plus `pnpm run test:compat` if exported events or globals change |
 | World-info editor UI | `world-info-card-rendering.test.js`; Playwright if visible editor behavior changes |
-| World-info regex or prompt activation | focused unit tests plus `bun run test:compat` |
-| Slash-command helper extraction | Macro slash-command E2E or focused parser/execution tests; `bun run test:compat` for public exports |
+| World-info regex or prompt activation | focused unit tests plus `pnpm run test:compat` |
+| Slash-command helper extraction | Macro slash-command E2E or focused parser/execution tests; `pnpm run test:compat` for public exports |
 | OpenAI settings UI | `openai-segmented-controls.test.js` plus focused DOM tests for changed selectors |
 | OpenAI/provider request semantics | `chat-completions-google.test.js` and related backend/provider tests; source-backed provider docs check |
 | Character route helper/service | focused unit/route tests plus interaction performance index tests if list/get/index behavior changes |
 | Character mutation side effects | thumbnail write-time pregeneration tests and proof that character mutations do not recreate or refresh the retired character-index sidecar |
 | Chat route helper/service | `chat-route-service.test.js` plus focused chat endpoint/import tests; interaction performance index tests when chat aggregate authority or canonical audit invalidation changes |
-| Express mount/order change | `bun run --cwd tests test:unit -- express5-route-compatibility.test.js --runInBand` |
-| Semantic docs change | `bun run docs:check` or `bun run docs:build` |
+| Express mount/order change | `pnpm --dir tests run test:unit -- express5-route-compatibility.test.js --runInBand` |
+| Semantic docs change | `pnpm run docs:check` or `pnpm run docs:build` |
 
 ## Related Semantic IDs And Code Binding Points
 

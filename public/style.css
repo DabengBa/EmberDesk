@@ -3077,7 +3077,8 @@ input[type="file"] {
     flex-grow: 1;
     display: flex;
     height: 100%;
-    padding: 1px;
+    padding: 6px 6px 14px;
+    scrollbar-gutter: stable;
 }
 
 #rm_print_characters_block .entity_block.useless {
@@ -3213,12 +3214,15 @@ input[type="file"] {
 }
 
 .emberdesk-react-character-library-toolbar {
-    gap: 5px;
-    padding: 1px 0 8px;
+    gap: 7px;
+    padding: 1px 0 2px;
 }
 
 .emberdesk-react-character-library-toolbar .character-list-action {
     margin: 0;
+    min-height: calc(var(--mainFontSize) * 1.85);
+    border-color: color-mix(in srgb, var(--SmartThemeBorderColor) 72%, transparent);
+    background-color: color-mix(in srgb, var(--SmartThemeBlurTintColor) 72%, transparent);
 }
 
 .emberdesk-react-character-library-toolbar .character-list-action > .fa-solid {
@@ -3239,8 +3243,8 @@ input[type="file"] {
 
 .character-library-toolbar-actions {
     min-width: 0;
-    flex-wrap: wrap;
-    justify-content: flex-start;
+    padding-bottom: 7px;
+    border-bottom: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 42%, transparent);
 }
 
 .character-library-toolbar-actions > .flex-container {
@@ -3249,23 +3253,27 @@ input[type="file"] {
 }
 
 .character-library-toolbar-fields {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(calc(var(--mainFontSize) * 7), 0.52fr);
     min-width: 0;
-    gap: 5px;
+    gap: 6px;
 }
 
 .character-library-toolbar-field {
-    flex: 1 1 calc(var(--mainFontSize) * 10);
-    min-width: calc(var(--mainFontSize) * 8);
+    min-width: 0;
 }
 
 .character-library-toolbar-field .text_pole {
     width: 100%;
     min-width: 0;
     margin: 0;
+    height: calc(var(--mainFontSize) * 1.9);
+    padding-inline: 8px;
 }
 
 .character-library-toolbar-field select.text_pole {
-    flex: 0 1 calc(var(--mainFontSize) * 8);
+    flex: 1 1 auto;
+    cursor: pointer;
 }
 
 .character-library-toolbar-filters {
@@ -3279,10 +3287,11 @@ input[type="file"] {
 
     .character-library-toolbar-fields {
         width: 100%;
+        grid-template-columns: 1fr;
     }
 
     .character-library-toolbar-field {
-        flex-basis: calc(var(--mainFontSize) * 9);
+        width: 100%;
     }
 }
 
@@ -3301,6 +3310,66 @@ input[type="file"] {
     font-weight: 600;
     line-height: 1;
     white-space: nowrap;
+}
+
+#rm_print_characters_block .character-library-react-panel__row,
+#rm_print_characters_block .character-library-react-panel__cell {
+    min-width: 0;
+}
+
+#rm_print_characters_block .character_select,
+#rm_print_characters_block .bogus_folder_select {
+    min-height: calc(var(--mainFontSize) * 3.7);
+    margin-bottom: 2px;
+    padding: 6px 7px;
+    gap: 9px;
+    border-radius: 5px;
+    transition:
+        background-color var(--animation-duration-2x) ease-out,
+        border-color var(--animation-duration-2x) ease-out;
+}
+
+#rm_print_characters_block .character_select:hover,
+#rm_print_characters_block .character_select:focus-visible,
+#rm_print_characters_block .bogus_folder_select:hover,
+#rm_print_characters_block .bogus_folder_select:focus-visible {
+    background-color: color-mix(in srgb, var(--SmartThemeBodyColor) 7%, transparent);
+    border-color: color-mix(in srgb, var(--SmartThemeBorderColor) 70%, transparent);
+}
+
+#rm_print_characters_block .character_select:focus-visible,
+#rm_print_characters_block .bogus_folder_select:focus-visible {
+    outline: 2px solid var(--SmartThemeQuoteColor);
+    outline-offset: -2px;
+}
+
+#rm_print_characters_block .character_select .avatar,
+#rm_print_characters_block .bogus_folder_select .avatar {
+    flex: 0 0 auto;
+}
+
+#rm_print_characters_block .character_select .ch_name,
+#rm_print_characters_block .bogus_folder_select .ch_name {
+    font-weight: 600;
+}
+
+#rm_print_characters_block .character_select .ch_description {
+    color: color-mix(in srgb, var(--SmartThemeBodyColor) 72%, transparent);
+    line-height: 1.25;
+}
+
+#rm_print_characters_block .character_select.is_active {
+    background-color: color-mix(in srgb, var(--active) 12%, transparent);
+    border-color: color-mix(in srgb, var(--active) 42%, transparent);
+}
+
+#rm_print_characters_block .character_select.character_selected {
+    background-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 13%, transparent);
+    border-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 50%, transparent);
+}
+
+#rm_print_characters_block .character-library-react-panel--grid .character-library-react-panel__row {
+    gap: 6px;
 }
 
 #rm_print_characters_pagination {
@@ -3538,6 +3607,15 @@ select option[disabled]:not(:checked) {
     height: 100%;
 }
 
+#rm_characters_block:has(.emberdesk-react-character-library-toolbar) {
+    background:
+        linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--SmartThemeBlurTintColor) 94%, var(--SmartThemeQuoteColor) 6%),
+            color-mix(in srgb, var(--SmartThemeBlurTintColor) 98%, transparent)
+        );
+}
+
 #rm_characters_block .right_menu_button {
     padding-right: 15px;
 }
@@ -3560,7 +3638,18 @@ select option[disabled]:not(:checked) {
 }
 
 #charListFixedTop {
-    padding: 5px;
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    padding: 5px 6px 7px;
+    border-bottom: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 52%, transparent);
+    background:
+        linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--SmartThemeBlurTintColor) 96%, var(--SmartThemeQuoteColor) 4%),
+            color-mix(in srgb, var(--SmartThemeBlurTintColor) 88%, transparent)
+        );
+    box-shadow: 0 8px 18px color-mix(in srgb, black 18%, transparent);
 }
 
 #form_character_search_form {
@@ -9080,6 +9169,11 @@ body:not(.movingUI) .drawer-content.maximized {
     font-weight: 600;
 }
 
+.settings-overlay-close {
+    width: auto;
+    flex: 0 0 auto;
+}
+
 .settings-tabs-description--visually-hidden {
     position: absolute;
     width: 1px;
@@ -9114,7 +9208,11 @@ body:not(.movingUI) .drawer-content.maximized {
 
 .settings-overlay {
     position: relative;
+    margin: auto;
+    padding: 0;
     z-index: 1;
+    max-width: none;
+    max-height: none;
     /* shell chrome stays at 4300 so nav toggle remains clickable */
     width: min(92vw, 1180px);
     height: min(92dvh, 880px);
@@ -9152,8 +9250,24 @@ body:not(.movingUI) .drawer-content.maximized {
         left: 0;
         width: 100vw;
         height: calc(100dvh - var(--topBarBlockSize, 40px));
+        overflow-y: auto;
         border-radius: 0;
         animation: settings-overlay-fade-in 150ms ease-out both;
+    }
+
+    .settings-page--overlay .settings-layout {
+        height: auto;
+        min-height: 100%;
+    }
+
+    .settings-page--overlay .settings-main-panel {
+        max-height: none;
+        overflow: visible;
+    }
+
+    .settings-page--overlay .settings-tab-panel {
+        flex: 0 0 auto;
+        overflow: visible;
     }
 }
 

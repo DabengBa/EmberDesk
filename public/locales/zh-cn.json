@@ -3853,5 +3853,7 @@
     "Author's Note Bottom": "作者注释底部",
     "At Depth": "按深度",
     "No keywords": "无关键词",
-    "Constant": "常驻"
+    "Constant": "常驻",
+    "Custom endpoint active. API key field stores proxy password.": "已启用自定义端点。API 密钥字段将存储网关密钥。",
+    "Direct provider endpoint. API key stays in the API Key field.": "当前使用直连服务端点。API 密钥保留在 API 密钥字段。"
 }

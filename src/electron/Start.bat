@@ -1,6 +1,6 @@
 @echo off
 pushd %~dp0
-call npm install --no-save --no-audit --no-fund --loglevel=error --no-progress --omit=dev --ignore-scripts
-npm run start server.js %*
+call pnpm install --prod --frozen-lockfile --no-ignore-scripts --reporter=silent
+call pnpm run start -- server.js %*
 pause
 popd

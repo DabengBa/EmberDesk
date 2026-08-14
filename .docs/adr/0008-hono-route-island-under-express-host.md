@@ -1,14 +1,14 @@
 # ADR-0008: Hono Route Island Under Express Host
 
-- Status: Accepted
+- Status: Superseded by ADR-0013 on 2026-08-07
 - Date: 2026-06-23
 - Deciders: EmberDesk maintainers
 - Supersedes: none
-- Superseded by: none
+- Superseded by: ADR-0013
 
 ## Context
 
-Phase 5 Sprint 1 needs a typed route experiment without reopening EmberDesk's server host boundary.
+Phase 5 Sprint 1 evaluated a typed route experiment without reopening EmberDesk's server host boundary.
 
 Current hard constraints:
 
@@ -18,11 +18,11 @@ Current hard constraints:
 - `tests/express5-route-compatibility.test.js` already treats the Express 5 host chain as a production contract.
 - The first candidate endpoint, `POST /api/moving-ui/save`, is narrow, already private-route only, and behavior-preserving for callers.
 
-The project wanted to learn whether Hono can improve route-local structure and validation without implying a wider runtime migration.
+The project evaluated whether Hono could improve route-local structure and validation without implying a wider runtime migration.
 
 ## Decision
 
-Adopt Hono only as a route-local island under the existing Express host for `POST /api/moving-ui/save`.
+The original decision adopted Hono only as a route-local island under the existing Express host for `POST /api/moving-ui/save`. ADR-0013 superseded it: the experiment did not justify retaining a second route framework, and the endpoint now uses an Express router directly.
 
 The accepted boundary is:
 
@@ -70,18 +70,16 @@ Neutral clarifications:
 
 ## Evidence
 
-- `tests/moving-ui-hono-route-island.test.js`
+- The route-island implementation and focused parity test were historical artifacts; ADR-0013 removed them after the direct Express route was proven sufficient.
 - `tests/express5-route-compatibility.test.js`
 - `src/endpoints/moving-ui.js`
 
-Validation command:
+Replacement validation:
 
 ```bash
-bun run --cwd tests test:unit -- express5-route-compatibility.test.js moving-ui-hono-route-island.test.js --runInBand
+pnpm --dir tests run test:unit -- express5-route-compatibility.test.js moving-ui-express-route.test.js --runInBand
 ```
 
 ## References
 
-- Hono routing and `app.fetch()` model: https://hono.dev/docs/api/routing
-- Hono Node.js getting started: https://hono.dev/docs/getting-started/nodejs
 - Express middleware guide: https://expressjs.com/en/guide/using-middleware.html

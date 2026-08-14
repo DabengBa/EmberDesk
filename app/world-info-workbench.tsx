@@ -2,6 +2,19 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useForm } from '@tanstack/react-form';
 import { z } from 'zod';
+import {
+    buildWorldInfoPanelFormDefaults,
+    getWorldInfoPanelStatus,
+} from './lib/world-info-workbench-helpers';
+
+function parseFiniteNumber(value: string): number | undefined {
+    if (value.trim() === '') {
+        return undefined;
+    }
+
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+}
 
 export interface WorldInfoReactWorldOption {
     value: string;
@@ -204,21 +217,6 @@ function buildAdvancedSummary(entry: WorldInfoWorkbenchEntryDetail | null | unde
     return parts.join(' · ');
 }
 
-export function buildWorldInfoPanelFormDefaults(state: WorldInfoWorkspacePanelState) {
-    return {
-        selectedWorldIndex: state.selectedWorldIndex ?? '',
-        searchQuery: state.searchQuery ?? '',
-        sortValue: state.sortValue ?? '',
-    };
-}
-
-export function getWorldInfoPanelStatus(bridgeState: WorldInfoWorkspacePanelState): WorkspacePanelStatus {
-    if (!bridgeState.editorSelectorPresent && !bridgeState.importMenuPresent) {
-        return 'error';
-    }
-    return 'success';
-}
-
 function AdvancedSection({
     id,
     title,
@@ -391,6 +389,7 @@ function EntryEditor({
                 </header>
                 <textarea
                     className="text_pole wi-workbench-content"
+                    aria-label="注入内容"
                     value={draft.content}
                     data-world-info-react-field="content"
                     rows={12}
@@ -424,8 +423,18 @@ function EntryEditor({
                             type="number"
                             value={draft.order}
                             data-world-info-react-field="order"
-                            onChange={event => setDraft({ ...draft, order: Number(event.target.value) })}
-                            onBlur={event => saveFields({ order: Number(event.target.value) })}
+                            onChange={event => {
+                                const value = parseFiniteNumber(event.target.value);
+                                if (value !== undefined) {
+                                    setDraft({ ...draft, order: value });
+                                }
+                            }}
+                            onBlur={event => {
+                                const value = parseFiniteNumber(event.target.value);
+                                if (value !== undefined) {
+                                    saveFields({ order: value });
+                                }
+                            }}
                         />
                     </label>
                     {draft.position === 4 ? (
@@ -436,8 +445,18 @@ function EntryEditor({
                                 type="number"
                                 value={draft.depth}
                                 data-world-info-react-field="depth"
-                                onChange={event => setDraft({ ...draft, depth: Number(event.target.value) })}
-                                onBlur={event => saveFields({ depth: Number(event.target.value) })}
+                                onChange={event => {
+                                    const value = parseFiniteNumber(event.target.value);
+                                    if (value !== undefined) {
+                                        setDraft({ ...draft, depth: value });
+                                    }
+                                }}
+                                onBlur={event => {
+                                    const value = parseFiniteNumber(event.target.value);
+                                    if (value !== undefined) {
+                                        saveFields({ depth: value });
+                                    }
+                                }}
                             />
                         </label>
                     ) : null}
@@ -450,8 +469,18 @@ function EntryEditor({
                             max={100}
                             value={draft.probability}
                             data-world-info-react-field="probability"
-                            onChange={event => setDraft({ ...draft, probability: Number(event.target.value) })}
-                            onBlur={event => saveFields({ probability: Number(event.target.value), useProbability: true })}
+                            onChange={event => {
+                                const value = parseFiniteNumber(event.target.value);
+                                if (value !== undefined) {
+                                    setDraft({ ...draft, probability: value });
+                                }
+                            }}
+                            onBlur={event => {
+                                const value = parseFiniteNumber(event.target.value);
+                                if (value !== undefined) {
+                                    saveFields({ probability: value, useProbability: true });
+                                }
+                            }}
                         />
                     </label>
                 </div>

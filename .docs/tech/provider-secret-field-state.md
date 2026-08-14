@@ -52,8 +52,8 @@ The file backend remains available when canonical flags are off. Rollback after 
 Focused proof:
 
 ```bash
-bun run --cwd tests test:unit -- provider-secret-field-state.test.js chat-generation-auto-recovery.test.js secrets-input-map.test.js --runInBand
-bun run --cwd tests test:unit -- chat-workspace-structure.test.js openai-provider-capabilities.test.js --runInBand
+pnpm --dir tests run test:unit -- provider-secret-field-state.test.js chat-generation-auto-recovery.test.js secrets-input-map.test.js --runInBand
+pnpm --dir tests run test:unit -- chat-workspace-structure.test.js openai-provider-capabilities.test.js --runInBand
 ```
 
 The tests cover disabled, needs-setup, ready, reverse-proxy, server-side secret, failed-save, successful-save, clear, selector mapping, and shared readiness cases.

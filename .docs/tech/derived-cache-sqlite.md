@@ -132,7 +132,7 @@ SQLite WAL supports concurrent readers, but multiple EmberDesk writer processes 
 Primary proof:
 
 ```bash
-bun run --cwd tests test:unit -- derived-cache-sqlite.test.js interaction-performance-index.test.js --runInBand
+pnpm --dir tests run test:unit -- derived-cache-sqlite.test.js interaction-performance-index.test.js --runInBand
 ```
 
 This command proves helper lifecycle behavior independently and keeps historical character-index coverage explicit while route-level tests prove normal runtime ignores the retired sidecar.

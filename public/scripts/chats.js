@@ -6,10 +6,7 @@ import {
     appendMediaToMessage,
     characters,
     chat,
-    eventSource,
-    event_types,
     getCurrentChatId,
-    getRequestHeaders,
     name2,
     reloadCurrentChat,
     saveSettingsDebounced,
@@ -29,6 +26,8 @@ import {
     getMediaDisplay,
     chatElement,
 } from '../script.js';
+import { eventSource, event_types } from './events.js';
+import { getRequestHeaders } from './request-context.js';
 import { selected_group } from './group-chats.js';
 import { power_user } from './power-user.js';
 import {

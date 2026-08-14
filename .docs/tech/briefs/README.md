@@ -57,8 +57,8 @@ Delete or avoid adding briefs that are:
 | `260605-05-derived-cache-release-hardening.md` | Records the no-code release-risk matrix proving derived SQLite fallback, reset, and circuit-breaker behavior. |
 | `260605-06-low-risk-frontend-controller-slice.md` | Preserves the low-risk frontend controller extraction constraints: background loading-state ownership changed while visible behavior and compatibility stayed stable. |
 | `260605-07-compatibility-hardening-pass.md` | Records protected extension, slash-command, route-envelope, regex, and shared-library compatibility surfaces for later slices. |
-| `260605-08-build-dependency-closure.md` | Preserves the build/toolchain closure facts for Node, Bun, Webpack, ESLint, oxlint, and dependency drift. |
-| `260605-09-node26-release-validation-sweep.md` | Records the Node 26.3.0 release validation matrix and the scoped Playwright skip decision. |
+| `260605-08-build-dependency-closure.md` | Historical Node/Bun/build-tool closure; the Webpack state recorded there is superseded by ADR-0013. |
+| `260605-09-node26-release-validation-sweep.md` | Historical Node 26.3.0 release validation matrix and scoped Playwright skip decision. |
 | `260605-10-documentation-topology-closure.md` | Records the delivered documentation topology closure: retained briefs are indexed, spec-local process files are not durable archives, and semantic docs stayed unchanged. |
 | `260605-11-roadmap-freeze-successor-decision.md` | Records the delivered roadmap freeze and successor-decision boundary for future SPA, TypeScript, database-first storage, broad endpoint, Electron, dependency/runtime, and `/lib.js` migration proposals. |
 | `260606-01-chat-message-affordance-proof.md` | Preserves the first successor-slice intent for the main chat workspace: establish message-row affordance and rendering contract proof before any message rendering or streaming refactor. |

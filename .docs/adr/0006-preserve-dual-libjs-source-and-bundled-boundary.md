@@ -1,8 +1,8 @@
 # ADR-0006: Preserve `/lib.js` as both source-import and bundled-browser boundary
 
-Status: accepted
+Status: superseded by ADR-0013 on 2026-08-07
 
-`public/lib.js` is imported directly by Node/Jest tests and source-relative browser modules, while browser delivery goes through a bundled ES module output. The current main bundle is Vite-built `dist/lib/lib.js`; Webpack remains only as a deprecated fallback and Docker precompile path until that compatibility path is retired. Some dependencies, such as `slidetoggle`, expose different namespace shapes through Node's CommonJS interop than they expose through browser bundlers.
+`public/lib.js` is imported directly by Node/Jest tests and source-relative browser modules, while browser delivery goes through a bundled ES module output. At acceptance, the project retained a Webpack fallback beside Vite. That fallback was removed in ADR-0013 after Vite became the proven browser build.
 
 The decision is to keep one `public/lib.js` boundary and normalize dependency export shapes inside that file instead of creating separate source-only and bundled-only wrappers. This keeps the documented import contract stable for first-party modules and extension authors, while forcing dependency interop quirks to be captured by focused boundary tests.
 

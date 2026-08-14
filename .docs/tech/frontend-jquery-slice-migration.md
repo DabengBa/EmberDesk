@@ -133,21 +133,21 @@ Focused proof for this slice:
 
 ```bash
 cd tests
-bun run test:unit -- login-page-controller.test.js --runInBand
-bun run test:unit -- setup-page-controller.test.js --runInBand
-bun run test:unit -- background-panel-controller.test.js --runInBand
-bun run test:unit -- chat-message-actions-controller.test.js --runInBand
-bun run test:unit -- provider-secret-field-state.test.js --runInBand
-bun run test:unit -- frontend-structure-contract.test.js --runInBand
-bun run test:e2e -- login.e2e.js
-bun run test:e2e -- sample.e2e.js
+pnpm run test:unit -- login-page-controller.test.js --runInBand
+pnpm run test:unit -- setup-page-controller.test.js --runInBand
+pnpm run test:unit -- background-panel-controller.test.js --runInBand
+pnpm run test:unit -- chat-message-actions-controller.test.js --runInBand
+pnpm run test:unit -- provider-secret-field-state.test.js --runInBand
+pnpm run test:unit -- frontend-structure-contract.test.js --runInBand
+pnpm run test:e2e -- login.e2e.js
+pnpm run test:e2e -- sample.e2e.js
 ```
 
 Docs proof:
 
 ```bash
-bun run docs:check
-bun run docs:build
+pnpm run docs:check
+pnpm run docs:build
 ```
 
 The Playwright config starts its own seeded EmberDesk server through `tests/playwright.config.js`. It runs `scripts/seed-dev-environment.mjs` with a temporary data root and config path, then starts `node server.js` for the selected base URL. Use `PLAYWRIGHT_BASE_URL`, `PLAYWRIGHT_PORT`, `PLAYWRIGHT_DATA_ROOT`, `PLAYWRIGHT_CONFIG_PATH`, `PLAYWRIGHT_USER`, `PLAYWRIGHT_PASSWORD`, or `PLAYWRIGHT_REUSE_SERVER=0` only when overriding that default test server behavior.

@@ -20,8 +20,8 @@ if %errorlevel% neq 0 (
     )
 )
 set NODE_ENV=production
-call npm install --no-save --no-audit --no-fund --loglevel=error --no-progress --omit=dev --ignore-scripts
-node server.js %*
+call pnpm install --prod --frozen-lockfile --ignore-scripts
+call pnpm start -- %*
 :end
 pause
 popd

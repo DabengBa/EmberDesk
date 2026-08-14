@@ -1,4 +1,0 @@
-contract_version = 1
-feature_slug = "react-main-chat-transport-retirement"
-brief = ".docs/tech/briefs/260716-11-react-main-chat-transport-retirement.md"
-doc_ids = ["page.chat_workspace", "feature.chat_generation_auto_recovery", "feature.chat_message_actions", "feature.fallback_provider"]

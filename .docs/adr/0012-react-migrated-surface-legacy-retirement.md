@@ -70,7 +70,7 @@ The [React Legacy Retirement Brief](../tech/briefs/260716-02-react-legacy-retire
 At minimum, each deletion must show:
 
 - semantic workflow parity for the affected page or feature;
-- focused unit and Playwright proof, plus `bun run test:compat` where extension-facing behavior is involved;
+- focused unit and Playwright proof, plus `pnpm run test:compat` where extension-facing behavior is involved;
 - no remaining runtime import, feature flag, hidden host, or fallback branch that activates the deleted owner;
 - preserved supported public contracts, including stable extension selectors or their documented replacement;
 - startup and interaction evidence where the surface touches workspace startup, large lists, or main chat;

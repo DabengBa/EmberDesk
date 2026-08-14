@@ -201,36 +201,6 @@ export async function readRecentChatPayload({
         }
     };
 
-    const getGroupChatFiles = async () => {
-        const groupDirents = []; // group chat retirement: do not enumerate group chats
-        void directories.groups;
-        if (false) await deps.fs.promises.readdir(directories.groups, { withFileTypes: true });
-        const _retiredGroupDirents = await Promise.resolve([]);
-        void _retiredGroupDirents;
-        const groups = groupDirents.filter(e => e.isFile() && deps.path.extname(e.name) === '.json').map(e => e.name);
-
-        for (const group of groups) {
-            try {
-                const groupPath = deps.path.join(directories.groups, group);
-                const groupContents = await deps.fs.promises.readFile(groupPath, 'utf8');
-                const groupData = JSON.parse(groupContents);
-
-                if (Array.isArray(groupData.chats)) {
-                    for (const chat of groupData.chats) {
-                        const filePath = deps.path.join(directories.groupChats, `${chat}.jsonl`);
-                        if (!deps.fs.existsSync(filePath)) {
-                            continue;
-                        }
-                        const stats = await deps.fs.promises.stat(filePath);
-                        allChatFiles.push({ groupId: groupData.id, filePath, mtime: stats.mtimeMs });
-                    }
-                }
-            } catch {
-                continue;
-            }
-        }
-    };
-
     const getRootChatFiles = async () => {
         const dirents = await deps.fs.promises.readdir(directories.chats, { withFileTypes: true });
         const chatFiles = dirents.filter(e => e.isFile() && deps.path.extname(e.name) === '.jsonl').map(e => e.name);
@@ -242,7 +212,7 @@ export async function readRecentChatPayload({
         }
     };
 
-    await Promise.allSettled([getCharacterChatFiles(), getGroupChatFiles(), getRootChatFiles()]);
+    await Promise.allSettled([getCharacterChatFiles(), getRootChatFiles()]);
 
     const maxWithPinned = parseInt(max ?? Number.MAX_SAFE_INTEGER) + pinnedChats.length;
     const isPinned = (/** @type {ChatFile} */ chatFile) => pinnedChats.some(p => p.file_name === deps.path.basename(chatFile.filePath) && (p.avatar === chatFile.pngFile || p.group === chatFile.groupId));

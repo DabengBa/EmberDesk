@@ -19,7 +19,7 @@ function getInternalName(avatarFilename) {
 }
 
 function cloneCanonicalPayload(payload) {
-    return JSON.parse(JSON.stringify(payload));
+    return structuredClone(payload);
 }
 
 export function normalizeCanonicalCharacterPayload(payload) {

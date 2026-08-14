@@ -1,4 +1,6 @@
-import { chat, chat_metadata, eventSource, event_types, getRequestHeaders, this_chid, characters } from '../../../script.js';
+import { chat, chat_metadata, this_chid, characters } from '../../../script.js';
+import { eventSource, event_types } from '../../events.js';
+import { getRequestHeaders } from '../../request-context.js';
 import { extension_settings } from '../../extensions.js';
 import { QuickReplyApi } from './api/QuickReplyApi.js';
 import { AutoExecuteHandler } from './src/AutoExecuteHandler.js';

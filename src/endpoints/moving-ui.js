@@ -1,6 +1,5 @@
 import path from 'node:path';
 import express from 'express';
-import { Hono } from 'hono';
 import sanitize from 'sanitize-filename';
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import { z } from 'zod';
@@ -28,76 +27,18 @@ function saveMovingUiPreset(directories, payload) {
     return true;
 }
 
-function createHonoBridgeRequest(request) {
-    const headers = new Headers();
-    for (const [key, value] of Object.entries(request.headers)) {
-        if (Array.isArray(value)) {
-            for (const item of value) {
-                headers.append(key, item);
-            }
-            continue;
-        }
-        if (value !== undefined) {
-            headers.set(key, value);
-        }
-    }
+export const router = express.Router();
 
-    return new Request(new URL(request.url, 'http://localhost'), {
-        method: request.method,
-        headers,
-    });
-}
-
-async function sendHonoBridgeResponse(response, honoResponse) {
-    response.status(honoResponse.status);
-    for (const [key, value] of honoResponse.headers.entries()) {
-        response.setHeader(key, value);
-    }
-    const body = Buffer.from(await honoResponse.arrayBuffer());
-    return response.send(body);
-}
-
-export const movingUiRouteOwner = new Hono();
-
-movingUiRouteOwner.post('/save', c => {
-    const parsed = movingUiSaveSchema.safeParse(c.env?.parsedBody);
-    const directories = c.env?.user?.directories;
-
+router.post('/save', (request, response) => {
+    const parsed = movingUiSaveSchema.safeParse(request.body);
+    const directories = request.user?.directories;
     if (!parsed.success || !directories?.movingUI) {
-        return new Response('Bad Request', {
-            status: 400,
-            headers: { 'content-type': 'text/plain; charset=utf-8' },
-        });
+        return response.status(400).type('text/plain').send('Bad Request');
     }
 
     if (!saveMovingUiPreset(directories, parsed.data)) {
-        return new Response('Bad Request', {
-            status: 400,
-            headers: { 'content-type': 'text/plain; charset=utf-8' },
-        });
+        return response.status(400).type('text/plain').send('Bad Request');
     }
 
-    return new Response('OK', {
-        status: 200,
-        headers: { 'content-type': 'text/plain; charset=utf-8' },
-    });
-});
-
-export const router = express.Router();
-
-router.use(async (request, response, next) => {
-    try {
-        const honoResponse = await movingUiRouteOwner.fetch(createHonoBridgeRequest(request), {
-            parsedBody: request.body,
-            user: request.user,
-        });
-
-        if (honoResponse.status === 404) {
-            return next();
-        }
-
-        return await sendHonoBridgeResponse(response, honoResponse);
-    } catch (error) {
-        return next(error);
-    }
+    return response.type('text/plain').send('OK');
 });

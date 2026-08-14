@@ -7,6 +7,8 @@ last_updated: 2026-06-23
 
 # React Phase 5 Sprint 2 Drizzle Derived-Cache Decision Gate Intent
 
+> Historical archived brief. The Hono route-island portion of the original Phase 5 plan was later superseded and deleted by ADR-0013; current backend routes are Express-owned.
+
 ## User Original Request
 
 用户追问：根据当前 roadmap，只补出一个 Sprint 1 spec 是否足以完成 Phase 5；如果不足，要求继续补充足够的 Phase 5 spec，使后续可以按 roadmap 继续开发，而不是停留在 phase-level 说明。

@@ -10,6 +10,8 @@ export default {
         files: [
             'public/lib/**',
             'public/scripts/extensions/**',
+            'artifacts/**',
+            'data/**',
         ],
         overrides: [
             {
@@ -17,7 +19,7 @@ export default {
                     'app/workspace-panels.tsx',
                 ],
                 rules: [
-                    'react-doctor/no-multi-comp',
+                    'react-doctor/no-multi-component-file',
                     'react-doctor/only-export-components',
                 ],
             },

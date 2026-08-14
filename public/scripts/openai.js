@@ -9,8 +9,6 @@ import {
     abortStatusCheck,
     cancelStatusCheck,
     characters,
-    event_types,
-    eventSource,
     extension_prompt_roles,
     extension_prompt_types,
     Generate,
@@ -18,7 +16,6 @@ import {
     getExtensionPromptMaxDepth,
     getMediaDisplay,
     getMediaIndex,
-    getRequestHeaders,
     is_send_press,
     main_api,
     name1,
@@ -32,6 +29,8 @@ import {
     system_message_types,
     this_chid,
 } from '../script.js';
+import { eventSource, event_types } from './events.js';
+import { getRequestHeaders } from './request-context.js';
 import { getGroupNames, selected_group } from './group-chats.js';
 
 import {

@@ -4,7 +4,7 @@ import { withCanonicalTransaction } from '../canonical-sqlite.js';
 import { uuidv4 } from '../util.js';
 
 function cloneJson(payload) {
-    return JSON.parse(JSON.stringify(payload ?? {}));
+    return structuredClone(payload ?? {});
 }
 
 function parseRequiredJson(value, fieldName) {

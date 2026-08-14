@@ -1,4 +1,0 @@
-contract_version = 1
-feature_slug = "react-world-info-retirement"
-brief = ".docs/tech/briefs/260716-08-react-world-info-retirement.md"
-doc_ids = ["feature.world_info_panel", "page.chat_workspace"]

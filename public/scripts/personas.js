@@ -6,10 +6,7 @@ import {
     chat_metadata,
     createOrEditCharacter,
     default_user_avatar,
-    eventSource,
-    event_types,
     getCurrentChatId,
-    getRequestHeaders,
     getThumbnailUrl,
     groupToEntity,
     menu_type,
@@ -22,6 +19,8 @@ import {
     setUserName,
     this_chid,
 } from '../script.js';
+import { eventSource, event_types } from './events.js';
+import { getRequestHeaders } from './request-context.js';
 import { power_user } from './power-user.js';
 import { getTokenCountAsync } from './tokenizers.js';
 import {

@@ -1,6 +1,6 @@
 # Third-Party Extension Compatibility
 
-This document records the compatibility boundary that protects EmberDesk's current regex feature and the bundled Tavern Helper extension during frontend modernization.
+This document records the compatibility boundary that protects EmberDesk's current regex feature and the bundled Tavern Helper extension during frontend modernization. The workspace composition root and the extracted contract owners are part of this boundary, but they are not interchangeable with the shared `/lib.js` library boundary.
 
 Terminology: in this document, **Tavern Helper** / **酒馆助手** specifically means the upstream [N0VI028/JS-Slash-Runner](https://github.com/N0VI028/JS-Slash-Runner) extension and EmberDesk's bundled local copy of that extension. It is not a generic label for all SillyTavern-style helper plugins.
 
@@ -23,9 +23,9 @@ This is a compatibility contract, not a request to refactor the extension or reg
 As of 2026-07-16, the compatibility boundary is also expressed as a **provider-neutral executable contract** used by retirement packages:
 
 - Manifest: `tests/helpers/frontend-compatibility-contract.js`
-- Static gate: `bun run test:compat` (`tests/third-party-extension-compatibility.test.js`)
-- Runtime gate: `bun run --cwd tests test:e2e -- third-party-extension-runtime.e2e.js --workers=1`
-- Bridge non-public gate: `bun run --cwd tests test:unit -- global-compatibility-bridge.test.js --runInBand`
+- Static gate: `pnpm run test:compat` (`tests/third-party-extension-compatibility.test.js`)
+- Runtime gate: `pnpm --dir tests run test:e2e -- third-party-extension-runtime.e2e.js --workers=1`
+- Bridge non-public gate: `pnpm --dir tests run test:unit -- global-compatibility-bridge.test.js --runInBand`
 
 Contract families: `globals`, `events`, `aliases`, `slash`, `regex`, `mounts`, `selectors`, `message-mutation`, `internal-bridge`.
 
@@ -46,8 +46,8 @@ Phase 4 adds internal React/Zustand observation through `app/stores/*` and `app/
 
 | Surface | Supported behavior | Current provider and replacement condition | Completion rule |
 |---|---|---|---|
-| `globalThis.SillyTavern` | Public object shape and supported lookup behavior for upstream-style helpers and extension-adjacent context | Current browser-shell object; a React-era provider must preserve the supported object behavior before this provider is retired. | The bridge must never become a substitute public API. |
-| `eventSource` / `event_types` | Emitter methods, event names, values, and established timing semantics | Current event emitter and table; any React-era provider must preserve the documented contract. | No rename, narrowing, or timing regression without a replacement contract and focused proof. |
+| `globalThis.SillyTavern` | Public object shape and supported lookup behavior for upstream-style helpers and extension-adjacent context | `public/scripts/public-api.js` explicitly installs the object during `public/script.js` composition; a React-era provider must preserve the supported object behavior before this provider is retired. | The bridge must never become a substitute public API. |
+| `eventSource` / `event_types` | Emitter methods, event names, values, and established timing semantics | `public/scripts/events.js` owns the emitter/table; `public/script.js` remains the public compatibility entry and re-export path. | No rename, narrowing, or timing regression without a replacement contract and focused proof. |
 | `@sillytavern/*` browser aliases | Alias resolution and protected export shapes for ecosystems such as Tavern Helper / JS-Slash-Runner | Current browser-module mapping; new ES-module utility imports should prefer `/lib.js`. | Replace the provider only after compatible aliases and exports are browser-proven. |
 | Extension mount points (`#extensions_settings`, `#extensions_settings2`, `#regex_container`, wand menu) | Reachable extension content and documented mount lifecycle | Current protected DOM nodes and templates; React must supply equivalent mount contracts before these nodes disappear. | Do not delete a node until affected extensions mount and operate through its replacement. |
 | Regex engine exports and `regex_placement` values | Existing exports, numeric placement values, and transformation behavior | Current regex module; React-era services may replace internals but not narrow the supported result. | Preserve numeric values and behavior with compatibility proof. |
@@ -74,16 +74,16 @@ Use the following `JS-Slash-Runner criticality` values when reviewing or extendi
 
 | Surface family | JS-Slash-Runner criticality | Current provider | Required replacement proof | Primary proof | Retirement consumer | Current gap |
 |---|---|---|---|---|---|---|
-| `@sillytavern/*` browser aliases | `primary` | browser module mapping under `public/` | compatible alias mapping and source-relative bundle output | `bun run test:compat` | Extensions Host / shell-global retirement | Static resolution is covered; behavior-specific alias consumers still rely on focused runtime checks. |
-| `#extensions_settings`, `#extensions_settings2`, `#regex_container`, `#extensionsMenuButton`, `#extensionsMenu` | `primary` | React lifecycle-owned protected mount slots under the sole-owner Extensions Host; public helpers remain on `public/scripts/extensions.js` | keep documented node IDs and mount protocol; do not require dual-owner legacy host chrome | `bun run test:compat`; `bun run --cwd tests test:e2e -- extensions-host.e2e.js third-party-extension-runtime.e2e.js --workers=1` | Extensions Host | Static presence and sole-owner host E2E cover slots; node IDs remain freeze-supported even after legacy host chrome retirement. |
-| `eventSource` / `event_types` | `primary` | `public/script.js` and `public/scripts/events.js` | emitter object and event-name table with matching runtime semantics | `bun run test:compat` | shell-global retirement | Export/value stability is covered; not every runtime timing path is browser-proven. |
-| slash-command public exports from `public/scripts/slash-commands.js` | `primary` | slash parser / registry / executor | compatible autocomplete and command execution provider | `bun run test:compat` | Extensions Host / Main Chat | Plugin-specific end-to-end execution remains a runtime evidence concern. |
-| regex exports and `regex_placement` values | `primary` | `public/scripts/extensions/regex/engine.js` | compatible regex provider and stable numeric placements | `bun run test:compat` | Extensions Host / World Info | Plugin-specific transformation flows still need runtime evidence notes. |
-| `globalThis.SillyTavern` | `secondary` | browser shell | supported global object behavior supplied without the legacy shell | `bun run test:compat` | shell-global retirement | Current repo evidence treats it as a compatibility surface, but `JS-Slash-Runner` primarily consumes module imports and extension context helpers instead of this global. |
-| message-row DOM contract | `secondary` | main-chat rendering path | protected row structure supplied by React main-chat owner | `bun run --cwd tests test:unit -- chat-workspace-structure.test.js third-party-extension-compatibility.test.js --runInBand`; `bun run --cwd tests test:e2e -- chat-message-layout.e2e.js`; `bun run --cwd tests test:e2e -- chat-message-rendering.e2e.js` | Main Chat | Core row structure is covered; plugin-specific rich DOM mutations remain a later renderer cutover concern. |
-| character-list DOM contract | `secondary` | character-list shell and guarded React row compatibility | React-owned list with protected row identity behavior | `bun run test:compat`; `bun run --cwd tests test:unit -- character-list-structure.test.js --runInBand` | Character Library | Static row identity is covered; not a primary `JS-Slash-Runner` gate. |
-| character route payload shape | `secondary` | browser-facing route payload contract | unchanged legacy-shaped payloads from the React-era consumer path | `bun run --cwd tests test:unit -- character-read-service.test.js interaction-performance-index.test.js character-list-structure.test.js --runInBand` | Character Library | Internal service envelope leakage is guarded, but not a primary plugin gate. |
-| Phase 4 React compatibility bridge snapshots | `internal-only` | `app/compat/global-compatibility-bridge.js` | no public extension use is introduced | `bun run --cwd tests test:unit -- global-compatibility-bridge.test.js --runInBand` | all retirement waves | Snapshot safety is covered; the bridge is intentionally unsupported for third-party extension code. |
+| `@sillytavern/*` browser aliases | `primary` | browser module mapping under `public/` | compatible alias mapping and source-relative bundle output | `pnpm run test:compat` | Extensions Host / shell-global retirement | Static resolution is covered; behavior-specific alias consumers still rely on focused runtime checks. |
+| `#extensions_settings`, `#extensions_settings2`, `#regex_container`, `#extensionsMenuButton`, `#extensionsMenu` | `primary` | React lifecycle-owned protected mount slots under the sole-owner Extensions Host; public helpers remain on `public/scripts/extensions.js` | keep documented node IDs and mount protocol; do not require dual-owner legacy host chrome | `pnpm run test:compat`; `pnpm --dir tests run test:e2e -- extensions-host.e2e.js third-party-extension-runtime.e2e.js --workers=1` | Extensions Host | Static presence and sole-owner host E2E cover slots; node IDs remain freeze-supported even after legacy host chrome retirement. |
+| `eventSource` / `event_types` | `primary` | `public/scripts/events.js`, assembled and re-exported by `public/script.js` | emitter object and event-name table with matching runtime semantics | `pnpm run test:compat` | shell-global retirement | Export/value stability is covered; not every runtime timing path is browser-proven. |
+| slash-command public exports from `public/scripts/slash-commands.js` | `primary` | slash parser / registry / executor | compatible autocomplete and command execution provider | `pnpm run test:compat` | Extensions Host / Main Chat | Plugin-specific end-to-end execution remains a runtime evidence concern. |
+| regex exports and `regex_placement` values | `primary` | `public/scripts/extensions/regex/engine.js` | compatible regex provider and stable numeric placements | `pnpm run test:compat` | Extensions Host / World Info | Plugin-specific transformation flows still need runtime evidence notes. |
+| `globalThis.SillyTavern` | `secondary` | `public/scripts/public-api.js`, installed by `public/script.js` | supported global object behavior supplied without the legacy shell | `pnpm run test:compat` | shell-global retirement | Current repo evidence treats it as a compatibility surface, but `JS-Slash-Runner` primarily consumes module imports and extension context helpers instead of this global. |
+| message-row DOM contract | `secondary` | main-chat rendering path | protected row structure supplied by React main-chat owner | `pnpm --dir tests run test:unit -- chat-workspace-structure.test.js third-party-extension-compatibility.test.js --runInBand`; `pnpm --dir tests run test:e2e -- chat-message-layout.e2e.js`; `pnpm --dir tests run test:e2e -- chat-message-rendering.e2e.js` | Main Chat | Core row structure is covered; plugin-specific rich DOM mutations remain a later renderer cutover concern. |
+| character-list DOM contract | `secondary` | character-list shell and guarded React row compatibility | React-owned list with protected row identity behavior | `pnpm run test:compat`; `pnpm --dir tests run test:unit -- character-list-structure.test.js --runInBand` | Character Library | Static row identity is covered; not a primary `JS-Slash-Runner` gate. |
+| character route payload shape | `secondary` | browser-facing route payload contract | unchanged legacy-shaped payloads from the React-era consumer path | `pnpm --dir tests run test:unit -- character-read-service.test.js interaction-performance-index.test.js character-list-structure.test.js --runInBand` | Character Library | Internal service envelope leakage is guarded, but not a primary plugin gate. |
+| Phase 4 React compatibility bridge snapshots | `internal-only` | `app/compat/global-compatibility-bridge.js` | no public extension use is introduced | `pnpm --dir tests run test:unit -- global-compatibility-bridge.test.js --runInBand` | all retirement waves | Snapshot safety is covered; the bridge is intentionally unsupported for third-party extension code. |
 
 ## Phase 6 JS-Slash-Runner Runtime Evidence
 
@@ -95,12 +95,12 @@ External dependency paths in this section were checked on 2026-06-23 against `JS
 
 | Surface | Current plugin dependency path | Baseline proof | Remaining runtime evidence note | Phase 7 blocker when broken |
 |---|---|---|---|---|
-| Mount lifecycle | `src/index.ts` appends `#tavern_helper` to `#extensions_settings` | `bun run test:compat`; `bun run --cwd tests test:e2e -- third-party-extension-runtime.e2e.js --workers=1` | Runtime proof loads `#tavern_helper`; flag-off / bundle-import-failure still leave protected mount nodes intact for non-retired hosts. | Yes |
-| Alias resolution | `src/**` imports `@sillytavern/*` paths resolved into `public/` browser modules | `bun run test:compat` | Static alias presence passes in the 2026-06-23 proof set; Phase 6 still treats alias narrowing or path churn as a hard blocker until a migration path exists. | Yes |
-| Event contract | `src/function/generate/*.ts`, `PromptViewer.vue`, `variable_manager/*.vue`, `tavern_regex.ts`, and render helpers consume `eventSource` / `event_types` | `bun run test:compat` | Event values and emitter methods are frozen, but Phase 6 still records that event timing semantics are not exhaustively browser-proven. | Yes |
-| Slash-command integration | `src/function/slash.ts` imports `executeSlashCommandsWithOptions`; multiple panels rely on the protected slash surface | `bun run test:compat` | Public export stability is covered; Phase 6 still records that plugin-specific end-to-end slash execution remains a runtime compatibility concern, not a solved cutover path. | Yes |
-| Regex integration | `src/function/generate/utils.ts` and `src/function/tavern_regex.ts` consume `getRegexedString` and `regex_placement.*` | `bun run test:compat` | Numeric placement stability is covered; Phase 6 still treats behavior drift in regex application order as a blocker until separately disproven. | Yes |
-| Public globals vs. internal bridge | Type declarations and extension-adjacent helpers still assume public legacy globals exist, while React bridge snapshots remain first-party only | `bun run test:compat`; `bun run --cwd tests test:unit -- global-compatibility-bridge.test.js --runInBand` | Phase 6 must keep the rule that a failed bridge attach leaves public globals untouched and does not create a new plugin API. | Yes |
+| Mount lifecycle | `src/index.ts` appends `#tavern_helper` to `#extensions_settings` | `pnpm run test:compat`; `pnpm --dir tests run test:e2e -- third-party-extension-runtime.e2e.js --workers=1` | Runtime proof loads `#tavern_helper`; flag-off / bundle-import-failure still leave protected mount nodes intact for non-retired hosts. | Yes |
+| Alias resolution | `src/**` imports `@sillytavern/*` paths resolved into `public/` browser modules | `pnpm run test:compat` | Static alias presence passes in the 2026-06-23 proof set; Phase 6 still treats alias narrowing or path churn as a hard blocker until a migration path exists. | Yes |
+| Event contract | `src/function/generate/*.ts`, `PromptViewer.vue`, `variable_manager/*.vue`, `tavern_regex.ts`, and render helpers consume `eventSource` / `event_types` | `pnpm run test:compat` | Event values and emitter methods are frozen, but Phase 6 still records that event timing semantics are not exhaustively browser-proven. | Yes |
+| Slash-command integration | `src/function/slash.ts` imports `executeSlashCommandsWithOptions`; multiple panels rely on the protected slash surface | `pnpm run test:compat` | Public export stability is covered; Phase 6 still records that plugin-specific end-to-end slash execution remains a runtime compatibility concern, not a solved cutover path. | Yes |
+| Regex integration | `src/function/generate/utils.ts` and `src/function/tavern_regex.ts` consume `getRegexedString` and `regex_placement.*` | `pnpm run test:compat` | Numeric placement stability is covered; Phase 6 still treats behavior drift in regex application order as a blocker until separately disproven. | Yes |
+| Public globals vs. internal bridge | Type declarations and extension-adjacent helpers still assume public legacy globals exist, while React bridge snapshots remain first-party only | `pnpm run test:compat`; `pnpm --dir tests run test:unit -- global-compatibility-bridge.test.js --runInBand` | Phase 6 must keep the rule that a failed bridge attach leaves public globals untouched and does not create a new plugin API. | Yes |
 
 ### Secondary evidence surfaces
 
@@ -289,12 +289,25 @@ Phase 6 treats `globalThis.SillyTavern`, `eventSource`, and `event_types` as pub
 
 | Surface | Public or internal | Current `JS-Slash-Runner` consumer path | Failure rule | Proof |
 |---|---|---|---|---|
-| `globalThis.SillyTavern` | public compatibility surface | Adjacent and type-level compatibility surface; current plugin source primarily uses module imports and extension context helpers instead of this global | Do not replace or stub the existing object when React bridge attach fails | `bun run test:compat` |
-| `eventSource` | public compatibility surface | Direct runtime consumer in `src/function/generate/*.ts`, `PromptViewer.vue`, `use_collapse_code_block.ts`, `variable_manager/*.vue`, and `tavern_regex.ts` | Keep emitter methods stable; bridge attach failure must leave the legacy object untouched | `bun run test:compat` |
-| `event_types` | public compatibility surface | Direct runtime consumer across the same generate, prompt, render, and variable-manager paths listed above | Keep event names and values stable; React-owned slices cannot silently rename or narrow them | `bun run test:compat` |
-| `__emberDeskReactCompatibilityBridge` | internal-only first-party adapter | No supported third-party consumer; Phase 4 uses it only for sanitized React-owned snapshots | Bridge detach removes only the internal bridge surface; it must not mutate or replace public globals | `bun run --cwd tests test:unit -- global-compatibility-bridge.test.js --runInBand` |
+| `globalThis.SillyTavern` | public compatibility surface | Adjacent and type-level compatibility surface; current plugin source primarily uses module imports and extension context helpers instead of this global | Do not replace or stub the existing object when React bridge attach fails | `pnpm run test:compat` |
+| `eventSource` | public compatibility surface | Direct runtime consumer in `src/function/generate/*.ts`, `PromptViewer.vue`, `use_collapse_code_block.ts`, `variable_manager/*.vue`, and `tavern_regex.ts` | Keep emitter methods stable; bridge attach failure must leave the legacy object untouched | `pnpm run test:compat` |
+| `event_types` | public compatibility surface | Direct runtime consumer across the same generate, prompt, render, and variable-manager paths listed above | Keep event names and values stable; React-owned slices cannot silently rename or narrow them | `pnpm run test:compat` |
+| `__emberDeskReactCompatibilityBridge` | internal-only first-party adapter | No supported third-party consumer; Phase 4 uses it only for sanitized React-owned snapshots | Bridge detach removes only the internal bridge surface; it must not mutate or replace public globals | `pnpm --dir tests run test:unit -- global-compatibility-bridge.test.js --runInBand` |
 
 The internal bridge is not a migration target for third-party extensions. Retirement work may replace public-global providers only after proving the supported contract through a public replacement; it may never treat the bridge as an undocumented substitute.
+
+## Composition-Root Ownership
+
+The current browser ownership is explicit:
+
+- `public/scripts/events.js` owns `eventSource` and `event_types`.
+- `public/scripts/request-context.js` owns CSRF loading, request headers, and the jQuery Ajax prefilter.
+- `public/scripts/public-api.js` explicitly installs `globalThis.SillyTavern`.
+- `public/script.js` assembles these contracts, registers the World Info shell context, preserves approved compatibility exports, and calls `bootstrapWorkspace()`.
+
+The first-party reverse-import gate in `tests/helpers/script-js-reverse-import-contract.js` records the current legacy coupling as an exact 70-entry snapshot. Existing allowlisted imports are compatibility facts, not a design target and not proof that reverse imports are already zero. New first-party entries are blocked; extracted names `eventSource`, `event_types`, and `getRequestHeaders` are forbidden from being imported from `script.js`.
+
+See [Workspace Composition Root](workspace-composition-root.md) for the implementation boundary and [Workspace Composition Root Processing Flow](../logic-description/workspace_composition_root_processing_flow.md) for current ordering and failure behavior.
 
 ## Character Route Compatibility
 
@@ -329,13 +342,13 @@ If a slice must touch one of those areas, add focused regression proof before ch
 Run this focused compatibility proof before and after frontend migration work:
 
 ```bash
-bun run test:compat
+pnpm run test:compat
 ```
 
 The direct tests-package command remains equivalent when debugging from `tests/`:
 
 ```bash
-(cd tests && bun run test:unit -- third-party-extension-compatibility.test.js --runInBand)
+(cd tests && pnpm run test:unit -- third-party-extension-compatibility.test.js --runInBand)
 ```
 
 This test verifies mount points, Tavern Helper manifest and distributable files, `@sillytavern/*` import resolution, key module exports, slash-command public exports, event values, and regex placement values.
@@ -346,15 +359,15 @@ Structure tests may share assertions through `tests/helpers/frontend-structure-c
 When message row rendering, message actions, or main chat workspace structure changes, also run the focused message proof that matches the touched surface:
 
 ```bash
-bun run --cwd tests test:unit -- chat-workspace-structure.test.js third-party-extension-compatibility.test.js --runInBand
-bun run --cwd tests test:e2e -- chat-message-layout.e2e.js
-bun run --cwd tests test:e2e -- chat-message-rendering.e2e.js
+pnpm --dir tests run test:unit -- chat-workspace-structure.test.js third-party-extension-compatibility.test.js --runInBand
+pnpm --dir tests run test:e2e -- chat-message-layout.e2e.js
+pnpm --dir tests run test:e2e -- chat-message-rendering.e2e.js
 ```
 
 When character read-service or character route work changes `/api/characters/all`, `/api/characters/list`, or `/api/characters/get`, also run:
 
 ```bash
-bun run --cwd tests test:unit -- character-read-service.test.js interaction-performance-index.test.js character-list-structure.test.js --runInBand
+pnpm --dir tests run test:unit -- character-read-service.test.js interaction-performance-index.test.js character-list-structure.test.js --runInBand
 ```
 
 That focused route proof verifies the internal read-service envelope stays internal and the legacy browser-facing payload shape remains stable.

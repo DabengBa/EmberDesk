@@ -1,4 +1,11 @@
 import { useForm, useStore } from '@tanstack/react-form';
+
+// Zod `z.coerce.*` fields widen the StandardSchema `input` to `unknown`, which TS 7
+// strictly rejects against the form's number-typed default values. The runtime coercion
+// is correct, so at the call site we assert the schema into the validator slot. The
+// package only exposes the async `FormValidateOrFn` (not the sync `FormValidateFn` the
+// `validators` slot expects), hence the structural `unknown` bridge.
+type SettingsFormValidator = (props: { value: typeof defaultSettingsFormValues }) => any;
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { startTransition, useEffect, useMemo, useState } from 'react';
 import { z } from 'zod';
@@ -33,6 +40,7 @@ import {
     sendOnEnterOptions,
     settingsCoverage,
     settingsTabDefinitions,
+    syncSettingsToLegacyRuntime,
     tagImportSettingOptions,
     toastPositionOptions,
     toolReasoningModeOptions,
@@ -447,8 +455,8 @@ export function SettingsSurface({
         canSubmitWhenInvalid: true,
         defaultValues: defaultSettingsFormValues,
         validators: {
-            onChange: settingsSchema,
-            onSubmit: settingsSchema,
+            onChange: settingsSchema as unknown as SettingsFormValidator,
+            onSubmit: settingsSchema as unknown as SettingsFormValidator,
         },
         onSubmitInvalid: ({ value }) => {
             setSaveStatus(null);
@@ -511,6 +519,7 @@ export function SettingsSurface({
                 throw new MessageError('设置保存失败。');
             }
 
+            syncSettingsToLegacyRuntime(payload);
             await refetchSettings();
             setHasRevisionConflict(false);
             setSaveStatus({ kind: 'success', message: 'Saved' });
@@ -882,7 +891,7 @@ export function SettingsSurface({
                                         variant="number"
                                         min={0}
                                         max={2}
-                                        step={0.05}
+                                        step={0.01}
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />

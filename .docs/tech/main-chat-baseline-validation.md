@@ -20,15 +20,15 @@ It does not change product semantics and does not update `.docs/db/`.
 The baseline requires these commands:
 
 ```bash
-bun run --cwd tests test:unit -- chat-workspace-structure.test.js third-party-extension-compatibility.test.js --runInBand
-bun run --cwd tests test:e2e -- chat-message-layout.e2e.js
-bun run --cwd tests test:e2e -- chat-message-rendering.e2e.js
+pnpm --dir tests run test:unit -- chat-workspace-structure.test.js third-party-extension-compatibility.test.js --runInBand
+pnpm --dir tests run test:e2e -- chat-message-layout.e2e.js
+pnpm --dir tests run test:e2e -- chat-message-rendering.e2e.js
 ```
 
 Optional aggregate compatibility gate:
 
 ```bash
-bun run test:compat
+pnpm run test:compat
 ```
 
 ## Current Evidence
@@ -37,10 +37,10 @@ Status: baseline proof passed locally for this delivery run.
 
 | Evidence | Status | Notes |
 |---|---|---|
-| Static message DOM and send-form structure | passed | `bun run --cwd tests test:unit -- chat-workspace-structure.test.js third-party-extension-compatibility.test.js --runInBand` passed on 2026-06-08; `chat-workspace-structure.test.js` covered send-form controls, chat options, message template identity, and message row action role/name affordances. |
+| Static message DOM and send-form structure | passed | `pnpm --dir tests run test:unit -- chat-workspace-structure.test.js third-party-extension-compatibility.test.js --runInBand` passed on 2026-06-08; `chat-workspace-structure.test.js` covered send-form controls, chat options, message template identity, and message row action role/name affordances. |
 | Third-party compatibility | passed | Same command passed on 2026-06-08; `third-party-extension-compatibility.test.js` kept extension mounts, Tavern Helper assets/imports, slash-command exports, character-list selector contracts, event emitter methods, and regex placement values stable. |
-| Synthetic layout proof | passed | `bun run --cwd tests test:e2e -- chat-message-layout.e2e.js` passed on 2026-06-08 with 1 Playwright test. |
-| Real stored chat rendering | passed | `bun run --cwd tests test:e2e -- chat-message-rendering.e2e.js` passed on 2026-06-08 with 1 Playwright test. The web server logged expected seeded-environment warnings for a missing generated chat file and missing default user avatar thumbnail; they did not fail the proof. |
+| Synthetic layout proof | passed | `pnpm --dir tests run test:e2e -- chat-message-layout.e2e.js` passed on 2026-06-08 with 1 Playwright test. |
+| Real stored chat rendering | passed | `pnpm --dir tests run test:e2e -- chat-message-rendering.e2e.js` passed on 2026-06-08 with 1 Playwright test. The web server logged expected seeded-environment warnings for a missing generated chat file and missing default user avatar thumbnail; they did not fail the proof. |
 
 ## UX Evidence Fields
 

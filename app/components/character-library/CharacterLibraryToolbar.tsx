@@ -93,7 +93,6 @@ export function CharacterLibraryToolbar({
                         <>
                             <output
                                 className="character-library-bulk-selected-count paginationjs-nav"
-                                role="status"
                                 title={bulkSelectedLabel}
                                 aria-label={bulkSelectedLabel}
                             >
@@ -113,7 +112,7 @@ export function CharacterLibraryToolbar({
                 </div>
             </div>
             <div className="character-library-toolbar-fields flex-container flexwrap gap8 alignItemsCenter">
-                <div className="character-library-toolbar-field flex-container flexnowrap gap8 alignItemsCenter">
+                <div className="character-library-toolbar-field character-library-toolbar-search-field flex-container flexnowrap gap8 alignItemsCenter">
                     <toolbarForm.Field name="searchQuery">
                         {field => (
                             <input
@@ -132,7 +131,7 @@ export function CharacterLibraryToolbar({
                         )}
                     </toolbarForm.Field>
                 </div>
-                <div className="character-library-toolbar-field flex-container flexnowrap gap8 alignItemsCenter">
+                <div className="character-library-toolbar-field character-library-toolbar-sort-field flex-container flexnowrap gap8 alignItemsCenter">
                     <toolbarForm.Field name="sortValue">
                         {field => (
                             <select

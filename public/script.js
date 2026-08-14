@@ -372,12 +372,11 @@ import {
 } from './scripts/character-library-query-helpers.js';
 import { mountReactWorkspaceShellChrome, mountReactSettingsOverlay, unmountReactSettingsOverlay } from './scripts/workspace-panels-react-bridge.js';
 import { runDeleteCharacterClosePreflight } from './scripts/delete-character-preflight.js';
+import { getRequestHeaders, installAjaxCsrfPrefilter, loadCsrfToken } from './scripts/request-context.js';
+import { installPublicBrowserApi } from './scripts/public-api.js';
 
 // API OBJECT FOR EXTERNAL WIRING
-globalThis.SillyTavern = {
-    libs,
-    getContext,
-};
+installPublicBrowserApi({ libs, getContext });
 
 if (globalThis.location?.pathname === '/' && globalThis.location?.search.includes('emberdesk_perf_hooks=1')) {
     globalThis.__emberDeskPerf = {
@@ -1713,7 +1712,7 @@ function getCharacterAuthoringReactBridge() {
                     return false;
                 case 'exportAuthoring':
                     applyCharacterAuthoringSaveModel(payload, { submit: false });
-                    $('#export_button').trigger('click');
+                    toggleCharacterExportPopup(getVisibleCharacterExportTrigger());
                     return false;
                 case 'openWorldInfo':
                     applyCharacterAuthoringSaveModel(payload, { submit: false });
@@ -3495,7 +3494,7 @@ function createCharacterLibraryPanelStateSnapshot({ listElement, pageEntities, r
                 : undefined,
             showClearFilters: Boolean(renderPlan.showEmptyBlock && entitiesFilter?.hasAnyFilter?.()),
         },
-        estimatedRowHeight: power_user.charListGrid ? 144 : 112,
+        estimatedRowHeight: power_user.charListGrid ? 144 : 72,
         scrollElement: listElement,
         isGrid: Boolean(power_user.charListGrid),
         bulkMode,
@@ -3543,7 +3542,7 @@ async function mountReactCharacterLibraryPanel(state) {
         listElement.replaceChildren();
         const errorBlock = document.createElement('div');
         errorBlock.className = 'character_list_empty empty_block';
-        errorBlock.textContent = 'Character Library React build is missing. Run bun run build:react:character-library.';
+        errorBlock.textContent = 'Character Library React build is missing. Run pnpm run build:react:character-library.';
         listElement.appendChild(errorBlock);
         return false;
     }
@@ -3882,6 +3881,16 @@ function toggleCharacterExportPopup(referenceElement = document.getElementById('
     exportPopup.querySelector('.export_format')?.focus();
 }
 
+function getVisibleCharacterExportTrigger() {
+    const authoringPanel = document.querySelector('[data-react-authoring-owner="characterAuthoring"]');
+    const reactExportButton = [...(authoringPanel?.querySelectorAll('button') ?? [])]
+        .find(button => button.textContent?.trim() === 'Export');
+
+    return reactExportButton instanceof HTMLElement
+        ? reactExportButton
+        : document.getElementById('export_button');
+}
+
 // Saved here for performance reasons
 const messageTemplate = $('#message_template .mes');
 export const chatElement = $('#chat');
@@ -4144,7 +4153,7 @@ let abortController = new AbortController();
 //css
 var css_send_form_display = $('<div id=send_form></div>').css('display');
 
-export let token;
+export { getRequestHeaders } from './scripts/request-context.js';
 
 
 /** The tag of the active character. (NOT the id) */
@@ -4154,19 +4163,6 @@ export let active_group = '';
 
 export const entitiesFilter = new FilterHelper(printCharactersDebounced);
 
-export function getRequestHeaders({ omitContentType = false } = {}) {
-    const headers = {
-        'Content-Type': 'application/json',
-        'X-CSRF-Token': token,
-    };
-
-    if (omitContentType) {
-        delete headers['Content-Type'];
-    }
-
-    return headers;
-}
-
 export function getSlideToggleOptions() {
     return {
         miliseconds: animation_duration * 1.5,
@@ -4174,9 +4170,7 @@ export function getSlideToggleOptions() {
     };
 }
 
-$.ajaxPrefilter((options, originalOptions, xhr) => {
-    xhr.setRequestHeader('X-CSRF-Token', token);
-});
+installAjaxCsrfPrefilter();
 
 /**
  * Pings the STserver to check if it is reachable.
@@ -4200,14 +4194,12 @@ export async function pingServer() {
     }
 }
 
-//MARK: firstLoadInit
-async function firstLoadInit() {
-    markStartup('firstLoadInit:start');
+//MARK: bootstrapWorkspace
+async function bootstrapWorkspace() {
+    markStartup('bootstrapWorkspace:start');
     try {
         await measureStartupStage('csrfToken', async () => {
-            const tokenResponse = await fetch('/csrf-token');
-            const tokenData = await tokenResponse.json();
-            token = tokenData.token;
+            await loadCsrfToken();
         });
     } catch {
         toastr.error(t`Couldn't get CSRF token. Please refresh the page.`, t`Error`, { timeOut: 0, extendedTimeOut: 0, preventDuplicates: true });
@@ -11960,7 +11952,7 @@ async function applyStartupSettingsCore(data, initLoaderHandle = null) {
 
         selected_button = settings.selected_button;
 
-        // TODO: Move me into firstLoadInit when experimental toggle is removed
+        // TODO: Move me into bootstrapWorkspace when experimental toggle is removed
         // power_user.experimental_macro_engine
         initMacros();
 
@@ -16711,7 +16703,7 @@ jQuery(async function () {
                     const url = new URL(source);
                     const confirm = await Popup.show.confirm('Open Source', `<span>Do you want to open the link to ${url.hostname} in a new tab?</span><var>${url}</var>`);
                     if (confirm) {
-                        window.open(source, '_blank');
+                        window.open(source, '_blank', 'noopener');
                     }
                 } else {
                     toastr.info('This character doesn\'t seem to have a source.');
@@ -16982,7 +16974,7 @@ jQuery(async function () {
     });
 
     // Added here to prevent execution before script.js is loaded and get rid of quirky timeouts
-    await firstLoadInit();
+    await bootstrapWorkspace();
 
     window.addEventListener('beforeunload', (e) => {
         if (isChatSaving || this_edit_mes_id >= 0) {

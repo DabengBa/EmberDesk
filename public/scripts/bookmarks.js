@@ -6,7 +6,6 @@ import {
     this_chid,
     openCharacterChat,
     chat_metadata,
-    getRequestHeaders,
     getThumbnailUrl,
     getCharacters,
     chat,
@@ -15,6 +14,7 @@ import {
     setActiveGroup,
     getCurrentChatDetails,
 } from '../script.js';
+import { getRequestHeaders } from './request-context.js';
 import { humanizedDateTime } from './RossAscends-mods.js';
 import {
     DEFAULT_AUTO_MODE_DELAY,

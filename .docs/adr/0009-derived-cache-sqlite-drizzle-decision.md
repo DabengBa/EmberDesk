@@ -89,7 +89,7 @@ Neutral clarifications:
 Validation command:
 
 ```bash
-bun run --cwd tests test:unit -- derived-cache-sqlite.test.js character-read-service.test.js interaction-performance-index.test.js --runInBand
+pnpm --dir tests run test:unit -- derived-cache-sqlite.test.js character-read-service.test.js interaction-performance-index.test.js --runInBand
 ```
 
 ## References

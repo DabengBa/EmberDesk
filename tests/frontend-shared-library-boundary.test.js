@@ -1,11 +1,8 @@
 /* global globalThis, window */
 import { describe, test, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import webpack from 'webpack';
-import getPublicLibConfig from '../webpack.config.js';
 
 jest.setTimeout(120000);
 
@@ -56,29 +53,7 @@ async function importFreshLib() {
     return import(`../public/lib.js?cacheBust=${Date.now()}-${Math.random()}`);
 }
 
-function runWebpack(config) {
-    return new Promise((resolve, reject) => {
-        const compiler = webpack(config);
-        compiler.run((error, stats) => {
-            compiler.close(() => {
-                if (error) {
-                    reject(error);
-                    return;
-                }
-
-                if (stats?.hasErrors()) {
-                    reject(new Error(stats.toString({ colors: false, all: false, errors: true })));
-                    return;
-                }
-
-                resolve(stats);
-            });
-        });
-    });
-}
-
 describe('frontend shared library boundary', () => {
-    const tmpRoots = [];
     const originalDataRoot = globalThis.DATA_ROOT;
     const originalWindow = globalThis.window;
     const originalDocument = globalThis.document;
@@ -130,9 +105,6 @@ describe('frontend shared library boundary', () => {
         } else {
             globalThis.JS_SHA256_NO_NODE_JS = originalSha256NoNodeJs;
         }
-        for (const root of tmpRoots.splice(0)) {
-            fs.rmSync(root, { recursive: true, force: true });
-        }
     });
 
     test('exports the documented default keys and named module values', async () => {
@@ -163,7 +135,7 @@ describe('frontend shared library boundary', () => {
     test('vite output remains importable as a module', async () => {
         const viteOutputFile = path.resolve(process.cwd(), '..', 'dist/lib/lib.js');
 
-        // Vite 构建应该已经完成（由 CI 或手动运行 bun run build:lib）
+        // Vite 构建应该已经完成（由 CI 或手动运行 pnpm run build:lib）
         expect(fs.existsSync(viteOutputFile)).toBe(true);
 
         const builtLib = await import(`${pathToFileURL(viteOutputFile).href}?cacheBust=${Date.now()}`);
@@ -171,22 +143,4 @@ describe('frontend shared library boundary', () => {
         expect(Object.keys(builtLib.default).sort()).toEqual(expectedExportNames.toSorted());
     });
 
-    test('webpack output remains importable as a module', async () => {
-        const dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-lib-boundary-'));
-        const webpackRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-webpack-boundary-'));
-        tmpRoots.push(dataRoot);
-        tmpRoots.push(webpackRoot);
-        globalThis.DATA_ROOT = dataRoot;
-        fs.writeFileSync(path.join(webpackRoot, 'package.json'), '{"type":"module"}\n', 'utf8');
-
-        const config = getPublicLibConfig({ webpackRoot });
-        await runWebpack(config);
-
-        const outputFile = path.join(config.output.path, config.output.filename);
-        expect(fs.existsSync(outputFile)).toBe(true);
-
-        const builtLib = await import(`${pathToFileURL(outputFile).href}?cacheBust=${Date.now()}`);
-        expect(builtLib).toHaveProperty('initLibraryShims');
-        expect(Object.keys(builtLib.default).sort()).toEqual(expectedExportNames.toSorted());
-    });
 });

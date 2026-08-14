@@ -2,16 +2,15 @@
 
 ## Module Responsibility
 
-This document covers EmberDesk's browser shared-library boundary at `public/lib.js`. The file is the compatibility layer between modern ES module imports and legacy extension globals.
+This document covers EmberDesk's browser shared-library boundary at `public/lib.js`. The file is the compatibility layer between modern ES module imports and legacy extension globals. It is distinct from the Workspace Composition Root at `public/script.js`: `/lib.js` owns shared dependency exports and library shims, while `script.js` owns workspace assembly, extracted runtime-contract installation, and the public `/script.js` compatibility entry.
 
 Primary files:
 
 - `public/lib.js` - shared browser-library entrypoint and legacy shim installer
-- `vite.config.ts` - Vite library-mode build for `/lib.js` (main build)
-- `webpack.config.js` - Webpack module-output build (deprecated fallback)
+- `vite.config.ts` - Vite library-mode build for `/lib.js`
 - `src/middleware/vite-lib-serve.js` - Vite-built `/lib.js` serving middleware
-- `src/middleware/webpack-serve.js` - Webpack-built `/lib.js` serving middleware (deprecated)
 - `tests/frontend-shared-library-boundary.test.js` - regression proof for exports, shims, and built output
+- `public/script.js` - separate workspace composition root; it calls `initLibraryShims()` during `bootstrapWorkspace()` but does not own the library export resolver
 
 ## Architecture And Constraints
 
@@ -22,15 +21,11 @@ Primary files:
 
 Browser ES modules do not automatically leak imported names to `window`. Any global exposed by this boundary must be installed intentionally by `initLibraryShims()` and covered by tests.
 
-**Build Tools:**
-
-- **Vite 8** (main): Library mode build outputting ES module format to `dist/lib/lib.js`. Fast HMR support for development (< 200ms). Build time ~34s.
-- **Webpack** (deprecated fallback): Module output with `experiments.outputModule` and `libraryTarget: 'module'`. Use `bun run build:lib:webpack` if Vite compatibility issues arise.
+**Build Tool:** Vite 8 builds the ES module output at `dist/lib/lib.js`.
 
 The same source file is also imported directly by Node/Jest tests. Dependency export interop therefore has to work in multiple environments:
 
 - Vite's browser module build (ES module output)
-- Webpack's browser module build (ES module output, deprecated)
 - Node's direct source import path, where a CommonJS package can appear under `default`, `slidetoggle`, or `module.exports`.
 
 This dual boundary is intentional and recorded in [ADR-0006](../adr/0006-preserve-dual-libjs-source-and-bundled-boundary.md).
@@ -82,7 +77,7 @@ Use absolute `/lib.js` imports only where the existing module location already f
 3. `slidetoggle.toggle`
 4. `module.exports.toggle`
 
-Fallback containers are read with `Reflect.get()` so browser bundled-output validation does not treat Node-only CommonJS fallback names as required static exports. The documented boundary is that source imports, Vite-built `/lib.js`, and the deprecated Webpack fallback all expose a callable `slideToggle` function.
+Fallback containers are read with `Reflect.get()` so browser bundled-output validation does not treat Node-only CommonJS fallback names as required static exports. The documented boundary is that source imports and Vite-built `/lib.js` expose a callable `slideToggle` function.
 
 ## Legacy Global Shim Contract
 
@@ -102,6 +97,8 @@ Fallback containers are read with `Reflect.get()` so browser bundled-output vali
 
 The shim is idempotent and must not overwrite an existing value. This protects extensions that pre-seed or wrap a shared global before EmberDesk startup completes.
 
+The workspace composition root installs other browser contracts separately. `globalThis.SillyTavern` is installed explicitly by `installPublicBrowserApi()` from `public/scripts/public-api.js`; `eventSource` / `event_types` are owned by `public/scripts/events.js`; and CSRF/request headers are owned by `public/scripts/request-context.js`. These are related compatibility surfaces, not additional `/lib.js` exports.
+
 ## Extension Guidance
 
 New extension code should import from `/lib.js` when it is authored as an ES module. Legacy extensions may continue to read the documented `window.*` globals.
@@ -119,13 +116,13 @@ Removing a global requires a deprecation cycle and extension-facing migration no
 Focused boundary proof:
 
 ```bash
-bun run test:unit -- frontend-shared-library-boundary.test.js --runInBand
+pnpm --dir tests run test:unit -- frontend-shared-library-boundary.test.js --runInBand
 ```
 
 Touched-file lint:
 
 ```bash
-bunx eslint public/lib.js tests/frontend-shared-library-boundary.test.js
+pnpm exec eslint public/lib.js tests/frontend-shared-library-boundary.test.js
 ```
 
 Logic-description proof:
@@ -137,7 +134,7 @@ uv run python .docs/logic-description/frontend_shared_library_boundary_sandbox_p
 Docs check:
 
 ```bash
-bun run docs:check
+pnpm run docs:check
 ```
 
 ## Related Semantic IDs And Code Binding Points
@@ -152,10 +149,12 @@ Stability-sensitive binding points:
 
 - `initLibraryShims()` in `public/lib.js`
 - `initLibraryShims()` call during `public/script.js` startup
+- `installPublicBrowserApi()` call during `public/script.js` module composition
+- `public/scripts/events.js` and `public/scripts/request-context.js` as separate extracted contract owners
 - `slideToggle` resolver in `public/lib.js`
 - Vite library config in `vite.config.ts`
 - `getViteLibServeMiddleware()` in `src/middleware/vite-lib-serve.js`
-- `getPublicLibConfig()` in `webpack.config.js` (deprecated)
-- `getWebpackServeMiddleware()` in `src/middleware/webpack-serve.js` (deprecated)
 
 Current processing rules are documented in [Frontend Shared Library Boundary Processing Flow](../logic-description/frontend_shared_library_boundary_processing_flow.md).
+
+The surrounding workspace composition and startup order are documented in [Workspace Composition Root](workspace-composition-root.md) and [Workspace Composition Root Processing Flow](../logic-description/workspace_composition_root_processing_flow.md).

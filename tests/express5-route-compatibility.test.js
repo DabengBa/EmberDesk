@@ -18,10 +18,8 @@ import {
     oauthCallbackMiddleware,
 } from '../src/express-route-compat.js';
 import getViteLibServeMiddleware from '../src/middleware/vite-lib-serve.js';
-import getWebpackServeMiddleware from '../src/middleware/webpack-serve.js';
 import userCssMiddleware from '../src/middleware/userCss.js';
 import multerMonkeyPatch from '../src/middleware/multerMonkeyPatch.js';
-import getPublicLibConfig from '../webpack.config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -467,38 +465,59 @@ describe('Express 5 route compatibility', () => {
     });
 
     test('static browser assets keep Express 5 compatible MIME types', async () => {
-        const webpackConfig = getPublicLibConfig();
-        fs.mkdirSync(webpackConfig.output.path, { recursive: true });
-        fs.writeFileSync(path.join(webpackConfig.output.path, webpackConfig.output.filename), 'export default {};', 'utf8');
+        const distLibPath = path.join(repoRoot, 'dist', 'lib');
+        const distLibFile = path.join(distLibPath, 'lib.js');
+        const existingLib = fs.existsSync(distLibFile)
+            ? fs.readFileSync(distLibFile)
+            : null;
+        fs.mkdirSync(distLibPath, { recursive: true });
+        fs.writeFileSync(distLibFile, 'export default {};', 'utf8');
         fs.mkdirSync(path.join(globalThis.DATA_ROOT, '_css'), { recursive: true });
         fs.writeFileSync(path.join(globalThis.DATA_ROOT, '_css', 'user.css'), ':root { --test: 1; }', 'utf8');
 
-        const app = express();
-        app.use(getWebpackServeMiddleware());
-        app.use(userCssMiddleware);
-        app.use(express.static(path.join(repoRoot, 'public'), {}));
+        try {
+            const app = express();
+            app.use(getViteLibServeMiddleware());
+            app.use(userCssMiddleware);
+            app.use(express.static(path.join(repoRoot, 'public'), {}));
 
-        await usingApp(app, async (url) => {
-            const checks = [
-                ['/lib.js', 'text/javascript'],
-                ['/script.js', 'text/javascript'],
-                ['/style.css', 'text/css'],
-                ['/index.html', 'text/html'],
-                ['/img/claude.svg', 'image/svg+xml'],
-                ['/webfonts/NotoSans/NotoSans-Regular.woff2', 'font/woff2'],
-                ['/css/user.css', 'text/css'],
-            ];
+            await usingApp(app, async (url) => {
+                const checks = [
+                    ['/lib.js', 'text/javascript'],
+                    ['/script.js', 'text/javascript'],
+                    ['/style.css', 'text/css'],
+                    ['/index.html', 'text/html'],
+                    ['/img/claude.svg', 'image/svg+xml'],
+                    ['/webfonts/NotoSans/NotoSans-Regular.woff2', 'font/woff2'],
+                    ['/css/user.css', 'text/css'],
+                ];
 
-            for (const [assetPath, contentType] of checks) {
-                const response = await fetch(`${url}${assetPath}`);
-                expect(response.status).toBe(200);
-                expect(response.headers.get('content-type')).toContain(contentType);
-                await response.arrayBuffer();
+                for (const [assetPath, contentType] of checks) {
+                    const response = await fetch(`${url}${assetPath}`);
+                    expect(response.status).toBe(200);
+                    expect(response.headers.get('content-type')).toContain(contentType);
+                    await response.arrayBuffer();
+                }
+            });
+        } finally {
+            if (existingLib) {
+                fs.writeFileSync(distLibFile, existingLib);
+            } else {
+                fs.rmSync(distLibFile, { force: true });
             }
-        });
+        }
     });
 
-    test('missing Vite lib output falls through to the Webpack lib asset', async () => {
+    test('server startup owns no Webpack fallback or compiler path', () => {
+        const serverMain = fs.readFileSync(path.join(repoRoot, 'src', 'server-main.js'), 'utf8');
+        const viteMiddleware = fs.readFileSync(path.join(repoRoot, 'src', 'middleware', 'vite-lib-serve.js'), 'utf8');
+
+        expect(serverMain).not.toContain('getWebpackServeMiddleware');
+        expect(serverMain).not.toContain('runWebpackCompiler');
+        expect(viteMiddleware).not.toContain('Webpack');
+    });
+
+    test('missing Vite lib output remains unavailable', async () => {
         const distLibRoot = path.join(repoRoot, 'dist', 'lib');
         const distLibFile = path.join(distLibRoot, 'lib.js');
         const distBackupFile = path.join(distLibRoot, `lib.js.backup-${Date.now()}`);
@@ -510,19 +529,12 @@ describe('Express 5 route compatibility', () => {
         }
 
         try {
-            const webpackConfig = getPublicLibConfig();
-            fs.mkdirSync(webpackConfig.output.path, { recursive: true });
-            fs.writeFileSync(path.join(webpackConfig.output.path, webpackConfig.output.filename), 'export const fallback = true;', 'utf8');
-
             const app = express();
             app.use(getViteLibServeMiddleware());
-            app.use(getWebpackServeMiddleware());
 
             await usingApp(app, async (url) => {
                 const response = await fetch(`${url}/lib.js`);
-                expect(response.status).toBe(200);
-                expect(response.headers.get('content-type')).toContain('text/javascript');
-                expect(await response.text()).toContain('fallback = true');
+                expect(response.status).toBe(404);
             });
         } finally {
             fs.rmSync(distLibFile, { force: true });

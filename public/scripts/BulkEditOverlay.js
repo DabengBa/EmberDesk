@@ -3,10 +3,7 @@
 import {
     characterGroupOverlay,
     characters,
-    event_types,
-    eventSource,
     getCharacters,
-    getRequestHeaders,
     buildAvatarList,
     characterToEntity,
     printCharactersDebounced,
@@ -19,6 +16,8 @@ import {
     syncReactCharacterLibraryToolbarState,
 } from '../script.js';
 
+import { eventSource, event_types } from './events.js';
+import { getRequestHeaders } from './request-context.js';
 import { favsToHotswap } from './RossAscends-mods.js';
 import { loader } from './action-loader.js';
 import { convertCharacterToPersona } from './personas.js';

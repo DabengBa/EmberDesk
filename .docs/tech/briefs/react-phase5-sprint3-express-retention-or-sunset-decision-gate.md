@@ -7,6 +7,8 @@ last_updated: 2026-06-23
 
 # React Phase 5 Sprint 3 Express Retention Or Sunset Decision Gate Intent
 
+> Historical archived brief. The original Phase 5 plan evaluated a Hono route island, but ADR-0013 removed that experiment; Express is the current and sole backend route owner.
+
 ## User Original Request
 
 用户继续要求：既然 Sprint 1 不能单独完成 Phase 5，就应按 roadmap 补齐剩余开发 spec，而不是把 “Express 是否保留为 runtime owner” 留成未排期的含糊后话。

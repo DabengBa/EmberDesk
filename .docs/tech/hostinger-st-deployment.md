@@ -7,7 +7,7 @@ This runbook documents the Hostinger-hosted production `st` deployment for Ember
 Related docs:
 
 - [hostinger-sttest-deployment.md](hostinger-sttest-deployment.md) - shared test server (`sttest`) runbook; do not use those paths for production
-- [bun-workflow.md](bun-workflow.md) - local package manager, runtime, and Docker install contract
+- [pnpm-workflow.md](pnpm-workflow.md) - local package manager, runtime, and Docker install contract
 - [server-startup-orchestration.md](server-startup-orchestration.md) - server boot phases after the container starts
 - [config-resolution.md](config-resolution.md) - config and data-root resolution consumed by the deployed server
 
@@ -42,7 +42,7 @@ Persistent state is mounted outside the application checkout:
 
 Keep these mounts intact. The Git checkout and rebuilt image are replaceable; config, user data, plugins, and third-party extensions are not.
 
-The image build must precompile React assets. `app/dist` is gitignored; without `bun run build:react` (and the panel builds) inside the Dockerfile, production `/login` returns HTTP 503 with `React login build is missing`.
+The image build must precompile React assets. `app/dist` is gitignored; without `pnpm run build:react` (and the panel builds) inside the Dockerfile, production `/login` returns HTTP 503 with `React login build is missing`.
 
 ## Core Implementation
 
@@ -131,8 +131,8 @@ This deployment runbook has no owning semantic product ID. Related user-facing s
 
 Operational binding points:
 
-- `Dockerfile` - production image build, React prebuild, and Bun install behavior
-- `docker/build-lib.js` - browser library precompile during image build
+- `Dockerfile` - production image build, React prebuild, and pnpm install behavior
+- `pnpm run build:lib` - Vite browser library precompile during image build
 - `src/healthcheck.js` - container healthcheck entry point
 - `src/middleware/react-login-serve.js` - required `app/dist` login shell contract
 - `server.js` - deployed process entry point

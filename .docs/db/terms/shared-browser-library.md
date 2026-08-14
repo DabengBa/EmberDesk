@@ -9,7 +9,7 @@ related: [page.chat_workspace, feature.extension_panel_open]
 
 ## ID 解释
 
-`term.shared_browser_library` represents the product-visible idea that EmberDesk exposes a stable browser-side library surface for first-party modules and extension authors. It does not describe the bundler, package-resolution internals, or server middleware that produce the file.
+`term.shared_browser_library` represents the product-visible idea that EmberDesk exposes a stable browser-side library surface for first-party modules and extension authors. It does not describe the bundler, package-resolution internals, server middleware, or workspace composition-root implementation that produces and installs that surface.
 
 ## Definition
 
@@ -17,11 +17,12 @@ The shared browser library is the import surface that lets browser modules and E
 
 ## Final Compatibility Status
 
-- Retirement packages use the provider-neutral contract in `tests/helpers/frontend-compatibility-contract.js` (`aliases` / `globals` families) with `bun run test:compat` before deleting a shared-library provider.
+- Retirement packages use the provider-neutral contract in `tests/helpers/frontend-compatibility-contract.js` (`aliases` / `globals` families) with `pnpm run test:compat` before deleting a shared-library provider.
 
 - `/lib.js` is a long-term supported browser-module surface for first-party code and new ES-module extensions.
 - Legacy `window.*` shims are current compatibility affordances, not a growth path for adding new globals. Their supported behavior must be deliberately reimplemented before the supplying legacy runtime is removed.
 - Existing upstream-style `@sillytavern/*` aliases remain a supported compatibility contract for ecosystems such as `JS-Slash-Runner`; when an extension only needs shared utilities, `/lib.js` is the preferred new import surface.
+- The workspace keeps its public browser contracts stable while internal owners are modernized incrementally. Detailed composition-root ownership and reverse-import rules live in [Workspace Composition Root](../../tech/workspace-composition-root.md).
 - Maintainer closeout state for `/lib.js`, legacy globals, and `@sillytavern/*` aliases lives in tech docs and ADRs. The product-facing promise here is only that the shared browser utility surface remains stable.
 
 ## User-Facing Lifecycle

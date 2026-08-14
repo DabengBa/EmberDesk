@@ -2,6 +2,8 @@
 
 日期：2026-06-15
 
+> 本文保留 2026-06-15 的原始现代化意图和交付追溯。当前运行时、构建和后端路由决策以 `AGENTS.md`、`.docs/adr/0013-remove-obsolete-web-stack-experiments.md` 及对应技术文档为准。
+
 ## 原始请求
 
 用户要求基于参考技术栈 `C:\SyncFiles\Softwares_Downloads\dev\Agents-Prompt\.docs\tech\recommended-stacks\react.md`，为 EmberDesk 编写从 jQuery 迁移到 React 生态的完整现代化路线图。
@@ -13,7 +15,7 @@
 从 jQuery 单体应用（13,583 行 `public/script.js`）渐进式迁移到现代 React 生态，在 12-18 个月内完成以下目标：
 
 1. **前端现代化**：用 React 19 + TanStack Router 的 feature-flagged page/panel islands 逐步替代低风险 jQuery surface，建立组件化、类型安全的前端架构
-2. **构建工具升级**：用 Vite 承接 `/lib.js` 主构建、共享 React app 和 panel bundles；Webpack 只保留为 deprecated fallback / Docker precompile path
+2. **构建工具升级**：用 Vite 承接 `/lib.js`、共享 React app 和 panel bundles；当时的 Webpack fallback 目标后来被 ADR-0013 删除
 3. **类型安全**：渐进式引入 TypeScript，前后端类型共享
 4. **状态管理**：后续 Phase 4 再评估用 Zustand 替代 `globalThis.SillyTavern` 全局对象；当前代码仍保留 legacy globals 兼容面
 5. **后端 API 边界评估**：后续 Phase 5 再评估 typed API / route boundary 工具是否值得引入；当前代码仍以 Express 5 为 API owner，不预设 Hono 替换 Express
@@ -43,7 +45,7 @@
 ### 架构约束
 
 - 保持文件作为用户数据正本（不迁移到数据库优先）
-- 保持 Node.js 26.3.0 作为运行时（Bun 仅作包管理器）
+- 当时保持 Node.js 26.3.0 作为运行时（Bun 仅作包管理器）；当前运行时已升级到 Node.js 26.7.0
 - 保持 Playwright E2E 测试框架
 - 不引入 React 以外的前端框架（如 Vue、Svelte）
 
@@ -66,7 +68,7 @@
 - TanStack Router 文档 (https://tanstack.com/router/latest): 当前 React page islands 的路由基础
 - React 19 文档 (https://react.dev/): Server Components、Actions
 - Vite 8 文档 (https://vite.dev/): 快速构建工具
-- Hono 文档 (https://hono.dev/): Phase 5 未来 API 候选，不是当前已采用依赖
+- Hono 文档 (https://hono.dev/): 已评估但未保留的 Phase 5 route-boundary 候选，详见 ADR-0013
 
 ## 假设
 
@@ -146,7 +148,7 @@ New stable links should point to durable docs, not process specs. Use a phase RE
 - ✅ Phase 4 已落地并从 active specs 归档：`app/stores/workspace-panel-store.js`、`app/stores/main-chat-observation-store.js`、`app/compat/global-compatibility-bridge.js`、`public/scripts/main-chat-visible-transport-owner.js` 和 `public/scripts/chat-message-render-descriptor.js` 已把 state foundation、compat bridge、transport classifier 与 renderer/windowing contract 固化到当前代码；持久入口改为 `.docs/tech/briefs/react-phase4-state-management-sequenced-specs.md`、`.docs/tech/react-modernization-roadmap.md` 和 owning docs。
 - ✅ ADR-0007 已接受，用于替代原先的 ADR 占位：早期 React 迁移采用 page/panel islands + legacy fallback，而不是一次性 SPA cutover。
 - 📋 Phase 2 Sprint 4-7 尚未完成完整 panel 行为迁移：World Info activation/import/regex/delete、Background upload/delete/rename/select/slash behavior、Extensions discovery/mount/API/install/update/delete behavior 仍由 legacy 面板拥有；当前 React host 只呈现受保护状态面。
-- 📋 TanStack Start、Hono、Drizzle ORM、Vitest、shadcn/ui 和 Ant Design 仍是后续候选或原始推荐栈内容；当前代码事实只支持把 React 19、TanStack Router、TanStack Query、TanStack Form、Zod、TanStack Virtual、Vite 8、Tailwind v4、TypeScript 6、ESLint 10，以及在 Phase 4 已引入的 Zustand 写成已采用。
+- 📋 TanStack Start、Drizzle ORM、Vitest、shadcn/ui 和 Ant Design 仍是后续候选或原始推荐栈内容；Hono 已被 ADR-0013 明确排除。当前代码事实只支持把 React 19、TanStack Router、TanStack Query、TanStack Form、Zod、TanStack Virtual、Vite 8、Tailwind v4、TypeScript 6、ESLint 10，以及在 Phase 4 已引入的 Zustand 写成已采用。
 
 ### 代码路径（预期）
 

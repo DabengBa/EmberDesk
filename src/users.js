@@ -274,7 +274,7 @@ export function requireLoginMiddleware(request, response, next) {
  */
 function sendMissingReactAuthBuild(response, pageName) {
     response.status(503).type('text/plain').send(
-        `React ${pageName} build is missing. Run "bun run build:react" and restart the server.`,
+        `React ${pageName} build is missing. Run "pnpm run build:react" and restart the server.`,
     );
 }
 

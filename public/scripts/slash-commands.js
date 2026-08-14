@@ -16,8 +16,6 @@ import {
     deleteSwipe,
     displayPastChats,
     duplicateCharacter,
-    eventSource,
-    event_types,
     extension_prompt_roles,
     extension_prompt_types,
     extractMessageBias,
@@ -28,7 +26,6 @@ import {
     getCurrentChatId,
     getFirstDisplayedMessageId,
     getOneCharacter,
-    getRequestHeaders,
     getThumbnailUrl,
     is_send_press,
     main_api,
@@ -63,6 +60,8 @@ import {
     this_chid,
     updateMessageElement,
 } from '../script.js';
+import { eventSource, event_types } from './events.js';
+import { getRequestHeaders } from './request-context.js';
 import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
 import { SlashCommandParserError } from './slash-commands/SlashCommandParserError.js';
 import { getMessageTimeStamp, isMobile } from './RossAscends-mods.js';

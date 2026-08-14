@@ -19,7 +19,7 @@ Non-goals:
 
 - Re-document every dependency's API.
 - Replace `tests/frontend-shared-library-boundary.test.js`.
-- Describe Vite or Webpack internals beyond the observable bundled-output boundary this file depends on.
+- Describe Vite internals beyond the observable bundled-output boundary this file depends on.
 
 ## Input Discovery And Parsing Rules
 
@@ -27,7 +27,7 @@ The boundary receives dependency values from ES module imports in `public/lib.js
 
 For most dependencies, the imported value is exported directly. `slidetoggle` is special because direct Node source imports and browser bundler builds can expose different namespace shapes:
 
-1. Vite and Webpack ESM resolution can expose `toggle` at the namespace top level.
+1. Vite ESM resolution can expose `toggle` at the namespace top level.
 2. Node CommonJS interop can expose an object under `default`.
 3. Some CommonJS namespace forms may expose `slidetoggle` or `module.exports`.
 

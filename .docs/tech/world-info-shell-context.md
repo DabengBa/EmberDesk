@@ -2,13 +2,15 @@
 
 ## Module Responsibility
 
-`public/scripts/world-info-shell-context.js` owns the narrow runtime context that lets `public/scripts/world-info.js` remain the World Info compatibility facade without importing `../script.js` directly.
+`public/scripts/world-info-shell-context.js` owns the narrow runtime context that lets `public/scripts/world-info.js` remain the World Info compatibility facade without importing `../script.js` directly. It is one of the composition-root seams registered by `public/script.js`, alongside the extracted event and request-context modules.
 
 The module is internal to the browser workspace. It is not a public extension API and it does not replace the user-facing World Info behavior documented in [World Info Panel](../db/features/world-info-panel.md).
 
 ## Architecture And Constraints
 
 - `public/script.js` registers the shell context during browser module startup with `registerWorldInfoShellContext(...)`.
+- `public/scripts/events.js` owns the emitter/table supplied through the registered context.
+- `public/scripts/request-context.js` owns `getRequestHeaders()` supplied through the registered context.
 - `public/scripts/world-info.js` calls `requireWorldInfoShellContext()` or the event-source helper when it needs shell-owned state, events, settings, character helpers, or metadata.
 - Registration must avoid eager reads of shell constants that are declared later in `public/script.js`. Values that can be affected by module initialization order use callable accessors, such as `get extensionPromptRoles() { return extension_prompt_roles; }`.
 - The context fails closed when missing. World Info code should receive `World Info shell context is not registered.` instead of silently falling back to stale globals.
@@ -37,6 +39,8 @@ Semantic IDs:
 Code binding points:
 
 - `public/script.js`
+- `public/scripts/events.js`
+- `public/scripts/request-context.js`
 - `public/scripts/world-info-shell-context.js`
 - `public/scripts/world-info.js`
 - `public/lib/eventemitter.js`
@@ -46,6 +50,8 @@ Related docs:
 
 - [React Modernization Roadmap](react-modernization-roadmap.md)
 - [Third-Party Extension Compatibility](third-party-extension-compatibility.md)
+- [Workspace Composition Root](workspace-composition-root.md)
+- [Workspace Composition Root Processing Flow](../logic-description/workspace_composition_root_processing_flow.md)
 - [World Info Shell Context Processing Flow](../logic-description/world_info_shell_context_processing_flow.md)
 
 ## Validation
@@ -53,7 +59,7 @@ Related docs:
 Focused proof:
 
 ```bash
-bun run --cwd tests test:unit -- world-info-shell-context.test.js --runInBand
+pnpm --dir tests run test:unit -- world-info-shell-context.test.js --runInBand
 uv run python .docs/logic-description/world_info_shell_context_sandbox_proof.py
 ```
 

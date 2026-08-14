@@ -123,7 +123,7 @@ This slice does not add a new steady-state cache. Its effect is startup-time DB 
 Focused proof:
 
 ```bash
-bun run --cwd tests test:unit -- canonical-sqlite-migrations.test.js canonical-sqlite.test.js derived-cache-sqlite.test.js --runInBand
+pnpm --dir tests run test:unit -- canonical-sqlite-migrations.test.js canonical-sqlite.test.js derived-cache-sqlite.test.js --runInBand
 ```
 
 What the tests currently prove:

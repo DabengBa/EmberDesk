@@ -1,9 +1,11 @@
 {
     "name": "emberdesk-tests",
     "type": "module",
+    "private": true,
+    "packageManager": "pnpm@12.0.0-rc.5",
     "license": "AGPL-3.0",
     "scripts": {
-        "test": "bun run test:unit && bun run test:e2e",
+        "test": "pnpm run test:unit && pnpm run test:e2e",
         "test:unit": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.config.json",
         "test:e2e": "playwright test",
         "lint": "eslint \"**/*.js\" ./*.js",

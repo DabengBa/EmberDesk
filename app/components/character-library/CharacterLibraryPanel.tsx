@@ -224,6 +224,8 @@ export function CharacterLibraryPanel({ bridge, state }: { bridge: CharacterLibr
                             <div
                                 key={rowEntities[0]?.renderKey ?? `${rowEntities[0]?.type}:${rowEntities[0]?.id}`}
                                 className="character-library-react-panel__row"
+                                data-index={item.index}
+                                ref={virtualizer.measureElement}
                                 style={{
                                     position: 'absolute',
                                     top: 0,

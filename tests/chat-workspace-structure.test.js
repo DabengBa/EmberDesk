@@ -359,6 +359,15 @@ describe('chat workspace structure', () => {
         expect(styleSource).toContain('.fallback-provider-section:has(#fallback_provider_enabled:checked) .fallback-provider-details');
     });
 
+    test('localizes custom Base URL status guidance for Simplified Chinese users', () => {
+        const zhCnLocale = JSON.parse(readRepoFile('public/locales/zh-cn.json'));
+
+        expect(zhCnLocale['Custom endpoint active. API key field stores proxy password.'])
+            .toBe('已启用自定义端点。API 密钥字段将存储网关密钥。');
+        expect(zhCnLocale['Direct provider endpoint. API key stays in the API Key field.'])
+            .toBe('当前使用直连服务端点。API 密钥保留在 API 密钥字段。');
+    });
+
     test('keeps automatic recovery status scoped outside message text', () => {
         const scriptSource = readRepoFile('public/script.js');
         const styleSource = readRepoFile('public/style.css');

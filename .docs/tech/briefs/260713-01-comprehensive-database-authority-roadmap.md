@@ -42,7 +42,7 @@ status: active
 
 ## 已确认边界
 
-- 继续使用 Node.js 26.3.0、Express 5、`node:sqlite` 和现有 per-user
+- 继续使用 Node.js 26.7.0、Express 5、`node:sqlite` 和现有 per-user
   `storage/emberdesk.sqlite`。
 - 不引入 PostgreSQL、外部 vector database、新 server host 或 ORM 作为本路线前提。
 - `SecretManager` 继续作为 secrets 唯一 API 边界；数据库迁移不得扩大 secret exposure。

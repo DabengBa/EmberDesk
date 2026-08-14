@@ -60,7 +60,6 @@
         "handlebars": "^4.7.9",
         "helmet": "^8.1.0",
         "highlight.js": "^11.11.1",
-        "hono": "4.12.25",
         "host-validation-middleware": "^0.1.1",
         "html-entities": "^2.6.0",
         "iconv-lite": "^0.6.3",
@@ -96,7 +95,6 @@
         "tiktoken": "^1.0.22",
         "url-join": "^5.0.0",
         "wavefile": "^11.0.0",
-        "webpack": "^5.105.4",
         "write-file-atomic": "^5.0.1",
         "ws": "^8.18.3",
         "yaml": "^2.8.3",
@@ -106,7 +104,7 @@
         "zustand": "^5.0.14"
     },
     "engines": {
-        "node": ">=26.3.0 <27"
+        "node": ">=26.7.0 <27"
     },
     "overrides": {
         "openai": "^4.17.0",
@@ -114,7 +112,7 @@
     },
     "name": "emberdesk",
     "type": "module",
-    "packageManager": "bun@1.3.14",
+    "packageManager": "pnpm@12.0.0-rc.5",
     "license": "AGPL-3.0",
     "repository": {
         "type": "git",
@@ -123,17 +121,16 @@
     "version": "1.18.0",
     "scripts": {
         "init": "node src/server-init.js",
-        "test": "bun run --cwd tests test:unit",
-        "test:unit": "bun run --cwd tests test:unit",
-        "test:compat": "bun run --cwd tests test:unit -- third-party-extension-compatibility.test.js --runInBand",
-        "test:e2e": "bun run --cwd tests test:e2e",
+        "test": "pnpm --dir tests run test:unit",
+        "test:unit": "pnpm --dir tests run test:unit",
+        "test:compat": "pnpm --dir tests run test:unit -- third-party-extension-compatibility.test.js script-js-composition-root.test.js --runInBand",
+        "test:e2e": "pnpm --dir tests run test:e2e",
         "start": "node server.js",
         "debug": "node --inspect server.js",
         "dev": "vite",
         "dev:express": "node server.js",
-        "dev:all": "concurrently \"bun run dev:express\" \"bun run dev\"",
+        "dev:all": "concurrently \"pnpm run dev:express\" \"pnpm run dev\"",
         "build:lib": "vite build --mode lib",
-        "build:lib:webpack": "node -e \"import('webpack').then(webpack => { const config = (await import('./webpack.config.js')).default(); webpack.webpack(config).run((err, stats) => { console.log(stats?.toString(config.stats)); process.exit(err ? 1 : 0); }); })\"",
         "build:react": "vite build --mode login",
         "build:react:character-library": "vite build --mode character-library-panel",
         "build:react:workspace-panels": "vite build --mode workspace-panels",
@@ -144,9 +141,8 @@
         "perf:startup": "node scripts/startup-performance-runner.mjs",
         "perf:interaction": "node scripts/interaction-performance-runner.mjs",
         "start:global": "node server.js --global",
-        "start:electron": "cd ./src/electron && npm run start",
+        "start:electron": "pnpm --dir ./src/electron run start",
         "start:deno": "deno run --allow-run --allow-net --allow-read --allow-write --allow-sys --allow-env server.js",
-        "start:bun": "bun server.js",
         "start:no-csrf": "node server.js --disableCsrf",
         "lint": "eslint \"src/**/*.{js,ts}\" \"public/**/*.js\" \"app/**/*.{ts,tsx}\" \"./*.{js,ts}\"",
         "lint:fast": "oxlint src public app *.js *.ts",
@@ -168,7 +164,6 @@
         "@tailwindcss/postcss": "4.3.0",
         "@tanstack/router-vite-plugin": "^1.167.18",
         "@types/archiver": "^6.0.3",
-        "@types/bun": "^1.3.14",
         "@types/bytes": "^3.1.5",
         "@types/command-exists": "^1.2.3",
         "@types/compression": "^1.8.1",
@@ -184,7 +179,7 @@
         "@types/lodash": "^4.17.24",
         "@types/mime-types": "^3.0.1",
         "@types/multer": "^2.1.0",
-        "@types/node": "^25.9.1",
+        "@types/node": "^26.1.2",
         "@types/node-persist": "^3.1.8",
         "@types/png-chunk-text": "^1.0.3",
         "@types/png-chunks-extract": "^1.0.2",
@@ -204,8 +199,8 @@
         "oxlint": "1.67.0",
         "postcss": "8.5.15",
         "tailwindcss": "4.3.0",
-        "typescript": "6.0.3",
+        "typescript": "7.0.2",
         "typescript-eslint": "8.60.1",
-        "vite": "^8.0.16"
+        "vite": "8.2.1"
     }
 }

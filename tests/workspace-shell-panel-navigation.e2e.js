@@ -136,7 +136,7 @@ test.describe('workspace shell panel navigation', () => {
     });
 
     test('shell no longer offers Group Chats after retirement', async ({ page }) => {
-        await testSetup(page);
+        await testSetup.awaitST({ page });
         await expect(page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'Group Chats' })).toHaveCount(0);
     });
 
@@ -212,6 +212,36 @@ test.describe('workspace shell panel navigation', () => {
         await expect(page.locator('[data-settings-overlay="true"]')).toHaveCount(0, { timeout: 15_000 });
         await expect(settingsButton).toHaveAttribute('aria-pressed', 'false');
         await expect(page.locator('#send_textarea')).toBeVisible();
+    });
+
+    test('keeps Settings fields reachable in a narrow workspace overlay', async ({ page }) => {
+        test.setTimeout(120_000);
+        await page.setViewportSize({ width: 375, height: 812 });
+        await testSetup.awaitST({ page });
+
+        const settingsButton = page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'Settings' });
+        await settingsButton.click({ timeout: 10_000 });
+        const overlay = page.locator('[data-settings-overlay="true"]');
+        await expect(overlay).toBeVisible({ timeout: 15_000 });
+        await expect(overlay.locator('.settings-input').first()).toBeVisible({ timeout: 30_000 });
+        const closeButton = overlay.locator('.settings-overlay-close');
+        await expect(closeButton).toBeVisible();
+        await expect.poll(async () => closeButton.evaluate(node => {
+            const panel = node.closest('.settings-main-panel');
+            return panel
+                ? node.getBoundingClientRect().width < panel.getBoundingClientRect().width / 2
+                : false;
+        })).toBe(true);
+        await expect.poll(async () => overlay.locator('.settings-tab-panel').evaluate(node => ({
+            clientHeight: node.clientHeight,
+            scrollHeight: node.scrollHeight,
+        }))).toEqual(expect.objectContaining({
+            clientHeight: expect.any(Number),
+            scrollHeight: expect.any(Number),
+        }));
+        await expect.poll(async () => overlay.locator('.settings-tab-panel').evaluate(node => (
+            node.clientHeight > 100 && node.scrollHeight >= node.clientHeight
+        ))).toBe(true);
     });
 
     test('opens AI Config and Formatting shell entries into overlay tabs without route jump', async ({ page }) => {

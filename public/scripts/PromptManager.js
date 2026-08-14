@@ -2,7 +2,8 @@
 
 import { DOMPurify } from '../lib.js';
 
-import { event_types, eventSource, is_send_press, main_api, substituteParams } from '../script.js';
+import { eventSource, event_types } from './events.js';
+import { is_send_press, main_api, substituteParams } from '../script.js';
 import { is_group_generating } from './group-chats.js';
 import { Message, MessageCollection, TokenHandler } from './openai.js';
 import { power_user } from './power-user.js';
@@ -1176,7 +1177,7 @@ class PromptManager {
     addPromptOrderForCharacter(character, promptOrder) {
         this.serviceSettings.prompt_order.push({
             character_id: character.id,
-            order: JSON.parse(JSON.stringify(promptOrder)),
+            order: structuredClone(promptOrder),
         });
     }
 

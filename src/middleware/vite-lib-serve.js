@@ -19,7 +19,6 @@ export default function getViteLibServeMiddleware() {
             if (fs.existsSync(libPath)) {
                 return res.sendFile(libPath);
             }
-            // Fall through to the deprecated Webpack middleware when the Vite bundle is absent.
             return next();
         }
         next();

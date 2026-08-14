@@ -1,15 +1,16 @@
-FROM oven/bun:1.3.14-alpine AS bun
-
-FROM node:26.3.0-alpine3.23
+FROM node:26.7.0-alpine3.23
 
 # Arguments
 ARG APP_HOME=/home/node/app
 
 # Install system dependencies
 # "Don't rely on the base image for tools; if you call it, you install it." ;)
-RUN apk add --no-cache gcompat tini git git-lfs su-exec shadow dos2unix
+RUN apk add --no-cache curl gcompat tini git git-lfs su-exec shadow dos2unix
 
-COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
+ENV PNPM_HOME=/root/.local/share/pnpm
+ENV PATH=${PNPM_HOME}/bin:${PNPM_HOME}:${PATH}
+RUN touch /root/.profile && \
+  curl -fsSL https://get.pnpm.io/install.sh | env SHELL=/bin/sh ENV=/root/.profile PNPM_VERSION=12.0.0-rc.5 sh -
 
 # Create app directory and set ownership
 WORKDIR ${APP_HOME}
@@ -24,8 +25,8 @@ COPY --chown=node:node . ./
 # Install full dependency tree first so Vite (devDependency) can build React assets.
 # Reinstall production-only packages after the precompile steps below.
 RUN \
-  echo "*** Install Bun packages (including build tooling) ***" && \
-  NODE_ENV=development bun install --frozen-lockfile --no-progress
+  echo "*** Install pnpm packages (including build tooling) ***" && \
+  NODE_ENV=development pnpm install --frozen-lockfile --ignore-scripts
 
 # Create config directory and link config.yaml. Added hardcoded dirs(constants.js?)
 # that must be present for Non-Root Mode and volumeless docker runs.
@@ -35,19 +36,15 @@ RUN \
   chown -R node:node config data plugins public/scripts/extensions/third-party backups && \
   ln -s "./config/config.yaml" "config.yaml"
 
-# Pre-compile public libraries
-RUN \
-  echo "*** Run Webpack ***" && \
-  node "./docker/build-lib.js"
-
-# Pre-compile React page and panel bundles required at runtime.
+# Pre-compile Vite library, React page, and panel bundles required at runtime.
 # Login/setup/settings need app/dist/index.html; panel islands need their assets.
 # Build order matters: login may empty app/dist; panel modes keep emptyOutDir=false.
 RUN \
-  echo "*** Build React page and panel bundles ***" && \
-  bun run build:react && \
-  bun run build:react:character-library && \
-  bun run build:react:workspace-panels && \
+  echo "*** Build Vite library, React page, and panel bundles ***" && \
+  pnpm run build:lib && \
+  pnpm run build:react && \
+  pnpm run build:react:character-library && \
+  pnpm run build:react:workspace-panels && \
   test -f app/dist/index.html && \
   test -f app/dist/assets/character-library-panel.js && \
   test -f app/dist/assets/workspace-panels.js
@@ -56,7 +53,7 @@ RUN \
 RUN \
   echo "*** Prune to production dependencies ***" && \
   rm -rf node_modules && \
-  bun install --frozen-lockfile --production --no-progress
+  pnpm install --frozen-lockfile --prod --ignore-scripts
 
 # Set the entrypoint script and cleanup
 RUN \

@@ -2,11 +2,14 @@
 
 ## Module Responsibility
 
-This document covers the implementation that shortens browser startup for the already-running-service scenario without redefining `APP_READY`.
+This document covers the implementation that shortens browser startup for the already-running-service scenario without redefining `APP_READY`. The browser entry and composition boundary are defined by `bootstrapWorkspace()` in `public/script.js`; this document focuses on readiness optimization rather than the complete composition-root contract.
 
 Primary files:
 
 - `public/script.js`
+- `public/scripts/request-context.js`
+- `public/scripts/public-api.js`
+- `public/scripts/events.js`
 - `public/scripts/startup-helpers.js`
 - `public/scripts/backgrounds.js`
 - `public/scripts/extensions.js`
@@ -27,11 +30,13 @@ Primary files:
 
 ### Frontend critical path
 
-`public/script.js` now separates startup into:
+`public/script.js` now exposes the named `bootstrapWorkspace()` startup sequence and separates startup into:
 
 - `getSettings.fetch`
 - `getSettings.applyCore`
 - post-ready deferred tasks
+
+Before that sequence begins, module composition installs `globalThis.SillyTavern` explicitly, registers the World Info shell context, and installs the jQuery CSRF prefilter. `bootstrapWorkspace()` then loads the CSRF token as its first measured stage. Request-context failure is propagated to the bootstrap owner and shows a persistent refresh error; no readiness event is emitted on that path.
 
 Critical path work still includes:
 
@@ -113,6 +118,8 @@ Stability-sensitive binding points:
 - `event_types.SETTINGS_LOADED`
 - `event_types.EXTENSION_SETTINGS_LOADED`
 - startup report metric `navigationToAppReadyMs`
+
+The full root ownership and reverse-import contract is documented in [Workspace Composition Root](workspace-composition-root.md). The current processing order and failure boundaries are reproduced by [Workspace Composition Root Processing Flow](../logic-description/workspace_composition_root_processing_flow.md).
 
 ## Performance And Caching
 

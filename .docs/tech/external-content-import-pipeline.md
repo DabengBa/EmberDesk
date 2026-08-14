@@ -48,7 +48,7 @@ The route layer still owns HTTP status mapping and response shape. The service r
 Focused proof:
 
 ```bash
-bun run --cwd tests test:unit -- external-content-import-service.test.js private-request-filter.test.js express5-route-compatibility.test.js --runInBand
+pnpm --dir tests run test:unit -- external-content-import-service.test.js private-request-filter.test.js express5-route-compatibility.test.js --runInBand
 rg -n "\bfetch\(" src\endpoints\content-manager.js src\endpoints\assets.js src\endpoints\external-content-import-service.js
 ```
 

@@ -556,6 +556,11 @@
     font-weight: 600;
 }
 
+.settings-overlay-close {
+    width: auto;
+    flex: 0 0 auto;
+}
+
 .settings-tabs-description--visually-hidden {
     position: absolute;
     width: 1px;
@@ -590,7 +595,11 @@
 
 .settings-overlay {
     position: relative;
+    margin: auto;
+    padding: 0;
     z-index: 1;
+    max-width: none;
+    max-height: none;
     /* shell chrome stays at 4300 so nav toggle remains clickable */
     width: min(92vw, 1180px);
     height: min(92dvh, 880px);
@@ -628,8 +637,24 @@
         left: 0;
         width: 100vw;
         height: calc(100dvh - var(--topBarBlockSize, 40px));
+        overflow-y: auto;
         border-radius: 0;
         animation: settings-overlay-fade-in 150ms ease-out both;
+    }
+
+    .settings-page--overlay .settings-layout {
+        height: auto;
+        min-height: 100%;
+    }
+
+    .settings-page--overlay .settings-main-panel {
+        max-height: none;
+        overflow: visible;
+    }
+
+    .settings-page--overlay .settings-tab-panel {
+        flex: 0 0 auto;
+        overflow: visible;
     }
 }
 

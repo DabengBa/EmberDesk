@@ -45,8 +45,8 @@ The helper is intentionally small so future migrations can keep contract invento
 Focused proof:
 
 ```bash
-bun run --cwd tests test:unit -- frontend-structure-contract.test.js chat-workspace-structure.test.js secrets-input-map.test.js character-list-structure.test.js world-info-card-rendering.test.js --runInBand
-bun run test:compat
+pnpm --dir tests run test:unit -- frontend-structure-contract.test.js chat-workspace-structure.test.js secrets-input-map.test.js character-list-structure.test.js world-info-card-rendering.test.js --runInBand
+pnpm run test:compat
 ```
 
 ## Related Semantic IDs And Binding Points
