@@ -6,6 +6,7 @@ import {
     buildWorldInfoPanelFormDefaults,
     getWorldInfoPanelStatus,
 } from './lib/world-info-workbench-helpers';
+import type { WorldInfoCommands } from './compat/workspace-commands';
 
 function parseFiniteNumber(value: string): number | undefined {
     if (value.trim() === '') {
@@ -122,15 +123,6 @@ export interface WorldInfoWorkspacePanelState {
 
 export type WorkspacePanelStatus = 'idle' | 'loading' | 'empty' | 'success' | 'error';
 
-interface WorkspacePanelBridge {
-    dispatchAction?: (action: string, payload?: Record<string, unknown>) => Promise<unknown> | unknown;
-}
-
-type WorkspacePanelActionMutation = {
-    mutate: (input: { action: string; payload?: Record<string, unknown> }) => void;
-    isPending: boolean;
-};
-
 const worldInfoPanelFormSchema = z.object({
     selectedWorldIndex: z.string(),
     searchQuery: z.string(),
@@ -243,12 +235,12 @@ function AdvancedSection({
 
 function EntryEditor({
     entry,
-    actionMutation,
+    commands,
     onBack,
     emptyMessage = '选择一条条目开始编辑',
 }: {
     entry: WorldInfoWorkbenchEntryDetail | null;
-    actionMutation: WorkspacePanelActionMutation;
+    commands: WorldInfoCommands;
     onBack?: () => void;
     emptyMessage?: string;
 }) {
@@ -281,10 +273,7 @@ function EntryEditor({
 
     const saveFields = (fields: Record<string, unknown>) => {
         setDraft(current => current ? { ...current, ...fields } as WorldInfoWorkbenchEntryDetail : current);
-        actionMutation.mutate({
-            action: 'updateEntryFields',
-            payload: { uid: entry.uid, fields },
-        });
+        void commands.updateEntryFields(entry.uid, fields);
     };
 
     return (
@@ -567,11 +556,11 @@ function EntryEditor({
 
 export function WorldInfoWorkbenchPanel({
     state,
-    bridge,
+    commands,
     shell,
 }: {
     state?: unknown;
-    bridge?: WorkspacePanelBridge;
+    commands: WorldInfoCommands;
     shell: (props: {
         status: WorkspacePanelStatus;
         recoveryActions: Array<{ id: string; label: string; disabled?: boolean; onClick: () => void }>;
@@ -585,9 +574,9 @@ export function WorldInfoWorkbenchPanel({
         defaultValues: formDefaults,
         validators: { onChange: worldInfoPanelFormSchema },
     });
-    const worldInfoActionMutation = useMutation({
-        mutationFn: async ({ action, payload }: { action: string; payload?: Record<string, unknown> }) => {
-            await bridge?.dispatchAction?.(action, payload);
+    const worldInfoCommandMutation = useMutation({
+        mutationFn: async (command: () => Promise<unknown> | unknown) => {
+            await command();
         },
         retry: false,
     });
@@ -631,7 +620,7 @@ export function WorldInfoWorkbenchPanel({
         recoveryActions.push({
             id: 'refresh-world',
             label: '刷新面板',
-            onClick: () => worldInfoActionMutation.mutate({ action: 'refreshWorld' }),
+            onClick: () => worldInfoCommandMutation.mutate(() => commands.refreshWorld()),
         });
     }
 
@@ -641,14 +630,14 @@ export function WorldInfoWorkbenchPanel({
             setListScrollTop(list.scrollTop);
         }
         setReturnEntryUid(uid);
-        worldInfoActionMutation.mutate({ action: 'openEntry', payload: { uid } });
+        worldInfoCommandMutation.mutate(() => commands.openEntry(uid));
         if (isNarrow) {
             setMobileView('editor');
         }
     };
 
     const backToList = () => {
-        worldInfoActionMutation.mutate({ action: 'clearSelectedEntry' });
+        worldInfoCommandMutation.mutate(() => commands.clearSelectedEntry());
         setMobileView('list');
         requestAnimationFrame(() => {
             const list = document.querySelector('[data-world-info-react-list-scroll]') as HTMLElement | null;
@@ -667,7 +656,7 @@ export function WorldInfoWorkbenchPanel({
 
     const clearSearch = () => {
         worldInfoForm.setFieldValue('searchQuery', '');
-        worldInfoActionMutation.mutate({ action: 'applySearchQuery', payload: { searchQuery: '' } });
+        worldInfoCommandMutation.mutate(() => commands.applySearchQuery(''));
     };
 
     const showListPane = !isNarrow || mobileView === 'list';
@@ -699,7 +688,7 @@ export function WorldInfoWorkbenchPanel({
                                 value={globalNames}
                                 onChange={event => {
                                     const names = Array.from(event.currentTarget.selectedOptions, option => option.value);
-                                    worldInfoActionMutation.mutate({ action: 'setGlobalWorlds', payload: { names } });
+                                    worldInfoCommandMutation.mutate(() => commands.setGlobalWorlds(names));
                                 }}
                             >
                                 {worldNames.map(world => (
@@ -716,10 +705,7 @@ export function WorldInfoWorkbenchPanel({
                             onClick={() => {
                                 const next = !activationOpen;
                                 setActivationOpen(next);
-                                worldInfoActionMutation.mutate({
-                                    action: 'toggleActivationRules',
-                                    payload: { open: next },
-                                });
+                                worldInfoCommandMutation.mutate(() => commands.toggleActivationRules(next));
                             }}
                         >
                             扫描规则
@@ -744,7 +730,7 @@ export function WorldInfoWorkbenchPanel({
                                     onChange={event => {
                                         const worldIndex = event.target.value;
                                         field.handleChange(worldIndex);
-                                        worldInfoActionMutation.mutate({ action: 'selectWorld', payload: { worldIndex } });
+                                        worldInfoCommandMutation.mutate(() => commands.selectWorld(worldIndex));
                                         setMobileView('list');
                                     }}
                                 >
@@ -774,7 +760,7 @@ export function WorldInfoWorkbenchPanel({
                                             onChange={event => {
                                                 const searchQuery = event.target.value;
                                                 field.handleChange(searchQuery);
-                                                worldInfoActionMutation.mutate({ action: 'applySearchQuery', payload: { searchQuery } });
+                                                worldInfoCommandMutation.mutate(() => commands.applySearchQuery(searchQuery));
                                             }}
                                         />
                                     )}
@@ -789,7 +775,7 @@ export function WorldInfoWorkbenchPanel({
                                             onChange={event => {
                                                 const sortValue = event.target.value;
                                                 field.handleChange(sortValue);
-                                                worldInfoActionMutation.mutate({ action: 'applySortOption', payload: { sortValue } });
+                                                worldInfoCommandMutation.mutate(() => commands.applySortOption(sortValue));
                                             }}
                                         >
                                             {sortOptions.filter(option => !option.hidden).map(option => (
@@ -803,38 +789,38 @@ export function WorldInfoWorkbenchPanel({
                                     className="menu_button"
                                     data-world-info-react-action="new-entry"
                                     disabled={!bridgeState.canCreateEntry}
-                                    onClick={() => worldInfoActionMutation.mutate({ action: 'createEntry' })}
+                                    onClick={() => worldInfoCommandMutation.mutate(() => commands.createEntry())}
                                 >
                                     新建条目
                                 </button>
                                 <button type="button" className="menu_button" data-world-info-react-action="new-world"
-                                    onClick={() => worldInfoActionMutation.mutate({ action: 'createWorld' })}>新建</button>
+                                    onClick={() => worldInfoCommandMutation.mutate(() => commands.createWorld())}>新建</button>
                                 <button type="button" className="menu_button" data-world-info-react-action="import"
                                     disabled={Boolean(bridgeState.importBusy)}
-                                    onClick={() => worldInfoActionMutation.mutate({ action: 'importWorld' })}>导入</button>
+                                    onClick={() => worldInfoCommandMutation.mutate(() => commands.importWorld())}>导入</button>
                                 <button type="button" className="menu_button" data-world-info-react-action="export"
                                     disabled={!bridgeState.exportMenuPresent}
-                                    onClick={() => worldInfoActionMutation.mutate({ action: 'exportWorld' })}>导出</button>
+                                    onClick={() => worldInfoCommandMutation.mutate(() => commands.exportWorld())}>导出</button>
                                 <button type="button" className="menu_button" data-world-info-react-action="refresh"
                                     disabled={!bridgeState.refreshMenuPresent}
-                                    onClick={() => worldInfoActionMutation.mutate({ action: 'refreshWorld' })}>刷新</button>
+                                    onClick={() => worldInfoCommandMutation.mutate(() => commands.refreshWorld())}>刷新</button>
                                 <button type="button" className="menu_button" data-world-info-react-action="rename"
                                     disabled={!bridgeState.renameMenuPresent}
-                                    onClick={() => worldInfoActionMutation.mutate({ action: 'renameWorld' })}>重命名</button>
+                                    onClick={() => worldInfoCommandMutation.mutate(() => commands.renameWorld())}>重命名</button>
                                 <button type="button" className="menu_button" data-world-info-react-action="duplicate"
                                     disabled={!bridgeState.duplicateMenuPresent}
-                                    onClick={() => worldInfoActionMutation.mutate({ action: 'duplicateWorld' })}>复制</button>
+                                    onClick={() => worldInfoCommandMutation.mutate(() => commands.duplicateWorld())}>复制</button>
                                 <button type="button" className="menu_button redWarningBG" data-world-info-react-action="delete"
                                     disabled={!bridgeState.deleteMenuPresent}
-                                    onClick={() => worldInfoActionMutation.mutate({ action: 'deleteWorld' })}>删除</button>
+                                    onClick={() => worldInfoCommandMutation.mutate(() => commands.deleteWorld())}>删除</button>
                             </>
                         ) : (
                             <>
                                 <button type="button" className="menu_button" data-world-info-react-action="new-world"
-                                    onClick={() => worldInfoActionMutation.mutate({ action: 'createWorld' })}>新建世界书</button>
+                                    onClick={() => worldInfoCommandMutation.mutate(() => commands.createWorld())}>新建世界书</button>
                                 <button type="button" className="menu_button" data-world-info-react-action="import"
                                     disabled={Boolean(bridgeState.importBusy)}
-                                    onClick={() => worldInfoActionMutation.mutate({ action: 'importWorld' })}>导入世界书</button>
+                                    onClick={() => worldInfoCommandMutation.mutate(() => commands.importWorld())}>导入世界书</button>
                             </>
                         )}
                     </div>
@@ -902,7 +888,7 @@ export function WorldInfoWorkbenchPanel({
                     >
                         <EntryEditor
                             entry={bridgeState.selectedEntry ?? null}
-                            actionMutation={worldInfoActionMutation}
+                            commands={commands}
                             onBack={isNarrow && mobileView === 'editor' ? backToList : undefined}
                             emptyMessage={selectedWorldName ? '选择一条条目开始编辑' : '请先选择或创建世界书'}
                         />

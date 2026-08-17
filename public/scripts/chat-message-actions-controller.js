@@ -141,6 +141,7 @@ function findExtraButtonsForHint(hint) {
  * @param {number} [dependencyOverrides.animationDuration] Transition duration
  * @param {string} [dependencyOverrides.animationEasing] Transition easing
  * @param {() => void} [dependencyOverrides.onStateChanged] Bridge callback after DOM state changes
+ * @param {() => void} [dependencyOverrides.onReactOwnedOutsideClick] React state-owner close callback
  * @returns {{init: () => void, cleanup: () => void, openExtraActions: (hint: Element) => void, closeExtraActions: () => void}}
  */
 export function createChatMessageActionsController(root = globalThis.document, dependencyOverrides = {}) {
@@ -154,6 +155,7 @@ export function createChatMessageActionsController(root = globalThis.document, d
         animationDuration: 0,
         animationEasing: 'linear',
         onStateChanged: () => {},
+        onReactOwnedOutsideClick: () => {},
         ...dependencyOverrides,
     };
     let abortController = null;
@@ -188,14 +190,18 @@ export function createChatMessageActionsController(root = globalThis.document, d
     }
 
     function closeExtraActions() {
-        const visibleButtons = Array.from(root.querySelectorAll?.(EXTRA_ACTIONS_OPEN_SELECTOR) ?? []);
+        const visibleButtons = Array.from(root.querySelectorAll?.(EXTRA_ACTIONS_OPEN_SELECTOR) ?? [])
+            .filter(button => !button.closest?.('[data-main-chat-message-row-owner="react"]'));
 
         if (visibleButtons.length === 0) {
             return;
         }
 
         const hiddenHints = Array.from(root.querySelectorAll?.(EXTRA_ACTIONS_HINT_SELECTOR) ?? [])
-            .filter(hint => hint.style.display === 'none');
+            .filter(hint => (
+                hint.style.display === 'none'
+                && !hint.closest?.('[data-main-chat-message-row-owner="react"]')
+            ));
         let remainingVisibleButtons = visibleButtons.length;
 
         for (const buttons of visibleButtons) {
@@ -226,6 +232,10 @@ export function createChatMessageActionsController(root = globalThis.document, d
 
     function handleClick(event) {
         const target = event.target;
+        if (target?.closest?.('[data-main-chat-message-row-owner="react"]')) {
+            return;
+        }
+
         const hint = target?.closest?.(EXTRA_ACTIONS_HINT_SELECTOR);
 
         if (hint) {
@@ -238,6 +248,7 @@ export function createChatMessageActionsController(root = globalThis.document, d
         }
 
         if (!target?.closest?.(EXTRA_ACTIONS_CLICK_AREA_SELECTOR)) {
+            dependencies.onReactOwnedOutsideClick();
             closeExtraActions();
         }
     }

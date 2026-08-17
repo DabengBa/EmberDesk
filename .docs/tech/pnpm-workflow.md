@@ -5,7 +5,7 @@
 ## Contract
 
 - Root, `tests`, and `src/electron` package managers are pinned with `packageManager: pnpm@12.0.0-rc.5`.
-- Node.js 26.7.0 Current (`>=26.7.0 <27`) is the supported application runtime and release proof target; pnpm owns dependency installation and script orchestration.
+- Node.js 24.16.0 Current (`>=24.16.0 <25`) is the supported application runtime and release proof target; pnpm owns dependency installation and script orchestration.
 - Non-contract local Node majors, including Node 25, may be useful for diagnostics but do not satisfy release validation.
 - Root and `tests` package boundaries are pnpm-owned and have committed `pnpm-lock.yaml` files.
 - `.npmrc` keeps lifecycle scripts disabled and rejects packages newer than seven days by default.
@@ -23,12 +23,32 @@ pnpm run build:react:character-library
 pnpm run build:react:workspace-panels
 pnpm run docs:build
 pnpm run test:unit
+pnpm run test:component
+pnpm run test:integration
 pnpm run test:compat
 pnpm run test:e2e
+pnpm run test:all
+pnpm run test:inventory
 (cd tests && pnpm install --frozen-lockfile --ignore-scripts)
 ```
 
 Use `pnpm run test:compat` before and after frontend jQuery slices that must preserve regex, Tavern Helper / JS-Slash-Runner, or character-list DOM compatibility. It delegates to the focused Jest proof in the `tests` package and is a compatibility gate, not a replacement for slice-specific tests.
+
+Test lanes are selected from the test's observed dependencies rather than its
+directory or filename:
+
+- `test:unit` is the default fast lane for deterministic logic with no real external resource.
+- `test:component` is reserved for DOM behavior with controlled boundaries; the current repository has no DOM-backed Jest component files, so the lane passes with no tests.
+- `test:integration` covers real filesystem, SQLite, HTTP/route, format, and module-boundary tests.
+- `test:e2e` covers Playwright browser journeys and starts with an isolated data root, temporary directory, and port per run/shard.
+- `test:all` runs all Jest files followed by the isolated Playwright lane.
+- `test:inventory` reports static layer/resource candidates, combined Jest/Playwright discovery counts, slow Jest files/tests, and observable phase timings.
+
+Every lane runner sets `DATA_ROOT`, `DATA_DIR`, and `TMPDIR` below a unique
+temporary run root. `EMBERDESK_TEST_ROOT` can provide a CI-owned parent; shard
+identity is included in the Playwright run root. The inventory report keeps
+`transform`, `environment`, and full `teardown` as unavailable when Jest does
+not expose those phases, rather than treating suite wall time as a fake phase.
 
 Use Vite build scripts for frontend build proof:
 
@@ -48,7 +68,7 @@ Docker and release install verification also use pnpm:
 
 - Do not run the server with Bun by default. `start`, `debug`, `start:global`, and `start:no-csrf` remain Node.js runtime commands.
 - Do not widen `package.json` `engines.node` to another major just because local focused tests pass under that runtime; update the contract only after source-backed release-schedule review and focused startup/test proof.
-- Local non-26.7.0 proof is diagnostic only after the Node 26.7.0 contract.
+- Local proof outside the Node.js `>=24.16.0 <25` contract is diagnostic only.
 - `src/electron` is an independent pnpm package boundary; its Electron lifecycle remains explicit and is not part of the server install.
 - `.dockerignore` excludes nested `node_modules` so Docker install proof is not polluted by local dependency folders.
 
@@ -62,7 +82,7 @@ Validated migration surfaces should include:
 - `pnpm run docs:build`.
 - `pnpm run test:unit`.
 - `pnpm run test:e2e` when runtime or startup compatibility must be proven end to end.
-- `docker run --rm node:26.7.0-alpine3.23 node --version`.
+- `docker run --rm node:24.16.0-alpine3.23 node --version`.
 - `docker build .` through full pnpm install, Vite builds (`build:lib`, `build:react`, `build:react:character-library`, `build:react:workspace-panels`), production prune, and `app/dist` verification.
 
 Known local boundary:

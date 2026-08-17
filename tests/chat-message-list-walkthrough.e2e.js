@@ -303,15 +303,13 @@ async function wheelRowNearViewportTop(page, messageId, targetTop = 140) {
 }
 
 async function expectMainChatHostPresent(page, expectedMessageCount) {
-    const reactHost = page.locator('#chat > #emberdesk-react-main-chat-message-list-host');
-
     if (!reactMainChatMessageListEnabled) {
-        await expect(reactHost).toHaveCount(0);
+        await expect(page.locator('#chat > [data-main-chat-message-row-owner="react"]')).toHaveCount(0);
         return;
     }
 
-    await expect(reactHost).toHaveCount(1);
-    await expect(reactHost).toHaveAttribute('aria-hidden', 'true');
+    await expect(page.locator('#chat')).toHaveAttribute('data-react-main-chat-owner', 'react');
+    await expect(page.locator('#chat > #emberdesk-react-main-chat-message-list-host')).toHaveCount(0);
     await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(expectedMessageCount);
 }
 
@@ -389,7 +387,7 @@ test.describe('main chat message list walkthrough', () => {
         expect(getUnexpectedConsoleErrors(consoleErrors)).toEqual([]);
     });
 
-    test('sprint 2 walkthrough reaches reasoning copy edit cancel and collapse-all through visible UI', async ({ page }) => {
+    test('sprint 2 walkthrough persists React reasoning edits and deletions through visible UI', async ({ page }) => {
         const consoleErrors = createConsoleErrorCollector(page);
 
         await testSetup.awaitST({ page });
@@ -411,6 +409,9 @@ test.describe('main chat message list walkthrough', () => {
 
         await firstReasoningRow.locator('.mes_reasoning_header').click();
         await expect(firstReasoningDetails).toHaveAttribute('open', '');
+        // Expanding must be owned by the React snapshot, not a transient legacy DOM mutation.
+        await firstReasoningRow.getByRole('button', { name: 'Message Actions' }).click();
+        await expect(firstReasoningDetails).toHaveAttribute('open', '');
         await firstReasoningRow.locator('.mes_reasoning_copy').click();
         await expectClipboardText(page, 'First reasoning block.\nCheck the visible answer boundary before finalizing.');
 
@@ -423,10 +424,33 @@ test.describe('main chat message list walkthrough', () => {
         await expect(reasoningTextarea).toHaveCount(0);
         await expect(firstReasoningRow.locator('.mes_reasoning')).toHaveText(/First reasoning block\./);
 
+        const persistedReasoning = 'Persisted reasoning from the React command boundary.';
+        await firstReasoningRow.locator('.mes_reasoning_edit').click();
+        await firstReasoningRow.locator('.reasoning_edit_textarea').fill(persistedReasoning);
+        await firstReasoningRow.getByRole('button', { name: 'Confirm Edit' }).click();
+        await expect(firstReasoningRow.locator('.mes_reasoning')).toHaveText(persistedReasoning);
+
         await secondReasoningRow.locator('.mes_reasoning_header').click();
         await expect(secondReasoningDetails).toHaveAttribute('open', '');
         await secondReasoningRow.locator('.mes_reasoning_close_all').click();
         await expect(page.locator('.mes_reasoning_details[open]')).toHaveCount(0);
+
+        await secondReasoningRow.locator('.mes_reasoning_header').click();
+        await expect(secondReasoningDetails).toHaveAttribute('open', '');
+        const removeReasoningButton = secondReasoningRow.locator('.mes_reasoning_delete');
+        await secondReasoningRow.locator('.mes_reasoning_edit').click();
+        await expect(secondReasoningRow.locator('.reasoning_edit_textarea')).toBeVisible();
+        await expect(removeReasoningButton).toBeVisible();
+        await removeReasoningButton.click();
+        const removeReasoningDialog = page.locator('dialog.popup[open]').filter({ hasText: 'Remove Reasoning' });
+        await expect(removeReasoningDialog).toBeVisible();
+        await removeReasoningDialog.locator('.popup-button-ok').click();
+        await expect(secondReasoningRow.locator('.mes_reasoning')).toHaveText('');
+
+        await openPastChat(page, alternateChatName);
+        await openPastChat(page, reasoningChatName);
+        await expect(firstReasoningRow.locator('.mes_reasoning')).toHaveText(persistedReasoning);
+        await expect(secondReasoningRow.locator('.mes_reasoning')).toHaveText('');
 
         expect(getUnexpectedConsoleErrors(consoleErrors)).toEqual([]);
     });

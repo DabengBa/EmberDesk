@@ -28,7 +28,8 @@ export async function mountWorkspacePanelHost({
     features,
     ensureContainer,
     getState,
-    bridge,
+    commands,
+    runtime,
     stateOverrides = undefined,
     onDisabled = null,
 }) {
@@ -55,32 +56,32 @@ export async function mountWorkspacePanelHost({
         kind,
         container,
         state: resolvedState,
-        bridge,
+        commands,
+        runtime,
         features,
     });
 }
 
-export function createWorkspacePanelActionBridge({
-    dispatchAction,
+export function createWorkspacePanelCommandPort({
+    commands,
     remount,
     shouldRemount = () => true,
     shouldRemountOnError = shouldRemount,
 }) {
-    return {
-        dispatchAction(action, payload = {}) {
-            return Promise.resolve(dispatchAction(action, payload)).then(actionResult => {
-                if (shouldRemount(actionResult, action, payload)) {
-                    remount();
-                }
-                return actionResult;
-            }, error => {
-                if (shouldRemountOnError(error, action, payload)) {
-                    remount();
-                }
-                throw error;
-            });
-        },
-    };
+    return Object.fromEntries(Object.entries(commands).map(([commandName, command]) => [
+        commandName,
+        (...args) => Promise.resolve(command(...args)).then(commandResult => {
+            if (shouldRemount(commandResult, commandName, args)) {
+                remount();
+            }
+            return commandResult;
+        }, error => {
+            if (shouldRemountOnError(error, commandName, args)) {
+                remount();
+            }
+            throw error;
+        }),
+    ]));
 }
 
 export function createWorkspacePanelStateChangeHandler(remount) {

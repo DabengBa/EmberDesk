@@ -273,6 +273,27 @@ describe('chat message actions controller', () => {
         expect(transitionElement).toHaveBeenCalledTimes(2);
     });
 
+    test('does not mutate React-owned message action output', async () => {
+        const { createChatMessageActionsController } = await importFreshControllerModule();
+        const root = new FakeElement(['root']);
+        const messageRow = root.appendChild(new FakeElement(['mes']));
+        messageRow.setAttribute('data-main-chat-message-row-owner', 'react');
+        const buttons = messageRow.appendChild(new FakeElement(['mes_buttons']));
+        const hint = buttons.appendChild(new FakeElement(['extraMesButtonsHint']));
+        const extraButtons = buttons.appendChild(new FakeElement(['extraMesButtons']));
+        const transitionElement = jest.fn((element, options) => options.complete?.call(element));
+
+        const controller = createChatMessageActionsController(root, { transitionElement });
+        controller.init();
+
+        root.dispatchClick(hint);
+
+        expect(hint.style.display).toBe('');
+        expect(extraButtons.classList.contains('visible')).toBe(false);
+        expect(extraButtons.style.display).toBe('');
+        expect(transitionElement).not.toHaveBeenCalled();
+    });
+
     test('reports state changes when the delegated extra message actions menu opens', async () => {
         const { createChatMessageActionsController } = await importFreshControllerModule();
         const { root, hint } = createMessageActionsRoot();

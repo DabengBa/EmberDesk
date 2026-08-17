@@ -15,7 +15,7 @@ This is a planning and execution record for [modernization-roadmap.md](moderniza
 
 Phase 1 assumes the current modernization contracts remain in force:
 
-- Node.js 26.7.0 Current (`>=26.7.0 <27`) is the application runtime contract.
+- Node.js 24.16.0 Current (`>=24.16.0 <25`) is the application runtime contract.
 - pnpm 11.20.0 is the package manager and script runner.
 - Express 5 remains the server framework.
 - The browser app remains HTML/CSS/jQuery.

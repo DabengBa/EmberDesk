@@ -14,7 +14,7 @@ import { searchCanonicalChatPayload, readCanonicalRecentChatPayload } from '../s
 import { writeCanonicalChatPayload } from '../src/endpoints/canonical-chat-write-service.js';
 import { createCanonicalChatBackup } from '../src/endpoints/canonical-chat-backup-restore-service.js';
 
-const EXPECTED_NODE_VERSION = 'v26.7.0';
+const EXPECTED_NODE_VERSION = 'v24.16.0';
 const FIXTURE = Object.freeze({
     characterCount: 12,
     chatsPerCharacter: 3,
@@ -112,7 +112,7 @@ async function main() {
     }
 
     const args = parseArgs(process.argv.slice(2));
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-canonical-chat-node26-'));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-canonical-chat-node24-'));
     const directories = makeDirectories(root);
     const manager = createCanonicalSqliteManager({ logger: { info() {}, warn() {} } });
 

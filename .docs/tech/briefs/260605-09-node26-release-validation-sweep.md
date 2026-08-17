@@ -1,6 +1,6 @@
 # Node 26 Release Validation Sweep Intent（历史）
 
-> 本 brief 记录 2026-06-05 的 Node.js 26.3.0 验证点。当前运行时契约是 Node.js 26.7.0；不要把本文历史矩阵当作当前 release proof。
+> 本 brief 记录 2026-06-05 的 Node.js 26.3.0 验证点。当前运行时契约是 Node.js 24.16.0；不要把本文历史矩阵当作当前 release proof。
 
 Date: 2026-06-05
 

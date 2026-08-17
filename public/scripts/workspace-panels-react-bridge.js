@@ -53,7 +53,8 @@ export async function mountReactWorkspacePanel({
     kind,
     container,
     state,
-    bridge,
+    commands,
+    runtime,
     features,
     loadModule = loadWorkspacePanelsModule,
     onError = (error, panelKind, reason) => {
@@ -78,7 +79,7 @@ export async function mountReactWorkspacePanel({
     }
 
     try {
-        panelModule.mountWorkspacePanel(kind, container, { state, bridge });
+        panelModule.mountWorkspacePanel(kind, container, { state, commands, runtime });
         return createWorkspacePanelMountedResult(kind);
     } catch (error) {
         onError(error, kind, WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.MOUNT_FAILED);
@@ -103,7 +104,8 @@ export async function unmountReactWorkspacePanel(kind, {
 export async function mountReactWorkspaceShellChrome({
     container,
     state,
-    bridge,
+    commands,
+    runtime,
     loadModule = loadWorkspacePanelsModule,
     onError = (error, reason) => {
         const action = reason === 'mount-failed' ? 'mount' : 'load';
@@ -123,7 +125,7 @@ export async function mountReactWorkspaceShellChrome({
     }
 
     try {
-        panelModule.mountWorkspaceShellChrome(container, { state, bridge });
+        panelModule.mountWorkspaceShellChrome(container, { state, commands, runtime });
         return { status: 'mounted' };
     } catch (error) {
         onError(error, 'mount-failed');
@@ -135,6 +137,7 @@ export async function mountReactSettingsOverlay({
     initialTab = null,
     panelKind = 'settings',
     onRequestClose,
+    runtime,
     loadModule = loadWorkspacePanelsModule,
     onError = (error, reason) => {
         console.error(`React settings overlay failed to ${reason}.`, error);
@@ -149,7 +152,7 @@ export async function mountReactSettingsOverlay({
     }
 
     try {
-        return panelModule.mountSettingsOverlay({ initialTab, panelKind, onRequestClose }) ?? {
+        return panelModule.mountSettingsOverlay({ initialTab, panelKind, onRequestClose, runtime }) ?? {
             kind: 'settings',
             mounted: true,
             status: 'mounted',

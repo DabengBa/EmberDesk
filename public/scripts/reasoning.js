@@ -223,6 +223,9 @@ export function isHiddenReasoningModel() {
  * @param {boolean} [options.reset=false] - Whether to reset state, and not take the current mess properties (for example when swiping)
  */
 export function updateReasoningUI(messageIdOrElement, { reset = false } = {}) {
+    if (document.getElementById('chat')?.dataset.reactMainChatOwner === 'react') {
+        return;
+    }
     const handler = new ReasoningHandler();
     handler.initHandleMessage(messageIdOrElement, { reset });
 }
@@ -531,6 +534,10 @@ export class ReasoningHandler {
      * @param {number} messageId - The ID of the message to update
      */
     updateDom(messageId) {
+        if (document.getElementById('chat')?.dataset.reactMainChatOwner === 'react') {
+            return;
+        }
+
         this.#checkDomElements(messageId);
 
         // Main CSS class to show this message includes reasoning
@@ -1169,6 +1176,12 @@ function registerReasoningMacros() {
     });
 }
 
+function isReactMainChatMessageRow(element) {
+    return document.getElementById('chat')?.dataset.reactMainChatOwner === 'react'
+        && element instanceof Element
+        && element.closest('[data-main-chat-message-row-owner="react"]') !== null;
+}
+
 function setReasoningEventHandlers() {
     /**
      * Updates the reasoning block of a message from a value.
@@ -1182,12 +1195,18 @@ function setReasoningEventHandlers() {
     }
 
     $(document).on('click', '.mes_reasoning_details', function (e) {
+        if (isReactMainChatMessageRow(this)) {
+            return;
+        }
         if (!e.target.closest('.mes_reasoning_actions') && !e.target.closest('.mes_reasoning_header')) {
             e.preventDefault();
         }
     });
 
     $(document).on('click', '.mes_reasoning_header', function (e) {
+        if (isReactMainChatMessageRow(this)) {
+            return;
+        }
         e.preventDefault();
         const details = $(this).closest('.mes_reasoning_details');
         // Along with the CSS rules to mark blocks not toggle-able when they are empty, prevent them from actually being toggled, or being edited
@@ -1208,11 +1227,17 @@ function setReasoningEventHandlers() {
     });
 
     $(document).on('click', '.mes_reasoning_copy', (e) => {
+        if (isReactMainChatMessageRow(e.currentTarget)) {
+            return;
+        }
         e.stopPropagation();
         e.preventDefault();
     });
 
     $(document).on('click', '.mes_reasoning_edit', function (e) {
+        if (isReactMainChatMessageRow(this)) {
+            return;
+        }
         e.stopPropagation();
         e.preventDefault();
         const { message, messageBlock } = getMessageFromJquery(this);
@@ -1254,6 +1279,9 @@ function setReasoningEventHandlers() {
     });
 
     $(document).on('click', '.mes_reasoning_close_all', function (e) {
+        if (isReactMainChatMessageRow(this)) {
+            return;
+        }
         e.stopPropagation();
         e.preventDefault();
 
@@ -1261,6 +1289,9 @@ function setReasoningEventHandlers() {
     });
 
     $(document).on('click', '.mes_reasoning_edit_done', async function (e) {
+        if (isReactMainChatMessageRow(this)) {
+            return;
+        }
         e.stopPropagation();
         e.preventDefault();
         const { message, messageId, messageBlock } = getMessageFromJquery(this);
@@ -1284,6 +1315,9 @@ function setReasoningEventHandlers() {
     });
 
     $(document).on('click', '.mes_reasoning_edit_cancel', function (e) {
+        if (isReactMainChatMessageRow(this)) {
+            return;
+        }
         e.stopPropagation();
         e.preventDefault();
 
@@ -1297,6 +1331,9 @@ function setReasoningEventHandlers() {
     });
 
     $(document).on('click', '.mes_edit_add_reasoning', async function () {
+        if (isReactMainChatMessageRow(this)) {
+            return;
+        }
         const { message, messageBlock } = getMessageFromJquery(this);
         if (!message?.extra) {
             return;
@@ -1322,6 +1359,9 @@ function setReasoningEventHandlers() {
     });
 
     $(document).on('click', '.mes_reasoning_delete', async function (e) {
+        if (isReactMainChatMessageRow(this)) {
+            return;
+        }
         e.stopPropagation();
         e.preventDefault();
 
@@ -1346,6 +1386,9 @@ function setReasoningEventHandlers() {
     });
 
     $(document).on('pointerup', '.mes_reasoning_copy', async function () {
+        if (isReactMainChatMessageRow(this)) {
+            return;
+        }
         const { message } = getMessageFromJquery(this);
         const reasoning = String(message?.extra?.reasoning ?? '');
 
@@ -1358,6 +1401,9 @@ function setReasoningEventHandlers() {
     });
 
     $(document).on('input', '.reasoning_edit_textarea', function () {
+        if (isReactMainChatMessageRow(this)) {
+            return;
+        }
         if (!power_user.auto_save_msg_edits) {
             return;
         }

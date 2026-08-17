@@ -148,7 +148,7 @@ New stable links should point to durable docs, not process specs. Use a phase RE
 - ✅ Phase 4 已落地并从 active specs 归档：`app/stores/workspace-panel-store.js`、`app/stores/main-chat-observation-store.js`、`app/compat/global-compatibility-bridge.js`、`public/scripts/main-chat-visible-transport-owner.js` 和 `public/scripts/chat-message-render-descriptor.js` 已把 state foundation、compat bridge、transport classifier 与 renderer/windowing contract 固化到当前代码；持久入口改为 `.docs/tech/briefs/react-phase4-state-management-sequenced-specs.md`、`.docs/tech/react-modernization-roadmap.md` 和 owning docs。
 - ✅ ADR-0007 已接受，用于替代原先的 ADR 占位：早期 React 迁移采用 page/panel islands + legacy fallback，而不是一次性 SPA cutover。
 - 📋 Phase 2 Sprint 4-7 尚未完成完整 panel 行为迁移：World Info activation/import/regex/delete、Background upload/delete/rename/select/slash behavior、Extensions discovery/mount/API/install/update/delete behavior 仍由 legacy 面板拥有；当前 React host 只呈现受保护状态面。
-- 📋 TanStack Start、Drizzle ORM、Vitest、shadcn/ui 和 Ant Design 仍是后续候选或原始推荐栈内容；Hono 已被 ADR-0013 明确排除。当前代码事实只支持把 React 19、TanStack Router、TanStack Query、TanStack Form、Zod、TanStack Virtual、Vite 8、Tailwind v4、TypeScript 6、ESLint 10，以及在 Phase 4 已引入的 Zustand 写成已采用。
+- 📋 TanStack Start、Drizzle ORM、Vitest、shadcn/ui 和 Ant Design 仍是后续候选或原始推荐栈内容；Hono 已被 ADR-0013 明确排除。当前代码事实只支持把 React 19、TanStack Router、TanStack Query、TanStack Form、Zod、TanStack Virtual、Vite 8、Tailwind v4、TypeScript 7、ESLint 10，以及在 Phase 4 已引入的 Zustand 写成已采用。
 
 ### 代码路径（预期）
 

@@ -72,5 +72,5 @@ Doc IDs: term.shared_browser_library, feature.startup_bootstrap, page.chat_works
 - Character Authoring export wiring, Character Library row geometry, and other unrelated dirty-worktree changes were not attributed to this topic and were not modified during review.
 - The remaining `public/scripts/** -> script.js` imports are the explicit compatibility allowlist; this wave does not claim zero reverse imports or an assembly-only 17k-line root.
 - Frontend review was scoped to static startup/compatibility impact: this topic adds no DOM/layout/CTA/primary-flow change, so no UX walkthrough was required.
-- Local validation used Node `v24.16.0`; this is diagnostic evidence only and not Node `>=26.7.0 <27` release proof.
+- Local validation used Node `v24.16.0` before it became the supported baseline; it remains historical diagnostic evidence, not current release proof for this runtime-contract change.
 - Root ESLint could not load the repository configuration for the extracted browser modules (`@typescript-eslint/typescript-estree` failed while reading `Cjs`); the tests-package ESLint, compatibility tests, syntax checks, semantic docs, and workflow gates passed. This is an environment/toolchain evidence gap, not a confirmed topic defect.

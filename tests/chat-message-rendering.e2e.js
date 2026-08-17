@@ -171,136 +171,55 @@ async function expectMessageTextMatches(page, messageIndex, expectedText) {
 }
 
 async function expectMainChatMessageListHostState(page, expectedMessageCount) {
-    const reactHost = page.locator('#chat > #emberdesk-react-main-chat-message-list-host');
-
     if (!reactMainChatMessageListEnabled) {
-        await expect(reactHost).toHaveCount(0);
+        await expect(page.locator('#chat > [data-main-chat-message-row-owner="react"]')).toHaveCount(0);
         return;
     }
 
-    await expect(reactHost).toHaveCount(1);
-    await expect(reactHost).toHaveAttribute('aria-hidden', 'true');
-    await expect(page.locator('#chat > [data-react-workspace-panel="mainChatMessageList"]')).toHaveCount(0);
+    await expect(page.locator('#chat')).toHaveAttribute('data-react-main-chat-owner', 'react');
+    await expect(page.locator('#chat > #emberdesk-react-main-chat-message-list-host')).toHaveCount(0);
     await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(expectedMessageCount);
 }
 
 async function expectReactMessageActionState(page, messageId, expectations = {}) {
     if (!reactMainChatMessageListEnabled) {
-        await expect(page.locator(`#chat > .mes[mesid="${messageId}"] .mes_buttons[data-main-chat-message-actions-row="${messageId}"]`)).toHaveCount(0);
+        await expect(page.locator(`#chat > .mes[mesid="${messageId}"]`)).not.toHaveAttribute('data-main-chat-message-row-owner', 'react');
         return;
     }
 
-    const actionOwner = page.locator(`#chat > .mes[mesid="${messageId}"] .mes_buttons[data-main-chat-message-actions-row="${messageId}"]`);
-    try {
-        await expect(actionOwner).toHaveCount(1);
-    } catch {
-        const debugState = await page.evaluate((targetMessageId) => {
-            const host = document.getElementById('emberdesk-react-main-chat-message-list-host');
-            const controller = document.querySelector('[data-main-chat-message-list-controller="true"]');
-            const row = document.querySelector(`#chat > .mes[mesid="${targetMessageId}"]`);
-            const messageButtons = row?.querySelector('.mes_buttons');
-
-            return {
-                featureEnabled: true,
-                hostPresent: Boolean(host),
-                hostChildElementCount: host?.childElementCount ?? 0,
-                controllerDataset: controller instanceof HTMLElement ? { ...controller.dataset } : null,
-                rowPresent: Boolean(row),
-                messageButtonsPresent: Boolean(messageButtons),
-                hintPresent: Boolean(messageButtons?.querySelector('.extraMesButtonsHint')),
-                extraActionsPresent: Boolean(messageButtons?.querySelector('.extraMesButtons')),
-                ownerCount: document.querySelectorAll(`#chat > .mes[mesid="${targetMessageId}"] .mes_buttons[data-main-chat-message-actions-row="${targetMessageId}"]`).length,
-            };
-        }, String(messageId));
-
-        throw new Error(`Missing action owner for row ${messageId}: ${JSON.stringify(debugState)}`);
-    }
-
-    await expect(actionOwner).toHaveAttribute('data-main-chat-message-actions-owner', 'react');
+    const actionOwner = page.locator(`#chat > .mes[mesid="${messageId}"] .mes_buttons`);
+    await expect(actionOwner).toHaveCount(1);
+    await expect(page.locator(`#chat > .mes[mesid="${messageId}"]`)).toHaveAttribute('data-main-chat-message-row-owner', 'react');
     if (expectations.expanded !== undefined) {
-        try {
-            await expect(actionOwner).toHaveAttribute('data-main-chat-message-actions-expanded', expectations.expanded ? 'true' : 'false');
-        } catch {
-            const debugState = await page.evaluate((targetMessageId) => {
-                const row = document.querySelector(`#chat > .mes[mesid="${targetMessageId}"]`);
-                const messageButtons = row?.querySelector('.mes_buttons');
-                const hints = Array.from(messageButtons?.querySelectorAll('.extraMesButtonsHint') ?? []);
-                const extraButtons = Array.from(messageButtons?.querySelectorAll('.extraMesButtons') ?? []);
-
-                return {
-                    rowOwner: row instanceof HTMLElement ? { ...row.dataset } : null,
-                    messageButtonsDataset: messageButtons instanceof HTMLElement ? { ...messageButtons.dataset } : null,
-                    hintCount: hints.length,
-                    hintStates: hints.map(hint => ({
-                        display: hint instanceof HTMLElement ? hint.style.display : '',
-                        opacity: hint instanceof HTMLElement ? hint.style.opacity : '',
-                        text: hint.textContent?.trim() ?? '',
-                    })),
-                    extraButtonsCount: extraButtons.length,
-                    extraButtonsStates: extraButtons.map(button => ({
-                        className: button.className,
-                        display: button instanceof HTMLElement ? button.style.display : '',
-                        opacity: button instanceof HTMLElement ? button.style.opacity : '',
-                        ariaHidden: button.getAttribute('aria-hidden'),
-                        text: button.textContent?.trim() ?? '',
-                    })),
-                };
-            }, String(messageId));
-
-            throw new Error(`Unexpected expanded state for row ${messageId}: ${JSON.stringify(debugState)}`);
+        const copyButton = actionOwner.locator('.mes_copy');
+        if (expectations.expanded) {
+            await expect(copyButton).toBeVisible();
+        } else {
+            await expect(copyButton).toHaveCount(1);
         }
     }
 
-    const attributeExpectations = [
-        ['data-main-chat-message-actions-available', expectations.availableIncludes ?? []],
-        ['data-main-chat-message-actions-high-frequency', expectations.highFrequencyIncludes ?? []],
-        ['data-main-chat-message-actions-secondary', expectations.secondaryIncludes ?? []],
-        ['data-main-chat-message-actions-danger', expectations.dangerIncludes ?? []],
+    const classExpectations = [
+        ...(expectations.availableIncludes ?? []),
+        ...(expectations.highFrequencyIncludes ?? []),
+        ...(expectations.secondaryIncludes ?? []),
+        ...(expectations.dangerIncludes ?? []),
     ];
 
-    for (const [attributeName, expectedValues] of attributeExpectations) {
-        if (!expectedValues.length) {
-            continue;
-        }
-
-        const actualValue = await actionOwner.getAttribute(attributeName);
-        expect(actualValue).not.toBeNull();
-        for (const expectedValue of expectedValues) {
-            expect(actualValue).toContain(expectedValue);
-        }
+    for (const expectedClass of classExpectations) {
+        await expect(actionOwner.locator(`.${expectedClass}`)).toHaveCount(1);
     }
-
 }
 
 async function expectReactRichBodyState(page, messageId) {
     if (!reactMainChatMessageListEnabled) {
-        await expect(page.locator(`[data-main-chat-rich-body-row="${messageId}"]`)).toHaveCount(0);
+        await expect(page.locator(`#chat > .mes[mesid="${messageId}"]`)).not.toHaveAttribute('data-main-chat-message-row-owner', 'react');
         return;
     }
 
-    const richBodyOwner = page.locator(`[data-main-chat-rich-body-row="${messageId}"]`);
-    const ownerCount = await richBodyOwner.count();
-    if (ownerCount !== 1) {
-        const debugState = await page.evaluate((targetMessageId) => {
-            const host = document.getElementById('emberdesk-react-main-chat-message-list-host');
-            const controller = document.querySelector('[data-main-chat-message-list-controller="true"]');
-            const row = document.querySelector(`#chat > .mes[mesid="${targetMessageId}"]`);
-
-            return {
-                featureEnabled: true,
-                hostPresent: Boolean(host),
-                hostChildElementCount: host?.childElementCount ?? 0,
-                controllerDataset: controller instanceof HTMLElement ? { ...controller.dataset } : null,
-                rowPresent: Boolean(row),
-                rowBlockPresent: Boolean(row?.querySelector('.mes_block')),
-                ownerCount: document.querySelectorAll(`[data-main-chat-rich-body-row="${targetMessageId}"]`).length,
-            };
-        }, String(messageId));
-
-        throw new Error(`Missing rich body owner for row ${messageId}: ${JSON.stringify(debugState)}`);
-    }
-
-    await expect(richBodyOwner).toHaveAttribute('data-main-chat-rich-body-owner', 'react');
+    const row = page.locator(`#chat > .mes[mesid="${messageId}"]`);
+    await expect(row).toHaveAttribute('data-main-chat-message-row-owner', 'react');
+    await expect(row.locator('.mes_text')).toHaveCount(1);
 }
 
 async function expectReactMessageRowState(page, messageId, expectedOwned) {
@@ -550,7 +469,7 @@ test.describe('chat message rendering', () => {
         expect(getUnexpectedConsoleErrors(consoleErrors)).toEqual([]);
     });
 
-    test('keeps legacy message actions visible and only adds hidden React owners when the bridge is enabled', async ({ page }) => {
+    test('keeps React-owned message actions and edit lifecycle visible', async ({ page }) => {
         expect(fs.existsSync(seededChatPath)).toBe(true);
 
         const seededMessages = getChatMessages(seededChatPath);
@@ -605,10 +524,9 @@ test.describe('chat message rendering', () => {
         const editTextarea = assistantRow.locator('.edit_textarea');
         await expect(editTextarea).toBeVisible();
         await expect(editTextarea).toHaveValue(seededMessages[assistantMessageIndex].mes);
-        // React remains sole row owner during edit with preserve-live content.
+        // React remains sole row owner during edit with a data-owned draft.
         await expectReactMessageRowState(page, assistantMessageIndex, true);
         await expect(assistantRow).toHaveAttribute('data-main-chat-message-row-state', 'editing');
-        await expect(assistantRow).toHaveAttribute('data-main-chat-message-row-preserve-live', 'true');
 
         const renderedMessageCount = await page.locator('#chat > .mes[mesid]').count();
         await clickControlAtCenter(page, assistantRow.getByRole('button', { name: 'Delete this message' }));

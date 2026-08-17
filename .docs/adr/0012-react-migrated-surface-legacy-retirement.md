@@ -76,6 +76,28 @@ At minimum, each deletion must show:
 - startup and interaction evidence where the surface touches workspace startup, large lists, or main chat;
 - updated `.docs/db` behavior documentation and project history.
 
+## React Runtime Boundary Addendum (2026-08-14)
+
+The main-chat retirement work now has an explicit internal boundary named **React Runtime Boundary**:
+
+- `app/` does not read `globalThis.SillyTavern`, `eventSource`, `event_types`, or `getContext()`. Internal React code receives typed runtime snapshots and named command ports from `app/compat/runtime-port.ts` and `app/compat/workspace-commands.ts`.
+- `app/stores/main-chat-store.ts` owns immutable message records, ordering, visible-window state, composer snapshot shape, generation state, streaming state, and slash snapshot shape. `public/scripts/main-chat-store-projection.js` is the framework-neutral projection from stored chat data to that shape; it does not scan message DOM or accept DOM HTML snapshots.
+- React mounts message rows directly under `#chat` and emits the protected `.mes[mesid]`, `.mes_text`, reasoning/media/file/action shells as output. Legacy message nodes are not an input source for React state.
+- `globalThis.SillyTavern`, `eventSource`, `event_types`, stable selectors, and `@sillytavern/*` remain public compatibility contracts. They are not an internal React state API and are not removed by this boundary decision.
+- Generic `dispatchAction(string, payload)` is removed from the React surface boundary. Commands are named by surface and operation, so a command cannot silently acquire another surface's authority.
+
+This addendum records a delivered boundary, not a claim that every main-chat owner has already moved. The remaining owner split is deliberate and must stay explicit:
+
+| Concern | Current owner | Boundary status |
+|---|---|---|
+| Message records, React rows, rich-body projection, ordering, windowing, and reading-position restore | React main-chat store and `MessageRow` output | Delivered |
+| Message edit/copy/delete/move, reasoning expand/copy/edit/delete/collapse, and visible generation command entry points | Named React commands backed by framework-neutral persistence and generation services | Delivered command boundary; public compatibility handlers remain |
+| Composer input value and legacy composer DOM controls | Existing `#send_textarea` / `#send_but` controls | Command capture delivered; store write-owner replacement is still required |
+| Provider transport, token append, slash parser/registry/executor, and reasoning parse/template/stream internals | Framework-neutral legacy modules behind public compatibility contracts | Not a React owner claim |
+| Third-party extension mutation zones and public globals/events | Freeze-supported compatibility contracts | Must remain stable until replacement proof exists |
+
+The final completion gate for this topic is therefore not a zero-count global search. It is a runtime proof that a message-state update with no pre-existing legacy message rows still renders, operates, persists, and emits the supported compatibility DOM from the React store. Composer write ownership and the remaining command/extension control surfaces must be proven separately before this addendum can be marked complete.
+
 ## Evidence
 
 - [ADR-0007: React Page And Panel Islands With Legacy Fallbacks](0007-react-page-islands-with-legacy-fallbacks.md)

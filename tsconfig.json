@@ -10,6 +10,7 @@
     "checkJs": false,
     "strict": true,
     "strictNullChecks": true,
+    "noUnusedLocals": true,
 
     // 互操作性
     "esModuleInterop": true,
@@ -28,14 +29,10 @@
     // 类型定义
     "types": ["node"],
 
-    // 忽略 TS 6.0 路径别名废弃警告
-    "ignoreDeprecations": "6.0",
-
     // 路径别名（与 Vite 保持一致）
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["app/*"],
-      "@sillytavern/*": ["public/scripts/*"]
+      "@/*": ["./app/*"],
+      "@sillytavern/*": ["./public/scripts/*"]
     }
   },
   "include": [

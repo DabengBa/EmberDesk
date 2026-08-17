@@ -456,7 +456,7 @@ canonical source IDs but do not become a second text authority.
       projection state, and attachment manifests; restore validates that manifest before
       replacing canonical rows, records a durable restore journal, and re-requires chat audit;
       fixed-scale Node 26.3.0 benchmark proof now lives in
-      `scripts/canonical-chat-node26-benchmark.mjs` and its feature evidence artifact.
+      `scripts/canonical-chat-node24-benchmark.mjs` and its feature evidence artifact.
     - Operators create and restore chat bundles with
       `scripts/canonical-sqlite-repair.mjs backup-chat|restore-chat --backup-file <path>`;
       `chat-restore-status` reports the latest durable restore result.

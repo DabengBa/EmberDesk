@@ -886,6 +886,7 @@ function areFormValuesEqual(left, right) {
  * @param {object} baseSettings
  * @param {object} formValues
  * @param {{ settingsRevision?: number | null, baselineFormValues?: object | null }} [options]
+ * @returns {import('../compat/runtime-port').SettingsDocument}
  */
 export function buildSettingsSavePayload(baseSettings, formValues, { settingsRevision = null, baselineFormValues = null } = {}) {
     const nextSettings = structuredClone(baseSettings && typeof baseSettings === 'object' ? baseSettings : {});
@@ -929,38 +930,26 @@ export function buildSettingsSavePayload(baseSettings, formValues, { settingsRev
 }
 
 /**
- * Keeps the legacy workspace runtime aligned after a React Settings save.
- * The workspace still uses these identity-stable objects to build generation
- * requests and to persist debounced legacy settings updates.
+ * Sends a saved Settings document through the injected runtime command port.
  *
- * @param {object} settings
- * @returns {boolean}
+ * @param {import('../compat/runtime-port').SettingsDocument} settings
+ * @param {{ commands?: { saveSettings?: (settings: import('../compat/runtime-port').SettingsDocument) => Promise<void> } }|undefined} [runtime]
+ * @returns {Promise<boolean>}
  */
-export function syncSettingsToLegacyRuntime(settings) {
-    const context = globalThis.SillyTavern?.getContext?.();
-    if (!context || typeof context !== 'object' || !settings || typeof settings !== 'object') {
+export async function saveSettingsToRuntime(settings, runtime) {
+    if (
+        !runtime
+        || typeof runtime !== 'object'
+        || !runtime.commands
+        || typeof runtime.commands.saveSettings !== 'function'
+        || !settings
+        || typeof settings !== 'object'
+    ) {
         return false;
     }
 
-    const mappings = [
-        ['chatCompletionSettings', 'oai_settings'],
-        ['powerUserSettings', 'power_user'],
-        ['extensionSettings', 'extension_settings'],
-    ];
-    let synchronized = false;
-
-    for (const [runtimeKey, settingsKey] of mappings) {
-        const runtimeSettings = context[runtimeKey];
-        const savedSettings = settings[settingsKey];
-        if (!runtimeSettings || typeof runtimeSettings !== 'object' || !savedSettings || typeof savedSettings !== 'object') {
-            continue;
-        }
-
-        Object.assign(runtimeSettings, savedSettings);
-        synchronized = true;
-    }
-
-    return synchronized;
+    await runtime.commands.saveSettings(settings);
+    return true;
 }
 
 export function getFieldErrorMessage(errors) {

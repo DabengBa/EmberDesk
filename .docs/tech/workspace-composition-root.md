@@ -120,7 +120,8 @@ pnpm run docs:check
 pnpm run docs:build
 ```
 
-The root ESLint configuration loads with the adopted TypeScript 6.0.3 and
-`typescript-eslint@8.60.1` toolchain. A full root lint run still reports
-pre-existing legacy formatting and unused-code debt; that debt is separate
-from the focused composition-root contract proof and typecheck.
+Root validation runs ESLint for JavaScript and the TypeScript 7 compiler for
+TS/TSX, including unused-local diagnostics. The former `typescript-eslint`
+parser cannot run against TypeScript 7 because TS7 no longer exposes its
+required Compiler API. Legacy JavaScript formatting and unused-code debt remain
+separate from focused composition-root contract proof and typecheck.

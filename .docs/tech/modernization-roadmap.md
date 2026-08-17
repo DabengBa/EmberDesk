@@ -28,7 +28,7 @@ Closure evidence:
 
 ## Assumptions
 
-- Node.js 26.7.0 Current (`>=26.7.0 <27`) is the supported application runtime.
+- Node.js 24.16.0 Current (`>=24.16.0 <25`) is the supported application runtime.
 - pnpm is the package manager and script runner; Bun is not used for dependency management or bundling.
 - Express 5 remains the server framework.
 - The browser application remains HTML/CSS/jQuery during this roadmap.
@@ -81,7 +81,7 @@ Phase 0 result:
 
 - Whole-repo lint is green after excluding vendored third-party extension build artifacts and fixing first-party lint debt.
 - The core modernization gates are green locally: semantic docs, compatibility, Express route/order, shared browser library, startup/config, user/auth/setup/login, character-list focused tests, performance tooling tests, and full unit suite.
-- Historical Phase 0 proof ran under Node 25.4.0, while the project runtime contract is now Node.js 26.7.0 Current. Treat those historical results as useful diagnostic evidence, not release proof.
+- Historical Phase 0 proof ran under Node 25.4.0, while the project runtime contract is now Node.js 24.16.0 Current. Treat those historical results as useful diagnostic evidence, not release proof.
 - Full Playwright E2E and performance runners were skipped because Phase 0 did not change user-visible behavior or implement a performance slice.
 
 ### Phase 1: Complexity Mapping
@@ -261,7 +261,7 @@ Phase 1 result:
 
 ## Known Execution Gaps
 
-- Historical Node.js 26.3.0 release validation proof covers the modernization surfaces listed here; current release proof must use the Node.js 26.7.0 contract.
+- Historical Node.js 26.3.0 release validation proof covers the modernization surfaces listed here; current release proof must use the Node.js 24.16.0 contract.
 - Full Playwright E2E remains conditional. The 2026-06-05 release validation sweep skipped Playwright because the validation scope changed no visible browser behavior. Later focused browser follow-ups validated character-library entry affordance, chat send-form/options affordance, stored-message rendering, deterministic streaming, long-chat load-more stability, and message action discoverability through targeted E2E or runner proof. Continue running affected E2E or focused browser checks when a later slice changes a primary browser flow, page structure, CTA sequencing, or visible UI behavior.
 - Startup and interaction performance runners remain required before claiming latency wins.
 - Vendored third-party extension artifacts are intentionally excluded from whole-repo lint; do not auto-format or refactor them as first-party source.
@@ -277,7 +277,7 @@ Phase 1 result:
 - 2026-06-04: World-info batch import delivered. The import entry now accepts multiple selected files and dropped files, filters unsupported formats, caps batch size, pre-scans conflicts, offers skip/overwrite/ask-per-conflict choices, processes files sequentially through the existing single-file importer, supports cancel-remaining, and summarizes imported/failed/skipped/unprocessed results without changing converter output, world-info schema, editor card DOM identity, or `/api/worldinfo/import` payload shape.
 - 2026-06-04: World-info batch import review hardening delivered. Batch import now keeps result objects factory-owned, reports conflict pre-scan fallback to the user, uses a named busy-state option instead of positional `arguments`, exposes More-menu actions as keyboard-operable menu items, localizes new batch/overwrite feedback in `zh-cn`, and shows a checking-target progress state while overwrite confirmation is pending instead of claiming the file is already imported.
 - 2026-06-04: OpenAI/provider capability helper extraction delivered. `public/scripts/openai-provider-capabilities.js` now owns pure model, reasoning, verbosity, and media-support helpers, while `public/scripts/openai.js` keeps compatibility wrappers and request assembly. Focused unit tests now exercise structured descriptors and the current helper branches without changing provider UI or payload semantics.
-- 2026-06-04: Historical Node 26.3.0 runtime contract delivered. It was later superseded by the Node.js 26.7.0 contract and pnpm 11.20.0 package-manager contract; local non-contract proof is diagnostic only.
+- 2026-06-04: Historical Node 26.3.0 runtime contract delivered. It was later superseded by the Node.js 24.16.0 contract and pnpm 11.20.0 package-manager contract; local non-contract proof is diagnostic only.
 - 2026-06-04: Derived SQLite sidecar helper foundation delivered. `src/derived-cache-sqlite.js` now owns reusable derived SQLite lifecycle, PRAGMA setup, status reporting, schema reset, dispose, and reset-threshold behavior, while the character index keeps business rules and canonical file-backed behavior. Focused proof lives in `tests/derived-cache-sqlite.test.js`.
 - 2026-06-04: oxlint fast-lane preflight delivered. Root `pnpm run lint:fast` now runs `oxlint src public *.js` with `.oxlintrc.json` preserving the existing ESLint ignored-path boundary. `pnpm run lint` remained the authoritative ESLint gate, and `pnpm --dir tests run lint` was left as the known red baseline for the follow-up ESLint flat-config slice.
 - 2026-06-04: ESLint 10 flat config upgrade delivered. Root and tests linting now use `eslint.config.js` / `tests/eslint.config.js`, legacy `.eslintrc.cjs` files are retired, tests own their Jest and Playwright lint plugins directly, `pnpm run lint` and `pnpm --dir tests run lint` both pass, and `pnpm run lint:fast` remains a non-authoritative oxlint preflight.
@@ -287,7 +287,7 @@ Phase 1 result:
 - 2026-06-05: Derived cache release hardening evidence closed. No code behavior changed; the release-risk matrix is covered by focused proof for unsupported `node:sqlite`, `force_off`, startup status, cache path guards, PRAGMA baseline, schema-version reset, corrupt DB rebuild, reset-threshold disable, keyed dispose, character-read filesystem fallback, circuit-disabled throw behavior, and `/api/characters/get` index refresh failures.
 - 2026-06-05: Background panel controller boundary delivered. `public/scripts/background-panel-controller.js` now owns root-scoped loading-state helper behavior for the background library panel, while `public/scripts/backgrounds.js` keeps request flow, upload/delete/rename/folder behavior, thumbnail handling, slash-command registration, selectors, and visible copy unchanged. Focused proof lives in `tests/background-panel-controller.test.js`.
 - 2026-06-05: Compatibility hardening pass delivered. `tests/third-party-extension-compatibility.test.js` now freezes slash-command public exports in addition to extension mount points, Tavern Helper assets, `@sillytavern/*` aliases, key module exports, event values, regex placement values, and character-list row identity. `tests/interaction-performance-index.test.js` now verifies character read-service envelope fields stay internal to the route layer.
-- 2026-06-05: Historical build dependency closure delivered. At that point Node.js 26.3.0, Bun 1.3.14, and Webpack `/lib.js` were the recorded roles; ADR-0013 later removed Webpack and the current runtime contract is Node.js 26.7.0. ESLint remains the authoritative lint gate and oxlint remains a warning-only fast preflight.
+- 2026-06-05: Historical build dependency closure delivered. At that point Node.js 26.3.0, Bun 1.3.14, and Webpack `/lib.js` were the recorded roles; ADR-0013 later removed Webpack and the current runtime contract is Node.js 24.16.0. ESLint remains the authoritative lint gate and oxlint remains a warning-only fast preflight.
 - 2026-06-05: Documentation topology closure delivered. `.docs/tech/briefs/README.md` now indexes retained closure briefs as persistent intent records, and this roadmap now distinguishes durable briefs from spec-local `design.md`/`plan.md` process artifacts that are deleted during wrap-up. `.docs/db` semantics were unchanged and `pnpm run docs:check` stayed green.
 
 ## Recommended Next Work
@@ -307,7 +307,7 @@ Before starting a successor roadmap, verify current release evidence still match
 
 ## Closed Sequence Result
 
-The 10-step closure program ended with Node 26 validation and documentation topology proof green. Startup and interaction performance runners remain the evidence path for future latency claims, but no further slice is planned inside this roadmap.
+The 10-step closure program ended with historical Node 26 validation and documentation topology proof green. Startup and interaction performance runners remain the evidence path for future latency claims, but no further slice is planned inside this roadmap.
 
 ## 10-Step Roadmap Closure Result
 

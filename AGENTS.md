@@ -10,7 +10,7 @@ EmberDesk is a self-hosted browser LLM workspace forked from SillyTavern. The pr
 
 | Area | Contract |
 |---|---|
-| Runtime | Node.js 26.7.0 Current (`>=26.7.0 <27`) |
+| Runtime | Node.js 24.16.0 Current (`>=24.16.0 <25`) |
 | Package manager / scripts | pnpm 12.0.0-rc.5 (`packageManager`) |
 | Language | JavaScript ES modules (server `src/`) + TypeScript (frontend `app/`) |
 | Server | Express 5 |
@@ -50,14 +50,18 @@ pnpm run build:react:workspace-panels
 pnpm run start
 pnpm run start:no-csrf
 pnpm run test:unit
+pnpm run test:component
+pnpm run test:integration
 pnpm run test:compat
 pnpm run test:e2e
+pnpm run test:all
+pnpm run test:inventory
 pnpm run docs:check
 pnpm run docs:build
 pnpm run lint
 ```
 
-Use Node.js 26.7.0 for server release proof by default. pnpm is the package manager and script runner; `src/electron` is an independent pnpm package boundary.
+Use Node.js 24.16.0 for server release proof by default. pnpm is the package manager and script runner; `src/electron` is an independent pnpm package boundary.
 
 ## Architecture Rules
 

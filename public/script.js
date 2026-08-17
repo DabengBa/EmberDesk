@@ -184,11 +184,6 @@ import {
     getExtensionCompatibilitySlotManager,
 } from './scripts/extension-compatibility-slots.js';
 import { COMMENT_NAME_DEFAULT, CONNECT_API_MAP, executeSlashCommandsOnChatInput, getMainChatSlashCommandAutoCompleteState, initDefaultSlashCommands, initSlashCommandAutoComplete, isExecutingCommandsFromChatInput, pauseScriptExecution, selectMainChatSlashCommandOption, setMainChatSlashCommandReactOwnerEnabled, stopScriptExecution, UNIQUE_APIS } from './scripts/slash-commands.js';
-import {
-    MAIN_CHAT_MESSAGE_ACTION_SNAPSHOT_SCHEMA,
-    MAIN_CHAT_MESSAGE_ROW_SNAPSHOT_SCHEMA,
-    MAIN_CHAT_RICH_BODY_SNAPSHOT_SCHEMA,
-} from './scripts/main-chat-bridge-contract.js';
 import { initMacroAutoComplete } from './scripts/autocomplete/MacroAutoComplete.js';
 import {
     tag_map,
@@ -309,11 +304,14 @@ import {
 import {
     buildChatMessageRichBodyRender,
 } from './scripts/chat-message-render-service.js';
+import {
+    buildMainChatSnapshotFromLegacyChat,
+} from './scripts/main-chat-store-projection.js';
 import { getStreamingControlState } from './scripts/chat-streaming-control-state.js';
 import { getMainChatComposerState } from './scripts/main-chat-composer-state.js';
 import { getMainChatSlashCommandState } from './scripts/main-chat-slash-command-state.js';
 import { getMainChatStreamingTransportState } from './scripts/main-chat-streaming-transport-state.js';
-import { buildMessageActionSnapshot, createChatMessageActionsController } from './scripts/chat-message-actions-controller.js';
+import { createChatMessageActionsController } from './scripts/chat-message-actions-controller.js';
 import { ToolManager } from './scripts/tool-calling.js';
 import { addShowdownPatch } from './scripts/util/showdown-patch.js';
 import { applyBrowserFixes } from './scripts/browser-fixes.js';
@@ -348,7 +346,7 @@ import {
 } from './scripts/character-authoring.js';
 import {
     mountWorkspacePanelHost,
-    createWorkspacePanelActionBridge,
+    createWorkspacePanelCommandPort,
     createWorkspacePanelStateChangeHandler,
     initWorkspacePanelDrawerBridge,
 } from './scripts/workspace-panel-host-controller.js';
@@ -374,9 +372,59 @@ import { mountReactWorkspaceShellChrome, mountReactSettingsOverlay, unmountReact
 import { runDeleteCharacterClosePreflight } from './scripts/delete-character-preflight.js';
 import { getRequestHeaders, installAjaxCsrfPrefilter, loadCsrfToken } from './scripts/request-context.js';
 import { installPublicBrowserApi } from './scripts/public-api.js';
+import { createReactRuntimeProvider } from './scripts/react-runtime-provider.js';
 
 // API OBJECT FOR EXTERNAL WIRING
 installPublicBrowserApi({ libs, getContext });
+
+const reactRuntimePort = createReactRuntimeProvider({
+    getContext,
+    eventSource,
+    eventTypes: event_types,
+    commands: {
+        submitMessage: async (input) => {
+            const textarea = document.getElementById('send_textarea');
+            if (!(textarea instanceof HTMLTextAreaElement)) {
+                throw new Error('Main chat composer is unavailable');
+            }
+            textarea.value = String(input ?? '');
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+            return mainChatVisibleGenerationMutex.update();
+        },
+        stopGeneration: () => stopGeneration(),
+        retryMessage: messageId => executeMainChatVisibleGenerationAction({
+            kind: 'retryGeneration',
+            messageId: Number(messageId),
+        }),
+        loadEarlier: anchorId => {
+            const numericAnchorId = Number(anchorId);
+            return loadEarlierChatMessages(
+                Number.isInteger(numericAnchorId) && numericAnchorId >= 0 ? numericAnchorId : null,
+            );
+        },
+        saveSettings: (settings) => {
+            const context = getContext();
+            const mappings = [
+                ['chatCompletionSettings', 'oai_settings'],
+                ['powerUserSettings', 'power_user'],
+                ['extensionSettings', 'extension_settings'],
+            ];
+
+            for (const [runtimeKey, settingsKey] of mappings) {
+                const runtimeSettings = context?.[runtimeKey];
+                const savedSettings = settings?.[settingsKey];
+                if (
+                    runtimeSettings
+                    && typeof runtimeSettings === 'object'
+                    && savedSettings
+                    && typeof savedSettings === 'object'
+                ) {
+                    Object.assign(runtimeSettings, savedSettings);
+                }
+            }
+        },
+    },
+});
 
 if (globalThis.location?.pathname === '/' && globalThis.location?.search.includes('emberdesk_perf_hooks=1')) {
     globalThis.__emberDeskPerf = {
@@ -475,9 +523,6 @@ document.addEventListener('click', event => {
     }
 }, true);
 const MAIN_CHAT_SCROLL_RESTORE_THRESHOLD_PX = 12;
-const mainChatMessageRowSnapshotSchema = MAIN_CHAT_MESSAGE_ROW_SNAPSHOT_SCHEMA;
-const mainChatRichBodySnapshotSchema = MAIN_CHAT_RICH_BODY_SNAPSHOT_SCHEMA;
-const mainChatMessageActionSnapshotSchema = MAIN_CHAT_MESSAGE_ACTION_SNAPSHOT_SCHEMA;
 const STREAMING_TRANSPORT_TERMINAL_PHASES = new Set(['stopped', 'completed', 'error']);
 const REACT_CHARACTER_LIBRARY_PANEL_ASSET_PATH = '/react/login/assets/character-library-panel.js';
 const REACT_CHARACTER_LIBRARY_PANEL_ASSET_CACHE_KEY = Date.now().toString(36);
@@ -498,7 +543,14 @@ let mainChatMessageListBridgeFormShellObserver = null;
 let mainChatMessageListBridgeBodyObserver = null;
 let mainChatMessageActionsController = null;
 let mainChatMessageListPendingRestoreChatId = null;
+let mainChatMessageListScrollRestoreScheduledChatId = null;
 let mainChatMessageRenderGeneration = 0;
+let mainChatComposerCommandBindings = null;
+let mainChatComposerFocusRestoreRequested = false;
+let reactMainChatProjectionCleared = false;
+const mainChatVisibleStartIndices = new Map();
+const mainChatVisibleGenerationMutex = new SimpleMutex(sendTextareaMessage);
+const mainChatMessageUiState = new Map();
 
 function getReactCharacterLibraryPanelAssetPath() {
     const cacheKey = globalThis.__emberDeskReactCharacterLibraryPanelAssetCacheKey ??= REACT_CHARACTER_LIBRARY_PANEL_ASSET_CACHE_KEY;
@@ -728,11 +780,11 @@ async function activateWorkspaceShellSlot(slotKey) {
         case 'characterLibrary':
             return openWorkspaceShellCharacterLibrary();
         case 'worldInfo':
-            return getWorkspaceShellChromeBridge().dispatchAction('openWorldInfo');
+            return openWorkspaceShellWorldInfo();
         case 'backgroundLibrary':
-            return getWorkspaceShellChromeBridge().dispatchAction('openBackgrounds');
+            return openWorkspaceShellBackgrounds();
         case 'extensionsHost':
-            return getWorkspaceShellChromeBridge().dispatchAction('openExtensions');
+            return openWorkspaceShellExtensions();
         case 'groupChats':
             return openWorkspaceShellGroupChats();
         case 'characterAuthoring':
@@ -785,6 +837,7 @@ async function openWorkspaceSettingsOverlay({ tab = null, panelKind = 'settings'
     const result = await mountReactSettingsOverlay({
         initialTab: tab,
         panelKind,
+        runtime: reactRuntimePort,
         onRequestClose: () => {
             void closeWorkspaceSettingsOverlay();
         },
@@ -818,55 +871,54 @@ async function closeWorkspaceSettingsOverlay() {
     });
 }
 
-function getWorkspaceShellChromeBridge() {
-    return {
-        async dispatchAction(action, payload = {}) {
-            await waitForWorkspaceShellPanelOpenTask();
+async function openWorkspaceShellWorldInfo() {
+    await waitForWorkspaceShellPanelOpenTask();
+    // React sole-owner: open drawer and mount workbench; deferred body is hidden activation-rules DOM only.
+    await openWorkspaceChildSlotHost('WorldInfo');
+    await waitForWorkspaceShellPanelOpenTask();
+    const worldInfoMount = await mountReactWorldInfoPanel();
+    void ensureWorkspaceShellDeferredPanel('world-info-body');
+    return createWorkspaceShellPanelResult('worldInfo', worldInfoMount);
+}
 
-            switch (action) {
-                case 'activateWorkspaceShellSlot':
-                    return activateWorkspaceShellSlot(payload?.slotKey);
-                case 'deactivateWorkspaceShellSlot':
-                    return deactivateWorkspaceShellSlot(payload?.slotKey);
-                case 'setWorkspaceShellSlotPinned':
-                    return setWorkspaceShellSlotPinned(payload?.slotKey, payload?.pinned);
-                case 'openAIConfig':
-                    return openWorkspaceSettingsOverlay({ tab: 'providers', panelKind: 'aiConfig' });
-                case 'openFormatting':
-                    return openWorkspaceSettingsOverlay({ tab: 'advanced', panelKind: 'advancedFormatting' });
-                case 'openCharacterLibrary':
-                    return openWorkspaceShellCharacterLibrary();
-                case 'openWorldInfo':
-                    // React sole-owner: open drawer and mount workbench; deferred body is hidden activation-rules DOM only.
-                    await openWorkspaceChildSlotHost('WorldInfo');
-                    await waitForWorkspaceShellPanelOpenTask();
-                    const worldInfoMount = await mountReactWorldInfoPanel();
-                    void ensureWorkspaceShellDeferredPanel('world-info-body');
-                    return createWorkspaceShellPanelResult('worldInfo', worldInfoMount);
-                case 'openBackgrounds':
-                    // React sole-owner: open drawer and mount Background Library; legacy gallery remains hidden compatibility DOM.
-                    await openWorkspaceChildSlotHost('Backgrounds');
-                    await waitForWorkspaceShellPanelOpenTask();
-                    return createWorkspaceShellPanelResult('backgroundLibrary', await mountReactBackgroundLibraryPanel());
-                case 'openExtensions':
-                    await openWorkspaceChildSlotHost('rm_extensions_block');
-                    await waitForWorkspaceShellPanelOpenTask();
-                    return createWorkspaceShellPanelResult('extensionsHost', await mountReactExtensionsHostPanel());
-                case 'openSettings':
-                    return openWorkspaceSettingsOverlay({ tab: null, panelKind: 'settings' });
-                case 'closeWorkspacePanel':
-                    if (payload?.kind === 'settings' || payload?.kind === 'aiConfig' || payload?.kind === 'advancedFormatting') {
-                        return closeWorkspaceSettingsOverlay();
-                    }
-                    return createWorkspaceShellPanelResult(payload?.kind || 'settings', { kind: payload?.kind || 'settings', mounted: false, status: 'success' });
-                case 'openGroupChats':
-                    return openWorkspaceShellGroupChats(); // retired: always fails closed
-                case 'openCharacterAuthoring':
-                    return openWorkspaceShellCharacterAuthoring();
-                default:
-                    console.warn('Unknown React workspace shell chrome action', action);
-            }
-        },
+async function openWorkspaceShellBackgrounds() {
+    await waitForWorkspaceShellPanelOpenTask();
+    // React sole-owner: open drawer and mount Background Library; legacy gallery remains hidden compatibility DOM.
+    await openWorkspaceChildSlotHost('Backgrounds');
+    await waitForWorkspaceShellPanelOpenTask();
+    return createWorkspaceShellPanelResult('backgroundLibrary', await mountReactBackgroundLibraryPanel());
+}
+
+async function openWorkspaceShellExtensions() {
+    await waitForWorkspaceShellPanelOpenTask();
+    await openWorkspaceChildSlotHost('rm_extensions_block');
+    await waitForWorkspaceShellPanelOpenTask();
+    return createWorkspaceShellPanelResult('extensionsHost', await mountReactExtensionsHostPanel());
+}
+
+async function closeWorkspacePanel(kind) {
+    await waitForWorkspaceShellPanelOpenTask();
+    if (kind === 'settings' || kind === 'aiConfig' || kind === 'advancedFormatting') {
+        return closeWorkspaceSettingsOverlay();
+    }
+    return createWorkspaceShellPanelResult(kind, { kind, mounted: false, status: 'success' });
+}
+
+function getWorkspaceShellCommands() {
+    return {
+        activateWorkspaceShellSlot,
+        deactivateWorkspaceShellSlot,
+        setWorkspaceShellSlotPinned,
+        openAIConfig: () => openWorkspaceSettingsOverlay({ tab: 'providers', panelKind: 'aiConfig' }),
+        openFormatting: () => openWorkspaceSettingsOverlay({ tab: 'advanced', panelKind: 'advancedFormatting' }),
+        openCharacterLibrary: openWorkspaceShellCharacterLibrary,
+        openWorldInfo: openWorkspaceShellWorldInfo,
+        openBackgrounds: openWorkspaceShellBackgrounds,
+        openExtensions: openWorkspaceShellExtensions,
+        openSettings: () => openWorkspaceSettingsOverlay({ tab: null, panelKind: 'settings' }),
+        closeWorkspacePanel,
+        openGroupChats: openWorkspaceShellGroupChats,
+        openCharacterAuthoring: openWorkspaceShellCharacterAuthoring,
     };
 }
 
@@ -879,7 +931,8 @@ async function mountReactWorkspaceShellChromeHost() {
     const result = await mountReactWorkspaceShellChrome({
         container: host,
         state: getWorkspaceShellChromeState(),
-        bridge: getWorkspaceShellChromeBridge(),
+        commands: getWorkspaceShellCommands(),
+        runtime: reactRuntimePort,
         features: getWorkspaceReactFeatures(),
     });
 
@@ -930,6 +983,89 @@ function consumeMainChatMessageListScrollRestore(chatId = getCurrentChatId()) {
     return shouldRestore;
 }
 
+function hasMainChatMessageListScrollRestore(chatId = getCurrentChatId()) {
+    const normalizedChatId = typeof chatId === 'string' ? chatId.trim() : '';
+    return normalizedChatId !== ''
+        && mainChatMessageListPendingRestoreChatId === normalizedChatId
+        && getMainChatMessageListScrollSnapshotStore().has(normalizedChatId);
+}
+
+function getMainChatMessageListScrollRestoreSnapshot(chatId = getCurrentChatId()) {
+    const normalizedChatId = typeof chatId === 'string' ? chatId.trim() : '';
+    if (!hasMainChatMessageListScrollRestore(normalizedChatId)) {
+        return null;
+    }
+
+    const snapshot = getMainChatMessageListScrollSnapshotStore().get(normalizedChatId);
+    if (!snapshot || typeof snapshot !== 'object') {
+        return null;
+    }
+
+    const anchorMessageId = typeof snapshot.anchorMessageId === 'string'
+        ? snapshot.anchorMessageId.trim()
+        : '';
+    const anchorViewportOffset = Number(snapshot.anchorViewportOffset);
+    const scrollTop = Number(snapshot.scrollOffset);
+    if (!anchorMessageId || !Number.isFinite(anchorViewportOffset) || !Number.isFinite(scrollTop)) {
+        return null;
+    }
+
+    return {
+        anchorMessageId,
+        anchorViewportOffset,
+        scrollTop: Math.max(scrollTop, 0),
+        wasNearBottom: snapshot.wasNearBottom === true,
+    };
+}
+
+function scheduleMainChatMessageListScrollRestore(chatId = getCurrentChatId()) {
+    const normalizedChatId = typeof chatId === 'string' ? chatId.trim() : '';
+    const restore = getMainChatMessageListScrollRestoreSnapshot(normalizedChatId);
+    if (!restore || mainChatMessageListScrollRestoreScheduledChatId === normalizedChatId) {
+        return;
+    }
+
+    mainChatMessageListScrollRestoreScheduledChatId = normalizedChatId;
+    let attempts = 0;
+    const applyRestore = () => {
+        if (getCurrentChatId() !== normalizedChatId || !hasMainChatMessageListScrollRestore(normalizedChatId)) {
+            mainChatMessageListScrollRestoreScheduledChatId = null;
+            return;
+        }
+
+        const chatContainer = document.getElementById('chat');
+        const messageRows = getMainChatRenderableMessageRows(chatContainer);
+        const anchorRow = messageRows.find(row => row.getAttribute('mesid') === restore.anchorMessageId);
+        if (!(chatContainer instanceof HTMLElement) || messageRows.length === 0) {
+            attempts += 1;
+            if (attempts < 8) {
+                requestAnimationFrame(applyRestore);
+                return;
+            }
+
+            mainChatMessageListScrollRestoreScheduledChatId = null;
+            return;
+        }
+
+        if (anchorRow) {
+            const chatRect = chatContainer.getBoundingClientRect();
+            const anchorViewportOffset = anchorRow.getBoundingClientRect().top - chatRect.top;
+            chatContainer.scrollTop = Math.max(
+                chatContainer.scrollTop + anchorViewportOffset - restore.anchorViewportOffset,
+                0,
+            );
+        } else {
+            chatContainer.scrollTop = restore.scrollTop;
+        }
+
+        deleteMainChatMessageListScrollSnapshot(normalizedChatId);
+        mainChatMessageListPendingRestoreChatId = null;
+        mainChatMessageListScrollRestoreScheduledChatId = null;
+    };
+
+    requestAnimationFrame(applyRestore);
+}
+
 function getMainChatRenderableMessageRows(chatContainer) {
     if (!(chatContainer instanceof HTMLElement)) {
         return [];
@@ -952,6 +1088,167 @@ function scheduleMainChatMessageListPanelRefresh() {
         mainChatMessageListBridgeRefreshFrame = 0;
         void mountReactMainChatMessageListPanel();
     });
+}
+
+function getMainChatMessageUiStateById() {
+    return Object.fromEntries(
+        Array.from(mainChatMessageUiState.entries(), ([messageId, state]) => [
+            messageId,
+            { ...state },
+        ]),
+    );
+}
+
+function shiftMainChatMessageUiStateAfterSplice(startIndex, delta) {
+    const normalizedStartIndex = Number(startIndex);
+    const normalizedDelta = Number(delta);
+    if (!Number.isInteger(normalizedStartIndex) || !Number.isInteger(normalizedDelta) || normalizedDelta === 0) {
+        return;
+    }
+
+    const nextState = new Map();
+    for (const [key, state] of mainChatMessageUiState.entries()) {
+        const messageId = Number(key);
+        if (!Number.isInteger(messageId) || messageId < normalizedStartIndex) {
+            nextState.set(key, state);
+            continue;
+        }
+
+        const nextMessageId = messageId + normalizedDelta;
+        if (nextMessageId >= 0) {
+            nextState.set(String(nextMessageId), state);
+        }
+    }
+
+    mainChatMessageUiState.clear();
+    for (const [key, state] of nextState.entries()) {
+        mainChatMessageUiState.set(key, state);
+    }
+}
+
+function setMainChatMessageUiState(messageId, patch) {
+    const normalizedMessageId = Number(messageId);
+    if (!Number.isInteger(normalizedMessageId) || normalizedMessageId < 0 || !patch || typeof patch !== 'object') {
+        return;
+    }
+
+    const key = String(normalizedMessageId);
+    const current = mainChatMessageUiState.get(key) ?? {};
+    const next = { ...current, ...patch };
+    const hasVisibleState = next.recoveryStatus
+        || next.failureNoticeVisible
+        || next.failureRetryVisible
+        || next.emptyReplyRegenerateVisible
+        || next.actionsExpanded
+        || next.editing
+        || typeof next.reasoningOpen === 'boolean'
+        || next.reasoningEditing
+        || next.lastInContext
+        || next.swipeCounterHidden;
+    if (!hasVisibleState) {
+        mainChatMessageUiState.delete(key);
+    } else {
+        mainChatMessageUiState.set(key, next);
+    }
+    scheduleMainChatMessageListPanelRefresh();
+}
+
+function setMainChatMessageUiFlag(flag, enabled, messageId = null) {
+    const normalizedMessageId = messageId === null || messageId === undefined
+        ? null
+        : Number(messageId);
+    let changed = false;
+
+    for (const [key, state] of mainChatMessageUiState.entries()) {
+        if (normalizedMessageId !== null && key !== String(normalizedMessageId)) {
+            continue;
+        }
+
+        if (enabled) {
+            if (state[flag] === true) {
+                continue;
+            }
+            mainChatMessageUiState.set(key, { ...state, [flag]: true });
+            changed = true;
+            continue;
+        }
+
+        if (state[flag] !== true) {
+            continue;
+        }
+        const next = { ...state };
+        delete next[flag];
+        const hasVisibleState = next.recoveryStatus
+            || next.failureNoticeVisible
+            || next.failureRetryVisible
+            || next.emptyReplyRegenerateVisible
+            || next.actionsExpanded
+            || next.editing
+            || typeof next.reasoningOpen === 'boolean'
+            || next.reasoningEditing
+            || next.lastInContext
+            || next.swipeCounterHidden;
+        if (hasVisibleState) {
+            mainChatMessageUiState.set(key, next);
+        } else {
+            mainChatMessageUiState.delete(key);
+        }
+        changed = true;
+    }
+
+    if (enabled && normalizedMessageId !== null) {
+        const key = String(normalizedMessageId);
+        const state = mainChatMessageUiState.get(key);
+        if (!state || state[flag] !== true) {
+            mainChatMessageUiState.set(key, { ...(state ?? {}), [flag]: true });
+            changed = true;
+        }
+    }
+
+    if (changed) {
+        scheduleMainChatMessageListPanelRefresh();
+    }
+}
+
+function clearMainChatMessageUiState(messageId) {
+    const key = String(Number(messageId));
+    if (mainChatMessageUiState.delete(key)) {
+        scheduleMainChatMessageListPanelRefresh();
+    }
+}
+
+function setMainChatMessageActionsExpanded(messageId, expanded) {
+    if (expanded) {
+        setMainChatMessageUiFlag('actionsExpanded', false);
+        setMainChatMessageUiState(messageId, { actionsExpanded: true });
+        return;
+    }
+
+    setMainChatMessageUiFlag('actionsExpanded', false);
+}
+
+function getMainChatRecoveryUiState() {
+    let recovery = null;
+    let failure = null;
+
+    for (const [messageId, state] of mainChatMessageUiState.entries()) {
+        if (state.recoveryStatus) {
+            recovery = {
+                messageId: Number(messageId),
+                status: state.recoveryStatus,
+                stage: state.recoveryStage === 'fallback' ? 'fallback' : 'primary',
+            };
+        }
+        if (state.failureNoticeVisible || state.failureRetryVisible) {
+            failure = {
+                messageId: Number(messageId),
+                noticeVisible: state.failureNoticeVisible === true,
+                retryVisible: state.failureRetryVisible === true,
+            };
+        }
+    }
+
+    return { recovery, failure };
 }
 
 function isMainChatGenerationControlElementVisible(element) {
@@ -1002,16 +1299,21 @@ function getMainChatComposerBridgeState() {
 }
 
 function getMainChatGenerationControlBridgeState() {
-    const recoveryStatus = document.querySelector('#chat > .mes .generation_auto_recovery_status');
-    const recoveryStatusText = recoveryStatus?.textContent?.trim() ?? '';
-    const failureRetry = document.querySelector('#chat > .mes .generation_failure_retry');
-    const failureNotice = document.querySelector('#chat > .mes .generation_failure_notice');
+    const reactOwner = isReactMainChatOwner();
+    const recoveryUi = reactOwner ? getMainChatRecoveryUiState() : null;
+    const recoveryStatus = reactOwner ? null : document.querySelector('#chat > .mes .generation_auto_recovery_status');
+    const recoveryStatusText = reactOwner ? recoveryUi?.recovery?.status ?? '' : recoveryStatus?.textContent?.trim() ?? '';
+    const failureRetry = reactOwner ? null : document.querySelector('#chat > .mes .generation_failure_retry');
+    const failureNotice = reactOwner ? null : document.querySelector('#chat > .mes .generation_failure_notice');
+    const hasFailure = reactOwner
+        ? Boolean(recoveryUi?.failure?.noticeVisible || recoveryUi?.failure?.retryVisible)
+        : Boolean(failureNotice || failureRetry);
     const continueSurface = isMainChatGenerationControlElementVisible(document.getElementById('mes_continue')) ? 'legacy' : 'hidden';
     const shouldPreferStoppedTerminal = shouldPreferStoppedMainChatTerminalSnapshot(
-        failureNotice || failureRetry ? 'error' : streamingProcessor?.isStopped ? 'stopped' : null,
+        hasFailure ? 'error' : streamingProcessor?.isStopped ? 'stopped' : null,
     );
-    const activeMessageId = getMainChatGenerationControlMessageId(recoveryStatus)
-        ?? getMainChatGenerationControlMessageId(failureRetry)
+    const activeMessageId = (reactOwner ? recoveryUi?.recovery?.messageId : getMainChatGenerationControlMessageId(recoveryStatus))
+        ?? (reactOwner ? recoveryUi?.failure?.messageId : getMainChatGenerationControlMessageId(failureRetry))
         ?? (Number.isInteger(streamingProcessor?.messageId) && streamingProcessor.messageId >= 0 ? streamingProcessor.messageId : null);
 
     return {
@@ -1020,13 +1322,19 @@ function getMainChatGenerationControlBridgeState() {
             hasStreamingProcessor: Boolean(streamingProcessor && !streamingProcessor.isStopped && !streamingProcessor.isFinished),
             isStopped: shouldPreferStoppedTerminal || Boolean(streamingProcessor?.isStopped),
             isFinished: Boolean(streamingProcessor?.isFinished),
-            hasError: !shouldPreferStoppedTerminal && Boolean(failureNotice || failureRetry),
-            isRecovering: Boolean(recoveryStatus),
-            recoveryStage: recoveryStatus?.dataset?.recoveryStage === 'fallback' ? 'fallback' : 'primary',
+            hasError: !shouldPreferStoppedTerminal && hasFailure,
+            isRecovering: reactOwner ? Boolean(recoveryUi?.recovery) : Boolean(recoveryStatus),
+            recoveryStage: reactOwner
+                ? recoveryUi?.recovery?.stage ?? 'primary'
+                : recoveryStatus?.dataset?.recoveryStage === 'fallback' ? 'fallback' : 'primary',
             activeMessageId,
             recoveryStatusLabel: recoveryStatusText || null,
-            failureRetryVisible: isMainChatGenerationControlElementVisible(failureRetry),
-            failureNoticeVisible: Boolean(failureNotice),
+            failureRetryVisible: reactOwner
+                ? recoveryUi?.failure?.retryVisible === true
+                : isMainChatGenerationControlElementVisible(failureRetry),
+            failureNoticeVisible: reactOwner
+                ? recoveryUi?.failure?.noticeVisible === true
+                : Boolean(failureNotice),
             continueSurface,
         }),
     };
@@ -1044,10 +1352,11 @@ function getMainChatSlashCommandBridgeState() {
     const textarea = document.getElementById('send_textarea');
     const formShell = document.getElementById('form_sheld');
     const hasError = formShell?.classList.contains('script_error') === true;
+    const autoCompleteState = getMainChatSlashCommandAutoCompleteState();
 
     return getMainChatSlashCommandState({
         text: textarea?.value ?? '',
-        autocompleteVisible: isMainChatSlashAutocompleteVisible(),
+        autocompleteVisible: autoCompleteState.visible === true,
         isExecuting: Boolean(isExecutingCommandsFromChatInput || formShell?.classList.contains('isExecutingCommandsFromChatInput')),
         isPaused: formShell?.classList.contains('script_paused') === true,
         isAborted: formShell?.classList.contains('script_aborted') === true,
@@ -1177,9 +1486,19 @@ function rememberMainChatStreamingTransportVisibleTerminal(phase, {
         return;
     }
 
-    const assistantRow = Array.from(document.querySelectorAll('#chat > .mes[is_user="false"][is_system="false"][mesid]')).at(-1);
-    const messageId = Number(assistantRow?.getAttribute('mesid'));
-    const messageText = assistantRow?.querySelector('.mes_text')?.textContent?.trim() ?? '';
+    const reactOwner = isReactMainChatOwner();
+    const assistantMessageId = reactOwner
+        ? chat.findLastIndex(message => !message?.is_user && !message?.is_system)
+        : null;
+    const assistantRow = reactOwner
+        ? null
+        : Array.from(document.querySelectorAll('#chat > .mes[is_user="false"][is_system="false"][mesid]')).at(-1);
+    const messageId = reactOwner
+        ? assistantMessageId
+        : Number(assistantRow?.getAttribute('mesid'));
+    const messageText = reactOwner
+        ? String(chat[assistantMessageId]?.mes ?? '').trim()
+        : assistantRow?.querySelector('.mes_text')?.textContent?.trim() ?? '';
     const normalizedMessageId = activeMessageId === null
         ? null
         : Number.isInteger(activeMessageId) && activeMessageId >= 0
@@ -1219,11 +1538,16 @@ function shouldPreferStoppedMainChatTerminalSnapshot(currentPhase = null) {
 }
 
 function getMainChatStreamingTransportBridgeState() {
-    const recoveryStatus = document.querySelector('#chat > .mes .generation_auto_recovery_status');
-    const failureRetry = document.querySelector('#chat > .mes .generation_failure_retry');
-    const failureNotice = document.querySelector('#chat > .mes .generation_failure_notice');
-    const activeMessageId = getMainChatGenerationControlMessageId(recoveryStatus)
-        ?? getMainChatGenerationControlMessageId(failureRetry)
+    const reactOwner = isReactMainChatOwner();
+    const recoveryUi = reactOwner ? getMainChatRecoveryUiState() : null;
+    const recoveryStatus = reactOwner ? null : document.querySelector('#chat > .mes .generation_auto_recovery_status');
+    const failureRetry = reactOwner ? null : document.querySelector('#chat > .mes .generation_failure_retry');
+    const failureNotice = reactOwner ? null : document.querySelector('#chat > .mes .generation_failure_notice');
+    const hasFailure = reactOwner
+        ? Boolean(recoveryUi?.failure?.noticeVisible || recoveryUi?.failure?.retryVisible)
+        : Boolean(failureNotice || failureRetry);
+    const activeMessageId = (reactOwner ? recoveryUi?.recovery?.messageId : getMainChatGenerationControlMessageId(recoveryStatus))
+        ?? (reactOwner ? recoveryUi?.failure?.messageId : getMainChatGenerationControlMessageId(failureRetry))
         ?? getMainChatGenerationControlMessageId(failureNotice)
         ?? (Number.isInteger(streamingProcessor?.messageId) && streamingProcessor.messageId >= 0 ? streamingProcessor.messageId : null);
     const hasActiveStreamingProcessor = Boolean(streamingProcessor && !streamingProcessor.isStopped && !streamingProcessor.isFinished);
@@ -1233,13 +1557,15 @@ function getMainChatStreamingTransportBridgeState() {
         isFinalizing: Boolean(streamingProcessor?.isFinalizing),
         isStopped: Boolean(streamingProcessor?.isStopped),
         isFinished: Boolean(streamingProcessor?.isFinished),
-        hasError: Boolean(failureNotice || failureRetry),
+        hasError: hasFailure,
         activeMessageId,
         observedTokenCount: streamingProcessor?.observedTokenCount ?? 0,
         observedChunkCount: streamingProcessor?.observedChunkCount ?? 0,
-        fromFallbackAttempt: Boolean(streamingProcessor?.fromFallbackAttempt || recoveryStatus?.dataset?.recoveryStage === 'fallback'),
-        recoverable: Boolean(recoveryStatus || failureRetry),
-        errorLabel: failureNotice?.textContent?.trim() || null,
+        fromFallbackAttempt: Boolean(streamingProcessor?.fromFallbackAttempt || (reactOwner
+            ? recoveryUi?.recovery?.stage === 'fallback'
+            : recoveryStatus?.dataset?.recoveryStage === 'fallback')),
+        recoverable: hasFailure || (reactOwner ? Boolean(recoveryUi?.recovery) : Boolean(recoveryStatus)),
+        errorLabel: reactOwner ? null : failureNotice?.textContent?.trim() || null,
     });
     const store = getMainChatStreamingTransportStore();
     const shouldPreferStoppedTerminal = shouldPreferStoppedMainChatTerminalSnapshot(snapshot.phase);
@@ -1691,49 +2017,50 @@ eventSource.on(event_types.WORLDINFO_SETTINGS_UPDATED, () => {
     queueReactWorldInfoRemount();
 });
 
-function getCharacterAuthoringReactBridge() {
-    return createWorkspacePanelActionBridge({
-        async dispatchAction(action, payload = {}) {
-            switch (action) {
-                case 'saveCharacterAuthoring':
-                    return await saveCharacterAuthoringFromPayload(payload);
-                case 'cancelAuthoring':
-                    if (getCurrentCharacterAuthoringMode() === 'edit' && this_chid !== undefined) {
-                        select_selected_character(this_chid, { switchMenu: false });
-                    } else {
-                        select_rm_create({ switchMenu: false });
-                    }
-                    return false;
-                case 'deleteAuthoring':
-                    $('#delete_button').trigger('click');
-                    return false;
-                case 'duplicateAuthoring':
-                    $('#dupe_button').trigger('click');
-                    return false;
-                case 'exportAuthoring':
-                    applyCharacterAuthoringSaveModel(payload, { submit: false });
-                    toggleCharacterExportPopup(getVisibleCharacterExportTrigger());
-                    return false;
-                case 'openWorldInfo':
-                    applyCharacterAuthoringSaveModel(payload, { submit: false });
-                    hideLegacyCharacterAuthoringEditor(false);
-                    await openCharacterWorldPopup();
-                    hideLegacyCharacterAuthoringEditor(true);
-                    await reopenCharacterAuthoringAfterLegacyPopup(payload?.draft);
-                    return false;
-                case 'openAlternateGreetings':
-                    applyCharacterAuthoringSaveModel(payload, { submit: false });
-                    hideLegacyCharacterAuthoringEditor(false);
-                    await openAlternateGreetings();
-                    hideLegacyCharacterAuthoringEditor(true);
-                    await reopenCharacterAuthoringAfterLegacyPopup(payload?.draft);
-                    return false;
-                default:
-                    console.warn('Unknown React character authoring action', action);
-            }
+function getCharacterAuthoringReactCommands() {
+    return createWorkspacePanelCommandPort({
+        commands: {
+            saveCharacterAuthoring: payload => saveCharacterAuthoringFromPayload(payload),
+            cancelAuthoring: () => {
+                if (getCurrentCharacterAuthoringMode() === 'edit' && this_chid !== undefined) {
+                    select_selected_character(this_chid, { switchMenu: false });
+                } else {
+                    select_rm_create({ switchMenu: false });
+                }
+                return false;
+            },
+            deleteAuthoring: () => {
+                $('#delete_button').trigger('click');
+                return false;
+            },
+            duplicateAuthoring: () => {
+                $('#dupe_button').trigger('click');
+                return false;
+            },
+            exportAuthoring: payload => {
+                applyCharacterAuthoringSaveModel(payload, { submit: false });
+                toggleCharacterExportPopup(getVisibleCharacterExportTrigger());
+                return false;
+            },
+            openWorldInfo: async payload => {
+                applyCharacterAuthoringSaveModel(payload, { submit: false });
+                hideLegacyCharacterAuthoringEditor(false);
+                await openCharacterWorldPopup();
+                hideLegacyCharacterAuthoringEditor(true);
+                await reopenCharacterAuthoringAfterLegacyPopup(payload?.draft);
+                return false;
+            },
+            openAlternateGreetings: async payload => {
+                applyCharacterAuthoringSaveModel(payload, { submit: false });
+                hideLegacyCharacterAuthoringEditor(false);
+                await openAlternateGreetings();
+                hideLegacyCharacterAuthoringEditor(true);
+                await reopenCharacterAuthoringAfterLegacyPopup(payload?.draft);
+                return false;
+            },
         },
-        shouldRemount(actionResult) {
-            return actionResult !== false;
+        shouldRemount(commandResult) {
+            return commandResult !== false;
         },
         shouldRemountOnError() {
             // Keep the React draft available for an actionable retry.
@@ -1751,7 +2078,8 @@ async function mountReactCharacterAuthoringPanel(stateOverrides = undefined) {
         kind: 'characterAuthoring',
         ensureContainer: ensureCharacterAuthoringReactHost,
         getState: (overrides) => getCharacterAuthoringReactBridgeState(overrides),
-        bridge: getCharacterAuthoringReactBridge(),
+        commands: getCharacterAuthoringReactCommands(),
+        runtime: reactRuntimePort,
         features: getWorkspaceReactFeatures(),
         stateOverrides,
         onDisabled() {
@@ -1944,31 +2272,28 @@ async function applyGroupAuthoringSaveModel(saveModel = {}) {
     return { ok: true, mode: 'create', id: data.id, group: data };
 }
 
-function getGroupAuthoringReactBridge() {
-    return createWorkspacePanelActionBridge({
-        dispatchAction(action, payload = {}) {
-            switch (action) {
-                case 'saveGroupAuthoring':
-                    return applyGroupAuthoringSaveModel(payload);
-                case 'cancelAuthoring':
-                    // Remount after the click completes so the controlled draft resets without
-                    // blocking the browser event loop.
-                    window.setTimeout(async () => {
-                        await unmountReactWorkspacePanel('groupAuthoring');
-                        await mountReactGroupAuthoringPanel();
-                    }, 0);
-                    return false;
-                case 'deleteAuthoring':
-                    // Keep legacy host hidden; delete handler still uses the existing confirmation control.
-                    hideLegacyGroupAuthoringEditor(true);
-                    $('#rm_group_delete').trigger('click');
-                    return false;
-                default:
-                    console.warn('Unknown React group authoring action', action);
-            }
+function getGroupAuthoringReactCommands() {
+    return createWorkspacePanelCommandPort({
+        commands: {
+            saveGroupAuthoring: payload => applyGroupAuthoringSaveModel(payload),
+            cancelAuthoring: () => {
+                // Remount after the click completes so the controlled draft resets without
+                // blocking the browser event loop.
+                window.setTimeout(async () => {
+                    await unmountReactWorkspacePanel('groupAuthoring');
+                    await mountReactGroupAuthoringPanel();
+                }, 0);
+                return false;
+            },
+            deleteAuthoring: () => {
+                // Keep legacy host hidden; delete handler still uses the existing confirmation control.
+                hideLegacyGroupAuthoringEditor(true);
+                $('#rm_group_delete').trigger('click');
+                return false;
+            },
         },
-        shouldRemount(actionResult, action) {
-            return action !== 'cancelAuthoring' && action !== 'deleteAuthoring';
+        shouldRemount(commandResult, commandName) {
+            return commandName !== 'cancelAuthoring' && commandName !== 'deleteAuthoring' && commandResult !== false;
         },
         shouldRemountOnError() {
             // Keep the React draft available for an actionable retry.
@@ -1983,7 +2308,8 @@ async function mountReactGroupAuthoringPanel() {
         kind: 'groupAuthoring',
         ensureContainer: ensureGroupAuthoringReactHost,
         getState: () => getGroupAuthoringReactBridgeState(),
-        bridge: getGroupAuthoringReactBridge(),
+        commands: getGroupAuthoringReactCommands(),
+        runtime: reactRuntimePort,
         features: getWorkspaceReactFeatures(),
         onDisabled() {
             hideLegacyGroupAuthoringEditor(true);
@@ -2109,52 +2435,30 @@ async function getWorldInfoReactBridgeStateAsync() {
     }
 }
 
-function getWorldInfoReactBridge() {
-    return createWorkspacePanelActionBridge({
-        dispatchAction(action, payload = {}) {
-            switch (action) {
-                case 'selectWorld':
-                    return selectWorldInfoEditorIndex(payload?.worldIndex ?? '');
-                case 'applySearchQuery':
-                    return applyWorldInfoSearchQuery(payload?.searchQuery ?? '');
-                case 'applySortOption':
-                    return applyWorldInfoSortOption(payload?.sortValue ?? '');
-                case 'setGlobalWorlds':
-                    return setWorldInfoGlobalActiveNames(payload?.names ?? []);
-                case 'createEntry':
-                    return createWorldInfoEntryFromEditor();
-                case 'createWorld':
-                    return promptToCreateWorldInfo();
-                case 'importWorld':
-                    return requestWorldInfoImportSelection();
-                case 'exportWorld':
-                    return exportCurrentWorldInfo();
-                case 'renameWorld':
-                    return renameCurrentWorldInfo();
-                case 'duplicateWorld':
-                    return duplicateCurrentWorldInfo();
-                case 'deleteWorld':
-                    return deleteCurrentWorldInfo();
-                case 'refreshWorld':
-                    return refreshCurrentWorldInfoEditor();
-                case 'openEntry':
-                    return selectWorldInfoWorkbenchEntry(payload?.uid ?? '');
-                case 'expandLegacyEntry':
-                    return openWorldInfoEntryByUid(payload?.uid ?? '');
-                case 'updateEntryFields':
-                    return updateWorldInfoWorkbenchEntryFields(payload?.uid ?? '', payload?.fields ?? {});
-                case 'clearSelectedEntry':
-                    return selectWorldInfoWorkbenchEntry('');
-                case 'toggleActivationRules':
-                    return setWorldInfoActivationRulesVisible(Boolean(payload?.open));
-                default:
-                    console.warn('Unknown World Info React action', action);
-                    return undefined;
-            }
+function getWorldInfoReactCommands() {
+    return createWorkspacePanelCommandPort({
+        commands: {
+            selectWorld: worldIndex => selectWorldInfoEditorIndex(worldIndex),
+            applySearchQuery: searchQuery => applyWorldInfoSearchQuery(searchQuery),
+            applySortOption: sortValue => applyWorldInfoSortOption(sortValue),
+            setGlobalWorlds: names => setWorldInfoGlobalActiveNames(names),
+            createEntry: () => createWorldInfoEntryFromEditor(),
+            createWorld: () => promptToCreateWorldInfo(),
+            importWorld: () => requestWorldInfoImportSelection(),
+            exportWorld: () => exportCurrentWorldInfo(),
+            renameWorld: () => renameCurrentWorldInfo(),
+            duplicateWorld: () => duplicateCurrentWorldInfo(),
+            deleteWorld: () => deleteCurrentWorldInfo(),
+            refreshWorld: () => refreshCurrentWorldInfoEditor(),
+            openEntry: uid => selectWorldInfoWorkbenchEntry(uid),
+            expandLegacyEntry: uid => openWorldInfoEntryByUid(uid),
+            updateEntryFields: (uid, fields) => updateWorldInfoWorkbenchEntryFields(uid, fields),
+            clearSelectedEntry: () => selectWorldInfoWorkbenchEntry(''),
+            toggleActivationRules: open => setWorldInfoActivationRulesVisible(open),
         },
-        shouldRemount(_result, action) {
+        shouldRemount(_result, commandName) {
             // Field edits keep local draft focus; activation toggle is DOM-only under React owner.
-            return action !== 'updateEntryFields' && action !== 'toggleActivationRules';
+            return commandName !== 'updateEntryFields' && commandName !== 'toggleActivationRules';
         },
         remount: () => {
             void mountReactWorldInfoPanel();
@@ -2167,7 +2471,8 @@ async function mountReactWorldInfoPanel() {
         kind: 'worldInfo',
         ensureContainer: ensureWorldInfoReactHost,
         getState: () => getWorldInfoReactBridgeStateAsync(),
-        bridge: getWorldInfoReactBridge(),
+        commands: getWorldInfoReactCommands(),
+        runtime: reactRuntimePort,
         features: getWorkspaceReactFeatures(),
         onDisabled() {
             // Sole-owner: never re-enable the legacy workbench editor.
@@ -2190,282 +2495,177 @@ function ensureMainChatMessageListReactHost() {
         return null;
     }
 
-    let host = document.getElementById(MAIN_CHAT_MESSAGE_LIST_REACT_HOST_ID);
-    if (host) {
-        return host;
+    chatContainer.dataset.reactMainChatOwner = 'react';
+    const sendForm = document.getElementById('send_form');
+    const nonQrFormItems = document.getElementById('nonQRFormItems');
+    if (sendForm instanceof HTMLElement) {
+        sendForm.dataset.mainChatComposerOwner = 'react';
+    }
+    if (nonQrFormItems instanceof HTMLElement) {
+        nonQrFormItems.dataset.mainChatComposerOwner = 'react';
+    }
+    bindMainChatReactComposerCommandPort();
+    return chatContainer;
+}
+
+function bindMainChatReactComposerCommandPort() {
+    if (mainChatComposerCommandBindings) {
+        return;
     }
 
-    host = document.createElement('div');
-    host.id = MAIN_CHAT_MESSAGE_LIST_REACT_HOST_ID;
-    host.className = 'emberdesk-react-main-chat-message-list-host';
-    host.hidden = true;
-    host.setAttribute('aria-hidden', 'true');
-    chatContainer.prepend(host);
-    return host;
+    const sendTextarea = document.getElementById('send_textarea');
+    const sendButton = document.getElementById('send_but');
+    const stopButton = document.getElementById('mes_stop');
+    const continueButton = document.getElementById('mes_continue');
+    const regenerateButton = document.getElementById('option_regenerate');
+
+    if (!(sendTextarea instanceof HTMLTextAreaElement) || !(sendButton instanceof HTMLElement)) {
+        return;
+    }
+
+    const isGenerationFocusTarget = target => {
+        return [sendButton, stopButton, continueButton, regenerateButton].some(control => (
+            control instanceof HTMLElement
+            && (target === control || control.contains(target))
+        ));
+    };
+    const restoreComposerFocusIfRequested = () => {
+        if (!mainChatComposerFocusRestoreRequested || document.activeElement === sendTextarea) {
+            return;
+        }
+
+        if (isGenerationFocusTarget(document.activeElement) || document.activeElement === document.body) {
+            sendTextarea.focus({ preventScroll: true });
+        }
+    };
+    const dispatchGeneration = (kind) => {
+        void Promise.resolve(
+            getMainChatMessageListReactCommands().triggerVisibleGeneration({ kind }),
+        ).finally(restoreComposerFocusIfRequested);
+    };
+    const stopVisibleGeneration = () => {
+        void Promise.resolve(
+            getMainChatMessageListReactCommands().stopVisibleGeneration(),
+        ).finally(restoreComposerFocusIfRequested);
+    };
+    const isSlashInputOwnedByLegacy = () => {
+        const slashState = getMainChatSlashCommandBridgeState();
+        return slashState.active || slashState.autocompleteVisible;
+    };
+    const handleTextareaKeyDown = event => {
+        if (
+            event.defaultPrevented
+            || event.isComposing
+            || event.key !== 'Enter'
+            || event.shiftKey
+            || event.ctrlKey
+            || event.altKey
+            || event.metaKey
+            || isSlashInputOwnedByLegacy()
+        ) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        event.stopPropagation();
+        dispatchGeneration('submitComposer');
+    };
+    const handleSendButtonClick = event => {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        event.stopPropagation();
+        dispatchGeneration('submitComposer');
+    };
+    const handleStopButtonClick = event => {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        event.stopPropagation();
+        stopVisibleGeneration();
+    };
+    const handleContinueButtonClick = event => {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        event.stopPropagation();
+        dispatchGeneration('continueLast');
+    };
+    const handleRegenerateButtonClick = event => {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        event.stopPropagation();
+        dispatchGeneration('retryGeneration');
+    };
+    const handleComposerFocus = () => {
+        mainChatComposerFocusRestoreRequested = true;
+        scheduleMainChatMessageListPanelRefresh();
+    };
+    const handleDocumentFocusIn = event => {
+        const target = event.target;
+        if (target === sendTextarea || sendTextarea.contains(target)) {
+            mainChatComposerFocusRestoreRequested = true;
+        } else if (!isGenerationFocusTarget(target)) {
+            mainChatComposerFocusRestoreRequested = false;
+        }
+    };
+
+    sendTextarea.addEventListener('keydown', handleTextareaKeyDown, true);
+    sendTextarea.addEventListener('focus', handleComposerFocus, true);
+    sendButton.addEventListener('click', handleSendButtonClick, true);
+    stopButton?.addEventListener('click', handleStopButtonClick, true);
+    continueButton?.addEventListener('click', handleContinueButtonClick, true);
+    regenerateButton?.addEventListener('click', handleRegenerateButtonClick, true);
+    document.addEventListener('focusin', handleDocumentFocusIn, true);
+
+    mainChatComposerCommandBindings = () => {
+        sendTextarea.removeEventListener('keydown', handleTextareaKeyDown, true);
+        sendTextarea.removeEventListener('focus', handleComposerFocus, true);
+        sendButton.removeEventListener('click', handleSendButtonClick, true);
+        stopButton?.removeEventListener('click', handleStopButtonClick, true);
+        continueButton?.removeEventListener('click', handleContinueButtonClick, true);
+        regenerateButton?.removeEventListener('click', handleRegenerateButtonClick, true);
+        document.removeEventListener('focusin', handleDocumentFocusIn, true);
+        mainChatComposerFocusRestoreRequested = false;
+    };
 }
 
 function cleanupMainChatMessageListReactHost() {
+    mainChatComposerCommandBindings?.();
+    mainChatComposerCommandBindings = null;
+    mainChatComposerFocusRestoreRequested = false;
     setMainChatSlashCommandReactOwnerEnabled(false);
-    const host = document.getElementById(MAIN_CHAT_MESSAGE_LIST_REACT_HOST_ID);
-    host?.remove();
+    const chatContainer = document.getElementById('chat');
+    if (chatContainer) {
+        delete chatContainer.dataset.reactMainChatOwner;
+        for (const key of [
+            'mainChatStreamingTransportPhase',
+            'mainChatStreamingTransportTokens',
+            'mainChatStreamingTransportMessageId',
+            'mainChatStreamingTransportFallback',
+            'mainChatGenerationControlPhase',
+            'mainChatComposerLength',
+            'mainChatComposerEmpty',
+            'mainChatComposerCanSubmit',
+            'mainChatComposerFocused',
+            'mainChatComposerDisabled',
+            'mainChatComposerGenerating',
+            'mainChatComposerContext',
+            'mainChatSlashCommandActive',
+            'mainChatSlashCommandQueryLength',
+            'mainChatSlashCommandAutocomplete',
+            'mainChatSlashCommandExecuting',
+            'mainChatSlashCommandPaused',
+            'mainChatSlashCommandAborted',
+            'mainChatSlashCommandError',
+        ]) {
+            delete chatContainer.dataset[key];
+        }
+    }
+    document.getElementById('send_form')?.removeAttribute('data-main-chat-composer-owner');
+    document.getElementById('nonQRFormItems')?.removeAttribute('data-main-chat-composer-owner');
 }
 
-function getMainChatMessageRowStructureNode(messageRow, className) {
-    if (!(messageRow instanceof HTMLElement) || !className) {
-        return null;
-    }
-
-    const directChild = messageRow.querySelector(`:scope > .${className}`);
-    if (directChild instanceof HTMLElement || directChild instanceof HTMLInputElement) {
-        return directChild;
-    }
-
-    const slotChild = messageRow.querySelector(`[data-main-chat-message-row-slot="${className}"] > .${className}`);
-    if (slotChild instanceof HTMLElement || slotChild instanceof HTMLInputElement) {
-        return slotChild;
-    }
-
-    const descendant = messageRow.querySelector(`.${className}`);
-    return descendant instanceof HTMLElement || descendant instanceof HTMLInputElement ? descendant : null;
-}
-
-function getMainChatMessageRowStructureTargets(messageRow) {
-    const checkboxShell = getMainChatMessageRowStructureNode(messageRow, 'for_checkbox');
-    const deleteCheckbox = messageRow.querySelector(':scope > input.del_checkbox, input.del_checkbox');
-    const avatarWrapper = getMainChatMessageRowStructureNode(messageRow, 'mesAvatarWrapper');
-    const swipeLeft = getMainChatMessageRowStructureNode(messageRow, 'swipe_left');
-    const messageBlock = messageRow.querySelector(':scope > .mes_block') ?? messageRow.querySelector('.mes_block');
-    const swipeRightBlock = messageRow.querySelector(':scope > .swipeRightBlock') ?? getMainChatMessageRowStructureNode(messageRow, 'swipeRightBlock');
-    const swipeRight = swipeRightBlock?.querySelector('.swipe_right');
-    const swipeCounter = swipeRightBlock?.querySelector('.swipes-counter');
-    const messageButtons = messageBlock?.querySelector('.mes_buttons');
-    const messageEditButtons = messageBlock?.querySelector('.mes_edit_buttons');
-
-    if (
-        !(checkboxShell instanceof HTMLElement)
-        || !(deleteCheckbox instanceof HTMLInputElement)
-        || !(avatarWrapper instanceof HTMLElement)
-        || !(swipeLeft instanceof HTMLElement)
-        || !(messageBlock instanceof HTMLElement)
-        || !(swipeRightBlock instanceof HTMLElement)
-        || !(swipeRight instanceof HTMLElement)
-        || !(swipeCounter instanceof HTMLElement)
-        || !(messageButtons instanceof HTMLElement)
-        || !(messageEditButtons instanceof HTMLElement)
-    ) {
-        return null;
-    }
-
-    return {
-        checkboxShell,
-        deleteCheckbox,
-        avatarWrapper,
-        swipeLeft,
-        messageBlock,
-        swipeRightBlock,
-        swipeRight,
-        swipeCounter,
-        messageButtons,
-        messageEditButtons,
-    };
-}
-
-function isMainChatRichBodyEligible(messageRow, messageId = Number(messageRow?.getAttribute?.('mesid'))) {
-    if (!(messageRow instanceof HTMLElement) || !Number.isInteger(messageId) || messageId < 0) {
-        return false;
-    }
-
-    if (messageRow.parentElement?.id !== 'chat' || messageRow.getAttribute('mesid') !== String(messageId)) {
-        return false;
-    }
-
-    if (!chat[messageId]) {
-        return false;
-    }
-
-    // Structurally complete rows are React-owned across finalized/editing/streaming/extension states.
-    // Live content is preserved by snapshot state + portal (no overwrite while editing/streaming/extension-mutated).
-    return Boolean(
-        messageRow.querySelector('.mes_block')
-        && messageRow.querySelector('.mes_reasoning_details')
-        && messageRow.querySelector('.mes_reasoning')
-        && messageRow.querySelector('.mes_text')
-        && messageRow.querySelector('.mes_media_wrapper')
-        && messageRow.querySelector('.mes_file_wrapper')
-        && messageRow.querySelector('.mes_bias'),
-    );
-}
-
-function getMainChatRichBodyRowState(messageRow, messageId = Number(messageRow?.getAttribute?.('mesid'))) {
-    if (hasMainChatEditingLifecycle(messageRow, messageId)) {
-        return 'editing';
-    }
-    if (hasMainChatStreamingLifecycle(messageRow, messageId)) {
-        return 'streaming';
-    }
-    if (hasMainChatExtensionMutationMarker(messageRow)) {
-        return 'extension-mutated';
-    }
-    return 'finalized';
-}
-
-function shouldPreserveMainChatRichBodyLiveContent(rowState) {
-    return rowState === 'editing' || rowState === 'streaming' || rowState === 'extension-mutated';
-}
-
-function hasMainChatRichBodyExtensionMutation(messageRow) {
-    const messageText = messageRow?.querySelector('.mes_text');
-    if (!(messageText instanceof HTMLElement)) {
-        return true;
-    }
-
-    return Boolean(
-        messageRow.querySelector('.mes_streaming')
-        || messageRow.querySelector('.TH-streaming')
-        || messageText.querySelector('.TH-render'),
-    );
-}
-
-function hasMainChatExtensionMutationMarker(messageRow) {
-    const messageText = messageRow?.querySelector('.mes_text');
-    if (!(messageText instanceof HTMLElement)) {
-        return false;
-    }
-
-    return Boolean(
-        messageRow.querySelector('.TH-streaming')
-        || messageText.querySelector('.TH-render'),
-    );
-}
-
-function hasMainChatUnsafeRowStructure(messageRow) {
-    return !(
-        messageRow instanceof HTMLElement
-        && messageRow.parentElement?.id === 'chat'
-        && messageRow.querySelector('.mes_block')
-        && messageRow.querySelector('.mes_text')
-        && messageRow.querySelector('.mes_reasoning_details')
-        && messageRow.querySelector('.mes_reasoning')
-        && messageRow.querySelector('.mes_media_wrapper')
-        && messageRow.querySelector('.mes_file_wrapper')
-        && messageRow.querySelector('.mes_bias')
-    );
-}
-
-function hasMainChatEditingLifecycle(messageRow, messageId = Number(messageRow?.getAttribute?.('mesid'))) {
-    return Number(this_edit_mes_id) === messageId
-        || Boolean(messageRow?.querySelector('.edit_textarea, .reasoning_edit_textarea'));
-}
-
-function hasMainChatStreamingLifecycle(messageRow, messageId = Number(messageRow?.getAttribute?.('mesid'))) {
-    return Boolean(
-        messageRow?.querySelector('.mes_streaming')
-        || messageRow?.querySelector('.TH-streaming')
-        || (
-            streamingProcessor
-            && !streamingProcessor.isStopped
-            && !streamingProcessor.isFinished
-            && streamingProcessor.messageId === messageId
-        ),
-    );
-}
-
-function getMainChatVisibleAnchorMessageId(chatContainer, messageRows) {
-    if (!(chatContainer instanceof HTMLElement) || !Array.isArray(messageRows) || messageRows.length === 0) {
-        return null;
-    }
-
-    const chatRect = chatContainer.getBoundingClientRect();
-    const anchorRow = messageRows.find((row) => {
-        const rowRect = row.getBoundingClientRect();
-        return rowRect.bottom > chatRect.top && rowRect.top < chatRect.bottom;
-    }) ?? messageRows[0];
-
-    return anchorRow?.getAttribute('mesid') ?? null;
-}
-
-function buildMainChatRichBodySnapshot(messageRow, {
-    messageId = Number(messageRow?.getAttribute?.('mesid')),
-    schema = mainChatRichBodySnapshotSchema,
-} = {}) {
-    const eligible = isMainChatRichBodyEligible(messageRow, messageId);
-    if (!eligible) {
-        return null;
-    }
-
-    const rowState = getMainChatRichBodyRowState(messageRow, messageId);
-    const preserveLiveContent = shouldPreserveMainChatRichBodyLiveContent(rowState);
-    const reasoningDetails = messageRow.querySelector('.mes_reasoning_details');
-    return {
-        schema: schema,
-        messageId: String(messageId),
-        state: rowState,
-        eligible: true,
-        preserveLiveContent,
-        messageHtml: messageRow.querySelector('.mes_text')?.innerHTML ?? '',
-        reasoningHtml: messageRow.querySelector('.mes_reasoning')?.innerHTML ?? '',
-        reasoningOpen: reasoningDetails instanceof HTMLDetailsElement ? reasoningDetails.open : false,
-        mediaHtml: messageRow.querySelector('.mes_media_wrapper')?.innerHTML ?? '',
-        fileHtml: messageRow.querySelector('.mes_file_wrapper')?.innerHTML ?? '',
-        biasHtml: messageRow.querySelector('.mes_bias')?.innerHTML ?? '',
-    };
-}
-
-function isMainChatMessageRowEligible(messageRow, messageId = Number(messageRow?.getAttribute?.('mesid'))) {
-    if (!isMainChatRichBodyEligible(messageRow, messageId)) {
-        return false;
-    }
-
-    if (!getMainChatMessageRowStructureTargets(messageRow)) {
-        return false;
-    }
-
-    return Boolean(buildMessageActionSnapshot(messageRow, {
-        getExpandMessageActions: () => power_user.expand_message_actions,
-    }));
-}
-
-function buildMainChatMessageRowSnapshot(messageRow, {
-    messageId = Number(messageRow?.getAttribute?.('mesid')),
-    schema = mainChatMessageRowSnapshotSchema,
-} = {}) {
-    const eligible = isMainChatMessageRowEligible(messageRow, messageId);
-    if (!eligible) {
-        return null;
-    }
-
-    const richBodySnapshot = buildMainChatRichBodySnapshot(messageRow, {
-        messageId,
-        schema: mainChatRichBodySnapshotSchema,
-    });
-    if (!richBodySnapshot) {
-        return null;
-    }
-
-    return {
-        schema: schema,
-        messageId: String(messageId),
-        state: richBodySnapshot.state,
-        eligible: true,
-        preserveLiveContent: Boolean(richBodySnapshot.preserveLiveContent),
-        role: messageRow.getAttribute('is_user') === 'true'
-            ? 'user'
-            : messageRow.getAttribute('is_system') === 'true'
-                ? 'system'
-                : 'character',
-        rootClassNames: Array.from(messageRow.classList),
-        displayName: messageRow.querySelector('.name_text')?.textContent?.trim() ?? '',
-        timestampText: messageRow.querySelector('.timestamp')?.textContent?.trim() ?? '',
-        timestampTitle: messageRow.querySelector('.timestamp')?.getAttribute('title') ?? '',
-        messageHtml: richBodySnapshot.messageHtml,
-        reasoningHtml: richBodySnapshot.reasoningHtml,
-        reasoningOpen: richBodySnapshot.reasoningOpen ?? false,
-        mediaHtml: richBodySnapshot.mediaHtml,
-        fileHtml: richBodySnapshot.fileHtml,
-        biasHtml: richBodySnapshot.biasHtml,
-        actionShellEligible: true,
-        swipeShellEligible: true,
-    };
+function isReactMainChatOwner() {
+    return document.getElementById('chat')?.dataset.reactMainChatOwner === 'react';
 }
 
 async function runMainChatVisibleGenerationAction({ kind, messageId } = {}) {
@@ -2529,173 +2729,280 @@ function runMainChatVisibleMessageActionsShellAction({ kind, messageId } = {}) {
             if (!Number.isInteger(messageId) || messageId < 0) {
                 return;
             }
-
-            const actionOwner = document.querySelector(`#chat > .mes[mesid="${messageId}"] .mes_buttons`);
-            const hint = actionOwner?.querySelector('.extraMesButtonsHint');
-            if (hint instanceof HTMLElement) {
-                mainChatMessageActionsController?.openExtraActions?.(hint);
-            }
+            setMainChatMessageActionsExpanded(messageId, true);
             break;
         }
         case 'close':
-            mainChatMessageActionsController?.closeExtraActions?.();
+            setMainChatMessageActionsExpanded(null, false);
             break;
         default:
             console.warn('Unknown main-chat visible message actions shell action', kind);
     }
 }
 
-function getMainChatMessageListReactBridgeState() {
-    const chatContainer = document.getElementById('chat');
-    const messageRows = Array.from(chatContainer?.querySelectorAll(':scope > .mes[mesid]') ?? []);
-    const firstMessageRow = messageRows[0];
-    const lastMessageRow = messageRows.at(-1);
-    const showMoreButton = document.getElementById('show_more_messages');
-    const host = document.getElementById(MAIN_CHAT_MESSAGE_LIST_REACT_HOST_ID);
-    const formShell = document.getElementById('form_sheld');
-    const sendForm = document.getElementById('send_form');
-    const nonQrFormItems = document.getElementById('nonQRFormItems');
-    const leftSendForm = document.getElementById('leftSendForm');
-    const rightSendForm = document.getElementById('rightSendForm');
-    const sendTextarea = document.getElementById('send_textarea');
-    const sendButton = document.getElementById('send_but');
-    const stopButton = document.getElementById('mes_stop');
-    const continueButton = document.getElementById('mes_continue');
-    const regenerateButton = document.getElementById('option_regenerate');
-    const messageRowSnapshots = messageRows
-        .map(row => buildMainChatMessageRowSnapshot(row, {
-            messageId: Number(row.getAttribute('mesid')),
-            schema: mainChatMessageRowSnapshotSchema,
-        }))
-        .filter(Boolean);
-    const richBodySnapshots = messageRows
-        .map(row => buildMainChatRichBodySnapshot(row, {
-            messageId: Number(row.getAttribute('mesid')),
-            schema: mainChatRichBodySnapshotSchema,
-        }))
-        .filter(Boolean);
-    const messageActionSnapshots = messageRows
-        .map(row => buildMessageActionSnapshot(row, {
-            getExpandMessageActions: () => power_user.expand_message_actions,
-        }))
-        .filter(Boolean)
-        .map(snapshot => ({
-            ...snapshot,
-            schema: mainChatMessageActionSnapshotSchema,
-        }));
+function getMainChatReactVisibleWindow(projectedChat) {
+    const totalMessageCount = Array.isArray(projectedChat) ? projectedChat.length : 0;
+    if (totalMessageCount === 0) {
+        return {
+            visibleMessageIds: [],
+            showMoreVisible: false,
+        };
+    }
+
+    const configuredLimit = Number(power_user?.chat_truncation);
+    const defaultStartIndex = Number.isInteger(configuredLimit) && configuredLimit > 0
+        ? Math.max(totalMessageCount - configuredLimit, 0)
+        : 0;
+    const savedStartIndex = mainChatVisibleStartIndices.get(getCurrentChatId());
+    const requestedStartIndex = Number.isInteger(savedStartIndex)
+        ? savedStartIndex
+        : defaultStartIndex;
+    const startIndex = Math.min(Math.max(requestedStartIndex, 0), totalMessageCount);
+
     return {
-        chatId: getCurrentChatId(),
-        hasChatContainer: Boolean(chatContainer),
-        messageCount: messageRows.length,
-        firstMessageId: firstMessageRow?.getAttribute('mesid') ?? '',
-        lastMessageId: lastMessageRow?.getAttribute('mesid') ?? '',
-        showMoreVisible: Boolean(showMoreButton),
-        visibleMessageIds: messageRows.map(row => row.getAttribute('mesid') ?? ''),
-        scrollTop: chatContainer?.scrollTop ?? 0,
-        scrollHeight: chatContainer?.scrollHeight ?? 0,
-        clientHeight: chatContainer?.clientHeight ?? 0,
-        generationControl: getMainChatGenerationControlBridgeState(),
-        composer: getMainChatComposerBridgeState(),
-        slashCommand: getMainChatSlashCommandBridgeState(),
-        slashUi: getMainChatSlashUiBridgeState(),
-        streamingTransport: getMainChatStreamingTransportBridgeState(),
-        quietTransport: getMainChatQuietTransportBridgeState(),
-        windowingContract: buildMainChatWindowingContract({
-            renderedMessageIds: messageRows.map(row => row.getAttribute('mesid') ?? ''),
-            totalMessageCount: Array.isArray(chat) ? chat.length : messageRows.length,
-            showMoreVisible: Boolean(showMoreButton),
-            anchorMessageId: getMainChatVisibleAnchorMessageId(chatContainer, messageRows),
-            scrollTop: chatContainer?.scrollTop ?? 0,
-        }),
-        rowLifecycleContract: buildMainChatRowLifecycleContract({
-            hasEditingRows: messageRows.some(row => hasMainChatEditingLifecycle(row, Number(row.getAttribute('mesid')))),
-            hasStreamingRows: messageRows.some(row => hasMainChatStreamingLifecycle(row, Number(row.getAttribute('mesid')))),
-            hasUnsafeRows: messageRows.some(row => hasMainChatUnsafeRowStructure(row)),
-            hasExtensionMutatedRows: messageRows.some(row => hasMainChatExtensionMutationMarker(row)),
-        }),
-        chatContainer,
-        host,
-        messageNodes: messageRows,
-        messageRowSnapshots: messageRowSnapshots,
-        richBodySnapshots: richBodySnapshots,
-        messageActionSnapshots: messageActionSnapshots,
-        formShell,
-        sendForm,
-        nonQrFormItems,
-        leftSendForm,
-        rightSendForm,
-        sendTextarea,
-        sendButton,
-        stopButton,
-        continueButton,
-        regenerateButton,
-        composerValue: sendTextarea instanceof HTMLTextAreaElement ? sendTextarea.value : '',
-        showMoreNode: showMoreButton,
+        visibleMessageIds: Array.from(
+            { length: totalMessageCount - startIndex },
+            (_value, offset) => String(startIndex + offset),
+        ),
+        showMoreVisible: startIndex > 0,
     };
 }
 
-function getMainChatMessageListReactBridge() {
-    return createWorkspacePanelActionBridge({
-        async dispatchAction(action, payload = {}) {
-            let shouldRefreshPanel = true;
-            const messageId = Number(payload?.messageId);
-            const normalizedMessageId = Number.isInteger(messageId) && messageId >= 0 ? messageId : undefined;
-            switch (action) {
-                case 'openCharacterLibrary':
-                    await openWorkspaceShellCharacterLibrary();
-                    break;
-                case 'loadMoreMessages':
-                    await loadEarlierChatMessages(
-                        Number.isInteger(Number(payload?.messagesToLoad))
-                            ? Number(payload.messagesToLoad)
-                            : null,
-                    );
-                    break;
-                case 'loadMoreUntilMessage': {
-                    const anchorMessageId = String(payload?.anchorMessageId ?? '');
-                    if (!anchorMessageId) {
-                        break;
-                    }
+function syncMainChatRuntimeDiagnostics(chatContainer, {
+    generationControl,
+    composer,
+    slashCommand,
+    streamingTransport,
+} = {}) {
+    if (!(chatContainer instanceof HTMLElement)) {
+        return;
+    }
 
-                    let anchorMessageRow = document.querySelector(`#chat > .mes[mesid="${CSS.escape(anchorMessageId)}"]`);
-                    let showMoreButton = document.getElementById('show_more_messages');
-                    while (!anchorMessageRow && showMoreButton instanceof HTMLElement) {
-                        await loadEarlierChatMessages();
-                        anchorMessageRow = document.querySelector(`#chat > .mes[mesid="${CSS.escape(anchorMessageId)}"]`);
-                        showMoreButton = document.getElementById('show_more_messages');
-                    }
-                    break;
-                }
-                case 'setSlashVisibleOwner':
-                    setMainChatSlashCommandReactOwnerEnabled(Boolean(payload?.enabled));
-                    shouldRefreshPanel = false;
-                    break;
-                case 'selectSlashAutocompleteOption':
-                    selectMainChatSlashCommandOption(Number(payload?.index));
-                    break;
-                case 'triggerVisibleGeneration':
-                    await executeMainChatVisibleGenerationAction({
-                        kind: String(payload?.kind ?? ''),
-                        messageId: normalizedMessageId,
-                    });
-                    break;
-                case 'stopVisibleGeneration':
-                    stopGeneration();
-                    break;
-                case 'toggleMessageActionsShell':
-                    runMainChatVisibleMessageActionsShellAction({
-                        kind: String(payload?.kind ?? ''),
-                        messageId: normalizedMessageId,
-                    });
-                    shouldRefreshPanel = false;
-                    break;
-                default:
-                    console.warn('Unknown Main Chat React action', action);
-            }
-            return shouldRefreshPanel;
+    const diagnostics = {
+        mainChatStreamingTransportPhase: streamingTransport?.phase ?? 'idle',
+        mainChatStreamingTransportTokens: streamingTransport?.observedTokenCount ?? 0,
+        mainChatStreamingTransportMessageId: streamingTransport?.activeMessageId ?? '',
+        mainChatStreamingTransportFallback: streamingTransport?.fromFallbackAttempt === true,
+        mainChatGenerationControlPhase: generationControl?.phase ?? 'idle',
+        mainChatComposerLength: composer?.valueLength ?? 0,
+        mainChatComposerEmpty: composer?.isEmpty === true,
+        mainChatComposerCanSubmit: composer?.canSubmit === true,
+        mainChatComposerFocused: composer?.isFocused === true,
+        mainChatComposerDisabled: composer?.isDisabled === true,
+        mainChatComposerGenerating: composer?.isGenerating === true,
+        mainChatComposerContext: composer?.activeContext ?? 'none',
+        mainChatSlashCommandActive: slashCommand?.active === true,
+        mainChatSlashCommandQueryLength: slashCommand?.queryLength ?? 0,
+        mainChatSlashCommandAutocomplete: slashCommand?.autocompleteVisible === true ? 'visible' : 'hidden',
+        mainChatSlashCommandExecuting: slashCommand?.executing === true,
+        mainChatSlashCommandPaused: slashCommand?.paused === true,
+        mainChatSlashCommandAborted: slashCommand?.aborted === true,
+        mainChatSlashCommandError: slashCommand?.errorLabel ?? '',
+    };
+
+    for (const [key, value] of Object.entries(diagnostics)) {
+        chatContainer.dataset[key] = String(value);
+    }
+}
+
+function getMainChatMessageListReactBridgeState() {
+    const chatContainer = document.getElementById('chat');
+    const generationControl = getMainChatGenerationControlBridgeState();
+    const composer = getMainChatComposerBridgeState();
+    const slashCommand = getMainChatSlashCommandBridgeState();
+    const slashUi = getMainChatSlashUiBridgeState();
+    const streamingTransport = getMainChatStreamingTransportBridgeState();
+    const composerElement = document.getElementById('send_textarea');
+    const projectedChat = reactMainChatProjectionCleared ? [] : chat;
+    const visibleWindow = getMainChatReactVisibleWindow(projectedChat);
+    const visibleMessageIds = visibleWindow.visibleMessageIds;
+    syncMainChatRuntimeDiagnostics(chatContainer, {
+        generationControl,
+        composer,
+        slashCommand,
+        streamingTransport,
+    });
+    const mainChatSnapshot = buildMainChatSnapshotFromLegacyChat({
+        chatId: getCurrentChatId(),
+        chat: projectedChat,
+        pristineChat: !chat_metadata?.tainted,
+        formatMessage: messageFormatting,
+        timestampForMessage: message => {
+            const momentDate = timestampToMoment(message?.send_date);
+            return momentDate.isValid() ? momentDate.format('LL LT') : '';
         },
-        shouldRemount(actionResult) {
-            return actionResult !== false;
+        avatarUrlForMessage: message => {
+            if (message?.force_avatar) {
+                return message.force_avatar;
+            }
+            if (message?.is_user) {
+                return getThumbnailUrl('persona', user_avatar);
+            }
+            if (this_chid === undefined) {
+                return system_avatar;
+            }
+            const character = characters[this_chid];
+            return character?.avatar && character.avatar !== 'none'
+                ? getThumbnailUrl('avatar', character.avatar)
+                : default_avatar;
+        },
+        timestampTitleForMessage: message => `${message?.extra?.api ? `${message.extra.api} - ` : ''}${message?.extra?.model ?? ''}`,
+        visibleMessageIds,
+        composer: {
+            value: composerElement instanceof HTMLTextAreaElement ? composerElement.value : '',
+            activeContext: composer.activeContext,
+            focused: composer.isFocused,
+            disabled: composer.isDisabled,
+        },
+        generation: {
+            phase: generationControl.phase,
+            activeMessageId: generationControl.activeMessageId === null
+                ? null
+                : String(generationControl.activeMessageId),
+        },
+        streaming: {
+            phase: streamingTransport.phase,
+            activeMessageId: streamingTransport.activeMessageId === null
+                ? null
+                : String(streamingTransport.activeMessageId),
+            observedTokenCount: streamingTransport.observedTokenCount,
+        },
+        slash: {
+            active: slashCommand.active,
+            replaceable: slashUi.replaceable,
+            detailsVisible: slashUi.detailsVisible,
+            detailsHtml: slashUi.detailsHtml,
+            options: slashUi.options,
+            autocompleteVisible: slashCommand.autocompleteVisible,
+            executing: slashCommand.executing,
+            paused: slashCommand.paused,
+            aborted: slashCommand.aborted,
+            errorLabel: slashCommand.errorLabel,
+        },
+        messageUiById: getMainChatMessageUiStateById(),
+        window: {
+            visibleMessageIds,
+            anchorMessageId: visibleMessageIds[0] ?? null,
+            showMoreVisible: visibleWindow.showMoreVisible,
+            scrollTop: chatContainer?.scrollTop ?? 0,
+            scrollHeight: chatContainer?.scrollHeight ?? 0,
+            clientHeight: chatContainer?.clientHeight ?? 0,
+            scrollRestore: getMainChatMessageListScrollRestoreSnapshot(),
+        },
+    });
+    return {
+        chatId: getCurrentChatId(),
+        hasChatContainer: Boolean(chatContainer),
+        messageCount: mainChatSnapshot.orderedMessageIds.length,
+        firstMessageId: visibleMessageIds[0] ?? '',
+        lastMessageId: visibleMessageIds.at(-1) ?? '',
+        showMoreVisible: visibleWindow.showMoreVisible,
+        visibleMessageIds,
+        scrollTop: chatContainer?.scrollTop ?? 0,
+        scrollHeight: chatContainer?.scrollHeight ?? 0,
+        clientHeight: chatContainer?.clientHeight ?? 0,
+        generationControl,
+        composer,
+        slashCommand,
+        slashUi,
+        streamingTransport,
+        quietTransport: getMainChatQuietTransportBridgeState(),
+        windowingContract: buildMainChatWindowingContract({
+            renderedMessageIds: visibleMessageIds,
+            totalMessageCount: Array.isArray(projectedChat) ? projectedChat.length : 0,
+            showMoreVisible: visibleWindow.showMoreVisible,
+            anchorMessageId: visibleMessageIds[0] ?? null,
+            scrollTop: chatContainer?.scrollTop ?? 0,
+        }),
+        rowLifecycleContract: buildMainChatRowLifecycleContract({
+            hasEditingRows: mainChatSnapshot.orderedMessageIds.some(messageId => mainChatSnapshot.messagesById[messageId]?.state === 'editing'),
+            hasStreamingRows: mainChatSnapshot.orderedMessageIds.some(messageId => mainChatSnapshot.messagesById[messageId]?.state === 'streaming'),
+            hasUnsafeRows: false,
+            hasExtensionMutatedRows: mainChatSnapshot.orderedMessageIds.some(messageId => mainChatSnapshot.messagesById[messageId]?.state === 'extension-mutated'),
+        }),
+        mainChatSnapshot,
+    };
+}
+
+function getMainChatMessageListReactCommands() {
+    return createWorkspacePanelCommandPort({
+        commands: {
+            openCharacterLibrary: async () => {
+                await openWorkspaceShellCharacterLibrary();
+                return true;
+            },
+            loadMoreMessages: messagesToLoad => loadEarlierChatMessages(
+                Number.isInteger(Number(messagesToLoad)) ? Number(messagesToLoad) : null,
+            ),
+            loadMoreUntilMessage: async anchorMessageId => {
+                if (!anchorMessageId) {
+                    return true;
+                }
+
+                let visibleWindow = getMainChatReactVisibleWindow(reactMainChatProjectionCleared ? [] : chat);
+                while (
+                    !visibleWindow.visibleMessageIds.includes(String(anchorMessageId))
+                    && visibleWindow.showMoreVisible
+                ) {
+                    await loadEarlierChatMessages();
+                    visibleWindow = getMainChatReactVisibleWindow(reactMainChatProjectionCleared ? [] : chat);
+                }
+                return true;
+            },
+            setSlashVisibleOwner: enabled => {
+                setMainChatSlashCommandReactOwnerEnabled(enabled);
+                return false;
+            },
+            selectSlashAutocompleteOption: index => selectMainChatSlashCommandOption(index),
+            startMessageEdit: messageId => startMainChatMessageEdit(messageId),
+            updateMessageEdit: (messageId, text) => updateMainChatMessageEdit(messageId, text),
+            commitMessageEdit: messageId => commitMainChatMessageEdit(messageId),
+            cancelMessageEdit: messageId => cancelMainChatMessageEdit(messageId),
+            setMessageReasoningOpen: (messageId, open) => setMainChatMessageReasoningOpen(messageId, open),
+            copyMessageReasoning: messageId => copyMainChatMessageReasoning(messageId),
+            startMessageReasoningEdit: messageId => startMainChatMessageReasoningEdit(messageId),
+            updateMessageReasoningEdit: (messageId, text) => updateMainChatMessageReasoningEdit(messageId, text),
+            commitMessageReasoningEdit: messageId => commitMainChatMessageReasoningEdit(messageId),
+            cancelMessageReasoningEdit: messageId => cancelMainChatMessageReasoningEdit(messageId),
+            deleteMessageReasoning: messageId => deleteMainChatMessageReasoning(messageId),
+            collapseAllMessageReasoning: () => collapseAllMainChatMessageReasoning(),
+            copyMessage: messageId => copyMainChatMessage(messageId),
+            duplicateMessage: messageId => duplicateMainChatMessage(messageId),
+            deleteMessage: messageId => deleteMessage(
+                messageId,
+                undefined,
+                power_user.confirm_message_delete === true,
+            ),
+            moveMessage: (messageId, direction) => messageEditMove(
+                messageId,
+                direction === 'up' ? messageId - 1 : messageId + 1,
+            ),
+            triggerVisibleGeneration: command => {
+                const kind = String(command?.kind ?? '');
+                if (kind === 'submitComposer') {
+                    return mainChatVisibleGenerationMutex.update();
+                }
+
+                return executeMainChatVisibleGenerationAction({
+                    kind,
+                    messageId: Number.isInteger(command?.messageId) && command.messageId >= 0 ? command.messageId : undefined,
+                });
+            },
+            stopVisibleGeneration: () => {
+                stopGeneration();
+                return true;
+            },
+            toggleMessageActionsShell: command => {
+                runMainChatVisibleMessageActionsShellAction({
+                    kind: String(command?.kind ?? ''),
+                    messageId: Number.isInteger(command?.messageId) && command.messageId >= 0 ? command.messageId : undefined,
+                });
+                return false;
+            },
+        },
+        shouldRemount(actionResult, commandName) {
+            return actionResult !== false
+                && !['copyMessage', 'duplicateMessage', 'deleteMessage', 'updateMessageEdit'].includes(commandName);
         },
         remount: () => {
             void mountReactMainChatMessageListPanel();
@@ -2704,16 +3011,21 @@ function getMainChatMessageListReactBridge() {
 }
 
 async function mountReactMainChatMessageListPanel() {
-    return mountWorkspacePanelHost({
+    const result = await mountWorkspacePanelHost({
         kind: 'mainChatMessageList',
         ensureContainer: ensureMainChatMessageListReactHost,
         getState: () => getMainChatMessageListReactBridgeState(),
-        bridge: getMainChatMessageListReactBridge(),
+        commands: getMainChatMessageListReactCommands(),
+        runtime: reactRuntimePort,
         features: getWorkspaceReactFeatures(),
         onDisabled() {
             cleanupMainChatMessageListReactHost();
         },
     });
+    if (result?.mounted) {
+        scheduleMainChatMessageListScrollRestore();
+    }
+    return result;
 }
 
 function ensureBackgroundLibraryReactHost() {
@@ -2869,40 +3181,23 @@ function getBackgroundLibraryReactBridgeState(stateOverrides = {}) {
     };
 }
 
-function getBackgroundLibraryReactBridge() {
-    return createWorkspacePanelActionBridge({
-        dispatchAction(action, payload = {}) {
-            switch (action) {
-                case 'applyBackgroundFilter':
-                    return applyBackgroundLibraryFilter(payload?.filterQuery ?? '');
-                case 'applyBackgroundSort':
-                    return applyBackgroundLibrarySort(payload?.sortValue ?? '');
-                case 'uploadBackground':
-                    return requestBackgroundUploadSelection(payload?.source ?? 'global');
-                case 'selectBackground':
-                    return selectBackgroundLibraryItem(payload?.id ?? '', payload?.source ?? '');
-                case 'lockBackground':
-                    return lockCurrentBackground();
-                case 'unlockBackground':
-                    return unlockCurrentBackground();
-                case 'autoBackground':
-                    return runAutoBackgroundSelection();
-                case 'refreshBackgrounds':
-                    return refreshBackgroundLibrary();
-                case 'renameBackground':
-                    return renameBackgroundLibraryItem(payload?.id ?? '', payload?.nextName ?? '', payload?.source ?? 'global');
-                case 'deleteBackground':
-                    return deleteBackgroundLibraryItem(payload?.id ?? '', payload?.source ?? 'global', {
-                        deleteFromServer: Boolean(payload?.deleteFromServer),
-                    });
-                case 'enterFolder':
-                    return enterBackgroundLibraryFolder(payload?.folderId ?? '');
-                case 'exitFolder':
-                    return exitBackgroundLibraryFolder();
-                default:
-                    console.warn('Unknown Background Library React action', action);
-                    return undefined;
-            }
+function getBackgroundLibraryReactCommands() {
+    return createWorkspacePanelCommandPort({
+        commands: {
+            applyBackgroundFilter: filterQuery => applyBackgroundLibraryFilter(filterQuery),
+            applyBackgroundSort: sortValue => applyBackgroundLibrarySort(sortValue),
+            uploadBackground: source => requestBackgroundUploadSelection(source),
+            selectBackground: (id, source) => selectBackgroundLibraryItem(id, source),
+            lockBackground: () => lockCurrentBackground(),
+            unlockBackground: () => unlockCurrentBackground(),
+            autoBackground: () => runAutoBackgroundSelection(),
+            refreshBackgrounds: () => refreshBackgroundLibrary(),
+            renameBackground: (id, nextName, source) => renameBackgroundLibraryItem(id, nextName, source),
+            deleteBackground: (id, source, deleteFromServer) => deleteBackgroundLibraryItem(id, source, {
+                deleteFromServer,
+            }),
+            enterFolder: folderId => enterBackgroundLibraryFolder(folderId),
+            exitFolder: () => exitBackgroundLibraryFolder(),
         },
         remount: () => {
             void mountReactBackgroundLibraryPanel({ refreshQueued: false });
@@ -2915,7 +3210,8 @@ async function mountReactBackgroundLibraryPanel(stateOverrides = {}) {
         kind: 'backgroundLibrary',
         ensureContainer: ensureBackgroundLibraryReactHost,
         getState: overrides => getBackgroundLibraryReactBridgeState(overrides ?? stateOverrides),
-        bridge: getBackgroundLibraryReactBridge(),
+        commands: getBackgroundLibraryReactCommands(),
+        runtime: reactRuntimePort,
         features: getWorkspaceReactFeatures(),
         stateOverrides,
     });
@@ -3118,39 +3414,31 @@ function getExtensionsHostReactMountPointStatuses() {
     }));
 }
 
-function getExtensionsHostReactBridge() {
-    return createWorkspacePanelActionBridge({
-        dispatchAction(action, payload = {}) {
-            switch (action) {
-                case 'toggleNotifyUpdates':
-                    return toggleExtensionsHostNotifyUpdates();
-                case 'openManageExtensions':
-                    return openExtensionsHostManager();
-                case 'openInstallExtension':
-                    return openExtensionsHostInstaller();
-                case 'updateExtrasApiUrl':
-                    updateExtensionsHostApiUrl(payload?.url ?? '');
-                    return false;
-                case 'updateExtrasApiKey':
-                    updateExtensionsHostApiKey(payload?.apiKey ?? '');
-                    return false;
-                case 'connectExtrasApi':
-                    return connectExtensionsHostApi();
-                case 'toggleAutoconnect':
-                    return setExtensionsHostAutoconnectEnabled(payload?.enabled ?? !document.getElementById('extensions_autoconnect')?.checked);
-                case 'ensureExtensionCompatibilitySlots':
-                    return ensureExtensionCompatibilitySlots(payload || {});
-                case 'retryDeferredExtensions':
-                    return retryDeferredExtensionsHostLoad();
-                default:
-                    console.warn('Unknown Extensions Host React action', action);
-                    return undefined;
-            }
+function getExtensionsHostReactCommands() {
+    return createWorkspacePanelCommandPort({
+        commands: {
+            toggleNotifyUpdates: () => toggleExtensionsHostNotifyUpdates(),
+            openManageExtensions: () => openExtensionsHostManager(),
+            openInstallExtension: () => openExtensionsHostInstaller(),
+            updateExtrasApiUrl: url => {
+                updateExtensionsHostApiUrl(url);
+                return false;
+            },
+            updateExtrasApiKey: apiKey => {
+                updateExtensionsHostApiKey(apiKey);
+                return false;
+            },
+            connectExtrasApi: () => connectExtensionsHostApi(),
+            toggleAutoconnect: enabled => setExtensionsHostAutoconnectEnabled(
+                enabled ?? !document.getElementById('extensions_autoconnect')?.checked,
+            ),
+            ensureExtensionCompatibilitySlots: owner => ensureExtensionCompatibilitySlots({ owner }),
+            retryDeferredExtensions: () => retryDeferredExtensionsHostLoad(),
         },
-        shouldRemount(actionResult, action) {
+        shouldRemount(actionResult, commandName) {
             // The React layout effect maintains compatibility slots on every mount.
             // Remounting that maintenance action would create an endless mount loop.
-            return action !== 'ensureExtensionCompatibilitySlots' && actionResult !== false;
+            return commandName !== 'ensureExtensionCompatibilitySlots' && actionResult !== false;
         },
         remount: () => {
             void mountReactExtensionsHostPanel();
@@ -3163,7 +3451,8 @@ async function mountReactExtensionsHostPanel(stateOverrides = {}) {
         kind: 'extensionsHost',
         ensureContainer: ensureExtensionsHostReactHost,
         getState: overrides => getExtensionsHostReactBridgeState(overrides ?? stateOverrides),
-        bridge: getExtensionsHostReactBridge(),
+        commands: getExtensionsHostReactCommands(),
+        runtime: reactRuntimePort,
         features: getWorkspaceReactFeatures(),
         stateOverrides,
     });
@@ -5151,12 +5440,31 @@ export async function replaceCurrentChat() {
 }
 
 /**
- * React-owned long-chat load-earlier implementation.
- * Inserts older message rows and preserves scroll anchor behavior.
+ * React-owned long-chat load-earlier command.
+ * Expands the immutable projection window; React renders the resulting rows.
  * @param {number|null} [messagesToLoad=null]
  * @returns {Promise<void>}
  */
 export async function loadEarlierChatMessages(messagesToLoad = null) {
+    if (isReactMainChatOwner()) {
+        const visibleWindow = getMainChatReactVisibleWindow(reactMainChatProjectionCleared ? [] : chat);
+        const configuredCount = Number(power_user?.chat_truncation);
+        const count = Number.isInteger(messagesToLoad) && messagesToLoad > 0
+            ? messagesToLoad
+            : Number.isInteger(configuredCount) && configuredCount > 0
+                ? configuredCount
+                : chat.length;
+        mainChatVisibleStartIndices.set(getCurrentChatId(), Math.max(
+            0,
+            (visibleWindow.visibleMessageIds.length > 0
+                ? Number(visibleWindow.visibleMessageIds[0])
+                : chat.length) - count,
+        ));
+        await eventSource.emit(event_types.MORE_MESSAGES_LOADED);
+        void mountReactMainChatMessageListPanel();
+        return;
+    }
+
     const firstDisplayedMesId = chatElement.children('.mes').first().attr('mesid');
     const firstDisplayedMessage = chatElement.children('.mes').first();
     let messageId = Number(firstDisplayedMesId);
@@ -5218,6 +5526,16 @@ export async function showMoreMessages(messagesToLoad = null) {
 }
 
 function clearGenerationAutoRecoveryStatus(messageId) {
+    if (isReactMainChatOwner()) {
+        setMainChatMessageUiState(messageId, {
+            recoveryStatus: null,
+            recoveryStage: null,
+            failureNoticeVisible: false,
+            failureRetryVisible: false,
+        });
+        return;
+    }
+
     const messageElement = chatElement.find(`.mes[mesid="${messageId}"]`);
     messageElement.find('.generation_auto_recovery_status').remove();
     messageElement.find('.generation_failure_retry').toggle(true);
@@ -5225,6 +5543,16 @@ function clearGenerationAutoRecoveryStatus(messageId) {
 }
 
 function showGenerationAutoRecoveryStatus(messageId, status, recoveryStage = 'primary') {
+    if (isReactMainChatOwner()) {
+        setMainChatMessageUiState(messageId, {
+            recoveryStatus: String(status ?? ''),
+            recoveryStage: recoveryStage === 'fallback' ? 'fallback' : 'primary',
+            failureNoticeVisible: false,
+            failureRetryVisible: false,
+        });
+        return;
+    }
+
     const messageElement = chatElement.find(`.mes[mesid="${messageId}"]`);
     if (!messageElement.length) {
         return;
@@ -5277,6 +5605,12 @@ function clearGenerationAttemptMessage(messageId, baseline = null) {
             delete message.extra.time_to_first_token;
         }
         syncMesToSwipe(messageId);
+    }
+
+    if (isReactMainChatOwner()) {
+        clearMainChatMessageUiState(messageId);
+        void mountReactMainChatMessageListPanel();
+        return;
     }
 
     const messageElement = chatElement.find(`.mes[mesid="${messageId}"]`);
@@ -5379,13 +5713,18 @@ async function replaceAssistantRecoveryMessage(messageId, { type, getMessage, ti
         message.extra.token_count = await getTokenCountAsync(tokenCountText, 0);
     }
 
-    updateMessageElement(message, {
-        messageId,
-        messageElement: chatElement.find(`.mes[mesid="${messageId}"]`),
-        adjustMediaScroll: SCROLL_BEHAVIOR.ADJUST,
-    });
+    if (!isReactMainChatOwner()) {
+        updateMessageElement(message, {
+            messageId,
+            messageElement: chatElement.find(`.mes[mesid="${messageId}"]`),
+            adjustMediaScroll: SCROLL_BEHAVIOR.ADJUST,
+        });
+    }
 
     syncMesToSwipe(messageId);
+    if (isReactMainChatOwner()) {
+        scheduleMainChatMessageListPanelRefresh();
+    }
     const swipeInfo = {
         send_date: message.send_date,
         gen_started: message.gen_started,
@@ -5443,6 +5782,16 @@ function getGenerationLifecycleStatusLabels() {
 }
 
 function showGenerationFailureRecovery(messageId, isRecovering = false) {
+    if (isReactMainChatOwner()) {
+        setMainChatMessageUiState(messageId, {
+            recoveryStatus: null,
+            recoveryStage: null,
+            failureNoticeVisible: true,
+            failureRetryVisible: !isRecovering,
+        });
+        return;
+    }
+
     const messageElement = chatElement.find(`.mes[mesid="${messageId}"]`);
 
     if (!messageElement.length || messageElement.find('.generation_failure_retry').length) {
@@ -5460,6 +5809,17 @@ function showGenerationFailureRecovery(messageId, isRecovering = false) {
 }
 
 export async function printMessages() {
+    mainChatMessageUiState.clear();
+    if (isReactMainChatOwner()) {
+        reactMainChatProjectionCleared = false;
+        const shouldRestore = hasMainChatMessageListScrollRestore();
+        void mountReactMainChatMessageListPanel();
+        if (!shouldRestore) {
+            scrollChatToBottom({ waitForFrame: true });
+        }
+        return;
+    }
+
     let startIndex = 0;
     let count = power_user.chat_truncation || Number.MAX_SAFE_INTEGER;
 
@@ -5485,6 +5845,11 @@ export async function printMessages() {
  * @param {Boolean} [options.fade=true] When false, the swipe chevrons will not fade in.
  */
 export async function redisplayChat({ targetChat = chat, startIndex = 0, fade = true } = {}) {
+    if (isReactMainChatOwner()) {
+        void mountReactMainChatMessageListPanel();
+        return;
+    }
+
     const messageElements = chatElement.find('.mes');
     messageElements.removeClass('last_mes');
 
@@ -5589,8 +5954,12 @@ export async function clearChat({ clearData = false, preserveMainChatScrollSnaps
     if (is_delete_mode) {
         $('#dialogue_del_mes_cancel').trigger('click');
     }
-    //This will also remove non '.mes' elements, e.g. '<div id="show_more_messages">Show more messages</div>'.
-    chatElement.children().remove();
+    // React owns #chat after the main-chat cutover; changing the store projection
+    // is enough to clear rows and avoids a second DOM writer.
+    if (!isReactMainChatOwner()) {
+        // This also removes non '.mes' elements, e.g. '#show_more_messages'.
+        chatElement.children().remove();
+    }
     if ($('.zoomed_avatar[forChar]').length) {
         console.debug('saw avatars to remove');
         $('.zoomed_avatar[forChar]').remove();
@@ -5600,11 +5969,27 @@ export async function clearChat({ clearData = false, preserveMainChatScrollSnaps
     itemizedPrompts.length = 0;
 
     if (clearData) chat.length = 0;
+    if (isReactMainChatOwner()) {
+        reactMainChatProjectionCleared = true;
+        void mountReactMainChatMessageListPanel();
+    }
 }
 
 export async function deleteLastMessage() {
-    deleteItemizedPromptForMessage(chat.length - 1);
+    const deletedMessageId = chat.length - 1;
+    deleteItemizedPromptForMessage(deletedMessageId);
     chat.length = chat.length - 1;
+    if (isReactMainChatOwner()) {
+        clearMainChatMessageUiState(deletedMessageId);
+        if (this_edit_mes_id === deletedMessageId) {
+            this_edit_mes_id = undefined;
+        }
+        mainChatVisibleStartIndices.delete(getCurrentChatId());
+        saveChatDebounced();
+        await eventSource.emit(event_types.MESSAGE_DELETED, chat.length);
+        void mountReactMainChatMessageListPanel();
+        return;
+    }
     chatElement.children('.mes').last().remove();
     await eventSource.emit(event_types.MESSAGE_DELETED, chat.length);
 }
@@ -5629,12 +6014,6 @@ export async function deleteMessage(id, swipeDeletionIndex = undefined, askConfi
         }
     }
 
-    const minId = getFirstDisplayedMessageId();
-    const messageElement = chatElement.find(`.mes[mesid="${id}"]`);
-    if (messageElement.length === 0) {
-        return;
-    }
-
     let deleteOnlySwipe = canDeleteSwipe;
     if (askConfirmation) {
         const result = await callGenericPopup(t`Are you sure you want to delete this message?`, POPUP_TYPE.CONFIRM, null, {
@@ -5650,6 +6029,27 @@ export async function deleteMessage(id, swipeDeletionIndex = undefined, askConfi
 
     if (deleteOnlySwipe) {
         await deleteSwipe(swipeDeletionIndex, id);
+        return;
+    }
+
+    if (isReactMainChatOwner()) {
+        chat.splice(id, 1);
+        shiftMainChatMessageUiStateAfterSplice(id, -1);
+        chat_metadata.tainted = true;
+        deleteItemizedPromptForMessage(id);
+        if (this_edit_mes_id === id) {
+            this_edit_mes_id = undefined;
+        }
+        mainChatVisibleStartIndices.delete(getCurrentChatId());
+        saveChatDebounced();
+        await eventSource.emit(event_types.MESSAGE_DELETED, chat.length);
+        void mountReactMainChatMessageListPanel();
+        return;
+    }
+
+    const minId = getFirstDisplayedMessageId();
+    const messageElement = chatElement.find(`.mes[mesid="${id}"]`);
+    if (messageElement.length === 0) {
         return;
     }
 
@@ -5972,6 +6372,14 @@ function insertSVGIcon(mes, extra) {
  * @param {boolean} [options.rerenderMessage=true] Whether to re-render the message content (inside <c>.mes_text</c>)
  */
 export function updateMessageBlock(messageId, message, { rerenderMessage = true } = {}) {
+    if (isReactMainChatOwner()) {
+        if (message && chat[messageId] !== message) {
+            chat[messageId] = message;
+        }
+        void mountReactMainChatMessageListPanel();
+        return;
+    }
+
     const messageElement = chatElement.find(`[mesid="${messageId}"]`);
     if (rerenderMessage) {
         const text = message?.extra?.display_text ?? message.mes;
@@ -6156,6 +6564,10 @@ export function getMediaIndex(mes) {
  */
 export function appendMediaToMessage(mes, messageElement, scrollBehavior = SCROLL_BEHAVIOR.ADJUST) {
     ensureMessageMediaIsArray(mes);
+    if (isReactMainChatOwner()) {
+        scheduleMainChatMessageListPanelRefresh();
+        return;
+    }
 
     const fileWrapper = messageElement.find('.mes_file_wrapper');
     const mediaWrapper = messageElement.find('.mes_media_wrapper');
@@ -6513,6 +6925,14 @@ export function addOneMessage(mes, { type = undefined, insertAfter = null, scrol
         }
         return chat.length - 1;
     })();
+
+    if (isReactMainChatOwner()) {
+        void mountReactMainChatMessageListPanel();
+        if (!insertAfter && !insertBefore && scroll) {
+            scrollChatToBottom({ waitForFrame: true });
+        }
+        return $();
+    }
 
     let messageElement;
 
@@ -7570,6 +7990,13 @@ class GenerationStreamSession {
      * @param {boolean?} continueOnReasoning If continuing on reasoning
      */
     async #checkDomElements(messageId, continueOnReasoning = null) {
+        if (isReactMainChatOwner()) {
+            if (continueOnReasoning) {
+                await this.reasoningHandler.process(messageId, false, this.promptReasoning);
+            }
+            return;
+        }
+
         if (this.messageDom === null || this.messageTextDom === null) {
             this.messageDom = document.querySelector(`#chat .mes[mesid="${messageId}"]`);
             this.messageTextDom = this.messageDom?.querySelector('.mes_text');
@@ -7583,6 +8010,10 @@ class GenerationStreamSession {
     }
 
     #updateMessageBlockVisibility() {
+        if (isReactMainChatOwner()) {
+            return;
+        }
+
         if (this.messageDom instanceof HTMLElement && Array.isArray(this.toolCalls) && this.toolCalls.length > 0) {
             const shouldHide = ['', '...'].includes(this.result) && !this.reasoningHandler.reasoning;
             this.messageDom.classList.toggle('displayNone', shouldHide);
@@ -7691,30 +8122,35 @@ class GenerationStreamSession {
                 };
             }
 
-            const formattedText = messageFormatting(
-                processedText,
-                chat[messageId].name,
-                chat[messageId].is_system,
-                chat[messageId].is_user,
-                messageId,
-                {},
-                false,
-            );
-            if (this.messageTextDom instanceof HTMLElement) {
-                if (power_user.stream_fade_in) {
-                    applyStreamFadeIn(this.messageTextDom, formattedText);
-                } else {
-                    this.messageTextDom.innerHTML = formattedText;
+            if (!isReactMainChatOwner()) {
+                const formattedText = messageFormatting(
+                    processedText,
+                    chat[messageId].name,
+                    chat[messageId].is_system,
+                    chat[messageId].is_user,
+                    messageId,
+                    {},
+                    false,
+                );
+                if (this.messageTextDom instanceof HTMLElement) {
+                    if (power_user.stream_fade_in) {
+                        applyStreamFadeIn(this.messageTextDom, formattedText);
+                    } else {
+                        this.messageTextDom.innerHTML = formattedText;
+                    }
+                }
+
+                const timePassed = formatGenerationTimer(this.timeStarted, currentTime, currentTokenCount, this.reasoningHandler.getDuration(), this.timeToFirstToken);
+                if (this.messageTimerDom instanceof HTMLElement) {
+                    this.messageTimerDom.textContent = timePassed.timerValue;
+                    this.messageTimerDom.title = timePassed.timerTitle;
                 }
             }
 
-            const timePassed = formatGenerationTimer(this.timeStarted, currentTime, currentTokenCount, this.reasoningHandler.getDuration(), this.timeToFirstToken);
-            if (this.messageTimerDom instanceof HTMLElement) {
-                this.messageTimerDom.textContent = timePassed.timerValue;
-                this.messageTimerDom.title = timePassed.timerTitle;
-            }
-
             this.setFirstSwipe(messageId);
+            if (isReactMainChatOwner()) {
+                scheduleMainChatMessageListPanelRefresh();
+            }
         }
 
         if (!scrollLock) {
@@ -7735,9 +8171,11 @@ class GenerationStreamSession {
         this.isFinalizing = true;
         void mountReactMainChatMessageListPanel();
         await this.onProgressStreaming(messageId, text, true);
-        const messageElement = chatElement.find(`.mes[mesid="${messageId}"]`);
+        const messageElement = isReactMainChatOwner() ? null : chatElement.find(`.mes[mesid="${messageId}"]`);
         const message = chat[messageId];
-        addCopyToCodeBlocks(messageElement);
+        if (messageElement) {
+            addCopyToCodeBlocks(messageElement);
+        }
 
         await this.reasoningHandler.finish(messageId);
 
@@ -7763,7 +8201,11 @@ class GenerationStreamSession {
 
         if (Array.isArray(this.images) && this.images.length > 0) {
             await processImageAttachment(message, { imageUrls: this.images });
-            appendMediaToMessage(message, $(this.messageDom));
+            if (!isReactMainChatOwner()) {
+                appendMediaToMessage(message, $(this.messageDom));
+            } else {
+                scheduleMainChatMessageListPanelRefresh();
+            }
         }
 
         // Store reasoning signature for models that support multi-turn context
@@ -9414,6 +9856,8 @@ async function executeGenerationRequestInShell(generationEnvelope) {
                     }
 
                     await streamingProcessor.onFinishStreaming(finishedMessageId, getMessage);
+                    rememberMainChatStreamingTransportProcessorTerminal(streamingProcessor, 'completed');
+                    scheduleMainChatMessageListPanelRefresh();
                     streamingProcessor = null;
                     clearGenerationAutoRecoveryStatus(finishedMessageId);
                     triggerAutoContinue(messageChunk, isImpersonate);
@@ -10128,6 +10572,18 @@ export async function duplicateCharacter({ avatar = null, silent = false } = {})
 }
 
 function setInContextMessages(msgInContextCount, type) {
+    if (isReactMainChatOwner()) {
+        if (type === 'swipe' || type === 'regenerate' || type === 'continue') {
+            msgInContextCount++;
+        }
+
+        const lastMessageId = Math.max(0, chat.length - msgInContextCount);
+        chat_metadata.lastInContextMessageId = lastMessageId;
+        setMainChatMessageUiFlag('lastInContext', false);
+        setMainChatMessageUiState(lastMessageId, { lastInContext: true });
+        return;
+    }
+
     chatElement.find('.mes').removeClass('lastInContext');
 
     if (type === 'swipe' || type === 'regenerate' || type === 'continue') {
@@ -11631,6 +12087,7 @@ export async function getChat() {
             chat.splice(0, chat.length);
             chat_metadata = {};
         }
+        reactMainChatProjectionCleared = false;
         if (!chat_metadata.integrity) {
             chat_metadata.integrity = uuidv4();
         }
@@ -11717,6 +12174,7 @@ export async function openCharacterChat(file_name) {
     const isReopeningCurrentChat = typeof currentChatId === 'string' && currentChatId === file_name;
     if (isReopeningCurrentChat) {
         deleteMainChatMessageListScrollSnapshot(file_name);
+        mainChatVisibleStartIndices.delete(file_name);
     }
 
     await clearChat({ clearData: true, preserveMainChatScrollSnapshot: !isReopeningCurrentChat });
@@ -12102,15 +12560,13 @@ export function setGenerationParamsFromPreset(preset) {
     }
 }
 
-// Common code for message editor done and auto-save
-function updateMessage(div) {
-    const mesBlock = div.closest('.mes_block');
-    let text = mesBlock.find('.edit_textarea').val()
-        ?? mesBlock.find('.mes_text').text();
-    const mesElement = div.closest('.mes');
-    const mes = chat[mesElement.attr('mesid')];
+function applyMessageEditText(messageId, inputText) {
+    const mes = chat[messageId];
+    if (!mes) {
+        return null;
+    }
 
-    // editing old messages
+    let text = String(inputText ?? '');
     mes.extra ??= {};
 
     let regexPlacement;
@@ -12156,7 +12612,18 @@ function updateMessage(div) {
 
     chat_metadata.tainted = true;
 
-    return { mesBlock, text, mes, bias };
+    return { text, mes, bias };
+}
+
+// Common code for message editor done and auto-save
+function updateMessage(div) {
+    const mesBlock = div.closest('.mes_block');
+    const mesElement = div.closest('.mes');
+    const messageId = Number(mesElement.attr('mesid'));
+    const text = mesBlock.find('.edit_textarea').val()
+        ?? mesBlock.find('.mes_text').text();
+    const updated = applyMessageEditText(messageId, text);
+    return { mesBlock, ...updated };
 }
 
 function openMessageDelete(fromSlashCommand) {
@@ -12201,6 +12668,287 @@ function messageEditAuto(div) {
     saveChatDebounced();
 }
 
+function startMainChatMessageEdit(messageId) {
+    const normalizedMessageId = Number(messageId);
+    const message = chat[normalizedMessageId];
+    if (!Number.isInteger(normalizedMessageId) || normalizedMessageId < 0 || !message) {
+        return false;
+    }
+
+    this_edit_mes_id = normalizedMessageId;
+    this_edit_mes_chname = message.name || (message.is_user ? name1 : name2);
+    setMainChatMessageUiState(normalizedMessageId, {
+        editing: true,
+        editText: trimSpaces(message.mes || ''),
+    });
+    return true;
+}
+
+function updateMainChatMessageEdit(messageId, text) {
+    const normalizedMessageId = Number(messageId);
+    if (!Number.isInteger(normalizedMessageId) || normalizedMessageId < 0 || !chat[normalizedMessageId]) {
+        return false;
+    }
+
+    setMainChatMessageUiState(normalizedMessageId, {
+        editing: true,
+        editText: String(text ?? ''),
+    });
+    return true;
+}
+
+async function duplicateMainChatMessage(messageId) {
+    const normalizedMessageId = Number(messageId);
+    const sourceMessage = chat[normalizedMessageId];
+    if (!Number.isInteger(normalizedMessageId) || normalizedMessageId < 0 || !sourceMessage) {
+        return false;
+    }
+
+    const editState = mainChatMessageUiState.get(String(normalizedMessageId));
+    const clone = structuredClone(sourceMessage);
+    clone.send_date = Date.now();
+    if (editState?.editing && typeof editState.editText === 'string') {
+        clone.mes = editState.editText;
+    }
+    if (power_user.trim_spaces) {
+        clone.mes = String(clone.mes ?? '').trim();
+    }
+
+    chat.splice(normalizedMessageId + 1, 0, clone);
+    shiftMainChatMessageUiStateAfterSplice(normalizedMessageId + 1, 1);
+    await saveChatConditional();
+    void mountReactMainChatMessageListPanel();
+    return true;
+}
+
+async function copyMainChatMessage(messageId) {
+    const normalizedMessageId = Number(messageId);
+    const sourceMessage = chat[normalizedMessageId];
+    if (!Number.isInteger(normalizedMessageId) || normalizedMessageId < 0 || !sourceMessage) {
+        return false;
+    }
+
+    await copyText(String(sourceMessage.mes ?? ''));
+    toastr.info('Copied!', '', { timeOut: 2000 });
+    return true;
+}
+
+async function commitMainChatMessageEdit(messageId) {
+    const normalizedMessageId = Number(messageId);
+    const editState = mainChatMessageUiState.get(String(normalizedMessageId));
+    if (!editState?.editing) {
+        return false;
+    }
+
+    const updated = applyMessageEditText(normalizedMessageId, editState.editText);
+    if (!updated) {
+        return false;
+    }
+
+    await eventSource.emit(event_types.MESSAGE_EDITED, normalizedMessageId);
+    setMainChatMessageUiState(normalizedMessageId, {
+        editing: false,
+        editText: null,
+    });
+    if (this_edit_mes_id === normalizedMessageId) {
+        this_edit_mes_id = undefined;
+    }
+    await eventSource.emit(event_types.MESSAGE_UPDATED, normalizedMessageId);
+    await saveChatConditional();
+    showSwipeButtons();
+    void mountReactMainChatMessageListPanel();
+    return true;
+}
+
+async function cancelMainChatMessageEdit(messageId) {
+    const normalizedMessageId = Number(messageId);
+    if (!Number.isInteger(normalizedMessageId) || normalizedMessageId < 0) {
+        return false;
+    }
+
+    setMainChatMessageUiState(normalizedMessageId, {
+        editing: false,
+        editText: null,
+    });
+    if (this_edit_mes_id === normalizedMessageId) {
+        this_edit_mes_id = undefined;
+    }
+    showSwipeButtons();
+    void mountReactMainChatMessageListPanel();
+    return true;
+}
+
+function setMainChatMessageReasoningOpen(messageId, open) {
+    const normalizedMessageId = Number(messageId);
+    const message = chat[normalizedMessageId];
+    if (!Number.isInteger(normalizedMessageId) || normalizedMessageId < 0 || !message) {
+        return false;
+    }
+
+    const hasReasoning = typeof message?.extra?.reasoning === 'string' && message.extra.reasoning !== '';
+    const isEditing = mainChatMessageUiState.get(String(normalizedMessageId))?.reasoningEditing === true;
+    if (!hasReasoning && !isEditing) {
+        return false;
+    }
+
+    setMainChatMessageUiState(normalizedMessageId, { reasoningOpen: open === true });
+    return true;
+}
+
+async function copyMainChatMessageReasoning(messageId) {
+    const normalizedMessageId = Number(messageId);
+    const message = chat[normalizedMessageId];
+    const reasoning = typeof message?.extra?.reasoning === 'string' ? message.extra.reasoning : '';
+    if (!Number.isInteger(normalizedMessageId) || normalizedMessageId < 0 || !reasoning) {
+        return false;
+    }
+
+    await copyText(reasoning);
+    toastr.info('Copied!', '', { timeOut: 2000 });
+    return true;
+}
+
+function startMainChatMessageReasoningEdit(messageId) {
+    const normalizedMessageId = Number(messageId);
+    const message = chat[normalizedMessageId];
+    if (!Number.isInteger(normalizedMessageId) || normalizedMessageId < 0 || !message) {
+        return false;
+    }
+
+    setMainChatMessageUiState(normalizedMessageId, {
+        reasoningOpen: true,
+        reasoningEditing: true,
+        reasoningEditText: typeof message?.extra?.reasoning === 'string' ? message.extra.reasoning : '',
+    });
+    return true;
+}
+
+function updateMainChatMessageReasoningEdit(messageId, text) {
+    const normalizedMessageId = Number(messageId);
+    const message = chat[normalizedMessageId];
+    if (!Number.isInteger(normalizedMessageId) || normalizedMessageId < 0 || !message) {
+        return false;
+    }
+
+    const reasoningEditText = String(text ?? '');
+    setMainChatMessageUiState(normalizedMessageId, {
+        reasoningOpen: true,
+        reasoningEditing: true,
+        reasoningEditText,
+    });
+    if (power_user.auto_save_msg_edits) {
+        message.extra ??= {};
+        message.extra.reasoning = getRegexedString(
+            reasoningEditText,
+            regex_placement.REASONING,
+            { isEdit: true },
+        );
+        message.extra.reasoning_type = message.extra.reasoning_type ? 'edited' : 'manual';
+        saveChatDebounced();
+    }
+    return true;
+}
+
+async function commitMainChatMessageReasoningEdit(messageId) {
+    const normalizedMessageId = Number(messageId);
+    const message = chat[normalizedMessageId];
+    const uiState = mainChatMessageUiState.get(String(normalizedMessageId));
+    if (!Number.isInteger(normalizedMessageId) || normalizedMessageId < 0 || !message || !uiState?.reasoningEditing) {
+        return false;
+    }
+
+    const reasoning = getRegexedString(
+        substituteParams(String(uiState.reasoningEditText ?? '')),
+        regex_placement.REASONING,
+        { isEdit: true },
+    );
+    setMainChatMessageUiState(normalizedMessageId, {
+        reasoningOpen: reasoning !== '',
+        reasoningEditing: false,
+        reasoningEditText: null,
+    });
+    if (reasoning === String(message?.extra?.reasoning ?? '')) {
+        return true;
+    }
+
+    message.extra ??= {};
+    message.extra.reasoning = reasoning;
+    message.extra.reasoning_type = message.extra.reasoning_type ? 'edited' : 'manual';
+    await saveChatConditional();
+    await eventSource.emit(event_types.MESSAGE_REASONING_EDITED, normalizedMessageId);
+    if (mainChatMessageUiState.get(String(normalizedMessageId))?.editing) {
+        await commitMainChatMessageEdit(normalizedMessageId);
+        return true;
+    }
+
+    void mountReactMainChatMessageListPanel();
+    return true;
+}
+
+async function cancelMainChatMessageReasoningEdit(messageId) {
+    const normalizedMessageId = Number(messageId);
+    if (!Number.isInteger(normalizedMessageId) || normalizedMessageId < 0) {
+        return false;
+    }
+
+    const uiState = mainChatMessageUiState.get(String(normalizedMessageId));
+    const hasReasoning = typeof chat[normalizedMessageId]?.extra?.reasoning === 'string'
+        && chat[normalizedMessageId].extra.reasoning !== '';
+    setMainChatMessageUiState(normalizedMessageId, {
+        reasoningOpen: hasReasoning && uiState?.reasoningOpen === true,
+        reasoningEditing: false,
+        reasoningEditText: null,
+    });
+    if (uiState?.editing) {
+        return cancelMainChatMessageEdit(normalizedMessageId);
+    }
+
+    void mountReactMainChatMessageListPanel();
+    return true;
+}
+
+async function deleteMainChatMessageReasoning(messageId) {
+    const normalizedMessageId = Number(messageId);
+    const message = chat[normalizedMessageId];
+    if (!Number.isInteger(normalizedMessageId) || normalizedMessageId < 0 || !message?.extra) {
+        return false;
+    }
+
+    const confirmed = await Popup.show.confirm(
+        'Remove Reasoning',
+        'Are you sure you want to clear the reasoning?<br />Visible message contents will stay intact.',
+    );
+    if (!confirmed) {
+        return false;
+    }
+
+    message.extra.reasoning = '';
+    delete message.extra.reasoning_type;
+    delete message.extra.reasoning_duration;
+    setMainChatMessageUiState(normalizedMessageId, {
+        reasoningOpen: false,
+        reasoningEditing: false,
+        reasoningEditText: null,
+    });
+    await saveChatConditional();
+    await eventSource.emit(event_types.MESSAGE_REASONING_DELETED, normalizedMessageId);
+    void mountReactMainChatMessageListPanel();
+    return true;
+}
+
+function collapseAllMainChatMessageReasoning() {
+    let changed = false;
+    for (let messageId = 0; messageId < chat.length; messageId++) {
+        const message = chat[messageId];
+        if (typeof message?.extra?.reasoning !== 'string' || message.extra.reasoning === '') {
+            continue;
+        }
+        setMainChatMessageUiState(messageId, { reasoningOpen: false });
+        changed = true;
+    }
+    return changed;
+}
+
 /**
  * Create the message edit UI.
  * @param {number} editMessageId The ID of the message to edit
@@ -12209,6 +12957,11 @@ export async function messageEdit(editMessageId) {
     const editMessage = chat[editMessageId];
     if (!editMessage) {
         console.warn(`Message with id ${editMessageId} not found in chat array.`);
+        return;
+    }
+
+    if (isReactMainChatOwner()) {
+        startMainChatMessageEdit(editMessageId);
         return;
     }
 
@@ -12272,6 +13025,10 @@ export async function messageEdit(editMessageId) {
  * @param {number} [messageId=this_edit_mes_id]
  */
 async function messageEditCancel(messageId = this_edit_mes_id) {
+    if (isReactMainChatOwner()) {
+        return cancelMainChatMessageEdit(messageId);
+    }
+
     let text = chat[messageId].mes;
     let thisMesDiv;
     // If this is the button then select it's parent. Otherwise, select by messageId.
@@ -12331,6 +13088,24 @@ async function messageEditMove(sourceId, targetId) {
         return false;
     }
 
+    if (isReactMainChatOwner()) {
+        if (!chat[sourceId] || !chat[targetId]) {
+            console.error(`Message #${sourceId} or #${targetId} was not found.`);
+            return false;
+        }
+
+        [chat[sourceId], chat[targetId]] = [chat[targetId], chat[sourceId]];
+
+        if (this_edit_mes_id === sourceId) {
+            this_edit_mes_id = targetId;
+        }
+
+        swapItemizedPrompts(sourceId, targetId);
+        await saveChatConditional();
+        void mountReactMainChatMessageListPanel();
+        return true;
+    }
+
     const targetMessageDiv = chatElement.find(`.mes[mesid="${targetId}"]`);
     const sourceMessageDiv = chatElement.find(`.mes[mesid="${sourceId}"]`);
 
@@ -12365,6 +13140,10 @@ async function messageEditMove(sourceId, targetId) {
 }
 
 async function messageEditDone(div) {
+    if (isReactMainChatOwner()) {
+        return commitMainChatMessageEdit(this_edit_mes_id);
+    }
+
     if (!(this_edit_mes_id >= 0)) {
         console.trace('this_edit_mes_id cannot be blank when calling messageEditDone.');
         return;
@@ -13145,12 +13924,18 @@ export function callPopup(text, type, inputValue = '', { okButton, rows, wide, w
  */
 export async function updateSwipeCounter(mesId, { message = undefined, messageElement = undefined } = {}) {
     message ??= chat[mesId];
-    messageElement ??= chatElement.children('.mes').filter(`[mesid="${mesId}"]`);
 
     //If the message does not have swipes, create them.
     if (ensureSwipes(message)) {
         syncMesToSwipe(mesId);
     }
+
+    if (isReactMainChatOwner()) {
+        scheduleMainChatMessageListPanelRefresh();
+        return;
+    }
+
+    messageElement ??= chatElement.children('.mes').filter(`[mesid="${mesId}"]`);
 
     const swipeCounterText = formatSwipeCounter((message?.swipe_id + 1), message?.swipes?.length);
     const swipeCounter = messageElement.find('.swipes-counter');
@@ -13277,6 +14062,14 @@ export function refreshSwipeButtons(updateCounters = false, fade = true) {
         //CSS will hide all messages.
         $('body').removeClass('hideAllSwipeButtons');
     }
+
+    if (isReactMainChatOwner()) {
+        if (updateCounters) {
+            scheduleMainChatMessageListPanelRefresh();
+        }
+        return;
+    }
+
     //Non-messages can appear in chat. '.mes' is required.
     const messageElements = chatElement.children('.mes[mesid]');
 
@@ -13329,6 +14122,9 @@ export function refreshSwipeButtons(updateCounters = false, fade = true) {
  */
 export function showSwipeButtons() {
     swipesHidden = false;
+    if (isReactMainChatOwner()) {
+        setMainChatMessageUiFlag('swipeCounterHidden', false);
+    }
     refreshSwipeButtons();
 }
 
@@ -13339,6 +14135,14 @@ export function showSwipeButtons() {
  */
 export function hideSwipeButtons({ hideCounters = false } = {}) {
     swipesHidden = true;
+    if (isReactMainChatOwner()) {
+        if (hideCounters) {
+            setMainChatMessageUiFlag('swipeCounterHidden', true, chat.length - 1);
+        }
+        refreshSwipeButtons();
+        return;
+    }
+
     refreshSwipeButtons();
 
     if (hideCounters === true) {
@@ -13505,6 +14309,9 @@ export function updateEditArrowClasses() {
     if (!(this_edit_mes_id >= 0)) {
         return;
     }
+    if (isReactMainChatOwner()) {
+        return;
+    }
 
     const message = chatElement.children('.mes').filter(`.mes[mesid="${this_edit_mes_id}"]`);
 
@@ -13531,7 +14338,11 @@ export function updateEditArrowClasses() {
 export function closeMessageEditor(what = 'all') {
     if (what === 'message' || what === 'all') {
         if (this_edit_mes_id >= 0) {
-            chatElement.find(`.mes[mesid="${this_edit_mes_id}"] .mes_edit_cancel`).trigger('click');
+            if (isReactMainChatOwner()) {
+                void cancelMainChatMessageEdit(this_edit_mes_id);
+            } else {
+                chatElement.find(`.mes[mesid="${this_edit_mes_id}"] .mes_edit_cancel`).trigger('click');
+            }
         }
     }
     if (what === 'reasoning' || what === 'all') {
@@ -14003,7 +14814,100 @@ export async function swipe(event, direction, {
         }
     }
 
-    const mesId = Number(forceMesId ?? event?.currentTarget?.closest('.mes')?.getAttribute('mesid') ?? messageIndex ?? chat.length - 1);
+    const mesId = Number(
+        forceMesId
+        ?? messageIndex
+        ?? (isReactMainChatOwner() ? NaN : event?.currentTarget?.closest('.mes')?.getAttribute('mesid'))
+        ?? chat.length - 1,
+    );
+
+    if (isReactMainChatOwner()) {
+        return runReactMainChatSwipe();
+    }
+
+    async function runReactMainChatSwipe() {
+        const targetMessage = chat[mesId];
+        if (!Number.isInteger(mesId) || mesId < 0 || !targetMessage) {
+            return;
+        }
+
+        const bypassSwipeChecks = [
+            SWIPE_SOURCE.DELETE,
+            SWIPE_SOURCE.BACK,
+            SWIPE_SOURCE.AUTO_SWIPE,
+            SWIPE_SOURCE.SLASH_COMMAND,
+            SWIPE_SOURCE.SWIPE_PICKER,
+        ].includes(source);
+
+        if (!bypassSwipeChecks) {
+            if (isGenerating() && swipes && !swipesHidden && swipeState === SWIPE_STATE.NONE) {
+                toastr.warning(t`Cannot swipe while generating. Stop the request and try again.`, t`Swipe aborted`);
+                return;
+            }
+            if (!isSwipingAllowed() || !isMessageSwipeable(mesId, targetMessage)) {
+                return;
+            }
+        }
+
+        cancelDebouncedChatSave();
+        ensureSwipes(targetMessage);
+        syncMesToSwipe(mesId);
+
+        const originalSwipeId = Number(targetMessage.swipe_id ?? 0);
+        let newSwipeId = Number(forceSwipeId ?? originalSwipeId);
+        const isRight = direction === SWIPE_DIRECTION.RIGHT;
+
+        if (forceSwipeId == null) {
+            newSwipeId += isRight ? 1 : -1;
+        }
+
+        if (!isRight && newSwipeId < 0) {
+            newSwipeId = Math.max(0, targetMessage.swipes.length - 1);
+        }
+
+        if (isRight && newSwipeId >= targetMessage.swipes.length) {
+            newSwipeId = targetMessage.swipes.length;
+            targetMessage.swipe_id = newSwipeId;
+
+            const overswipe = getOverswipeBehavior(mesId, targetMessage);
+            if (overswipe === OVERSWIPE_BEHAVIOR.NONE) {
+                targetMessage.swipe_id = originalSwipeId;
+                showSwipeButtons();
+                return;
+            }
+            if (overswipe === OVERSWIPE_BEHAVIOR.REGENERATE) {
+                clearMessageData(targetMessage);
+                await eventSource.emit(event_types.MESSAGE_SWIPED, mesId);
+                if (!is_send_press) {
+                    is_send_press = true;
+                    return Generate('swipe');
+                }
+                return;
+            }
+            if (overswipe === OVERSWIPE_BEHAVIOR.LOOP || overswipe === OVERSWIPE_BEHAVIOR.PRISTINE_GREETING) {
+                newSwipeId = 0;
+            }
+        }
+
+        if (newSwipeId < 0 || newSwipeId >= targetMessage.swipes.length) {
+            targetMessage.swipe_id = originalSwipeId;
+            showSwipeButtons();
+            return;
+        }
+
+        if (!syncSwipeToMes(mesId, newSwipeId, targetMessage)) {
+            targetMessage.swipe_id = originalSwipeId;
+            showSwipeButtons();
+            return;
+        }
+
+        await eventSource.emit(event_types.MESSAGE_SWIPED, mesId);
+        if (source !== SWIPE_SOURCE.BACK) {
+            saveChatDebounced();
+        }
+        showSwipeButtons();
+        void mountReactMainChatMessageListPanel();
+    }
 
     if ([SWIPE_SOURCE.DELETE, SWIPE_SOURCE.BACK, SWIPE_SOURCE.AUTO_SWIPE, SWIPE_SOURCE.SLASH_COMMAND, SWIPE_SOURCE.SWIPE_PICKER].includes(source)) {
         console.info(`The ${direction} swipe source on message #${mesId} is ${source}, Most checks have been bypassed. `);
@@ -15437,6 +16341,9 @@ jQuery(async function () {
     $(document).on('click', '.last_mes .swipe_right', async (e, data) => await swipe(e, SWIPE_DIRECTION.RIGHT, data));
     $(document).on('click', '.last_mes .swipe_left', async (e, data) => await swipe(e, SWIPE_DIRECTION.LEFT, data));
     $(document).on('click keydown', '.generation_failure_retry', function (event) {
+        if (isReactMainChatOwner() && $(this).closest('[data-main-chat-message-row-owner="react"]').length > 0) {
+            return;
+        }
         if (event.type === 'keydown' && !['Enter', ' '].includes(event.key)) {
             return;
         }
@@ -16184,6 +17091,9 @@ jQuery(async function () {
     });
 
     $(document).on('pointerup', '.mes_copy', async function () {
+        if (isReactMainChatOwner() && $(this).closest('[data-main-chat-message-row-owner="react"]').length > 0) {
+            return;
+        }
         if (this_chid !== undefined || selected_group || name2 === neutralCharacterName) {
             try {
                 const messageId = $(this).closest('.mes').attr('mesid');
@@ -16199,6 +17109,9 @@ jQuery(async function () {
     //********************
     //***Message Editor***
     $(document).on('click', '.mes_edit', async function () {
+        if (isReactMainChatOwner()) {
+            return;
+        }
         if (is_delete_mode) {
             return;
         }
@@ -16241,6 +17154,11 @@ jQuery(async function () {
         getExpandMessageActions: () => power_user.expand_message_actions,
         animationDuration: animation_duration,
         animationEasing: animation_easing,
+        onReactOwnedOutsideClick: () => {
+            if (isReactMainChatOwner()) {
+                runMainChatVisibleMessageActionsShellAction({ kind: 'close' });
+            }
+        },
         onStateChanged: () => {
             void mountReactMainChatMessageListPanel();
         },
@@ -16248,6 +17166,9 @@ jQuery(async function () {
     mainChatMessageActionsController.init();
 
     $(document).on('click', '.mes_edit_cancel', async function () {
+        if (isReactMainChatOwner()) {
+            return;
+        }
         await messageEditCancel.call(this, this_edit_mes_id);
     });
 
@@ -16305,6 +17226,9 @@ jQuery(async function () {
     });
 
     $(document).on('click', '.mes_edit_done', async function () {
+        if (isReactMainChatOwner()) {
+            return;
+        }
         await messageEditDone($(this));
     });
 
@@ -16935,6 +17859,12 @@ jQuery(async function () {
         const message = chat[messageId];
         if (!message || message.is_user || message.is_system) return;
         const visibleText = (message.extra?.display_text ?? message.mes ?? '').trim();
+        if (isReactMainChatOwner()) {
+            setMainChatMessageUiState(messageId, {
+                emptyReplyRegenerateVisible: visibleText.length === 0,
+            });
+            return;
+        }
         if (visibleText.length > 0) return;
         const mesBlock = $(`.mes[mesid="${messageId}"] .mes_block`);
         if (mesBlock.length === 0 || mesBlock.find('.empty_reply_regenerate').length > 0) return;

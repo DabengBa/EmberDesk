@@ -50,12 +50,10 @@ describe('chat workspace structure', () => {
             'WORKSPACE_SHELL_CHROME_HOST_ID',
             'ensureWorkspaceShellChromeHost',
             'data-react-workspace-shell-chrome-status',
-            "case 'openAIConfig':",
-            "window.location.assign('/settings?tab=providers');",
-            "case 'openFormatting':",
-            "window.location.assign('/settings?tab=advanced');",
-            "case 'openSettings':",
-            "window.location.assign('/settings');",
+            'function getWorkspaceShellCommands()',
+            "openAIConfig: () => openWorkspaceSettingsOverlay({ tab: 'providers', panelKind: 'aiConfig' })",
+            "openFormatting: () => openWorkspaceSettingsOverlay({ tab: 'advanced', panelKind: 'advancedFormatting' })",
+            "openSettings: () => openWorkspaceSettingsOverlay({ tab: null, panelKind: 'settings' })",
         ], { contractName: 'same-entry React workspace chrome host' });
         expect(scriptSource).not.toContain('openWorkspaceShellDrawer');
         expect(scriptSource).not.toContain('closeWorkspaceShellPanel');
@@ -71,8 +69,7 @@ describe('chat workspace structure', () => {
         expect(styleSource).toContain('#emberdesk-react-workspace-shell-chrome-host');
         expect(styleSource).toContain('.react-workspace-shell-chrome');
         expect(styleSource).toContain('.react-workspace-shell-nav-button[data-workspace-shell-panel-active="true"]');
-        expect(styleSource).toContain('.react-workspace-panel-dock-status');
-        expect(styleSource).toContain('body[data-react-workspace-shell-chrome="mounted"] .react-workspace-panel-dock-status');
+        expect(styleSource).not.toContain('.react-workspace-panel-dock-status');
         expect(styleSource).toContain('body[data-react-workspace-shell-chrome="mounted"] .drawer-opener[data-target="rightNavHolder"]');
         expect(styleSource).toContain('body[data-react-workspace-shell-chrome="mounted"] .drawer-opener[data-target="extensions-settings-button"]');
     });
@@ -90,31 +87,19 @@ describe('chat workspace structure', () => {
 
     test('lets React own main-chat outer layout without wrapping protected rows', () => {
         const workspacePanelSource = readRepoFile('app/workspace-panels.tsx');
-        const styleSource = readRepoFile('public/style.css');
+        const rowSource = readRepoFile('app/components/main-chat/MainChatMessageRow.tsx');
+        const panelBlock = workspacePanelSource.match(
+            /function MainChatMessageListWorkspacePanel\([\s\S]*?\n\}\n\nfunction renderPanel/,
+        )?.[0] ?? '';
 
-        expectContainsMarkers(workspacePanelSource, [
-            'syncMainChatLayoutShellDom(',
-            'chatContainer.dataset.mainChatLayoutOwner = \'react\';',
-            'sendForm.dataset.mainChatLayoutOwner = \'react\';',
-            'data-main-chat-layout-owner="react"',
-            'data-main-chat-local-status=',
-        ], { contractName: 'React main-chat layout shell' });
-        expect(workspacePanelSource).toContain("messageRow.parentElement?.id !== 'chat'");
-        expect(workspacePanelSource).not.toContain('chatContainer.appendChild(messageRow');
-        expect(styleSource).toContain('body[data-react-workspace-shell-chrome="mounted"] #chat[data-main-chat-layout-owner="react"]');
-        expect(styleSource).toContain('#send_form[data-main-chat-layout-owner="react"]');
-        expect(styleSource).toContain('#nonQRFormItems[data-main-chat-layout-owner="react"]');
-        expect(styleSource).toContain('.react-main-chat-local-actions');
-        expect(styleSource).toContain('.react-main-chat-local-actions .menu_button');
-        expect(styleSource).toContain('.react-main-chat-local-status {');
-        expect(styleSource).toContain('pointer-events: none;');
-        expect(styleSource).toContain('.react-main-chat-local-status .react-main-chat-local-actions {');
-        expect(styleSource).toContain('pointer-events: auto;');
-        expect(styleSource).toContain('inset-block-end: calc(100% + 6px);');
-        expect(styleSource).toContain('.workspace-panel-status-badge');
-        expect(styleSource).toContain('.workspace-panel-legacy-slot-status');
-        expect(styleSource).toContain('var(--error-color, var(--ember-red))');
-        expect(styleSource).not.toContain('var(--error-red)');
+        expect(panelBlock).toContain('<MainChatMessageRow');
+        expect(panelBlock).not.toContain('createPortal');
+        expect(panelBlock).not.toMatch(/\bHTMLElement\b|\bquerySelector(?:All)?\b|\bmessageNodes\b/);
+        expect(rowSource).toContain('className="mes');
+        expect(rowSource).toContain('mesid: message.id');
+        expect(rowSource).toContain('className="mes_text"');
+        expect(rowSource).toContain('data-main-chat-message-row-owner="react"');
+        expect(rowSource).toContain('className="swipes-counter"');
     });
 
     test('keeps send-form controls discoverable by role and accessible name', () => {
@@ -298,6 +283,30 @@ describe('chat workspace structure', () => {
         });
 
         expect(indexHtml).toMatch(/class="[^"]*\bmes_edit_cancel\b[^"]*"[^>]*\bdata-action="cancel-edit"/);
+    });
+
+    test('keeps React message rows compatible with last-message and reasoning/edit selectors', () => {
+        const rowSource = readRepoFile('app/components/main-chat/MainChatMessageRow.tsx');
+        const panelSource = readRepoFile('app/workspace-panels.tsx');
+
+        expect(rowSource).toContain('isLast?: boolean;');
+        expect(rowSource).toContain("...(isLast ? ['last_mes'] : [])");
+        expect(panelSource).toContain('isLast={message.id === messageIds.at(-1)}');
+
+        [
+            'mes_edit_add_reasoning',
+            'mes_edit_up',
+            'mes_edit_down',
+            'mes_reasoning_actions',
+            'mes_reasoning_edit_done',
+            'mes_reasoning_delete',
+            'mes_reasoning_edit_cancel',
+            'mes_reasoning_close_all',
+            'mes_reasoning_copy',
+            'mes_reasoning_edit',
+        ].forEach(className => {
+            expect(rowSource).toContain(className);
+        });
     });
 
     test('keeps fallback provider controls embedded in the API configuration drawer', () => {

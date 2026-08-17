@@ -20,6 +20,7 @@ import {
 import { SettingField } from '@/components/settings/SettingField';
 import { SettingsSection } from '@/components/settings/SettingsSection';
 import { SettingsTabs } from '@/components/settings/SettingsTabs';
+import type { RuntimePort } from '@/compat/runtime-port';
 import {
     avatarStyleOptions,
     buildSettingsFormDefaults,
@@ -40,7 +41,7 @@ import {
     sendOnEnterOptions,
     settingsCoverage,
     settingsTabDefinitions,
-    syncSettingsToLegacyRuntime,
+    saveSettingsToRuntime,
     tagImportSettingOptions,
     toastPositionOptions,
     toolReasoningModeOptions,
@@ -315,6 +316,7 @@ export type SettingsSurfaceProps = {
     variant?: SettingsSurfaceVariant;
     initialTab?: string | null;
     onRequestClose?: () => void;
+    runtime?: RuntimePort;
 };
 
 function resolveInitialSettingsTab(initialTab?: string | null) {
@@ -334,6 +336,7 @@ export function SettingsSurface({
     variant = 'page',
     initialTab = null,
     onRequestClose,
+    runtime,
 }: SettingsSurfaceProps) {
     const isOverlay = variant === 'overlay';
     const [activeTab, setActiveTab] = useState(() => resolveInitialSettingsTab(initialTab));
@@ -519,7 +522,7 @@ export function SettingsSurface({
                 throw new MessageError('设置保存失败。');
             }
 
-            syncSettingsToLegacyRuntime(payload);
+            await saveSettingsToRuntime(payload, runtime);
             await refetchSettings();
             setHasRevisionConflict(false);
             setSaveStatus({ kind: 'success', message: 'Saved' });

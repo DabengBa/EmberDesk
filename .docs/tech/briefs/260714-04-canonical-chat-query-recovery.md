@@ -41,7 +41,7 @@ backup/restore、operator repair 和 Node 26 large-chat proof，使 canonical ch
 - `src/endpoints/canonical-chat-backup-restore-service.js` 与
   `src/canonical-sqlite-migrations.js` 现在提供 attachment manifest 校验、
   restore journal 记录和 interrupted restore 状态。
-- `scripts/canonical-chat-node26-benchmark.mjs` 与当前测试/文档一起提供
+- `scripts/canonical-chat-node24-benchmark.mjs` 与当前测试/文档一起提供
   Node.js 26.3.0 的 fixed-scale search/recent/save/concurrent-read/backup proof。
 - 耐久行为和用户可见合同见
   [canonical-sqlite-storage-roadmap](../canonical-sqlite-storage-roadmap.md)、

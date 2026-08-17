@@ -5,9 +5,13 @@
     "packageManager": "pnpm@12.0.0-rc.5",
     "license": "AGPL-3.0",
     "scripts": {
-        "test": "pnpm run test:unit && pnpm run test:e2e",
-        "test:unit": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.config.json",
-        "test:e2e": "playwright test",
+        "test": "pnpm run test:all",
+        "test:unit": "node run-test-lane.mjs unit",
+        "test:component": "node run-test-lane.mjs component",
+        "test:integration": "node run-test-lane.mjs integration",
+        "test:all": "node run-test-lane.mjs all && node run-playwright-lane.mjs",
+        "test:e2e": "node run-playwright-lane.mjs",
+        "test:inventory": "node ../scripts/run-test-inventory.mjs",
         "lint": "eslint \"**/*.js\" ./*.js",
         "lint:fix": "eslint \"**/*.js\" ./*.js --fix"
     },

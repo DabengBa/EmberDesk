@@ -4,7 +4,7 @@ import { testSetup } from './frontend/frontent-test-utils.js';
 
 const characterName = 'Dev Character 001';
 const seededChatName = 'Dev Character 001 Session 01';
-const reactMainChatMessageListEnabled = process.env.EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST === 'true';
+const reactMainChatMessageListEnabled = true;
 const mobileViewports = [
     { name: 'narrow phone', width: 390, height: 844 },
     { name: 'wide mobile', width: 768, height: 1024 },
@@ -422,25 +422,23 @@ async function expectReachableControlGeometry(page, selector, label) {
 }
 
 async function expectMainChatStreamingTransportState(page, expectations = {}) {
-    const controller = page.locator('[data-main-chat-message-list-controller="true"]');
-
     if (!reactMainChatMessageListEnabled) {
-        await expect(controller).toHaveCount(0);
         return;
     }
 
-    await expect(controller).toHaveCount(1);
+    const chat = page.locator('#chat');
+    await expect(chat).toHaveCount(1);
 
     if (expectations.phase !== undefined) {
         const phases = Array.isArray(expectations.phase) ? expectations.phase : [expectations.phase];
         await expect.poll(async () => (
-            await controller.getAttribute('data-main-chat-streaming-transport-phase')
+            await chat.getAttribute('data-main-chat-streaming-transport-phase')
         ) ?? '').toMatch(createExactValuePattern(phases));
     }
 
     if (expectations.tokenCountAtLeast !== undefined) {
         await expect.poll(async () => {
-            const value = await controller.getAttribute('data-main-chat-streaming-transport-tokens');
+            const value = await chat.getAttribute('data-main-chat-streaming-transport-tokens');
             return Number(value ?? '-1');
         }).toBeGreaterThanOrEqual(expectations.tokenCountAtLeast);
     }
@@ -448,48 +446,44 @@ async function expectMainChatStreamingTransportState(page, expectations = {}) {
     if (expectations.generationPhase !== undefined) {
         const phases = Array.isArray(expectations.generationPhase) ? expectations.generationPhase : [expectations.generationPhase];
         await expect.poll(async () => (
-            await controller.getAttribute('data-main-chat-generation-control-phase')
+            await chat.getAttribute('data-main-chat-generation-control-phase')
         ) ?? '').toMatch(createExactValuePattern(phases));
     }
 
     if (expectations.expectFallback !== undefined || expectations.messageId !== undefined) {
         if (expectations.messageId !== undefined) {
-            await expect(controller).toHaveAttribute(
+            await expect(chat).toHaveAttribute(
                 'data-main-chat-streaming-transport-message-id',
                 expectations.messageId === null ? '' : String(expectations.messageId),
             );
         }
 
         if (expectations.expectFallback !== undefined) {
-            await expect(controller).toHaveAttribute('data-main-chat-streaming-transport-fallback', expectations.expectFallback ? 'true' : 'false');
+            await expect(chat).toHaveAttribute('data-main-chat-streaming-transport-fallback', expectations.expectFallback ? 'true' : 'false');
         }
     }
 }
 
 async function expectMainChatTransportMarkersRetired(page) {
-    const controller = page.locator('[data-main-chat-message-list-controller="true"]');
-
     if (!reactMainChatMessageListEnabled) {
-        await expect(controller).toHaveCount(0);
         return;
     }
 
-    await expect(controller).toHaveCount(1);
-    await expect(controller).not.toHaveAttribute('data-main-chat-visible-transport-owner', /.+/);
-    await expect(controller).not.toHaveAttribute('data-main-chat-visible-transport-status', /.+/);
+    const chat = page.locator('#chat');
+    await expect(chat).toHaveCount(1);
+    await expect(chat).not.toHaveAttribute('data-main-chat-visible-transport-owner', /.+/);
+    await expect(chat).not.toHaveAttribute('data-main-chat-visible-transport-status', /.+/);
 }
 
 async function expectMainChatQuietTransportMarkersRetired(page) {
-    const controller = page.locator('[data-main-chat-message-list-controller="true"]');
-
     if (!reactMainChatMessageListEnabled) {
-        await expect(controller).toHaveCount(0);
         return;
     }
 
-    await expect(controller).toHaveCount(1);
-    await expect(controller).not.toHaveAttribute('data-main-chat-quiet-transport-owner', /.+/);
-    await expect(controller).not.toHaveAttribute('data-main-chat-quiet-transport-status', /.+/);
+    const chat = page.locator('#chat');
+    await expect(chat).toHaveCount(1);
+    await expect(chat).not.toHaveAttribute('data-main-chat-quiet-transport-owner', /.+/);
+    await expect(chat).not.toHaveAttribute('data-main-chat-quiet-transport-status', /.+/);
 }
 
 function createExactValuePattern(values) {
@@ -506,41 +500,39 @@ async function expectMainChatStreamingRendererStaysOnSameReactRow(page, messageI
 }
 
 async function expectMainChatComposerState(page, expectations = {}) {
-    const controller = page.locator('[data-main-chat-message-list-controller="true"]');
-
     if (!reactMainChatMessageListEnabled) {
-        await expect(controller).toHaveCount(0);
         return;
     }
 
-    await expect(controller).toHaveCount(1);
+    const chat = page.locator('#chat');
+    await expect(chat).toHaveCount(1);
 
     if (expectations.length !== undefined) {
-        await expect(controller).toHaveAttribute('data-main-chat-composer-length', String(expectations.length));
+        await expect(chat).toHaveAttribute('data-main-chat-composer-length', String(expectations.length));
     }
 
     if (expectations.empty !== undefined) {
-        await expect(controller).toHaveAttribute('data-main-chat-composer-empty', expectations.empty ? 'true' : 'false');
+        await expect(chat).toHaveAttribute('data-main-chat-composer-empty', expectations.empty ? 'true' : 'false');
     }
 
     if (expectations.canSubmit !== undefined) {
-        await expect(controller).toHaveAttribute('data-main-chat-composer-can-submit', expectations.canSubmit ? 'true' : 'false');
+        await expect(chat).toHaveAttribute('data-main-chat-composer-can-submit', expectations.canSubmit ? 'true' : 'false');
     }
 
     if (expectations.focused !== undefined) {
-        await expect(controller).toHaveAttribute('data-main-chat-composer-focused', expectations.focused ? 'true' : 'false');
+        await expect(chat).toHaveAttribute('data-main-chat-composer-focused', expectations.focused ? 'true' : 'false');
     }
 
     if (expectations.disabled !== undefined) {
-        await expect(controller).toHaveAttribute('data-main-chat-composer-disabled', expectations.disabled ? 'true' : 'false');
+        await expect(chat).toHaveAttribute('data-main-chat-composer-disabled', expectations.disabled ? 'true' : 'false');
     }
 
     if (expectations.generating !== undefined) {
-        await expect(controller).toHaveAttribute('data-main-chat-composer-generating', expectations.generating ? 'true' : 'false');
+        await expect(chat).toHaveAttribute('data-main-chat-composer-generating', expectations.generating ? 'true' : 'false');
     }
 
     if (expectations.context !== undefined) {
-        await expect(controller).toHaveAttribute('data-main-chat-composer-context', expectations.context);
+        await expect(chat).toHaveAttribute('data-main-chat-composer-context', expectations.context);
     }
 }
 
@@ -564,41 +556,38 @@ async function expectMainChatComposerVisibleOwner(page, expectedOwned) {
 }
 
 async function expectMainChatSlashCommandState(page, expectations = {}) {
-    const controller = page.locator('[data-main-chat-message-list-controller="true"]');
-
     if (!reactMainChatMessageListEnabled) {
-        await expect(controller).toHaveCount(0);
         return;
     }
 
-    await expect(controller).toHaveCount(1);
+    const chat = page.locator('#chat');
 
     if (expectations.active !== undefined) {
-        await expect(controller).toHaveAttribute('data-main-chat-slash-command-active', expectations.active ? 'true' : 'false');
+        await expect(chat).toHaveAttribute('data-main-chat-slash-command-active', expectations.active ? 'true' : 'false');
     }
 
     if (expectations.queryLength !== undefined) {
-        await expect(controller).toHaveAttribute('data-main-chat-slash-command-query-length', String(expectations.queryLength));
+        await expect(chat).toHaveAttribute('data-main-chat-slash-command-query-length', String(expectations.queryLength));
     }
 
     if (expectations.autocomplete !== undefined) {
-        await expect(controller).toHaveAttribute('data-main-chat-slash-command-autocomplete', expectations.autocomplete ? 'visible' : 'hidden');
+        await expect(chat).toHaveAttribute('data-main-chat-slash-command-autocomplete', expectations.autocomplete ? 'visible' : 'hidden');
     }
 
     if (expectations.executing !== undefined) {
-        await expect(controller).toHaveAttribute('data-main-chat-slash-command-executing', expectations.executing ? 'true' : 'false');
+        await expect(chat).toHaveAttribute('data-main-chat-slash-command-executing', expectations.executing ? 'true' : 'false');
     }
 
     if (expectations.paused !== undefined) {
-        await expect(controller).toHaveAttribute('data-main-chat-slash-command-paused', expectations.paused ? 'true' : 'false');
+        await expect(chat).toHaveAttribute('data-main-chat-slash-command-paused', expectations.paused ? 'true' : 'false');
     }
 
     if (expectations.aborted !== undefined) {
-        await expect(controller).toHaveAttribute('data-main-chat-slash-command-aborted', expectations.aborted ? 'true' : 'false');
+        await expect(chat).toHaveAttribute('data-main-chat-slash-command-aborted', expectations.aborted ? 'true' : 'false');
     }
 
     if (expectations.error !== undefined) {
-        await expect(controller).toHaveAttribute('data-main-chat-slash-command-error', expectations.error);
+        await expect(chat).toHaveAttribute('data-main-chat-slash-command-error', expectations.error);
     }
 }
 
