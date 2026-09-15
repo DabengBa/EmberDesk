@@ -4,7 +4,7 @@
 
 ## Contract
 
-- Root, `tests`, and `src/electron` package managers are pinned with `packageManager: pnpm@12.0.0-rc.5`.
+- Root and `tests` package managers are pinned with `packageManager: pnpm@12.0.0-rc.5`.
 - Node.js 24.16.0 Current (`>=24.16.0 <25`) is the supported application runtime and release proof target; pnpm owns dependency installation and script orchestration.
 - Non-contract local Node majors, including Node 25, may be useful for diagnostics but do not satisfy release validation.
 - Root and `tests` package boundaries are pnpm-owned and have committed `pnpm-lock.yaml` files.
@@ -69,7 +69,7 @@ Docker and release install verification also use pnpm:
 - Do not run the server with Bun by default. `start`, `debug`, `start:global`, and `start:no-csrf` remain Node.js runtime commands.
 - Do not widen `package.json` `engines.node` to another major just because local focused tests pass under that runtime; update the contract only after source-backed release-schedule review and focused startup/test proof.
 - Local proof outside the Node.js `>=24.16.0 <25` contract is diagnostic only.
-- `src/electron` is an independent pnpm package boundary; its Electron lifecycle remains explicit and is not part of the server install.
+- The server install owns Node.js runtime only; Electron desktop-shell packaging is no longer part of the repository.
 - `.dockerignore` excludes nested `node_modules` so Docker install proof is not polluted by local dependency folders.
 
 ## Validation Notes

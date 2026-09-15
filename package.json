@@ -145,7 +145,6 @@
         "perf:startup": "node scripts/startup-performance-runner.mjs",
         "perf:interaction": "node scripts/interaction-performance-runner.mjs",
         "start:global": "node server.js --global",
-        "start:electron": "pnpm --dir ./src/electron run start",
         "start:deno": "deno run --allow-run --allow-net --allow-read --allow-write --allow-sys --allow-env server.js",
         "start:no-csrf": "node server.js --disableCsrf",
         "lint": "eslint \"src/**/*.js\" \"public/**/*.js\" \"./*.js\" && tsc --noEmit",

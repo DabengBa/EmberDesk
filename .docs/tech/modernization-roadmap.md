@@ -191,7 +191,7 @@ Phase 1 result:
 1. Keep Bun and Node roles separate.
    - Install and run scripts with Bun.
    - Run the application with Node by default.
-   - Keep `src/electron` npm-owned until its lifecycle scripts and packaging are deliberately migrated.
+   - Keep Vite, Bun, and Node roles separate; the desktop shell was previously a separate Electron package boundary and has since been removed from the repository.
 
 2. Keep Vite as the only `/lib.js` build path.
    - Verify named exports and default export shape.
@@ -300,7 +300,7 @@ Successor entry points:
 - The 2026-06-06 and 2026-06-08 successor records for chat message affordance/rendering, streaming proof, long-chat proof, performance evidence, and character-library entry affordance are evidence pointers for future proposals, not reopened roadmap steps.
 - SPA framework or TypeScript application migration needs explicit user approval, ADR coverage, compatibility plan, and staged migration proof.
 - Database-first canonical storage remains outside this roadmap. Any future proposal must preserve migration/recovery paths and prove why file-backed canonical data is no longer the right source of truth.
-- Broad endpoint splits, Electron lifecycle migration, dependency/runtime churn, and `/lib.js` replacement each need dedicated designs with focused validation.
+- Broad endpoint splits, dependency/runtime churn, and `/lib.js` replacement each need dedicated designs with focused validation.
 - Performance claims still require startup or interaction performance runner evidence before they become shipped facts.
 
 Before starting a successor roadmap, verify current release evidence still matches the active runtime and package boundaries.

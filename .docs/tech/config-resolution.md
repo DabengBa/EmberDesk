@@ -45,7 +45,7 @@ Constraints:
 
 ### Global-mode data root isolation
 
-In global mode (`--global` or `globalThis.FORCE_GLOBAL_MODE`), `dataRoot` is forced to `defaultConfig.dataRoot` (the OS app-data path from `envPaths('EmberDesk')`). CLI `--dataRoot` and config-file `dataRoot` are both ignored. This ensures global/electron/bin launches always write user data to the intended OS directory, not the process cwd.
+In global mode (`--global` or `globalThis.FORCE_GLOBAL_MODE`), `dataRoot` is forced to `defaultConfig.dataRoot` (the OS app-data path from `envPaths('EmberDesk')`). CLI `--dataRoot` and config-file `dataRoot` are both ignored. This ensures global/bin launches always write user data to the intended OS directory, not the process cwd.
 
 ```js
 const resolvedDataRoot = argv.isGlobal

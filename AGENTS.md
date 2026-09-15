@@ -61,7 +61,7 @@ pnpm run docs:build
 pnpm run lint
 ```
 
-Use Node.js 24.16.0 for server release proof by default. pnpm is the package manager and script runner; `src/electron` is an independent pnpm package boundary.
+Use Node.js 24.16.0 for server release proof by default. pnpm is the package manager and script runner.
 
 ## Architecture Rules
 
