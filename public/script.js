@@ -255,25 +255,10 @@ import {
     isPersonaPanelOpen,
 } from './scripts/personas.js';
 import {
-    getBackgrounds,
     initBackgrounds,
     loadBackgroundSettings,
     background_settings,
-    applyBackgroundLibraryFilter,
-    applyBackgroundLibrarySort,
-    requestBackgroundUploadSelection,
-    selectBackgroundLibraryItem,
-    lockCurrentBackground,
-    unlockCurrentBackground,
-    runAutoBackgroundSelection,
-    refreshBackgroundLibrary,
-    renameBackgroundLibraryItem,
-    deleteBackgroundLibraryItem,
-    enterBackgroundLibraryFolder,
-    exitBackgroundLibraryFolder,
-    getBackgroundLibraryServicePanelState,
 } from './scripts/backgrounds.js';
-import { getBackgroundLibraryPanelStatus as getBackgroundPanelState } from './scripts/background-domain.js';
 import { loader } from './scripts/action-loader.js';
 import { createSingleFlightTask, resolvePersistedCurrentVersion, resolveStartupSettingsPlan } from './scripts/startup-helpers.js';
 import { ensurePanel, registerPanelHook } from './scripts/deferred-panels.js';
@@ -445,7 +430,6 @@ export function getWorkspaceReactFeatures() {
         reactPanels: {
             mainChatMessageList: true,
             worldInfo: true,
-            backgroundLibrary: true,
             extensionsHost: true,
             characterAuthoring: true,
             groupAuthoring: false,
@@ -481,7 +465,6 @@ export function isReactCharacterLibraryPanelEnabled() {
 }
 
 const WORLD_INFO_REACT_HOST_ID = 'emberdesk-react-world-info-panel-host';
-const BACKGROUND_LIBRARY_REACT_HOST_ID = 'emberdesk-react-background-library-panel-host';
 const EXTENSIONS_HOST_REACT_HOST_ID = 'emberdesk-react-extensions-host-panel-host';
 const MAIN_CHAT_MESSAGE_LIST_REACT_HOST_ID = 'emberdesk-react-main-chat-message-list-host';
 const CHARACTER_AUTHORING_REACT_HOST_ID = 'emberdesk-react-character-authoring-panel-host';
@@ -713,7 +696,6 @@ function getWorkspaceChildSlotHostId(slotKey) {
     return {
         characterLibrary: 'right-nav-panel',
         worldInfo: 'WorldInfo',
-        backgroundLibrary: 'Backgrounds',
         extensionsHost: 'rm_extensions_block',
         groupChats: 'right-nav-panel',
         characterAuthoring: 'right-nav-panel',
@@ -781,8 +763,6 @@ async function activateWorkspaceShellSlot(slotKey) {
             return openWorkspaceShellCharacterLibrary();
         case 'worldInfo':
             return openWorkspaceShellWorldInfo();
-        case 'backgroundLibrary':
-            return openWorkspaceShellBackgrounds();
         case 'extensionsHost':
             return openWorkspaceShellExtensions();
         case 'groupChats':
@@ -798,7 +778,6 @@ function deactivateWorkspaceShellSlot(slotKey) {
     const kind = {
         characterLibrary: 'characterLibrary',
         worldInfo: 'worldInfo',
-        backgroundLibrary: 'backgroundLibrary',
         extensionsHost: 'extensionsHost',
         groupChats: 'groupChats',
         characterAuthoring: 'characterAuthoring',
@@ -881,14 +860,6 @@ async function openWorkspaceShellWorldInfo() {
     return createWorkspaceShellPanelResult('worldInfo', worldInfoMount);
 }
 
-async function openWorkspaceShellBackgrounds() {
-    await waitForWorkspaceShellPanelOpenTask();
-    // React sole-owner: open drawer and mount Background Library; legacy gallery remains hidden compatibility DOM.
-    await openWorkspaceChildSlotHost('Backgrounds');
-    await waitForWorkspaceShellPanelOpenTask();
-    return createWorkspaceShellPanelResult('backgroundLibrary', await mountReactBackgroundLibraryPanel());
-}
-
 async function openWorkspaceShellExtensions() {
     await waitForWorkspaceShellPanelOpenTask();
     await openWorkspaceChildSlotHost('rm_extensions_block');
@@ -913,7 +884,6 @@ function getWorkspaceShellCommands() {
         openFormatting: () => openWorkspaceSettingsOverlay({ tab: 'advanced', panelKind: 'advancedFormatting' }),
         openCharacterLibrary: openWorkspaceShellCharacterLibrary,
         openWorldInfo: openWorkspaceShellWorldInfo,
-        openBackgrounds: openWorkspaceShellBackgrounds,
         openExtensions: openWorkspaceShellExtensions,
         openSettings: () => openWorkspaceSettingsOverlay({ tab: null, panelKind: 'settings' }),
         closeWorkspacePanel,
@@ -3028,216 +2998,6 @@ async function mountReactMainChatMessageListPanel() {
     return result;
 }
 
-function ensureBackgroundLibraryReactHost() {
-    const backgroundPanel = document.getElementById('Backgrounds');
-    if (!backgroundPanel) {
-        return null;
-    }
-
-    let host = document.getElementById(BACKGROUND_LIBRARY_REACT_HOST_ID);
-    if (!host) {
-        host = document.createElement('div');
-        host.id = BACKGROUND_LIBRARY_REACT_HOST_ID;
-        host.className = 'emberdesk-react-background-library-panel-host';
-        host.setAttribute('data-doc-id', 'feature.background_library_panel');
-        // Prefer the drawer body as host parent.
-        const body = backgroundPanel.querySelector('.drawer-body') || backgroundPanel;
-        body.prepend(host);
-    }
-
-    hideLegacyBackgroundGallery(true);
-    return host;
-}
-
-function hideLegacyBackgroundGallery(hidden) {
-    const backgroundPanel = document.getElementById('Backgrounds');
-    const host = document.getElementById(BACKGROUND_LIBRARY_REACT_HOST_ID);
-    if (!(backgroundPanel instanceof HTMLElement)) {
-        return;
-    }
-
-    const legacySelectors = [
-        '#bg-header-fixed',
-        '#bg_tabs',
-        '#bg_menu_content',
-        '#bg_custom_content',
-        '#bg_folder_grid',
-        '#bg_folder_breadcrumb',
-        '#bg-filter',
-        '#bg-sort',
-        '#bg_thumb_zoom_in',
-        '#bg_thumb_zoom_out',
-        '#auto_background',
-        '#bg_selection_mode_button',
-        '#bg_group_add_to_folder_button',
-        '#bg_folder_remove_selected_button',
-        '#bg_chat_hint',
-        '.bg-drawer-controls',
-        '.bg_list',
-    ];
-
-    for (const selector of legacySelectors) {
-        backgroundPanel.querySelectorAll(selector).forEach((node) => {
-            if (!(node instanceof HTMLElement) || node === host || host?.contains(node)) {
-                return;
-            }
-            node.hidden = hidden;
-            node.setAttribute('aria-hidden', hidden ? 'true' : 'false');
-            if (hidden) {
-                node.setAttribute('inert', '');
-            } else {
-                node.removeAttribute('inert');
-            }
-            node.dataset.legacyBackgroundHiddenByReact = hidden ? 'true' : 'false';
-        });
-    }
-
-    // Keep the file input available for service-backed upload selection.
-    const uploadInput = document.getElementById('add_bg_button');
-    if (uploadInput instanceof HTMLElement) {
-        uploadInput.hidden = false;
-        uploadInput.removeAttribute('inert');
-        uploadInput.setAttribute('aria-hidden', 'true');
-        uploadInput.classList.add('displayNone');
-    }
-
-    backgroundPanel.classList.toggle('bg-drawer-react-owned', hidden);
-    backgroundPanel.dataset.backgroundLibraryVisibleOwner = hidden ? 'react' : 'legacy';
-}
-
-function getBackgroundLibraryReactGalleryItems(container) {
-    if (!container) {
-        return [];
-    }
-
-    return Array.from(container.querySelectorAll('.bg_example')).map((element, index) => ({
-        id: element.getAttribute('bgfile') || `${container.id}-${index}`,
-        title: element.getAttribute('title') || element.querySelector('.BGSampleTitle')?.textContent?.trim() || `Background ${index + 1}`,
-        url: $(element).data('url') ?? '',
-        isCustom: element.getAttribute('custom') === 'true',
-        animated: element.getAttribute('animated') === 'true',
-        selected: element.classList.contains('selected-background'),
-        locked: element.classList.contains('locked-background'),
-    }));
-}
-
-function getBackgroundLibraryReactBridgeState(stateOverrides = {}) {
-    const systemContainer = document.getElementById('bg_menu_content');
-    const chatContainer = document.getElementById('bg_custom_content');
-    const loadingIndicator = document.getElementById('bg_startup_loading');
-    const backgroundFilter = /** @type {HTMLInputElement|null} */ (document.getElementById('bg-filter'));
-    const backgroundSort = /** @type {HTMLSelectElement|null} */ (document.getElementById('bg-sort'));
-
-    // Prefer the DOM-free background library service snapshot when available.
-    try {
-        if (typeof getBackgroundLibraryServicePanelState === 'function') {
-            const serviceState = getBackgroundLibraryServicePanelState({
-                systemContainerPresent: Boolean(systemContainer),
-                chatContainerPresent: Boolean(chatContainer),
-                refreshQueued: Boolean(stateOverrides.refreshQueued),
-                isLoading: Boolean(stateOverrides.isLoading) || Boolean(loadingIndicator),
-                error: stateOverrides.error ?? null,
-                filterQuery: backgroundFilter?.value,
-                sortValue: backgroundSort?.value,
-            });
-            if (serviceState) {
-                return {
-                    ...serviceState,
-                    refreshQueued: Boolean(stateOverrides.refreshQueued),
-                    systemContainerPresent: Boolean(systemContainer),
-                    chatContainerPresent: Boolean(chatContainer),
-                    filterQuery: serviceState.filterQuery ?? backgroundFilter?.value ?? '',
-                    sortValue: serviceState.sortValue ?? backgroundSort?.value ?? '',
-                };
-            }
-        }
-    } catch (error) {
-        console.warn('Background library service panel state unavailable; falling back to gallery DOM snapshot.', error);
-    }
-
-    const systemItemCount = systemContainer?.querySelectorAll('.bg_example').length ?? 0;
-    const chatItemCount = chatContainer?.querySelectorAll('.bg_example').length ?? 0;
-    const panelState = getBackgroundPanelState({
-        isLoading: Boolean(stateOverrides.isLoading) || Boolean(loadingIndicator),
-        systemItemCount,
-        chatItemCount,
-        error: stateOverrides.error ?? null,
-    });
-
-    return {
-        ...panelState,
-        systemContainerPresent: Boolean(systemContainer),
-        chatContainerPresent: Boolean(chatContainer),
-        systemItemCount,
-        chatItemCount,
-        refreshQueued: Boolean(stateOverrides.refreshQueued),
-        systemBackgrounds: getBackgroundLibraryReactGalleryItems(systemContainer),
-        chatBackgrounds: getBackgroundLibraryReactGalleryItems(chatContainer),
-        filterQuery: backgroundFilter?.value ?? '',
-        sortValue: backgroundSort?.value ?? '',
-        folderViewActive: document.getElementById('Backgrounds')?.classList.contains('in-folder-view') === true,
-        lockedCount: document.querySelectorAll('.bg_example.locked-background').length,
-        selectedCount: document.querySelectorAll('.bg_example.selected-background').length,
-    };
-}
-
-function getBackgroundLibraryReactCommands() {
-    return createWorkspacePanelCommandPort({
-        commands: {
-            applyBackgroundFilter: filterQuery => applyBackgroundLibraryFilter(filterQuery),
-            applyBackgroundSort: sortValue => applyBackgroundLibrarySort(sortValue),
-            uploadBackground: source => requestBackgroundUploadSelection(source),
-            selectBackground: (id, source) => selectBackgroundLibraryItem(id, source),
-            lockBackground: () => lockCurrentBackground(),
-            unlockBackground: () => unlockCurrentBackground(),
-            autoBackground: () => runAutoBackgroundSelection(),
-            refreshBackgrounds: () => refreshBackgroundLibrary(),
-            renameBackground: (id, nextName, source) => renameBackgroundLibraryItem(id, nextName, source),
-            deleteBackground: (id, source, deleteFromServer) => deleteBackgroundLibraryItem(id, source, {
-                deleteFromServer,
-            }),
-            enterFolder: folderId => enterBackgroundLibraryFolder(folderId),
-            exitFolder: () => exitBackgroundLibraryFolder(),
-        },
-        remount: () => {
-            void mountReactBackgroundLibraryPanel({ refreshQueued: false });
-        },
-    });
-}
-
-async function mountReactBackgroundLibraryPanel(stateOverrides = {}) {
-    const result = await mountWorkspacePanelHost({
-        kind: 'backgroundLibrary',
-        ensureContainer: ensureBackgroundLibraryReactHost,
-        getState: overrides => getBackgroundLibraryReactBridgeState(overrides ?? stateOverrides),
-        commands: getBackgroundLibraryReactCommands(),
-        runtime: reactRuntimePort,
-        features: getWorkspaceReactFeatures(),
-        stateOverrides,
-    });
-    if (result?.mounted) {
-        hideLegacyBackgroundGallery(true);
-    }
-    return result;
-}
-const handleReactBackgroundLibraryStateChange = createWorkspacePanelStateChangeHandler((stateOverrides) => {
-    void mountReactBackgroundLibraryPanel(stateOverrides);
-});
-
-function initReactBackgroundLibraryBridge() {
-    initWorkspacePanelDrawerBridge({
-        removeEventTarget: document,
-        addEventTarget: document,
-        eventName: 'emberdesk:background-library-state-change',
-        stateChangeHandler: handleReactBackgroundLibraryStateChange,
-        drawerSelector: '#backgrounds-drawer-toggle',
-        drawerNamespace: 'reactBackgroundLibrary',
-        remount(stateOverrides) {
-            void mountReactBackgroundLibraryPanel(stateOverrides);
-        },
-    });
-}
-
 function ensureExtensionsHostReactHost() {
     const extensionsPanel = document.getElementById('rm_extensions_block');
     if (!extensionsPanel) {
@@ -4101,7 +3861,6 @@ let currentVersion = '0.0.0';
 export let displayVersion = 'EmberDesk';
 let deferredExtensionTask = null;
 const deferredVersionTask = createSingleFlightTask(() => measureStartupStage('deferred.getClientVersion', () => getClientVersion()));
-const deferredBackgroundTask = createSingleFlightTask(() => measureStartupStage('deferred.getBackgrounds', () => getBackgrounds()));
 
 let generation_started = new Date();
 /** @type {Character[]} */
@@ -4305,7 +4064,6 @@ function configureDeferredStartupTasks(settingsPlan) {
 
 function startDeferredStartupTasks() {
     void deferredVersionTask.ensure().catch(error => console.error('Deferred client version startup failed.', error));
-    void deferredBackgroundTask.ensure().catch(error => console.error('Deferred background startup failed.', error));
 
     if (deferredExtensionTask) {
         void deferredExtensionTask.ensure().catch(error => console.error('Deferred extension startup failed.', error));
@@ -4559,7 +4317,6 @@ async function bootstrapWorkspace() {
     await measureStartupStage('initTokenizers', () => initTokenizers());
     await measureStartupStage('hydrateFeatureModules', async () => {
         initBackgrounds();
-        initReactBackgroundLibraryBridge();
         initAuthorsNote();
         await initPersonas();
         await initSlashCommandAutoComplete();

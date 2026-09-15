@@ -29,8 +29,8 @@
 | 样式 | Tailwind CSS v4 + 既有 CSS | 已采用 | Tailwind v4 接入 React app；主工作区 legacy CSS 仍是现有页面和扩展兼容面的 owner。 |
 | UI 组件 | 本地 React 组件 | 已采用 | 当前代码使用 `app/components/*` 本地组件；shadcn/ui、Ant Design 尚未进入 `package.json`，不能写成已采用依赖。 |
 | API | Express 5 | 当前保留 | Express 是唯一的 runtime 和 route owner；`POST /api/moving-ui/save` 使用直接的 Express router，见 [ADR-0013](../adr/0013-remove-obsolete-web-stack-experiments.md) 与 [ADR-0010](../adr/0010-express-runtime-owner-boundary.md)。 |
-| 数据获取 | TanStack Query | 已采用 | React login/setup/settings、character-library panel、workspace panel shell，以及 World Info / Background Library / Extensions Host 的 guarded React state/action surfaces 已使用 TanStack Query。 |
-| 表单 | TanStack Form + Zod | 已采用 | React login/setup/settings、character-library toolbar、World Info controls、Background Library filter/sort controls 和 Extensions Host Extras controls 的 React-owned 表单/呈现态使用 TanStack Form + Zod；legacy-owned 控件可通过 host 边界保留。 |
+| 数据获取 | TanStack Query | 已采用 | React login/setup/settings、character-library panel、workspace panel shell，以及 World Info / Extensions Host 的 guarded React state/action surfaces 已使用 TanStack Query。 |
+| 表单 | TanStack Form + Zod | 已采用 | React login/setup/settings、character-library toolbar、World Info controls 和 Extensions Host Extras controls 的 React-owned 表单/呈现态使用 TanStack Form + Zod；legacy-owned 控件可通过 host 边界保留。 |
 | 列表性能 | TanStack Virtual | 已采用 | Character Library panel 在大页尺寸下用 `@tanstack/react-virtual` 限制同时挂载行数；main-chat `mainChatMessageList` island 现在也用它做 headless measurement / snapshot / restore controller，但仍不渲染第二套可见消息列表。 |
 | 状态 | Zustand + compatibility contracts | 已采用 / 替代中 | Zustand 已用于 workspace panel mount/update/unmount store 和 main-chat observation store；`globalThis.SillyTavern`、`@sillytavern/*` 与 `eventSource` / `event_types` 的外部行为继续受支持，但其 legacy provider 必须在 retirement program 中被可验证的替代实现接管；`__emberDeskReactCompatibilityBridge` 明确 internal-only。 |
 | 数据层 | file-backed user data + derived SQLite cache | 当前保留 | Phase 5 Sprint 2 已明确当前不采用 Drizzle；SQLite 仍只作为 derived cache，不是用户数据正本，见 [ADR-0009](../adr/0009-derived-cache-sqlite-drizzle-decision.md)。 |
@@ -54,7 +54,7 @@
 The next implementation work is sequenced by outcome, not by the old fallback taxonomy:
 
 1. delete-ready standalone React pages: Login and Setup;
-2. complete existing foundations: Character Library, Character/Group Authoring, Settings, World Info, Background Library, and Extensions Host;
+2. complete existing foundations: Character Library, Character/Group Authoring, Settings, World Info, and Extensions Host; the former Background Library management surface is retired as of 2026-09-15.
 3. complete cross-cutting extension/automation contracts while each foundation moves;
 4. retire the same-entry workspace shell and main-chat legacy owners last.
 
@@ -110,7 +110,7 @@ No step may delete user capability, change a documented user workflow, or break 
 - 当前交付保持现有 pagination shell、`entitiesFilter` / `getEntitiesList()` 语义、bulk delete / bulk tag 流程、delete dialog 和受保护 DOM 选择器；只把列表渲染、搜索/排序视图状态和 bulk 呈现收口到 React。
 - TanStack 收口状态：`/api/characters/all` 的读取与 mount-time refresh 由 TanStack Query 承接；搜索 / 排序 / bulk toolbar 呈现态由 TanStack Form + Zod 承接；标签过滤继续复用 legacy tag controls 与 `entitiesFilter` 语义，并通过 `LegacyElementHost` 挂入 React toolbar，tag 选择值不进入当前 TanStack Form / Zod schema；当前页 rows 在 `1000 / 页` 下通过 `@tanstack/react-virtual` 保持可见窗口挂载，而不是一次性挂载整页角色。React island 同步会按完整 normalized character payload 判断是否需要更新 legacy `characters` 数组，并保留 `/api/characters/all` 的结构化 overflow 错误给既有提示路径；当前规则见 [React character-library sync processing flow](../logic-description/react_character_library_sync_processing_flow.md)。
 - `Sprint 4-5 / World Info`：已交付为 `features.react.panels.worldInfo` 控制的 guarded React workspace panel island。React host 在 legacy World Info editor 内显示 global/editor selector readiness、当前 world、entry count、search/sort 控件、创建/导入/导出/刷新入口和 entry 快捷入口；这些 React controls 通过 bridge 调用 legacy DOM actions，World Info scanning、prompt injection、regex placement、converter/import result handling 和 world-book delete cascade 仍由 legacy owner 执行。
-- `Sprint 6 / Background Library`：已交付为 `features.react.panels.backgroundLibrary` 控制的 guarded React workspace panel island。React host 显示 loading/empty/success/error 状态、filter/sort controls、global/chat gallery counts 和背景动作入口；filter/sort/upload/select/lock/unlock/auto/refresh 通过 bridge 调用 legacy background controls，`/api/backgrounds/*`、thumbnail/lazy-load、文件夹、选择、lock 和 slash-command 行为仍由 legacy owner 执行。
+- `Sprint 6 / Background Library`：历史记录（2026-06-19）。该 guarded island 已在 2026-09-15 随 Background Library 管理面退休；现行兼容边界仅保留背景 URL/render/settings 与媒体存储能力，见 [retired feature record](../db/features/background-library-panel.md)。
 - `Sprint 7 / Extensions Host`：已退休为 React sole owner。React host 拥有 notify updates、Manage、Install、Extras API URL/API key/autoconnect/connect、loader/error/retry 与 protected mount lifecycle；framework-neutral domain/service 模块与 `public/scripts/extensions.js` 薄 barrel 拥有 discovery/activation/operations/Extras。`#extensions_settings`、`#extensions_settings2`、`#regex_container`、`#extensionsMenuButton`、`#extensionsMenu`、Tavern Helper、regex extension、install/update/delete protocol 和 `@sillytavern/*` 保持 freeze-supported 兼容契约，不再作为第二可见 host。
 
 **Sprint 列表**：
@@ -119,18 +119,18 @@ No step may delete user capability, change a documented user workflow, or break 
 - ✅ Sprint 3: 角色库面板 - 批量操作（2 周，已交付；bulk 选择/删除/标签流程继续复用现有确认对话框和 overlay 链路，`Del` 在无选中项时保持 disabled）
 - ✅ Sprint 4: 世界信息面板 - 编辑器（3 周，已交付 guarded React host/editor controls；legacy prompt/regex/delete 语义保留）
 - ✅ Sprint 5: 世界信息面板 - 导入导出（2 周，已交付 React import/export/create/refresh entry points；legacy converter/import 结果链路保留）
-- ✅ Sprint 6: 背景库面板（2 周，已交付 React status/filter/gallery/action island；legacy background file/API/slash 行为保留）
+- ✅ Sprint 6: 背景库面板（历史交付；管理面已于 2026-09-15 退休，保留 URL/render/settings 与媒体兼容）
 - ✅ Sprint 7: Extensions 面板宿主（3 周，已交付 Extensions drawer 宿主 controls；保留 `#extensions_settings` / `#extensions_settings2` / `#regex_container` / wand menu 等受保护挂载点）
 
-**Phase 1 Sprint 3 后续边界**：`World Info`、`Backgrounds`、`Extensions` 没有混入 React `/settings`。它们按路线图进入 Phase 2：World Info 在 Sprint 4-5，Backgrounds 在 Sprint 6，Extensions drawer 宿主在 Sprint 7；第三方扩展 API、挂载兼容和迁移指南仍由 Phase 4 / Phase 6 负责。
+**Phase 1 Sprint 3 后续边界（历史路线）**：`World Info`、`Backgrounds`、`Extensions` 没有混入 React `/settings`。World Info 与 Extensions 的现行 owner 见各自文档；Background Library Sprint 6 交付已于 2026-09-15 退休。
 
 **Sprint 4-7 当前边界**：
-- Sprint 4-7 已完成本阶段的 guarded island 交付：共享 `app/workspace-panels.tsx` bundle 提供 TanStack Query shell，并为 World Info、Background Library、Extensions Host 提供 TanStack Form + Zod 控制面、action mutation bridge、status rows 和 safe legacy-slot markers。
+- Sprint 4-7 的 Background Library 部分是历史交付；当前共享 workspace bundle 仅保留 World Info 与 Extensions Host 的 active controls，并继续提供各自的 compatibility markers。
 - `public/scripts/workspace-panels-react-bridge.js` 继续负责按 flag、host container、bridge state/action 和 bundle import 成功与否返回 mounted/fallback 结果。bundle import 失败时结果为 fallback，legacy 控制仍是行为 owner。
-- `public/scripts/workspace-panel-host-controller.js` 现在把 World Info、Background Library、Extensions Host 和 `mainChatMessageList` 的共享 host lifecycle 收口到一个内部 seam：flag-off cleanup、container gate、drawer reopen remount、state-change resample 和 action-settle remount 走同一条路径，从而修复“锁定 Character Management 后打开 World Info 仍会把角色面板挤掉”的回归类问题，同时不改变 `mountWorkspacePanel(kind, container, options)` 的外部兼容语义。
+- `public/scripts/workspace-panel-host-controller.js` 历史上把 World Info、Background Library、Extensions Host 和 `mainChatMessageList` 的共享 host lifecycle 收口到一个内部 seam；Background Library host 已随管理面退休，现行 seam 仅服务仍注册的 panel。
 - World Info React island 当前接管宿主壳、world select、search/sort、create/import/export/refresh buttons 和 entry shortcut 呈现；World Info prompt activation、regex engine、converter/import result semantics 和 deletion cascade 仍由 `public/scripts/world-info.js` 及相关 legacy modules 拥有。
 - `public/scripts/world-info-shell-context.js` 现在由 `public/script.js` 在启动时注册默认 shell context；`public/scripts/world-info.js` 继续作为 World Info compatibility facade，但它读取 shell-owned settings/request/event/chat/character capabilities 时不再直接批量依赖 `../script.js`。该 context 必须对稍后初始化的 shell 常量保持 lazy access，并在代理 `eventSource` 方法时保留原 emitter binding，避免启动顺序和事件契约回归。
-- Background Library React island 当前接管宿主壳、filter/sort controls、gallery presentation 和 upload/select/lock/unlock/auto/refresh entry points；background file APIs、thumbnail/lazy-load、folder state、selection effects 和 slash commands 仍由 `public/scripts/backgrounds.js` / `public/scripts/background-panel-controller.js` 拥有。
+- Background Library React island 的上述接管是历史状态，已于 2026-09-15 退休；背景 URL/render/settings、静态文件与 canonical media compatibility 不属于当前 panel owner。
 - Extensions Host React 现为 sole visible owner：宿主壳、notify/manage/install/Extras、loader/retry 与 slot lifecycle 属于 React + host services；`extensions.js` 为 public barrel。Tavern Helper、regex extension、wand menu templates、install/update/delete protocols 和 `@sillytavern/*` aliases 保持 freeze-supported。第三方扩展 API 与迁移指南仍由 Phase 4 / Phase 6 兼容文档拥有。
 
 **Phase 2 后 full owner cutover 归属**：
@@ -139,12 +139,12 @@ No step may delete user capability, change a documented user workflow, or break 
 |---|---|---|---|
 | Character Library | React toolbar/list/search/sort/bulk 呈现、TanStack Query refresh、TanStack Form + Zod toolbar state、虚拟滚动窗口 | legacy tag controls、`entitiesFilter`、`characters` global array sync、delete dialog、bulk delete/tag side effects、protected row selectors、flag/build fallback | `Phase 7 Sprint 1: Character Library full owner cutover` |
 | World Info | React host、world select、search/sort、create/import/export/refresh entry points、entry shortcut 呈现 | prompt activation、regex engine、converter/import result semantics、delete cascade、legacy DOM action bridge、flag/build fallback | `Phase 7 Sprint 2: World Info full owner cutover` |
-| Background Library | React host、filter/sort、gallery presentation、upload/select/lock/unlock/auto/refresh entry points | `/api/backgrounds/*` action semantics、thumbnail/lazy-load、folder state、selection effects、slash commands、legacy background controller、flag/build fallback | `Phase 7 Sprint 3: Background Library full owner cutover` |
+| Background Library | retired management surface; no current host or entry | retained URL/render/settings and media compatibility outside the retired feature | `2026-09-15 Background Library retirement closeout` |
 | Extensions Host | React sole-owner host、notify/manage/install/Extras、loader/retry、mount lifecycle | extension discovery/activation services、Tavern Helper、regex extension、wand menu templates、install/update/delete protocols、`@sillytavern/*` aliases、freeze-supported protected mount IDs | `sole-owner retirement complete`; residual work is freeze-supported contract maintenance |
 
 **Sprint 4-7 验证门**：
 ```bash
-pnpm --dir tests run test:unit -- world-info-card-rendering.test.js world-info-import-feedback.test.js world-info-converters.test.js worldinfo-delete-cascade.test.js background-panel-controller.test.js thumbnail-placeholder-background.test.js workspace-react-panel-flags.test.js react-workspace-panels-helpers.test.js --runInBand
+pnpm --dir tests run test:unit -- world-info-card-rendering.test.js world-info-import-feedback.test.js world-info-converters.test.js worldinfo-delete-cascade.test.js thumbnail-placeholder-background.test.js workspace-react-panel-flags.test.js react-workspace-panels-helpers.test.js --runInBand
 pnpm run build:react:workspace-panels
 pnpm run test:compat
 pnpm run docs:check
@@ -342,8 +342,8 @@ pnpm run docs:check
   React 现在是 Character Library 可见 toolbar/list/search/sort/bulk 浏览状态的唯一正常 runtime owner；同入口 legacy path 只保留为 documented emergency compatibility facade / rollback owner。
 - ✅ [Sprint 2: World Info full owner cutover](../specs/react-phase7-full-owner-cutover/phase7-sprint2-world-info-full-owner-cutover.md)（已交付）
   React 可见 action path 现在通过 `public/scripts/world-info.js` helper facade 路由，World Info prompt/regex/converter/delete semantics 保持单一兼容 owner，而不是竞争实现。
-- ✅ [Sprint 3: Background Library full owner cutover](../specs/react-phase7-full-owner-cutover/phase7-sprint3-background-library-full-owner-cutover.md)（已交付）
-  React 可见 action path 现在通过 `public/scripts/backgrounds.js` helper facade 路由；legacy background path 只保留为 documented compatibility owner / rollback，不再是未决迁移债务。
+- ✅ [Sprint 3: Background Library retirement closeout](briefs/260716-09-react-background-library-retirement.md)（2026-09-15 已交付）
+  Background Library management UI, routes, redirects, feature flag, bridge, and commands are removed; background URL/render/settings and retained media compatibility remain documented separately.
 - ✅ [Sprint 4: Extensions Host full owner cutover](../specs/react-phase7-full-owner-cutover/phase7-sprint4-extensions-host-full-owner-cutover.md)（已交付）
   React 接管 Extensions Host 可见 notify/manage/install/Extras 壳层，但 protected mount points、Tavern Helper、regex extension、install/update/delete protocol 和 `@sillytavern/*` aliases 被冻结为兼容边界，而不是删除候选。
 - ✅ [Sprint 5: Main-chat transport full owner cutover](../specs/react-phase7-full-owner-cutover/phase7-sprint5-main-chat-transport-full-owner-cutover.md)（已交付）
@@ -490,7 +490,7 @@ pnpm run docs:check
   └─ 输出: Phase 7 Sprint 4 / Sprint 7 所需的删除、冻结或长期支持证据
 
 2028 Q3-Q4：Phase 7 full owner cutover and legacy fallback retirement（ADR-gated）
-  ├─ Sprint 1-3: Character Library / World Info / Background Library full owner cutover
+  ├─ Sprint 1-3: Character Library / World Info historical owner work; Background Library management retired 2026-09-15
   ├─ Sprint 4: Extensions Host full owner cutover
   ├─ Sprint 5-6: Main-chat transport / renderer / windowing full owner cutover
   └─ Sprint 7: workspace shell 和 global compatibility retirement decision
@@ -529,7 +529,7 @@ pnpm run docs:check
 - `feature.chat_message_rendering`
 - `feature.chat_message_actions`
 - `feature.world_info_panel`
-- `feature.background_library_panel`
+- `retired feature.background_library_panel` (historical record only)
 - `feature.extension_panel_open`
 - `term.shared_browser_library`
 
@@ -539,10 +539,10 @@ pnpm run docs:check
 - `app/components/settings/*`, `app/lib/settings-helpers.js` (React Settings 字段、payload 和 coverage ledger)
 - `app/character-library-panel.tsx`, `app/components/character-library/*`, `app/lib/character-library-helpers.ts` (React character-library panel island)
 - `app/stores/workspace-panel-store.js`, `app/stores/main-chat-observation-store.js`, `app/compat/global-compatibility-bridge.js` (Phase 4 Zustand stores、allowlisted compatibility snapshot/export bridge)
-- `src/react-feature-flags.js`, `src/react-login-feature.js`, `src/react-setup-feature.js`, `src/react-settings-feature.js`, `src/react-character-library-feature.js`, `src/workspace-react-features.js` (shared React feature-flag resolution plus workspace panel bootstrap；当前 payload 包含 `characterLibrary`、`mainChatMessageList`、`worldInfo`、`backgroundLibrary`、`extensionsHost`)
-- `public/script.js`, `public/scripts/backgrounds.js`, `public/scripts/extensions.js`, `public/scripts/character-library-react-sync.js`, `public/scripts/workspace-panels-react-bridge.js`, `public/scripts/workspace-panel-host-controller.js`, `public/scripts/world-info-shell-context.js`, `public/scripts/main-chat-bridge-contract.js` (legacy workspace facade、main-chat/background/extensions host state event、character-library sync、workspace-panel fail-closed bundle loader、shared host lifecycle seam、World Info shell-context seam 和 main-chat contract constants)
+- `src/react-feature-flags.js`, `src/react-login-feature.js`, `src/react-setup-feature.js`, `src/react-settings-feature.js`, `src/react-character-library-feature.js`, `src/workspace-react-features.js` (shared React feature-flag resolution plus workspace panel bootstrap；当前 payload 不包含已退休的 `backgroundLibrary` panel)
+- `public/script.js`, `public/scripts/backgrounds.js`, `public/scripts/extensions.js`, `public/scripts/character-library-react-sync.js`, `public/scripts/workspace-panels-react-bridge.js`, `public/scripts/workspace-panel-host-controller.js`, `public/scripts/world-info-shell-context.js`, `public/scripts/main-chat-bridge-contract.js` (legacy workspace facade、main-chat/extensions host state event、character-library sync、workspace-panel fail-closed bundle loader、shared host lifecycle seam、World Info shell-context seam 和 main-chat contract constants)
 - `src/users.js`, `src/server-main.js`, `src/middleware/react-login-serve.js` (React route hosting、build-missing fallback 和 legacy redirect)
-- `app/workspace-panels.tsx` (workspace panel bundle；提供 TanStack Query provider shell、World Info editor/import/export controls、Background Library filter/gallery/action controls、Extensions Host notify/manage/install/Extras controls，以及 main-chat direct-child message-window controller、finalized rich-body snapshot/owner-marker boundary、current-session scroll restore、visible row/actions/composer/slash owners 与标准 direct-chat visible transport mutation；legacy formatter、quiet/background generation、excluded compatibility transport paths 和 slash registry/executor 仍留在原 owner)
+- `app/workspace-panels.tsx` (workspace panel bundle；提供 TanStack Query provider shell、World Info editor/import/export controls、Extensions Host notify/manage/install/Extras controls，以及 main-chat direct-child message-window controller、finalized rich-body snapshot/owner-marker boundary、current-session scroll restore、visible row/actions/composer/slash owners 与标准 direct-chat visible transport mutation；legacy formatter、quiet/background generation、excluded compatibility transport paths 和 slash registry/executor 仍留在原 owner)
 - `default/config.yaml` (当前 `features.react.pages.*` 和 `features.react.panels.*` 默认值)
 - `globalThis.SillyTavern`, `eventSource` / `event_types`, `@sillytavern/*`（最终策略已冻结：前两类为 frozen facade / long-term support，internal bridge 不替代它们）
 
@@ -561,7 +561,7 @@ pnpm run docs:check
 - [React character-library sync processing flow](../logic-description/react_character_library_sync_processing_flow.md) - React character-library island 与 legacy `characters` 状态同步规则
 - [React workspace shell child-slot processing flow](../logic-description/react_workspace_panel_flags_processing_flow.md) - always-on React shell、child-slot lifecycle 与 React-owned pin authority
 - [Workspace shell child-slot coordination](workspace-shell-panel-dock-coordination.md) - same-entry React shell 如何管理 registry、local recovery 与 child-host projection
-- [Background Library Panel](../db/features/background-library-panel.md) - Phase 2 Sprint 6 当前 guarded action island 与 legacy-owned 行为边界
+- [Background Library Panel](../db/features/background-library-panel.md) - retired 2026-09-15; preserves the historical record and current URL/render/settings boundary
 - [Extensions Panel Open](../db/features/extension-panel-open.md) - Phase 2 Sprint 7 当前 guarded action island 与 legacy-owned 扩展行为边界
 - [ADR-0007: React page and panel islands with legacy fallbacks](../adr/0007-react-page-islands-with-legacy-fallbacks.md) - Phase 0-3B guarded island / fallback 基线；Phase 7 cutover ADR update 必须显式说明哪些 fallback 被删除、冻结或长期支持
 - React 推荐技术栈：`C:\SyncFiles\Softwares_Downloads\dev\Agents-Prompt\.docs\tech\recommended-stacks\react.md` - 技术选型来源

@@ -81,7 +81,7 @@ Safe extraction candidates:
 
 Delivered low-risk controller slice:
 
-- The background library loading indicator now has a dedicated root-scoped controller in `public/scripts/background-panel-controller.js`, with request flow, upload/delete/rename/folder behavior, slash-command registration, selectors, and visible copy still owned by `public/scripts/backgrounds.js`.
+- The former background library loading/controller slice is historical and was retired with the Background Library management surface on 2026-09-15. Background URL/render/settings compatibility and retained media paths remain supported outside that retired UI.
 
 Do not start with:
 

@@ -10,7 +10,6 @@ import { persistCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-impo
 import {
     getCanonicalManagedMediaReadState,
     listCanonicalAssetPayload,
-    listCanonicalBackgroundPayload,
 } from '../src/endpoints/canonical-managed-media-read-service.js';
 import {
     replaceCanonicalManagedMediaFolders,
@@ -104,7 +103,7 @@ afterEach(() => {
 });
 
 describe('canonical managed media read service', () => {
-    test('uses a clean managed-media audit to rebuild background, folder, and asset payloads', () => {
+    test('uses a clean managed-media audit to rebuild the asset payload while retaining canonical folder state', () => {
         const directories = makeDirectories();
         const { manager } = seedMedia(directories);
         const state = getCanonicalManagedMediaReadState({
@@ -117,19 +116,8 @@ describe('canonical managed media read service', () => {
         });
 
         expect(state).toEqual(expect.objectContaining({ ok: true }));
-        expect(listCanonicalBackgroundPayload(state.db, {
-            metadataByPath: {
-                'backgrounds/sky.webp': { isAnimated: false },
-                'backgrounds/animated.gif': { isAnimated: true },
-            },
-        })).toEqual({
-            images: [
-                { filename: 'animated.gif', isAnimated: true },
-                { filename: 'sky.webp', isAnimated: false },
-            ],
-            folders: [{ id: 'sky', name: 'Sky', thumbnailFile: 'sky.webp' }],
-            imageFolderMap: { 'sky.webp': ['sky'] },
-        });
+        expect(state.db.prepare('SELECT COUNT(*) AS count FROM media_folders').get().count).toBe(1);
+        expect(state.db.prepare('SELECT COUNT(*) AS count FROM media_folder_memberships').get().count).toBe(1);
         expect(listCanonicalAssetPayload(state.db)).toEqual({
             bgm: ['assets/bgm/loop.ogg'],
             live2d: ['/assets/live2d/model/hero.model3.json'],

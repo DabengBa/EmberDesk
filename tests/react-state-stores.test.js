@@ -29,11 +29,9 @@ describe('React state stores', () => {
     test('declares every primary workspace shell panel as a dock kind', () => {
         expect(WORKSPACE_PANEL_KINDS).toEqual([
             'worldInfo',
-            'backgroundLibrary',
             'extensionsHost',
             'mainChatMessageList',
             'characterAuthoring',
-            'groupAuthoring',
         ]);
 
         expect(WORKSPACE_PANEL_DOCK_KINDS).toEqual([
@@ -41,10 +39,8 @@ describe('React state stores', () => {
             'advancedFormatting',
             'characterLibrary',
             'worldInfo',
-            'backgroundLibrary',
             'extensionsHost',
             'settings',
-            'groupChats',
             'characterAuthoring',
         ]);
     });

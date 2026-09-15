@@ -2,7 +2,6 @@ import { createStore } from 'zustand/vanilla';
 
 export const WORKSPACE_PANEL_KINDS = Object.freeze([
     'worldInfo',
-    'backgroundLibrary',
     'extensionsHost',
     'mainChatMessageList',
     'characterAuthoring',
@@ -13,7 +12,6 @@ export const WORKSPACE_PANEL_DOCK_KINDS = Object.freeze([
     'advancedFormatting',
     'characterLibrary',
     'worldInfo',
-    'backgroundLibrary',
     'extensionsHost',
     'settings',
     'characterAuthoring',
@@ -36,12 +34,6 @@ export const WORKSPACE_SHELL_CHILD_SLOTS = Object.freeze({
         allowedCapabilities: Object.freeze(['refreshWorldInfo', 'openWorldEditor']),
         contentOwner: 'world-info-workbench',
         mountTarget: '#WorldInfo',
-    }),
-    backgroundLibrary: Object.freeze({
-        accessibleName: 'Backgrounds',
-        allowedCapabilities: Object.freeze(['refreshBackgrounds', 'selectBackground']),
-        contentOwner: 'background-library',
-        mountTarget: '#Backgrounds',
     }),
     extensionsHost: Object.freeze({
         accessibleName: 'Extensions',

@@ -13,8 +13,7 @@ The shipped slices are:
 - `public/scripts/setup.js` - setup page behavior, exported helpers, controller initializer, and production auto-init wrapper
 - `public/setup.html` - stable setup page markup and script host
 - `tests/setup-page-controller.test.js` - focused helper and controller regression proof for `fresh` and `set-password` setup modes
-- `public/scripts/background-panel-controller.js` - background-library panel loading state helper and root-scoped controller
-- `tests/background-panel-controller.test.js` - focused proof for background panel state classification, fail-fast initialization, root scoping, and cleanup
+- Historical Background Library controller slice (retired 2026-09-15): `public/scripts/background-panel-controller.js` and `tests/background-panel-controller.test.js`
 - `public/scripts/chat-message-actions-controller.js` - low-risk message action menu affordance controller for extra-action expand/collapse behavior
 - `tests/chat-message-actions-controller.test.js` - focused proof for delegated action dispatch, duplicate-init safety, expanded-action close rules, and cleanup
 - `public/scripts/provider-secret-field-state.js` - state-only API drawer helper for unified key and fallback provider secret status/save/clear decisions
@@ -67,16 +66,16 @@ The setup slice keeps the existing API boundary:
 
 It does not remove the global jQuery script tag from `public/setup.html`; that cleanup has a broader compatibility surface than this page-controller extraction.
 
-For the background library panel, the controller owns only the local loading indicator under `#bg_menu_content`:
+Historical Background Library slice (retired 2026-09-15): the controller owned only the local loading indicator under `#bg_menu_content`:
 
 - required-element detection for the system background container
 - loading indicator creation/removal using the existing `bg_startup_loading` id and existing visual classes
 - injected loading copy so production keeps the localized `Loading backgrounds...` text
 - cleanup that removes controller-owned loading state
 
-The background slice intentionally does not own upload, delete, rename, folder assignment, background selection, slash-command registration, thumbnail generation, or `/api/backgrounds/*` request behavior. `public/scripts/backgrounds.js` still owns those flows and only delegates `setBackgroundCatalogLoading()` to the controller.
+历史背景切片不负责 upload、delete、rename、folder assignment、background selection、slash-command registration、thumbnail generation 或 `/api/backgrounds/*` request behavior；在该旧实现中，这些流程曾由 `public/scripts/backgrounds.js` 负责，并仅将 `setBackgroundCatalogLoading()` 委托给 controller。
 
-When `features.react.panels.backgroundLibrary` is enabled, the React workspace-panel scaffold reads this same loading state as an additive status host inside `#Backgrounds`. That host reports loading/empty/success state and global/chat gallery counts, but it does not become the owner of any background action flow. The bridge helper can accept an error override for future callers, but the current production background event only dispatches loading state.
+Historical Background Library React-host description (retired 2026-09-15): the former scaffold read this loading state as an additive status host inside `#Backgrounds`; no current panel or management owner remains.
 
 ## Core Implementation
 
@@ -104,7 +103,7 @@ The recovery success behavior now matches the semantic contract: after a success
 
 `public/scripts/setup.js` follows the same shape with `createSetupController(root, dependencies)`, `initSetupPage(root, dependencies)`, `globalThis.EMBERDESK_SETUP_TEST_MODE`, focused setup helper exports, and page-owned listener cleanup.
 
-`public/scripts/background-panel-controller.js` is a smaller panel-local variant of the same migration rule. It exports pure state classification through `getBackgroundPanelState()`, fail-fast controller creation through `createBackgroundPanelController(root, dependencies)`, and cleanup for controller-owned DOM state. Production code keeps the existing background module load order and routes all network, folder, thumbnail, and slash-command work through `public/scripts/backgrounds.js`.
+`public/scripts/background-panel-controller.js` was a smaller panel-local variant of the same migration rule and was retired with the Background Library management surface on 2026-09-15. It exports pure state classification through `getBackgroundPanelState()`, fail-fast controller creation through `createBackgroundPanelController(root, dependencies)`, and cleanup for controller-owned DOM state. Production code keeps the existing background module load order and routes all network, folder, thumbnail, and slash-command work through `public/scripts/backgrounds.js`.
 
 `public/scripts/chat-message-actions-controller.js` applies the same root-scoped controller rule to a narrow main-chat affordance. It owns only the delegated expand/collapse behavior for `.extraMesButtonsHint` and `.extraMesButtons`, preserves existing selectors and animation settings, and exposes `MESSAGE_ACTION_TIERS` as a local implementation note for high-frequency, secondary, and danger action grouping. It does not own message body rendering, edit/delete business logic, swipe handling, reasoning controls, media controls, streaming, or slash-command message injection.
 
@@ -135,7 +134,7 @@ Focused proof for this slice:
 cd tests
 pnpm run test:unit -- login-page-controller.test.js --runInBand
 pnpm run test:unit -- setup-page-controller.test.js --runInBand
-pnpm run test:unit -- background-panel-controller.test.js --runInBand
+# Historical Background Library proof; the test file was retired on 2026-09-15.
 pnpm run test:unit -- chat-message-actions-controller.test.js --runInBand
 pnpm run test:unit -- provider-secret-field-state.test.js --runInBand
 pnpm run test:unit -- frontend-structure-contract.test.js --runInBand
@@ -163,7 +162,7 @@ Semantic IDs:
 - `feature.account_lockout`
 - `page.setup`
 - `feature.first_time_setup`
-- `feature.background_library_panel`
+- `retired feature.background_library_panel` (historical record only)
 
 Stable binding points:
 
@@ -175,11 +174,8 @@ Stable binding points:
 - `createSetupController()` in `public/scripts/setup.js`
 - `globalThis.EMBERDESK_SETUP_TEST_MODE` import guard in `public/scripts/setup.js`
 - setup page markup IDs in `public/setup.html`
-- `createBackgroundPanelController()` in `public/scripts/background-panel-controller.js`
-- `getBackgroundPanelState()` in `public/scripts/background-panel-controller.js`
-- `setBackgroundCatalogLoading()` delegation in `public/scripts/backgrounds.js`
-- `emberdesk:background-library-state-change` dispatch in `public/scripts/backgrounds.js`
-- `ensureBackgroundLibraryReactHost()` and `getBackgroundLibraryReactBridgeState()` in `public/script.js`
+- Historical bindings: `createBackgroundPanelController()` and `getBackgroundPanelState()` in the retired `public/scripts/background-panel-controller.js`
+- Historical bindings: `setBackgroundCatalogLoading()`, `emberdesk:background-library-state-change`, `ensureBackgroundLibraryReactHost()`, and `getBackgroundLibraryReactBridgeState()`; the management bridge and event were retired on 2026-09-15.
 - `createChatMessageActionsController()` in `public/scripts/chat-message-actions-controller.js`
 - `MESSAGE_ACTION_TIERS` in `public/scripts/chat-message-actions-controller.js`
 - extra message action menu delegation from `public/script.js`
@@ -192,7 +188,7 @@ Related docs:
 - [Login Page](../db/pages/login.md)
 - [Setup Page](../db/pages/setup.md)
 - [Password Recovery](../db/features/password-recovery.md)
-- [Background Library Panel](../db/features/background-library-panel.md)
+- [Retired Background Library Panel](../db/features/background-library-panel.md)
 - [API Configuration](../db/pages/api-configuration.md)
 - [Fallback Provider](../db/features/fallback-provider.md)
 - [Frontend Structure Contracts](frontend-structure-contracts.md)

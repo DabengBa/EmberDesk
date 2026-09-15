@@ -38,7 +38,6 @@ test.describe('workspace shell panel navigation', () => {
         const registryEntries = [
             { label: 'Character Library', visibleSelector: '#right-nav-panel.openDrawer #rm_characters_block' },
             { label: 'World Info', visibleSelector: '#WorldInfo.openDrawer' },
-            { label: 'Backgrounds', visibleSelector: '#Backgrounds.openDrawer' },
             { label: 'Extensions', visibleSelector: '#rm_extensions_block.openDrawer' },
         ];
 
@@ -163,9 +162,6 @@ test.describe('workspace shell panel navigation', () => {
 
         await openShellPanel(page, 'World Info');
         await expect.poll(async () => page.locator('#world_editor_select option').count(), { timeout: 10_000 }).toBeGreaterThan(1);
-
-        await openShellPanel(page, 'Backgrounds');
-        await expect.poll(async () => page.locator('#Backgrounds .bg_example, #Backgrounds .background-item, #Backgrounds [data-background-id]').count(), { timeout: 10_000 }).toBeGreaterThan(0);
 
         await openShellPanel(page, 'Extensions');
         await expect.poll(async () => page.locator('#extensions_settings, #extensions_settings2, #regex_container, #extensionsMenu').count(), { timeout: 10_000 }).toBe(4);

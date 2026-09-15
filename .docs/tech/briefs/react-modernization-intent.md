@@ -4,6 +4,8 @@
 
 > 本文保留 2026-06-15 的原始现代化意图和交付追溯。当前运行时、构建和后端路由决策以 `AGENTS.md`、`.docs/adr/0013-remove-obsolete-web-stack-experiments.md` 及对应技术文档为准。
 
+> 当前状态（2026-09-15）：Background Library 管理面已退休；背景 URL/render/settings、静态资源、canonical managed media、inline images 与 chat attachments 仍按兼容边界保留。
+
 ## 原始请求
 
 用户要求基于参考技术栈 `C:\SyncFiles\Softwares_Downloads\dev\Agents-Prompt\.docs\tech\recommended-stacks\react.md`，为 EmberDesk 编写从 jQuery 迁移到 React 生态的完整现代化路线图。
@@ -144,10 +146,10 @@ New stable links should point to durable docs, not process specs. Use a phase RE
 - ✅ Phase 0 Sprint 2-4 已落地：`tsconfig.json`、`eslint.config.js`、`app/client.tsx`、`app/router.tsx`、`app/routes/*`、`app/styles/globals.css`、`vite.config.ts` 已形成 React app 基础设施。
 - ✅ Phase 1 已落地：`/login` 默认启用 React，`/setup` 和 `/settings` 已作为 feature-flagged React page islands 交付，并保留 `/login.html`、`/setup.html` 和 legacy `/` fallback。
 - ✅ Phase 2 Sprint 1-3 已落地：Character Library 已作为 `features.react.panels.characterLibrary` 控制的 workspace panel island 交付，bundle 入口为 `app/character-library-panel.tsx`，legacy tag controls 和兼容 DOM 仍保留。
-- ✅ Phase 2 Sprint 4-7 已推进到 guarded host/status bridge：`features.react.panels.worldInfo` / `backgroundLibrary` / `extensionsHost`、`public/scripts/workspace-panels-react-bridge.js`、`app/workspace-panels.tsx` 和 `build:react:workspace-panels` 已接线；World Info、Background Library、Extensions Host 现在可在 flag 开启时显示独立 readiness/status host。
+- ✅ Phase 2 Sprint 4-7 的 guarded host/status bridge 已记录；其中 Background Library 管理面已于 2026-09-15 退休，当前 active surfaces 为 World Info 与 Extensions Host。
 - ✅ Phase 4 已落地并从 active specs 归档：`app/stores/workspace-panel-store.js`、`app/stores/main-chat-observation-store.js`、`app/compat/global-compatibility-bridge.js`、`public/scripts/main-chat-visible-transport-owner.js` 和 `public/scripts/chat-message-render-descriptor.js` 已把 state foundation、compat bridge、transport classifier 与 renderer/windowing contract 固化到当前代码；持久入口改为 `.docs/tech/briefs/react-phase4-state-management-sequenced-specs.md`、`.docs/tech/react-modernization-roadmap.md` 和 owning docs。
 - ✅ ADR-0007 已接受，用于替代原先的 ADR 占位：早期 React 迁移采用 page/panel islands + legacy fallback，而不是一次性 SPA cutover。
-- 📋 Phase 2 Sprint 4-7 尚未完成完整 panel 行为迁移：World Info activation/import/regex/delete、Background upload/delete/rename/select/slash behavior、Extensions discovery/mount/API/install/update/delete behavior 仍由 legacy 面板拥有；当前 React host 只呈现受保护状态面。
+- 📋 Phase 2 Sprint 4-7 的完整行为迁移记录已被当前 owner 文档取代：World Info activation/import/regex/delete 与 Extensions discovery/mount/API/install/update/delete 仍按各自兼容边界维护；Background Library upload/delete/rename/select/slash 管理行为已随管理面于 2026-09-15 退休。当前 active React host 只覆盖仍注册的 surfaces。
 - 📋 TanStack Start、Drizzle ORM、Vitest、shadcn/ui 和 Ant Design 仍是后续候选或原始推荐栈内容；Hono 已被 ADR-0013 明确排除。当前代码事实只支持把 React 19、TanStack Router、TanStack Query、TanStack Form、Zod、TanStack Virtual、Vite 8、Tailwind v4、TypeScript 7、ESLint 10，以及在 Phase 4 已引入的 Zustand 写成已采用。
 
 ### 代码路径（预期）
@@ -193,5 +195,5 @@ D:\DEV\EmberDesk\
 - 2026-06-15: 创建 React 现代化重构意图文档，基于用户请求和参考技术栈
 - 2026-06-15: 确认 Spec 组织结构为混合方案（方案 C）和命名规范（方案 B）
 - 2026-06-15: 定义双向链接格式和验证门
-- 2026-06-19: 按当前代码补记 Phase 2 Sprint 4-7 的 guarded host/status bridge 已接线，同时明确完整 World Info / Backgrounds / Extensions 行为迁移仍未完成
+- 2026-06-19: 按当时代码补记 Phase 2 Sprint 4-7 的 guarded host/status bridge；该历史状态不表示 Background Library 管理面仍是当前 capability
 - 2026-06-23: 按当前代码补记 Phase 4 已完成并从 active specs 归档，Phase 4 durable traceability 由 archive brief、路线图、PROJECT_HISTORY 和 owning docs 继续承接

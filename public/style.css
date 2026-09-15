@@ -3940,23 +3940,6 @@ body:not(.hide-char-version) #rm_print_characters_block .character_version {
     background-color: var(--white30a);
 }
 
-/* BG MENU */
-
-#bg_menu {
-    cursor: pointer;
-    position: fixed;
-    z-index: 3001;
-}
-
-.bg_list {
-    display: flex;
-    flex-wrap: wrap;
-    width: calc(var(--sheldWidth) - 15px);
-    max-width: 100vw;
-    max-width: 100dvw;
-    justify-content: space-evenly;
-}
-
 .input-file {
     display: flex;
     justify-content: center;
@@ -6810,37 +6793,6 @@ body[data-react-workspace-shell-chrome="mounted"] #chat[data-main-chat-layout-ow
     max-width: 100%;
     align-self: stretch;
     margin: 0 4px 10px;
-}
-
-.workspace-panel-background-item {
-    display: grid;
-    grid-template-columns: minmax(96px, 0.35fr) minmax(0, 1fr);
-    gap: 8px;
-    align-items: start;
-}
-
-.workspace-panel-background-preview {
-    width: 100%;
-    aspect-ratio: 16 / 9;
-    border: 1px solid var(--SmartThemeBorderColor);
-    border-radius: 5px;
-    background-color: var(--SmartThemeBlurTintColor);
-    background-position: center;
-    background-size: cover;
-}
-
-.workspace-panel-background-details {
-    display: flex;
-    min-width: 0;
-    flex-direction: column;
-    gap: 4px;
-}
-
-.workspace-panel-background-actions .menu_button,
-.workspace-panel-background-details > .flex-container .menu_button {
-    flex: 0 0 auto;
-    min-width: max-content;
-    white-space: nowrap;
 }
 
 .react-authoring-panel {
