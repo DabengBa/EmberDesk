@@ -1657,10 +1657,6 @@ function onCharacterCreateClick() {
     $('#tagList').empty();
 }
 
-function onGroupCreateClick() {
-    $('#groupTagList').empty();
-}
-
 export function applyTagsOnCharacterSelect(chid = null) {
     // If we are in create window, we cannot simply redraw, as there are no real persisted tags. Grab them, and pass them in
     if (menu_type === 'create') {
@@ -2773,10 +2769,8 @@ function restoreSavedTagFilters() {
 
 export function initTags() {
     createTagInput('#tagInput', '#tagList', { tagOptions: { removable: true } });
-    createTagInput('#groupTagInput', '#groupTagList', { tagOptions: { removable: true } });
 
     $(document).on('click', '#rm_button_create', onCharacterCreateClick);
-    $(document).on('click', '#rm_button_group_chats', onGroupCreateClick);
     $(document).on('click', '.tag_remove', onTagRemoveClick);
     $(document).on('input', '.tag_input', onTagInput);
     $(document).on('click', '.tags_view', function (event) {

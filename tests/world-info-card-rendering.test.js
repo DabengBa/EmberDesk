@@ -352,7 +352,7 @@ describe('world info card rendering', () => {
         const flags = read('src/react-feature-flags.js');
         const bridge = read('public/scripts/workspace-panels-react-bridge.js');
 
-        expect(flags).toContain("panelName === 'characterAuthoring' || panelName === 'groupAuthoring' || panelName === 'worldInfo'");
+        expect(flags).toContain("panelName === 'characterAuthoring' || panelName === 'worldInfo'");
         expect(bridge).toContain('worldInfo: true');
         expect(script).toContain('function hideLegacyWorldInfoWorkbench(hidden');
         expect(script).toContain("workbench.dataset.worldInfoVisibleOwner = hidden ? 'react' : 'legacy'");

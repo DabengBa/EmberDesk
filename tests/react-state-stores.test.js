@@ -33,7 +33,6 @@ describe('React state stores', () => {
             'extensionsHost',
             'mainChatMessageList',
             'characterAuthoring',
-            'groupAuthoring',
         ]);
 
         expect(WORKSPACE_PANEL_DOCK_KINDS).toEqual([
@@ -44,7 +43,6 @@ describe('React state stores', () => {
             'backgroundLibrary',
             'extensionsHost',
             'settings',
-            'groupChats',
             'characterAuthoring',
         ]);
     });

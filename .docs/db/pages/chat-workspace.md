@@ -31,7 +31,7 @@ This page exists so a user can run their daily LLM workflow from one browser sur
 - `feature.startup_bootstrap`: the visible shell-loading experience between opening the URL and reaching a usable workspace.
 - `feature.next_workspace_shell`: the same-entry React workspace chrome that owns current context, shell status, primary navigation, and child-slot lifecycle.
 - `feature.character_library_panel`: browsing and selecting character cards from the workspace.
-- `feature.group_authoring`: creating and editing group definitions, members, and save state from the workspace drawer.
+- `feature.group_authoring`: the retained retired marker for the removed group-authoring workflow; it has no live workspace owner.
 - `feature.chat_message_rendering`: displaying stored or finalized chat messages as readable text inside stable message rows.
 - `feature.chat_message_actions`: discovering and using actions attached to rendered chat messages.
 - `feature.chat_generation_auto_recovery`: bounded automatic retry behavior for visible main-chat generation failures.

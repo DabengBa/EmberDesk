@@ -22,8 +22,3 @@ export function isReactCharacterAuthoringPanelEnabled() {
     // Character Authoring is React sole-owner; product flag is retired.
     return true;
 }
-
-export function isReactGroupAuthoringPanelEnabled() {
-    // Group Authoring is React sole-owner; product flag is retired.
-    return true;
-}

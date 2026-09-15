@@ -56,12 +56,9 @@ import {
     selected_group,
     saveGroupChat,
     getGroups,
-    generateGroupWrapper,
     is_group_generating,
     resetSelectedGroup,
     select_group_chats,
-    editGroup,
-    setGroupAuthoringMembersDraft,
     regenerateGroup,
     group_generation_id,
     getGroupChat,
@@ -350,7 +347,6 @@ import {
     createWorkspacePanelStateChangeHandler,
     initWorkspacePanelDrawerBridge,
 } from './scripts/workspace-panel-host-controller.js';
-import { unmountReactWorkspacePanel } from './scripts/workspace-panels-react-bridge.js';
 import { registerWorldInfoShellContext } from './scripts/world-info-shell-context.js';
 import { getCharacterDeleteCandidates, removeCharactersFromState, shouldRefreshCharacterAfterEdit } from './scripts/character-list-state.js';
 import {
@@ -448,7 +444,6 @@ export function getWorkspaceReactFeatures() {
             backgroundLibrary: true,
             extensionsHost: true,
             characterAuthoring: true,
-            groupAuthoring: false,
         },
     };
 }
@@ -483,10 +478,7 @@ export function isReactCharacterLibraryPanelEnabled() {
 const WORLD_INFO_REACT_HOST_ID = 'emberdesk-react-world-info-panel-host';
 const BACKGROUND_LIBRARY_REACT_HOST_ID = 'emberdesk-react-background-library-panel-host';
 const EXTENSIONS_HOST_REACT_HOST_ID = 'emberdesk-react-extensions-host-panel-host';
-const MAIN_CHAT_MESSAGE_LIST_REACT_HOST_ID = 'emberdesk-react-main-chat-message-list-host';
 const CHARACTER_AUTHORING_REACT_HOST_ID = 'emberdesk-react-character-authoring-panel-host';
-const GROUP_AUTHORING_REACT_HOST_ID = 'emberdesk-react-group-authoring-panel-host';
-let reactGroupAuthoringGroupId = null;
 const LEGACY_SETTINGS_DRAWER_ROUTE_TARGETS = {
     '#ai-config-button > .drawer-toggle': '/settings?tab=providers',
     '#sys-settings-button > .drawer-toggle': '/settings?tab=providers',
@@ -677,7 +669,6 @@ function openWorkspaceChildSlotHostImmediate(hostId) {
 function showWorkspaceChildSlotContent(selectedMenuId) {
     const normalizedMenuId = String(selectedMenuId ?? '').replace('#', '');
     const displayModes = {
-        rm_group_chats_block: 'flex',
         rm_api_block: 'grid',
         rm_characters_block: 'flex',
     };
@@ -715,7 +706,6 @@ function getWorkspaceChildSlotHostId(slotKey) {
         worldInfo: 'WorldInfo',
         backgroundLibrary: 'Backgrounds',
         extensionsHost: 'rm_extensions_block',
-        groupChats: 'right-nav-panel',
         characterAuthoring: 'right-nav-panel',
     }[slotKey];
 }
@@ -751,16 +741,6 @@ async function openWorkspaceShellCharacterLibrary() {
     return createWorkspaceShellPanelResult('characterLibrary', isReactCharacterLibraryPanelEnabled());
 }
 
-async function openWorkspaceShellGroupChats() {
-    toastr?.warning?.(t`Group chats have been removed from EmberDesk.`);
-    return createWorkspaceShellPanelResult('groupChats', {
-        kind: 'groupChats',
-        mounted: false,
-        reason: 'group-chat-feature-removed',
-        status: 'error',
-    });
-}
-
 async function openWorkspaceShellCharacterAuthoring() {
     openWorkspaceChildSlotHostImmediate('right-nav-panel');
     const hasSelectedCharacter = this_chid !== undefined && characters[this_chid];
@@ -785,8 +765,6 @@ async function activateWorkspaceShellSlot(slotKey) {
             return openWorkspaceShellBackgrounds();
         case 'extensionsHost':
             return openWorkspaceShellExtensions();
-        case 'groupChats':
-            return openWorkspaceShellGroupChats();
         case 'characterAuthoring':
             return openWorkspaceShellCharacterAuthoring();
         default:
@@ -800,7 +778,6 @@ function deactivateWorkspaceShellSlot(slotKey) {
         worldInfo: 'worldInfo',
         backgroundLibrary: 'backgroundLibrary',
         extensionsHost: 'extensionsHost',
-        groupChats: 'groupChats',
         characterAuthoring: 'characterAuthoring',
     }[slotKey];
 
@@ -917,7 +894,6 @@ function getWorkspaceShellCommands() {
         openExtensions: openWorkspaceShellExtensions,
         openSettings: () => openWorkspaceSettingsOverlay({ tab: null, panelKind: 'settings' }),
         closeWorkspacePanel,
-        openGroupChats: openWorkspaceShellGroupChats,
         openCharacterAuthoring: openWorkspaceShellCharacterAuthoring,
     };
 }
@@ -1991,20 +1967,8 @@ function queueReactCharacterAuthoringRemount() {
     }, 0);
 }
 
-function queueReactGroupAuthoringRemount() {
-    window.setTimeout(() => {
-        void mountReactGroupAuthoringPanel();
-    }, 0);
-}
-
 eventSource.on(event_types.CHARACTER_EDITOR_OPENED, () => {
     queueReactCharacterAuthoringRemount();
-});
-
-eventSource.on('groupSelected', event => {
-    const groupId = event?.detail?.id;
-    reactGroupAuthoringGroupId = groupId == null ? null : String(groupId);
-    queueReactGroupAuthoringRemount();
 });
 
 function queueReactWorldInfoRemount() {
@@ -2094,233 +2058,6 @@ async function mountReactCharacterAuthoringPanel(stateOverrides = undefined) {
         const host = ensureCharacterAuthoringReactHost();
         if (host && !host.querySelector('[data-react-authoring-build-error]')) {
             host.innerHTML = '<div class="react-authoring-panel" data-react-authoring-build-error="true" role="alert">Character Authoring React build is missing or failed to mount. Redeploy the workspace-panels bundle.</div>';
-        }
-    }
-    return result;
-}
-
-function ensureGroupAuthoringReactHost() {
-    const groupPanel = document.getElementById('rm_group_chats_block');
-    if (!groupPanel) {
-        return null;
-    }
-
-    let host = document.getElementById(GROUP_AUTHORING_REACT_HOST_ID);
-    if (host) {
-        return host;
-    }
-
-    host = document.createElement('div');
-    host.id = GROUP_AUTHORING_REACT_HOST_ID;
-    host.className = 'emberdesk-react-authoring-panel-host emberdesk-react-group-authoring-panel-host';
-    groupPanel.prepend(host);
-    return host;
-}
-
-function hideLegacyGroupAuthoringEditor(hidden) {
-    const groupPanel = document.getElementById('rm_group_chats_block');
-    const host = document.getElementById(GROUP_AUTHORING_REACT_HOST_ID);
-    if (!(groupPanel instanceof HTMLElement)) {
-        return;
-    }
-
-    Array.from(groupPanel.children).forEach(child => {
-        if (!(child instanceof HTMLElement) || child === host) {
-            return;
-        }
-
-        child.hidden = hidden;
-        child.setAttribute('aria-hidden', hidden ? 'true' : 'false');
-        child.dataset.legacyGroupAuthoringHiddenByReact = hidden ? 'true' : 'false';
-    });
-}
-
-function getGroupAuthoringReactBridgeState() {
-    const title = String($('#rm_group_chat_name').val() || '').trim();
-    const group = reactGroupAuthoringGroupId
-        ? groups.find(x => x.id == reactGroupAuthoringGroupId)
-        : null;
-    const memberIds = Array.isArray(group?.members) ? [...group.members] : [];
-    const candidates = characters
-        .filter(character => character?.avatar && !memberIds.includes(character.avatar))
-        .map(character => ({
-            id: character.avatar,
-            label: character.name || character.avatar,
-        }));
-    const tagOptions = tags
-        .map(tag => ({ id: String(tag.id), label: String(tag.name ?? '') }))
-        .filter(tag => tag.id && tag.label)
-        .sort((left, right) => left.label.localeCompare(right.label));
-    return {
-        mode: group ? 'edit' : 'create',
-        title: title || (group ? 'Group Authoring' : 'New Group'),
-        subtitle: 'Group draft',
-        dirty: false,
-        draft: {
-            id: group?.id || '',
-            name: title,
-            avatar_url: String($('#group_avatar_preview img').attr('src') || group?.avatar_url || ''),
-            members: memberIds,
-            disabled_members: Array.isArray(group?.disabled_members) ? [...group.disabled_members] : [],
-            fav: Boolean(group?.fav),
-            allow_self_responses: Boolean($('#rm_group_allow_self_responses').prop('checked')),
-            hideMutedSprites: Boolean($('#rm_group_hidemutedsprites').prop('checked')),
-            activation_strategy: Number($('#rm_group_activation_strategy').val()),
-            generation_mode: Number($('#rm_group_generation_mode').val()),
-            auto_mode_delay: Number($('#rm_group_automode_delay').val()),
-            generation_mode_join_prefix: String($('#rm_group_generation_mode_join_prefix').val() || ''),
-            generation_mode_join_suffix: String($('#rm_group_generation_mode_join_suffix').val() || ''),
-            tagIds: group?.id && Array.isArray(tag_map[group.id]) ? [...tag_map[group.id]] : [],
-        },
-        candidates,
-        tagOptions,
-        unsupportedFields: [],
-    };
-}
-
-async function applyGroupAuthoringSaveModel(saveModel = {}) {
-    const members = Array.isArray(saveModel.members) ? [...saveModel.members] : [];
-    const tagIds = Array.isArray(saveModel.tag_ids) ? [...saveModel.tag_ids] : [];
-    const groupId = reactGroupAuthoringGroupId;
-    if (members.length === 0) {
-        toastr.error(t`Add at least one member`);
-        throw new Error('Group requires at least one member');
-    }
-
-    // Mirror values into remaining legacy controls for non-React consumers without clicking submit.
-    setAuthoringInputValue('#rm_group_chat_name', saveModel.name);
-    $('#rm_group_allow_self_responses').prop('checked', Boolean(saveModel.allow_self_responses));
-    $('#rm_group_hidemutedsprites').prop('checked', Boolean(saveModel.hideMutedSprites));
-    $('#rm_group_activation_strategy').val(String(saveModel.activation_strategy ?? 0));
-    $('#rm_group_generation_mode').val(String(saveModel.generation_mode ?? 0));
-    setAuthoringInputValue('#rm_group_automode_delay', saveModel.auto_mode_delay);
-    setAuthoringInputValue('#rm_group_generation_mode_join_prefix', saveModel.generation_mode_join_prefix);
-    setAuthoringInputValue('#rm_group_generation_mode_join_suffix', saveModel.generation_mode_join_suffix);
-    setGroupAuthoringMembersDraft(members, groupId);
-
-    if (groupId) {
-        const group = groups.find(x => x.id == groupId);
-        if (!group) {
-            throw new Error('Selected group not found');
-        }
-
-        const previousGroup = structuredClone(group);
-        group.name = String(saveModel.name || group.name || '');
-        group.avatar_url = String(saveModel.avatar_url || group.avatar_url || '');
-        group.members = members;
-        group.allow_self_responses = Boolean(saveModel.allow_self_responses);
-        group.hideMutedSprites = Boolean(saveModel.hideMutedSprites);
-        group.activation_strategy = Number(saveModel.activation_strategy ?? group.activation_strategy ?? 0);
-        group.generation_mode = Number(saveModel.generation_mode ?? group.generation_mode ?? 0);
-        group.auto_mode_delay = Number(saveModel.auto_mode_delay ?? group.auto_mode_delay ?? 5);
-        group.generation_mode_join_prefix = String(saveModel.generation_mode_join_prefix || '');
-        group.generation_mode_join_suffix = String(saveModel.generation_mode_join_suffix || '');
-        group.fav = Boolean(saveModel.fav);
-        group.disabled_members = Array.isArray(saveModel.disabled_members) ? [...saveModel.disabled_members] : [];
-        try {
-            await editGroup(groupId, true, true);
-        } catch (error) {
-            Object.assign(group, previousGroup);
-            throw error;
-        }
-        tag_map[groupId] = tagIds;
-        saveSettingsDebounced();
-        return { ok: true, mode: 'edit', id: groupId, group };
-    }
-
-    let name = String(saveModel.name || '').trim();
-    if (!name) {
-        const memberNames = characters.filter(x => members.includes(x.avatar)).map(x => x.name).join(', ');
-        name = t`Group: ${memberNames}`;
-    }
-
-    const groupCreateModel = {
-        name,
-        members,
-        avatar_url: String(saveModel.avatar_url || default_avatar),
-        allow_self_responses: Boolean(saveModel.allow_self_responses),
-        hideMutedSprites: Boolean(saveModel.hideMutedSprites),
-        activation_strategy: Number(saveModel.activation_strategy ?? 0),
-        generation_mode: Number(saveModel.generation_mode ?? 0),
-        disabled_members: Array.isArray(saveModel.disabled_members) ? [...saveModel.disabled_members] : [],
-        fav: Boolean(saveModel.fav),
-        chat_id: humanizedDateTime(),
-        chats: [],
-        auto_mode_delay: Number(saveModel.auto_mode_delay ?? 5),
-        generation_mode_join_prefix: String(saveModel.generation_mode_join_prefix || ''),
-        generation_mode_join_suffix: String(saveModel.generation_mode_join_suffix || ''),
-    };
-    groupCreateModel.chats = [groupCreateModel.chat_id];
-
-    const createGroupResponse = await fetch('/api/groups/create', {
-        method: 'POST',
-        headers: getRequestHeaders(),
-        body: JSON.stringify(groupCreateModel),
-    });
-    if (!createGroupResponse.ok) {
-        toastr.error(t`Failed to create group`);
-        throw new Error(`Group create failed with status ${createGroupResponse.status}`);
-    }
-
-    const data = await createGroupResponse.json();
-    tag_map[data.id] = tagIds;
-    saveSettingsDebounced();
-    await getCharacters();
-    await getGroups();
-    await printCharacters(true);
-    select_rm_info('group_create', data.id);
-    return { ok: true, mode: 'create', id: data.id, group: data };
-}
-
-function getGroupAuthoringReactCommands() {
-    return createWorkspacePanelCommandPort({
-        commands: {
-            saveGroupAuthoring: payload => applyGroupAuthoringSaveModel(payload),
-            cancelAuthoring: () => {
-                // Remount after the click completes so the controlled draft resets without
-                // blocking the browser event loop.
-                window.setTimeout(async () => {
-                    await unmountReactWorkspacePanel('groupAuthoring');
-                    await mountReactGroupAuthoringPanel();
-                }, 0);
-                return false;
-            },
-            deleteAuthoring: () => {
-                // Keep legacy host hidden; delete handler still uses the existing confirmation control.
-                hideLegacyGroupAuthoringEditor(true);
-                $('#rm_group_delete').trigger('click');
-                return false;
-            },
-        },
-        shouldRemount(commandResult, commandName) {
-            return commandName !== 'cancelAuthoring' && commandName !== 'deleteAuthoring' && commandResult !== false;
-        },
-        shouldRemountOnError() {
-            // Keep the React draft available for an actionable retry.
-            return false;
-        },
-        remount: () => mountReactGroupAuthoringPanel(),
-    });
-}
-
-async function mountReactGroupAuthoringPanel() {
-    const result = await mountWorkspacePanelHost({
-        kind: 'groupAuthoring',
-        ensureContainer: ensureGroupAuthoringReactHost,
-        getState: () => getGroupAuthoringReactBridgeState(),
-        commands: getGroupAuthoringReactCommands(),
-        runtime: reactRuntimePort,
-        features: getWorkspaceReactFeatures(),
-        onDisabled() {
-            hideLegacyGroupAuthoringEditor(true);
-        },
-    });
-
-    hideLegacyGroupAuthoringEditor(true);
-    if (!result?.mounted) {
-        const host = ensureGroupAuthoringReactHost();
-        if (host && !host.querySelector('[data-react-authoring-build-error]')) {
-            host.innerHTML = '<div class="react-authoring-panel" data-react-authoring-build-error="true" role="alert">Group Authoring React build is missing or failed to mount. Redeploy the workspace-panels bundle.</div>';
         }
     }
     return result;
@@ -13411,7 +13148,6 @@ async function displayChats(searchQuery, currentChat, displayName, avatarImg, gr
 
 export function selectRightMenuWithAnimation(selectedMenuId) {
     const displayModes = {
-        'rm_group_chats_block': 'flex',
         'rm_api_block': 'grid',
         'rm_characters_block': 'flex',
     };
@@ -17364,15 +17100,6 @@ jQuery(async function () {
         await displayPastChats(importedFileNames);
 
         targetElement.value = '';
-    });
-
-    $('#rm_button_group_chats').on('click', function () {
-        toastr?.warning?.(t`Group chats have been removed from EmberDesk.`);
-    });
-
-    $('#rm_button_back_from_group').on('click', function () {
-        selected_button = 'characters';
-        select_rm_characters();
     });
 
     $('#dupe_button').on('click', async function () {

@@ -23,7 +23,6 @@ export function getDefaultWorkspaceReactFeatures() {
             backgroundLibrary: true,
             extensionsHost: true,
             characterAuthoring: true,
-            groupAuthoring: false,
         },
     };
 }

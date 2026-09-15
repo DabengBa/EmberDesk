@@ -4,20 +4,16 @@ import {
     shuffle,
     onlyUnique,
     debounce,
-    delay,
     isDataURL,
     createThumbnail,
     extractAllWords,
     saveBase64AsFile,
     PAGINATION_TEMPLATE,
     getBase64Async,
-    resetScrollHeight,
     initScrollHeight,
     localizePagination,
     renderPaginationDropdown,
     paginationDropdownChangeHandler,
-    waitUntilCondition,
-    uuidv4,
 } from './utils.js';
 import { RA_CountCharTokens, humanizedDateTime, dragElement, favsToHotswap, getMessageTimeStamp } from './RossAscends-mods.js';
 import { power_user, loadMovingUIState, sortEntitiesList } from './power-user.js';
@@ -117,26 +113,6 @@ let group_generation_id = null;
 let fav_grp_checked = false;
 let openGroupId = null;
 let newGroupMembers = [];
-
-export function setGroupAuthoringMembersDraft(members, groupId = selected_group) {
-    const nextMembers = Array.isArray(members)
-        ? members.filter((member, index, array) => typeof member === 'string' && member && array.indexOf(member) === index)
-        : [];
-    const group = groupId ? groups.find(x => x.id == groupId) : null;
-
-    if (group) {
-        group.members = [...nextMembers];
-        group.disabled_members = Array.isArray(group.disabled_members)
-            ? group.disabled_members.filter(member => nextMembers.includes(member))
-            : [];
-    } else {
-        newGroupMembers = [...nextMembers];
-    }
-
-    printGroupMembers();
-    printGroupCandidates();
-    $('#rm_group_submit').prop('disabled', nextMembers.length === 0);
-}
 
 export const group_activation_strategy = {
     NATURAL: 0,
@@ -2067,13 +2043,6 @@ export async function saveGroupBookmarkChat(groupId, name, metadata, mesId, chat
     }
 }
 
-function onSendTextareaInput() {
-    if (is_group_automode_enabled) {
-        // Wait for current automode generation to finish
-        is_group_automode_enabled = false;
-        $('#rm_group_automode').prop('checked', false);
-    }
-}
 
 function stopAutoModeGeneration() {
     if (groupAutoModeAbortController) {
@@ -2121,44 +2090,3 @@ function doCurMemberListPopout() {
         $('#groupMemberListPopout').fadeOut(animation_duration, () => { $('#groupMemberListPopout').remove(); });
     }
 }
-
-jQuery(() => {
-    if (!CSS.supports('field-sizing', 'content')) {
-        $(document).on('input', '#rm_group_chats_block .autoSetHeight', function () {
-            resetScrollHeight($(this));
-        });
-    }
-
-    $(document).on('click', '.group_select', function () {
-        const groupId = $(this).attr('data-chid') || $(this).attr('data-grid');
-        openGroupById(groupId);
-    });
-    $('#rm_group_filter').on('input', filterGroupMembers);
-    $('#rm_group_members_filter').on('input', filterGroupMemberList);
-    $('#rm_group_submit').on('click', createGroup);
-    $('#rm_group_scenario').on('click', setCharacterSettingsOverrides);
-    $('#rm_group_automode').on('input', function () {
-        const value = $(this).prop('checked');
-        is_group_automode_enabled = value;
-        eventSource.once(event_types.GENERATION_STOPPED, stopAutoModeGeneration);
-    });
-    $('#rm_group_hidemutedsprites').on('input', function () {
-        const value = $(this).prop('checked');
-        hideMutedSprites = value;
-        onHideMutedSpritesClick(value);
-    });
-    $('#send_textarea').on('keyup', onSendTextareaInput);
-    $('#groupCurrentMemberPopoutButton').on('click', doCurMemberListPopout);
-    $('#rm_group_chat_name').on('input', onGroupNameInput);
-    $('#rm_group_delete').off().on('click', onDeleteGroupClick);
-    $('#group_favorite_button').on('click', onFavoriteGroupClick);
-    $('#rm_group_allow_self_responses').on('input', onGroupSelfResponsesClick);
-    $('#rm_group_activation_strategy').on('change', onGroupActivationStrategyInput);
-    $('#rm_group_generation_mode').on('change', onGroupGenerationModeInput);
-    $('#rm_group_automode_delay').on('input', onGroupAutoModeDelayInput);
-    $('#rm_group_generation_mode_join_prefix').on('input', onGroupGenerationModeTemplateInput);
-    $('#rm_group_generation_mode_join_suffix').on('input', onGroupGenerationModeTemplateInput);
-    $('#group_avatar_button').on('input', uploadGroupAvatar);
-    $('#rm_group_restore_avatar').on('click', restoreGroupAvatar);
-    $(document).on('click', '.group_member .right_menu_button', onGroupActionClick);
-});

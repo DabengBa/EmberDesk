@@ -13,7 +13,7 @@ Each candidate records current provider, replacement provider, proof command, an
 
 
 Created: 2026-07-07  
-Last reviewed: 2026-07-17
+Last reviewed: 2026-09-15
 
 This ledger is the maintainer-facing source of truth for retiring legacy runtime owners from already migrated React surfaces. The 2026-07-07 verdicts below remain the historical baseline; [ADR-0012](../adr/0012-react-migrated-surface-legacy-retirement.md) replaces their former destination-state policy.
 
@@ -30,14 +30,15 @@ This document is not a user-facing feature guide. End-user UI should continue to
 - `freeze-supported`: the surface is an explicit long-term compatibility boundary. Internal implementation may evolve, but the documented external contract must not be narrowed casually.
 - `delete`: safe to remove only after the listed proof gates pass and no protected consumer remains.
 
-## 2026-07-16 Current Retirement Program
+## 2026-09-15 Current Retirement Program
 
 | surface | successor status | why | deletion gate |
 |---|---|---|---|
 | Login | `retired` | React is the sole runtime owner for `/login`; `/login.html` redirects only | complete; missing build fails closed |
 | Setup | `retired` | React is the sole runtime owner for `/setup`; `/setup.html` redirects only | complete; missing build fails closed |
 | Character Library | `retired` | React is sole list/row owner; protected selectors come from React DOM; no flag/legacy list fallback | complete |
-| Character and Group Authoring | `foundation` | React forms exist, but save completion currently waits for legacy write behavior | React command/service owner with create/edit/delete parity |
+| Character Authoring | `retired` | React is the sole owner of character create/edit fields and direct `/api/characters` commands; only a hidden legacy form host remains for tool popups | `pnpm --dir tests run test:e2e -- character-group-authoring.e2e.js --workers=1`; `pnpm --dir tests run test:unit -- character-authoring-facade.test.js react-workspace-panels-helpers.test.js --runInBand` |
+| Group Authoring | `retired` | No product runtime owner; group session, shell entry, React authoring form, and write-through helper are deleted, while `/api/groups/*` stays a JSON `410` tombstone and historical group files are untouched | `pnpm --dir tests run test:unit -- group-chat-retirement.test.js groups-route-authoring.test.js react-workspace-panels-helpers.test.js --runInBand` |
 | Settings | `sole-owner` | React `/settings` owns general/provider/UI/advanced settings; shell Settings/AI Config/Formatting navigate here; missing build is 503 | complete |
 | World Info | `sole-owner-visible` | React workbench is sole visible owner; domain/workbench services own projection/selection; prompt/import/delete remain barrel-owned | residual hidden activation-rules DOM and full barrel thinning |
 | Background Library | `sole-owner` | React gallery is the sole visible owner; domain/library services own catalog/actions; `backgrounds.js` is a service/command barrel; product flag and panel controller are retired | Keep slash and managed-media transport parity; remaining hidden gallery DOM is non-visible scaffolding only |
@@ -52,15 +53,15 @@ This document is not a user-facing feature guide. End-user UI should continue to
 |---|---|---|---|---|---|---|---|
 | Same-entry legacy workspace chrome for `/` | `retired` | React workspace shell with declared child slots | prior-version deployment only | `pnpm --dir tests run test:e2e -- workspace-shell-panel-navigation.e2e.js third-party-extension-runtime.e2e.js --workers=1`; `pnpm --dir tests run test:unit -- react-workspace-panels-helpers.test.js react-state-stores.test.js --runInBand` |  | `.docs/db/features/next-workspace-shell.md`; `.docs/db/pages/chat-workspace.md`; `.docs/tech/workspace-shell-panel-dock-coordination.md` | 2026-07-18 |
 | Separate-route or full SPA workspace shell cutover | `blocked` | current same-entry `/` shell strategy | legacy `/` workspace shell and current same-entry rollback path | ADR-0007 successor updates; shell/browser proof; extension compatibility proof | current approved strategy explicitly rejects `/workspace-next` and full SPA workspace replacement without a new spec/ADR, migration plan, rollback proof, and compatibility evidence | `.docs/project-overview.md`; `.docs/tech/react-modernization-roadmap.md`; `.docs/adr/0007-react-page-islands-with-legacy-fallbacks.md` | 2026-07-07 |
-| Group Chats legacy drawer content under registry-backed shell entries | `compatibility-facade` | same-entry React shell entry registry for visible entry state and open/close/reopen coordination | existing legacy drawer content and route branch | `pnpm --dir tests run test:e2e -- workspace-shell-panel-navigation.e2e.js --workers=1`; `pnpm --dir tests run test:unit -- react-workspace-panels-helpers.test.js --runInBand` |  | `.docs/db/features/next-workspace-shell.md`; `.docs/db/pages/chat-workspace.md`; `.docs/tech/workspace-shell-panel-dock-coordination.md` | 2026-07-16 |
+| Group Chats legacy drawer content under registry-backed shell entries | `retired` | No shell entry or legacy drawer content remains; `/api/groups/*` answers JSON `410` and historical group files stay untouched | previous-version deployment only | `pnpm --dir tests run test:unit -- group-chat-retirement.test.js groups-route-authoring.test.js react-workspace-panels-helpers.test.js --runInBand`; `pnpm --dir tests run test:e2e -- character-group-authoring.e2e.js --workers=1` |  | `.docs/db/features/next-workspace-shell.md`; `.docs/db/pages/chat-workspace.md`; `.docs/tech/legacy-cutover-ledger.md` | 2026-09-15 |
 | Settings / AI Config / Formatting product entries | `retired` | React Settings sole owner (tabs for providers and advanced); shell opens in-workspace overlay, `/settings` remains deep-link full page | previous application version | `pnpm --dir tests run test:unit -- settings-react-route.test.js react-workspace-panels-helpers.test.js --runInBand`; `pnpm --dir tests run test:e2e -- settings.e2e.js workspace-shell-panel-navigation.e2e.js --workers=1` |  | `.docs/db/pages/settings.md`; `.docs/db/pages/api-configuration.md`; `.docs/db/pages/chat-workspace.md` | 2026-07-16 |
 
 ## Authoring
 
 | entry | verdict | current owner | rollback owner | evidence gate | blocking reason | durable doc owner | last reviewed |
 |---|---|---|---|---|---|---|---|
-| Character Authoring visible form surface inside the right drawer | `deleted-or-retired` | React sole-owner character authoring surface with direct `/api/characters` writes | hidden legacy form host for tool popups only; product flag and dual-owner fallback retired | `pnpm --dir tests run test:e2e -- character-group-authoring.e2e.js --workers=1`; `pnpm --dir tests run test:unit -- character-authoring-facade.test.js group-authoring-facade.test.js react-workspace-panels-helpers.test.js --runInBand` | 2026-07-16 | `.docs/db/pages/chat-workspace.md`; `.docs/db/features/character-library-panel.md`; `.docs/PROJECT_HISTORY.md` | 2026-07-16 |
-| Group Authoring visible form surface inside the right drawer | `deleted-or-retired` | React sole-owner group authoring surface with direct `/api/groups` writes | hidden legacy form host only; product flag and dual-owner fallback retired | `pnpm --dir tests run test:e2e -- character-group-authoring.e2e.js --workers=1`; `pnpm --dir tests run test:unit -- group-authoring-facade.test.js react-workspace-panels-helpers.test.js --runInBand` | 2026-07-16 | `.docs/db/pages/chat-workspace.md`; `.docs/db/features/group-authoring.md`; `.docs/PROJECT_HISTORY.md` | 2026-07-16 |
+| Character Authoring visible form surface inside the right drawer | `deleted-or-retired` | React sole-owner character authoring surface with direct `/api/characters` writes | hidden legacy form host for tool popups only; product flag and dual-owner fallback retired | `pnpm --dir tests run test:e2e -- character-group-authoring.e2e.js --workers=1`; `pnpm --dir tests run test:unit -- character-authoring-facade.test.js react-workspace-panels-helpers.test.js --runInBand` | 2026-07-16 | `.docs/db/pages/chat-workspace.md`; `.docs/db/features/character-library-panel.md`; `.docs/PROJECT_HISTORY.md` | 2026-09-15 |
+| Group Authoring visible form surface inside the right drawer | `retired` | No product runtime owner; `/api/groups/*` is a JSON `410` tombstone router and historical group files remain untouched | previous-version deployment only | `pnpm --dir tests run test:unit -- group-chat-retirement.test.js groups-route-authoring.test.js react-workspace-panels-helpers.test.js --runInBand` | group session, shell entry, React authoring form, and write-through helper are deleted | `.docs/db/features/group-authoring.md`; `.docs/db/pages/chat-workspace.md`; `.docs/PROJECT_HISTORY.md` | 2026-09-15 |
 
 ## Character Library
 
