@@ -55,7 +55,6 @@ function makeDirectories(prefix) {
     const worlds = path.join(root, 'worlds');
     const thumbnailsAvatar = path.join(root, 'thumbnails', 'avatar');
     const thumbnailsPersona = path.join(root, 'thumbnails', 'persona');
-    const thumbnailsBg = path.join(root, 'thumbnails', 'bg');
     fs.mkdirSync(characters, { recursive: true });
     fs.mkdirSync(chats, { recursive: true });
     fs.mkdirSync(groupChats, { recursive: true });
@@ -63,8 +62,7 @@ function makeDirectories(prefix) {
     fs.mkdirSync(worlds, { recursive: true });
     fs.mkdirSync(thumbnailsAvatar, { recursive: true });
     fs.mkdirSync(thumbnailsPersona, { recursive: true });
-    fs.mkdirSync(thumbnailsBg, { recursive: true });
-    return { root, characters, chats, groupChats, backups, worlds, thumbnailsAvatar, thumbnailsPersona, thumbnailsBg };
+    return { root, characters, chats, groupChats, backups, worlds, thumbnailsAvatar, thumbnailsPersona };
 }
 
 /**

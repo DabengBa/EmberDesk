@@ -6,6 +6,10 @@ This note documents the same-entry React workspace shell at `/`. React owns the 
 
 Declared child slots retain feature-local content and protected compatibility DOM. Their drawer classes are presentation projections, never shell state inputs. User-visible behavior is documented by [Chat Workspace](../db/pages/chat-workspace.md) and [Next Workspace Shell](../db/features/next-workspace-shell.md).
 
+## Current Retirement Boundary
+
+The global Backgrounds entry, Background Library gallery, Expressions/waifu controls, and global sprite persistence are retired. The shell registry below lists only current entries; active chat background settings/metadata, static `backgrounds/*` compatibility, avatar/persona media, and retained thumbnail behavior are separate compatibility contracts documented by Chat Workspace.
+
 ## Architecture And Constraints
 
 - The shell always mounts from the shared workspace-panel bundle. There is no shell flag, inline workspace feature payload, strict mode, or same-version legacy fallback.
@@ -18,7 +22,7 @@ Declared child slots retain feature-local content and protected compatibility DO
 
 ## Core Implementation
 
-1. The React shell registry exposes AI Config, Formatting, Character Library, World Info, Backgrounds, Extensions, Settings, Group Chats, and Character Authoring. AI Config, Formatting, and Settings route to React Settings.
+1. The React shell registry exposes AI Config, Formatting, Character Library, World Info, Extensions, Settings, Group Chats, and Character Authoring. AI Config, Formatting, and Settings route to React Settings; the former Backgrounds entry is retired and has no current shell slot.
 2. Each child slot declares a stable key, mount target, accessible name, content owner, and allowed feature-local capabilities in `WORKSPACE_SHELL_CHILD_SLOTS`.
 3. A slot click records a React dock intent before the shell invokes `activateWorkspaceShellSlot`. Settled mount results update only the React store; a sequence guard ignores stale async results.
 4. Closing a slot calls `deactivateWorkspaceShellSlot`. React clears the active state after its own transition, then projects the close to the declared host.

@@ -63,6 +63,8 @@ export const toShallow = (character) => {
 export function unsetPrivateFields(char) {
     _.set(char, 'fav', false);
     _.set(char, 'data.extensions.fav', false);
+    _.unset(char, 'data.extensions.risuai.additionalAssets');
+    _.unset(char, 'data.extensions.risuai.emotions');
     _.unset(char, 'chat');
 }
 

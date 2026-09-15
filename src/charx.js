@@ -9,7 +9,7 @@ import { DEFAULT_AVATAR_PATH } from './constants.js';
 // 'embeded://' is intentional - RisuAI exports use this misspelling
 const CHARX_EMBEDDED_URI_PREFIXES = ['embeded://', 'embedded://', '__asset:'];
 const CHARX_IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'apng', 'avif', 'bmp', 'jfif']);
-const CHARX_SPRITE_TYPES = new Set(['emotion', 'expression']);
+const CHARX_EXPRESSION_TYPES = new Set(['emotion', 'expression', 'sprite']);
 const CHARX_BACKGROUND_TYPES = new Set(['background']);
 
 // ZIP local file header signature: PK\x03\x04
@@ -36,7 +36,7 @@ function findZipStart(buffer) {
  * @property {string} ext - File extension (lowercase, no dot)
  * @property {string} zipPath - Normalized path within the ZIP archive
  * @property {number} order - Original index in assets array
- * @property {string} [storageCategory] - 'sprite' | 'background' | 'misc' (set by mapCharXAssetsForStorage)
+ * @property {string} [storageCategory] - 'background' | 'misc' (set by mapCharXAssetsForStorage)
  * @property {string} [baseName] - Normalized filename base (set by mapCharXAssetsForStorage)
  */
 
@@ -213,16 +213,15 @@ export class CharXParser {
      * Normalize asset name for filesystem storage.
      * @param {string} name - Original asset name
      * @param {string} fallback - Fallback name if normalization fails
-     * @param {boolean} useHyphens - Use hyphens instead of underscores (for sprites)
      * @returns {string} Normalized filename base (without extension)
      */
-    getCharXAssetBaseName(name, fallback, useHyphens = false) {
+    getCharXAssetBaseName(name, fallback) {
         const cleaned = (String(name ?? '').trim() || '');
         if (!cleaned) {
             return fallback.toLowerCase();
         }
 
-        const separator = useHyphens ? '-' : '_';
+        const separator = '_';
         // Convert to lowercase, collapse non-alphanumeric runs to separator, trim edges
         const base = cleaned
             .toLowerCase()
@@ -252,25 +251,25 @@ export class CharXParser {
                 return acc;
             }
 
+            if (CHARX_EXPRESSION_TYPES.has(asset.type)) {
+                // Expressions are no longer persisted as character sprite assets.
+                return acc;
+            }
+
             let storageCategory;
-            if (CHARX_SPRITE_TYPES.has(asset.type)) {
-                storageCategory = 'sprite';
-            } else if (CHARX_BACKGROUND_TYPES.has(asset.type)) {
+            if (CHARX_BACKGROUND_TYPES.has(asset.type)) {
                 storageCategory = 'background';
             } else {
                 storageCategory = 'misc';
             }
 
-            // Use hyphens for sprites so ST's expression label extraction works correctly
-            // (sprites.js extracts label via regex that splits on dash or dot)
-            const useHyphens = storageCategory === 'sprite';
             // Strip trailing extension from name if present (e.g., "image.png" with ext "png")
             const nameWithoutExt = this.stripTrailingImageExtension(asset.name, ext);
             acc.push({
                 ...asset,
                 ext,
                 storageCategory,
-                baseName: this.getCharXAssetBaseName(nameWithoutExt, `${storageCategory}-${asset.order ?? 0}`, useHyphens),
+                baseName: this.getCharXAssetBaseName(nameWithoutExt, `${storageCategory}-${asset.order ?? 0}`),
             });
 
             return acc;
@@ -280,7 +279,6 @@ export class CharXParser {
 
 /**
  * Delete existing file with same base name (any extension) before overwriting.
- * Matches ST's sprite upload behavior in sprites.js.
  * @param {string} dirPath - Directory path
  * @param {string} baseName - Base filename without extension
  */
@@ -298,35 +296,22 @@ function deleteExistingByBaseName(dirPath, baseName) {
 }
 
 /**
- * Persist extracted CharX assets to appropriate ST directories.
- * Note: Uses sync writes consistent with ST's existing file handling.
+ * Persist extracted CharX assets to appropriate user directories.
+ * Note: Uses sync writes consistent with existing file handling.
  * @param {Array} assets - Mapped assets from CharXParser
  * @param {Map<string, Buffer>} bufferMap - Extracted file buffers
  * @param {Object} directories - User directories object
  * @param {string} characterFolder - Character folder name (sanitized)
- * @returns {{sprites: number, backgrounds: number, misc: number}}
+ * @returns {{backgrounds: number, misc: number}}
  */
 export function persistCharXAssets(assets, bufferMap, directories, characterFolder) {
-    /** @type {{sprites: number, backgrounds: number, misc: number}} */
-    const summary = { sprites: 0, backgrounds: 0, misc: 0 };
+    /** @type {{backgrounds: number, misc: number}} */
+    const summary = { backgrounds: 0, misc: 0 };
     if (!Array.isArray(assets) || assets.length === 0) {
         return summary;
     }
 
-    let spritesPath = null;
     let miscPath = null;
-
-    const ensureSpritesPath = () => {
-        if (spritesPath) {
-            return spritesPath;
-        }
-        const candidate = path.join(directories.characters, characterFolder);
-        if (!ensureDirectory(candidate)) {
-            return null;
-        }
-        spritesPath = candidate;
-        return spritesPath;
-    };
 
     const ensureMiscPath = () => {
         if (miscPath) {
@@ -352,19 +337,6 @@ export function persistCharXAssets(assets, bufferMap, directories, characterFold
         }
 
         try {
-            if (asset.storageCategory === 'sprite') {
-                const targetDir = ensureSpritesPath();
-                if (!targetDir) {
-                    continue;
-                }
-                // Delete existing sprite with same base name (any extension) - matches sprites.js behavior
-                deleteExistingByBaseName(targetDir, asset.baseName);
-                const filePath = path.join(targetDir, `${asset.baseName}.${asset.ext || 'png'}`);
-                writeFileAtomicSync(filePath, buffer);
-                summary.sprites += 1;
-                continue;
-            }
-
             if (asset.storageCategory === 'background') {
                 // Store in character-specific backgrounds folder: characters/{charName}/backgrounds/
                 const backgroundDir = path.join(directories.characters, characterFolder, 'backgrounds');

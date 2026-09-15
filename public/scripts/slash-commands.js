@@ -76,7 +76,6 @@ import { decodeTextTokens, getAvailableTokenizers, getFriendlyTokenizerName, get
 import { debounce, delay, equalsIgnoreCaseAndAccents, findChar, getCharIndex, isFalseBoolean, isTrueBoolean, onlyUnique, regexFromString, showFontAwesomePicker, stringToRange, trimToEndSentence, trimToStartSentence, waitUntilCondition } from './utils.js';
 import { registerVariableCommands, resolveVariable } from './variables.js';
 import { registerActionLoaderSlashCommands } from './action-loader-slashcommands.js';
-import { background_settings } from './backgrounds.js';
 import { SlashCommandClosure } from './slash-commands/SlashCommandClosure.js';
 import { SlashCommandClosureResult } from './slash-commands/SlashCommandClosureResult.js';
 import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from './slash-commands/SlashCommandArgument.js';
@@ -699,38 +698,6 @@ export function initDefaultSlashCommands() {
             ],
         })],
         helpString: t`Get help on macros, chat formatting and commands.`,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'bg',
-        callback: setBackgroundCallback,
-        aliases: ['background'],
-        returns: t`the current background`,
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: t`background filename`,
-                typeList: [ARGUMENT_TYPE.STRING],
-                enumProvider: commonEnumProviders.backgrounds,
-            }),
-        ],
-        helpString: `
-        <div>
-            ${t`Sets a background according to the provided filename. Partial names allowed.`}
-        </div>
-        <div>
-            ${t`If no background is provided, this will return the currently selected background.`}
-        </div>
-        <div>
-            <strong>${t`Example:`}</strong>
-            <ul>
-                <li>
-                    <pre><code>/bg beach.jpg</code></pre>
-                </li>
-                <li>
-                    <pre><code>/bg</code></pre>
-                </li>
-            </ul>
-        </div>
-    `,
     }));
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'char-find',
@@ -6226,34 +6193,6 @@ $(document).on('click', '[data-displayHelp]', function (e) {
     const page = String($(this).data('displayhelp'));
     helpCommandCallback(null, page);
 });
-
-function setBackgroundCallback(_, bg) {
-    if (!bg) {
-        // allow reporting of the background name if called without args
-        // for use in ST Scripts via pipe
-        return background_settings.name;
-    }
-
-    console.log('Set background to ' + bg);
-
-    const bgElements = Array.from(document.querySelectorAll('.bg_example')).map((x) => ({ element: x, bgfile: x.getAttribute('bgfile') }));
-
-    const fuse = new Fuse(bgElements, { keys: ['bgfile'] });
-    const result = fuse.search(bg);
-
-    if (!result.length) {
-        toastr.error(t`No background found with name "${bg}"`);
-        return '';
-    }
-
-    const bgElement = result[0].item.element;
-
-    if (bgElement instanceof HTMLElement) {
-        bgElement.click();
-    }
-
-    return '';
-}
 
 /**
  * Retrieves the available model options based on the currently selected main API and its subtype

@@ -92,17 +92,6 @@ async function runGenerationScenario({ type = 'avatar', format = 'jpg', quality 
         },
     }));
 
-    jest.unstable_mockModule('../src/endpoints/image-metadata.js', () => ({
-        getThumbnailResolution: () => 13824,
-        isAnimatedWebP: () => false,
-        isAnimatedApng: () => false,
-        thumbnailDimensions: {
-            bg: [160, 90],
-            avatar: [96, 144],
-            persona: [96, 144],
-        },
-    }));
-
     jest.unstable_mockModule('write-file-atomic', () => ({
         sync: (targetPath, buffer) => fs.writeFileSync(targetPath, buffer),
     }));
@@ -140,9 +129,10 @@ describe('thumbnail jpeg quality tuning', () => {
         const configSource = fs.readFileSync(path.join(repoRoot, 'default/config.yaml'), 'utf8');
 
         expect(configSource).toMatch(/# JPG thumbnail quality \(0-100\)\s+quality:\s*85/);
+        expect(configSource).not.toMatch(/dimensions:.*['\"]bg['\"]/);
     });
 
-    test.each(['avatar', 'persona', 'bg'])('jpg mode uses quality 85 for new %s thumbnails', async (type) => {
+    test.each(['avatar', 'persona'])('jpg mode uses quality 85 for new %s thumbnails', async (type) => {
         const { result, outputBuffer, mockCover, mockResize, mockGetBuffer } = await runGenerationScenario({
             type,
             format: 'jpg',
@@ -152,19 +142,18 @@ describe('thumbnail jpeg quality tuning', () => {
         expect(result.path).toBeTruthy();
         expect(mockGetBuffer).toHaveBeenCalledWith('image/jpeg', { quality: 85, jpegColorSpace: 'ycbcr' });
 
-        if (type === 'bg') {
-            expect(mockResize).toHaveBeenCalledTimes(1);
-            expect(mockCover).not.toHaveBeenCalled();
-        } else {
-            expect(mockCover).toHaveBeenCalledWith({ w: 96, h: 144 });
-            expect(mockResize).not.toHaveBeenCalled();
-        }
+        expect(mockCover).toHaveBeenCalledWith({ w: 96, h: 144 });
+        expect(mockResize).not.toHaveBeenCalled();
 
         expect(outputBuffer).toEqual(Buffer.from(JSON.stringify({
             mime: 'image/jpeg',
             quality: 85,
             jpegColorSpace: 'ycbcr',
         })));
+    });
+
+    test('retired background thumbnail generation is rejected', async () => {
+        await expect(runGenerationScenario({ type: 'bg' })).rejects.toThrow('Invalid thumbnail type');
     });
 
     test('existing explicit quality 95 remains untouched as an override', async () => {

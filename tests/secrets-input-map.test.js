@@ -8,14 +8,6 @@ import {
 
 describe('secrets input map', () => {
     test('Workers AI uses the key manager instead of a missing autocomplete input', () => {
-        const secretsSource = readRepoFile('public/scripts/secrets.js');
-        const stableDiffusionSettings = readRepoFile('public/scripts/extensions/stable-diffusion/settings.html');
-
-        expect(stableDiffusionSettings).toContain('data-key="api_key_workers_ai"');
-        expect(secretsSource).not.toMatch(/\[SECRET_KEYS\.WORKERS_AI\]: '#api_key_workers_ai'/);
-    });
-
-    test('fallback OpenAI provider has a dedicated secret and input mapping', () => {
         const frontendSecrets = readRepoFile('public/scripts/secrets.js');
         const backendSecrets = readRepoFile('src/endpoints/secrets.js');
 

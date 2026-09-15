@@ -13,8 +13,6 @@ import { router as quickRepliesRouter } from './endpoints/quick-replies.js';
 import { router as avatarsRouter } from './endpoints/avatars.js';
 import { router as themesRouter } from './endpoints/themes.js';
 import { router as openAiRouter } from './endpoints/openai.js';
-import { router as googleRouter } from './endpoints/google.js';
-import { router as anthropicRouter } from './endpoints/anthropic.js';
 import { router as tokenizersRouter } from './endpoints/tokenizers.js';
 import { router as presetsRouter } from './endpoints/presets.js';
 import { router as secretsRouter } from './endpoints/secrets.js';
@@ -30,22 +28,15 @@ import { router as worldInfoRouter } from './endpoints/worldinfo.js';
 import { router as statsRouter } from './endpoints/stats.js';
 import { router as contentManagerRouter } from './endpoints/content-manager.js';
 import { router as settingsRouter } from './endpoints/settings.js';
-import { router as backgroundsRouter } from './endpoints/backgrounds.js';
-import { router as spritesRouter } from './endpoints/sprites.js';
-import { router as stableDiffusionRouter } from './endpoints/stable-diffusion.js';
 import { router as hordeRouter } from './endpoints/horde.js';
 import { router as vectorRetirementRouter } from './endpoints/vector-retirement.js';
-import { router as translateRouter } from './endpoints/translate.js';
 import { router as classifyRouter } from './endpoints/classify.js';
-import { router as captionRouter } from './endpoints/caption.js';
 import { router as searchRouter } from './endpoints/search.js';
 import { router as openRouterRouter } from './endpoints/openrouter.js';
 import { router as nanogptRouter } from './endpoints/nanogpt.js';
 import { router as chatCompletionsRouter } from './endpoints/backends/chat-completions.js';
-import { router as speechRouter } from './endpoints/speech.js';
 import { router as dataMaidRouter } from './endpoints/data-maid.js';
 import { router as backupsRouter } from './endpoints/backups.js';
-import { router as imageMetadataRouter } from './endpoints/image-metadata.js';
 import { setupHealthEndpoint } from './endpoints/health.js';
 
 /**
@@ -99,6 +90,9 @@ export function redirectDeprecatedEndpoints(app) {
     redirect('/getgroupchat', '/api/chats/group/get');
     redirect('/deletegroupchat', '/api/chats/group/delete');
     redirect('/savegroupchat', '/api/chats/group/save');
+    // The group-authoring redirects below point at the retired /api/groups router,
+    // which now answers every request with a stable JSON 410 (group_chat_feature_removed).
+    // These are retired compatibility routes only; group authoring is no longer a feature.
     redirect('/getgroups', '/api/groups/all');
     redirect('/creategroup', '/api/groups/create');
     redirect('/editgroup', '/api/groups/edit');
@@ -110,10 +104,6 @@ export function redirectDeprecatedEndpoints(app) {
     redirect('/getstats', '/api/stats/get');
     redirect('/recreatestats', '/api/stats/recreate');
     redirect('/updatestats', '/api/stats/update');
-    redirect('/getbackgrounds', '/api/backgrounds/all');
-    redirect('/delbackground', '/api/backgrounds/delete');
-    redirect('/renamebackground', '/api/backgrounds/rename');
-    redirect('/downloadbackground', '/api/backgrounds/upload'); // yes, the downloadbackground endpoint actually uploads one
     redirect('/savetheme', '/api/themes/save');
     redirect('/getuseravatars', '/api/avatars/get');
     redirect('/deleteuseravatar', '/api/avatars/delete');
@@ -151,8 +141,6 @@ export function setupPrivateEndpoints(app) {
     app.use('/api/avatars', avatarsRouter);
     app.use('/api/themes', themesRouter);
     app.use('/api/openai', openAiRouter);
-    app.use('/api/google', googleRouter);
-    app.use('/api/anthropic', anthropicRouter);
     app.use('/api/tokenizers', tokenizersRouter);
     app.use('/api/presets', presetsRouter);
     app.use('/api/secrets', secretsRouter);
@@ -166,24 +154,17 @@ export function setupPrivateEndpoints(app) {
     app.use('/api/groups', groupsRouter);
     app.use('/api/worldinfo', worldInfoRouter);
     app.use('/api/stats', statsRouter);
-    app.use('/api/backgrounds', backgroundsRouter);
-    app.use('/api/sprites', spritesRouter);
     app.use('/api/content', contentManagerRouter);
     app.use('/api/settings', settingsRouter);
-    app.use('/api/sd', stableDiffusionRouter);
     app.use('/api/horde', hordeRouter);
     app.use('/api/vector', vectorRetirementRouter);
-    app.use('/api/translate', translateRouter);
     app.use('/api/extra/classify', classifyRouter);
-    app.use('/api/extra/caption', captionRouter);
     app.use('/api/search', searchRouter);
     app.use('/api/openrouter', openRouterRouter);
     app.use('/api/nanogpt', nanogptRouter);
     app.use('/api/backends/chat-completions', chatCompletionsRouter);
-    app.use('/api/speech', speechRouter);
     app.use('/api/data-maid', dataMaidRouter);
     app.use('/api/backups', backupsRouter);
-    app.use('/api/image-metadata', imageMetadataRouter);
 }
 
 /**

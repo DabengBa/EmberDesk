@@ -462,62 +462,6 @@ body.no-blur #send_form {
     background-color: var(--SmartThemeBlurTintColor) !important;
 }
 
-/* wAIfu mode*/
-
-body.waifuMode #top-bar {
-    border-radius: 0 0 20px 20px;
-    border: 1px solid var(--SmartThemeBorderColor);
-}
-
-body.waifuMode #sheld {
-    height: 40vh;
-    height: 40dvh;
-    top: calc(100% - 40vh);
-    bottom: 0;
-}
-
-body.waifuMode #chat {
-    border-top: 1px solid var(--SmartThemeBorderColor);
-    border-radius: 10px 10px 0 0;
-}
-
-body.waifuMode #expression-wrapper {
-    justify-content: center;
-}
-
-body.waifuMode .expression-holder {
-    max-height: 90vh;
-    max-width: 90vw;
-    height: 90vh;
-    width: fit-content;
-    bottom: 0;
-    filter: drop-shadow(2px 2px 2px #51515199);
-    z-index: 2;
-    margin: 0 auto;
-    left: 0;
-    right: 0;
-}
-
-body.waifuMode .zoomed_avatar {
-    min-width: 100px;
-    min-height: 100px;
-    max-height: 90vh;
-    max-width: 90vh;
-    width: calc((100vw - var(--sheldWidth)) /2);
-    position: absolute;
-    padding: 0;
-    filter: drop-shadow(2px 2px 2px #51515199);
-    z-index: 29;
-    overflow: hidden;
-    display: none;
-    left: 0;
-    right: 0;
-    margin: 0 auto;
-    top: 50px;
-    aspect-ratio: 2 / 3;
-    height: auto;
-}
-
 /* movingUI*/
 
 body.movingUI .drag-grabber {
@@ -526,20 +470,12 @@ body.movingUI .drag-grabber {
 
 body.movingUI #sheld,
 body.movingUI .drawer-content,
-body.movingUI #expression-holder,
 body.movingUI .zoomed_avatar,
 body.movingUI .draggable,
 body.movingUI #floatingPrompt {
     resize: both;
 }
 
-#expression-image.default,
-#expression-holder:has(.default) {
-    height: 120px;
-    margin-top: 0;
-    top: 50px;
-    justify-content: center;
-}
 
 /*No Text Shadows Mode*/
 

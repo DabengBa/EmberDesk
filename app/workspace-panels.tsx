@@ -12,7 +12,6 @@ import {
 import type { RuntimePort } from './compat/runtime-port';
 import type {
     AuthoringCommands,
-    BackgroundLibraryCommands,
     ExtensionsHostCommands,
     MainChatCommands,
     WorkspaceDockPanelKind,
@@ -70,7 +69,7 @@ function parseFiniteNumber(value: string): number | undefined {
     return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-export type WorkspacePanelKind = 'worldInfo' | 'backgroundLibrary' | 'extensionsHost' | 'mainChatMessageList' | 'characterAuthoring';
+export type WorkspacePanelKind = 'worldInfo' | 'extensionsHost' | 'mainChatMessageList' | 'characterAuthoring';
 interface WorkspacePanelMount {
     root: Root;
     container: HTMLElement;
@@ -152,37 +151,6 @@ interface WorkspaceShellNavigationEntry {
 
 type WorldInfoWorkspacePanelState = WorldInfoWorkbenchPanelState;
 
-interface BackgroundLibraryWorkspacePanelState {
-    status?: 'disabled' | 'loading' | 'empty' | 'success' | 'error';
-    showLoading?: boolean;
-    showEmpty?: boolean;
-    showError?: boolean;
-    systemContainerPresent?: boolean;
-    chatContainerPresent?: boolean;
-    systemItemCount?: number;
-    chatItemCount?: number;
-    refreshQueued?: boolean;
-    systemBackgrounds?: BackgroundLibraryReactGalleryItem[];
-    chatBackgrounds?: BackgroundLibraryReactGalleryItem[];
-    filterQuery?: string;
-    sortValue?: string;
-    folderViewActive?: boolean;
-    activeFolderId?: string | null;
-    folders?: Array<{ id: string; name: string; thumbnailFile?: string }>;
-    lockedCount?: number;
-    selectedCount?: number;
-}
-
-interface BackgroundLibraryReactGalleryItem {
-    id: string;
-    title: string;
-    url?: string;
-    isCustom?: boolean;
-    animated?: boolean;
-    selected?: boolean;
-    locked?: boolean;
-}
-
 interface ExtensionsHostWorkspacePanelState {
     extensionsSettingsPresent?: boolean;
     extensionsSettings2Present?: boolean;
@@ -245,22 +213,10 @@ interface SettingsOverlayMount {
 
 let mountedSettingsOverlay: SettingsOverlayMount | null = null;
 
-const backgroundLibraryPanelFormSchema = z.object({
-    filterQuery: z.string(),
-    sortValue: z.string(),
-});
-
 const extensionsHostPanelFormSchema = z.object({
     extrasApiUrl: z.string(),
     extrasApiKey: z.string(),
 });
-
-function buildBackgroundLibraryPanelFormDefaults(state: BackgroundLibraryWorkspacePanelState) {
-    return {
-        filterQuery: state.filterQuery ?? '',
-        sortValue: state.sortValue ?? '',
-    };
-}
 
 function buildExtensionsHostPanelFormDefaults(state: ExtensionsHostWorkspacePanelState) {
     return {
@@ -414,14 +370,6 @@ function asWorldInfoState(state: unknown): WorldInfoWorkspacePanelState {
     }
 
     return state as WorldInfoWorkspacePanelState;
-}
-
-function asBackgroundLibraryState(state: unknown): BackgroundLibraryWorkspacePanelState {
-    if (!state || typeof state !== 'object') {
-        return {};
-    }
-
-    return state as BackgroundLibraryWorkspacePanelState;
 }
 
 function asExtensionsHostState(state: unknown): ExtensionsHostWorkspacePanelState {
@@ -1029,26 +977,6 @@ function AuthoringWorkspacePanel({
     );
 }
 
-function getBackgroundLibraryPanelStatus(bridgeState: BackgroundLibraryWorkspacePanelState): WorkspacePanelStatus {
-    if (bridgeState.showLoading || bridgeState.status === 'loading') {
-        return 'loading';
-    }
-
-    if (bridgeState.showError || bridgeState.status === 'error') {
-        return 'error';
-    }
-
-    if (bridgeState.showEmpty || bridgeState.status === 'empty') {
-        return 'empty';
-    }
-
-    if (bridgeState.status === 'success') {
-        return 'success';
-    }
-
-    return 'idle';
-}
-
 function getExtensionsHostPanelStatus(bridgeState: ExtensionsHostWorkspacePanelState): WorkspacePanelStatus {
     if (bridgeState.deferredState === 'loading') {
         return 'loading';
@@ -1095,262 +1023,6 @@ function WorldInfoWorkspacePanel({ state, commands }: { state?: unknown; command
                 </WorkspacePanelShell>
             )}
         />
-    );
-}
-
-function BackgroundGallery({
-    source,
-    items,
-    commands,
-}: {
-    source: 'global' | 'chat';
-    items: BackgroundLibraryReactGalleryItem[];
-    commands?: BackgroundLibraryCommands;
-}) {
-    return (
-        <div className="flex-container flexFlowColumn gap4" data-background-library-react-gallery={source}>
-            <div className="flex-container justifyspacebetween alignitemscenter gap8">
-                <span>{source === 'global' ? '全局背景' : '聊天背景'}</span>
-                <span>{items.length}</span>
-            </div>
-            {items.length > 0 ? items.map(item => (
-                <div
-                    key={`${source}:${item.id}`}
-                    className="workspace-panel-background-item"
-                    data-background-library-react-item={item.id}
-                >
-                    <div
-                        className="workspace-panel-background-preview"
-                        style={{ backgroundImage: item.url }}
-                        aria-hidden="true"
-                    />
-                    <div className="workspace-panel-background-details">
-                        <button
-                            type="button"
-                            className="menu_button workspace-panel-item-row"
-                            data-background-library-react-item-select={item.id}
-                            onClick={() => void commands?.selectBackground(item.id, source)}
-                        >
-                            <span className="workspace-panel-item-label">{item.title}</span>
-                            <span className="workspace-panel-item-status">{item.locked ? '已锁定' : item.selected ? '已选择' : item.animated ? '动态背景' : '选择'}</span>
-                        </button>
-                        <div className="flex-container flexwrap gap4">
-                            <button
-                                type="button"
-                                className="menu_button"
-                                data-background-library-react-item-action="rename"
-                                onClick={() => {
-                                    const nextName = globalThis.prompt?.(`重命名 ${item.title}`, item.title);
-                                    if (!nextName) {
-                                        return;
-                                    }
-                                    void commands?.renameBackground(item.id, nextName, source);
-                                }}
-                            >
-                                重命名
-                            </button>
-                            <button
-                                type="button"
-                                className="menu_button red_button"
-                                data-background-library-react-item-action="delete"
-                                onClick={() => {
-                                    const confirmed = globalThis.confirm?.(`删除 ${item.title}？`);
-                                    if (!confirmed) {
-                                        return;
-                                    }
-                                    void commands?.deleteBackground(item.id, source, source === 'chat');
-                                }}
-                            >
-                                删除
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )) : (
-                <span className="opacity50">暂无背景</span>
-            )}
-        </div>
-    );
-}
-
-function BackgroundLibraryWorkspacePanel({ state, commands }: { state?: unknown; commands?: BackgroundLibraryCommands }) {
-    const bridgeState = asBackgroundLibraryState(state);
-    const status = getBackgroundLibraryPanelStatus(bridgeState);
-    const formDefaults = useMemo(() => buildBackgroundLibraryPanelFormDefaults(bridgeState), [bridgeState]);
-    const backgroundLibraryForm = useForm({
-        defaultValues: formDefaults,
-        validators: {
-            onChange: backgroundLibraryPanelFormSchema,
-        },
-    });
-    const backgroundLibraryCommandMutation = useMutation({
-        mutationFn: async (command: () => Promise<unknown> | unknown) => {
-            await command();
-        },
-        retry: false,
-    });
-    const systemBackgrounds = bridgeState.systemBackgrounds ?? [];
-    const chatBackgrounds = bridgeState.chatBackgrounds ?? [];
-    const recoveryActions: WorkspacePanelRecoveryAction[] = [];
-
-    useEffect(() => {
-        backgroundLibraryForm.reset(formDefaults);
-    }, [backgroundLibraryForm, formDefaults]);
-
-    if (status === 'empty') {
-        recoveryActions.push({
-            id: 'upload-background',
-            label: '上传背景',
-            onClick: () => backgroundLibraryCommandMutation.mutate(() => commands?.uploadBackground('global')),
-        });
-    }
-
-    if (status === 'empty' || status === 'error') {
-        recoveryActions.push({
-            id: 'refresh-backgrounds',
-            label: '刷新面板',
-            onClick: () => backgroundLibraryCommandMutation.mutate(() => commands?.refreshBackgrounds()),
-        });
-    }
-
-    return (
-        <WorkspacePanelShell
-            kind="backgroundLibrary"
-            title="背景"
-            status={status}
-            actions={recoveryActions}
-            legacyBoundary="service-owned-catalog-actions"
-            slots={[
-                { id: 'global-gallery', label: 'Global gallery', ready: bridgeState.systemContainerPresent },
-                { id: 'chat-gallery', label: 'Chat gallery', ready: bridgeState.chatContainerPresent },
-                { id: 'background-actions', label: 'Background actions', ready: bridgeState.systemContainerPresent || bridgeState.chatContainerPresent },
-            ]}
-        >
-            <div className="flex-container flexFlowColumn gap8" data-background-library-react-workflow="gallery-actions">
-                <div className="flex-container flexwrap gap8 alignitemscenter">
-                    <output>文件夹视图：{bridgeState.folderViewActive ? '开' : '关'}</output>
-                    {bridgeState.folderViewActive ? (
-                        <button
-                            type="button"
-                            className="menu_button"
-                            data-background-library-react-action="exit-folder"
-                            onClick={() => backgroundLibraryCommandMutation.mutate(() => commands?.exitFolder())}
-                        >
-                            返回文件夹
-                        </button>
-                    ) : null}
-                    <output>已锁定：{bridgeState.lockedCount ?? 0}</output>
-                    <output>已选择：{bridgeState.selectedCount ?? 0}</output>
-                </div>
-                <div className="flex-container flexwrap gap8 alignitemscenter">
-                    <backgroundLibraryForm.Field name="filterQuery">
-                        {field => (
-                            <input
-                                className="text_pole textarea_compact"
-                                type="search"
-                                data-background-library-react-control="filter"
-                                aria-label="搜索背景"
-                                placeholder="搜索背景"
-                                value={field.state.value}
-                                onChange={event => {
-                                    const filterQuery = event.target.value;
-                                    field.handleChange(filterQuery);
-                                    backgroundLibraryCommandMutation.mutate(() => commands?.applyBackgroundFilter(filterQuery));
-                                }}
-                            />
-                        )}
-                    </backgroundLibraryForm.Field>
-                    <backgroundLibraryForm.Field name="sortValue">
-                        {field => (
-                            <select
-                                className="text_pole textarea_compact"
-                                data-background-library-react-control="sort"
-                                aria-label="背景排序"
-                                value={field.state.value}
-                                onChange={event => {
-                                    const sortValue = event.target.value;
-                                    field.handleChange(sortValue);
-                                    backgroundLibraryCommandMutation.mutate(() => commands?.applyBackgroundSort(sortValue));
-                                }}
-                            >
-                                <option value="az">A-Z</option>
-                                <option value="za">Z-A</option>
-                                <option value="newest">最新</option>
-                                <option value="oldest">最旧</option>
-                            </select>
-                        )}
-                    </backgroundLibraryForm.Field>
-                </div>
-                <div className="flex-container flexwrap gap8 alignitemscenter workspace-panel-background-actions">
-                    <button
-                        type="button"
-                        className="menu_button"
-                        data-background-library-react-action="upload-global"
-                        onClick={() => backgroundLibraryCommandMutation.mutate(() => commands?.uploadBackground('global'))}
-                    >
-                            上传全局背景
-                    </button>
-                    <button
-                        type="button"
-                        className="menu_button"
-                        data-background-library-react-action="upload-chat"
-                        onClick={() => backgroundLibraryCommandMutation.mutate(() => commands?.uploadBackground('chat'))}
-                    >
-                            上传聊天背景
-                    </button>
-                    <button
-                        type="button"
-                        className="menu_button"
-                        data-background-library-react-action="lock"
-                        onClick={() => backgroundLibraryCommandMutation.mutate(() => commands?.lockBackground())}
-                    >
-                            锁定
-                    </button>
-                    <button
-                        type="button"
-                        className="menu_button"
-                        data-background-library-react-action="unlock"
-                        onClick={() => backgroundLibraryCommandMutation.mutate(() => commands?.unlockBackground())}
-                    >
-                            解锁
-                    </button>
-                    <button
-                        type="button"
-                        className="menu_button"
-                        data-background-library-react-action="auto"
-                        onClick={() => backgroundLibraryCommandMutation.mutate(() => commands?.autoBackground())}
-                    >
-                            自动选择
-                    </button>
-                    <button
-                        type="button"
-                        className="menu_button"
-                        data-background-library-react-action="refresh"
-                        onClick={() => backgroundLibraryCommandMutation.mutate(() => commands?.refreshBackgrounds())}
-                    >
-                            刷新
-                    </button>
-                </div>
-                {!bridgeState.folderViewActive && Array.isArray(bridgeState.folders) && bridgeState.folders.length > 0 ? (
-                    <div className="flex-container flexFlowColumn gap4" data-background-library-react-folders="root">
-                        <span>文件夹</span>
-                        {bridgeState.folders.map(folder => (
-                            <button
-                                key={folder.id}
-                                type="button"
-                                className="menu_button workspace-panel-item-row"
-                                data-background-library-react-folder={folder.id}
-                                onClick={() => backgroundLibraryCommandMutation.mutate(() => commands?.enterFolder(folder.id))}
-                            >
-                                <span className="workspace-panel-item-label">{folder.name}</span>
-                            </button>
-                        ))}
-                    </div>
-                ) : null}
-                <BackgroundGallery source="global" items={systemBackgrounds} commands={commands} />
-                <BackgroundGallery source="chat" items={chatBackgrounds} commands={commands} />
-            </div>
-        </WorkspacePanelShell>
     );
 }
 
@@ -1648,8 +1320,6 @@ function renderPanel(
     switch (kind) {
         case 'worldInfo':
             return <WorldInfoWorkspacePanel state={state} commands={commands as WorldInfoCommands} />;
-        case 'backgroundLibrary':
-            return <BackgroundLibraryWorkspacePanel state={state} commands={commands as BackgroundLibraryCommands | undefined} />;
         case 'extensionsHost':
             return <ExtensionsHostWorkspacePanel state={state} commands={commands as ExtensionsHostCommands | undefined} />;
         case 'mainChatMessageList':
@@ -1683,7 +1353,6 @@ const workspaceShellNavigationEntries: WorkspaceShellNavigationEntry[] = [
     { command: 'openFormatting', icon: 'fa-font', label: 'Formatting', panelKind: 'advancedFormatting' },
     { command: 'openCharacterLibrary', icon: 'fa-address-book', label: 'Character Library', panelKind: 'characterLibrary', slotKey: 'characterLibrary' },
     { command: 'openWorldInfo', icon: 'fa-book-atlas', label: 'World Info', panelKind: 'worldInfo', slotKey: 'worldInfo' },
-    { command: 'openBackgrounds', icon: 'fa-image', label: 'Backgrounds', panelKind: 'backgroundLibrary', slotKey: 'backgroundLibrary' },
     { command: 'openExtensions', icon: 'fa-cubes', label: 'Extensions', panelKind: 'extensionsHost', slotKey: 'extensionsHost' },
     { command: 'openSettings', icon: 'fa-gear', label: 'Settings', panelKind: 'settings' },
 ];
@@ -1774,8 +1443,6 @@ function executeWorkspaceShellNavigationCommand(
             return commands.openCharacterLibrary();
         case 'openWorldInfo':
             return commands.openWorldInfo();
-        case 'openBackgrounds':
-            return commands.openBackgrounds();
         case 'openExtensions':
             return commands.openExtensions();
         case 'openSettings':

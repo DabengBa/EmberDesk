@@ -1,3 +1,5 @@
+allowBuilds:
+  protobufjs: set this to true or false
 minimumReleaseAge: 10080
 trustPolicy: no-downgrade
 trustPolicyExclude:

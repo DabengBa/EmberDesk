@@ -61,12 +61,10 @@ import { POPUP_TYPE, callGenericPopup, fixToastrForDialogs } from './popup.js';
 import { loadSystemPrompts } from './sysprompt.js';
 import { fuzzySearchCategories } from './filters.js';
 import { accountStorage } from './util/AccountStorage.js';
-import { extractDominantColor, generateThemePalette, deriveBackgroundName } from './util/ThemeGenerator.js';
 import { DEFAULT_REASONING_TEMPLATE, loadReasoningTemplates } from './reasoning.js';
 import { bindModelTemplates } from './chat-templates.js';
 import { IMAGE_OVERSWIPE, MEDIA_DISPLAY } from './constants.js';
 import { t } from './i18n.js';
-import { getBackgroundPath, isCustomBackgroundUrl } from './backgrounds.js';
 import { persona_description_positions as _persona_description_positions } from './personas.js';
 
 export const toastPositionClasses = [
@@ -167,7 +165,6 @@ export const power_user = {
 
     custom_css: '',
 
-    waifuMode: false,
     movingUI: false,
     movingUIState: {},
     movingUIPreset: '',
@@ -829,17 +826,6 @@ function switchUiMode() {
     }
 }
 
-function toggleWaifu() {
-    $('#waifuMode').trigger('click');
-    return '';
-}
-
-function switchWaifuMode() {
-    $('body').toggleClass('waifuMode', power_user.waifuMode);
-    $('#waifuMode').prop('checked', power_user.waifuMode);
-    scrollChatToBottom();
-}
-
 function switchSpoilerMode() {
     if (power_user.spoiler_free_mode) {
         $('#descriptionWrapper').hide();
@@ -1131,12 +1117,6 @@ function applyTheme(name) {
             key: 'fast_ui_mode',
             action: () => {
                 switchUiMode();
-            },
-        },
-        {
-            key: 'waifuMode',
-            action: () => {
-                switchWaifuMode();
             },
         },
         {
@@ -1479,10 +1459,6 @@ export async function loadPowerUserSettings(settings, data) {
         power_user.chat_display = chat_styles.DEFAULT;
     }
 
-    if (typeof power_user.waifuMode !== 'boolean') {
-        power_user.waifuMode = false;
-    }
-
     if (typeof power_user.chat_width !== 'number') {
         power_user.chat_width = 50;
     }
@@ -1551,9 +1527,6 @@ export async function loadPowerUserSettings(settings, data) {
     $('#trim_sentences_checkbox').prop('checked', power_user.trim_sentences);
     $('#disable_group_trimming').prop('checked', power_user.disable_group_trimming);
     $('#markdown_escape_strings').val(power_user.markdown_escape_strings);
-    $('#fast_ui_mode').prop('checked', power_user.fast_ui_mode);
-    $('#waifuMode').prop('checked', power_user.waifuMode);
-    $('#movingUImode').prop('checked', power_user.movingUI);
     $('#noShadowsmode').prop('checked', power_user.noShadows);
     $('#start_reply_with').text(power_user.user_prompt_bias);
     $('#chat-show-reply-prefix-checkbox').prop('checked', power_user.show_user_prompt_bias);
@@ -1669,8 +1642,6 @@ export async function loadPowerUserSettings(settings, data) {
     await loadContextSettings();
     await loadSystemPrompts(data);
     await loadReasoningTemplates(data);
-    loadMaxContextUnlocked();
-    switchWaifuMode();
     switchSpoilerMode();
     loadMovingUIState();
     loadCharListState();
@@ -2389,7 +2360,6 @@ export function getThemeObject(name) {
         border_color: power_user.border_color,
         font_scale: power_user.font_scale,
         fast_ui_mode: power_user.fast_ui_mode,
-        waifuMode: power_user.waifuMode,
         avatar_style: power_user.avatar_style,
         chat_display: power_user.chat_display,
         toastr_position: power_user.toastr_position,
@@ -2499,7 +2469,6 @@ async function resetMovablePanels(type) {
         'right-nav-panel',
         'WorldInfo',
         'floatingPrompt',
-        'expression-holder',
         'groupMemberListPopout',
         'summaryExtensionPopout',
         'gallery',
@@ -2724,67 +2693,6 @@ async function doDelMode(_, text) {
 
 function doResetPanels() {
     $('#movingUIreset').trigger('click');
-    return '';
-}
-
-async function setAvgBG(args) {
-    const nameOverride = args?.name ? String(args.name).trim() : '';
-    const bgOverride = args?.bg ? String(args.bg).trim() : '';
-    const force = isTrueBoolean(args?.force?.toString());
-
-    let bgUrl;
-
-    if (bgOverride) {
-        // Use the specified background file
-        const isCustom = isCustomBackgroundUrl(bgOverride);
-        bgUrl = isCustom ? bgOverride : getBackgroundPath(bgOverride);
-    } else {
-        // Use the currently active background
-        bgUrl = $('#bg1')
-            .css('background-image')
-            .replace(/^url\(['"]?/, '')
-            .replace(/['"]?\)$/, '');
-    }
-
-    if (!bgUrl || bgUrl === 'none') {
-        toastr.warning('No background image set.');
-        return '';
-    }
-
-    // Build theme name from background filename or use override
-    const bgName = deriveBackgroundName(bgUrl);
-    const themeName = nameOverride || `bgcol - ${bgName}`;
-
-    // Check if a theme with the same name already exists
-    if (themes.some(t => t.name === themeName) && !force) {
-        toastr.warning('Pass "force=true" to overwrite.', `A theme named "${themeName}" already exists.`);
-        return '';
-    }
-
-    const bgimg = new Image();
-    bgimg.crossOrigin = 'anonymous';
-    bgimg.src = bgUrl;
-
-    await new Promise((resolve, reject) => {
-        bgimg.onload = resolve;
-        bgimg.onerror = () => reject(new Error('Failed to load background image'));
-    });
-
-    // Extract dominant vivid color using Oklch-weighted sampling
-    const dominantRgb = extractDominantColor(bgimg);
-
-    // Generate a full theme palette from the dominant color
-    const palette = generateThemePalette(dominantRgb);
-
-    // Create theme object from current settings, then override colors
-    const theme = getThemeObject(themeName);
-    Object.assign(theme, palette);
-
-    // Save as a new theme
-    await saveTheme(themeName, theme);
-    applyTheme(themeName);
-
-    toastr.success(`Theme "${themeName}" generated and applied.`);
     return '';
 }
 
@@ -3178,12 +3086,6 @@ jQuery(() => {
     $('#fast_ui_mode').on('change', function () {
         power_user.fast_ui_mode = $(this).prop('checked');
         switchUiMode();
-        saveSettingsDebounced();
-    });
-
-    $('#waifuMode').on('change', () => {
-        power_user.waifuMode = !!$('#waifuMode').prop('checked');
-        switchWaifuMode();
         saveSettingsDebounced();
     });
 
@@ -3948,11 +3850,6 @@ jQuery(() => {
     });
 
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'vn',
-        callback: toggleWaifu,
-        helpString: 'Swaps Visual Novel Mode On/Off',
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'newchat',
         /** @type {(args: { delete: string?}, string) => Promise<''>} */
         callback: async (args, _) => {
@@ -4030,31 +3927,6 @@ jQuery(() => {
         callback: doResetPanels,
         helpString: 'resets UI panels to original state',
         aliases: ['resetui'],
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'bgcol',
-        callback: setAvgBG,
-        namedArgumentList: [
-            SlashCommandNamedArgument.fromProps({
-                name: 'force',
-                description: 'force generation even if a theme with the same name already exists',
-                typeList: [ARGUMENT_TYPE.BOOLEAN],
-                defaultValue: 'false',
-                enumList: commonEnumProviders.boolean('trueFalse')(),
-            }),
-            SlashCommandNamedArgument.fromProps({
-                name: 'name',
-                description: 'override the generated theme name',
-                typeList: [ARGUMENT_TYPE.STRING],
-            }),
-            SlashCommandNamedArgument.fromProps({
-                name: 'bg',
-                description: 'background image filename to use instead of the current one',
-                typeList: [ARGUMENT_TYPE.STRING],
-                enumProvider: commonEnumProviders.backgrounds,
-            }),
-        ],
-        helpString: 'Generates a new theme based on a dominant color of the specified background image. Saves as "bgcol - background name".',
     }));
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'theme',

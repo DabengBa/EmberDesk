@@ -1,4 +1,4 @@
-import { describe, test, expect } from '@jest/globals';
+import { describe, expect, test } from '@jest/globals';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,53 +8,62 @@ const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
 
 function read(relativePath) {
-    return fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
+    const sourcePath = relativePath === 'public/index.html' && process.env.U002_INDEX_SOURCE
+        ? process.env.U002_INDEX_SOURCE
+        : path.join(repoRoot, relativePath);
+    return fs.readFileSync(sourcePath, 'utf8');
 }
 
-describe('background panel status (legacy controller retired)', () => {
-    test('domain status helper classifies disabled, loading, empty, success, and error states', async () => {
-        const domain = await import(`../public/scripts/background-domain.js?t=${Date.now()}`);
-        expect(domain.getBackgroundLibraryPanelStatus({ disabled: true })).toEqual({
-            status: 'disabled', showLoading: false, showEmpty: false, showError: false,
-        });
-        expect(domain.getBackgroundLibraryPanelStatus({ isLoading: true, systemItemCount: 0 })).toEqual({
-            status: 'loading', showLoading: true, showEmpty: false, showError: false,
-        });
-        expect(domain.getBackgroundLibraryPanelStatus({ systemItemCount: 0, chatItemCount: 0 })).toEqual({
-            status: 'empty', showLoading: false, showEmpty: true, showError: false,
-        });
-        expect(domain.getBackgroundLibraryPanelStatus({ systemItemCount: 2 })).toEqual({
-            status: 'success', showLoading: false, showEmpty: false, showError: false,
-        });
-        expect(domain.getBackgroundLibraryPanelStatus({ error: new Error('boom'), systemItemCount: 2 })).toEqual({
-            status: 'error', showLoading: false, showEmpty: false, showError: true,
-        });
+function exists(relativePath) {
+    return fs.existsSync(path.join(repoRoot, relativePath));
+}
+
+describe('retired legacy background and expressions surfaces', () => {
+    test('removes retired modules and extension assets', () => {
+        expect(exists('public/scripts/backgrounds.js')).toBe(false);
+        expect(exists('public/scripts/background-domain.js')).toBe(false);
+        expect(exists('public/scripts/background-library-service.js')).toBe(false);
+        expect(exists('public/scripts/extensions/expressions')).toBe(false);
     });
 
-    test('backgrounds facade no longer imports the retired panel controller', () => {
-        const source = read('public/scripts/backgrounds.js');
-        expect(source).not.toContain("from './background-panel-controller.js'");
-        expect(source).not.toContain('replaceBackgroundPanelController');
-        expect(source).not.toContain('createBackgroundPanelController');
+    test('removes legacy background and expressions integration without removing group sprite semantics', () => {
+        const script = read('public/script.js');
+        const powerUser = read('public/scripts/power-user.js');
+        const slashCommands = read('public/scripts/slash-commands.js');
+        const extensions = read('public/scripts/extensions.js');
+        const index = read('public/index.html');
+
+        expect(script).not.toMatch(/backgroundLibrary|background-domain|backgrounds\.js|openBackgrounds|initBackgrounds|deferredBackgroundTask/);
+        expect(script).toContain('background_settings');
+        expect(script).toContain('loadBackgroundSettings(settings);');
+        expect(script).toContain('background: background_settings,');
+        expect(powerUser).not.toContain('from \'./backgrounds.js\'');
+        expect(powerUser).not.toContain('name: \'bgcol\'');
+        expect(slashCommands).not.toContain('from \'./backgrounds.js\'');
+        expect(slashCommands).not.toMatch(/setBackgroundCallback|name: ['"]background['"]/);
+        expect(extensions).not.toMatch(/expressionOverrides|\bexpressions\s*:/);
+        expect(index).not.toContain('id="Backgrounds"');
+        expect(index).not.toContain('backgrounds-drawer-toggle');
+        expect(index).not.toContain('id="expressions_container"');
+        expect(index).not.toContain('background_thumbnails_animation');
+        expect(index).not.toContain('id="background_template"');
+        expect(index).not.toContain('id="bg_folder_tile_template"');
+        expect(index).not.toContain('id="bg_new_folder_template"');
+        expect(script).toContain('hideMutedSprites');
+        expect(index).toContain('id="rm_group_hidemutedsprites"');
     });
 
-    test('legacy controller module is deleted', () => {
-        expect(fs.existsSync(path.join(repoRoot, 'public/scripts/background-panel-controller.js'))).toBe(false);
-    });
+    test('does not leave retired sprite endpoint or extension imports in the frontend shell', () => {
+        const files = [
+            'public/script.js',
+            'public/scripts/power-user.js',
+            'public/scripts/slash-commands.js',
+            'public/scripts/extensions.js',
+            'public/index.html',
+        ];
 
-    test('React-owned background drawers force hidden compatibility controls out of layout', () => {
-        const styles = read('public/css/backgrounds.css');
-
-        expect(styles).toContain('#Backgrounds.bg-drawer-react-owned [data-legacy-background-hidden-by-react="true"]');
-        expect(styles).toContain('display: none !important;');
-    });
-
-    test('React gallery rows keep a visible background preview', () => {
-        const styles = read('public/style.css');
-
-        expect(styles).toContain('.workspace-panel-background-preview');
-        expect(styles).toContain('aspect-ratio: 16 / 9;');
-        expect(styles).toContain('.workspace-panel-background-actions .menu_button');
-        expect(styles).toContain('min-width: max-content;');
+        for (const file of files) {
+            expect(read(file)).not.toMatch(/api\/sprites|extensions\/expressions/);
+        }
     });
 });

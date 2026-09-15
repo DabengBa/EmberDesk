@@ -4,6 +4,10 @@ Creation date: 2026-05-01
 
 Scope: EmberDesk is a self-hosted browser-based LLM workspace derived from SillyTavern. This file records cross-spec architectural evolution and lessons that matter beyond individual specs.
 
+| Date | Change | Summary | Why | References |
+|---|---|---|---|---|
+| 2026-09-15 | retirement | Retire the global Background Library, Expressions/waifu controls, and global sprite persistence while retaining active chat backgrounds, `custom_background` / `chat_backgrounds` metadata, static `backgrounds/*` compatibility, avatar/persona media, and chat `hideMutedSprites` metadata | Remove deleted media capabilities without conflating them with active chat background or avatar compatibility; preserve historical Background Library sole-owner delivery as a superseded record | [background-library-panel](db/features/background-library-panel.md), [chat-workspace](db/pages/chat-workspace.md), [legacy-cutover-ledger](tech/legacy-cutover-ledger.md), [ADR-0012](adr/0012-react-migrated-surface-legacy-retirement.md), [retirement brief](tech/briefs/260716-09-react-background-library-retirement.md) |
+
 ## Architecture / Evolution
 
 | Date | Change | Summary | Why | References |

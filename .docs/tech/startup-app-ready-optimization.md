@@ -11,7 +11,6 @@ Primary files:
 - `public/scripts/public-api.js`
 - `public/scripts/events.js`
 - `public/scripts/startup-helpers.js`
-- `public/scripts/backgrounds.js`
 - `public/scripts/extensions.js`
 - `public/scripts/action-loader.js`
 - `scripts/startup-performance-runner.mjs`
@@ -54,10 +53,9 @@ Critical path work still includes:
 Post-ready work is scheduled through single-flight tasks from `public/scripts/startup-helpers.js`:
 
 - `deferred.getClientVersion`
-- `deferred.getBackgrounds`
 - `deferred.loadExtensionSettings`
 
-`public/scripts/backgrounds.js` uses a single-flight catalog loader so startup warmup, panel-open reads, and explicit refreshes do not duplicate the same request. If a refresh is requested while the current load is still in flight, the refresh queues one more run after the active request finishes.
+The former deferred background catalog warmup and Background Library panel loading are retired. Active chat background application remains a chat-context/settings contract and does not create a catalog loader or startup panel.
 
 `public/scripts/extensions.js` exposes a deferred loader hook so the extensions UI can show a local placeholder and wait for the same in-flight activation task before opening details. When deferred loading fails, the placeholder switches to a retry state instead of leaving a permanent spinner behind.
 

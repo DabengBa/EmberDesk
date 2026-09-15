@@ -58,8 +58,6 @@ async function fetchProviderResource({ url, options = undefined, source, stage, 
 export const CONTENT_TYPES = {
     SETTINGS: 'settings',
     CHARACTER: 'character',
-    SPRITES: 'sprites',
-    BACKGROUND: 'background',
     WORLD: 'world',
     AVATAR: 'avatar',
     THEME: 'theme',
@@ -356,10 +354,6 @@ export function getUserTargetByType(type, directories) {
             return directories.root;
         case CONTENT_TYPES.CHARACTER:
             return directories.characters;
-        case CONTENT_TYPES.SPRITES:
-            return directories.characters;
-        case CONTENT_TYPES.BACKGROUND:
-            return directories.backgrounds;
         case CONTENT_TYPES.WORLD:
             return directories.worlds;
         case CONTENT_TYPES.AVATAR:

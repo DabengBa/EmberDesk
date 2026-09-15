@@ -70,7 +70,7 @@ for (const dir of Object.values(directories)) {
 
 await seedBootstrapContent();
 await seedSettings();
-await seedBackgroundsAndThemes();
+await seedThemes();
 await seedUserAccount();
 
 const worldNames = await seedWorlds();
@@ -114,10 +114,6 @@ async function seedBootstrapContent() {
         path.join(dataRoot, '_css', 'user.css'),
     );
     await copyFile(
-        path.join(repoRoot, 'default', 'content', 'backgrounds', '__transparent.png'),
-        path.join(directories.backgrounds, '__transparent.png'),
-    );
-    await copyFile(
         path.join(repoRoot, 'default', 'content', 'presets', 'quick-replies', 'Default.json'),
         path.join(directories.quickreplies, 'Default.json'),
     );
@@ -145,15 +141,7 @@ async function seedUserAccount() {
     });
 }
 
-async function seedBackgroundsAndThemes() {
-    await copyFile(
-        path.join(repoRoot, 'default', 'content', 'backgrounds', '_black.jpg'),
-        path.join(directories.backgrounds, '_black.jpg'),
-    );
-    await copyFile(
-        path.join(repoRoot, 'default', 'content', 'backgrounds', 'landscape beach day.png'),
-        path.join(directories.backgrounds, 'landscape beach day.png'),
-    );
+async function seedThemes() {
     await copyFile(
         path.join(repoRoot, 'default', 'content', 'themes', 'Dark V 1.0.json'),
         path.join(directories.themes, 'Dark V 1.0.json'),

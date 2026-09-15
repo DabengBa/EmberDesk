@@ -51,7 +51,6 @@ import {
 import { createCharacterImportCoordinator } from './character-import-service.js';
 
 import { areThumbnailsEnabled, generateThumbnail, invalidateThumbnail } from './thumbnails.js';
-import { importRisuSprites } from './sprites.js';
 import { getUserDirectories } from '../users.js';
 import { getChatInfo } from './chats.js';
 import { ByafParser } from '../byaf.js';
@@ -1028,14 +1027,14 @@ async function importFromCharX(uploadPath, { request }, preservedFileName) {
 
     const fileName = preservedFileName || getPngName(processedCard.name, request.user.directories);
     // Use the actual character name for asset folders, not the unique filename
-    // ST's sprite system looks up by character name, not PNG filename
+    // Character-specific backgrounds and miscellaneous CharX assets use this folder.
     const characterFolder = processedCard.name;
 
     if (auxiliaryAssets.length > 0) {
         try {
             const summary = persistCharXAssets(auxiliaryAssets, extractedBuffers, request.user.directories, characterFolder);
-            if (summary.sprites || summary.backgrounds || summary.misc) {
-                console.log(`CharX: Imported ${summary.sprites} sprite(s), ${summary.backgrounds} background(s), ${summary.misc} misc asset(s) for ${characterFolder}`);
+            if (summary.backgrounds || summary.misc) {
+                console.log(`CharX: Imported ${summary.backgrounds} background(s), ${summary.misc} misc asset(s) for ${characterFolder}`);
             }
         } catch (error) {
             console.warn(`CharX: Failed to persist auxiliary assets for ${characterFolder}`, error);
@@ -1141,7 +1140,6 @@ async function importFromJson(uploadPath, { request }, preservedFileName) {
 
     if (jsonData.spec !== undefined) {
         console.info(`Importing from ${jsonData.spec} json`);
-        importRisuSprites(request.user.directories, jsonData);
         unsetPrivateFields(jsonData);
         if (jsonData.data?.name) {
             jsonData.data.name = sanitize(jsonData.data.name);
@@ -1243,7 +1241,6 @@ async function importFromPng(uploadPath, { request }, preservedFileName) {
 
     if (jsonData.spec !== undefined) {
         console.info(`Found a ${jsonData.spec} character file.`);
-        importRisuSprites(request.user.directories, jsonData);
         unsetPrivateFields(jsonData);
         jsonData = readFromV2(jsonData);
         jsonData.create_date = new Date().toISOString();

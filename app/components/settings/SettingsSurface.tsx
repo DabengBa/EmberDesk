@@ -134,7 +134,6 @@ const settingsSchema = z.object({
         mesIDDisplayEnabled: z.boolean(),
         hideChatAvatarsEnabled: z.boolean(),
         compactInputArea: z.boolean(),
-        waifuMode: z.boolean(),
         expandMessageActions: z.boolean(),
         enableZenSliders: z.boolean(),
         enableLabMode: z.boolean(),
@@ -1766,15 +1765,6 @@ export function SettingsSurface({
                                         name="userInterface.compactInputArea"
                                         label="Compact Input Area"
                                         description="使用更紧凑的输入区域。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.waifuMode"
-                                        label="Waifu Mode"
-                                        description="Settings path binding for userInterface.waifuMode."
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}

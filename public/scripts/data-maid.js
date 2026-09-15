@@ -41,10 +41,6 @@ class DataMaidDialog {
                 name: t`Avatar Thumbnails`,
                 description: t`Thumbnails for avatars of missing or deleted characters.`,
             },
-            backgroundThumbnails: {
-                name: t`Background Thumbnails`,
-                description: t`Thumbnails for missing or deleted backgrounds.`,
-            },
             personaThumbnails: {
                 name: t`Persona Thumbnails`,
                 description: t`Thumbnails for missing or deleted personas.`,
@@ -314,7 +310,7 @@ class DataMaidDialog {
      */
     async view(prop, hash, name) {
         const url = this.getViewUrl(hash);
-        const isImage = ['images', 'avatarThumbnails', 'backgroundThumbnails'].includes(prop);
+        const isImage = ['images', 'avatarThumbnails'].includes(prop);
         const element = isImage
             ? await this.getViewElement(url, name)
             : await this.getTextViewElement(url);

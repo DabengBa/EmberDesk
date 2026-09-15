@@ -154,7 +154,6 @@
         "apiKey": "",
         "autoConnect": false,
         "disabledExtensions": [],
-        "expressionOverrides": [],
         "memory": {
             "minLongMemory": 16,
             "maxLongMemory": 1024,
@@ -202,9 +201,6 @@
         },
         "caption": {
             "refine_mode": false
-        },
-        "expressions": {
-            "showDefault": false
         },
         "dice": {},
         "regex": [],

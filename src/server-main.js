@@ -86,7 +86,6 @@ import { init as settingsInit } from './endpoints/settings.js';
 import { redirectDeprecatedEndpoints, ServerStartup, setupPrivateEndpoints, setupPublicEndpoints } from './server-startup.js';
 import { diskCache } from './endpoints/characters.js';
 import { migrateFlatSecrets } from './endpoints/secrets.js';
-import { migrateGroupChatsMetadataFormat } from './endpoints/groups.js';
 import { createServerStartupProfiler } from './server-startup-profiler.js';
 
 // Unrestrict console logs display limit
@@ -318,7 +317,6 @@ async function collectCleanupResources() {
     console.log();
 
     const directories = await startupProfiler.measure('getUserDirectoriesList', () => getUserDirectoriesList());
-    await startupProfiler.measure('migrateGroupChatsMetadataFormat', () => migrateGroupChatsMetadataFormat(directories));
     await startupProfiler.measure('checkForNewContent', () => checkForNewContent(directories));
     await startupProfiler.measure('diskCache.verify', () => diskCache.verify(directories));
     await startupProfiler.measure('migrateFlatSecrets', () => Promise.resolve(migrateFlatSecrets(directories)));

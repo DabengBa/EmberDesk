@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
+import { CharXParser } from '../src/charx.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,7 +23,6 @@ function makeUserDirectories(prefix) {
         avatars: path.join(root, 'User Avatars'),
         thumbnailsAvatar: path.join(root, 'thumbnails', 'avatar'),
         thumbnailsPersona: path.join(root, 'thumbnails', 'persona'),
-        thumbnailsBg: path.join(root, 'thumbnails', 'bg'),
     };
 
     for (const dir of Object.values(directories)) {
@@ -72,6 +72,7 @@ async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled 
         mutateJsonString: value => value,
         clientRelativePath: (_root, inputPath) => inputPath,
         getUniqueName: (baseName) => baseName,
+        getImageBuffers: async () => new Map(),
         isPathUnderParent: (parent, target) => target === parent || target.startsWith(`${parent}${path.sep}`),
         sanitizeSafeCharacterReplacements: () => '_',
         uuidv4: () => 'test-managed-media-id',
@@ -140,10 +141,6 @@ async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled 
         areThumbnailsEnabled: () => thumbnailsEnabled,
         invalidateThumbnail: mockInvalidateThumbnail,
         generateThumbnail: mockGenerateThumbnail,
-    }));
-
-    jest.unstable_mockModule('../src/endpoints/sprites.js', () => ({
-        importRisuSprites: () => {},
     }));
 
     jest.unstable_mockModule('../src/users.js', () => ({
@@ -322,6 +319,20 @@ afterEach(() => {
 });
 
 describe('thumbnail write-time pregeneration hooks', () => {
+    test('CharX expression assets are not mapped for persistence', () => {
+        const parser = new CharXParser(Buffer.alloc(0));
+        const mapped = parser.mapCharXAssetsForStorage([
+            { type: 'expression', name: 'happy', ext: 'png', zipPath: 'happy.png', order: 0 },
+            { type: 'emotion', name: 'sad', ext: 'png', zipPath: 'sad.png', order: 1 },
+            { type: 'sprite', name: 'angry', ext: 'png', zipPath: 'angry.png', order: 2 },
+            { type: 'background', name: 'room', ext: 'jpg', zipPath: 'room.jpg', order: 3 },
+            { type: 'custom', name: 'misc', ext: 'png', zipPath: 'misc.png', order: 4 },
+        ]);
+
+        expect(mapped.map(asset => asset.type)).toEqual(['background', 'custom']);
+        expect(mapped.map(asset => asset.storageCategory)).toEqual(['background', 'misc']);
+    });
+
     test('character create kicks off avatar pregeneration without awaiting it', async () => {
         const directories = makeUserDirectories('emberdesk-pregen-character-');
         let sawWrittenCharacter = false;

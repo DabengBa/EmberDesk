@@ -79,9 +79,9 @@ Safe extraction candidates:
 - Small DOM controller helpers for one bounded panel or toolbar surface when the root element and cleanup can be explicit.
 - Request helper wrappers only when they preserve existing URL, body, header, and response contracts.
 
-Delivered low-risk controller slice:
+### Historical delivered slice (superseded 2026-09-15)
 
-- The background library loading indicator now has a dedicated root-scoped controller in `public/scripts/background-panel-controller.js`, with request flow, upload/delete/rename/folder behavior, slash-command registration, selectors, and visible copy still owned by `public/scripts/backgrounds.js`.
+The background library loading-indicator/controller slice was a historical delivery record. The Background Library, its loading host, gallery, request owner, Expressions/waifu controls, and global sprite persistence are now retired; active chat background application and retained static background paths are separate compatibility behavior.
 
 Do not start with:
 

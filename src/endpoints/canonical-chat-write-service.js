@@ -31,7 +31,7 @@ function listStringLeaves(value, fieldPath = []) {
 }
 
 function isManagedAttachmentCandidate(value) {
-    return /^(files|backgrounds|assets|user\/files|user\/images|User Avatars)\//.test(String(value ?? ''));
+    return /^(files|assets|user\/files|user\/images|User Avatars)\//.test(String(value ?? ''));
 }
 
 function findFirstUnregisteredAttachmentPath(db, payload) {

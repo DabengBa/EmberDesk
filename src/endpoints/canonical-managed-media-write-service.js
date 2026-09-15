@@ -3,8 +3,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import mime from 'mime-types';
-import { sync as writeFileAtomicSync } from 'write-file-atomic';
-
 import { canonicalSqliteManager, withCanonicalTransaction } from '../canonical-sqlite.js';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
 import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
@@ -12,11 +10,9 @@ import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js
 import { uuidv4 } from '../util.js';
 import {
     getCanonicalManagedMediaReference,
-    getCanonicalManagedMediaFolderState,
     listOpenCanonicalManagedMediaRepairs,
     markCanonicalManagedMediaRepairAttempt,
     recordCanonicalManagedMediaRepair,
-    replaceCanonicalManagedMediaFolders,
     resolveCanonicalManagedMediaRepair,
     upsertCanonicalManagedMediaReference,
 } from './canonical-managed-media-store.js';
@@ -184,76 +180,6 @@ function saveProjectionRepair(db, { repairKey, reference, operation, compatibili
         },
         nowMs,
     });
-}
-
-function projectCanonicalManagedMediaFolderState({ directories, folderState }) {
-    const metadataPath = path.join(directories.root, 'image-metadata.json');
-    let index;
-    try {
-        index = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
-    } catch {
-        index = { version: 1, images: {}, folders: [] };
-    }
-    index.images = index.images && typeof index.images === 'object' ? index.images : {};
-    for (const [relativePath, metadata] of Object.entries(index.images)) {
-        if (normalizePath(relativePath).startsWith('backgrounds/') && metadata && typeof metadata === 'object') {
-            delete metadata.folderIds;
-        }
-    }
-    for (const [filename, folderIds] of Object.entries(folderState.imageFolderMap ?? {})) {
-        const relativePath = path.posix.join('backgrounds', path.posix.basename(filename));
-        const metadata = index.images[relativePath] && typeof index.images[relativePath] === 'object'
-            ? index.images[relativePath]
-            : {};
-        metadata.folderIds = Array.isArray(folderIds) ? [...folderIds] : [];
-        index.images[relativePath] = metadata;
-    }
-    index.folders = Array.isArray(folderState.folders) ? folderState.folders : [];
-    writeFileAtomicSync(metadataPath, JSON.stringify(index, null, 4), 'utf8');
-}
-
-export async function writeCanonicalManagedMediaFolderState({
-    handle,
-    directories,
-    folderState,
-    projectFolderState = null,
-    dependencies = {},
-    nowMs = Date.now(),
-} = {}) {
-    const state = getCanonicalManagedMediaWriteState({ handle, directories, dependencies });
-    if (!state.ok) {
-        return state;
-    }
-
-    replaceCanonicalManagedMediaFolders(state.db, {
-        folders: folderState?.folders,
-        imageFolderMap: folderState?.imageFolderMap,
-        nowMs,
-    });
-    const canonicalFolderState = getCanonicalManagedMediaFolderState(state.db);
-    try {
-        (projectFolderState ?? projectCanonicalManagedMediaFolderState)({
-            directories,
-            folderState: canonicalFolderState,
-        });
-        return { ok: true, authorityCommitted: true, folderState: canonicalFolderState };
-    } catch (error) {
-        const repairKey = createRepairKey('folder_projection', 'folder-state');
-        recordCanonicalManagedMediaRepair(state.db, {
-            repairKey,
-            operation: 'folder_projection',
-            reason: String(error?.message ?? error ?? 'folder_projection_failed'),
-            details: { folderState: canonicalFolderState },
-            nowMs,
-        });
-        return {
-            ok: false,
-            authorityCommitted: true,
-            reason: 'projection_failed',
-            repairKey,
-            folderState: canonicalFolderState,
-        };
-    }
 }
 
 export async function writeCanonicalManagedMedia({
@@ -468,14 +394,7 @@ export async function renameCanonicalManagedMediaReference({
     }
 }
 
-function projectRepair({ db, directories, repair }) {
-    if (repair.operation === 'folder_projection') {
-        projectCanonicalManagedMediaFolderState({
-            directories,
-            folderState: getCanonicalManagedMediaFolderState(db),
-        });
-        return;
-    }
+function projectRepair({ directories, repair }) {
     const compatibilityPath = assertCompatibilityPath(directories, repair.details.compatibilityPath);
     const managedRelativePath = normalizePath(repair.details.managedRelativePath);
     const managedPath = path.resolve(directories.storage, managedRelativePath);
@@ -507,7 +426,7 @@ export async function repairCanonicalManagedMediaProjection({
         }
         markCanonicalManagedMediaRepairAttempt(db, { repairKey: repair.repairKey, attemptedAtMs: nowMs });
         try {
-            projectRepair({ db, directories, repair });
+            projectRepair({ directories, repair });
             resolveCanonicalManagedMediaRepair(db, { repairKey: repair.repairKey, resolvedAtMs: nowMs });
             results.push({ repairKey: repair.repairKey, status: 'repaired', operation: repair.operation });
         } catch (error) {

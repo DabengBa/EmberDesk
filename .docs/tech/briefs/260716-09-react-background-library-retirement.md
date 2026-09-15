@@ -4,7 +4,7 @@ source: user
 confirmed: true
 last_updated: 2026-07-17
 feature_slug: react-background-library-retirement
-status: delivered
+status: superseded
 ---
 
 # React Background Library Retirement Intent
@@ -47,9 +47,16 @@ React 独立拥有背景 catalog、filter/sort、selection、lock、folders、up
 
 ## Closeout
 
-- **Status**: delivered (2026-07-17)
-- **Sole owner**: React Background Library panel on the same workspace Backgrounds entry
-- **Service**: `public/scripts/background-domain.js`, `public/scripts/background-library-service.js`
-- **Barrel**: `public/scripts/backgrounds.js` (slash + transport helpers)
+- **Status**: delivered (2026-07-17; historical record)
+- **Sole owner**: React Background Library panel on the same workspace Backgrounds entry (historical delivery state)
+- **Service**: `public/scripts/background-domain.js`, `public/scripts/background-library-service.js` (historical implementation)
+- **Barrel**: `public/scripts/backgrounds.js` (slash + transport helpers; historical implementation)
 - **Owning docs**: `.docs/db/features/background-library-panel.md`, `.docs/db/pages/chat-workspace.md`, `.docs/tech/legacy-cutover-ledger.md`, `.docs/PROJECT_HISTORY.md`
 - **ADR**: `.docs/adr/0012-react-migrated-surface-legacy-retirement.md`
+
+## Supersession Note (2026-09-15)
+
+- **Status**: superseded by the 2026-09-15 global Background Library / Expressions / waifu / sprite persistence retirement.
+- **Historical fact retained**: this brief records the earlier React sole-owner intent and delivered implementation state; it is not a statement that the retired gallery remains available.
+- **Current boundary**: active chat backgrounds, `custom_background` / `chat_backgrounds` metadata, static `backgrounds/*` compatibility, avatar/persona media, and retained thumbnail behavior remain supported separately. Global catalog/folder/gallery actions, Expressions/waifu controls, and global sprite persistence are retired.
+- **Current evidence owner**: `.docs/db/features/background-library-panel.md`, `.docs/db/pages/chat-workspace.md`, `.docs/tech/legacy-cutover-ledger.md`, and the U005 cross-unit route/navigation contracts.

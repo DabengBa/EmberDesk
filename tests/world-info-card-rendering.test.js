@@ -256,7 +256,6 @@ describe('world info card rendering', () => {
             'advanced-formatting-button',
             'WI-SP-button',
             'user-settings-button',
-            'backgrounds-button',
             'extensions-settings-button',
             'persona-management-button',
             'rightNavHolder',

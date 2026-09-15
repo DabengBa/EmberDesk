@@ -8,7 +8,6 @@ import { getCanonicalMigrationStatus, runCanonicalMigrations } from './canonical
 import { persistCanonicalAuditStatus } from './canonical-sqlite-shadow-import.js';
 import {
     listCanonicalManagedMediaReferences,
-    replaceCanonicalManagedMediaFolders,
     upsertCanonicalManagedMediaReference,
 } from './endpoints/canonical-managed-media-store.js';
 import { isPathUnderParent } from './util.js';
@@ -16,7 +15,6 @@ import { isPathUnderParent } from './util.js';
 export const MANAGED_MEDIA_AUDIT_SCOPE = 'managed_media';
 
 const MEDIA_DOMAINS = Object.freeze([
-    { key: 'backgrounds', ownerType: 'background', role: 'background', recursive: false },
     { key: 'assets', ownerType: 'asset', role: 'asset', recursive: true },
     { key: 'avatars', ownerType: 'persona_avatar', role: 'persona_avatar', recursive: false },
     { key: 'files', ownerType: 'attachment', role: 'attachment', recursive: true },
@@ -28,11 +26,23 @@ function toCompatibilityPath(directories, filePath) {
 }
 
 function isSafeCompatibilityPath(directories, compatibilityPath, domainRoot = null) {
-    if (typeof compatibilityPath !== 'string' || !compatibilityPath || path.isAbsolute(compatibilityPath)) {
+    if (typeof compatibilityPath !== 'string' || !compatibilityPath) {
+        return false;
+    }
+    if (compatibilityPath.includes('/') && compatibilityPath.includes('\\')) {
+        return false;
+    }
+    if (path.isAbsolute(compatibilityPath)
+        || path.posix.isAbsolute(compatibilityPath)
+        || path.win32.isAbsolute(compatibilityPath)) {
+        return false;
+    }
+    const normalized = compatibilityPath.split(path.sep).join(path.posix.sep);
+    if (normalized !== path.posix.normalize(normalized)) {
         return false;
     }
     const root = path.resolve(directories.root);
-    const resolved = path.resolve(root, compatibilityPath);
+    const resolved = path.resolve(root, normalized);
     if (!isPathUnderParent(root, resolved)) {
         return false;
     }
@@ -85,24 +95,6 @@ function hashFile(filePath) {
     return hash.digest('hex');
 }
 
-function readFolderProjection(directories) {
-    const metadataPath = path.join(directories.root, 'image-metadata.json');
-    try {
-        const payload = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
-        const folders = Array.isArray(payload?.folders) ? payload.folders : [];
-        const imageFolderMap = {};
-        for (const [relativePath, metadata] of Object.entries(payload?.images ?? {})) {
-            if (!relativePath.startsWith('backgrounds/') || !Array.isArray(metadata?.folderIds)) {
-                continue;
-            }
-            imageFolderMap[path.posix.basename(relativePath)] = metadata.folderIds.map(String);
-        }
-        return { folders, imageFolderMap };
-    } catch {
-        return { folders: [], imageFolderMap: {} };
-    }
-}
-
 function summarizeImport({ handle, entries, skipped = false, reason = null, migrationStatus = null }) {
     const count = status => entries.filter(entry => entry.status === status).length;
     return {
@@ -133,11 +125,15 @@ function buildAuditSummary({ handle, migrationStatus, entries }) {
 }
 
 function getDomainForPath(directories, compatibilityPath) {
-    const normalized = String(compatibilityPath).split(path.sep).join(path.posix.sep);
     return MEDIA_DOMAINS.find(domain => {
         const root = directories?.[domain.key];
-        return root && isSafeCompatibilityPath(directories, normalized, root);
+        return root && isSafeCompatibilityPath(directories, compatibilityPath, root);
     }) ?? null;
+}
+
+function isRetiredCompatibilityPath(directories, reference) {
+    return reference.ownerType === 'background'
+        && isSafeCompatibilityPath(directories, reference.compatibilityPath, directories?.backgrounds);
 }
 
 export async function runCanonicalManagedMediaShadowImport({
@@ -196,7 +192,6 @@ export async function runCanonicalManagedMediaShadowImport({
             });
         }
     }
-    replaceCanonicalManagedMediaFolders(db, { ...readFolderProjection(directories), nowMs });
     return summarizeImport({ handle, entries, migrationStatus });
 }
 
@@ -228,6 +223,20 @@ export async function auditCanonicalManagedMediaShadowImport({
     }
 
     for (const reference of references) {
+        if (!isSafeCompatibilityPath(directories, reference.compatibilityPath)) {
+            entries.push({
+                compatibility_path: reference.compatibilityPath,
+                status: 'drift',
+                drift_types: ['unsafe_path'],
+                details: {},
+                audited_at_ms: auditedAtMs,
+            });
+            continue;
+        }
+        // Only safe, retired background references are ignored after background retirement.
+        if (isRetiredCompatibilityPath(directories, reference)) {
+            continue;
+        }
         const domain = getDomainForPath(directories, reference.compatibilityPath);
         if (!domain) {
             entries.push({

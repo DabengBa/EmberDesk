@@ -572,8 +572,11 @@ Code binding points:
 - `character-write-service.js` owns core character write sequencing.
 - `chats.js` owns chat save/rename/delete/import route side effects.
 - `character-index.js` is retired from normal runtime and remains only as a historical/helper-level proof surface.
-- `settings.js`, `secrets.js`, `assets.js`, `backgrounds.js`, and `extensions.js`
-  remain their HTTP/facade owners while domain stores move behind them.
+- `settings.js`, `secrets.js`, `assets.js`, and `extensions.js` remain their HTTP/facade owners while domain stores move behind them.
+
+Historical binding point for the retired Background Library (superseded):
+
+- `backgrounds.js` was the HTTP/facade owner for the former global Background Library. It is retired from the current runtime; retained active-chat background settings/metadata and static `backgrounds/*` compatibility remain supported through their current chat/settings and static-media contracts, with no global catalog owner.
 
 ## Validation
 

@@ -7,13 +7,12 @@ import { afterEach, describe, expect, jest, test } from '@jest/globals';
 import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import { persistCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.js';
+import * as canonicalReadService from '../src/endpoints/canonical-managed-media-read-service.js';
 import {
     getCanonicalManagedMediaReadState,
     listCanonicalAssetPayload,
-    listCanonicalBackgroundPayload,
 } from '../src/endpoints/canonical-managed-media-read-service.js';
 import {
-    replaceCanonicalManagedMediaFolders,
     upsertCanonicalManagedMediaReference,
 } from '../src/endpoints/canonical-managed-media-store.js';
 
@@ -52,8 +51,6 @@ function seedMedia(directories, { audit = true } = {}) {
     });
     runCanonicalMigrations(db, { nowMs: 1735689600000 });
     const records = [
-        ['backgrounds/sky.webp', 'background', 'background'],
-        ['backgrounds/animated.gif', 'background', 'background'],
         ['assets/bgm/loop.ogg', 'asset', 'asset'],
         ['assets/live2d/model/hero.model3.json', 'asset', 'asset'],
         ['assets/live2d/textures/ignored.json', 'asset', 'asset'],
@@ -74,11 +71,6 @@ function seedMedia(directories, { audit = true } = {}) {
             nowMs: 1735689600000,
         });
     }
-    replaceCanonicalManagedMediaFolders(db, {
-        folders: [{ id: 'sky', name: 'Sky', thumbnailFile: 'sky.webp' }],
-        imageFolderMap: { 'sky.webp': ['sky'] },
-        nowMs: 1735689600000,
-    });
     if (audit) {
         persistCanonicalAuditStatus(db, {
             ok: true,
@@ -104,7 +96,11 @@ afterEach(() => {
 });
 
 describe('canonical managed media read service', () => {
-    test('uses a clean managed-media audit to rebuild background, folder, and asset payloads', () => {
+    test('keeps the retired background payload out of the read-service API while preserving assets', () => {
+        expect(canonicalReadService.listCanonicalBackgroundPayload).toBeUndefined();
+    });
+
+    test('uses a clean managed-media audit to rebuild the asset payload', () => {
         const directories = makeDirectories();
         const { manager } = seedMedia(directories);
         const state = getCanonicalManagedMediaReadState({
@@ -117,19 +113,6 @@ describe('canonical managed media read service', () => {
         });
 
         expect(state).toEqual(expect.objectContaining({ ok: true }));
-        expect(listCanonicalBackgroundPayload(state.db, {
-            metadataByPath: {
-                'backgrounds/sky.webp': { isAnimated: false },
-                'backgrounds/animated.gif': { isAnimated: true },
-            },
-        })).toEqual({
-            images: [
-                { filename: 'animated.gif', isAnimated: true },
-                { filename: 'sky.webp', isAnimated: false },
-            ],
-            folders: [{ id: 'sky', name: 'Sky', thumbnailFile: 'sky.webp' }],
-            imageFolderMap: { 'sky.webp': ['sky'] },
-        });
         expect(listCanonicalAssetPayload(state.db)).toEqual({
             bgm: ['assets/bgm/loop.ogg'],
             live2d: ['/assets/live2d/model/hero.model3.json'],

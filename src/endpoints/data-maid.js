@@ -17,7 +17,6 @@ const sha256 = str => crypto.createHash('sha256').update(str).digest('hex');
  * @property {string[]} chats - List of loose character chats
  * @property {string[]} groupChats - List of loose group chats
  * @property {string[]} avatarThumbnails - List of loose avatar thumbnails
- * @property {string[]} backgroundThumbnails - List of loose background thumbnails
  * @property {string[]} personaThumbnails - List of loose persona thumbnails
  * @property {string[]} chatBackups - List of chat backups
  * @property {string[]} settingsBackups - List of settings backups
@@ -39,7 +38,6 @@ const sha256 = str => crypto.createHash('sha256').update(str).digest('hex');
  * @property {DataMaidSanitizedRecord[]} chats - List of sanitized loose character chats
  * @property {DataMaidSanitizedRecord[]} groupChats - List of sanitized loose group chats
  * @property {DataMaidSanitizedRecord[]} avatarThumbnails - List of sanitized loose avatar thumbnails
- * @property {DataMaidSanitizedRecord[]} backgroundThumbnails - List of sanitized loose background thumbnails
  * @property {DataMaidSanitizedRecord[]} personaThumbnails - List of sanitized loose persona thumbnails
  * @property {DataMaidSanitizedRecord[]} chatBackups - List of sanitized chat backups
  * @property {DataMaidSanitizedRecord[]} settingsBackups - List of sanitized settings backups
@@ -115,7 +113,6 @@ export class DataMaidService {
             chats: await this.#collectChats(),
             groupChats: await this.#collectGroupChats(),
             avatarThumbnails: await this.#collectAvatarThumbnails(),
-            backgroundThumbnails: await this.#collectBackgroundThumbnails(),
             personaThumbnails: await this.#collectPersonaThumbnails(),
             chatBackups: await this.#collectChatBackups(),
             settingsBackups: await this.#collectSettingsBackups(),
@@ -155,7 +152,6 @@ export class DataMaidService {
             chats: await Promise.all(report.chats.map(i => this.#sanitizeRecord(i, true))),
             groupChats: await Promise.all(report.groupChats.map(i => this.#sanitizeRecord(i, false))),
             avatarThumbnails: await Promise.all(report.avatarThumbnails.map(i => this.#sanitizeRecord(i, false))),
-            backgroundThumbnails: await Promise.all(report.backgroundThumbnails.map(i => this.#sanitizeRecord(i, false))),
             personaThumbnails: await Promise.all(report.personaThumbnails.map(i => this.#sanitizeRecord(i, false))),
             chatBackups: await Promise.all(report.chatBackups.map(i => this.#sanitizeRecord(i, false))),
             settingsBackups: await Promise.all(report.settingsBackups.map(i => this.#sanitizeRecord(i, false))),
@@ -418,34 +414,6 @@ export class DataMaidService {
             }
         } catch (error) {
             console.error('[Data Maid] Error collecting avatar thumbnails:', error);
-        }
-
-        return result;
-    }
-
-    /**
-     * Collects loose background thumbnails from the provided directories.
-     * @returns {Promise<string[]>} List of paths to loose background thumbnails
-     */
-    async #collectBackgroundThumbnails() {
-        const result = [];
-
-        try {
-            const knownBackgrounds = new Set();
-            const backgrounds = await fs.promises.readdir(this.directories.backgrounds, { withFileTypes: true });
-            for (const file of backgrounds) {
-                if (file.isFile()) {
-                    knownBackgrounds.add(file.name);
-                }
-            }
-            const backgroundThumbnails = await fs.promises.readdir(this.directories.thumbnailsBg, { withFileTypes: true });
-            for (const file of backgroundThumbnails) {
-                if (file.isFile() && !knownBackgrounds.has(file.name)) {
-                    result.push(path.join(this.directories.thumbnailsBg, file.name));
-                }
-            }
-        } catch (error) {
-            console.error('[Data Maid] Error collecting background thumbnails:', error);
         }
 
         return result;

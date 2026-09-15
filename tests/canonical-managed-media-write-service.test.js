@@ -12,13 +12,10 @@ import {
     deleteCanonicalManagedMediaReference,
     invalidateCanonicalManagedMediaAudit,
     repairCanonicalManagedMediaProjection,
-    writeCanonicalManagedMediaFolderState,
     writeCanonicalManagedMedia,
 } from '../src/endpoints/canonical-managed-media-write-service.js';
 import {
-    getCanonicalManagedMediaFolderState,
     listCanonicalManagedMediaReferences,
-    upsertCanonicalManagedMediaReference,
 } from '../src/endpoints/canonical-managed-media-store.js';
 
 const tempRoots = [];
@@ -93,7 +90,7 @@ afterEach(() => {
 });
 
 describe('canonical managed media write service', () => {
-    test('commits a staged blob before projection and records a replayable repair when projection fails', async () => {
+    test('commits a staged asset blob before projection and records a replayable repair when projection fails', async () => {
         const directories = makeDirectories();
         const manager = createManager();
         const db = seedCleanAudit(manager, directories);
@@ -101,10 +98,10 @@ describe('canonical managed media write service', () => {
         const result = await writeCanonicalManagedMedia({
             handle: 'alice',
             directories,
-            compatibilityPath: 'backgrounds/sky.png',
-            ownerType: 'background',
-            ownerId: 'backgrounds/sky.png',
-            role: 'background',
+            compatibilityPath: 'assets/sky.png',
+            ownerType: 'asset',
+            ownerId: 'assets/sky.png',
+            role: 'asset',
             displayName: 'sky.png',
             contents: Buffer.from('sky-content'),
             dependencies: dependencies(manager),
@@ -122,11 +119,11 @@ describe('canonical managed media write service', () => {
         }));
         const [reference] = listCanonicalManagedMediaReferences(db);
         expect(reference).toEqual(expect.objectContaining({
-            compatibilityPath: 'backgrounds/sky.png',
+            compatibilityPath: 'assets/sky.png',
             contentHash: expect.any(String),
         }));
         expect(fs.readFileSync(path.join(directories.storage, reference.managedRelativePath), 'utf8')).toBe('sky-content');
-        expect(fs.existsSync(path.join(directories.backgrounds, 'sky.png'))).toBe(false);
+        expect(fs.existsSync(path.join(directories.assets, 'sky.png'))).toBe(false);
 
         const repair = await repairCanonicalManagedMediaProjection({
             db,
@@ -136,7 +133,7 @@ describe('canonical managed media write service', () => {
         });
 
         expect(repair).toEqual(expect.objectContaining({ ok: true }));
-        expect(fs.readFileSync(path.join(directories.backgrounds, 'sky.png'), 'utf8')).toBe('sky-content');
+        expect(fs.readFileSync(path.join(directories.assets, 'sky.png'), 'utf8')).toBe('sky-content');
     });
 
     test('tombstones only the final reference and leaves managed-file removal to audited GC dry runs', async () => {
@@ -211,78 +208,4 @@ describe('canonical managed media write service', () => {
         expect(openDatabase).not.toHaveBeenCalled();
     });
 
-    test('commits canonical folder membership before projection and replays an interrupted metadata projection', async () => {
-        const directories = makeDirectories();
-        const manager = createManager();
-        const db = seedCleanAudit(manager, directories);
-        upsertCanonicalManagedMediaReference(db, {
-            compatibilityPath: 'backgrounds/sky.png',
-            contentHash: 'folder-sky-hash',
-            sizeBytes: 1,
-            mediaType: 'image/png',
-            managedRelativePath: 'managed-media/folder-sky-hash',
-            ownerType: 'background',
-            ownerId: 'backgrounds/sky.png',
-            role: 'background',
-            displayName: 'sky.png',
-            nowMs: 1735689600100,
-        });
-
-        const folderState = {
-            folders: [{ id: 'sky', name: 'Sky', thumbnailFile: 'sky.png' }],
-            imageFolderMap: { 'sky.png': ['sky'] },
-        };
-        const result = await writeCanonicalManagedMediaFolderState({
-            handle: 'alice',
-            directories,
-            folderState,
-            dependencies: dependencies(manager),
-            projectFolderState: () => {
-                throw new Error('metadata projection disk full');
-            },
-            nowMs: 1735689600200,
-        });
-
-        expect(result).toEqual(expect.objectContaining({
-            ok: false,
-            authorityCommitted: true,
-            reason: 'projection_failed',
-            repairKey: expect.stringContaining('managed_media:folder_projection:'),
-        }));
-        expect(getCanonicalManagedMediaFolderState(db)).toEqual(folderState);
-
-        const repair = await repairCanonicalManagedMediaProjection({
-            db,
-            directories,
-            repairKeys: [result.repairKey],
-            nowMs: 1735689600300,
-        });
-        expect(repair).toEqual(expect.objectContaining({ ok: true }));
-        expect(JSON.parse(fs.readFileSync(path.join(directories.root, 'image-metadata.json'), 'utf8'))).toEqual(expect.objectContaining({
-            folders: folderState.folders,
-            images: expect.objectContaining({
-                'backgrounds/sky.png': expect.objectContaining({ folderIds: ['sky'] }),
-            }),
-        }));
-        persistCanonicalAuditStatus(db, {
-            ok: true,
-            handle: 'alice',
-            hasDrift: false,
-            blocking: false,
-            entries: [],
-        }, {
-            scope: 'managed_media',
-            auditedAtMs: 1735689600350,
-        });
-
-        const deletion = await writeCanonicalManagedMediaFolderState({
-            handle: 'alice',
-            directories,
-            folderState: { folders: [], imageFolderMap: {} },
-            dependencies: dependencies(manager),
-            nowMs: 1735689600400,
-        });
-        expect(deletion).toEqual(expect.objectContaining({ ok: true, authorityCommitted: true }));
-        expect(getCanonicalManagedMediaFolderState(db)).toEqual({ folders: [], imageFolderMap: {} });
-    });
 });

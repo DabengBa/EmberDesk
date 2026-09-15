@@ -21,6 +21,12 @@ afterEach(() => {
 });
 
 describe('seed-dev-environment', () => {
+    test('startup performance probe does not wait for retired global backgrounds', () => {
+        const source = fs.readFileSync(path.join(repoRoot, 'scripts/startup-performance-runner.mjs'), 'utf8');
+
+        expect(source).not.toContain('deferred.getBackgrounds');
+    });
+
     test('creates the default content required for a clean first load', () => {
         const sandboxRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-seed-dev-'));
         tempRoots.push(sandboxRoot);
@@ -46,7 +52,8 @@ describe('seed-dev-environment', () => {
         );
 
         expect(fs.existsSync(path.join(dataRoot, '_css', 'user.css'))).toBe(true);
-        expect(fs.existsSync(path.join(dataRoot, 'default-user', 'backgrounds', '__transparent.png'))).toBe(true);
+        expect(fs.existsSync(path.join(dataRoot, 'default-user', 'backgrounds', '__transparent.png'))).toBe(false);
+        expect(fs.existsSync(path.join(dataRoot, 'default-user', 'backgrounds'))).toBe(true);
         expect(fs.existsSync(path.join(dataRoot, 'default-user', 'QuickReplies', 'Default.json'))).toBe(true);
     });
 

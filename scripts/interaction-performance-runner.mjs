@@ -161,14 +161,8 @@ async function seedBaselineDataset({ baselineRoot, datasetProfile }) {
 
     const charactersRoot = path.join(userRoot, 'characters');
     const chatsRoot = path.join(userRoot, 'chats');
-    const backgroundsRoot = path.join(userRoot, 'backgrounds');
     await fs.promises.mkdir(charactersRoot, { recursive: true });
     await fs.promises.mkdir(chatsRoot, { recursive: true });
-    await fs.promises.mkdir(backgroundsRoot, { recursive: true });
-    fs.copyFileSync(
-        path.join(repoRoot, 'default', 'content', 'backgrounds', '__transparent.png'),
-        path.join(backgroundsRoot, '__transparent.png'),
-    );
 
     for (let index = 0; index < datasetProfile.characters; index++) {
         const baseName = `perf-character-${String(index + 1).padStart(4, '0')}`;

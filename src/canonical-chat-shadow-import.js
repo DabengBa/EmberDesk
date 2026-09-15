@@ -134,7 +134,7 @@ function listStringLeaves(value, fieldPath = []) {
 }
 
 function isManagedAttachmentCandidate(value) {
-    return /^(files|assets|user-images|backgrounds)\//.test(value);
+    return /^(files|assets|user-images)\//.test(value);
 }
 
 function getManagedMediaByCompatibilityPath(db) {

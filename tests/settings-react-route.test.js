@@ -97,9 +97,17 @@ describe('settings React route flag', () => {
         const settingFieldSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'settings', 'SettingField.tsx'), 'utf8');
         const settingsStyleSource = fs.readFileSync(path.join(repoRoot, 'app', 'styles', 'settings-surface.css'), 'utf8');
         const publicStyleSource = fs.readFileSync(path.join(repoRoot, 'public', 'style.css'), 'utf8');
+        const indexSource = fs.readFileSync(path.join(repoRoot, 'public', 'index.html'), 'utf8');
         const helperModule = await import(`../app/lib/settings-helpers.js?settingsHelpers=${Date.now()}-${Math.random()}`);
 
-        expect(routeSource).toContain("import { useForm, useStore } from '@tanstack/react-form';");
+        expect(routeSource).not.toContain('waifuMode');
+        expect(helperModule.settingsFormFieldPaths).not.toContain('userInterface.waifuMode');
+        expect(helperModule.settingsCoverage.reactOwned.userInterface).not.toContain('power_user.waifuMode');
+        expect(helperModule.defaultSettingsFormValues.userInterface).not.toHaveProperty('waifuMode');
+        expect(indexSource).not.toContain('id="waifuMode"');
+        expect(indexSource).toContain('id="bg1"');
+        expect(indexSource).toContain('id="rm_group_hidemutedsprites"');
+
         expect(routeSource).toContain("import { useMutation, useQuery } from '@tanstack/react-query';");
         expect(routeSource).toContain("import { z } from 'zod';");
         expect(routeSource).toContain('const settingsQuery = useQuery(');

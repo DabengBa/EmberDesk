@@ -106,3 +106,9 @@ The final completion gate for this topic is therefore not a zero-count global se
 - [React Legacy Retirement Brief](../tech/briefs/260716-02-react-legacy-retirement.md)
 - [Third-Party Extension Compatibility](../tech/third-party-extension-compatibility.md)
 - [Chat Workspace](../db/pages/chat-workspace.md)
+
+## Surface Status Addendum (2026-09-15)
+
+The broad retirement decision remains accepted, but the earlier Background Library sole-owner delivery is superseded for this surface. The global Background Library, its gallery/folder/action owner, Expressions and waifu controls, and global sprite persistence are retired. This addendum preserves the historical decision and implementation facts; it does not rewrite them as if they never existed.
+
+The retained contract is narrower and user-observable: active chat backgrounds and `custom_background` / `chat_backgrounds` metadata remain available, static `backgrounds/*` compatibility remains available for active background use, and avatar/persona images plus retained thumbnail behavior remain available. Group-chat `hideMutedSprites` remains a chat metadata behavior and does not restore sprite management. The semantic owner docs are [Background Library Panel (Retired)](../db/features/background-library-panel.md) and [Chat Workspace](../db/pages/chat-workspace.md); the maintainer status is in the [Legacy Cutover Ledger](../tech/legacy-cutover-ledger.md).

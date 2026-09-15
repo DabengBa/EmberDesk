@@ -45,7 +45,7 @@ Delete or avoid adding briefs that are:
 | `260716-06-react-character-group-authoring-retirement.md` | Preserves full character and group authoring behavior while replacing legacy forms and save orchestration with React ownership. |
 | `260716-07-react-settings-retirement.md` | Preserves complete settings and provider-configuration behavior while retiring legacy drawers and same-version fallback. |
 | `260716-08-react-world-info-retirement.md` | Preserves World Info editing, regex, import/export, automation, and protected browser-import contracts during React ownership cutover. |
-| `260716-09-react-background-library-retirement.md` | Preserves Background Library browsing, mutation, selection, extension, and automation behavior while deleting its legacy UI owner. |
+| `260716-09-react-background-library-retirement.md` | Superseded historical record of the earlier Background Library browsing/mutation/selection delivery; current global gallery and its legacy UI owner are retired, while retained active-chat/background/avatar contracts are documented by the current owning docs. |
 | `260716-10-react-extensions-host-retirement.md` | Preserves supported extension mounts, scripts, events, slash/regex behavior, and browser imports while React replaces the legacy host. |
 | `260716-11-react-main-chat-transport-retirement.md` | Preserves the complete generation lifecycle and provider matrix while moving Main Chat transport ownership out of the legacy shell. |
 | `260716-12-react-main-chat-renderer-retirement.md` | Preserves message rendering, editing, streaming, long-chat, actions, and extension mutation behavior while deleting the legacy renderer. |
@@ -55,7 +55,7 @@ Delete or avoid adding briefs that are:
 | `260605-03-character-route-performance-proof.md` | Records why the third closure slice became Node 26 route/perf/UX evidence instead of another route extraction. |
 | `260605-04-chat-route-service-extraction.md` | Preserves the narrow chat search/recent service boundary and the decision to leave mutation/import/export behavior route-owned. |
 | `260605-05-derived-cache-release-hardening.md` | Records the no-code release-risk matrix proving derived SQLite fallback, reset, and circuit-breaker behavior. |
-| `260605-06-low-risk-frontend-controller-slice.md` | Preserves the low-risk frontend controller extraction constraints: background loading-state ownership changed while visible behavior and compatibility stayed stable. |
+| `260605-06-low-risk-frontend-controller-slice.md` | Historical delivered record of the former background-library loading-state slice; the global gallery/controller is retired, while current active-background compatibility is documented separately. |
 | `260605-07-compatibility-hardening-pass.md` | Records protected extension, slash-command, route-envelope, regex, and shared-library compatibility surfaces for later slices. |
 | `260605-08-build-dependency-closure.md` | Historical Node/Bun/build-tool closure; the Webpack state recorded there is superseded by ADR-0013. |
 | `260605-09-node26-release-validation-sweep.md` | Historical Node 26.3.0 release validation matrix and scoped Playwright skip decision. |

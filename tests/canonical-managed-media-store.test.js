@@ -9,8 +9,8 @@ import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import { expectCanonicalDomainSchema } from './helpers/canonical-domain-schema.js';
 import {
-    getCanonicalManagedMediaFolderState,
     listCanonicalManagedMediaReferences,
+    upsertCanonicalManagedMediaReference,
 } from '../src/endpoints/canonical-managed-media-store.js';
 import {
     MANAGED_MEDIA_AUDIT_SCOPE,
@@ -75,7 +75,7 @@ afterEach(() => {
 });
 
 describe('canonical managed media catalog', () => {
-    test('imports compatibility media without moving files, deduplicates content, and migrates background folder membership', async () => {
+    test('ignores retired background files while importing supported compatibility media and deduplicating content', async () => {
         const root = makeRoot();
         const directories = createDirectories(root);
         const manager = createManager();
@@ -112,7 +112,6 @@ describe('canonical managed media catalog', () => {
             featureFlags: { enabled: true, strict: false },
         });
         const references = listCanonicalManagedMediaReferences(db);
-        const folders = getCanonicalManagedMediaFolderState(db);
         const audit = await auditCanonicalManagedMediaShadowImport({
             handle: 'alice',
             directories,
@@ -122,22 +121,20 @@ describe('canonical managed media catalog', () => {
 
         expect(first).toEqual(expect.objectContaining({
             ok: true,
-            importedCount: 5,
+            importedCount: 4,
             unchangedCount: 0,
         }));
         expect(second).toEqual(expect.objectContaining({
             ok: true,
             importedCount: 0,
-            unchangedCount: 5,
+            unchangedCount: 4,
         }));
         expect(fs.readFileSync(backgroundPath, 'utf8')).toBe('shared-media');
         expect(fs.readFileSync(attachmentPath, 'utf8')).toBe('shared-media');
+        expect(references).not.toEqual(expect.arrayContaining([
+            expect.objectContaining({ compatibilityPath: 'backgrounds/sky.png' }),
+        ]));
         expect(references).toEqual(expect.arrayContaining([
-            expect.objectContaining({
-                compatibilityPath: 'backgrounds/sky.png',
-                ownerType: 'background',
-                contentHash: hash('shared-media'),
-            }),
             expect.objectContaining({
                 compatibilityPath: 'user/files/copy.png',
                 ownerType: 'attachment',
@@ -146,17 +143,9 @@ describe('canonical managed media catalog', () => {
         ]));
         const sharedReferences = references.filter(reference => reference.contentHash === hash('shared-media'));
         expect(new Set(sharedReferences.map(reference => reference.blobId)).size).toBe(1);
-        expect(folders).toEqual({
-            folders: [{ id: 'folder-sky', name: 'Sky', thumbnailFile: 'sky.png' }],
-            imageFolderMap: { 'sky.png': ['folder-sky'] },
-        });
         expect(audit).toEqual(expect.objectContaining({ ok: true, blocking: false }));
-        expect(audit.entries).toEqual(expect.arrayContaining([
-            expect.objectContaining({
-                compatibility_path: 'backgrounds/sky.png',
-                status: 'clean',
-                drift_types: expect.arrayContaining(['registered', 'duplicate_content']),
-            }),
+        expect(audit.entries).not.toEqual(expect.arrayContaining([
+            expect.objectContaining({ compatibility_path: 'backgrounds/sky.png' }),
         ]));
         expect(getPersistedCanonicalAuditStatus(db, { scope: MANAGED_MEDIA_AUDIT_SCOPE })).toEqual(expect.objectContaining({
             ok: true,
@@ -183,6 +172,18 @@ describe('canonical managed media catalog', () => {
             directories,
             featureFlags: { enabled: true, strict: false },
         });
+        upsertCanonicalManagedMediaReference(db, {
+            compatibilityPath: 'backgrounds/changed.png',
+            contentHash: hash('original'),
+            sizeBytes: Buffer.byteLength('original'),
+            mediaType: 'image/png',
+            managedRelativePath: 'managed-media/retired-background',
+            ownerType: 'background',
+            ownerId: 'backgrounds/changed.png',
+            role: 'background',
+            displayName: 'changed.png',
+            nowMs: 1735689600000,
+        });
         fs.writeFileSync(path.join(directories.backgrounds, 'changed.png'), 'changed');
         fs.rmSync(path.join(directories.avatars, 'missing.png'));
         writeCompatibilityFile(directories, 'user/files/orphan.txt', 'orphan');
@@ -196,6 +197,26 @@ describe('canonical managed media catalog', () => {
                 id, blob_id, owner_type, owner_id, role, display_name, compatibility_path, metadata_json, created_at_ms, updated_at_ms, deleted_at_ms
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
         `).run('unsafe-reference', 'unsafe-blob', 'attachment', 'unsafe', 'attachment', 'unsafe', '../unsafe', '{}', 1, 1);
+        db.prepare(`
+            INSERT INTO managed_blobs (
+                id, content_hash, size_bytes, media_type, relative_path, lifecycle_state, created_at_ms, updated_at_ms, deleted_at_ms
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)
+        `).run('wrong-owner-blob', hash('wrong-owner'), 10, 'image/png', 'managed-media/wrong-owner', 'active', 1, 1);
+        db.prepare(`
+            INSERT INTO media_references (
+                id, blob_id, owner_type, owner_id, role, display_name, compatibility_path, metadata_json, created_at_ms, updated_at_ms, deleted_at_ms
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+        `).run('wrong-owner-reference', 'wrong-owner-blob', 'asset', 'wrong-owner', 'asset', 'wrong-owner.png', 'backgrounds/wrong-owner.png', '{}', 1, 1);
+        db.prepare(`
+            INSERT INTO managed_blobs (
+                id, content_hash, size_bytes, media_type, relative_path, lifecycle_state, created_at_ms, updated_at_ms, deleted_at_ms
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)
+        `).run('traversal-blob', hash('traversal'), 9, 'image/png', 'managed-media/traversal', 'active', 1, 1);
+        db.prepare(`
+            INSERT INTO media_references (
+                id, blob_id, owner_type, owner_id, role, display_name, compatibility_path, metadata_json, created_at_ms, updated_at_ms, deleted_at_ms
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+        `).run('traversal-reference', 'traversal-blob', 'background', 'traversal', 'background', 'traversal.png', 'backgrounds/../assets/traversal.png', '{}', 1, 1);
 
         const audit = await auditCanonicalManagedMediaShadowImport({
             handle: 'alice',
@@ -209,11 +230,15 @@ describe('canonical managed media catalog', () => {
             blocking: true,
             reason: 'audit_drift_blocked',
         }));
+        expect(audit.entries).not.toEqual(expect.arrayContaining([
+            expect.objectContaining({ compatibility_path: 'backgrounds/changed.png' }),
+        ]));
         expect(audit.entries).toEqual(expect.arrayContaining([
-            expect.objectContaining({ compatibility_path: 'backgrounds/changed.png', drift_types: ['hash_mismatch'] }),
             expect.objectContaining({ compatibility_path: 'User Avatars/missing.png', drift_types: ['missing'] }),
             expect.objectContaining({ compatibility_path: 'user/files/orphan.txt', drift_types: ['orphan'] }),
             expect.objectContaining({ compatibility_path: '../unsafe', drift_types: ['unsafe_path'] }),
+            expect.objectContaining({ compatibility_path: 'backgrounds/wrong-owner.png', drift_types: ['unsafe_path'] }),
+            expect.objectContaining({ compatibility_path: 'backgrounds/../assets/traversal.png', drift_types: ['unsafe_path'] }),
         ]));
         expect(fs.readFileSync(path.join(directories.backgrounds, 'changed.png'), 'utf8')).toBe('changed');
         expect(fs.existsSync(path.join(directories.files, 'orphan.txt'))).toBe(true);

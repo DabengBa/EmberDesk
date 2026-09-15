@@ -340,10 +340,6 @@ export const commonEnumProviders = {
         new SlashCommandEnumValue('system', null, enumTypes.enum, enumIcons.system),
     ],
 
-    backgrounds: () => Array.from(document.querySelectorAll('.bg_example'))
-        .map(it => new SlashCommandEnumValue(it.getAttribute('bgfile')))
-        .filter(it => it.value?.length),
-
     connectionProfiles: ({ includeNone = false } = {}) => () => [
         ...includeNone ? [new SlashCommandEnumValue('<None>')] : [],
         ...extension_settings.connectionManager.profiles.map(p => new SlashCommandEnumValue(p.name, null, enumTypes.name, enumIcons.server)),

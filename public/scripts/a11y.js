@@ -13,8 +13,6 @@ const buttonSelectors = [
     '.swipe_right',
     '.character_select',
     '.tags .tag',
-    '.jg-menu .jg-button',
-    '.bg_example .mobile-only-menu-toggle',
     '.paginationjs-pages li a',
     '#show_more_messages',
 ].join(', ');
@@ -30,7 +28,6 @@ const listSelectors = [
     '.recentChatList',
     '.dataMaidCategoryContent',
     '#userList',
-    '.bg_list',
 ].join(', ');
 
 const listItemSelectors = [
@@ -44,19 +41,6 @@ const listItemSelectors = [
     '.recentChatList .recentChat',
     '.dataMaidCategoryContent .dataMaidItem',
     '#userList .userSelect',
-    '.bg_list .bg_example',
-].join(', ');
-
-const toolbarSelectors = [
-    '.jg-menu',
-].join(', ');
-
-const tabListSelectors = [
-    '#bg_tabs .bg_tabs_list',
-].join(', ');
-
-const tabItemSelectors = [
-    '#bg_tabs .bg_tabs_list .bg_tab_button',
 ].join(', ');
 
 const nativeInteractiveSelectors = [
@@ -90,15 +74,6 @@ const a11yRules = {
         }
 
         element.setAttribute('role', 'listitem');
-    },
-    [toolbarSelectors]: (element) => {
-        element.setAttribute('role', 'toolbar');
-    },
-    [tabListSelectors]: (element) => {
-        element.setAttribute('role', 'tablist');
-    },
-    [tabItemSelectors]: (element) => {
-        element.setAttribute('role', 'tab');
     },
     '#toast-container .toast': (element) => {
         element.setAttribute('role', 'status');

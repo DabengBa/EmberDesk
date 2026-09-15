@@ -55,7 +55,7 @@ Use Vite build scripts for frontend build proof:
 - `pnpm run build:lib` builds the shared `/lib.js` browser library.
 - `pnpm run build:react` builds the shared React page app used by `/login`, `/setup`, and `/settings`.
 - `pnpm run build:react:character-library` builds the guarded character-library workspace panel bundle.
-- `pnpm run build:react:workspace-panels` builds the shared guarded workspace-panel action-island bundle for World Info, Background Library, and Extensions Host; React owns the visible host controls and action bridges, while prompt/regex/background file/slash/extension protocol behavior remains with the legacy owners until a later migration explicitly retires those boundaries.
+- `pnpm run build:react:workspace-panels` builds the shared guarded workspace-panel action-island bundle for World Info and Extensions Host; the former Background Library scaffold is historical and the global gallery is retired. React owns the visible host controls and action bridges, while prompt/regex/background file/slash/extension protocol behavior remains with the relevant retained owners.
 
 Docker and release install verification also use pnpm:
 

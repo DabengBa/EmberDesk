@@ -1,3 +1,7 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import {
     UNSET_SENTINEL,
     calculateDataSize,
@@ -5,6 +9,12 @@ import {
     toShallow,
     unsetPrivateFields,
 } from '../src/endpoints/character-card-helpers.js';
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+function readRepoFile(relativePath) {
+    return fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
+}
 
 describe('character-card helpers', () => {
     test('calculateDataSize sums stringified top-level values for objects', () => {
@@ -147,6 +157,46 @@ describe('character-card helpers', () => {
                 },
             },
         });
+    });
+
+    test('unsetPrivateFields retires Risu expression payloads without dropping other extensions', () => {
+        const character = {
+            data: {
+                extensions: {
+                    fav: true,
+                    risuai: {
+                        additionalAssets: {
+                            happy: 'data:image/png;base64,expression',
+                        },
+                        emotions: {
+                            happy: 'data:image/png;base64,emotion',
+                        },
+                        keep: 'preserve-me',
+                    },
+                    world: 'World A',
+                },
+            },
+        };
+
+        unsetPrivateFields(character);
+
+        const persistedCard = JSON.parse(JSON.stringify(character));
+        expect(persistedCard.data.extensions).toEqual({
+            fav: false,
+            risuai: {
+                keep: 'preserve-me',
+            },
+            world: 'World A',
+        });
+    });
+
+    test('unsetPrivateFields keeps JSON and PNG Spec V2 import wiring on the shared helper', () => {
+        const source = readRepoFile('src/endpoints/characters.js');
+        const v2ImportWiring = [...source.matchAll(/if \(jsonData\.spec !== undefined\) \{[\s\S]*?unsetPrivateFields\(jsonData\);[\s\S]*?jsonData = readFromV2\(jsonData\);[\s\S]*?characterData: JSON\.stringify\(jsonData\),/g)];
+
+        expect(v2ImportWiring).toHaveLength(2);
+        expect(source.match(/unsetPrivateFields\(jsonData\);/g)).toHaveLength(2);
+        expect(source).not.toContain('importRisuSprites');
     });
 
 });

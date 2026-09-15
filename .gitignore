@@ -63,6 +63,7 @@ test-results/
 /artifacts/
 .docs/db/dist/
 .playwright-cli/
+.worktrees/
 .tmp/
 /.tmp-*
 /tmp/

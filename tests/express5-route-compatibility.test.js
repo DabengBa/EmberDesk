@@ -33,7 +33,7 @@ setConfigFilePath(configPath);
 
 const { router: userDataRouter, requireLoginMiddleware } = await import('../src/users.js');
 const { router: imagesRouter } = await import('../src/endpoints/images.js');
-const { redirectDeprecatedEndpoints, setupPublicEndpoints } = await import('../src/server-startup.js');
+const { redirectDeprecatedEndpoints, setupPrivateEndpoints, setupPublicEndpoints } = await import('../src/server-startup.js');
 
 function listen(app) {
     const server = http.createServer(app);
@@ -300,6 +300,38 @@ describe('Express 5 route compatibility', () => {
         });
     });
 
+    test('retired media APIs fail closed while static backgrounds and retained thumbnail routes stay bounded', async () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-retired-media-routes-'));
+        tmpRoots.push(root);
+        const directories = createUserDirectories(root);
+        fs.writeFileSync(path.join(directories.backgrounds, 'active-chat.png'), 'active chat background', 'utf8');
+
+        const app = express();
+        app.use((request, _response, next) => {
+            request.user = { profile: { handle: 'test-user' }, directories };
+            next();
+        });
+        // Exercise the same private-router composition as server startup; a retired router re-registration must fail this proof.
+        setupPrivateEndpoints(app);
+
+        await usingApp(app, async (url) => {
+            const retainedBackground = await fetch(`${url}/backgrounds/active-chat.png`, { redirect: 'manual' });
+            expect(retainedBackground.status).toBe(200);
+            expect(retainedBackground.headers.get('location')).toBeNull();
+            expect(await retainedBackground.text()).toBe('active chat background');
+
+            const retiredThumbnail = await fetch(`${url}/thumbnail?type=bg&file=active-chat.png`, { redirect: 'manual' });
+            expect(retiredThumbnail.status).toBe(400);
+            expect(retiredThumbnail.headers.get('location')).toBeNull();
+
+            for (const route of ['/api/backgrounds/all', '/api/image-metadata', '/api/sprites/get']) {
+                const response = await fetch(`${url}${route}`, { redirect: 'manual' });
+                expect(response.status).toBe(404);
+                expect(response.headers.get('location')).toBeNull();
+            }
+        });
+    });
+
     test('deprecated endpoint redirects preserve methods under Express 5', async () => {
         const app = express();
         redirectDeprecatedEndpoints(app);
@@ -314,6 +346,19 @@ describe('Express 5 route compatibility', () => {
 
             expect(response.status).toBe(308);
             expect(response.headers.get('location')).toBe('/api/characters/all');
+        });
+    });
+
+    test('retired background endpoint routes are absent rather than redirected', async () => {
+        const app = express();
+        redirectDeprecatedEndpoints(app);
+
+        await usingApp(app, async (url) => {
+            for (const route of ['/getbackgrounds', '/delbackground', '/renamebackground', '/downloadbackground']) {
+                const response = await fetch(`${url}${route}`, { redirect: 'manual' });
+                expect(response.status).toBe(404);
+                expect(response.headers.get('location')).toBeNull();
+            }
         });
     });
 
