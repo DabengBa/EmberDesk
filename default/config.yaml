@@ -123,7 +123,6 @@ features:
     pages:
     panels:
       # mainChatMessageList product flag retired (React sole-owner; always enabled in workspace bootstrap)
-      backgroundLibrary: true
       extensionsHost: true
 
 # -- SSO LOGIN CONFIGURATION --

@@ -14,11 +14,12 @@ Declared child slots retain feature-local content and protected compatibility DO
 - `app/stores/workspace-panel-store.js` owns in-memory active/open/pin snapshots and the declared child-slot contract. State is limited to the current browser page session.
 - `public/script.js` owns feature-local slot activation helpers. It may project React decisions to a documented legacy host, but does not read drawer classes to determine active, pinned, or closed shell state.
 - `app/compat/global-compatibility-bridge.js` exposes a sanitized `workspacePanelDock` snapshot for internal diagnostics only. It does not replace `globalThis.SillyTavern`, `eventSource`, `event_types`, or `@sillytavern/*`.
+- Background URL/render/settings reads remain outside shell panel coordination; the retired Background Library management surface has no registered slot or navigation entry.
 - Protected extension mounts, message and character selectors, slash commands, and regex behavior remain compatibility contracts. The shell cannot remove them as incidental cleanup.
 
 ## Core Implementation
 
-1. The React shell registry exposes AI Config, Formatting, Character Library, World Info, Backgrounds, Extensions, Settings, Group Chats, and Character Authoring. AI Config, Formatting, and Settings route to React Settings.
+1. The React shell registry exposes AI Config, Formatting, Character Library, World Info, Extensions, Settings, Group Chats, and Character Authoring. AI Config, Formatting, and Settings route to React Settings. Background Library management is retired and is not registered in the shell.
 2. Each child slot declares a stable key, mount target, accessible name, content owner, and allowed feature-local capabilities in `WORKSPACE_SHELL_CHILD_SLOTS`.
 3. A slot click records a React dock intent before the shell invokes `activateWorkspaceShellSlot`. Settled mount results update only the React store; a sequence guard ignores stale async results.
 4. Closing a slot calls `deactivateWorkspaceShellSlot`. React clears the active state after its own transition, then projects the close to the declared host.
@@ -35,7 +36,6 @@ Related semantic IDs:
 - `feature.character_library_panel`
 - `feature.group_authoring`
 - `feature.world_info_panel`
-- `feature.background_library_panel`
 - `feature.extension_panel_open`
 
 Current code binding points:

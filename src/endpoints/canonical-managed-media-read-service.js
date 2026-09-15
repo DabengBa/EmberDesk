@@ -4,10 +4,7 @@ import { canonicalSqliteManager } from '../canonical-sqlite.js';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
 import { getPersistedCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
-import {
-    getCanonicalManagedMediaFolderState,
-    listCanonicalManagedMediaReferences,
-} from './canonical-managed-media-store.js';
+import { listCanonicalManagedMediaReferences } from './canonical-managed-media-store.js';
 
 function getDefaultDependencies() {
     const slice = getCanonicalStorageSlice('managed_media');
@@ -116,22 +113,6 @@ function listOwnerReferences(db, ownerType, prefix) {
     return listCanonicalManagedMediaReferences(db)
         .filter(reference => reference.ownerType === ownerType)
         .filter(reference => normalizeCompatibilityPath(reference.compatibilityPath).startsWith(prefix));
-}
-
-export function listCanonicalBackgroundPayload(db, { metadataByPath = {} } = {}) {
-    const images = listOwnerReferences(db, 'background', 'backgrounds/')
-        .map(reference => {
-            const compatibilityPath = normalizeCompatibilityPath(reference.compatibilityPath);
-            return {
-                filename: path.posix.basename(compatibilityPath),
-                isAnimated: metadataByPath[compatibilityPath]?.isAnimated ?? false,
-            };
-        });
-
-    return {
-        images,
-        ...getCanonicalManagedMediaFolderState(db),
-    };
 }
 
 export function listCanonicalAssetPayload(db) {

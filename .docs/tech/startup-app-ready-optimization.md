@@ -54,12 +54,9 @@ Critical path work still includes:
 Post-ready work is scheduled through single-flight tasks from `public/scripts/startup-helpers.js`:
 
 - `deferred.getClientVersion`
-- `deferred.getBackgrounds`
 - `deferred.loadExtensionSettings`
 
-`public/scripts/backgrounds.js` uses a single-flight catalog loader so startup warmup, panel-open reads, and explicit refreshes do not duplicate the same request. If a refresh is requested while the current load is still in flight, the refresh queues one more run after the active request finishes.
-
-`public/scripts/extensions.js` exposes a deferred loader hook so the extensions UI can show a local placeholder and wait for the same in-flight activation task before opening details. When deferred loading fails, the placeholder switches to a retry state instead of leaving a permanent spinner behind.
+Background URL/render/settings compatibility is initialized through the retained browser background module, but there is no Background Library catalog warmup or deferred management-panel stage. Extension deferred loading remains local to the extension surface; a failure does not block the main shell.
 
 ### Settings-cache for /api/settings/get
 
@@ -108,7 +105,6 @@ Relevant semantic docs now live in `.docs/db/`:
 
 - `page.chat_workspace`
 - `feature.startup_bootstrap`
-- `feature.background_library_panel`
 - `feature.extension_panel_open`
 
 Stability-sensitive binding points:
@@ -124,5 +120,5 @@ The full root ownership and reverse-import contract is documented in [Workspace 
 ## Performance And Caching
 
 - Deferred tasks use single-flight caching to prevent duplicate warmup requests during startup.
-- Background refresh paths can queue a follow-up refresh after the current load completes.
+- Background URL/render/settings compatibility does not use a catalog refresh task; extension deferred loading remains local to its panel.
 - Existing-server reports should be compared with the same profile, URL, and machine because startup is sensitive to browser cache and content state.

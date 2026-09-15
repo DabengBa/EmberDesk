@@ -3,7 +3,6 @@ export type CommandResult = Promise<unknown> | unknown;
 export type WorkspaceShellSlotKey =
     | 'characterLibrary'
     | 'worldInfo'
-    | 'backgroundLibrary'
     | 'extensionsHost'
     | 'groupChats'
     | 'characterAuthoring';
@@ -13,7 +12,6 @@ export type WorkspaceDockPanelKind =
     | 'advancedFormatting'
     | 'characterLibrary'
     | 'worldInfo'
-    | 'backgroundLibrary'
     | 'extensionsHost'
     | 'settings'
     | 'characterAuthoring';
@@ -23,7 +21,6 @@ export interface WorkspaceShellCommands {
     openFormatting(): CommandResult;
     openCharacterLibrary(): CommandResult;
     openWorldInfo(): CommandResult;
-    openBackgrounds(): CommandResult;
     openExtensions(): CommandResult;
     openSettings(): CommandResult;
     openGroupChats(): CommandResult;
@@ -93,23 +90,6 @@ export interface WorldInfoCommands {
     toggleActivationRules(open: boolean): CommandResult;
 }
 
-export type BackgroundSource = 'global' | 'chat';
-
-export interface BackgroundLibraryCommands {
-    applyBackgroundFilter(filterQuery: string): CommandResult;
-    applyBackgroundSort(sortValue: string): CommandResult;
-    uploadBackground(source: BackgroundSource): CommandResult;
-    selectBackground(id: string, source: BackgroundSource): CommandResult;
-    lockBackground(): CommandResult;
-    unlockBackground(): CommandResult;
-    autoBackground(): CommandResult;
-    refreshBackgrounds(): CommandResult;
-    renameBackground(id: string, nextName: string, source: BackgroundSource): CommandResult;
-    deleteBackground(id: string, source: BackgroundSource, deleteFromServer: boolean): CommandResult;
-    enterFolder(folderId: string): CommandResult;
-    exitFolder(): CommandResult;
-}
-
 export interface ExtensionsHostCommands {
     toggleNotifyUpdates(): CommandResult;
     openManageExtensions(): CommandResult;
@@ -139,6 +119,5 @@ export type WorkspacePanelCommands =
     | WorkspaceShellCommands
     | MainChatCommands
     | WorldInfoCommands
-    | BackgroundLibraryCommands
     | ExtensionsHostCommands
     | AuthoringCommands;

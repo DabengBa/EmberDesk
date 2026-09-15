@@ -40,7 +40,7 @@ A surface is complete only when:
 |---|---|---|---|
 | 1 | Login and Setup | independent React routes with matching form flows | prove full route parity, remove page flags and `*.html` fallback routing |
 | 2 | Character Library; Character and Group Authoring | React list/forms and state foundations are present | replace legacy tag, row-selector, save, and dialog behavior without narrowing extension contracts |
-| 3 | Settings; World Info; Background Library; Extensions Host | React UI/action hosts exist, but key behavior still routes through legacy facades | move behavior kernels behind React-owned service contracts, then remove facades and protected legacy hosts only after compatibility proof |
+| 3 | Settings; World Info; Extensions Host | React UI/action hosts exist, but key behavior still routes through legacy facades; Background Library management is now retired | move behavior kernels behind React-owned service contracts for active surfaces, while preserving the retired feature record and retained media compatibility |
 | 4 | Same-entry Workspace Shell and Main Chat | React shell/layout, composer, safe rows, and selected transport foundations exist | replace drawer/control coordination, all request families, streaming/edit/unsafe rows, load-more, and supported extension behavior with performance proof |
 | cross-cutting | Public extension and automation contracts | `eventSource`, aliases, globals, selector contracts, and slash/regex behavior are established | preserve behavior through explicit React-era contracts before deleting any legacy implementation that supplies it |
 

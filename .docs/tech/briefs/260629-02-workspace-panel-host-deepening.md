@@ -25,7 +25,7 @@ Date: 2026-06-29
 - Current status: delivered.
 - Change history:
   - 2026-06-29: 把 workspace panel host lifecycle、bridge remount 和 fallback 规则固定为单独 deepening 切片。
-  - 2026-06-30: 新增 `public/scripts/workspace-panel-host-controller.js`，统一 World Info、Background Library、Extensions Host 和 `mainChatMessageList` 的 flag gate、drawer reopen、state-change resample 与 action-settle remount。
+  - 2026-06-30: 新增 `public/scripts/workspace-panel-host-controller.js`，历史上统一 World Info、Background Library、Extensions Host 和 `mainChatMessageList` 的 flag gate、drawer reopen、state-change resample 与 action-settle remount；Background Library host 已于 2026-09-15 退休。
   - 2026-06-30: `tests/react-workspace-panels-helpers.test.js` 补齐共享 host seam proof，并用异步 `actionResult` 回归证明修复 `shouldRemount(false)` 仍被误重挂载的问题。
 - Implementation traceability:
   - Code paths: `public/scripts/workspace-panel-host-controller.js`, `public/script.js`, `app/workspace-panels.tsx`.

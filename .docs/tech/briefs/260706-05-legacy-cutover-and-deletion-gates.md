@@ -7,13 +7,15 @@ last_updated: 2026-07-07
 
 # Legacy Cutover And Deletion Gates
 
+> Background Library management retirement note (2026-09-15): the management UI, panel hosts, routes, commands, and feature flag are retired. Historical planning and implementation details below remain for traceability; background URL/render/settings and retained media contracts remain supported.
+
 ## User Original Request
 
 用户要求继续按 Workspace React replacement roadmap 推进“真实替换”，并在前序 `260706-01` 至 `260706-04` 已把 shell control、legacy-hosted panel entry、authoring surface、supporting panel content owner 逐步切入后，收口每条 legacy owner、fallback path、public export 和 compatibility surface 的最终处理结果。
 
 ## Background & Motivation
 
-当前 EmberDesk 的 same-entry React workspace shell 已经覆盖 panel registry、character/group authoring、World Info、Backgrounds、Extensions 和部分 main-chat owner state，但仓库仍保留多类 legacy 资产：
+当前 EmberDesk 的 same-entry React workspace shell 已经覆盖 panel registry、character/group authoring、World Info、Extensions 和部分 main-chat owner state；Backgrounds 管理面覆盖属于历史状态，但仓库仍保留多类 legacy 资产：
 
 - 纯过渡期遗留的旧 owner / fallback path
 - 仍承担公共 contract 的 global / event / import facade

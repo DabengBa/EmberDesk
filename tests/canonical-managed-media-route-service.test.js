@@ -8,7 +8,6 @@ import { canonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import { persistCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.js';
 import {
-    listCanonicalManagedMediaReferences,
     upsertCanonicalManagedMediaReference,
 } from '../src/endpoints/canonical-managed-media-store.js';
 import { setConfigFilePath } from '../src/util.js';
@@ -17,7 +16,6 @@ const tempRoots = [];
 const configDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-managed-media-routes-config-'));
 const configPath = path.join(configDirectory, 'config.yaml');
 let assetsRouter;
-let backgroundsRouter;
 let imageMetadataRouter;
 
 function makeDirectories() {
@@ -141,7 +139,6 @@ beforeAll(async () => {
     ].join('\n'), 'utf8');
     setConfigFilePath(configPath);
     ({ router: assetsRouter } = await import('../src/endpoints/assets.js'));
-    ({ router: backgroundsRouter } = await import('../src/endpoints/backgrounds.js'));
     ({ router: imageMetadataRouter } = await import('../src/endpoints/image-metadata.js'));
 });
 
@@ -154,39 +151,28 @@ afterEach(() => {
 });
 
 describe('canonical managed media route service', () => {
-    test('uses the clean catalog instead of compatibility-directory scans for background and asset lists', async () => {
+    test('keeps generic image metadata routes while retiring folder management routes', () => {
+        const postPaths = imageMetadataRouter.stack
+            .filter(layer => layer.route?.methods?.post)
+            .map(layer => layer.route.path);
+
+        expect(postPaths).toEqual(expect.arrayContaining(['/', '/all', '/cleanup']));
+        expect(postPaths.some(routePath => routePath.startsWith('/folders/'))).toBe(false);
+    });
+
+    test('uses the clean catalog instead of compatibility-directory scans for asset lists', async () => {
         const directories = makeDirectories();
-        fs.writeFileSync(path.join(directories.backgrounds, 'filesystem-only.gif'), 'not an image');
         fs.mkdirSync(path.join(directories.assets, 'bgm'), { recursive: true });
         fs.writeFileSync(path.join(directories.assets, 'bgm', 'filesystem-only.ogg'), 'file');
         seedCanonicalMedia(directories);
         setManagedMediaEnv();
 
-        const backgroundsResponse = await invokeRoute(backgroundsRouter, '/all', directories);
-        const assetsResponse = await invokeRoute(assetsRouter, '/get', directories);
-
-        expect(backgroundsResponse.statusCode).toBe(200);
-        expect(backgroundsResponse.body.images).toEqual([
-            { filename: 'canonical.gif', isAnimated: false },
-        ]);
-        expect(assetsResponse.statusCode).toBe(200);
-        expect(assetsResponse.body).toEqual({
-            bgm: ['assets/bgm/canonical.ogg'],
-        });
-    });
-
-    test('falls back to compatibility-directory scans when managed-media audit has not run', async () => {
-        const directories = makeDirectories();
-        fs.writeFileSync(path.join(directories.backgrounds, 'filesystem-only.gif'), 'not an image');
-        seedCanonicalMedia(directories, { audit: false });
-        setManagedMediaEnv();
-
-        const response = await invokeRoute(backgroundsRouter, '/all', directories);
+        const response = await invokeRoute(assetsRouter, '/get', directories);
 
         expect(response.statusCode).toBe(200);
-        expect(response.body.images).toEqual([
-            { filename: 'filesystem-only.gif', isAnimated: false },
-        ]);
+        expect(response.body).toEqual({
+            bgm: ['assets/bgm/canonical.ogg'],
+        });
     });
 
     test('rejects strict managed-media reads when the persisted audit is missing', async () => {
@@ -200,65 +186,4 @@ describe('canonical managed media route service', () => {
         expect(response.body).toEqual({ error: 'Failed to fetch managed assets' });
     });
 
-    test('routes a background upload through the enabled canonical write authority before compatibility projection', async () => {
-        const directories = makeDirectories();
-        seedCanonicalMedia(directories);
-        setManagedMediaEnv({ writes: true });
-        const uploadPath = path.join(directories.root, 'upload.tmp');
-        fs.writeFileSync(uploadPath, 'new-background-content');
-
-        const response = await invokeRoute(backgroundsRouter, '/upload', directories, {
-            body: {},
-            file: {
-                destination: directories.root,
-                filename: 'upload.tmp',
-                originalname: 'uploaded.png',
-            },
-        });
-
-        expect(response.statusCode).toBe(200);
-        expect(response.body).toBe('uploaded.png');
-        expect(fs.readFileSync(path.join(directories.backgrounds, 'uploaded.png'), 'utf8')).toBe('new-background-content');
-        const reference = listCanonicalManagedMediaReferences(canonicalSqliteManager.open({
-            handle: 'alice',
-            directories,
-            featureFlags: { enabled: true, strict: false },
-        })).find(item => item.compatibilityPath === 'backgrounds/uploaded.png');
-        expect(reference).toEqual(expect.objectContaining({
-            ownerType: 'background',
-            managedRelativePath: expect.stringMatching(/^managed-media\/[a-f0-9]{64}$/),
-        }));
-        expect(fs.readFileSync(path.join(directories.storage, reference.managedRelativePath), 'utf8')).toBe('new-background-content');
-    });
-
-    test('routes background-folder mutations through canonical authority and preserves the folder API payload', async () => {
-        const directories = makeDirectories();
-        seedCanonicalMedia(directories);
-        setManagedMediaEnv({ writes: true });
-
-        const createResponse = await invokeRoute(imageMetadataRouter, '/folders/create', directories, {
-            body: { name: 'Sky' },
-        });
-        expect(createResponse.statusCode).toBe(200);
-        expect(createResponse.body).toEqual(expect.objectContaining({ name: 'Sky' }));
-
-        const assignResponse = await invokeRoute(imageMetadataRouter, '/folders/assign', directories, {
-            body: { id: createResponse.body.id, paths: ['backgrounds/canonical.gif'] },
-        });
-        expect(assignResponse.statusCode).toBe(200);
-        expect(assignResponse.body).toEqual({ ok: true });
-
-        const foldersResponse = await invokeRoute(backgroundsRouter, '/folders', directories);
-        expect(foldersResponse.statusCode).toBe(200);
-        expect(foldersResponse.body).toEqual({
-            folders: [{ id: createResponse.body.id, name: 'Sky', thumbnailFile: '' }],
-            imageFolderMap: { 'canonical.gif': [createResponse.body.id] },
-        });
-        expect(JSON.parse(fs.readFileSync(path.join(directories.root, 'image-metadata.json'), 'utf8'))).toEqual(expect.objectContaining({
-            folders: [{ id: createResponse.body.id, name: 'Sky', thumbnailFile: '' }],
-            images: expect.objectContaining({
-                'backgrounds/canonical.gif': expect.objectContaining({ folderIds: [createResponse.body.id] }),
-            }),
-        }));
-    });
 });

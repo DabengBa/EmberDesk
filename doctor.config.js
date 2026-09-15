@@ -52,7 +52,6 @@ export default {
                 files: [
                     'src/endpoints/assets.js',
                     'src/endpoints/avatars.js',
-                    'src/endpoints/backgrounds.js',
                     'src/endpoints/backups.js',
                     'src/endpoints/characters.js',
                     'src/endpoints/chats.js',

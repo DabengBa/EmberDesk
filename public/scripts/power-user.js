@@ -4051,7 +4051,6 @@ jQuery(() => {
                 name: 'bg',
                 description: 'background image filename to use instead of the current one',
                 typeList: [ARGUMENT_TYPE.STRING],
-                enumProvider: commonEnumProviders.backgrounds,
             }),
         ],
         helpString: 'Generates a new theme based on a dominant color of the specified background image. Saves as "bgcol - background name".',

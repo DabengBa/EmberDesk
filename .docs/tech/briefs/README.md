@@ -45,7 +45,7 @@ Delete or avoid adding briefs that are:
 | `260716-06-react-character-group-authoring-retirement.md` | Preserves full character and group authoring behavior while replacing legacy forms and save orchestration with React ownership. |
 | `260716-07-react-settings-retirement.md` | Preserves complete settings and provider-configuration behavior while retiring legacy drawers and same-version fallback. |
 | `260716-08-react-world-info-retirement.md` | Preserves World Info editing, regex, import/export, automation, and protected browser-import contracts during React ownership cutover. |
-| `260716-09-react-background-library-retirement.md` | Preserves Background Library browsing, mutation, selection, extension, and automation behavior while deleting its legacy UI owner. |
+| `260716-09-react-background-library-retirement.md` | Preserves the historical Background Library intent and records the 2026-09-15 management-surface retirement plus retained URL/render/settings and media boundaries. |
 | `260716-10-react-extensions-host-retirement.md` | Preserves supported extension mounts, scripts, events, slash/regex behavior, and browser imports while React replaces the legacy host. |
 | `260716-11-react-main-chat-transport-retirement.md` | Preserves the complete generation lifecycle and provider matrix while moving Main Chat transport ownership out of the legacy shell. |
 | `260716-12-react-main-chat-renderer-retirement.md` | Preserves message rendering, editing, streaming, long-chat, actions, and extension mutation behavior while deleting the legacy renderer. |

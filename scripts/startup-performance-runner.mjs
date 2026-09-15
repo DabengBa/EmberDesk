@@ -270,7 +270,7 @@ async function captureBrowserProfile(targetUrl, targetScreenshotPath) {
     }
 
     const expectedDeferredStages = await page.evaluate(() => {
-        const stageNames = ['deferred.getClientVersion', 'deferred.getBackgrounds'];
+        const stageNames = ['deferred.getClientVersion'];
         const extensionsButton = document.getElementById('extensions_details');
         if (extensionsButton && !extensionsButton.classList.contains('disabled')) {
             stageNames.push('deferred.loadExtensionSettings');

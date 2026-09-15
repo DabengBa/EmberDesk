@@ -124,27 +124,6 @@ function sanitizeWorkspacePanelState(kind, state) {
         });
     }
 
-    if (kind === 'backgroundLibrary') {
-        return cloneJsonSafe({
-            status: state.status,
-            showLoading: state.showLoading,
-            showEmpty: state.showEmpty,
-            showError: state.showError,
-            systemContainerPresent: state.systemContainerPresent,
-            chatContainerPresent: state.chatContainerPresent,
-            systemItemCount: state.systemItemCount,
-            chatItemCount: state.chatItemCount,
-            refreshQueued: state.refreshQueued,
-            systemBackgrounds: state.systemBackgrounds,
-            chatBackgrounds: state.chatBackgrounds,
-            filterQuery: state.filterQuery,
-            sortValue: state.sortValue,
-            folderViewActive: state.folderViewActive,
-            lockedCount: state.lockedCount,
-            selectedCount: state.selectedCount,
-        });
-    }
-
     if (kind === 'extensionsHost') {
         return cloneJsonSafe({
             extensionsSettingsPresent: state.extensionsSettingsPresent,

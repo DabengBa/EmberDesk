@@ -30,7 +30,6 @@ import { router as worldInfoRouter } from './endpoints/worldinfo.js';
 import { router as statsRouter } from './endpoints/stats.js';
 import { router as contentManagerRouter } from './endpoints/content-manager.js';
 import { router as settingsRouter } from './endpoints/settings.js';
-import { router as backgroundsRouter } from './endpoints/backgrounds.js';
 import { router as spritesRouter } from './endpoints/sprites.js';
 import { router as stableDiffusionRouter } from './endpoints/stable-diffusion.js';
 import { router as hordeRouter } from './endpoints/horde.js';
@@ -110,10 +109,6 @@ export function redirectDeprecatedEndpoints(app) {
     redirect('/getstats', '/api/stats/get');
     redirect('/recreatestats', '/api/stats/recreate');
     redirect('/updatestats', '/api/stats/update');
-    redirect('/getbackgrounds', '/api/backgrounds/all');
-    redirect('/delbackground', '/api/backgrounds/delete');
-    redirect('/renamebackground', '/api/backgrounds/rename');
-    redirect('/downloadbackground', '/api/backgrounds/upload'); // yes, the downloadbackground endpoint actually uploads one
     redirect('/savetheme', '/api/themes/save');
     redirect('/getuseravatars', '/api/avatars/get');
     redirect('/deleteuseravatar', '/api/avatars/delete');
@@ -166,7 +161,6 @@ export function setupPrivateEndpoints(app) {
     app.use('/api/groups', groupsRouter);
     app.use('/api/worldinfo', worldInfoRouter);
     app.use('/api/stats', statsRouter);
-    app.use('/api/backgrounds', backgroundsRouter);
     app.use('/api/sprites', spritesRouter);
     app.use('/api/content', contentManagerRouter);
     app.use('/api/settings', settingsRouter);

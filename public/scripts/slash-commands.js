@@ -76,7 +76,7 @@ import { decodeTextTokens, getAvailableTokenizers, getFriendlyTokenizerName, get
 import { debounce, delay, equalsIgnoreCaseAndAccents, findChar, getCharIndex, isFalseBoolean, isTrueBoolean, onlyUnique, regexFromString, showFontAwesomePicker, stringToRange, trimToEndSentence, trimToStartSentence, waitUntilCondition } from './utils.js';
 import { registerVariableCommands, resolveVariable } from './variables.js';
 import { registerActionLoaderSlashCommands } from './action-loader-slashcommands.js';
-import { background_settings } from './backgrounds.js';
+import { background_settings, generateUrlParameter, setBackground } from './backgrounds.js';
 import { SlashCommandClosure } from './slash-commands/SlashCommandClosure.js';
 import { SlashCommandClosureResult } from './slash-commands/SlashCommandClosureResult.js';
 import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from './slash-commands/SlashCommandArgument.js';
@@ -709,12 +709,11 @@ export function initDefaultSlashCommands() {
             SlashCommandArgument.fromProps({
                 description: t`background filename`,
                 typeList: [ARGUMENT_TYPE.STRING],
-                enumProvider: commonEnumProviders.backgrounds,
             }),
         ],
         helpString: `
         <div>
-            ${t`Sets a background according to the provided filename. Partial names allowed.`}
+            ${t`Sets a background using the provided filename, path, or URL.`}
         </div>
         <div>
             ${t`If no background is provided, this will return the currently selected background.`}
@@ -6229,29 +6228,33 @@ $(document).on('click', '[data-displayHelp]', function (e) {
 
 function setBackgroundCallback(_, bg) {
     if (!bg) {
-        // allow reporting of the background name if called without args
-        // for use in ST Scripts via pipe
         return background_settings.name;
     }
 
-    console.log('Set background to ' + bg);
+    const value = String(bg).trim();
+    if (!value) {
+        return background_settings.name;
+    }
 
-    const bgElements = Array.from(document.querySelectorAll('.bg_example')).map((x) => ({ element: x, bgfile: x.getAttribute('bgfile') }));
-
-    const fuse = new Fuse(bgElements, { keys: ['bgfile'] });
-    const result = fuse.search(bg);
-
-    if (!result.length) {
-        toastr.error(t`No background found with name "${bg}"`);
+    const cssUrlMatch = value.match(/^url\(["']?(.*?)["']?\)$/i);
+    if (cssUrlMatch) {
+        const source = cssUrlMatch[1];
+        const name = source.startsWith('backgrounds/')
+            ? decodeURIComponent(source.slice('backgrounds/'.length))
+            : source;
+        setBackground(name, `url("${encodeURI(source)}")`);
         return '';
     }
 
-    const bgElement = result[0].item.element;
+    const isExternalUrl = /^(?:https?:|data:|blob:)/i.test(value);
+    const isStoredPath = value.startsWith('backgrounds/');
+    const isRelativeCustomPath = value.includes('/') && !isStoredPath;
+    const name = isStoredPath ? decodeURIComponent(value.slice('backgrounds/'.length)) : value;
+    const url = isExternalUrl || isRelativeCustomPath
+        ? `url("${encodeURI(value)}")`
+        : generateUrlParameter(value, false);
 
-    if (bgElement instanceof HTMLElement) {
-        bgElement.click();
-    }
-
+    setBackground(name, url);
     return '';
 }
 

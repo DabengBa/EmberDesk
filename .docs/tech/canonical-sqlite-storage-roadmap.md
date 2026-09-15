@@ -559,7 +559,7 @@ surfaces affected by later implementation remain:
 - `feature.world_book_delete`
 - `page.settings`
 - `page.api_configuration`
-- `feature.background_library_panel`
+- `retired feature.background_library_panel` (historical semantic record only)
 - `feature.extension_panel_open`
 - `feature.chat_message_rendering`
 - `feature.chat_message_actions`
@@ -573,7 +573,7 @@ Code binding points:
 - `chats.js` owns chat save/rename/delete/import route side effects.
 - `character-index.js` is retired from normal runtime and remains only as a historical/helper-level proof surface.
 - `settings.js`, `secrets.js`, `assets.js`, `backgrounds.js`, and `extensions.js`
-  remain their HTTP/facade owners while domain stores move behind them.
+  retain their HTTP/facade roles where still supported; `backgrounds.js` retains background URL/render/settings compatibility but no Background Library management surface.
 
 ## Validation
 
