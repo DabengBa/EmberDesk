@@ -23,8 +23,8 @@ Adopt a staged legacy-retirement program for the already migrated React surfaces
 
 1. `/login`, `/setup`, and `/settings`;
 2. Character Library plus Character and Group Authoring;
-3. World Info, Background Library, and Extensions Host;
-4. the same-entry workspace shell and guarded main-chat island.
+3. World Info and Extensions Host;
+4. the same-entry workspace shell and guarded main-chat island; the former Background Library management surface is handled by the 2026-09-15 retirement closeout.
 
 For a surface to complete the program:
 
@@ -75,6 +75,15 @@ At minimum, each deletion must show:
 - preserved supported public contracts, including stable extension selectors or their documented replacement;
 - startup and interaction evidence where the surface touches workspace startup, large lists, or main chat;
 - updated `.docs/db` behavior documentation and project history.
+
+## Background Library Retirement Addendum (2026-09-15)
+
+The Background Library management surface completed a separate retirement closeout under this program:
+
+- Removed the Background Library React and legacy management hosts, product flag, panel/controller bridge, management routes and redirects, and `/lockbg`, `/unlockbg`, and `/autobg` commands.
+- Preserved background URL/render/settings compatibility, `/backgrounds/*`, historical/default assets, canonical managed-media ownership including shadow import, tombstones, folder repair/import, generic image metadata, inline chat images, and canonical chat attachments.
+- The stable semantic ID `feature.background_library_panel` remains as a retired historical record so prior links resolve; it does not imply a current panel or navigation entry.
+- Proof is recorded in `tests/background-library-retirement.test.js`, the compatibility lane, the semantic docs check, [the retired feature record](../db/features/background-library-panel.md), and [the legacy cutover ledger](../tech/legacy-cutover-ledger.md).
 
 ## React Runtime Boundary Addendum (2026-08-14)
 

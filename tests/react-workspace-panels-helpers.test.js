@@ -74,7 +74,6 @@ describe('React workspace panels bridge helpers', () => {
 
         expect(isReactWorkspacePanelEnabled('worldInfo', features)).toBe(true);
         expect(isReactWorkspacePanelEnabled('mainChatMessageList', features)).toBe(true);
-        expect(isReactWorkspacePanelEnabled('backgroundLibrary', features)).toBe(false);
         expect(isReactWorkspacePanelEnabled('extensionsHost', features)).toBe(true);
     });
 
@@ -546,6 +545,19 @@ describe('React workspace panels bridge helpers', () => {
             onError,
         })).resolves.toEqual(createWorkspacePanelFallbackResult('worldInfo', WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.BUNDLE_LOAD_FAILED));
         expect(onError).toHaveBeenCalledWith(expect.any(Error), 'worldInfo', WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.BUNDLE_LOAD_FAILED);
+
+        await expect(mountReactWorkspacePanel({
+            kind: 'extensionsHost',
+            container,
+            features: { reactPanels: { extensionsHost: true } },
+            loadModule: async () => ({
+                mountWorkspacePanel() {
+                    throw new Error('mount exploded');
+                },
+            }),
+            onError,
+        })).resolves.toEqual(createWorkspacePanelFallbackResult('extensionsHost', WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.MOUNT_FAILED));
+        expect(onError).toHaveBeenCalledWith(expect.any(Error), 'extensionsHost', WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.MOUNT_FAILED);
 
         await expect(mountReactWorkspacePanel({
             kind: 'worldInfo',

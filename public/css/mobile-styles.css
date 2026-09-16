@@ -33,10 +33,6 @@
         display: none;
     }
 
-    #background_fitting {
-        max-width: 6em;
-    }
-
     #extensions_settings,
     #extensions_settings2 {
         width: 100% !important;

@@ -29,7 +29,6 @@ const retiredOperation = () => {
     return Promise.reject(error);
 };
 
-export function setGroupAuthoringMembersDraft() { return retiredOperation(); }
 export function saveGroupChat() { return retiredOperation(); }
 export function generateGroupWrapper() { return retiredOperation(); }
 export function deleteGroup() { return retiredOperation(); }

@@ -5,7 +5,9 @@ confirmed: true
 last_updated: 2026-06-19
 ---
 
-# React Phase 2 Workspace Panels Sprints 4-7 Intent
+# React Phase 2 Workspace Panels
+
+> Background Library management retirement note (2026-09-15): the management UI, panel hosts, routes, commands, and feature flag are retired. Historical planning and implementation details below remain for traceability; background URL/render/settings and retained media contracts remain supported.
 
 ## User Original Request
 
@@ -33,10 +35,10 @@ Phase 2 Sprint 1-3 已经把 Character Library 交付为 `features.react.panels.
   - 2026-06-19: implementation completed the World Info React action island: the React surface now shows selected world, world count, entry count, search/sort fields, create/import/export/refresh buttons, and entry edit shortcuts while dispatching to the existing legacy action chain.
 - **Implementation traceability:** implemented code paths `default/config.yaml`, `src/workspace-react-features.js`, `public/script.js`, `public/scripts/workspace-panels-react-bridge.js`, `app/workspace-panels.tsx`, `vite.config.ts`, `tests/workspace-react-panel-flags.test.js`, `tests/react-workspace-panels-helpers.test.js`; legacy behavior owners remain `public/scripts/world-info.js`, `public/scripts/world-info-converters.js`, and `public/scripts/world-info-import-results.js`; docs `.docs/db/features/world-info-panel.md`, `.docs/db/pages/chat-workspace.md`, `.docs/tech/react-modernization-roadmap.md`; delivery status `guarded React action island implemented; legacy prompt/regex/import-result/delete semantics retained`.
 
-### Domain: Background Library React island
+### Domain: Background Library React island (Historical; retired 2026-09-15)
 
 - **User expectation:** Sprint 6 应把背景库面板推进到 React workspace panel island；用户仍从原 workspace 入口打开背景面板，上传、删除、重命名、选择背景、刷新和 loading/catch-up 行为不能倒退。
-- **Current status:** delivered as a guarded React workspace panel island. React owns the visible host, loading/empty/success/error status, filter/sort controls, global/chat gallery presentation, background action entry points, TanStack Form/Zod control state, and TanStack Query-backed panel state; legacy modules remain the behavior owners for background file APIs, thumbnails, folder state, selection side effects, lock behavior, and slash commands.
+- **Historical status:** delivered as a guarded React workspace panel island. The visible host, gallery, and action state described here were retired on 2026-09-15; background URL/render/settings and retained media compatibility remain supported outside the retired management feature.
 - **Change history:**
   - 2026-06-18: 用户通过持久目标要求继续 `$delivery-workflow` 执行 Sprint 6。
   - 2026-06-18: 规格准备阶段确认 `public/scripts/background-panel-controller.js` 已是现有加载状态控制边界，应复用而不是重写背景行为链路。
@@ -60,7 +62,7 @@ Phase 2 Sprint 1-3 已经把 Character Library 交付为 `features.react.panels.
 ### Domain: TanStack adoption and legacy ownership clarity
 
 - **User expectation:** 后续 React 面板仍要严格推动 TanStack Query / TanStack Form / Zod；如果某个控制仍由 legacy 拥有，必须在规格和实现中写清楚边界，而不是声称 React 已接管。
-- **Current status:** TanStack Query provider shell is present in the shared workspace-panel bundle, and World Info, Background Library, and Extensions Host now use TanStack Form + Zod for React-owned controls plus TanStack Query-backed panel state. Legacy-owned controls remain outside these schemas by design.
+- **Current status:** TanStack Query provider shell remains in the shared workspace-panel bundle; current active controls cover World Info and Extensions Host. Background Library Form/Zod and Query claims are historical because its management surface was retired on 2026-09-15.
 - **Change history:**
   - 2026-06-16: 用户要求路线图严格推动 TanStack Form/Query/Zod。
   - 2026-06-18: Phase 2 Sprint 1-3 已把该要求应用到 Character Library；Sprint 4-7 继续沿用同一规则。

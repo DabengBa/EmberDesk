@@ -2,6 +2,8 @@
 
 日期：2026-07-01
 
+> Current boundary (2026-09-15): Background Library management is retired. The current shell has no Backgrounds entry or child slot; background URL/render/settings and retained media compatibility remain outside shell coordination.
+
 ## 原始请求
 
 用户指出当前 EmberDesk 已经在使用 React 版本的工作区局部能力，因此对“另建 `/workspace-next`”没有信心。用户确认新的方向应是：在当前 `/` 工作区继续扩大 React owner 范围，分阶段接管工作区壳层，并将每个阶段拆成多个步骤分别编写 `spec.md` 开发设计文档；同时重新整理或删除旧的 `.docs/specs/260701-01-next-workspace-shell`。
@@ -11,7 +13,7 @@
 当前 React 现代化路线图已完成并进入兼容维护。生产入口 `/` 仍由 jQuery workspace shell 承载，但多个核心工作区 surface 已经是 React owner 或 React-controlled owner：
 
 - Character Library 可见 toolbar/list/search/sort/bulk 浏览状态已由 React panel path 正常拥有。
-- World Info、Background Library、Extensions Host 已通过 React host/action surfaces 和 legacy compatibility facades 运行。
+- World Info 与 Extensions Host remain active React host/action surfaces. The Background Library host/action surface is a historical record and was retired on 2026-09-15.
 - Main Chat Message List 已拥有 React row-lifecycle/windowing、safe finalized rich-body、visible composer、slash UI、message action shell、标准 OpenAI direct-chat visible transport 等边界。
 - Zustand stores、global compatibility bridge、workspace panel mount result contract 和 `JS-Slash-Runner` compatibility gate 已形成证据基础。
 
@@ -35,7 +37,7 @@
 
 ### Phase B: Workspace Coordination
 
-- `260701-03-panel-dock-and-drawer-coordination`: 让 React 统一调度角色库、World Info、Backgrounds、Extensions 的入口、dock/drawer 状态和 fallback。
+- `260701-03-panel-dock-and-drawer-coordination`: historical shell coordination included Character Library, World Info, Backgrounds, and Extensions; current shell has no Background Library management entry or slot.
 - `260701-04-main-chat-layout-and-composer-shell`: 让 React 统一主聊天布局、composer/action rail 和局部状态区，继续保留 protected message row 和 excluded transport fallback。
 
 ### Phase C: Interaction Hardening
@@ -78,17 +80,17 @@
 
 - **用户期望**：已有 React surface 应继续向外接管，形成统一体验。
 - **设计结论**：每个 spec 优先复用现有 React panel/main-chat owner，不引入第二套角色库、第二套消息列表或第二套扩展协议。
-- **当前状态**：第一阶段发布隐藏诊断和决策契约；第二阶段在 `features.react.shell.takeover=true` 时让 React 接管可见外层 chrome、当前上下文摘要、shell 状态和主导航入口；第三阶段让 React chrome 统一调度 Character Library、World Info、Backgrounds、Extensions 的 panel dock intent/result、active/pressed entry 和本地 mounted/fallback/error 状态；第四、第五阶段继续把主聊天外层布局、局部 generation/recovery、desktop/mobile 响应式切换、局部 loading/empty/error/retry 文案和同会话手动 panel intent 收敛到同一个 same-entry shell owner。Legacy drawer 内容、chat 行本体、composer 兼容边界和 protected extension mount points 仍保留为兼容 substrate。
+- **当前状态**：第一阶段发布隐藏诊断和决策契约；第二阶段在 `features.react.shell.takeover=true` 时让 React 接管可见外层 chrome、当前上下文摘要、shell 状态和主导航入口；第三阶段历史上协调 Character Library、World Info、Backgrounds、Extensions 的 panel dock intent/result，现行 shell 仅保留仍注册 surfaces 的 coordination；第四、第五阶段继续把主聊天外层布局、局部 generation/recovery、desktop/mobile 响应式切换、局部 loading/empty/error/retry 文案和同会话手动 panel intent 收敛到同一个 same-entry shell owner。Legacy drawer 内容、chat 行本体、composer 兼容边界和 protected extension mount points 仍保留为兼容 substrate。
 - **变更历史**：
   - 2026-07-01: 明确 fallback 不是开发通过条件；dev/CI/test strict 失败和 production safety fallback 被拆成不同语义。
   - 2026-07-01: 真实浏览器 smoke 发现旧 `Character Management` 和 `Extensions` 主入口仍与 React chrome 竞争；已通过 `body[data-react-workspace-shell-chrome="mounted"]` 隐藏 legacy primary entry buttons，同时保留 drawer content。
   - 2026-07-01: 第四阶段的窄切片已让 React main-chat shell 标记现有 `#chat`、`#send_form`、`#nonQRFormItems` 为外层 layout/status owner，并在 composer 附近显示本地 generation/recovery status；该交付不假设第三阶段 panel dock 已完成。
-  - 2026-07-05: 第三阶段 panel dock coordination 已交付；React shell 记录四类 panel 的 transient dock intent/result、active/pressed entry、local status 和 pinned/locked hints，同时继续通过既有 facades 打开 World Info、Backgrounds、Extensions 和 Character Library。
+  - 2026-07-05: 第三阶段 panel dock coordination 已交付；该历史记录曾覆盖四类 panel；Background Library management 已于 2026-09-15 退休，当前 shell 不再为其保留入口或 slot。
   - 2026-07-05: 第五阶段 responsive/recovery hardening 已交付；React shell 在 phone/desktop viewport 下统一 main-chat 与 panel 状态区域的布局，给 main-chat 和 workspace panels 补齐本地 retry / legacy-return / next-step CTA，并保持手动 panel intent 仅在当前页面会话内生效。
   - 2026-07-06: 真实浏览器 walkthrough 发现 shell 驱动的 `World Info` 首次打开仍可能卡在 deferred panel/legacy listener 时序上，`Character Library` 也可能因同一 React Query snapshot 重复同步回 legacy bridge 而卡顿；已通过“先让 click task 结束再开 drawer”“先预加载 `world-info-body`”“按 `charactersDataUpdatedAt` 一次性同步”修复。
   - 2026-07-01: 代码审查发现 React chrome 隐藏 legacy drawer toggle 的范围大于 React 替代入口，已补齐 AI Config 与 Formatting 入口；Settings 在 React Settings page 未启用时改为打开 legacy User Settings drawer。
   - 2026-07-01: strict 判定从 `NODE_ENV !== 'production'` 收窄为 CI、`NODE_ENV=development` 或 `NODE_ENV=test`，避免普通自托管未设置 `NODE_ENV` 时误入 fail-fast。
-- **实现追踪**：`reactPages.settings` 与 `reactShell.strict` 由 bootstrap payload 暴露，CI、`NODE_ENV=development` 或 `NODE_ENV=test` 在 takeover 开启时进入 strict；未设置 `NODE_ENV` 或 production 默认保留 safety fallback。React chrome 当前入口为 AI Config、Formatting、Character Library、World Info、Backgrounds、Extensions、Settings；第三到第五阶段的 shell/panel/recovery 路径集中在 `app/stores/workspace-panel-store.js`、`app/compat/global-compatibility-bridge.js`、`app/workspace-panels.tsx`、`public/script.js` 和 `public/style.css`，并在 2026-07-06 walkthrough 后补入“panel 状态文案人类化”“nav click 不与 legacy listener 竞争”“World Info deferred panel 预热”“Character Library query snapshot 去重”约束；验证为 `bun run --cwd tests test:unit -- react-state-stores.test.js --runInBand`、`bun run --cwd tests test:unit -- react-workspace-panels-helpers.test.js --runInBand`、`bun run --cwd tests test:unit -- character-library-react-helpers.test.js --runInBand`、`bun run --cwd tests test:unit -- chat-workspace-structure.test.js --runInBand`、`bun run test:compat`、`bun run build:react:workspace-panels`、`bun run build:react:character-library`、`bun run docs:check`、`bun run docs:build`、`PLAYWRIGHT_CHROME_EXECUTABLE=/home/allen/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome PLAYWRIGHT_REUSE_SERVER=0 PLAYWRIGHT_PORT=18100 bun run --cwd tests test:e2e -- chat-message-layout.e2e.js --workers=1`，以及 `PLAYWRIGHT_CHROME_EXECUTABLE=/home/allen/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome PLAYWRIGHT_REUSE_SERVER=0 PLAYWRIGHT_PORT=18101 EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST=true bun run --cwd tests test:e2e -- chat-message-rendering.e2e.js --workers=1`。
+- **实现追踪**：`reactPages.settings` 与 `reactShell.strict` 由 bootstrap payload 暴露，CI、`NODE_ENV=development` 或 `NODE_ENV=test` 在 takeover 开启时进入 strict；未设置 `NODE_ENV` 或 production 默认保留 safety fallback。React chrome 当前入口为 AI Config、Formatting、Character Library、World Info、Extensions、Settings；Background Library management has no current entry；第三到第五阶段的 shell/panel/recovery 路径集中在 `app/stores/workspace-panel-store.js`、`app/compat/global-compatibility-bridge.js`、`app/workspace-panels.tsx`、`public/script.js` 和 `public/style.css`，并在 2026-07-06 walkthrough 后补入“panel 状态文案人类化”“nav click 不与 legacy listener 竞争”“World Info deferred panel 预热”“Character Library query snapshot 去重”约束；验证为 `bun run --cwd tests test:unit -- react-state-stores.test.js --runInBand`、`bun run --cwd tests test:unit -- react-workspace-panels-helpers.test.js --runInBand`、`bun run --cwd tests test:unit -- character-library-react-helpers.test.js --runInBand`、`bun run --cwd tests test:unit -- chat-workspace-structure.test.js --runInBand`、`bun run test:compat`、`bun run build:react:workspace-panels`、`bun run build:react:character-library`、`bun run docs:check`、`bun run docs:build`、`PLAYWRIGHT_CHROME_EXECUTABLE=/home/allen/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome PLAYWRIGHT_REUSE_SERVER=0 PLAYWRIGHT_PORT=18100 bun run --cwd tests test:e2e -- chat-message-layout.e2e.js --workers=1`，以及 `PLAYWRIGHT_CHROME_EXECUTABLE=/home/allen/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome PLAYWRIGHT_REUSE_SERVER=0 PLAYWRIGHT_PORT=18101 EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST=true bun run --cwd tests test:e2e -- chat-message-rendering.e2e.js --workers=1`。
 
 ### Domain 3: 阶段化证明
 
@@ -118,6 +120,6 @@
 - 2026-07-01: 交付第一阶段 same-entry shell takeover foundation；同入口 feature payload、strict/safety 决策、hidden marker 和 semantic docs 已落地。
 - 2026-07-01: 交付第二阶段 React workspace chrome；同入口 React chrome、role/name 主导航、legacy primary entry 隐藏、semantic feature doc 和 browser smoke 已落地。
 - 2026-07-01: 交付第四阶段 main-chat layout/composer shell 的窄接管；React 标记现有 chat/composer 容器为外层 layout/status owner，新增本地 generation/recovery status，保留 `#chat > .mes`、`#show_more_messages`、slash、provider transport 和 extension compatibility 边界。
-- 2026-07-05: 交付第三阶段 panel dock coordination；React workspace chrome 统一记录 Character Library、World Info、Backgrounds、Extensions 的 transient dock state、active entry、本地 panel status 与 pinned/locked hints，并保留既有 facade/fallback 行为。
+- 2026-07-05: 交付第三阶段 panel dock coordination；该历史记录曾覆盖 Character Library、World Info、Backgrounds、Extensions；Background Library management 已于 2026-09-15 退休。
 - 2026-07-05: 交付第五阶段 responsive/recovery hardening；React shell 统一 desktop/mobile 布局、本地 loading/empty/error/retry vocabulary、main-chat 与 panel 的恢复 CTA，以及同会话手动 panel intent 的保留策略，同时不引入新的持久偏好或 `/workspace-next`。
 - 2026-07-06: 吸收浏览器 walkthrough 与 Claude Code 只读设计指导后的收口约束：默认可见状态只用短语而不用原始枚举；Diagnostics 继续折叠承载原始状态与 legacy slot 细节；不新增成功 toast；移动端继续隐藏 status strip 保留 composer 宽度。

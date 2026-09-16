@@ -5,7 +5,9 @@ confirmed: true
 last_updated: 2026-07-06
 ---
 
-# Workspace React Replacement Roadmap Specs
+# Workspace React Replacement Roadmap
+
+> Background Library management retirement note (2026-09-15): the management UI, panel hosts, routes, commands, and feature flag are retired. Historical planning and implementation details below remain for traceability; background URL/render/settings and retained media contracts remain supported.
 
 ## User Original Request
 
@@ -13,7 +15,7 @@ last_updated: 2026-07-06
 
 ## Background & Motivation
 
-当前 EmberDesk 已经有 same-entry React workspace shell、panel dock coordination、Character Library / World Info / Backgrounds / Extensions / Main Chat Message List 等 React islands，但仍保留大量 legacy drawer、jQuery controller、compatibility facade 和 fallback owner。近期真实浏览器测试暴露了 shell dock state、legacy drawer state、fixed bundle cache 和快速切换之间的状态机问题；这些问题说明“guarded island + fallback”已经不足以表达最终替换目标。
+当前 EmberDesk 历史上有 same-entry React workspace shell、panel dock coordination、Character Library / World Info / Backgrounds / Extensions / Main Chat Message List 等 React islands；Background Library 管理面已于 2026-09-15 退休。仓库仍保留多类 legacy drawer、jQuery controller、compatibility facade 和 fallback owner。近期真实浏览器测试暴露了 shell dock state、legacy drawer state、fixed bundle cache 和快速切换之间的状态机问题；这些问题说明“guarded island + fallback”已经不足以表达最终替换目标。
 
 旧 `.docs/tech/react-modernization-roadmap.md` 记录 Phase 0-7 已完成并进入兼容维护，但该状态是当时的路线图完成定义；本次用户明确重开后续 replacement roadmap，要求以真实 owner 替换为目标，而不是继续停留在 island/fallback 维护状态。
 
@@ -23,7 +25,7 @@ last_updated: 2026-07-06
 
 - **User expectation:** 不再为每个面板重复修状态机，而是建立统一的 panel owner registry、open/close/toggle/active/fallback/error 协议。
 - **Current status:** planned by spec set `260706-01`。
-- **Delivery status:** delivered on 2026-07-06. The registry now covers AI Config, Formatting, Character Library, World Info, Backgrounds, Extensions, Settings, Group Chats, and Character Authoring; same-entry open/close/reopen and pinned-close truthfulness are covered by unit, E2E, and Chrome DevTools walkthrough evidence.
+- **Delivery status:** delivered on 2026-07-06. The registry history covered AI Config, Formatting, Character Library, World Info, Backgrounds, Extensions, Settings, Group Chats, and Character Authoring; the Background Library management entry and host were retired on 2026-09-15.
 - **Change history:**
   - 2026-07-06: 创建本 brief，把 panel state 统一收口设为后续所有替换的前置条件。
   - 2026-07-06: 按 `$grill-with-docs` 要求做联网和仓库压力测试；外部 ARIA 资料支持同一 panel entry 的 toggle 语义，外部 strangler-fig 资料支持渐进替换但要求明确 cutover/decommission 门，因此 `260706-01` 继续保持“先 registry/control plane”的最小可交付切片，而不提前重写内容面。
@@ -53,7 +55,7 @@ last_updated: 2026-07-06
 
 ### Domain 4: 已有 React islands 需要从 action-host 深化为 content owner
 
-- **User expectation:** World Info、Backgrounds、Extensions 当前仍大量调用 legacy action/facade；后续要逐步真实替换内容和交互 owner。
+- **User expectation:** World Info 与 Extensions 的 active compatibility facades 仍需维护；Backgrounds 相关 owner-replacement 计划属于历史记录，管理面已退休。
 - **Current status:** planned by spec set `260706-04`。
 - **Change history:**
   - 2026-07-06: 把现有 islands 的“深化替换”列为单独规格，而不是重写 Phase 2。

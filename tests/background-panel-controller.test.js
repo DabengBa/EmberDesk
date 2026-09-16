@@ -26,7 +26,7 @@ describe('retired legacy background and expressions surfaces', () => {
         expect(exists('public/scripts/extensions/expressions')).toBe(false);
     });
 
-    test('removes legacy background and expressions integration without removing group sprite semantics', () => {
+    test('removes legacy background, expressions, and group-sprite management integration', () => {
         const script = read('public/script.js');
         const powerUser = read('public/scripts/power-user.js');
         const slashCommands = read('public/scripts/slash-commands.js');
@@ -49,8 +49,8 @@ describe('retired legacy background and expressions surfaces', () => {
         expect(index).not.toContain('id="background_template"');
         expect(index).not.toContain('id="bg_folder_tile_template"');
         expect(index).not.toContain('id="bg_new_folder_template"');
-        expect(script).toContain('hideMutedSprites');
-        expect(index).toContain('id="rm_group_hidemutedsprites"');
+        expect(script).not.toContain('hideMutedSprites');
+        expect(index).not.toContain('id="rm_group_hidemutedsprites"');
     });
 
     test('does not leave retired sprite endpoint or extension imports in the frontend shell', () => {

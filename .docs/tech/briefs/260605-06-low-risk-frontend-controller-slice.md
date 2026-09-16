@@ -1,4 +1,8 @@
-# Low-Risk Frontend Controller Slice Intent
+# Low-Risk Frontend Controller Slice
+
+> Background Library management retirement note (2026-09-15): the management UI, panel hosts, routes, commands, and feature flag are retired. Historical planning and implementation details below remain for traceability; background URL/render/settings and retained media contracts remain supported.
+
+## Intent
 
 Date: 2026-06-05
 
@@ -22,9 +26,9 @@ Delivered status: completed on 2026-06-05.
 
 Code paths:
 
-- `public/scripts/background-panel-controller.js` now owns the background library panel loading-state helper and root-scoped controller.
-- `public/scripts/backgrounds.js` delegates `setBackgroundCatalogLoading()` to the controller while preserving existing background API calls, selectors, localized copy, upload/delete/rename/folder flows, and slash-command registration.
-- `tests/background-panel-controller.test.js` proves state classification, missing default root handling, required-container fail-fast behavior, root-scoped loading indicator ownership, and idempotent cleanup.
+- Historical: `public/scripts/background-panel-controller.js` owned the background library panel loading-state helper and root-scoped controller before the management surface was retired on 2026-09-15.
+- Historical: `public/scripts/backgrounds.js` delegated `setBackgroundCatalogLoading()` to the controller while preserving the then-current background API calls, selectors, localized copy, upload/delete/rename/folder flows, and slash-command registration.
+- Historical: `tests/background-panel-controller.test.js` proved state classification, missing default root handling, required-container fail-fast behavior, root-scoped loading indicator ownership, and idempotent cleanup.
 
 Validation:
 
@@ -35,4 +39,4 @@ Validation:
 ## Change History
 
 - 2026-06-05: 记录 10-step roadmap closure program 中第 5 步的用户意图。
-- 2026-06-05: 交付 background library panel controller 边界，并确认本切片没有改变用户可见 copy、API shape 或 protected compatibility surface。
+- 2026-06-05: 记录 background library panel controller 边界；该历史切片在 2026-09-15 随管理面退休，保留记录但不构成当前 capability。

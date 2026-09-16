@@ -153,7 +153,7 @@ describe('group chat retirement', () => {
         const scenarioOverrideSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'templates', 'scenarioOverride.html'), 'utf8');
         const forbidMediaSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'templates', 'forbidMedia.html'), 'utf8');
         const hiddenBlockSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'templates', 'hiddenBlock.html'), 'utf8');
-        const stableDiffusionSettingsSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'extensions', 'stable-diffusion', 'settings.html'), 'utf8');
+        const stableDiffusionExtensionPath = path.join(repoRoot, 'public', 'scripts', 'extensions', 'stable-diffusion');
         const quickReplySlashSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'extensions', 'quick-reply', 'src', 'SlashCommandHandler.js'), 'utf8');
         const defaultSettingsSource = fs.readFileSync(path.join(repoRoot, 'default', 'content', 'settings.json'), 'utf8');
         const defaultOpenAiPresetSource = fs.readFileSync(path.join(repoRoot, 'default', 'content', 'presets', 'openai', 'Default.json'), 'utf8');
@@ -181,7 +181,7 @@ describe('group chat retirement', () => {
         expect(scenarioOverrideSource).not.toContain('All group members');
         expect(forbidMediaSource).not.toContain('character/group');
         expect(hiddenBlockSource).not.toContain('Characters and groups');
-        expect(stableDiffusionSettingsSource).not.toContain('Won\'t be used in groups.');
+        expect(fs.existsSync(stableDiffusionExtensionPath)).toBe(false);
         expect(defaultSettingsSource).not.toContain('new_group_chat_prompt');
         expect(defaultOpenAiPresetSource).not.toContain('new_group_chat_prompt');
         expect(defaultOpenAiPresetSource).not.toContain('group_nudge_prompt');
@@ -361,7 +361,6 @@ describe('group chat retirement', () => {
         expect(promptConverterSource).not.toMatch(/group_names|groupNames|startsWithGroupName|group chat/i);
         const retiredCoreSources = [
             'public/scripts/authors-note.js',
-            'public/scripts/backgrounds.js',
             'public/scripts/cfg-scale.js',
             'public/scripts/chats.js',
             'public/scripts/instruct-mode.js',
@@ -395,9 +394,7 @@ describe('group chat retirement', () => {
     });
 
     test('retains context compatibility fields and rejects retired group operations with the stable error', () => {
-        const expressionsSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'extensions', 'expressions', 'index.js'), 'utf8');
-        expect(expressionsSource).not.toMatch(/visual.?novel|selected_group|groupId|group-chat/i);
-        expect(expressionsSource).toContain('function setExpression');
+        expect(fs.existsSync(path.join(repoRoot, 'public', 'scripts', 'extensions', 'expressions'))).toBe(false);
 
         for (const file of [
             'public/scripts/extensions/quick-reply/index.js',

@@ -2,6 +2,8 @@
 
 Status: superseded in part by ADR-0012
 
+> Historical baseline. The Background Library-specific updates below describe pre-2026-09-15 behavior and are superseded by the retirement boundary recorded at the end of this ADR.
+
 EmberDesk's main workspace still exposes jQuery-era compatibility surfaces for extensions, slash commands, shared globals, and file-backed settings flows, while early React migration now needs both lower-risk standalone routes and the first workspace-side panel slice. The decision is to ship `/login`, `/setup`, and `/settings` as feature-flagged React page islands, and to ship early workspace slices such as the character library as guarded React panel islands behind the existing workspace entry points, reusing the shared React build and keeping `/login.html`, `/setup.html`, legacy `/` workspace behavior, and legacy panel fallbacks until each surface is safe to retire.
 
 Alternatives considered were a full SPA cutover and a purely embedded React-in-jQuery drawer migration. A full SPA cutover would force high-risk workspace and extension compatibility changes into the first React slice; embedded drawers would hide the intended route/panel boundaries and make rollback harder to reason about.
@@ -31,7 +33,7 @@ Consequences:
 - Those actions now route through explicit helpers in `public/scripts/world-info.js`, making that module the single compatibility facade for high-risk World Info behavior while prompt activation, regex placement, converter/import semantics, and delete-cascade rules stay preserved.
 - The flag-off or bundle-import-failure path still remains the documented emergency compatibility facade and rollback owner from the same workspace entry; React does not become a second implementation of the underlying World Info prompt/regex/delete semantics.
 
-2026-06-23 Phase 7 Sprint 3 update:
+2026-06-23 Phase 7 Sprint 3 update (historical; superseded 2026-09-15):
 
 - Background Library has advanced past the original action-island baseline: the visible React owner path no longer dispatches selection, lock/unlock, or auto-background behavior through raw DOM `.click()` calls in `public/script.js`, and the host now resamples bridge state after each React-dispatched action settles.
 - Those actions now route through explicit helpers in `public/scripts/backgrounds.js`, making that module the single compatibility facade for high-risk Background Library behavior while folder drill-in state, selection and lock side effects, thumbnail/lazy-load lifecycle, and `/lockbg` / `/unlockbg` / `/autobg` semantics stay preserved.
@@ -75,9 +77,14 @@ Consequences:
 - The "no full SPA workspace shell" decision remains in force for separate-route or whole-app cutover proposals: EmberDesk still does not introduce `/workspace-next`, does not replace the file-backed model, and does not retire extension/slash/event compatibility surfaces as part of shell modernization.
 - The workspace shell boundary has been explicitly reopened as a same-entry successor path for the current `/` route. `features.react.shell.takeover` may mount a React-owned outer chrome and main-chat layout/status shell while keeping drawer contents, protected message rows, extension mount points, and legacy rollback available on the same entry.
 - The bootstrap payload now includes `reactPages.settings`, independent workspace panel flags, and `reactShell.{takeover,strict}`. Strict takeover failures are limited to CI, explicit development, and explicit test environments; self-hosted starts with `NODE_ENV` unset keep the production safety fallback semantics.
-- React workspace chrome may hide legacy primary toggles only after equivalent role/name entries exist in the React chrome. AI Config, Formatting, Character Library, World Info, Backgrounds, Extensions, and Settings now have React chrome entries; Settings routes to `/settings` only when the React Settings page is enabled and otherwise opens the existing User Settings drawer.
+- React workspace chrome may hide legacy primary toggles only after equivalent role/name entries exist in the React chrome. At the time, AI Config, Formatting, Character Library, World Info, Backgrounds, Extensions, and Settings had React chrome entries; Backgrounds management was later retired on 2026-09-15.
 
 2026-07-05 Panel dock coordination update:
+
+- The same-entry React workspace chrome now coordinates Character Library, World Info, Backgrounds, and Extensions through a transient dock snapshot owned by `app/stores/workspace-panel-store.js`, with visible chrome actions still routed through the legacy drawer and facade owners in `public/script.js`.
+- The shell records an optimistic `loading` intent before each panel action and then normalizes the settled result to `disabled`, `loading`, `empty`, `success`, or `error` without creating a second owner for World Info, Background, Extensions, or character-library behavior.
+- Current drawer `pinnedOpen` facts are copied into transient `locked` / `pinned` metadata for compatibility snapshots and focused proof, but the visible shell chrome only shows active-panel and dock-status feedback; it does not render separate pinned/locked badges.
+- `__emberDeskReactCompatibilityBridge` may expose the sanitized `workspacePanelDock` snapshot for internal diagnostics and migration proof, but it remains internal-only and does not replace the documented public compatibility surfaces.
 
 2026-07-18 Workspace shell retirement update:
 
@@ -85,16 +92,15 @@ Consequences:
 - `features.react.shell.takeover`, strict-mode handling, inline workspace feature bootstrap, same-version legacy shell fallback, takeover diagnostics, and shell drawer adapters are retired.
 - Declared child slots retain only feature-local content and protected compatibility DOM. Release rollback is a previous application version, not a flag-off or mount-failure legacy shell path.
 
-- The same-entry React workspace chrome now coordinates Character Library, World Info, Backgrounds, and Extensions through a transient dock snapshot owned by `app/stores/workspace-panel-store.js`, with visible chrome actions still routed through the legacy drawer and facade owners in `public/script.js`.
-- The shell records an optimistic `loading` intent before each panel action and then normalizes the settled result to `disabled`, `loading`, `empty`, `success`, or `error` without creating a second owner for World Info, Background, Extensions, or character-library behavior.
-- Current drawer `pinnedOpen` facts are copied into transient `locked` / `pinned` metadata for compatibility snapshots and focused proof, but the visible shell chrome only shows active-panel and dock-status feedback; it does not render separate pinned/locked badges.
-- `__emberDeskReactCompatibilityBridge` may expose the sanitized `workspacePanelDock` snapshot for internal diagnostics and migration proof, but it remains internal-only and does not replace the documented public compatibility surfaces.
-
 2026-07-06 Workspace panel owner registry update:
 
-- The same-entry React workspace chrome now treats AI Config, Formatting, Character Library, World Info, Backgrounds, Extensions, Settings, Group Chats, and Character Authoring as registry-backed panel entries. This widens the control plane without claiming that every panel's content has already moved to React.
+- The same-entry React workspace chrome historically treated AI Config, Formatting, Character Library, World Info, Backgrounds, Extensions, Settings, Group Chats, and Character Authoring as registry-backed panel entries. The Background Library management entry is retired; current registration excludes it.
 - Same-entry toggle semantics are part of the boundary: clicking the active entry asks the legacy owner to close and only clears active shell state after the close result arrives. Pinned or locked drawers keep the shell entry active because the user-visible content remains open.
 - The registry keeps owner/fallback coordination in `app/workspace-panels.tsx`, `app/stores/workspace-panel-store.js`, and `public/script.js`; panel-specific semantics, protected DOM, public compatibility exports, and later content replacement remain governed by their own specs and docs.
+
+- The Background Library management product is retired: its React/legacy hosts, feature flag, management routes and redirects, management bridge/controller, and `/lockbg` / `/unlockbg` / `/autobg` commands are removed.
+- Background URL/render/settings reads, `/backgrounds/*`, historical/default assets, canonical managed-media ownership/tombstones/folder repair/import, generic image metadata, inline chat images, and canonical chat attachments remain supported outside the retired feature.
+- This ADR's early guarded-island claims remain historical rationale; current user-facing semantics and ownership are defined by the retired feature record and the legacy cutover ledger.
 
 2026-07-06 Browser walkthrough hardening update:
 
