@@ -28,9 +28,9 @@ describe('thumbnail lazy image loading templates', () => {
 
         expectTemplateFragment(indexHtml, 'character_template', '<img src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async">');
         expectTemplateFragment(indexHtml, 'inline_avatar_template', '<img src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async">');
-        expectTemplateFragment(indexHtml, 'group_member_template', '<img alt="Avatar" src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async" />');
-        expectTemplateFragment(indexHtml, 'group_avatars_template', '<img alt="img4" class="img_4" src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async">');
         expectTemplateFragment(indexHtml, 'past_chat_template', '<div class="avatar"><img src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async"></div>');
+        expect(indexHtml).not.toContain('id="group_member_template"');
+        expect(indexHtml).not.toContain('id="group_avatars_template"');
     });
 
     test('swipe picker removes inherited past-chat avatars', () => {
@@ -39,9 +39,10 @@ describe('thumbnail lazy image loading templates', () => {
         expect(swipePicker).toContain('template.find(\'.avatar\').remove();');
     });
 
-    test('group past chats replace the template avatar with the real group avatar element', () => {
+    test('character past chats keep their avatar template', () => {
         const scriptSource = read('public/script.js');
 
-        expect(scriptSource).toContain('template.find(\'.avatar\').replaceWith(groupAvatar.clone());');
+        expect(scriptSource).toContain("template.find('.avatar img').attr('src', avatarImg);");
+        expect(scriptSource).not.toContain("replaceWith(groupAvatar.clone())");
     });
 });

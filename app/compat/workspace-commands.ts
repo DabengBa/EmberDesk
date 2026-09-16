@@ -4,7 +4,6 @@ export type WorkspaceShellSlotKey =
     | 'characterLibrary'
     | 'worldInfo'
     | 'extensionsHost'
-    | 'groupChats'
     | 'characterAuthoring';
 
 export type WorkspaceDockPanelKind =
@@ -23,7 +22,6 @@ export interface WorkspaceShellCommands {
     openWorldInfo(): CommandResult;
     openExtensions(): CommandResult;
     openSettings(): CommandResult;
-    openGroupChats(): CommandResult;
     openCharacterAuthoring(): CommandResult;
     activateWorkspaceShellSlot(slotKey: WorkspaceShellSlotKey): CommandResult;
     deactivateWorkspaceShellSlot(slotKey: WorkspaceShellSlotKey): CommandResult;
@@ -102,11 +100,10 @@ export interface ExtensionsHostCommands {
     retryDeferredExtensions(): CommandResult;
 }
 
-export type AuthoringKind = 'characterAuthoring' | 'groupAuthoring';
+export type AuthoringKind = 'characterAuthoring';
 
 export interface AuthoringCommands {
     saveCharacterAuthoring?(payload: Record<string, unknown>): CommandResult;
-    saveGroupAuthoring?(payload: Record<string, unknown>): CommandResult;
     cancelAuthoring?(kind: AuthoringKind): CommandResult;
     deleteAuthoring?(kind: AuthoringKind): CommandResult;
     duplicateAuthoring?(kind: AuthoringKind): CommandResult;

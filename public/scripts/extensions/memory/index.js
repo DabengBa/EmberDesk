@@ -17,7 +17,6 @@ import {
     animation_easing,
 } from '../../../script.js';
 import { eventSource, event_types } from '../../events.js';
-import { is_group_generating, selected_group } from '../../group-chats.js';
 import { loadMovingUIState, power_user } from '../../power-user.js';
 import { dragElement } from '../../RossAscends-mods.js';
 import { getTextTokens, getTokenCountAsync, tokenizers } from '../../tokenizers.js';
@@ -391,15 +390,14 @@ function getIndexOfLatestChatSummary(chat) {
 }
 
 /**
- * Check if something is changed during the summarization process.
- * @param {{ groupId: any; chatId: any; characterId: any; }} context
+ * Check if the active character or chat changed during the summarization process.
+ * @param {{ chatId: any; characterId: any; }} context
  * @returns {boolean} True if the context has changed and the summary should be discarded
  */
 function isContextChanged(context) {
     const newContext = getContext();
-    if (newContext.groupId !== context.groupId
-        || newContext.chatId !== context.chatId
-        || (!newContext.groupId && (newContext.characterId !== context.characterId))) {
+    if (newContext.chatId !== context.chatId
+        || newContext.characterId !== context.characterId) {
         console.log('Context changed, summary discarded');
         return true;
     }
@@ -568,10 +566,6 @@ async function getSummaryPromptForNow(context, force) {
     }
 
     try {
-        // Wait for group to finish generating
-        if (selected_group) {
-            await waitUntilCondition(() => is_group_generating === false, 1000, 10);
-        }
         // Wait for the send button to be released
         await waitUntilCondition(() => is_send_press === false, 30000, 100);
     } catch {

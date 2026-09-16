@@ -11,8 +11,6 @@ const MIGRATABLE_KEYS = [
     /^extension_update_nag$/,
     /^extensions_sortByName$/,
     /^FeatherlessModels_PerPage$/,
-    /^GroupMembers_PerPage$/,
-    /^GroupCandidates_PerPage$/,
     /^LNavLockOn$/,
     /^LNavOpened$/,
     /^mediaWarningShown:/,

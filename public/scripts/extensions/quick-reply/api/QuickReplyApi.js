@@ -194,7 +194,6 @@ export class QuickReplyApi {
      * @param {boolean} [props.executeOnUser] whether to execute the quick reply after a user has sent a message
      * @param {boolean} [props.executeOnAi] whether to execute the quick reply after the AI has sent a message
      * @param {boolean} [props.executeOnChatChange] whether to execute the quick reply when a new chat is loaded
-     * @param {boolean} [props.executeOnGroupMemberDraft] whether to execute the quick reply when a group member is selected
      * @param {boolean} [props.executeOnNewChat] whether to execute the quick reply when a new chat is created
      * @param {boolean} [props.executeBeforeGeneration] whether to execute the quick reply before message generation
      * @param {string} [props.automationId] when not empty, the quick reply will be executed when the WI with the given automation ID is activated
@@ -210,7 +209,6 @@ export class QuickReplyApi {
         executeOnUser,
         executeOnAi,
         executeOnChatChange,
-        executeOnGroupMemberDraft,
         executeOnNewChat,
         executeBeforeGeneration,
         automationId,
@@ -230,7 +228,6 @@ export class QuickReplyApi {
         qr.executeOnUser = executeOnUser ?? false;
         qr.executeOnAi = executeOnAi ?? false;
         qr.executeOnChatChange = executeOnChatChange ?? false;
-        qr.executeOnGroupMemberDraft = executeOnGroupMemberDraft ?? false;
         qr.executeOnNewChat = executeOnNewChat ?? false;
         qr.executeBeforeGeneration = executeBeforeGeneration ?? false;
         qr.automationId = automationId ?? '';
@@ -254,7 +251,6 @@ export class QuickReplyApi {
      * @param {boolean} [props.executeOnUser] whether to execute the quick reply after a user has sent a message
      * @param {boolean} [props.executeOnAi] whether to execute the quick reply after the AI has sent a message
      * @param {boolean} [props.executeOnChatChange] whether to execute the quick reply when a new chat is loaded
-     * @param {boolean} [props.executeOnGroupMemberDraft] whether to execute the quick reply when a group member is selected
      * @param {boolean} [props.executeOnNewChat] whether to execute the quick reply when a new chat is created
      * @param {boolean} [props.executeBeforeGeneration] whether to execute the quick reply before message generation
      * @param {string} [props.automationId] when not empty, the quick reply will be executed when the WI with the given automation ID is activated
@@ -271,7 +267,6 @@ export class QuickReplyApi {
         executeOnUser,
         executeOnAi,
         executeOnChatChange,
-        executeOnGroupMemberDraft,
         executeOnNewChat,
         executeBeforeGeneration,
         automationId,
@@ -290,7 +285,6 @@ export class QuickReplyApi {
         qr.executeOnUser = executeOnUser ?? qr.executeOnUser;
         qr.executeOnAi = executeOnAi ?? qr.executeOnAi;
         qr.executeOnChatChange = executeOnChatChange ?? qr.executeOnChatChange;
-        qr.executeOnGroupMemberDraft = executeOnGroupMemberDraft ?? qr.executeOnGroupMemberDraft;
         qr.executeOnNewChat = executeOnNewChat ?? qr.executeOnNewChat;
         qr.executeBeforeGeneration = executeBeforeGeneration ?? qr.executeBeforeGeneration;
         qr.automationId = automationId ?? qr.automationId;

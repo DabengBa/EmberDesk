@@ -12,7 +12,6 @@ import { SlashCommandHandler } from './src/SlashCommandHandler.js';
 import { ButtonUi } from './src/ui/ButtonUi.js';
 import { SettingsUi } from './src/ui/SettingsUi.js';
 import { debounceAsync } from '../../utils.js';
-import { selected_group } from '../../group-chats.js';
 export { debounceAsync };
 
 
@@ -81,7 +80,6 @@ const loadSets = async () => {
                     qr.executeOnUser = slot.autoExecute_userMessage ?? false;
                     qr.executeOnAi = slot.autoExecute_botMessage ?? false;
                     qr.executeOnChatChange = slot.autoExecute_chatLoad ?? false;
-                    qr.executeOnGroupMemberDraft = slot.autoExecute_groupMemberDraft ?? false;
                     qr.executeOnNewChat = slot.autoExecute_newChat ?? false;
                     qr.executeBeforeGeneration = slot.autoExecute_beforeGeneration ?? false;
                     qr.automationId = slot.automationId ?? '';
@@ -152,7 +150,7 @@ const handleCharChange = () => {
     // If no character is loaded, there's nothing more to do.
     /** @type {Character} */
     const character = characters[this_chid];
-    if (!character || selected_group) {
+    if (!character) {
         return;
     }
 
@@ -293,11 +291,6 @@ const onAiMessage = async (messageId) => {
 };
 eventSource.makeFirst(event_types.CHARACTER_MESSAGE_RENDERED, (...args) => executeIfReadyElseQueue(onAiMessage, args));
 
-const onGroupMemberDraft = async () => {
-    await autoExec.handleGroupMemberDraft();
-};
-eventSource.on(event_types.GROUP_MEMBER_DRAFTED, (...args) => executeIfReadyElseQueue(onGroupMemberDraft, args));
-
 const onWIActivation = async (entries) => {
     await autoExec.handleWIActivation(entries);
 };
@@ -307,15 +300,10 @@ const onNewChat = async () => {
     await autoExec.handleNewChat();
 };
 eventSource.on(event_types.CHAT_CREATED, (...args) => executeIfReadyElseQueue(onNewChat, args));
-eventSource.on(event_types.GROUP_CHAT_CREATED, (...args) => executeIfReadyElseQueue(onNewChat, args));
 
 const onBeforeGeneration = async (_generationType, _options = {}, isDryRun = false) => {
     if (isDryRun) {
         log('Before-generation hook skipped due to dryRun.');
-        return;
-    }
-    if (selected_group && this_chid === undefined) {
-        log('Before-generation hook skipped for event before group wrapper.');
         return;
     }
     await autoExec.handleBeforeGeneration();

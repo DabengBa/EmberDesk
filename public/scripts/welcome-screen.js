@@ -20,7 +20,6 @@ import {
 import { eventSource, event_types } from './events.js';
 import { getRequestHeaders } from './request-context.js';
 import { getRegexedString, regex_placement } from './extensions/regex/engine.js';
-import { is_group_generating } from './group-chats.js';
 import { t } from './i18n.js';
 import { getMessageTimeStamp } from './RossAscends-mods.js';
 import { renderTemplateAsync } from './templates.js';
@@ -195,7 +194,7 @@ export async function openPermanentAssistantChat({ tryCreate = true, created = f
 }
 
 async function createPermanentAssistant() {
-    if (is_group_generating || is_send_press) {
+    if (is_send_press) {
         throw new Error(t`Cannot create while generating.`);
     }
 

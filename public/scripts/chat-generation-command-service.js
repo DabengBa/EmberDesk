@@ -49,7 +49,6 @@ export const GENERATION_COMMAND_STATUSES = Object.freeze({
 export const GENERATION_COMMAND_PATHS = Object.freeze({
     STANDARD_OPENAI_VISIBLE_DIRECT_CHAT: 'standard-openai-visible-direct-chat',
     NON_OPENAI_PROVIDER: 'non-openai-provider',
-    GROUP_CHAT: 'group-chat',
     DRY_RUN: 'dry-run',
     NESTED_VISIBLE_GENERATION: 'nested-visible-generation',
     QUIET_GENERATION: 'quiet-generation',
@@ -63,7 +62,6 @@ export const GENERATION_COMMAND_PATHS = Object.freeze({
 export const GENERATION_COMMAND_REASONS = Object.freeze({
     SUPPORTED_KIND: 'supported-kind',
     NON_OPENAI_PROVIDER: 'non-openai-provider',
-    GROUP_CHAT: 'group-chat',
     DRY_RUN: 'dry-run',
     NESTED_GENERATION: 'nested-generation',
     QUIET_GENERATION: 'quiet-generation',
@@ -150,7 +148,6 @@ export function getGenerationCommandVisibility(kind) {
 export function buildGenerationCommandCapabilities({
     kind = '',
     mainApi = '',
-    selectedGroup = false,
     dryRun = false,
     depth = 0,
     quietPrompt = false,
@@ -181,7 +178,6 @@ export function buildGenerationCommandCapabilities({
             rollbackStrategy: quietContract.rollbackStrategy,
             allowsNestedDepth: true,
             allowsDryRun: true,
-            allowsGroup: true,
             allowsNonOpenAI: true,
         };
     }
@@ -203,9 +199,7 @@ export function buildGenerationCommandCapabilities({
         rollbackStrategy: autoRecover ? 'lifecycle-baseline' : 'caller-owned',
         allowsNestedDepth: true,
         allowsDryRun: true,
-        allowsGroup: true,
         allowsNonOpenAI: true,
-        selectedGroup: Boolean(selectedGroup),
         mainApi: String(mainApi ?? ''),
         dryRun: isDryRun,
         depth: Number(depth) || 0,
@@ -221,7 +215,6 @@ export function buildGenerationCommandCapabilities({
 export function createGenerationCommand({
     kind = '',
     mainApi = '',
-    selectedGroup = false,
     dryRun = false,
     depth = 0,
     quietPrompt = false,
@@ -252,7 +245,6 @@ export function createGenerationCommand({
             path: GENERATION_COMMAND_PATHS.UNKNOWN_GENERATION_KIND,
             reason: GENERATION_COMMAND_REASONS.UNSUPPORTED_KIND,
             mainApi: String(mainApi ?? ''),
-            selectedGroup: Boolean(selectedGroup),
             dryRun: Boolean(dryRun),
             depth: Number(depth) || 0,
             capabilities: {
@@ -266,7 +258,6 @@ export function createGenerationCommand({
                 rollbackStrategy: 'caller-owned',
                 allowsNestedDepth: false,
                 allowsDryRun: false,
-                allowsGroup: false,
                 allowsNonOpenAI: false,
             },
             // Explicit rejection — never route unknown kinds through a legacy owner.
@@ -302,9 +293,6 @@ export function createGenerationCommand({
     } else if (dryRun) {
         path = GENERATION_COMMAND_PATHS.DRY_RUN;
         reason = GENERATION_COMMAND_REASONS.DRY_RUN;
-    } else if (selectedGroup) {
-        path = GENERATION_COMMAND_PATHS.GROUP_CHAT;
-        reason = GENERATION_COMMAND_REASONS.GROUP_CHAT;
     } else if (mainApi && mainApi !== 'openai') {
         path = GENERATION_COMMAND_PATHS.NON_OPENAI_PROVIDER;
         reason = GENERATION_COMMAND_REASONS.NON_OPENAI_PROVIDER;
@@ -313,7 +301,6 @@ export function createGenerationCommand({
     const capabilities = buildGenerationCommandCapabilities({
         kind: effectiveKind,
         mainApi,
-        selectedGroup,
         dryRun,
         depth,
         quietPrompt: quietPrompt || isQuietFamily,
@@ -330,7 +317,6 @@ export function createGenerationCommand({
         path,
         reason,
         mainApi: String(mainApi ?? ''),
-        selectedGroup: Boolean(selectedGroup),
         dryRun: Boolean(dryRun),
         depth: Number(depth) || 0,
         capabilities,
@@ -350,7 +336,6 @@ export function createGenerationRequestEnvelope({
     options = {},
     dryRun = false,
     mainApi = '',
-    selectedGroup = false,
     kind = '',
 } = {}) {
     const effectiveKind = kind || mapLegacyGenerationTypeToCommandKind(type, options);
@@ -358,7 +343,6 @@ export function createGenerationRequestEnvelope({
     const command = createGenerationCommand({
         kind: effectiveKind,
         mainApi,
-        selectedGroup,
         dryRun,
         depth,
         quietPrompt: type === 'quiet',
@@ -373,7 +357,6 @@ export function createGenerationRequestEnvelope({
         options,
         dryRun: Boolean(dryRun),
         mainApi: String(mainApi ?? ''),
-        selectedGroup: Boolean(selectedGroup),
         command,
     };
 }
@@ -400,8 +383,7 @@ export function createGenerationCommandPlan(commandOrInput = {}, options = {}) {
         statusLabels,
     });
 
-    // Capability contract is authoritative for auto-recovery (keeps group visible OpenAI eligible
-    // when lifecycle helpers already allow it; quiet/non-visible force single attempt).
+    // Capability contract is authoritative for auto-recovery (quiet/non-visible force single attempt).
     const shouldAutoRecover = Boolean(command.capabilities?.autoRecover && lifecyclePlan.shouldAutoRecover);
     const attempts = shouldAutoRecover
         ? lifecyclePlan.attempts

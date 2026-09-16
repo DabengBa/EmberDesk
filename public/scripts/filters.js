@@ -1,23 +1,22 @@
-import { fuzzySearchCharacters, fuzzySearchGroups, fuzzySearchPersonas, fuzzySearchTags, fuzzySearchWorldInfo, power_user } from './power-user.js';
+import { fuzzySearchCharacters, fuzzySearchPersonas, fuzzySearchTags, fuzzySearchWorldInfo, power_user } from './power-user.js';
 import { tag_map } from './tags.js';
 import { includesIgnoreCaseAndAccents } from './utils.js';
 
 
 /**
  * @typedef FilterType The filter type possible for this filter helper
- * @type {'search'|'tag'|'folder'|'fav'|'group'|'world_info_search'|'persona_search'}
+ * @type {'search'|'tag'|'folder'|'fav'|'world_info_search'|'persona_search'}
  */
 
 /**
  * The filter types
- * @type {{ SEARCH: 'search', TAG: 'tag', FOLDER: 'folder', FAV: 'fav', GROUP: 'group', WORLD_INFO_SEARCH: 'world_info_search', PERSONA_SEARCH: 'persona_search'}}
+ * @type {{ SEARCH: 'search', TAG: 'tag', FOLDER: 'folder', FAV: 'fav', WORLD_INFO_SEARCH: 'world_info_search', PERSONA_SEARCH: 'persona_search'}}
  */
 export const FILTER_TYPES = {
     SEARCH: 'search',
     TAG: 'tag',
     FOLDER: 'folder',
     FAV: 'fav',
-    GROUP: 'group',
     WORLD_INFO_SEARCH: 'world_info_search',
     PERSONA_SEARCH: 'persona_search',
 };
@@ -57,14 +56,13 @@ export function isFilterState(a, b) {
 
 /**
  * The fuzzy search categories
- * @type {{ characters: string, worldInfo: string, personas: string, tags: string, groups: string }}
+ * @type {{ characters: string, worldInfo: string, personas: string, tags: string }}
  */
 export const fuzzySearchCategories = Object.freeze({
     characters: 'characters',
     worldInfo: 'worldInfo',
     personas: 'personas',
     tags: 'tags',
-    groups: 'groups',
 });
 
 
@@ -102,7 +100,6 @@ export class FilterHelper {
             [fuzzySearchCategories.worldInfo]: { resultMap: new Map() },
             [fuzzySearchCategories.personas]: { resultMap: new Map() },
             [fuzzySearchCategories.tags]: { resultMap: new Map() },
-            [fuzzySearchCategories.groups]: { resultMap: new Map() },
         };
     }
 
@@ -143,7 +140,6 @@ export class FilterHelper {
     filterFunctions = {
         [FILTER_TYPES.SEARCH]: this.searchFilter.bind(this),
         [FILTER_TYPES.FAV]: this.favFilter.bind(this),
-        [FILTER_TYPES.GROUP]: this.groupFilter.bind(this),
         [FILTER_TYPES.FOLDER]: this.folderFilter.bind(this),
         [FILTER_TYPES.TAG]: this.tagFilter.bind(this),
         [FILTER_TYPES.WORLD_INFO_SEARCH]: this.wiSearchFilter.bind(this),
@@ -157,7 +153,6 @@ export class FilterHelper {
     filterData = {
         [FILTER_TYPES.SEARCH]: '',
         [FILTER_TYPES.FAV]: false,
-        [FILTER_TYPES.GROUP]: false,
         [FILTER_TYPES.FOLDER]: false,
         [FILTER_TYPES.TAG]: { excluded: [], selected: [] },
         [FILTER_TYPES.WORLD_INFO_SEARCH]: '',
@@ -265,18 +260,6 @@ export class FilterHelper {
     }
 
     /**
-     * Applies a group type filter to the data.
-     * @param {any[]} data The data to filter.
-     * @returns {any[]} The filtered data.
-     */
-    groupFilter(data) {
-        const state = this.filterData[FILTER_TYPES.GROUP];
-        const isGroup = entity => entity.type === 'group';
-
-        return this.filterDataByState(data, state, isGroup, { includeFolders: true });
-    }
-
-    /**
      * Applies a "folder" filter to the data.
      * @param {any[]} data The data to filter.
      * @returns {any[]} The filtered data.
@@ -325,10 +308,8 @@ export class FilterHelper {
         // Save fuzzy search results and scores if enabled
         if (power_user.fuzzy_search) {
             const fuzzySearchCharactersResults = fuzzySearchCharacters(searchValue, this.fuzzySearchCaches);
-            const fuzzySearchGroupsResults = fuzzySearchGroups(searchValue, this.fuzzySearchCaches);
             const fuzzySearchTagsResult = fuzzySearchTags(searchValue, this.fuzzySearchCaches);
             this.cacheScores(FILTER_TYPES.SEARCH, new Map(fuzzySearchCharactersResults.map(i => [`character.${i.refIndex}`, i.score])));
-            this.cacheScores(FILTER_TYPES.SEARCH, new Map(fuzzySearchGroupsResults.map(i => [`group.${i.item.id}`, i.score])));
             this.cacheScores(FILTER_TYPES.SEARCH, new Map(fuzzySearchTagsResult.map(i => [`tag.${i.item.id}`, i.score])));
         }
 

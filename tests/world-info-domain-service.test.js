@@ -281,8 +281,8 @@ describe('world info domain and workbench services', () => {
         // Session is the mutable workbench state owner used by facade APIs.
         expect(source).toContain('function getWorldInfoWorkbenchSession()');
         expect(source).toContain("initialSortValue: String(accountStorage.getItem(SORT_ORDER_KEY) || '0')");
-        expect(source).toContain('applyFilters: (entries) => worldInfoFilter.applyFilters(entries)');
-        expect(source).toContain('getSearchScore: (uid) => worldInfoFilter.getScore(FILTER_TYPES.WORLD_INFO_SEARCH, uid)');
+        expect(source).toContain('applyFilters: (entries) => getWorldInfoFilter().applyFilters(entries)');
+        expect(source).toContain('getSearchScore: (uid) => getWorldInfoFilter().getScore(FILTER_TYPES.WORLD_INFO_SEARCH, uid)');
         expect(source).toContain('export function setWorldInfoGlobalActiveNames(names)');
         expect(source).toContain('await saveWorldInfo(worldName, data, true);');
         expect(source).toContain('await session.selectEntry(entry.uid);');

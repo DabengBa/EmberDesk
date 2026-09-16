@@ -4,7 +4,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
-    REACT_WORKSPACE_PANELS_ASSET_PATH,
     createWorkspacePanelsModuleLoader,
     getDefaultWorkspaceReactFeatures,
     isReactWorkspacePanelEnabled,
@@ -39,7 +38,6 @@ describe('React workspace panels bridge helpers', () => {
                 worldInfo: true,
                 extensionsHost: true,
                 characterAuthoring: true,
-                groupAuthoring: false,
             },
             reactPages: {
                 settings: true,
@@ -232,7 +230,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('function closeWorkspaceChildSlotHost(hostId, { force = false } = {})');
         expect(scriptSource).toContain('function deactivateWorkspaceChildSlotByKind(slotKey, options = {})');
         expect(scriptSource).toContain('function getWorkspaceChildSlotHostId(slotKey)');
-        expect(scriptSource).toContain('group-chat-feature-removed');
+        expect(scriptSource).not.toContain('openWorkspaceShellGroupChats');
         expect(scriptSource).toContain('function showWorkspaceChildSlotContent(selectedMenuId)');
         expect(scriptSource).toContain('async function openWorkspaceShellCharacterLibrary()');
         expect(scriptSource).toContain("openWorkspaceChildSlotHostImmediate('right-nav-panel');");
@@ -259,8 +257,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).not.toContain("window.location.assign('/settings');");
         expect(scriptSource).not.toContain("openWorkspaceShellDrawer('user-settings-block')");
         expect(scriptSource).not.toContain('reactPages?.settings');
-        expect(scriptSource).toContain('openGroupChats: openWorkspaceShellGroupChats,');
-        expect(scriptSource.match(/openWorkspaceShellGroupChats\(\) \{[\s\S]*?\n\}/)?.[0] ?? '').not.toContain("$('#rm_button_group_chats').trigger('click');");
+        expect(scriptSource).not.toContain('openGroupChats:');
 
         const styleSource = read('public/style.css');
         expect(styleSource).toContain('.react-workspace-shell-nav-button[data-workspace-shell-panel-active="true"]');
@@ -308,7 +305,7 @@ describe('React workspace panels bridge helpers', () => {
         const workspacePanelSource = read('app/workspace-panels.tsx');
         const scriptSource = read('public/script.js');
         const groupChatsSource = read('public/scripts/group-chats.js');
-        expect(groupChatsSource).toContain('openGroupById retired');
+        expect(groupChatsSource).toContain('retired multi-character chat product');
 
         expect(configSource).not.toContain('mainChatMessageList:');
         expect(configSource).not.toContain('characterAuthoring:');
@@ -320,7 +317,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspaceFeatureSource).toContain('return true;');
         expect(bridgeSource).toContain('mainChatMessageList: true');
         expect(bridgeSource).toContain('characterAuthoring: true');
-        expect(bridgeSource).not.toContain('groupAuthoring: true');
+        expect(bridgeSource).not.toContain('groupAuthoring');
         expect(workspacePanelSource).toContain("export type WorkspacePanelKind = 'worldInfo' | 'extensionsHost' | 'mainChatMessageList' | 'characterAuthoring';");
         expect(scriptSource).toContain('mainChatMessageList: true');
         expect(scriptSource).toContain('characterAuthoring: true');
@@ -330,11 +327,9 @@ describe('React workspace panels bridge helpers', () => {
     test('ships React authoring form fields and legacy write-through action bridge', () => {
         const workspacePanelSource = read('app/workspace-panels.tsx');
         const scriptSource = read('public/script.js');
-        const groupChatsSource = read('public/scripts/group-chats.js');
-
         expect(workspacePanelSource).toContain('createCharacterAuthoringSession');
         expect(workspacePanelSource).toContain("../public/scripts/character-authoring.js");
-        expect(workspacePanelSource).toContain('group_chat_feature_removed');
+        expect(workspacePanelSource).not.toContain('group_chat_feature_removed');
         expect(workspacePanelSource).not.toContain("../public/scripts/group-authoring.js");
         expect(workspacePanelSource).toContain('react-authoring-field');
         expect(workspacePanelSource).toContain('data-react-authoring-field="name"');
@@ -351,31 +346,13 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('data-react-authoring-field="characterWorld"');
         expect(workspacePanelSource).toContain('data-react-authoring-field="tags"');
         expect(workspacePanelSource).toContain('data-react-authoring-field="favorite"');
-        expect(workspacePanelSource).toContain('data-react-authoring-field="talkativeness"');
+        expect(workspacePanelSource).not.toContain('data-react-authoring-field="talkativeness"');
         expect(workspacePanelSource).toContain('data-react-authoring-field="alternateGreetings"');
         expect(workspacePanelSource).toContain('data-react-authoring-field="depthPrompt.prompt"');
         expect(workspacePanelSource).toContain('data-react-authoring-field="depthPrompt.depth"');
         expect(workspacePanelSource).toContain('data-react-authoring-field="depthPrompt.role"');
         expect(workspacePanelSource).toContain('data-react-authoring-field="avatar"');
-        expect(workspacePanelSource).toContain('data-react-authoring-field="activationStrategy"');
-        expect(workspacePanelSource).toContain('data-react-authoring-field="generationMode"');
-        expect(workspacePanelSource).toContain('data-react-authoring-field="autoModeDelay"');
-        expect(workspacePanelSource).toContain('data-react-authoring-field="allowSelfResponses"');
-        expect(workspacePanelSource).toContain('data-react-authoring-field="hideMutedSprites"');
-        expect(workspacePanelSource).toContain('data-react-authoring-field="joinPrefix"');
-        expect(workspacePanelSource).toContain('data-react-authoring-field="joinSuffix"');
-        expect(workspacePanelSource).toContain('data-react-authoring-field="groupFavorite"');
-        expect(workspacePanelSource).toContain('data-react-authoring-field="groupTags"');
         expect(workspacePanelSource).not.toContain('Additional extension fields still use the legacy editor:');
-        expect(workspacePanelSource).toContain('data-react-authoring-members');
-        expect(workspacePanelSource).toContain('data-react-authoring-candidates');
-        expect(workspacePanelSource).toContain('data-react-authoring-action="add-member"');
-        expect(workspacePanelSource).toContain('data-react-authoring-action="remove-member"');
-        expect(workspacePanelSource).toContain('data-react-authoring-action="move-up"');
-        expect(workspacePanelSource).toContain('data-react-authoring-action="move-down"');
-        expect(workspacePanelSource).toContain('aria-label={`Remove ${member}`}');
-        expect(workspacePanelSource).toContain('aria-label={`Move ${member} up`}');
-        expect(workspacePanelSource).toContain('aria-label={`Move ${member} down`}');
         expect(workspacePanelSource).toContain('authoringCommandMutation.mutateAsync((submitResult.payload ?? {}) as Record<string, unknown>)');
         expect(workspacePanelSource).toContain('shouldApplyCharacterAuthoringSaveResult');
         expect(workspacePanelSource).toContain('createCharacterAuthoringSession(submittedDraft');
@@ -394,9 +371,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('disabled={isActionPending}');
         expect(workspacePanelSource).toContain('{!isCreateMode ? (');
         expect(scriptSource).toContain('function getCharacterAuthoringReactCommands()');
-        expect(scriptSource).toContain('function getGroupAuthoringReactCommands()');
         expect(scriptSource).toContain('saveCharacterAuthoring: payload => saveCharacterAuthoringFromPayload(payload)');
-        expect(scriptSource).toContain('saveGroupAuthoring: payload => applyGroupAuthoringSaveModel(payload)');
         expect(scriptSource).toContain('function applyCharacterAuthoringSaveModel');
         expect(scriptSource).toContain('async function saveCharacterAuthoringFromPayload');
         expect(scriptSource).toContain('buildCharacterAuthoringFormData');
@@ -409,16 +384,15 @@ describe('React workspace panels bridge helpers', () => {
         expect(characterSaveSource).toContain('getCharacterAuthoringWriteUrl');
         expect(characterSaveSource).not.toContain("$('#create_button').trigger('click')");
         expect(characterSaveSource).not.toContain('waitForCharacterAuthoringSaveCompletion');
-        expect(scriptSource).toContain('group-chat-feature-removed');
+        expect(scriptSource).not.toContain('openWorkspaceShellGroupChats');
         expect(scriptSource).toContain('function queueReactCharacterAuthoringRemount()');
-        expect(scriptSource).toContain("eventSource.on(event_types.CHARACTER_EDITOR_OPENED, () => {");
         expect(scriptSource).toContain('queueReactCharacterAuthoringRemount();');
         expect(scriptSource).toContain('hideLegacyCharacterAuthoringEditor(true);');
         expect(scriptSource).toContain('data-react-authoring-build-error');
         expect(scriptSource).not.toContain('hideLegacyCharacterAuthoringEditor(Boolean(result?.mounted));');
         expect(scriptSource.match(/openWorkspaceShellCharacterAuthoring\(\) \{[\s\S]*?\n\}/)?.[0] ?? '').toContain("select_selected_character(this_chid, { switchMenu: false });");
         expect(scriptSource).toContain('deleteAuthoring: () => {');
-        expect(scriptSource).toContain("import { unmountReactWorkspacePanel } from './scripts/workspace-panels-react-bridge.js';");
+        expect(scriptSource).not.toContain("import { unmountReactWorkspacePanel } from './scripts/workspace-panels-react-bridge.js';");
         expect(workspacePanelSource).not.toContain("action: 'openGroupChats'");
         // group-only cancel short-circuit retired with group authoring product surface
         expect(workspacePanelSource).toContain('void commands?.cancelAuthoring?.(kind);');
@@ -636,7 +610,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain("kind: 'extensionsHost'");
         expect(scriptSource).toContain("kind: 'mainChatMessageList'");
         expect(scriptSource).toContain("kind: 'characterAuthoring'");
-        expect(scriptSource).toContain('group-chat-feature-removed');
+        expect(scriptSource).not.toContain('openWorkspaceShellGroupChats');
 
         expect(hostControllerSource).toContain('export async function mountWorkspacePanelHost({');
         expect(hostControllerSource).toContain('export function createWorkspacePanelCommandPort({');
@@ -1014,11 +988,12 @@ test('renders an Extensions Host workflow through React-owned controls and expli
     test('world info workbench facade owns snapshot and entry field updates without DOM action bypass', () => {
         const scriptSource = read('public/script.js');
         const worldInfoSource = read('public/scripts/world-info.js');
+        const worldInfoServiceSource = read('public/scripts/world-info-workbench-service.js');
         const workbenchSource = read('app/world-info-workbench.tsx');
         const hostControllerSource = read('public/scripts/workspace-panel-host-controller.js');
 
         expect(worldInfoSource).toContain('export async function getWorldInfoWorkbenchFacadeSnapshot');
-        expect(worldInfoSource).toContain('worldInfoFilter.applyFilters(entriesArray)');
+        expect(worldInfoSource).toContain('getWorldInfoFilter().applyFilters(entriesArray)');
         expect(worldInfoSource).toContain('sortWorldInfoEntries(entriesArray)');
         expect(scriptSource).toContain("commandName !== 'updateEntryFields' && commandName !== 'toggleActivationRules'");
         expect(scriptSource).toContain('WIMultiSelector');
@@ -1026,7 +1001,7 @@ test('renders an Extensions Host workflow through React-owned controls and expli
         expect(worldInfoSource).toContain('export async function updateWorldInfoWorkbenchEntryFields');
         expect(worldInfoSource).toContain('export async function selectWorldInfoWorkbenchEntry');
         expect(worldInfoSource).toContain('vectorized');
-        expect(worldInfoSource).toContain('WORLD_INFO_WORKBENCH_EDITABLE_FIELDS');
+        expect(worldInfoServiceSource).toContain('WORLD_INFO_WORKBENCH_EDITABLE_FIELDS');
         expect(scriptSource).toContain('getWorldInfoReactBridgeStateAsync');
         expect(scriptSource).toContain('updateEntryFields: (uid, fields) => updateWorldInfoWorkbenchEntryFields(uid, fields)');
         expect(scriptSource).toContain("clearSelectedEntry: () => selectWorldInfoWorkbenchEntry('')");

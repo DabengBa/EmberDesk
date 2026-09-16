@@ -6,7 +6,6 @@ import {
 } from '../../../script.js';
 import { eventSource, event_types } from '../../events.js';
 import { getRequestHeaders } from '../../request-context.js';
-import { groups, selected_group } from '../../group-chats.js';
 import { loadFileToDocument, delay, getBase64Async, getSanitizedFilename, saveBase64AsFile, getFileExtension, getVideoThumbnail, clamp } from '../../utils.js';
 import { loadMovingUIState } from '../../power-user.js';
 import { dragElement } from '../../RossAscends-mods.js';
@@ -297,7 +296,7 @@ async function initGallery(items, url) {
  *
  * This function takes care of:
  * - Loading necessary resources for the gallery on the first invocation.
- * - Preparing gallery items based on the character or group selection.
+ * - Preparing gallery items based on the character selection.
  * - Handling the drag-and-drop functionality for image upload.
  * - Displaying the gallery in a popup.
  * - Cleaning up resources when the gallery popup is closed.
@@ -321,8 +320,8 @@ async function showCharGallery(deleteModeState = false) {
 
     try {
         deleteModeActive = deleteModeState;
-        let url = selected_group || this_chid;
-        if (!selected_group && this_chid !== undefined) {
+        let url = this_chid;
+        if (this_chid !== undefined) {
             url = getGalleryFolder(characters[this_chid]);
         }
 
@@ -570,9 +569,6 @@ function updateGalleryFolder(newUrl) {
         throw new Error('Folder name cannot be empty');
     }
     const context = SillyTavern.getContext();
-    if (context.groupId) {
-        throw new Error('Cannot change gallery folder in group chat');
-    }
     if (context.characterId === undefined) {
         throw new Error('Character is not selected');
     }
@@ -596,9 +592,6 @@ function updateGalleryFolder(newUrl) {
  */
 function restoreGalleryFolder() {
     const context = SillyTavern.getContext();
-    if (context.groupId) {
-        throw new Error('Cannot change gallery folder in group chat');
-    }
     if (context.characterId === undefined) {
         throw new Error('Character is not selected');
     }
@@ -771,20 +764,14 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
             typeList: [ARGUMENT_TYPE.STRING],
             enumProvider: commonEnumProviders.characters('character'),
         }),
-        SlashCommandNamedArgument.fromProps({
-            name: 'group',
-            description: 'group name',
-            typeList: [ARGUMENT_TYPE.STRING],
-            enumProvider: commonEnumProviders.characters('group'),
-        }),
     ],
-    helpString: 'List images in the gallery of the current char / group or a specified char / group.',
+    helpString: 'List images in the gallery of the current character or a specified character.',
 }));
 
 async function listGalleryCommand(args) {
     try {
-        let url = args.char ?? (args.group ? groups.find(it => it.name == args.group)?.id : null) ?? (selected_group || this_chid);
-        if (!args.char && !args.group && !selected_group && this_chid !== undefined) {
+        let url = args.char ?? this_chid;
+        if (!args.char && this_chid !== undefined) {
             url = getGalleryFolder(characters[this_chid]);
         }
 

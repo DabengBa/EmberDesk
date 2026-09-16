@@ -25,9 +25,6 @@ export interface CharacterLibraryPanelEntity {
     entities?: Array<unknown>;
     hidden?: number;
     isUseless?: boolean;
-    memberNames?: string[];
-    memberCount?: number;
-    avatarHtml?: string | null;
     folderIconClass?: string;
     folderColor?: string;
     folderColor2?: string;
@@ -58,12 +55,10 @@ export interface CharacterLibraryPanelState {
     bulkMode?: boolean;
     selectedCharacterIds?: Array<string | number>;
     activeCharacterId?: string | number | null;
-    activeGroupId?: string | number | null;
 }
 
 export interface CharacterLibraryPanelBridge {
     onSelectCharacter?(id: string | number): void;
-    onSelectGroup?(id: string | number): void;
     onOpenFolder?(id: string | number): void;
     onBackFolder?(): void;
     onClearFilters?(): void;

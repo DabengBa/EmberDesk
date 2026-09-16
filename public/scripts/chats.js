@@ -28,7 +28,6 @@ import {
 } from '../script.js';
 import { eventSource, event_types } from './events.js';
 import { getRequestHeaders } from './request-context.js';
-import { selected_group } from './group-chats.js';
 import { power_user } from './power-user.js';
 import {
     extractTextFromHTML,
@@ -698,11 +697,6 @@ export function formatCreatorNotes(text, avatarId) {
 }
 
 async function openGlobalStylesPreferenceDialog() {
-    if (selected_group) {
-        toastr.info(t`To change the global styles preference, please select a character individually.`);
-        return;
-    }
-
     const entityId = getCurrentEntityId();
     const preference = new StylesPreference(entityId);
     const currentValue = preference.get();
@@ -738,8 +732,8 @@ async function openGlobalStylesPreferenceDialog() {
 }
 
 async function checkForCreatorNotesStyles() {
-    // Don't do anything if in group chat or not in a chat
-    if (selected_group || this_chid === undefined) {
+    // Don't do anything when no character chat is selected
+    if (this_chid === undefined) {
         return;
     }
 
@@ -817,7 +811,7 @@ async function openExternalMediaOverridesDialog() {
     const entityId = getCurrentEntityId();
 
     if (!entityId) {
-        toastr.info(t`No character or group selected`);
+        toastr.info(t`No character selected`);
         return;
     }
 
@@ -837,10 +831,6 @@ async function openExternalMediaOverridesDialog() {
 }
 
 export function getCurrentEntityId() {
-    if (selected_group) {
-        return String(selected_group);
-    }
-
     return characters[this_chid]?.avatar ?? null;
 }
 
@@ -1490,7 +1480,7 @@ async function openAttachmentManager() {
         await renderList(chatAttachments, ATTACHMENT_SOURCE.CHAT);
         await renderList(characterAttachments, ATTACHMENT_SOURCE.CHARACTER);
 
-        const isNotCharacter = this_chid === undefined || selected_group;
+        const isNotCharacter = this_chid === undefined;
         const isNotInChat = getCurrentChatId() === undefined;
         template.find('.characterAttachmentsBlock').toggle(!isNotCharacter);
         template.find('.chatAttachmentsBlock').toggle(!isNotInChat);
@@ -1627,8 +1617,7 @@ async function openAttachmentManager() {
  */
 function getAvailableTargets() {
     const targets = Object.values(ATTACHMENT_SOURCE);
-
-    const isNotCharacter = this_chid === undefined || selected_group;
+    const isNotCharacter = this_chid === undefined;
     const isNotInChat = getCurrentChatId() === undefined;
 
     if (isNotCharacter) {
@@ -1850,7 +1839,7 @@ async function verifyAttachmentsForSource(source) {
 const NEUTRAL_CHAT_KEY = 'neutralChat';
 
 export function preserveNeutralChat() {
-    if (this_chid !== undefined || selected_group || name2 !== neutralCharacterName) {
+    if (this_chid !== undefined || name2 !== neutralCharacterName) {
         return;
     }
 
@@ -1858,7 +1847,7 @@ export function preserveNeutralChat() {
 }
 
 export function restoreNeutralChat() {
-    if (this_chid !== undefined || selected_group || name2 !== neutralCharacterName) {
+    if (this_chid !== undefined || name2 !== neutralCharacterName) {
         return;
     }
 

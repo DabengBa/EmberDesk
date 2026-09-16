@@ -4,7 +4,6 @@ import { DOMPurify } from '../lib.js';
 
 import { eventSource, event_types } from './events.js';
 import { is_send_press, main_api, substituteParams } from '../script.js';
-import { is_group_generating } from './group-chats.js';
 import { Message, MessageCollection, TokenHandler } from './openai.js';
 import { power_user } from './power-user.js';
 import { debounce, waitUntilCondition, escapeHtml, uuidv4 } from './utils.js';
@@ -726,12 +725,6 @@ class PromptManager {
             this.saveServiceSettings().then(() => this.renderDebounced());
         });
 
-        // Re-render when the group changes.
-        eventSource.on('groupSelected', (event) => {
-            this.handleGroupSelected(event);
-            this.saveServiceSettings().then(() => this.renderDebounced());
-        });
-
         // Sanitize settings after character has been deleted.
         eventSource.on(event_types.CHARACTER_DELETED, (event) => {
             this.handleCharacterDeleted(event);
@@ -807,7 +800,7 @@ class PromptManager {
         if ('character' === this.configuration.promptOrder.strategy && null === this.activeCharacter) return;
         this.error = null;
 
-        waitUntilCondition(() => !is_send_press && !is_group_generating, 1024 * 1024, 100).then(async () => {
+        waitUntilCondition(() => !is_send_press, 1024 * 1024, 100).then(async () => {
             if (true === afterTryGenerate) {
                 // Executed during dry-run for determining context composition
                 this.profileStart('filling context');
@@ -1101,35 +1094,6 @@ class PromptManager {
     }
 
     /**
-     * Set the most recently selected character group
-     *
-     * @param event
-     */
-    handleGroupSelected(event) {
-        if ('global' === this.configuration.promptOrder.strategy) {
-            this.activeCharacter = { id: this.configuration.promptOrder.dummyId };
-        } else if ('character' === this.configuration.promptOrder.strategy) {
-            const characterDummy = { id: event.detail.id, group: event.detail.group };
-            this.activeCharacter = characterDummy;
-            const promptOrder = this.getPromptOrderForCharacter(characterDummy);
-
-            if (0 === promptOrder.length) this.addPromptOrderForCharacter(characterDummy, promptManagerDefaultPromptOrder);
-        } else {
-            throw new Error('Prompt order strategy not supported.');
-        }
-    }
-
-    /**
-     * Get a list of group characters, regardless of whether they are active or not.
-     *
-     * @returns {string[]}
-     */
-    getActiveGroupCharacters() {
-        // ToDo: Ideally, this should return the actual characters.
-        return (this.activeCharacter?.group?.members || []).map(member => member && member.substring(0, member.lastIndexOf('.')));
-    }
-
-    /**
      * Get the prompts for a specific character. Can be filtered to only include enabled prompts.
      * @returns {Prompt[]} The prompts for the character.
      * @param character
@@ -1217,15 +1181,12 @@ class PromptManager {
      * @returns {Prompt} An object with "role" and "content" properties
      */
     preparePrompt(prompt, original = null) {
-        const groupMembers = this.getActiveGroupCharacters();
         const preparedPrompt = new Prompt(prompt);
 
         if (typeof original === 'string') {
-            if (0 < groupMembers.length) preparedPrompt.content = substituteParams(prompt.content ?? '', { original, groupOverride: groupMembers.join(', ') });
-            else preparedPrompt.content = substituteParams(prompt.content, { original });
+            preparedPrompt.content = substituteParams(prompt.content ?? '', { original });
         } else {
-            if (0 < groupMembers.length) preparedPrompt.content = substituteParams(prompt.content ?? '', { groupOverride: groupMembers.join(', ') });
-            else preparedPrompt.content = substituteParams(prompt.content);
+            preparedPrompt.content = substituteParams(prompt.content ?? '');
         }
 
         return preparedPrompt;

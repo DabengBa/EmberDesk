@@ -37,12 +37,10 @@ const enableThoughtSignatures = !!getConfigValue('gemini.thoughtSignatures', tru
  * @typedef {object} PromptNames
  * @property {string} charName Character name
  * @property {string} userName User name
- * @property {string[]} groupNames Group member names
- * @property {function(string): boolean} startsWithGroupName Check if a message starts with a group name
  */
 
 /**
- * Extracts the character name, user name, and group member names from the request.
+ * Extracts the character and user names from the request.
  * @param {import('express').Request} request Express request object
  * @returns {PromptNames} Prompt names
  */
@@ -50,10 +48,6 @@ export function getPromptNames(request) {
     return {
         charName: String(request.body.char_name || ''),
         userName: String(request.body.user_name || ''),
-        groupNames: Array.isArray(request.body.group_names) ? request.body.group_names.map(String) : [],
-        startsWithGroupName: function (message) {
-            return this.groupNames.some(name => message.startsWith(`${name}: `));
-        },
     };
 }
 
@@ -203,14 +197,14 @@ export function convertClaudeMessages(messages, prefillString, useSysPrompt, use
             if (messages[i].role !== 'system') {
                 break;
             }
-            // Append example names if not already done by the frontend (e.g. for group chats).
+            // Append example names if not already done by the frontend.
             if (names.userName && messages[i].name === 'example_user') {
                 if (!messages[i].content.startsWith(`${names.userName}: `)) {
                     messages[i].content = `${names.userName}: ${messages[i].content}`;
                 }
             }
             if (names.charName && messages[i].name === 'example_assistant') {
-                if (!messages[i].content.startsWith(`${names.charName}: `) && !names.startsWithGroupName(messages[i].content)) {
+                if (!messages[i].content.startsWith(`${names.charName}: `)) {
                     messages[i].content = `${names.charName}: ${messages[i].content}`;
                 }
             }
@@ -257,7 +251,7 @@ export function convertClaudeMessages(messages, prefillString, useSysPrompt, use
                 }
             }
             if (names.charName && message.name === 'example_assistant') {
-                if (!message.content.startsWith(`${names.charName}: `) && !names.startsWithGroupName(message.content)) {
+                if (!message.content.startsWith(`${names.charName}: `)) {
                     message.content = `${names.charName}: ${message.content}`;
                 }
             }
@@ -402,7 +396,7 @@ export function convertCohereMessages(messages, names) {
         // No names support (who would've thought)
         if (msg.name) {
             if (msg.role == 'system' && msg.name == 'example_assistant') {
-                if (names.charName && !msg.content.startsWith(`${names.charName}: `) && !names.startsWithGroupName(msg.content)) {
+                if (names.charName && !msg.content.startsWith(`${names.charName}: `)) {
                     msg.content = `${names.charName}: ${msg.content}`;
                 }
             }
@@ -434,14 +428,14 @@ export function convertGooglePrompt(messages, model, useSysPrompt, names) {
 
     if (useSysPrompt) {
         while (messages.length > 1 && messages[0].role === 'system') {
-            // Append example names if not already done by the frontend (e.g. for group chats).
+            // Append example names if not already done by the frontend.
             if (names.userName && messages[0].name === 'example_user') {
                 if (!messages[0].content.startsWith(`${names.userName}: `)) {
                     messages[0].content = `${names.userName}: ${messages[0].content}`;
                 }
             }
             if (names.charName && messages[0].name === 'example_assistant') {
-                if (!messages[0].content.startsWith(`${names.charName}: `) && !names.startsWithGroupName(messages[0].content)) {
+                if (!messages[0].content.startsWith(`${names.charName}: `)) {
                     messages[0].content = `${names.charName}: ${messages[0].content}`;
                 }
             }
@@ -492,7 +486,7 @@ export function convertGooglePrompt(messages, model, useSysPrompt, names) {
                         part.text = `${names.userName}: ${part.text}`;
                     }
                 } else if (message.name === 'example_assistant') {
-                    if (names.charName && !part.text.startsWith(`${names.charName}: `) && !names.startsWithGroupName(part.text)) {
+                    if (names.charName && !part.text.startsWith(`${names.charName}: `)) {
                         part.text = `${names.charName}: ${part.text}`;
                     }
                 } else {
@@ -636,14 +630,14 @@ export function convertAI21Messages(messages, names) {
         if (messages[i].role !== 'system') {
             break;
         }
-        // Append example names if not already done by the frontend (e.g. for group chats).
+        // Append example names if not already done by the frontend.
         if (names.userName && messages[i].name === 'example_user') {
             if (!messages[i].content.startsWith(`${names.userName}: `)) {
                 messages[i].content = `${names.userName}: ${messages[i].content}`;
             }
         }
         if (names.charName && messages[i].name === 'example_assistant') {
-            if (!messages[i].content.startsWith(`${names.charName}: `) && !names.startsWithGroupName(messages[i].content)) {
+            if (!messages[i].content.startsWith(`${names.charName}: `)) {
                 messages[i].content = `${names.charName}: ${messages[i].content}`;
             }
         }
@@ -667,7 +661,7 @@ export function convertAI21Messages(messages, names) {
         });
     }
 
-    // Doesn't support completion names, so prepend if not already done by the frontend (e.g. for group chats).
+    // Doesn't support completion names, so prepend if not already done by the frontend.
     messages.forEach(msg => {
         if ('name' in msg) {
             if (msg.role !== 'system' && !msg.content.startsWith(`${msg.name}: `)) {
@@ -710,7 +704,7 @@ export function convertMistralMessages(messages, names) {
 
     const sanitizeToolId = (id) => crypto.createHash('sha512').update(id).digest('hex').slice(0, 9);
 
-    // Doesn't support completion names, so prepend if not already done by the frontend (e.g. for group chats).
+    // Doesn't support completion names, so prepend if not already done by the frontend.
     messages.forEach(msg => {
         if ('tool_calls' in msg && Array.isArray(msg.tool_calls)) {
             msg.tool_calls.forEach(tool => {
@@ -721,7 +715,7 @@ export function convertMistralMessages(messages, names) {
             msg.tool_call_id = sanitizeToolId(msg.tool_call_id);
         }
         if (msg.role === 'system' && msg.name === 'example_assistant') {
-            if (names.charName && !msg.content.startsWith(`${names.charName}: `) && !names.startsWithGroupName(msg.content)) {
+            if (names.charName && !msg.content.startsWith(`${names.charName}: `)) {
                 msg.content = `${names.charName}: ${msg.content}`;
             }
             delete msg.name;
@@ -789,8 +783,8 @@ export function convertXAIMessages(messages, names) {
         }
 
         const needsCharNamePrefix = [
-            { role: 'assistant', condition: names.charName && !msg.content.startsWith(`${names.charName}: `) && !names.startsWithGroupName(msg.content) },
-            { role: 'system', name: 'example_assistant', condition: names.charName && !msg.content.startsWith(`${names.charName}: `) && !names.startsWithGroupName(msg.content) },
+            { role: 'assistant', condition: names.charName && !msg.content.startsWith(`${names.charName}: `) },
+            { role: 'system', name: 'example_assistant', condition: names.charName && !msg.content.startsWith(`${names.charName}: `) },
             { role: 'system', name: 'example_user', condition: names.userName && !msg.content.startsWith(`${names.userName}: `) },
         ];
 
@@ -848,7 +842,7 @@ export function mergeMessages(messages, names, { strict = false, placeholders = 
             message.content = text;
         }
         if (message.role === 'system' && message.name === 'example_assistant') {
-            if (names.charName && !message.content.startsWith(`${names.charName}: `) && !names.startsWithGroupName(message.content)) {
+            if (names.charName && !message.content.startsWith(`${names.charName}: `)) {
                 message.content = `${names.charName}: ${message.content}`;
             }
         }
@@ -867,7 +861,7 @@ export function mergeMessages(messages, names, { strict = false, placeholders = 
         }
         if (single) {
             if (message.role === 'assistant') {
-                if (names.charName && !message.content.startsWith(`${names.charName}: `) && !names.startsWithGroupName(message.content)) {
+                if (names.charName && !message.content.startsWith(`${names.charName}: `)) {
                     message.content = `${names.charName}: ${message.content}`;
                 }
             }

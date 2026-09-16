@@ -71,7 +71,7 @@ export async function initSystemMessages() {
         }),
         /** @type {ChatMessage} */
         empty: lodash.merge(structuredClone(defaultMessage), {
-            mes: 'No one hears you. <b>Hint&#58;</b> add more members to the group!',
+            mes: 'No one hears you. <b>Hint&#58;</b> choose a character to start chatting.',
         }),
         /** @type {ChatMessage} */
         generic: lodash.merge(structuredClone(defaultMessage), {

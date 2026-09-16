@@ -6,7 +6,7 @@ import { getRequestHeaders } from './request-context.js';
 import { saveSettings, saveSettingsDebounced, animation_duration, CLIENT_VERSION } from '../script.js';
 import { POPUP_RESULT, POPUP_TYPE, Popup } from './popup.js';
 import { renderTemplate, renderTemplateAsync } from './templates.js';
-import { delay, deleteValueByPath, equalsIgnoreCaseAndAccents, escapeHtml, isSubsetOf, sanitizeSelector, setValueByPath, versionCompare } from './utils.js';
+import { delay, deleteValueByPath, equalsIgnoreCaseAndAccents, escapeHtml, sanitizeSelector, setValueByPath } from './utils.js';
 import {
     buildExtensionOperationFailureFeedback,
     EMPTY_AUTHOR as DOMAIN_EMPTY_AUTHOR,
@@ -200,19 +200,12 @@ export function cancelDebouncedMetadataSave() {
 }
 
 export function saveMetadataDebounced() {
-    const context = getContext();
-    const groupId = context.groupId;
-    const characterId = context.characterId;
+    const characterId = getContext().characterId;
 
     cancelDebouncedMetadataSave();
 
     saveMetadataTimeout = setTimeout(async () => {
         const newContext = getContext();
-
-        if (groupId !== newContext.groupId) {
-            console.warn('Group changed, not saving metadata');
-            return;
-        }
 
         if (characterId !== newContext.characterId) {
             console.warn('Character changed, not saving metadata');
@@ -672,6 +665,7 @@ async function activateExtensions() {
         const extrasRequirements = manifest.requires;
         const extensionDependencies = manifest.dependencies;
         const displayName = manifest.display_name || name;
+        const minClientVersion = manifest.minimum_client_version ?? 'unknown';
 
         const decision = evaluateExtensionActivation({
             name,

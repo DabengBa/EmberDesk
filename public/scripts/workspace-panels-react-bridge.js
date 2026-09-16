@@ -22,7 +22,6 @@ export function getDefaultWorkspaceReactFeatures() {
             worldInfo: true,
             extensionsHost: true,
             characterAuthoring: true,
-            groupAuthoring: false,
         },
     };
 }

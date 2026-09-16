@@ -54,12 +54,6 @@ describe('character list render state helpers', () => {
         })).toBe('character:alpha.png');
 
         expect(getCharacterListEntityKey({
-            type: 'group',
-            id: 'group-fallback',
-            item: { id: 'group-1' },
-        })).toBe('group:group-1');
-
-        expect(getCharacterListEntityKey({
             type: 'tag',
             id: 'tag-fallback',
             item: { id: 'folder-1' },
@@ -69,16 +63,15 @@ describe('character list render state helpers', () => {
     test('builds an entity snapshot without changing entity order or ids', () => {
         const entities = [
             { type: 'character', id: 0, item: { avatar: 'alpha.png' } },
-            { type: 'group', id: 'group-1', item: { id: 'group-1' } },
             { type: 'tag', id: 'folder-1', item: { id: 'folder-1' }, entities: [] },
         ];
 
         const snapshot = createCharacterListEntitySnapshot(entities);
 
-        expect(snapshot.total).toBe(3);
-        expect(snapshot.keys).toEqual(['character:alpha.png', 'group:group-1', 'tag:folder-1']);
-        expect(snapshot.entities.map(entity => entity.id)).toEqual([0, 'group-1', 'folder-1']);
-        expect(snapshot.entities.map(entity => entity.renderIndex)).toEqual([0, 1, 2]);
+        expect(snapshot.total).toBe(2);
+        expect(snapshot.keys).toEqual(['character:alpha.png', 'tag:folder-1']);
+        expect(snapshot.entities.map(entity => entity.id)).toEqual([0, 'folder-1']);
+        expect(snapshot.entities.map(entity => entity.renderIndex)).toEqual([0, 1]);
     });
 
     test('formats pagination range labels with plugin-provided totals or snapshot fallback', () => {
@@ -125,14 +118,13 @@ describe('character list render state helpers', () => {
             ],
             includeBackBlock: true,
             totalCharacters: 4,
-            totalGroups: 1,
             hasActiveFilter: true,
         });
 
         expect(plan.includeBackBlock).toBe(true);
         expect(plan.showEmptyBlock).toBe(false);
         expect(plan.displayCount).toBe(1);
-        expect(plan.hiddenCount).toBe(4);
+        expect(plan.hiddenCount).toBe(3);
         expect(plan.showHiddenBlock).toBe(true);
     });
 
@@ -160,7 +152,6 @@ describe('character list render state helpers', () => {
             currentPage: 1,
             pageSize: 3,
             totalCharacters: 3,
-            totalGroups: 0,
             hasActiveFilter: false,
         });
 
@@ -191,7 +182,6 @@ describe('character list render state helpers', () => {
             currentPage: 1,
             pageSize: 2,
             totalCharacters: 2,
-            totalGroups: 0,
             hasActiveFilter: false,
         })).toMatchObject({ mode: 'fallback', reason: 'duplicate-entity-key' });
 
@@ -204,7 +194,6 @@ describe('character list render state helpers', () => {
             currentPage: 1,
             pageSize: 2,
             totalCharacters: 1,
-            totalGroups: 0,
             includeBackBlock: true,
             hasActiveFilter: false,
         })).toMatchObject({ mode: 'fallback', reason: 'back-block' });

@@ -120,6 +120,7 @@ describe('chat route service', () => {
             chats: ['shared'],
         }));
         writeFile(path.join(directories.groupChats, 'shared.jsonl'), '{"chat_metadata":{}}\n{"mes":"shared group memory"}');
+        writeFile(path.join(directories.chats, 'root.jsonl'), '{"chat_metadata":{}}\n{"mes":"root chat must not leak into group search"}');
 
         const dependencies = createDependencies();
         const result = await searchChatPayload({

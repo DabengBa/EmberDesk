@@ -3,7 +3,6 @@ import { callGenericPopup, Popup, POPUP_TYPE } from './popup.js';
 import { getFileExtension, sortMoments, timestampToMoment } from './utils.js';
 import { displayPastChats, importCharacterChat } from '/script.js';
 import { getRequestHeaders } from './request-context.js';
-import { importGroupChat } from './group-chats.js';
 
 class BackupsBrowser {
     /** @type {HTMLElement} */
@@ -103,7 +102,7 @@ class BackupsBrowser {
         formData.set('user_name', context.name1);
         formData.set('character_name', context.name2);
 
-        const importFn = context.groupId ? importGroupChat : importCharacterChat;
+        const importFn = importCharacterChat;
         const result = await importFn(formData, { refresh: false });
 
         if (result.length === 0) {

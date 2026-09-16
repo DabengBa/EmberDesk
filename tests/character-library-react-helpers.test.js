@@ -55,7 +55,7 @@ describe('character library React panel scaffold', () => {
         expect(toolbarSource).toContain('disabled={disabled}');
         expect(toolbarSource).toContain('aria-disabled={disabled}');
         expect(toolbarSource).toContain('className="character-library-bulk-selected-count paginationjs-nav"');
-        expect(toolbarSource).toContain('role="status"');
+        expect(toolbarSource).toContain('<output');
         expect(toolbarSource).toContain('aria-label={bulkSelectedLabel}');
         expect(toolbarSource).toContain('disabled={state.bulkSelectedCount === 0}');
         expect(toolbarSource).toContain('className="character-library-toolbar-filters"');
@@ -107,7 +107,7 @@ describe('character library React panel scaffold', () => {
         expect(scriptSource).toContain('mountReactCharacterLibraryPanel');
         expect(scriptSource).toContain('mountReactCharacterLibraryToolbar');
         expect(scriptSource).toContain('renderCharacterListPageReact');
-        expect(scriptSource).toContain('void openGroupById(String(id));');
+        expect(scriptSource).not.toContain('openGroupById');
         expect(scriptSource).toContain("chooseBogusFolder($('#rm_print_characters_block'), 'back');");
         expect(scriptSource).not.toContain("document.getElementById('BogusFolderBack')?.click()");
         expect(scriptSource).not.toContain('createEntityElement(entity)');

@@ -351,9 +351,6 @@ export function initItemizedPrompts() {
     eventSource.on(event_types.CHAT_DELETED, async (name) => {
         await deleteItemizedPrompts(name);
     });
-    eventSource.on(event_types.GROUP_CHAT_DELETED, async (name) => {
-        await deleteItemizedPrompts(name);
-    });
 }
 
 /**

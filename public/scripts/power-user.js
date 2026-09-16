@@ -18,7 +18,6 @@ import {
     saveChatConditional,
     setAnimationDuration,
     ANIMATION_DURATION_DEFAULT,
-    setActiveGroup,
     setActiveCharacter,
     entitiesFilter,
     doNewChat,
@@ -32,10 +31,6 @@ import {
 import { eventSource, event_types } from './events.js';
 import { getRequestHeaders } from './request-context.js';
 import { isMobile, initMovingUI, favsToHotswap } from './RossAscends-mods.js';
-import {
-    groups,
-    resetSelectedGroup,
-} from './group-chats.js';
 import {
     instruct_presets,
     loadInstructMode,
@@ -181,7 +176,6 @@ export const power_user = {
     send_on_enter: send_on_enter_options.AUTO,
     console_log_prompts: false,
     request_token_probabilities: false,
-    show_group_chat_queue: false,
     allow_name1_display: false,
     allow_name2_display: false,
     hotswap_enabled: true,
@@ -206,7 +200,6 @@ export const power_user = {
     enable_md_hotkeys: false,
     tag_import_setting: tag_import_setting.ASK,
     tag_sort_mode: tag_sort_mode.MANUAL,
-    disable_group_trimming: false,
     single_line: false,
 
     instruct: {
@@ -1513,7 +1506,6 @@ export async function loadPowerUserSettings(settings, data) {
 
     $('#console_log_prompts').prop('checked', power_user.console_log_prompts);
     $('#request_token_probabilities').prop('checked', power_user.request_token_probabilities);
-    $('#show_group_chat_queue').prop('checked', power_user.show_group_chat_queue);
     $('#auto_fix_generated_markdown').prop('checked', power_user.auto_fix_generated_markdown);
     $('#auto_scroll_chat_to_bottom').prop('checked', power_user.auto_scroll_chat_to_bottom);
     $('#bogus_folders').prop('checked', power_user.bogus_folders);
@@ -1525,7 +1517,6 @@ export async function loadPowerUserSettings(settings, data) {
     $('#collapse-newlines-checkbox').prop('checked', power_user.collapse_newlines);
     $('#always-force-name2-checkbox').prop('checked', power_user.always_force_name2);
     $('#trim_sentences_checkbox').prop('checked', power_user.trim_sentences);
-    $('#disable_group_trimming').prop('checked', power_user.disable_group_trimming);
     $('#markdown_escape_strings').val(power_user.markdown_escape_strings);
     $('#noShadowsmode').prop('checked', power_user.noShadows);
     $('#start_reply_with').text(power_user.user_prompt_bias);
@@ -2016,22 +2007,6 @@ export function fuzzySearchTags(searchValue, fuzzySearchCaches = null) {
     return performFuzzySearch(fuzzySearchCategories.tags, tags, keys, searchValue, fuzzySearchCaches);
 }
 
-/**
- * Fuzzy search groups by a search term
- * @param {string} searchValue - The search term
- * @param {Object.<string, { resultMap: Map<string, any> }>} [fuzzySearchCaches=null] - Optional fuzzy search caches
- * @returns {import('fuse.js').FuseResult<any>[]} Results as items with their score
- */
-export function fuzzySearchGroups(searchValue, fuzzySearchCaches = null) {
-    const keys = [
-        { name: 'name', weight: 20 },
-        { name: 'members', weight: 15 },
-        { name: '#tags', weight: 10, getFn: (group) => getTagsList(group.id).map(x => x.name).join('||') },
-        { name: 'id', weight: 1 },
-    ];
-
-    return performFuzzySearch(fuzzySearchCategories.groups, groups, keys, searchValue, fuzzySearchCaches);
-}
 
 /**
  * Renders a story string template with the given parameters.
@@ -2469,7 +2444,6 @@ async function resetMovablePanels(type) {
         'right-nav-panel',
         'WorldInfo',
         'floatingPrompt',
-        'groupMemberListPopout',
         'summaryExtensionPopout',
         'gallery',
         'logprobsViewer',
@@ -2587,7 +2561,6 @@ async function doRandomChat(_, tagName) {
         return randomIndex.toString();
     }
 
-    resetSelectedGroup();
     const characterId = getRandomCharacterId();
     if (!characterId) {
         toastr.error('No characters found');
@@ -2595,7 +2568,6 @@ async function doRandomChat(_, tagName) {
     }
     setCharacterId(characterId);
     setActiveCharacter(characters[characterId]?.avatar);
-    setActiveGroup(null);
     await delay(1);
     await reloadCurrentChat();
     return characters[characterId]?.name;
@@ -3361,11 +3333,6 @@ jQuery(() => {
         saveSettingsDebounced();
     });
 
-    $('#show_group_chat_queue').on('input', function () {
-        power_user.show_group_chat_queue = !!$(this).prop('checked');
-        saveSettingsDebounced();
-    });
-
     $('#auto_scroll_chat_to_bottom').on('input', function () {
         power_user.auto_scroll_chat_to_bottom = !!$(this).prop('checked');
         saveSettingsDebounced();
@@ -3632,11 +3599,6 @@ jQuery(() => {
                 },
             );
         });
-    });
-
-    $('#disable_group_trimming').on('input', function () {
-        power_user.disable_group_trimming = !!$(this).prop('checked');
-        saveSettingsDebounced();
     });
 
     $('#debug_menu').on('click', function () {

@@ -7,9 +7,7 @@ import {
     is_send_press,
     max_context,
     saveSettingsDebounced,
-    active_group,
     active_character,
-    setActiveGroup,
     setActiveCharacter,
     getEntitiesList,
     buildAvatarList,
@@ -27,7 +25,6 @@ import {
     send_on_enter_options,
 } from './power-user.js';
 
-import { selected_group, is_group_generating, openGroupById } from './group-chats.js';
 import { getTagKeyForEntity, applyTagsOnCharacterSelect } from './tags.js';
 import {
     SECRET_KEYS,
@@ -260,12 +257,11 @@ export async function RA_CountCharTokens() {
     $('#chartokenwarning').toggle(showWarning);
 }
 /**
- * Auto load chat with the last active character or group.
+ * Auto load chat with the last active character.
  * Fires when active_character is defined and auto_load_chat is true.
  * The function first tries to find a character with a specific ID from the global settings.
- * If it doesn't exist, it tries to find a group with a specific grid from the global settings.
  * If the character list hadn't been loaded yet, it calls itself again after 100ms delay.
- * The character or group is selected (clicked) if it is found.
+ * The character is selected (clicked) if it is found.
  */
 async function RA_autoloadchat() {
     // active character is the name, we should look it up in the character list and get the id
@@ -282,12 +278,6 @@ async function RA_autoloadchat() {
             saveSettingsDebounced();
             console.warn(`Currently active character with ID ${active_character} not found. Resetting to no active character.`);
         }
-    }
-
-    if (active_group !== null && active_group !== undefined) {
-        // Group chat retirement: never restore a group session.
-        setActiveGroup(null);
-        saveSettingsDebounced();
     }
 }
 
@@ -331,7 +321,7 @@ function RA_checkOnlineStatus() {
             connection_made = true;
             retry_delay = 100;
 
-            if (!is_send_press && !(selected_group && is_group_generating)) {
+            if (!is_send_press) {
                 $('#send_but').removeClass('displayNone'); //on connect, send button shows
                 $('#mes_continue').removeClass('displayNone'); //continue button is shown when connected
                 $('#mes_impersonate').removeClass('displayNone'); //continue button is shown when connected
@@ -804,14 +794,6 @@ export function initRossMods() {
     $(document).on('click', '.character_select', function () {
         const characterId = $(this).attr('data-chid');
         setActiveCharacter(characterId);
-        setActiveGroup(null);
-        saveSettingsDebounced();
-    });
-
-    $(document).on('click', '.group_select', function () {
-        const groupId = $(this).attr('data-chid') || $(this).attr('data-grid');
-        setActiveCharacter(null);
-        setActiveGroup(groupId);
         saveSettingsDebounced();
     });
 

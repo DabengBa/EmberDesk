@@ -9,7 +9,7 @@ import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import _ from 'lodash';
 
 import validateAvatarUrlMiddleware from '../middleware/validateFileName.js';
-import { sendGroupChatRetired } from './group-chat-retirement.js';
+import { groupChatRetirementHandler, sendGroupChatRetired } from './group-chat-retirement.js';
 import {
     getConfigValue,
     humanizedDateTime,
@@ -63,6 +63,12 @@ const checkIntegrity = !!getConfigValue('backups.chat.checkIntegrity', true, 'bo
 
 export const CHAT_BACKUPS_PREFIX = 'chat_';
 
+function rejectGroupChatRequest(request, response, next) {
+    if (request.body?.is_group) {
+        return sendGroupChatRetired(response);
+    }
+    return next();
+}
 function getRequestHandle(request) {
     return request.user?.profile?.handle ?? request.user?.handle ?? 'default-user';
 }
@@ -612,10 +618,7 @@ export function writeChatProjection(jsonlData, filePath, handle, cardName, backu
     getBackupFunction(handle)(backupDirectory, cardName, jsonlData);
 }
 
-router.post('/save', validateAvatarUrlMiddleware, async function (request, response) {
-    if (request.body?.is_group) {
-        return sendGroupChatRetired(response);
-    }
+router.post('/save', rejectGroupChatRequest, validateAvatarUrlMiddleware, async function (request, response) {
     try {
         const handle = request.user.profile?.handle ?? null;
         const cardName = String(request.body.avatar_url).replace('.png', '');
@@ -711,10 +714,7 @@ export function getChatData(chatFilePath) {
     return chatData;
 }
 
-router.post('/get', validateAvatarUrlMiddleware, function (request, response) {
-    if (request.body?.is_group) {
-        return sendGroupChatRetired(response);
-    }
+router.post('/get', rejectGroupChatRequest, validateAvatarUrlMiddleware, function (request, response) {
     try {
         const dirName = String(request.body.avatar_url).replace('.png', '');
         const directoryPath = path.join(request.user.directories.chats, dirName);
@@ -752,19 +752,14 @@ router.post('/get', validateAvatarUrlMiddleware, function (request, response) {
     }
 });
 
-router.post('/rename', validateAvatarUrlMiddleware, async function (request, response) {
-    if (request.body?.is_group) {
-        return sendGroupChatRetired(response);
-    }
+router.post('/rename', rejectGroupChatRequest, validateAvatarUrlMiddleware, async function (request, response) {
     try {
         if (!request.body || !request.body.original_file || !request.body.renamed_file) {
             return response.sendStatus(400);
         }
 
-        const pathToFolder = request.body.is_group
-            ? request.user.directories.groupChats
-            : path.join(request.user.directories.chats, String(request.body.avatar_url).replace('.png', ''));
-        if (!request.body.is_group && !isPathUnderParent(request.user.directories.chats, pathToFolder)) {
+        const pathToFolder = path.join(request.user.directories.chats, String(request.body.avatar_url).replace('.png', ''));
+        if (!isPathUnderParent(request.user.directories.chats, pathToFolder)) {
             return response.sendStatus(400);
         }
         const pathToOriginalFile = path.join(pathToFolder, sanitize(request.body.original_file));
@@ -783,19 +778,14 @@ router.post('/rename', validateAvatarUrlMiddleware, async function (request, res
             return sendCanonicalChatWriteBlocked(response, writeState);
         }
         if (writeState.ok) {
-            const ownerType = request.body.is_group ? 'group' : 'character';
             const originalLocator = getCanonicalChatLocator(request.user.directories, {
-                ownerType,
-                ownerId: request.body.is_group
-                    ? path.parse(sanitize(request.body.original_file)).name
-                    : String(request.body.avatar_url).replace('.png', ''),
+                ownerType: 'character',
+                ownerId: String(request.body.avatar_url).replace('.png', ''),
                 filePath: pathToOriginalFile,
             });
             const nextLocator = getCanonicalChatLocator(request.user.directories, {
-                ownerType,
-                ownerId: request.body.is_group
-                    ? path.parse(sanitize(request.body.renamed_file)).name
-                    : String(request.body.avatar_url).replace('.png', ''),
+                ownerType: 'character',
+                ownerId: String(request.body.avatar_url).replace('.png', ''),
                 filePath: pathToRenamedFile,
             });
             const result = renameCanonicalChat({
@@ -825,18 +815,14 @@ router.post('/rename', validateAvatarUrlMiddleware, async function (request, res
                 });
             }
             console.info('Successfully renamed canonical chat file.');
-            if (!request.body.is_group) {
-                syncCanonicalChatStatsAfterCharacterChatMutation(request.user.profile?.handle ?? null, request.user.directories, request.body.avatar_url, 'chat rename');
-            }
+            syncCanonicalChatStatsAfterCharacterChatMutation(request.user.profile?.handle ?? null, request.user.directories, request.body.avatar_url, 'chat rename');
             return response.send({ ok: true, sanitizedFileName });
         }
 
         fs.copyFileSync(pathToOriginalFile, pathToRenamedFile);
         fs.unlinkSync(pathToOriginalFile);
         console.info('Successfully renamed chat file.');
-        if (!request.body.is_group) {
-            syncCanonicalChatStatsAfterCharacterChatMutation(request.user.profile?.handle ?? null, request.user.directories, request.body.avatar_url, 'chat rename');
-        }
+        syncCanonicalChatStatsAfterCharacterChatMutation(request.user.profile?.handle ?? null, request.user.directories, request.body.avatar_url, 'chat rename');
         return response.send({ ok: true, sanitizedFileName });
     } catch (error) {
         console.error('Error renaming chat file:', error);
@@ -844,10 +830,7 @@ router.post('/rename', validateAvatarUrlMiddleware, async function (request, res
     }
 });
 
-router.post('/delete', validateAvatarUrlMiddleware, function (request, response) {
-    if (request.body?.is_group) {
-        return sendGroupChatRetired(response);
-    }
+router.post('/delete', rejectGroupChatRequest, validateAvatarUrlMiddleware, function (request, response) {
     try {
         if (!path.extname(request.body.chatfile)) {
             request.body.chatfile += '.jsonl';
@@ -915,26 +898,19 @@ router.post('/delete', validateAvatarUrlMiddleware, function (request, response)
     }
 });
 
-router.post('/export', validateAvatarUrlMiddleware, async function (request, response) {
-    if (request.body?.is_group) {
-        return sendGroupChatRetired(response);
-    }
-    if (!request.body.file || (!request.body.avatar_url && request.body.is_group === false)) {
+router.post('/export', rejectGroupChatRequest, validateAvatarUrlMiddleware, async function (request, response) {
+    if (!request.body.file || !request.body.avatar_url) {
         return response.sendStatus(400);
     }
-    const pathToFolder = request.body.is_group
-        ? request.user.directories.groupChats
-        : path.join(request.user.directories.chats, String(request.body.avatar_url).replace('.png', ''));
+    const pathToFolder = path.join(request.user.directories.chats, String(request.body.avatar_url).replace('.png', ''));
     const filename = path.join(pathToFolder, sanitize(request.body.file));
-    if (!request.body.is_group && !isPathUnderParent(request.user.directories.chats, filename)) {
+    if (!isPathUnderParent(request.user.directories.chats, filename)) {
         return response.sendStatus(400);
     }
     let exportfilename = request.body.exportfilename;
     const canonical = serializeCanonicalChatRoutePayload(request, getCanonicalChatLocator(request.user.directories, {
-        ownerType: request.body.is_group ? 'group' : 'character',
-        ownerId: request.body.is_group
-            ? path.parse(sanitize(request.body.file)).name
-            : String(request.body.avatar_url).replace('.png', ''),
+        ownerType: 'character',
+        ownerId: String(request.body.avatar_url).replace('.png', ''),
         filePath: filename,
     }));
     if (canonical.active && canonical.jsonl === null) {
@@ -994,10 +970,6 @@ router.post('/export', validateAvatarUrlMiddleware, async function (request, res
         console.error('chat export failed.', err);
         return response.sendStatus(400);
     }
-});
-
-router.post('/group/import', function (request, response) {
-    return sendGroupChatRetired(response);
 });
 
 router.post('/import', validateAvatarUrlMiddleware, function (request, response) {
@@ -1107,25 +1079,14 @@ router.post('/import', validateAvatarUrlMiddleware, function (request, response)
     }
 });
 
-router.post('/group/get', function (request, response) {
-    return sendGroupChatRetired(response);
-});
-
-router.post('/group/info', function (request, response) {
-    return sendGroupChatRetired(response);
-});
-
-router.post('/group/delete', function (request, response) {
-    return sendGroupChatRetired(response);
-});
-
-router.post('/group/save', function (request, response) {
-    return sendGroupChatRetired(response);
-});
+router.use('/group', groupChatRetirementHandler);
 
 router.post('/search', validateAvatarUrlMiddleware, async function (request, response) {
     try {
         const { query, avatar_url, group_id } = request.body;
+        if (group_id) {
+            return response.send([]);
+        }
         const dependencies = {
             fs,
             path,
@@ -1136,17 +1097,13 @@ router.post('/search', validateAvatarUrlMiddleware, async function (request, res
         const payload = readState.ok
             ? await searchCanonicalChatPayload({
                 db: readState.db,
-                directories: request.user.directories,
                 query,
                 avatarUrl: avatar_url,
-                groupId: group_id,
-                dependencies,
             })
             : await searchChatPayload({
                 directories: request.user.directories,
                 query,
                 avatarUrl: avatar_url,
-                groupId: group_id,
                 dependencies,
             });
 

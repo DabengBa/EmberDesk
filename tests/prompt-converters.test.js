@@ -12,14 +12,10 @@ beforeAll(async () => {
     mod = await import('../src/prompt-converters.js');
 });
 
-function makeNames(charName = '', userName = '', groupNames = []) {
+function makeNames(charName = '', userName = '') {
     return {
         charName,
         userName,
-        groupNames,
-        startsWithGroupName(message) {
-            return this.groupNames.some(name => message.startsWith(`${name}: `));
-        },
     };
 }
 
@@ -553,14 +549,13 @@ describe('convertXAIMessages', () => {
         expect(result[0].name).toBe('Someone');
     });
 
-    test('handles group names - does not double prefix', () => {
-        const groupNames = makeNames('Char', 'Player', ['Alice', 'Bob']);
+    test('handles named assistant content without a group prefix exception', () => {
+        const names = makeNames('Char', 'Player');
         const messages = [
             { role: 'assistant', name: 'SomeNPC', content: 'Alice: speaking as Alice' },
         ];
-        const result = mod.convertXAIMessages(messages, groupNames);
-        // Starts with group name, so charName prefix should not be added
-        expect(result[0].content).toBe('Alice: speaking as Alice');
+        const result = mod.convertXAIMessages(messages, names);
+        expect(result[0].content).toBe('Char: Alice: speaking as Alice');
     });
 });
 
@@ -721,33 +716,15 @@ describe('addOpenRouterSignatures', () => {
 
 
 describe('getPromptNames', () => {
-    test('extracts names from request body', () => {
+    test('extracts character and user names while ignoring retired group names', () => {
         const request = { body: { char_name: 'Bot', user_name: 'User', group_names: ['Alice', 'Bob'] } };
         const names = mod.getPromptNames(request);
-        expect(names.charName).toBe('Bot');
-        expect(names.userName).toBe('User');
-        expect(names.groupNames).toEqual(['Alice', 'Bob']);
+        expect(names).toEqual({ charName: 'Bot', userName: 'User' });
     });
 
-    test('defaults to empty strings and array when missing', () => {
+    test('defaults to empty strings when missing', () => {
         const request = { body: {} };
-        const names = mod.getPromptNames(request);
-        expect(names.charName).toBe('');
-        expect(names.userName).toBe('');
-        expect(names.groupNames).toEqual([]);
-    });
-
-    test('startsWithGroupName checks message prefix', () => {
-        const request = { body: { char_name: '', user_name: '', group_names: ['Alice', 'Bob'] } };
-        const names = mod.getPromptNames(request);
-        expect(names.startsWithGroupName('Alice: hello')).toBe(true);
-        expect(names.startsWithGroupName('Charlie: hello')).toBe(false);
-    });
-
-    test('coerces non-string group_names to strings', () => {
-        const request = { body: { group_names: [123, null] } };
-        const names = mod.getPromptNames(request);
-        expect(names.groupNames).toEqual(['123', 'null']);
+        expect(mod.getPromptNames(request)).toEqual({ charName: '', userName: '' });
     });
 });
 

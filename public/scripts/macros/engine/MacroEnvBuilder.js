@@ -1,5 +1,4 @@
-import { name1, name2, characters, getCharacterCardFieldsLazy, getGeneratingModel } from '../../../script.js';
-import { groups, selected_group } from '../../../scripts/group-chats.js';
+import { name1, name2, getCharacterCardFieldsLazy, getGeneratingModel } from '../../../script.js';
 import { logMacroGeneralError } from './MacroDiagnostics.js';
 import { getStringHash } from '/scripts/utils.js';
 /**
@@ -132,8 +131,8 @@ class MacroEnvBuilder {
         // Names
         env.names.user = ctx.name1Override ?? name1 ?? '';
         env.names.char = ctx.name2Override ?? name2 ?? '';
-        env.names.group = getGroupValue(ctx, { currentChar: env.names.char, includeMuted: true });
-        env.names.groupNotMuted = getGroupValue(ctx, { currentChar: env.names.char, includeMuted: false });
+        env.names.group = getGroupValue(ctx, { currentChar: env.names.char });
+        env.names.groupNotMuted = getGroupValue(ctx, { currentChar: env.names.char });
         env.names.notChar = getGroupValue(ctx, { currentChar: env.names.char, filterOutChar: true, includeUser: env.names.user });
 
         // System
@@ -181,31 +180,14 @@ instance = MacroEnvBuilder.instance;
  * @param {MacroEnvRawContext} ctx
  * @param {Object} options
  * @param {string} [options.currentChar=null]
- * @param {boolean} [options.includeMuted=false]
  * @param {boolean} [options.filterOutChar=false]
  * @param {string|null} [options.includeUser=null]
  * @returns {string}
  */
-function getGroupValue(ctx, { currentChar = null, includeMuted = false, filterOutChar = false, includeUser = null }) {
+function getGroupValue(ctx, { currentChar = null, filterOutChar = false, includeUser = null }) {
     if (typeof ctx.groupOverride === 'string') {
         return ctx.groupOverride;
     }
 
-    if (!selected_group) return filterOutChar ? (includeUser || '') : (currentChar ?? '');
-
-    const groupEntry = Array.isArray(groups) ? groups.find(x => x && x.id === selected_group) : null;
-    const members = /** @type {string[]} */ (groupEntry?.members ?? []);
-    const disabledMembers = /** @type {string[]} */ (groupEntry?.disabled_members ?? []);
-
-    const names = Array.isArray(members)
-        ? members
-            .filter(((id) => includeMuted ? true : !disabledMembers.includes(id)))
-            .map(m => Array.isArray(characters) ? characters.find(c => c && c.avatar === m) : null)
-            .filter(c => !!c && typeof c.name === 'string')
-            .filter(c => !filterOutChar || c.name !== currentChar)
-            .map(c => c.name)
-            .join(', ')
-        : '';
-
-    return names;
+    return filterOutChar ? (includeUser || '') : (currentChar ?? '');
 }

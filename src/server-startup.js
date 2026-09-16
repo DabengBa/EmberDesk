@@ -90,9 +90,7 @@ export function redirectDeprecatedEndpoints(app) {
     redirect('/getgroupchat', '/api/chats/group/get');
     redirect('/deletegroupchat', '/api/chats/group/delete');
     redirect('/savegroupchat', '/api/chats/group/save');
-    // The group-authoring redirects below point at the retired /api/groups router,
-    // which now answers every request with a stable JSON 410 (group_chat_feature_removed).
-    // These are retired compatibility routes only; group authoring is no longer a feature.
+    // Group-authoring redirects target a retired router that returns the stable 410 contract.
     redirect('/getgroups', '/api/groups/all');
     redirect('/creategroup', '/api/groups/create');
     redirect('/editgroup', '/api/groups/edit');

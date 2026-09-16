@@ -26,19 +26,6 @@ export interface CharacterLibraryCharacterRowModel {
     tagsDisplayLimit?: number;
 }
 
-export interface CharacterLibraryGroupRowModel {
-    type: 'group';
-    id: string | number;
-    name: string;
-    avatarUrl?: string;
-    isFav?: boolean;
-    isActive?: boolean;
-}
-
-export type CharacterLibraryRowModel =
-    | CharacterLibraryCharacterRowModel
-    | CharacterLibraryGroupRowModel;
-
 export function isCharacterFav(item: { fav?: unknown } | null | undefined): boolean {
     return Boolean(item?.fav || item?.fav === 'true' || item?.fav === true);
 }

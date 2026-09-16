@@ -28,7 +28,6 @@ import { convertAgnaiMemoryBook, convertCharacterBook, convertNovelLorebook, con
 import { DragAndDropHandler } from './dragdrop.js';
 import { createWorldInfoImportResult, summarizeWorldInfoBatchImport } from './world-info-import-results.js';
 import {
-    WORLD_INFO_WORKBENCH_EDITABLE_FIELDS as DOMAIN_WORKBENCH_EDITABLE_FIELDS,
     getWorldInfoWorkbenchPositionLabel as domainGetWorldInfoWorkbenchPositionLabel,
     buildWorldInfoWorkbenchEntrySummary as domainBuildWorldInfoWorkbenchEntrySummary,
     buildWorldInfoWorkbenchEntryDetail as domainBuildWorldInfoWorkbenchEntryDetail,
@@ -644,7 +643,20 @@ const sortFn = (a, b) => b.order - a.order;
 let updateEditor = (navigation, flashOnNav = true) => { console.debug('Triggered WI navigation', navigation, flashOnNav); };
 
 // Do not optimize. updateEditor is a function that is updated by the displayWorldEntries with new data.
-export const worldInfoFilter = new FilterHelper(() => updateEditor());
+// FilterHelper must not be constructed at module evaluation time: world-info.js
+// participates in an import cycle with filters.js, so the binding can still be
+// uninitialized when this module body runs.
+/** @type {FilterHelper} */
+export let worldInfoFilter = null;
+
+/**
+ * Returns the World Info list filter helper, creating it on first use.
+ * @returns {FilterHelper}
+ */
+function getWorldInfoFilter() {
+    worldInfoFilter ??= new FilterHelper(() => updateEditor());
+    return worldInfoFilter;
+}
 export const SORT_ORDER_KEY = 'world_info_sort_order';
 export const METADATA_KEY = 'world_info';
 
@@ -1673,7 +1685,7 @@ export async function selectWorldInfoEditorIndex(worldIndex) {
     syncWorldInfoEditorSelectorUi(selectedValue);
 
     $('#world_info_search').val('');
-    worldInfoFilter.setFilterData(FILTER_TYPES.WORLD_INFO_SEARCH, '', true);
+    getWorldInfoFilter().setFilterData(FILTER_TYPES.WORLD_INFO_SEARCH, '', true);
 
     const session = getWorldInfoWorkbenchSession();
     await session.selectWorldIndex(selectedValue);
@@ -1704,7 +1716,7 @@ export function applyWorldInfoSearchQuery(searchQuery) {
     session.applySortOption(normalizedQuery ? '14' : String(accountStorage.getItem(SORT_ORDER_KEY) || '0'));
     // Keep legacy filter/DOM in sync for non-React consumers while dual-path exists.
     $('#world_info_search').val(normalizedQuery);
-    worldInfoFilter.setFilterData(FILTER_TYPES.WORLD_INFO_SEARCH, normalizedQuery);
+    getWorldInfoFilter().setFilterData(FILTER_TYPES.WORLD_INFO_SEARCH, normalizedQuery);
 }
 
 export function applyWorldInfoSortOption(sortValue) {
@@ -2022,8 +2034,8 @@ function getWorldInfoWorkbenchSession() {
             initialSortValue: String(accountStorage.getItem(SORT_ORDER_KEY) || '0'),
             loadWorldInfo,
             saveWorldInfo,
-            applyFilters: (entries) => worldInfoFilter.applyFilters(entries),
-            getSearchScore: (uid) => worldInfoFilter.getScore(FILTER_TYPES.WORLD_INFO_SEARCH, uid),
+            applyFilters: (entries) => getWorldInfoFilter().applyFilters(entries),
+            getSearchScore: (uid) => getWorldInfoFilter().getScore(FILTER_TYPES.WORLD_INFO_SEARCH, uid),
             setOriginalDataValue: setWIOriginalDataValue,
         });
     }
@@ -2032,10 +2044,6 @@ function getWorldInfoWorkbenchSession() {
     worldInfoWorkbenchSession.setSelectedWorldInfo(Array.isArray(selected_world_info) ? selected_world_info : []);
     return worldInfoWorkbenchSession;
 }
-
-
-const WORLD_INFO_WORKBENCH_EDITABLE_FIELDS = DOMAIN_WORKBENCH_EDITABLE_FIELDS;
-
 /**
  * Human-readable injection position for workbench list/editor display.
  * @param {object} entry
@@ -2259,7 +2267,6 @@ function registerWorldInfoSlashCommands() {
      */
     async function getCharBookCallback({ type, name, create }, characterIdentifier) {
         const context = getContext();
-        if (context.groupId && !characterIdentifier) throw new Error('This command is not available in groups without providing a character name');
         type = String(type ?? '').trim().toLowerCase() || 'primary';
         characterIdentifier = String(characterIdentifier ?? '') || context.characters[context.characterId]?.avatar || null;
         const character = findChar({ name: characterIdentifier });
@@ -2878,7 +2885,7 @@ function registerWorldInfoSlashCommands() {
                 enumProvider: commonEnumProviders.characters('character'),
             }),
         ],
-        helpString: 'Get a name of the character-bound lorebook and pass it down the pipe. Returns empty string if character lorebook is not set. Does not work in group chats without providing a character avatar name.',
+        helpString: 'Get a name of the character-bound lorebook and pass it down the pipe. Returns empty string if character lorebook is not set.',
         aliases: ['getcharlore', 'getcharwi'],
     }));
 
@@ -3325,7 +3332,7 @@ export function sortWorldInfoEntries(data, { customSort = null } = {}) {
 
     return domainSortWorldInfoEntries(data, {
         customSort: resolvedCustomSort,
-        getSearchScore: (uid) => worldInfoFilter.getScore(FILTER_TYPES.WORLD_INFO_SEARCH, uid),
+        getSearchScore: (uid) => getWorldInfoFilter().getScore(FILTER_TYPES.WORLD_INFO_SEARCH, uid),
     });
 }
 
@@ -3494,7 +3501,7 @@ async function displayWorldEntries(name, data, navigation = navigation_option.no
 
         // Apply the filter and do the chosen sorting
         entriesArray = addMissingWorldInfoFields(entriesArray);
-        entriesArray = worldInfoFilter.applyFilters(entriesArray);
+        entriesArray = getWorldInfoFilter().applyFilters(entriesArray);
         entriesArray = sortWorldInfoEntries(entriesArray);
 
         // Cache keys
@@ -3767,7 +3774,7 @@ export const originalWIDataKeyMap = {
 
 /** Checks the state of the current search, and adds/removes the search sorting option accordingly */
 function verifyWorldInfoSearchSortRule() {
-    const searchTerm = worldInfoFilter.getFilterData(FILTER_TYPES.WORLD_INFO_SEARCH);
+    const searchTerm = getWorldInfoFilter().getFilterData(FILTER_TYPES.WORLD_INFO_SEARCH);
     const searchOption = $('#world_info_sort_order option[data-rule="search"]');
     const selector = $('#world_info_sort_order');
     const isHidden = searchOption.attr('hidden') !== undefined;
@@ -7316,11 +7323,6 @@ export function initWorldInfo() {
             assignLorebookToChat({ shiftKey: true, altKey: false });
         });
 
-        $('#group-chat-lorebook-dropdown').on('change', async function () {
-            $(this).prop('selectedIndex', 0);
-            await assignLorebookToChat({ shiftKey: true, altKey: false });
-        });
-
         if (!globalWorldInfoSelector.data('select2')) {
             globalWorldInfoSelector.select2({
                 width: '100%',
@@ -7443,7 +7445,7 @@ export function initWorldInfo() {
 
         $('#world_editor_select').on('change', async () => {
             $('#world_info_search').val('');
-            worldInfoFilter.setFilterData(FILTER_TYPES.WORLD_INFO_SEARCH, '', true);
+            getWorldInfoFilter().setFilterData(FILTER_TYPES.WORLD_INFO_SEARCH, '', true);
             const selectedIndex = String($('#world_editor_select').find(':selected').val());
 
             if (selectedIndex === '') {
@@ -7455,7 +7457,7 @@ export function initWorldInfo() {
         });
 
         const debouncedWorldInfoSearch = debounce((searchQuery) => {
-            worldInfoFilter.setFilterData(FILTER_TYPES.WORLD_INFO_SEARCH, searchQuery);
+            getWorldInfoFilter().setFilterData(FILTER_TYPES.WORLD_INFO_SEARCH, searchQuery);
         });
         $('#world_info_search').on('input', function () {
             const searchQuery = $(this).val();

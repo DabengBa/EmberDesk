@@ -51,12 +51,6 @@ describe('interaction performance report helpers', () => {
                 min: null,
                 max: null,
             },
-            groupsRefreshMs: {
-                median: null,
-                p90: null,
-                min: null,
-                max: null,
-            },
             characterPrintMs: {
                 median: null,
                 p90: null,
@@ -663,14 +657,11 @@ describe('interaction performance report helpers', () => {
                 deletedAvatar: 'alpha.png',
                 characterCountBefore: 180,
                 characterCountAfter: 179,
-                groupCountAfter: 0,
                 renderedCharacterCount: 179,
-                renderedGroupCount: 0,
                 metrics: {
                     deleteFlowMs: 120,
                     deleteRequestMs: 12,
                     preDeleteChatLookupMs: 14,
-                    groupsRefreshMs: 3,
                     characterPrintMs: 88,
                     characterPageLoadedLagMs: 5,
                 },
@@ -679,14 +670,11 @@ describe('interaction performance report helpers', () => {
                 deletedAvatar: 'alpha.png',
                 characterCountBefore: 180,
                 characterCountAfter: 179,
-                groupCountAfter: 0,
                 renderedCharacterCount: 179,
-                renderedGroupCount: 0,
                 metrics: {
                     deleteFlowMs: 220,
                     deleteRequestMs: 20,
                     preDeleteChatLookupMs: 18,
-                    groupsRefreshMs: 4,
                     characterPrintMs: 90,
                     characterPageLoadedLagMs: 8,
                 },
@@ -698,9 +686,7 @@ describe('interaction performance report helpers', () => {
             deletedAvatar: 'alpha.png',
             characterCountBefore: 180,
             characterCountAfter: 179,
-            groupCountAfter: 0,
             renderedCharacterCount: 179,
-            renderedGroupCount: 0,
         });
     });
 
@@ -711,14 +697,11 @@ describe('interaction performance report helpers', () => {
                 deletedAvatar: 'alpha.png',
                 characterCountBefore: 180,
                 characterCountAfter: 179,
-                groupCountAfter: 0,
                 renderedCharacterCount: 179,
-                renderedGroupCount: 0,
                 metrics: {
                     deleteFlowMs: 120,
                     deleteRequestMs: 12,
                     preDeleteChatLookupMs: 14,
-                    groupsRefreshMs: 3,
                     characterPrintMs: 88,
                     characterPageLoadedLagMs: 5,
                 },
@@ -729,14 +712,11 @@ describe('interaction performance report helpers', () => {
             deletedAvatar: 'alpha.png',
             characterCountBefore: 180,
             characterCountAfter: 179,
-            groupCountAfter: 0,
             renderedCharacterCount: 179,
-            renderedGroupCount: 0,
             metrics: {
                 deleteFlowMs: 120,
                 deleteRequestMs: 12,
                 preDeleteChatLookupMs: 14,
-                groupsRefreshMs: 3,
                 characterPrintMs: 88,
                 characterPageLoadedLagMs: 5,
             },
@@ -772,7 +752,6 @@ describe('interaction performance report helpers', () => {
         expect(result.normalizedOn).toEqual({
             query: 'Perf',
             renderedCharacterCount: 12,
-            renderedGroupCount: 0,
             firstListItemClickable: false,
             busyCleared: true,
             pageLoaded: true,
@@ -785,7 +764,6 @@ describe('interaction performance report helpers', () => {
             'character_library_first_interactive',
             {
                 renderedCharacterCount: 12,
-                renderedGroupCount: 1,
                 firstListItemClickable: true,
                 busyCleared: false,
                 pageLoaded: true,
@@ -797,7 +775,6 @@ describe('interaction performance report helpers', () => {
         )).toEqual({
             query: '',
             renderedCharacterCount: 12,
-            renderedGroupCount: 1,
             firstListItemClickable: true,
             busyCleared: false,
             pageLoaded: true,
@@ -852,5 +829,22 @@ describe('interaction performance report helpers', () => {
             loadMoreBeforeMesid: 401,
             loadMoreAfterMesid: 301,
         });
+    });
+
+    test('does not expose retired group metrics in interaction reports', () => {
+        const summary = summarizeInteractionSamples([{ timing: { groupsRefreshMs: 4 } }]);
+        expect(summary).not.toHaveProperty('groupsRefreshMs');
+
+        const payload = summarizeScenarioPayload('character_delete_refresh_ui', {
+            characterCountBefore: 2,
+            characterCountAfter: 1,
+            groupCountAfter: 0,
+            renderedCharacterCount: 1,
+            renderedGroupCount: 0,
+            metrics: { groupsRefreshMs: 4 },
+        });
+        expect(payload).not.toHaveProperty('groupCountAfter');
+        expect(payload).not.toHaveProperty('renderedGroupCount');
+        expect(payload.metrics).not.toHaveProperty('groupsRefreshMs');
     });
 });

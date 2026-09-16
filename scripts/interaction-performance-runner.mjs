@@ -1,3 +1,5 @@
+/* global DOMException, DOMRect, Event, HTMLElement, HTMLTextAreaElement, ReadableStream, Response, TextEncoder, URL, clearTimeout, document, fetch, getComputedStyle, requestAnimationFrame, setTimeout */
+
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -705,7 +707,7 @@ async function invokeCharacterLibraryScenario(page, scenarioName) {
             throw new Error('Character list element is unavailable.');
         }
 
-        const rowSelector = '.character_select,.group_select';
+        const rowSelector = '.character_select';
         const nextFrame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
         const withTimeout = (promise, timeoutMs, fallbackValue = null) => Promise.race([
@@ -714,7 +716,6 @@ async function invokeCharacterLibraryScenario(page, scenarioName) {
         ]);
         const countRows = () => ({
             renderedCharacterCount: listElement.querySelectorAll('.character_select').length,
-            renderedGroupCount: listElement.querySelectorAll('.group_select').length,
         });
         const describeCharacterLibraryRenderState = () => {
             const rightPanel = document.body.querySelector(':scope > #top-settings-holder > #rightNavHolder > #right-nav-panel');
@@ -1348,7 +1349,6 @@ async function invokeDeleteRefreshScenario(page, avatar) {
             metrics: {
                 preDeleteChatLookupMs: null,
                 deleteRequestMs: null,
-                groupsRefreshMs: null,
                 characterPrintMs: null,
                 deleteFlowMs: null,
                 removeCharacterFromUIMs: null,
@@ -1361,7 +1361,6 @@ async function invokeDeleteRefreshScenario(page, avatar) {
         }
 
         const characterCountBefore = Array.isArray(context.characters) ? context.characters.length : 0;
-        const groupCountBefore = Array.isArray(context.groups) ? context.groups.length : 0;
         const startedAt = performance.now();
 
         try {
@@ -1379,7 +1378,6 @@ async function invokeDeleteRefreshScenario(page, avatar) {
         const traceMetrics = perfHooks.interactionTrace?.metrics ?? {};
         const listElement = document.querySelector('#rm_print_characters_block');
         const renderedCharacterCount = listElement ? listElement.querySelectorAll('.character_select').length : 0;
-        const renderedGroupCount = listElement ? listElement.querySelectorAll('.group_select').length : 0;
         const lastCharacterPageLoadedAt = pageLoadedEvents.length ? pageLoadedEvents[pageLoadedEvents.length - 1] : null;
         perfHooks.interactionTrace = null;
 
@@ -1391,15 +1389,11 @@ async function invokeDeleteRefreshScenario(page, avatar) {
                 deletedAvatar: targetAvatar,
                 characterCountBefore,
                 characterCountAfter: Array.isArray(context.characters) ? context.characters.length : 0,
-                groupCountBefore,
-                groupCountAfter: Array.isArray(context.groups) ? context.groups.length : 0,
                 renderedCharacterCount,
-                renderedGroupCount,
                 metrics: {
                     deleteFlowMs: traceMetrics.deleteFlowMs ?? browserMs,
                     deleteRequestMs: traceMetrics.deleteRequestMs,
                     preDeleteChatLookupMs: traceMetrics.preDeleteChatLookupMs,
-                    groupsRefreshMs: traceMetrics.groupsRefreshMs,
                     characterPrintMs: traceMetrics.characterPrintMs,
                     removeCharacterFromUIMs: traceMetrics.removeCharacterFromUIMs,
                     characterPageLoadedLagMs: lastCharacterPageLoadedAt === null
@@ -1494,7 +1488,6 @@ function normalizeSample(scenarioName, variant, sample, sampleIndex, sampleCount
             deleteFlowMs: round(sample.payload?.metrics?.deleteFlowMs),
             deleteRequestMs: round(sample.payload?.metrics?.deleteRequestMs),
             preDeleteChatLookupMs: round(sample.payload?.metrics?.preDeleteChatLookupMs),
-            groupsRefreshMs: round(sample.payload?.metrics?.groupsRefreshMs),
             characterPrintMs: round(sample.payload?.metrics?.characterPrintMs),
             characterPageLoadedLagMs: round(metrics.characterPageLoadedLagMs),
             firstListItemVisibleMs: round(metrics.firstListItemVisibleMs),
@@ -1761,14 +1754,13 @@ function renderMarkdownReport(report) {
                 `- Delete flow median: ${scenario.comparison.sqliteOn.deleteFlowMs.median ?? 'n/a'} ms`,
                 `- Delete request median: ${scenario.comparison.sqliteOn.deleteRequestMs.median ?? 'n/a'} ms`,
                 `- Pre-delete chat lookup median: ${scenario.comparison.sqliteOn.preDeleteChatLookupMs.median ?? 'n/a'} ms`,
-                `- Groups refresh median: ${scenario.comparison.sqliteOn.groupsRefreshMs.median ?? 'n/a'} ms`,
                 `- Character print median: ${scenario.comparison.sqliteOn.characterPrintMs.median ?? 'n/a'} ms`,
             ]
             : scenario.scenario.startsWith('character_library_')
                 ? buildCharacterLibraryMetricLines(scenario.comparison.sqliteOn)
-            : scenario.scenario.startsWith('main_chat_')
-                ? buildMainChatMetricLines(scenario.comparison.sqliteOn)
-            : [];
+                : scenario.scenario.startsWith('main_chat_')
+                    ? buildMainChatMetricLines(scenario.comparison.sqliteOn)
+                    : [];
 
         return [
             `## ${scenario.scenario}`,

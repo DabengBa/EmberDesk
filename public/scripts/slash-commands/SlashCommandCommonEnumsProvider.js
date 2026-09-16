@@ -1,6 +1,5 @@
 import { chat_metadata, characters, substituteParams, chat, extension_prompt_roles, extension_prompt_types, name2, neutralCharacterName } from '../../script.js';
 import { extension_settings } from '../extensions.js';
-import { getGroupMembers, groups } from '../group-chats.js';
 import { power_user } from '../power-user.js';
 import { searchCharByName, getTagsList, tags, tag_map } from '../tags.js';
 import { onlyUniqueJson, sortIgnoreCaseAndAccents } from '../utils.js';
@@ -25,7 +24,6 @@ export const enumIcons = {
 
     // Common types
     character: '👤',
-    group: '🧑‍🤝‍🧑',
     persona: '🧙‍♂️',
     qr: 'QR',
     closure: '𝑓',
@@ -188,26 +186,16 @@ export const commonEnumProviders = {
     ],
 
     /**
-     * All possible char entities, like characters and groups. Can be filtered down to just one type.
+     * All possible characters.
      *
-     * @param {('all' | 'character' | 'group')?} [mode='all'] - Which type to return
      * @returns {() => SlashCommandEnumValue[]}
      */
-    characters: (mode = 'all') => () => {
+    characters: () => {
         return [
-            ...['all', 'character'].includes(mode) ? characters.map(char => new SlashCommandEnumValue(char.name, null, enumTypes.name, enumIcons.character)) : [],
-            ...['all', 'group'].includes(mode) ? groups.map(group => new SlashCommandEnumValue(group.name, null, enumTypes.qr, enumIcons.group)) : [],
+            ...characters.map(char => new SlashCommandEnumValue(char.name, null, enumTypes.name, enumIcons.character)),
             ...(name2 === neutralCharacterName) ? [new SlashCommandEnumValue(neutralCharacterName, null, enumTypes.name, '🥸')] : [],
         ];
     },
-
-    /**
-     * All group members of the given group, or default the current active one
-     *
-     * @param {string?} groupId - The id of the group - pass in `undefined` to use the current active group
-     * @returns {() =>SlashCommandEnumValue[]}
-     */
-    groupMembers: (groupId = undefined) => () => getGroupMembers(groupId).map((character, index) => new SlashCommandEnumValue(String(index), character.name, enumTypes.enum, enumIcons.character)),
 
     /**
      * All possible personas
@@ -233,7 +221,7 @@ export const commonEnumProviders = {
     },
 
     /**
-     * All possible tags for a given char/group entity
+     * All possible tags for a given character
      *
      * @param {('all' | 'existing' | 'not-existing')?} [mode='all'] - Which types of tags to show
      * @returns {(executor:SlashCommandExecutor, scope:SlashCommandScope) => SlashCommandEnumValue[]}

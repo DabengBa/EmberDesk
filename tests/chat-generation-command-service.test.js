@@ -69,18 +69,6 @@ describe('chat generation command service', () => {
             },
         ],
         [
-            'visible group chat',
-            { kind: 'submitComposer', mainApi: 'openai', selectedGroup: true },
-            {
-                owner: GENERATION_SERVICE_OWNER,
-                status: GENERATION_COMMAND_STATUSES.SERVICE_OWNED,
-                path: GENERATION_COMMAND_PATHS.GROUP_CHAT,
-                reason: GENERATION_COMMAND_REASONS.GROUP_CHAT,
-                visibility: GENERATION_COMMAND_VISIBILITY.VISIBLE,
-                executable: true,
-            },
-        ],
-        [
             'visible dry run',
             { kind: 'submitComposer', mainApi: 'openai', dryRun: true },
             {
@@ -301,7 +289,6 @@ describe('chat generation command service', () => {
         const fixtures = [
             { kind: 'submitComposer', mainApi: 'openai' },
             { kind: 'submitComposer', mainApi: 'kobold' },
-            { kind: 'submitComposer', mainApi: 'openai', selectedGroup: true },
             { kind: 'submitComposer', mainApi: 'openai', dryRun: true },
             { kind: 'submitComposer', mainApi: 'openai', depth: 2 },
             { kind: 'continueLast', mainApi: 'openai' },
@@ -349,7 +336,6 @@ describe('chat generation command service', () => {
             options,
             dryRun: true,
             mainApi: 'google',
-            selectedGroup: true,
         });
 
         expect(envelope).toMatchObject({
@@ -357,7 +343,6 @@ describe('chat generation command service', () => {
             type: 'normal',
             kind: 'submitComposer',
             mainApi: 'google',
-            selectedGroup: true,
             dryRun: true,
         });
         expect(envelope.options).toBe(options);
@@ -365,7 +350,6 @@ describe('chat generation command service', () => {
             owner: GENERATION_SERVICE_OWNER,
             path: GENERATION_COMMAND_PATHS.NESTED_VISIBLE_GENERATION,
             mainApi: 'google',
-            selectedGroup: true,
             dryRun: true,
             depth: 2,
         });

@@ -130,12 +130,20 @@ describe('character list structure', () => {
         ].forEach(id => expectElementWithId(indexHtml, id));
     });
 
+    test('keeps the character folder filter actionable', () => {
+        const tagsSource = read('public/scripts/tags.js');
+
+        expect(tagsSource).toMatch(/FOLDER: \{ id: '4', sort_order: 3, name: 'Show only folders',[^\n]*action: filterByFolder,[^\n]*icon: 'fa-solid fa-folder-plus', class: 'filterByFolder' \}/);
+        expect(tagsSource).toContain('[ACTIONABLE_TAGS.FOLDER.id, FILTER_TYPES.FOLDER]');
+        expect(tagsSource).not.toContain('ACTIONABLE_TAGS.GROUP');
+        expect(tagsSource).not.toContain('FILTER_TYPES.GROUP');
+    });
+
     test('keeps generated character row selectors and active-state hooks stable', () => {
         const scriptSource = read('public/script.js');
         const rowSource = read('app/components/character-library/CharacterLibraryCharacterRow.tsx');
         const groupRowPath = path.join(repoRoot, 'app/components/character-library/CharacterLibraryGroupRow.tsx');
         expect(fs.existsSync(groupRowPath)).toBe(false);
-        const groupRowSource = '';
         const folderRowSource = read('app/components/character-library/CharacterLibraryFolderRow.tsx');
 
         expect(rowSource).toContain('data-chid={String(model.id)}');
@@ -152,7 +160,7 @@ describe('character list structure', () => {
         expect(scriptSource).toContain('$(`#CharID${chid}`).addClass(\'is_active\')');
 
         const indexHtml = read('public/index.html');
-        expect(indexHtml).toMatch(/<small class="entity_type_badge group_type_badge" data-i18n="Group">Group<\/small>/);
+        expect(indexHtml).not.toContain('group_type_badge');
     });
 
     test('keeps character-library perf-only search measurement hook wired', () => {
@@ -203,14 +211,14 @@ describe('character list structure', () => {
 
         expect(invokeSource).toContain('await perfHooks.openCharacterLibraryForPerf();');
         expect(invokeSource).toContain('normalizeCharacterLibraryDrawerGeometry(rightPanel);');
-        expect(invokeSource).toContain("document.body.querySelector(':scope > #top-settings-holder')");
+        expect(invokeSource).toContain('document.body.querySelector(\':scope > #top-settings-holder\')');
         expect(invokeSource).toContain('canonicalSettingsHolder.append(holder);');
-        expect(invokeSource).toContain("document.body.querySelector(':scope > #top-settings-holder > #rightNavHolder > #right-nav-panel')");
+        expect(invokeSource).toContain('document.body.querySelector(\':scope > #top-settings-holder > #rightNavHolder > #right-nav-panel\')');
         expect(invokeSource).toContain('const characterLibraryDrawer = await showCharacterLibrary();');
-        expect(invokeSource).toContain("listElement = characterLibraryDrawer.querySelector('#rm_print_characters_block');");
+        expect(invokeSource).toContain('listElement = characterLibraryDrawer.querySelector(\'#rm_print_characters_block\');');
         expect(invokeSource.indexOf('normalizeCharacterLibraryDrawerGeometry(rightPanel);'))
             .toBeLessThan(invokeSource.indexOf('await perfHooks.openCharacterLibraryForPerf();'));
-        expect(invokeSource).toContain("rightPanel.classList.contains('openDrawer')");
+        expect(invokeSource).toContain('rightPanel.classList.contains(\'openDrawer\')');
         expect(invokeSource).toContain('await perfHooks.resetCharacterLibraryPanelForPerf();');
         expect(invokeSource).toContain('const restorePromise = printCharactersBounded(true);');
         expect(invokeSource).toContain('const describeCharacterLibraryRenderState = () => {');
@@ -241,8 +249,8 @@ describe('character list structure', () => {
         expect(scriptSource).toContain('Character list container #rm_print_characters_block is missing.');
         expect(scriptSource).toContain('Character Library React build is missing');
         expect(scriptSource).toContain('Legacy list fallback is retired');
-        expect(renderStateSource).toMatch(/const displayCount = pageEntities\.filter\(entity => entity\.type === 'character' \|\| entity\.type === 'group'\)\.length;/);
-        expect(renderStateSource).toMatch(/const hiddenCount = \(totalCharacters \+ totalGroups\) - displayCount;/);
+        expect(renderStateSource).toMatch(/const displayCount = pageEntities\.filter\(entity => entity\.type === 'character'\)\.length;/);
+        expect(renderStateSource).toMatch(/const hiddenCount = totalCharacters - displayCount;/);
         expect(scriptSource).toContain('$(\'#character_search_bar\').val(\'\').trigger(\'input\')');
         expect(scriptSource).toContain('$(\'.rm_tag_filter .clearAllFilters\').trigger(\'click\')');
         expect(statusBlockSource).toContain('className="empty_block_message"');
@@ -288,15 +296,12 @@ describe('character list structure', () => {
         expect(sourcesExampleRule).toContain('overflow-wrap: anywhere');
     });
 
-    test('keeps ordinary character type badges quiet while group badges remain visible', () => {
+    test('keeps ordinary character type badges quiet', () => {
         const styleSource = read('public/style.css');
 
         const characterBadgeRule = styleSource.match(/#rm_print_characters_block \.character_type_badge\s*\{(?<body>[^}]+)\}/)?.groups?.body;
-        const groupBadgeRule = styleSource.match(/#rm_print_characters_block \.group_type_badge\s*\{(?<body>[^}]+)\}/)?.groups?.body;
 
         expect(characterBadgeRule).toContain('display: none');
-        expect(groupBadgeRule).toContain('display: inline-flex');
-        expect(groupBadgeRule).toContain('color: var(--SmartThemeUnderlineColor)');
     });
 
     test('keeps character list pagination state synchronized after page-size changes', () => {
@@ -454,7 +459,6 @@ describe('character list structure', () => {
         expect(indexHtml).toContain('id="bulkSelectionHint"');
         expect(indexHtml).toContain('data-i18n="Click character cards to select"');
         expect(indexHtml).toContain('data-i18n="Character Toolbar URL">URL</span>');
-        expect(indexHtml).toContain('data-i18n="Character Toolbar Group">Group</span>');
         expect(indexHtml).toContain('data-i18n="Character Toolbar Bulk">Bulk</span>');
         expect(indexHtml).toContain('data-i18n="Character Toolbar Sort">Sort</label>');
         expect(indexHtml).toMatch(/id="bulkSelectedCount"[^>]*style="display: none;"[^>]*role="status"/);
@@ -470,13 +474,13 @@ describe('character list structure', () => {
         expect(powerUserSource).toContain('if (!instance) {');
         expect(powerUserSource).not.toContain('$(this).autocomplete(\'widget\')[0].style.display');
         expect(rowSource).toContain('className="bulk_select_checkbox"');
-        expect(rowSource).toContain("role={bulkMode ? 'checkbox' : 'button'}");
+        expect(rowSource).toContain('role={bulkMode ? \'checkbox\' : \'button\'}');
         expect(rowSource).toContain('aria-checked={bulkMode ? selected : undefined}');
         expect(rowSource).toContain('aria-checked={selected}');
         expect(scriptSource).toContain('const pageCharacterIds = currentCharacterListPageEntities');
-        expect(scriptSource).toContain(".filter(entity => entity?.type === 'character')");
+        expect(scriptSource).toContain('.filter(entity => entity?.type === \'character\')');
         expect(scriptSource).toContain('void syncReactCharacterLibraryToolbarState();');
-        expect(scriptSource).not.toContain("document.querySelectorAll('#rm_print_characters_block .character_select')");
+        expect(scriptSource).not.toContain('document.querySelectorAll(\'#rm_print_characters_block .character_select\')');
         expect(overlaySource).toContain('character.setAttribute(\'aria-selected\', \'true\')');
         expect(overlaySource).toContain('character.setAttribute(\'aria-selected\', \'false\')');
         expect(overlaySource).toContain('character.setAttribute(\'aria-checked\', \'true\')');
@@ -502,7 +506,7 @@ describe('character list structure', () => {
         expect(styleSource).toMatch(/#rm_print_characters_block \.character_select\.character_selected/);
         expect(styleSource).toMatch(/#rm_print_characters_block \.character_select\.character_selected::after/);
         expect(zhCnLocale).toContain('"Character Toolbar URL": "URL"');
-        expect(zhCnLocale).toContain('"Character Toolbar Group": "群"');
+        expect(zhCnLocale).not.toContain('"Character Toolbar Group": "群"');
         expect(zhCnLocale).toContain('"Character Toolbar Bulk": "批"');
         expect(zhCnLocale).toContain('"Character Toolbar List": "列"');
         expect(zhCnLocale).toContain('"Character Toolbar Sort": "排"');

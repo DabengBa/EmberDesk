@@ -64,11 +64,6 @@ export class AutoExecuteHandler {
         await this.performAutoExecute(this.getCommands('executeOnChatChange'));
     }
 
-    async handleGroupMemberDraft() {
-        if (!this.checkExecute()) return;
-        await this.performAutoExecute(this.getCommands('executeOnGroupMemberDraft'));
-    }
-
     async handleNewChat() {
         if (!this.checkExecute()) return;
         await this.performAutoExecute(this.getCommands('executeOnNewChat'));

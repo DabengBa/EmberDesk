@@ -106,7 +106,7 @@ test.describe('third-party extension runtime compatibility', () => {
             }
 
             observed.characterRows = document.querySelectorAll(
-                '.character_select, .group_select, .bogus_folder_select',
+                '.character_select, .bogus_folder_select',
             ).length;
 
             const mesRow = document.querySelector('#chat > .mes[mesid]');
@@ -169,7 +169,7 @@ test.describe('third-party extension runtime compatibility', () => {
             if (await characterButton.count()) {
                 await characterButton.click({ timeout: 5_000 }).catch(() => undefined);
             }
-            await expect.poll(async () => page.locator('.character_select, .group_select').count(), {
+            await expect.poll(async () => page.locator('.character_select').count(), {
                 timeout: 20_000,
             }).toBeGreaterThan(0);
         } else {

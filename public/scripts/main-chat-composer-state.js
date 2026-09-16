@@ -1,6 +1,5 @@
 const MAIN_CHAT_COMPOSER_CONTEXTS = new Set([
     'character',
-    'group',
     'assistant',
     'none',
 ]);
@@ -15,7 +14,7 @@ const MAIN_CHAT_COMPOSER_CONTEXTS = new Set([
  * @param {boolean} [input.isFocused=false]
  * @param {boolean} [input.isDisabled=false]
  * @param {boolean} [input.isGenerating=false]
- * @param {'character'|'group'|'assistant'|'none'} [input.activeContext='none']
+ * @param {'character'|'assistant'|'none'} [input.activeContext='none']
  * @returns {object}
  */
 export function getMainChatComposerState({

@@ -52,31 +52,6 @@ import {
 import { scanImportedCharacter, showUnifiedImportConfirm, applyImportChoices, buildSkipAllChoices } from './scripts/import-confirm-dialog.js';
 
 import {
-    groups,
-    selected_group,
-    saveGroupChat,
-    getGroups,
-    generateGroupWrapper,
-    is_group_generating,
-    resetSelectedGroup,
-    select_group_chats,
-    editGroup,
-    setGroupAuthoringMembersDraft,
-    regenerateGroup,
-    group_generation_id,
-    getGroupChat,
-    renameGroupMember,
-    createNewGroupChat,
-    getGroupAvatar,
-    openGroupById,
-    deleteGroupChat,
-    renameGroupChat,
-    importGroupChat,
-    getGroupCharacterCardsLazy,
-    getGroupDepthPrompts,
-} from './scripts/group-chats.js';
-
-import {
     collapseNewlines,
     loadPowerUserSettings,
     playMessageSound,
@@ -203,7 +178,6 @@ import {
     compareTagsForSort,
     initTags,
     applyTagsOnCharacterSelect,
-    applyTagsOnGroupSelect,
     tag_import_setting,
     applyCharacterTagsToMessageDivs,
 } from './scripts/tags.js';
@@ -324,13 +298,7 @@ import {
     getCharacterAuthoringDirtyFields,
     getCharacterAuthoringWriteUrl,
 } from './scripts/character-authoring.js';
-import {
-    mountWorkspacePanelHost,
-    createWorkspacePanelCommandPort,
-    createWorkspacePanelStateChangeHandler,
-    initWorkspacePanelDrawerBridge,
-} from './scripts/workspace-panel-host-controller.js';
-import { unmountReactWorkspacePanel } from './scripts/workspace-panels-react-bridge.js';
+import { mountWorkspacePanelHost, createWorkspacePanelCommandPort, createWorkspacePanelStateChangeHandler, initWorkspacePanelDrawerBridge } from './scripts/workspace-panel-host-controller.js';
 import { registerWorldInfoShellContext } from './scripts/world-info-shell-context.js';
 import { getCharacterDeleteCandidates, removeCharactersFromState, shouldRefreshCharacterAfterEdit } from './scripts/character-list-state.js';
 import {
@@ -427,7 +395,6 @@ export function getWorkspaceReactFeatures() {
             worldInfo: true,
             extensionsHost: true,
             characterAuthoring: true,
-            groupAuthoring: false,
         },
     };
 }
@@ -461,10 +428,7 @@ export function isReactCharacterLibraryPanelEnabled() {
 
 const WORLD_INFO_REACT_HOST_ID = 'emberdesk-react-world-info-panel-host';
 const EXTENSIONS_HOST_REACT_HOST_ID = 'emberdesk-react-extensions-host-panel-host';
-const MAIN_CHAT_MESSAGE_LIST_REACT_HOST_ID = 'emberdesk-react-main-chat-message-list-host';
 const CHARACTER_AUTHORING_REACT_HOST_ID = 'emberdesk-react-character-authoring-panel-host';
-const GROUP_AUTHORING_REACT_HOST_ID = 'emberdesk-react-group-authoring-panel-host';
-let reactGroupAuthoringGroupId = null;
 const LEGACY_SETTINGS_DRAWER_ROUTE_TARGETS = {
     '#ai-config-button > .drawer-toggle': '/settings?tab=providers',
     '#sys-settings-button > .drawer-toggle': '/settings?tab=providers',
@@ -554,10 +518,6 @@ function ensureWorkspaceShellChromeHost() {
 }
 
 function getWorkspaceShellActiveContext() {
-    if (selected_group) {
-        return 'group';
-    }
-
     if (this_chid !== undefined) {
         return 'character';
     }
@@ -567,15 +527,12 @@ function getWorkspaceShellActiveContext() {
 
 function getWorkspaceShellChromeState() {
     const activeContext = getWorkspaceShellActiveContext();
-    const group = selected_group ? groups.find(x => x.id == selected_group) : null;
     const character = this_chid !== undefined ? characters[this_chid] : null;
-    const contextTitle = activeContext === 'group'
-        ? (group?.name || 'Group chat')
-        : activeContext === 'character'
-            ? (character?.name || name2 || 'Character')
-            : activeContext === 'assistant'
-                ? 'EmberDesk'
-                : '';
+    const contextTitle = activeContext === 'character'
+        ? (character?.name || name2 || 'Character')
+        : activeContext === 'assistant'
+            ? 'EmberDesk'
+            : '';
 
     return {
         activeContext,
@@ -655,7 +612,6 @@ function openWorkspaceChildSlotHostImmediate(hostId) {
 function showWorkspaceChildSlotContent(selectedMenuId) {
     const normalizedMenuId = String(selectedMenuId ?? '').replace('#', '');
     const displayModes = {
-        rm_group_chats_block: 'flex',
         rm_api_block: 'grid',
         rm_characters_block: 'flex',
     };
@@ -692,7 +648,6 @@ function getWorkspaceChildSlotHostId(slotKey) {
         characterLibrary: 'right-nav-panel',
         worldInfo: 'WorldInfo',
         extensionsHost: 'rm_extensions_block',
-        groupChats: 'right-nav-panel',
         characterAuthoring: 'right-nav-panel',
     }[slotKey];
 }
@@ -728,16 +683,6 @@ async function openWorkspaceShellCharacterLibrary() {
     return createWorkspaceShellPanelResult('characterLibrary', isReactCharacterLibraryPanelEnabled());
 }
 
-async function openWorkspaceShellGroupChats() {
-    toastr?.warning?.(t`Group chats have been removed from EmberDesk.`);
-    return createWorkspaceShellPanelResult('groupChats', {
-        kind: 'groupChats',
-        mounted: false,
-        reason: 'group-chat-feature-removed',
-        status: 'error',
-    });
-}
-
 async function openWorkspaceShellCharacterAuthoring() {
     openWorkspaceChildSlotHostImmediate('right-nav-panel');
     const hasSelectedCharacter = this_chid !== undefined && characters[this_chid];
@@ -760,8 +705,6 @@ async function activateWorkspaceShellSlot(slotKey) {
             return openWorkspaceShellWorldInfo();
         case 'extensionsHost':
             return openWorkspaceShellExtensions();
-        case 'groupChats':
-            return openWorkspaceShellGroupChats();
         case 'characterAuthoring':
             return openWorkspaceShellCharacterAuthoring();
         default:
@@ -774,7 +717,6 @@ function deactivateWorkspaceShellSlot(slotKey) {
         characterLibrary: 'characterLibrary',
         worldInfo: 'worldInfo',
         extensionsHost: 'extensionsHost',
-        groupChats: 'groupChats',
         characterAuthoring: 'characterAuthoring',
     }[slotKey];
 
@@ -882,7 +824,6 @@ function getWorkspaceShellCommands() {
         openExtensions: openWorkspaceShellExtensions,
         openSettings: () => openWorkspaceSettingsOverlay({ tab: null, panelKind: 'settings' }),
         closeWorkspacePanel,
-        openGroupChats: openWorkspaceShellGroupChats,
         openCharacterAuthoring: openWorkspaceShellCharacterAuthoring,
     };
 }
@@ -1232,10 +1173,6 @@ function getMainChatGenerationControlMessageId(element) {
 }
 
 function getMainChatComposerActiveContext() {
-    if (selected_group) {
-        return 'group';
-    }
-
     if (this_chid !== undefined) {
         return 'character';
     }
@@ -1303,14 +1240,6 @@ function getMainChatGenerationControlBridgeState() {
             continueSurface,
         }),
     };
-}
-
-function isMainChatSlashAutocompleteVisible() {
-    const autocompleteWrap = document.querySelector('.autoComplete-wrap');
-    const autocompleteMenu = document.querySelector('.autoComplete');
-
-    return isMainChatGenerationControlElementVisible(autocompleteWrap)
-        || isMainChatGenerationControlElementVisible(autocompleteMenu);
 }
 
 function getMainChatSlashCommandBridgeState() {
@@ -1832,7 +1761,6 @@ function applyCharacterAuthoringSaveModel(saveModel = {}, { submit = true } = {}
     setAuthoringInputValue('#creator_textarea', fields.creator);
     setAuthoringInputValue('#character_version_textarea', fields.character_version);
     setAuthoringInputValue('#tags_textarea', Array.isArray(fields.tags) ? fields.tags.join(', ') : '');
-    setAuthoringInputValue('#talkativeness_slider', fields.talkativeness);
     setAuthoringInputValue('#depth_prompt_prompt', extensions.depth_prompt?.prompt);
     setAuthoringInputValue('#depth_prompt_depth', extensions.depth_prompt?.depth);
     setAuthoringInputValue('#depth_prompt_role', extensions.depth_prompt?.role);
@@ -1860,7 +1788,7 @@ async function saveCharacterAuthoringFromPayload(saveModel = {}) {
         toastr.error(t`Name is required`);
         throw new Error('Name is required');
     }
-    if (mode === 'create' && (is_group_generating || is_send_press)) {
+    if (mode === 'create' && is_send_press) {
         toastr.error(t`Cannot create characters while generating. Stop the request and try again.`, t`Creation aborted`);
         throw new Error('Creation aborted while generating');
     }
@@ -1956,22 +1884,6 @@ function queueReactCharacterAuthoringRemount() {
     }, 0);
 }
 
-function queueReactGroupAuthoringRemount() {
-    window.setTimeout(() => {
-        void mountReactGroupAuthoringPanel();
-    }, 0);
-}
-
-eventSource.on(event_types.CHARACTER_EDITOR_OPENED, () => {
-    queueReactCharacterAuthoringRemount();
-});
-
-eventSource.on('groupSelected', event => {
-    const groupId = event?.detail?.id;
-    reactGroupAuthoringGroupId = groupId == null ? null : String(groupId);
-    queueReactGroupAuthoringRemount();
-});
-
 function queueReactWorldInfoRemount() {
     if (document.getElementById('WorldInfo')?.classList.contains('openDrawer')) {
         window.setTimeout(() => void mountReactWorldInfoPanel(), 0);
@@ -2059,233 +1971,6 @@ async function mountReactCharacterAuthoringPanel(stateOverrides = undefined) {
         const host = ensureCharacterAuthoringReactHost();
         if (host && !host.querySelector('[data-react-authoring-build-error]')) {
             host.innerHTML = '<div class="react-authoring-panel" data-react-authoring-build-error="true" role="alert">Character Authoring React build is missing or failed to mount. Redeploy the workspace-panels bundle.</div>';
-        }
-    }
-    return result;
-}
-
-function ensureGroupAuthoringReactHost() {
-    const groupPanel = document.getElementById('rm_group_chats_block');
-    if (!groupPanel) {
-        return null;
-    }
-
-    let host = document.getElementById(GROUP_AUTHORING_REACT_HOST_ID);
-    if (host) {
-        return host;
-    }
-
-    host = document.createElement('div');
-    host.id = GROUP_AUTHORING_REACT_HOST_ID;
-    host.className = 'emberdesk-react-authoring-panel-host emberdesk-react-group-authoring-panel-host';
-    groupPanel.prepend(host);
-    return host;
-}
-
-function hideLegacyGroupAuthoringEditor(hidden) {
-    const groupPanel = document.getElementById('rm_group_chats_block');
-    const host = document.getElementById(GROUP_AUTHORING_REACT_HOST_ID);
-    if (!(groupPanel instanceof HTMLElement)) {
-        return;
-    }
-
-    Array.from(groupPanel.children).forEach(child => {
-        if (!(child instanceof HTMLElement) || child === host) {
-            return;
-        }
-
-        child.hidden = hidden;
-        child.setAttribute('aria-hidden', hidden ? 'true' : 'false');
-        child.dataset.legacyGroupAuthoringHiddenByReact = hidden ? 'true' : 'false';
-    });
-}
-
-function getGroupAuthoringReactBridgeState() {
-    const title = String($('#rm_group_chat_name').val() || '').trim();
-    const group = reactGroupAuthoringGroupId
-        ? groups.find(x => x.id == reactGroupAuthoringGroupId)
-        : null;
-    const memberIds = Array.isArray(group?.members) ? [...group.members] : [];
-    const candidates = characters
-        .filter(character => character?.avatar && !memberIds.includes(character.avatar))
-        .map(character => ({
-            id: character.avatar,
-            label: character.name || character.avatar,
-        }));
-    const tagOptions = tags
-        .map(tag => ({ id: String(tag.id), label: String(tag.name ?? '') }))
-        .filter(tag => tag.id && tag.label)
-        .sort((left, right) => left.label.localeCompare(right.label));
-    return {
-        mode: group ? 'edit' : 'create',
-        title: title || (group ? 'Group Authoring' : 'New Group'),
-        subtitle: 'Group draft',
-        dirty: false,
-        draft: {
-            id: group?.id || '',
-            name: title,
-            avatar_url: String($('#group_avatar_preview img').attr('src') || group?.avatar_url || ''),
-            members: memberIds,
-            disabled_members: Array.isArray(group?.disabled_members) ? [...group.disabled_members] : [],
-            fav: Boolean(group?.fav),
-            allow_self_responses: Boolean($('#rm_group_allow_self_responses').prop('checked')),
-            hideMutedSprites: Boolean($('#rm_group_hidemutedsprites').prop('checked')),
-            activation_strategy: Number($('#rm_group_activation_strategy').val()),
-            generation_mode: Number($('#rm_group_generation_mode').val()),
-            auto_mode_delay: Number($('#rm_group_automode_delay').val()),
-            generation_mode_join_prefix: String($('#rm_group_generation_mode_join_prefix').val() || ''),
-            generation_mode_join_suffix: String($('#rm_group_generation_mode_join_suffix').val() || ''),
-            tagIds: group?.id && Array.isArray(tag_map[group.id]) ? [...tag_map[group.id]] : [],
-        },
-        candidates,
-        tagOptions,
-        unsupportedFields: [],
-    };
-}
-
-async function applyGroupAuthoringSaveModel(saveModel = {}) {
-    const members = Array.isArray(saveModel.members) ? [...saveModel.members] : [];
-    const tagIds = Array.isArray(saveModel.tag_ids) ? [...saveModel.tag_ids] : [];
-    const groupId = reactGroupAuthoringGroupId;
-    if (members.length === 0) {
-        toastr.error(t`Add at least one member`);
-        throw new Error('Group requires at least one member');
-    }
-
-    // Mirror values into remaining legacy controls for non-React consumers without clicking submit.
-    setAuthoringInputValue('#rm_group_chat_name', saveModel.name);
-    $('#rm_group_allow_self_responses').prop('checked', Boolean(saveModel.allow_self_responses));
-    $('#rm_group_hidemutedsprites').prop('checked', Boolean(saveModel.hideMutedSprites));
-    $('#rm_group_activation_strategy').val(String(saveModel.activation_strategy ?? 0));
-    $('#rm_group_generation_mode').val(String(saveModel.generation_mode ?? 0));
-    setAuthoringInputValue('#rm_group_automode_delay', saveModel.auto_mode_delay);
-    setAuthoringInputValue('#rm_group_generation_mode_join_prefix', saveModel.generation_mode_join_prefix);
-    setAuthoringInputValue('#rm_group_generation_mode_join_suffix', saveModel.generation_mode_join_suffix);
-    setGroupAuthoringMembersDraft(members, groupId);
-
-    if (groupId) {
-        const group = groups.find(x => x.id == groupId);
-        if (!group) {
-            throw new Error('Selected group not found');
-        }
-
-        const previousGroup = structuredClone(group);
-        group.name = String(saveModel.name || group.name || '');
-        group.avatar_url = String(saveModel.avatar_url || group.avatar_url || '');
-        group.members = members;
-        group.allow_self_responses = Boolean(saveModel.allow_self_responses);
-        group.hideMutedSprites = Boolean(saveModel.hideMutedSprites);
-        group.activation_strategy = Number(saveModel.activation_strategy ?? group.activation_strategy ?? 0);
-        group.generation_mode = Number(saveModel.generation_mode ?? group.generation_mode ?? 0);
-        group.auto_mode_delay = Number(saveModel.auto_mode_delay ?? group.auto_mode_delay ?? 5);
-        group.generation_mode_join_prefix = String(saveModel.generation_mode_join_prefix || '');
-        group.generation_mode_join_suffix = String(saveModel.generation_mode_join_suffix || '');
-        group.fav = Boolean(saveModel.fav);
-        group.disabled_members = Array.isArray(saveModel.disabled_members) ? [...saveModel.disabled_members] : [];
-        try {
-            await editGroup(groupId, true, true);
-        } catch (error) {
-            Object.assign(group, previousGroup);
-            throw error;
-        }
-        tag_map[groupId] = tagIds;
-        saveSettingsDebounced();
-        return { ok: true, mode: 'edit', id: groupId, group };
-    }
-
-    let name = String(saveModel.name || '').trim();
-    if (!name) {
-        const memberNames = characters.filter(x => members.includes(x.avatar)).map(x => x.name).join(', ');
-        name = t`Group: ${memberNames}`;
-    }
-
-    const groupCreateModel = {
-        name,
-        members,
-        avatar_url: String(saveModel.avatar_url || default_avatar),
-        allow_self_responses: Boolean(saveModel.allow_self_responses),
-        hideMutedSprites: Boolean(saveModel.hideMutedSprites),
-        activation_strategy: Number(saveModel.activation_strategy ?? 0),
-        generation_mode: Number(saveModel.generation_mode ?? 0),
-        disabled_members: Array.isArray(saveModel.disabled_members) ? [...saveModel.disabled_members] : [],
-        fav: Boolean(saveModel.fav),
-        chat_id: humanizedDateTime(),
-        chats: [],
-        auto_mode_delay: Number(saveModel.auto_mode_delay ?? 5),
-        generation_mode_join_prefix: String(saveModel.generation_mode_join_prefix || ''),
-        generation_mode_join_suffix: String(saveModel.generation_mode_join_suffix || ''),
-    };
-    groupCreateModel.chats = [groupCreateModel.chat_id];
-
-    const createGroupResponse = await fetch('/api/groups/create', {
-        method: 'POST',
-        headers: getRequestHeaders(),
-        body: JSON.stringify(groupCreateModel),
-    });
-    if (!createGroupResponse.ok) {
-        toastr.error(t`Failed to create group`);
-        throw new Error(`Group create failed with status ${createGroupResponse.status}`);
-    }
-
-    const data = await createGroupResponse.json();
-    tag_map[data.id] = tagIds;
-    saveSettingsDebounced();
-    await getCharacters();
-    await getGroups();
-    await printCharacters(true);
-    select_rm_info('group_create', data.id);
-    return { ok: true, mode: 'create', id: data.id, group: data };
-}
-
-function getGroupAuthoringReactCommands() {
-    return createWorkspacePanelCommandPort({
-        commands: {
-            saveGroupAuthoring: payload => applyGroupAuthoringSaveModel(payload),
-            cancelAuthoring: () => {
-                // Remount after the click completes so the controlled draft resets without
-                // blocking the browser event loop.
-                window.setTimeout(async () => {
-                    await unmountReactWorkspacePanel('groupAuthoring');
-                    await mountReactGroupAuthoringPanel();
-                }, 0);
-                return false;
-            },
-            deleteAuthoring: () => {
-                // Keep legacy host hidden; delete handler still uses the existing confirmation control.
-                hideLegacyGroupAuthoringEditor(true);
-                $('#rm_group_delete').trigger('click');
-                return false;
-            },
-        },
-        shouldRemount(commandResult, commandName) {
-            return commandName !== 'cancelAuthoring' && commandName !== 'deleteAuthoring' && commandResult !== false;
-        },
-        shouldRemountOnError() {
-            // Keep the React draft available for an actionable retry.
-            return false;
-        },
-        remount: () => mountReactGroupAuthoringPanel(),
-    });
-}
-
-async function mountReactGroupAuthoringPanel() {
-    const result = await mountWorkspacePanelHost({
-        kind: 'groupAuthoring',
-        ensureContainer: ensureGroupAuthoringReactHost,
-        getState: () => getGroupAuthoringReactBridgeState(),
-        commands: getGroupAuthoringReactCommands(),
-        runtime: reactRuntimePort,
-        features: getWorkspaceReactFeatures(),
-        onDisabled() {
-            hideLegacyGroupAuthoringEditor(true);
-        },
-    });
-
-    hideLegacyGroupAuthoringEditor(true);
-    if (!result?.mounted) {
-        const host = ensureGroupAuthoringReactHost();
-        if (host && !host.querySelector('[data-react-authoring-build-error]')) {
-            host.innerHTML = '<div class="react-authoring-panel" data-react-authoring-build-error="true" role="alert">Group Authoring React build is missing or failed to mount. Redeploy the workspace-panels bundle.</div>';
         }
     }
     return result;
@@ -3317,17 +3002,10 @@ function hideLegacyCharacterLibraryToolbarChrome() {
     document.getElementById('rm_characters_block')?.classList.add('react-character-library-toolbar-active');
 }
 
-function showLegacyCharacterLibraryToolbarChrome() {
-    document.getElementById('rm_characters_block')?.classList.remove('react-character-library-toolbar-active');
-}
-
 function getReactCharacterLibraryPanelBridge() {
     return globalThis.__emberDeskCharacterLibraryPanelBridge ??= {
         onSelectCharacter(id) {
             void selectCharacterById(Number(id));
-        },
-        onSelectGroup(id) {
-            void openGroupById(String(id));
         },
         onOpenFolder(id) {
             chooseBogusFolder($('#rm_print_characters_block'), String(id));
@@ -3465,23 +3143,6 @@ function getCharacterLibraryEntityTags(entityId) {
 
 function enrichCharacterLibraryPageEntities(pageEntities) {
     return (Array.isArray(pageEntities) ? pageEntities : []).map(entity => {
-        if (entity?.type === 'group' && entity.item) {
-            const members = Array.isArray(entity.item.members) ? entity.item.members : [];
-            const memberNames = [];
-            for (const member of members) {
-                const character = characters.find(x => x.avatar === member || x.name === member);
-                if (character?.name) {
-                    memberNames.push(character.name);
-                }
-            }
-            return {
-                ...entity,
-                memberNames,
-                memberCount: memberNames.length,
-                avatarHtml: getGroupAvatar(entity.item)?.[0]?.outerHTML ?? null,
-                tags: getCharacterLibraryEntityTags(entity.id),
-            };
-        }
         if (entity?.type === 'tag' && entity.item) {
             const folderType = entity.item.folder_type;
             return {
@@ -3544,7 +3205,6 @@ function createCharacterLibraryPanelStateSnapshot({ listElement, pageEntities, r
         bulkMode,
         selectedCharacterIds,
         activeCharacterId: this_chid,
-        activeGroupId: selected_group,
     };
 }
 
@@ -3643,7 +3303,6 @@ export async function syncReactCharacterLibraryToolbarState() {
                         pageEntities,
                         includeBackBlock: Boolean(power_user?.bogus_folders && typeof isBogusFolderOpen === 'function' && isBogusFolderOpen()),
                         totalCharacters: Array.isArray(characters) ? characters.length : 0,
-                        totalGroups: Array.isArray(groups) ? groups.length : 0,
                         hasActiveFilter: Boolean(entitiesFilter?.hasAnyFilter?.()),
                     }),
                     currentPage: getCharacterListCurrentPage(),
@@ -4104,14 +3763,11 @@ export function reloadMarkdownProcessor() {
 }
 
 export function getCurrentChatId() {
-    if (selected_group) {
-        return groups.find(x => x.id == selected_group)?.chat_id;
-    } else if (this_chid !== undefined) {
+    if (this_chid !== undefined) {
         return characters[this_chid]?.chat;
     }
 }
 
-export const talkativeness_default = 0.5;
 export const depth_prompt_depth_default = 4;
 export const depth_prompt_role_default = 'system';
 const per_page_default = 50;
@@ -4120,7 +3776,7 @@ var is_advanced_char_open = false;
 
 /**
  * The type of the right menu
- * @typedef {'characters' | 'character_edit' | 'create' | 'group_edit' | 'group_create' | '' } MenuType
+ * @typedef {'characters' | 'character_edit' | 'create' | '' } MenuType
  */
 
 /**
@@ -4148,7 +3804,6 @@ export let create_save = {
     scenario: '',
     mes_example: '',
     world: '',
-    talkativeness: talkativeness_default,
     alternate_greetings: [],
     depth_prompt_prompt: '',
     depth_prompt_depth: depth_prompt_depth_default,
@@ -4166,7 +3821,7 @@ let chat_file_for_del = '';
 export let online_status = 'no_connection';
 
 export let is_send_press = false; //Send generation
-export const isGenerating = () => (is_send_press || is_group_generating);
+export const isGenerating = () => is_send_press;
 
 let this_del_mes = -1;
 
@@ -4253,8 +3908,6 @@ export { getRequestHeaders } from './scripts/request-context.js';
 
 /** The tag of the active character. (NOT the id) */
 export let active_character = '';
-/** The tag of the active group. (Coincidentally also the id) */
-export let active_group = '';
 
 export const entitiesFilter = new FilterHelper(printCharactersDebounced);
 
@@ -4448,20 +4101,10 @@ export function setAnimationDuration(ms = null) {
 
 /**
  * Sets the currently active character
- * @param {object|number|string} [entityOrKey] - An entity with id property (character, group, tag), or directly an id or tag key. If not provided, the active character is reset to `null`.
+ * @param {object|number|string} [entityOrKey] - An entity with id property (character or tag), or directly an id or tag key. If not provided, the active character is reset to `null`.
  */
 export function setActiveCharacter(entityOrKey) {
     active_character = entityOrKey ? getTagKeyForEntity(entityOrKey) : null;
-    if (active_character) active_group = null;
-}
-
-/**
- * Sets the currently active group.
- * @param {object|number|string} [entityOrKey] - An entity with id property (character, group, tag), or directly an id or tag key. If not provided, the active group is reset to `null`.
- */
-export function setActiveGroup(_entityOrKey) {
-    // Group chat retirement: never persist or restore an active group.
-    active_group = null;
 }
 
 export function startStatusLoading() {
@@ -4482,8 +4125,8 @@ export function resultCheckStatus() {
 /**
  * Switches the currently selected character to the one with the given ID. (character index, not the character key!)
  *
- * If the character ID doesn't exist, if the chat is being saved, or if a group is being generated, this function does nothing.
- * If the character is different from the currently selected one, it will clear the chat and reset any selected character or group.
+ * If the character ID doesn't exist or if the chat is being saved, this function does nothing.
+ * If the character is different from the currently selected one, it will clear the chat and reset the selected character.
  * @param {number} id The ID of the character to switch to.
  * @param {object} [options] Options for the switch.
  * @param {boolean} [options.switchMenu=true] Whether to switch the right menu to the character edit menu if the character is already selected.
@@ -4499,17 +4142,12 @@ export async function selectCharacterById(id, { switchMenu = true } = {}) {
         return;
     }
 
-    if (selected_group && is_group_generating) {
-        return;
-    }
-
-    if (selected_group || String(this_chid) !== String(id)) {
+    if (String(this_chid) !== String(id)) {
         //if clicked on a different character from what was currently selected
         if (!is_send_press) {
             persistMainChatMessageListScrollSnapshotBeforeClear();
             setCharacterId(undefined);
             setCharacterName('');
-            resetSelectedGroup();
             await clearChat({ clearData: true });
             cancelTtsPlay();
             this_edit_mes_id = undefined;
@@ -4610,12 +4248,9 @@ export async function printCharacters(fullRefresh = false, { allowDuringCharacte
 
     // We are actually always reprinting filters, as it "doesn't hurt", and this way they are always up to date
     printTagFilters(tag_filter_type.character);
-    printTagFilters(tag_filter_type.group_members_list);
-    printTagFilters(tag_filter_type.group_candidates_list);
 
-    // We are also always reprinting the lists on character/group edit window, as these ones doesn't get updated otherwise
+    // Keep character editing filters in sync before rendering the list.
     applyTagsOnCharacterSelect();
-    applyTagsOnGroupSelect();
 
     const entitySnapshot = createCharacterListEntitySnapshot(getEntitiesList({ doFilter: true }));
     const entities = entitySnapshot.entities;
@@ -4683,7 +4318,6 @@ async function renderCharacterListPage(data, { fullRefresh = false } = {}) {
         pageEntities: data,
         includeBackBlock: power_user.bogus_folders && isBogusFolderOpen(),
         totalCharacters: characters.length,
-        totalGroups: groups.length,
         hasActiveFilter: entitiesFilter.hasAnyFilter(),
     });
     if (!listElement) {
@@ -4835,7 +4469,6 @@ async function reconcileCharacterListAfterDelete(options) {
             pageEntities: plan.pageEntities,
             includeBackBlock: false,
             totalCharacters: characters.length,
-            totalGroups: groups.length,
             hasActiveFilter,
         });
         const rendered = await renderCharacterListPageReact(createCharacterLibraryPanelStateSnapshot({
@@ -4886,9 +4519,9 @@ function verifyCharactersSearchSortRule() {
 
 /**
  * @typedef {object} Entity - Object representing a display entity
- * @property {Character|Group|import('./scripts/tags.js').Tag|*} item - The item
+ * @property {Character|import('./scripts/tags.js').Tag|*} item - The item
  * @property {string|number} id - The id
- * @property {'character'|'group'|'tag'} type - The type of this entity (character, group, tag)
+ * @property {'character'|'tag'} type - The type of this entity (character, tag)
  * @property {Entity[]?} [entities=null] - An optional list of entities relevant for this item
  * @property {number?} [hidden=null] - An optional number representing how many hidden entities this entity contains
  * @property {boolean?} [isUseless=null] - Specifies if the entity is useless (not relevant, but should still be displayed for consistency) and should be displayed greyed out
@@ -4903,16 +4536,6 @@ function verifyCharactersSearchSortRule() {
  */
 export function characterToEntity(character, id) {
     return { item: character, id, type: 'character' };
-}
-
-/**
- * Converts the given group to its entity representation
- *
- * @param {Group} group - The group
- * @returns {Entity} The entity for this group
- */
-export function groupToEntity(group) {
-    return { item: group, id: group.id, type: 'group' };
 }
 
 /**
@@ -5137,7 +4760,6 @@ export async function getCharacters() {
             }
         }
 
-        await getGroups();
         await printCharacters(true);
     } catch (error) {
         console.error('Failed to fetch characters:', error);
@@ -5888,9 +5510,7 @@ export async function reloadCurrentChatUnsafe() {
     preserveNeutralChat();
     await clearChat({ clearData: true });
 
-    if (selected_group) {
-        await getGroupChat(selected_group, true);
-    } else if (this_chid !== undefined) {
+    if (this_chid !== undefined) {
         await getChat();
     } else {
         resetChatState();
@@ -5926,7 +5546,6 @@ export async function sendTextareaMessage() {
     if (power_user.continue_on_send &&
         !hasPendingFileAttachment() &&
         !textareaText &&
-        !selected_group &&
         chat.length &&
         !lastMessage.is_user &&
         !lastMessage.is_system
@@ -5934,7 +5553,7 @@ export async function sendTextareaMessage() {
         generateType = 'continue';
     }
 
-    if (textareaText && !selected_group && this_chid === undefined && name2 !== neutralCharacterName) {
+    if (textareaText && this_chid === undefined && name2 !== neutralCharacterName) {
         await newAssistantChat({ temporary: false });
     }
 
@@ -6654,15 +6273,14 @@ export function addCopyToCodeBlocks(messageElement) {
 }
 
 /**
- * Shows or hides the Prompt display button
+ * Shows or hides the Prompt display button.
  * @param {ChatMessage} message Message object
  * @param {object} options Options
  * @param {number} [options.messageId] Message ID
  * @param {JQuery<HTMLElement>} [options.messageElement] Message element
- * @return {void}
+ * @returns {void}
  */
 function updateMessageItemizedPromptButton(message, { messageId = chat.indexOf(message), messageElement = chatElement.find(`.mes[mesid="${messageId}"]`) }) {
-    //if we have itemized messages, and the array isn't null..
     if (!message.is_user && Array.isArray(itemizedPrompts) && itemizedPrompts.length > 0) {
         const itemizedPrompt = itemizedPrompts.find(x => Number(x.mesId) === Number(messageId));
         if (itemizedPrompt) {
@@ -6678,7 +6296,7 @@ function updateMessageItemizedPromptButton(message, { messageId = chat.indexOf(m
  * @param {number} [options.messageId] Message ID
  * @returns {string} Formatted message HTML
  */
-function getMessageTextHTML(message, { messageId = chat.indexOf(message) }) {
+export function getMessageTextHTML(message, { messageId = chat.indexOf(message) }) {
     return buildChatMessageRichBody(message, { messageId }).messageHtml;
 }
 
@@ -7034,50 +6652,11 @@ export function substituteParamsLegacy(content, _name1, _name2, _original, _grou
     }
 
     const getGroupValue = (includeMuted) => {
-        if (typeof _group === 'string') {
-            return _group;
-        }
-
-        if (selected_group) {
-            const members = groups.find(x => x.id === selected_group)?.members;
-            /** @type {string[]} */
-            const disabledMembers = groups.find(x => x.id === selected_group)?.disabled_members ?? [];
-            const isMuted = x => includeMuted ? true : !disabledMembers.includes(x);
-            const names = Array.isArray(members)
-                ? members.filter(isMuted).map(m => characters.find(c => c.avatar === m)?.name).filter(Boolean).join(', ')
-                : '';
-            return names;
-        } else {
-            return _name2 ?? name2;
-        }
+        void includeMuted;
+        return typeof _group === 'string' ? _group : (_name2 ?? name2);
     };
 
-    const getNotCharValue = () => {
-        const currentUser = _name1 ?? name1;
-        const currentSpeaker = _name2 ?? name2;
-
-        // Single character chat
-        if (!selected_group) {
-            return currentUser;
-        }
-
-        // Group chat
-        const members = groups.find(x => x.id === selected_group)?.members;
-
-        if (!Array.isArray(members)) {
-            return currentUser;
-        }
-
-        const memberNames = members
-            .map(m => characters.find(c => c.avatar === m)?.name)
-            .filter(Boolean); // Filter out any null/undefined names
-
-        // Filter out the current speaker and add the user
-        const otherMembers = memberNames.filter(name => name !== currentSpeaker);
-        otherMembers.push(currentUser);
-
-        return otherMembers.join(', ');
-    };
+    const getNotCharValue = () => _name1 ?? name1;
 
     if (_replaceCharacterCard) {
         const fields = getCharacterCardFields();
@@ -7198,19 +6777,6 @@ export function getStoppingStrings(isImpersonate, isContinue, api = main_api) {
         if (isContinue && Array.isArray(chat) && chat[chat.length - 1]?.is_user) {
             result.push(charString);
         }
-
-        // Add group members as stopping strings if generating for a specific group member or user. (Allow slash commands to work around name stopping string restrictions)
-        if (selected_group && (name2 || isImpersonate)) {
-            const group = groups.find(x => x.id === selected_group);
-
-            if (group && Array.isArray(group.members)) {
-                const names = group.members
-                    .map(x => characters.find(y => y.avatar == x))
-                    .filter(x => x && x.name && x.name !== name2)
-                    .map(x => `\n${x.name}:`);
-                result.push(...names);
-            }
-        }
     }
 
     result.push(...getInstructStoppingSequences());
@@ -7232,7 +6798,6 @@ export function getStoppingStrings(isImpersonate, isContinue, api = main_api) {
  * @prop {string} [quietImage] Image to use for the quiet prompt
  * @prop {string} [quietName] Name to use for the quiet prompt (defaults to "System:")
  * @prop {number} [responseLength] Maximum response length. If unset, the global default value is used.
- * @prop {number} [forceChId] Character ID to use for this generation run. Works in groups only.
  * @prop {object} [jsonSchema] JSON schema to use for the structured generation. Usually requires a special instruction.
  * @prop {boolean} [backgroundGeneration] Whether this quiet request is acting as a background helper flow.
  * @prop {boolean} [removeReasoning] Parses and removes the reasoning block according to reasoning format preferences
@@ -7240,10 +6805,10 @@ export function getStoppingStrings(isImpersonate, isContinue, api = main_api) {
  * @param {GenerateQuietPromptParams} params Parameters for the quiet prompt generation
  * @returns {Promise<string>} Generated text. If using structured output, will contain a serialized JSON object.
  */
-export async function generateQuietPrompt({ quietPrompt = '', quietToLoud = false, skipWIAN = false, quietImage = null, quietName = null, responseLength = null, forceChId = null, jsonSchema = null, backgroundGeneration = false, removeReasoning = true, trimToSentence = false } = {}) {
+export async function generateQuietPrompt({ quietPrompt = '', quietToLoud = false, skipWIAN = false, quietImage = null, quietName = null, responseLength = null, jsonSchema = null, backgroundGeneration = false, removeReasoning = true, trimToSentence = false } = {}) {
     if (arguments.length > 0 && typeof arguments[0] !== 'object') {
         console.trace('generateQuietPrompt called with positional arguments. Please use an object instead.');
-        [quietPrompt, quietToLoud, skipWIAN, quietImage, quietName, responseLength, forceChId, jsonSchema] = arguments;
+        [quietPrompt, quietToLoud, skipWIAN, quietImage, quietName, responseLength, jsonSchema] = arguments;
     }
 
     const responseLengthCustomized = typeof responseLength === 'number' && responseLength > 0;
@@ -7274,7 +6839,6 @@ export async function generateQuietPrompt({ quietPrompt = '', quietToLoud = fals
             force_name2: true,
             quietImage: quietImage ?? null,
             quietName: quietName ?? null,
-            force_chid: forceChId ?? null,
             jsonSchema: jsonSchema ?? null,
         };
         rememberMainChatQuietTransportSnapshot({
@@ -7353,44 +6917,6 @@ export function extractMessageBias(message) {
     } catch {
         return '';
     }
-}
-
-/**
- * Removes impersonated group member lines from the group member messages.
- * Doesn't do anything if group reply trimming is disabled.
- * @param {string} getMessage Group message
- * @returns Cleaned-up group message
- */
-function cleanGroupMessage(getMessage) {
-    if (power_user.disable_group_trimming) {
-        return getMessage;
-    }
-
-    const group = groups.find((x) => x.id == selected_group);
-
-    if (group && Array.isArray(group.members) && group.members) {
-        for (let member of group.members) {
-            const character = characters.find(x => x.avatar == member);
-
-            if (!character) {
-                continue;
-            }
-
-            const name = character.name;
-
-            // Skip current speaker.
-            if (name === name2) {
-                continue;
-            }
-
-            const regex = new RegExp(`(^|\n)${escapeRegex(name)}:`);
-            const nameMatch = getMessage.match(regex);
-            if (nameMatch) {
-                getMessage = getMessage.substring(0, nameMatch.index);
-            }
-        }
-    }
-    return getMessage;
 }
 
 function addPersonaDescriptionExtensionPrompt() {
@@ -7596,11 +7122,6 @@ export function getCharacterCardFieldsLazy({ chid = undefined } = {}) {
     const currentChid = chid ?? this_chid;
     const character = characters[currentChid];
 
-    // For group chats, we need to check if group cards should be used
-    const useGroupCards = selected_group && character;
-    const groupCardsLazy = useGroupCards ? getGroupCharacterCardsLazy(selected_group, Number(currentChid)) : null;
-
-    /** @type {Record<string, () => string|string[]>} */
     const resolvers = {
         persona: () => baseChatReplace(power_user.persona_description?.trim()),
         system: () => {
@@ -7621,25 +7142,20 @@ export function getCharacterCardFieldsLazy({ chid = undefined } = {}) {
             if (!character) return '';
             return baseChatReplace(character.data?.creator_notes?.trim());
         },
-        // These four fields may be overridden by group cards
         description: () => {
-            if (groupCardsLazy) return groupCardsLazy.description;
             if (!character) return '';
             return baseChatReplace(character.description?.trim());
         },
         personality: () => {
-            if (groupCardsLazy) return groupCardsLazy.personality;
             if (!character) return '';
             return baseChatReplace(character.personality?.trim());
         },
         scenario: () => {
-            if (groupCardsLazy) return groupCardsLazy.scenario;
             if (!character) return '';
             const scenarioText = chat_metadata.scenario || character.scenario || '';
             return baseChatReplace(scenarioText.trim());
         },
         mesExamples: () => {
-            if (groupCardsLazy) return groupCardsLazy.mesExamples;
             if (!character) return '';
             const exampleDialog = chat_metadata.mes_example || character.mes_example || '';
             return baseChatReplace(exampleDialog.trim());
@@ -8461,12 +7977,11 @@ function removeLastMessage() {
  * @property {boolean} [returnInvalid] If true, a string that can't be parsed as a JSON will be returned as is, instead of an empty object.
  *
  * @typedef {object} GenerateOptions
- * @property {boolean} [automatic_trigger] If the generation was triggered automatically (e.g. group auto mode).
+ * @property {boolean} [automatic_trigger] If the generation was triggered automatically.
  * @property {boolean} [force_name2] If a char name should be forced to add to the prompt's last line (Text Completion, non-Instruct only).
  * @property {string} [quiet_prompt] A system instruction to use for the quiet prompt.
  * @property {boolean} [quietToLoud] Whether the system instruction should be sent in background (quiet) or a foreground (loud) mode.
  * @property {boolean} [skipWIAN] Skip adding World Info and Author's Note to the prompt.
- * @property {number} [force_chid] Force character ID to use for the generation. Only works in groups.
  * @property {AbortSignal} [signal] Abort signal to cancel the generation. If not provided, will create a new AbortController.
  * @property {string} [quietImage] Image URL to use for the quiet prompt (defaults to empty string)
  * @property {string} [quietName] Name to use for the quiet prompt (defaults to "System:")
@@ -8488,7 +8003,6 @@ export async function Generate(type, options = {}, dryRun = false) {
         options,
         dryRun,
         mainApi: main_api,
-        selectedGroup: Boolean(selected_group),
     });
     return executeGenerationRequestInShell(generationEnvelope);
 }
@@ -8505,7 +8019,6 @@ async function executeGenerationRequestInShell(generationEnvelope) {
         quiet_prompt,
         quietToLoud,
         skipWIAN,
-        force_chid,
         signal,
         quietImage,
         quietName,
@@ -8520,7 +8033,7 @@ async function executeGenerationRequestInShell(generationEnvelope) {
     await unshallowCharacter(this_chid);
 
     // Occurs every time, even if the generation is aborted due to slash commands execution
-    await eventSource.emit(event_types.GENERATION_STARTED, type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, force_chid, signal, quietImage }, dryRun);
+    await eventSource.emit(event_types.GENERATION_STARTED, type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, signal, quietImage }, dryRun);
 
     // Don't recreate abort controller if signal is passed
     if (!(abortController && signal)) {
@@ -8542,7 +8055,7 @@ async function executeGenerationRequestInShell(generationEnvelope) {
     }
 
     // Occurs only if the generation is not aborted due to slash commands execution
-    await eventSource.emit(event_types.GENERATION_AFTER_COMMANDS, type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, force_chid, signal, quietImage }, dryRun);
+    await eventSource.emit(event_types.GENERATION_AFTER_COMMANDS, type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, signal, quietImage }, dryRun);
 
     if (!dryRun) {
         // Ping server to make sure it is still alive
@@ -8560,14 +8073,6 @@ async function executeGenerationRequestInShell(generationEnvelope) {
         chat_metadata.tainted = true;
     }
 
-    if (selected_group) {
-        console.warn('Group chat generation is retired');
-        if (!dryRun) {
-            toastr?.error?.(t`Group chats have been removed from EmberDesk.`);
-            unblockGeneration?.(type);
-        }
-        return Promise.resolve();
-    }
     //#########QUIET PROMPT STUFF##############
     // process quiet prompt params
     if (quiet_prompt) {
@@ -8661,19 +8166,10 @@ async function executeGenerationRequestInShell(generationEnvelope) {
 
     // Depth prompt (character-specific A/N)
     removeDepthPrompts();
-    const groupDepthPrompts = getGroupDepthPrompts(selected_group, Number(this_chid));
-
-    if (selected_group && Array.isArray(groupDepthPrompts) && groupDepthPrompts.length > 0) {
-        groupDepthPrompts.forEach((value, index) => {
-            const role = getExtensionPromptRoleByName(value.role);
-            setExtensionPrompt(inject_ids.DEPTH_PROMPT_INDEX(index), value.text, extension_prompt_types.IN_CHAT, value.depth, extension_settings.note.allowWIScan, role);
-        });
-    } else {
-        const depthPromptText = charDepthPrompt || '';
-        const depthPromptDepth = characters[this_chid]?.data?.extensions?.depth_prompt?.depth ?? depth_prompt_depth_default;
-        const depthPromptRole = getExtensionPromptRoleByName(characters[this_chid]?.data?.extensions?.depth_prompt?.role ?? depth_prompt_role_default);
-        setExtensionPrompt(inject_ids.DEPTH_PROMPT, depthPromptText, extension_prompt_types.IN_CHAT, depthPromptDepth, extension_settings.note.allowWIScan, depthPromptRole);
-    }
+    const depthPromptText = charDepthPrompt || '';
+    const depthPromptDepth = characters[this_chid]?.data?.extensions?.depth_prompt?.depth ?? depth_prompt_depth_default;
+    const depthPromptRole = getExtensionPromptRoleByName(characters[this_chid]?.data?.extensions?.depth_prompt?.role ?? depth_prompt_role_default);
+    setExtensionPrompt(inject_ids.DEPTH_PROMPT, depthPromptText, extension_prompt_types.IN_CHAT, depthPromptDepth, extension_settings.note.allowWIScan, depthPromptRole);
 
     // First message in fresh 1-on-1 chat reacts to user/character settings changes
     if (chat.length) {
@@ -8723,23 +8219,18 @@ async function executeGenerationRequestInShell(generationEnvelope) {
         const depth = coreChat.length - i - (isContinue ? 2 : 1);
         const isPrefix = isContinue && i === coreChat.length - 1;
 
-        // In group chats, only include reasoning from the currently generating character
-        const isOtherGroupMember = selected_group && coreChat[i].name !== name2;
-
         coreChat[i] = {
             ...coreChat[i],
-            mes: isOtherGroupMember
-                ? coreChat[i].mes
-                : promptReasoning.addToMessage(
-                    coreChat[i].mes,
-                    getRegexedString(
-                        String(coreChat[i].extra?.reasoning ?? ''),
-                        regex_placement.REASONING,
-                        { isPrompt: true, depth: depth },
-                    ),
-                    isPrefix,
-                    coreChat[i].extra?.reasoning_duration,
+            mes: promptReasoning.addToMessage(
+                coreChat[i].mes,
+                getRegexedString(
+                    String(coreChat[i].extra?.reasoning ?? ''),
+                    regex_placement.REASONING,
+                    { isPrompt: true, depth: depth },
                 ),
+                isPrefix,
+                coreChat[i].extra?.reasoning_duration,
+            ),
         };
         if (promptReasoning.isLimitReached()) {
             break;
@@ -9640,7 +9131,7 @@ async function executeGenerationRequestInShell(generationEnvelope) {
                         streamingProcessor = null;
                         depth = depth + 1;
                         await ToolManager.saveFunctionToolInvocations(invocationResult.invocations);
-                        return Generate('normal', { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, force_chid, signal, quietImage, quietName, depth }, dryRun);
+                        return Generate('normal', { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, signal, quietImage, quietName, depth }, dryRun);
                     }
                 }
 
@@ -9866,7 +9357,7 @@ async function executeGenerationRequestInShell(generationEnvelope) {
 
                 depth = depth + 1;
                 await ToolManager.saveFunctionToolInvocations(invocationResult.invocations);
-                return Generate('normal', { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, force_chid, signal, quietImage, quietName, depth }, dryRun);
+                return Generate('normal', { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, signal, quietImage, quietName, depth }, dryRun);
             }
         }
 
@@ -10103,11 +9594,6 @@ export function shouldAutoContinue(messageChunk, isImpersonate) {
  * @param {boolean} isImpersonate Is the user impersonation
  */
 export function triggerAutoContinue(messageChunk, isImpersonate) {
-    if (selected_group) {
-        console.debug('Auto-continue is disabled for group chat');
-        return;
-    }
-
     if (shouldAutoContinue(messageChunk, isImpersonate)) {
         $('#option_continue').trigger('click');
     }
@@ -10745,11 +10231,6 @@ export function cleanUpMessage({ getMessage, isImpersonate, isContinue, displayI
         }
     }
 
-    // clean-up group message from excessive generations
-    if (selected_group) {
-        getMessage = cleanGroupMessage(getMessage);
-    }
-
     if (!power_user.allow_name2_display) {
         const name2Escaped = escapeRegex(name2);
         getMessage = getMessage.replace(new RegExp(`(^|\n)${name2Escaped}:\\s*`, 'g'), '$1');
@@ -10962,17 +10443,6 @@ export async function saveReply({ type, getMessage, fromStreaming = false, title
         if (power_user.message_token_count_enabled) {
             const tokenCountText = (reasoning || '') + newMessage.mes;
             newMessage.extra.token_count = await getTokenCountAsync(tokenCountText, 0);
-        }
-
-        if (selected_group) {
-            console.debug('entering chat update for groups');
-            let avatarImg = 'img/ai4.png';
-            if (characters[this_chid].avatar != 'none') {
-                avatarImg = getThumbnailUrl('avatar', characters[this_chid].avatar);
-            }
-            newMessage.force_avatar = avatarImg;
-            newMessage.original_avatar = characters[this_chid].avatar;
-            newMessage.extra.gen_id = group_generation_id;
         }
 
         await processImageAttachment(newMessage, { imageUrls });
@@ -11310,10 +10780,7 @@ function resetChatStateWithOptions({ clearCharacters = true } = {}) {
     chat_metadata = {};
 }
 
-/**
- *
- * @param {'characters' | 'character_edit' | 'create' | 'group_edit' | 'group_create'} value
- */
+/** @param {'characters' | 'character_edit' | 'create'} value */
 export function setMenuType(value) {
     menu_type = value;
     // Allow custom CSS to see which menu type is active
@@ -11485,8 +10952,6 @@ export async function renameCharacter(name = null, { silent = false, renameChats
                     throw new Error('New character not selected');
                 }
 
-                // Also rename as a group member
-                await renameGroupMember(oldAvatar, newAvatar, newValue.toString());
                 const renamePastChatsConfirm = renameChats !== null
                     ? renameChats
                     : silent
@@ -11580,16 +11045,10 @@ async function renamePastChats(oldAvatar, newAvatar, newName) {
 
 export function saveChatDebounced() {
     const chid = this_chid;
-    const selectedGroup = selected_group;
 
     cancelDebouncedChatSave();
 
     chatSaveTimeout = setTimeout(async () => {
-        if (selectedGroup !== selected_group) {
-            console.warn('Chat save timeout triggered, but group changed. Aborting.');
-            return;
-        }
-
         if (chid !== this_chid) {
             console.warn('Chat save timeout triggered, but chid changed. Aborting.');
             return;
@@ -11613,11 +11072,6 @@ export function saveChatDebounced() {
  * @returns {Promise<void>}
  */
 export async function saveChat({ chatName, withMetadata, mesId, force = false, chatData = undefined } = {}) {
-    if (selected_group) {
-        toastr.error(t`Operation was aborted to prevent data corruption.`, t`saveChat called for a group chat`);
-        throw new Error('saveChat called for a group chat');
-    }
-
     if (arguments.length > 0 && typeof arguments[0] !== 'object') {
         console.trace('saveChat called with positional arguments. Please use an object instead.');
         [chatName, withMetadata, mesId, force] = arguments;
@@ -11794,16 +11248,7 @@ export function buildAvatarList(block, entities, { templateId = 'inline_avatar_t
             avatarTemplate.find('.ch_fav').val(entity.item.fav);
         }
 
-        // If this is a group, we need to hack slightly. We still want to keep most of the css classes and layout, but use a group avatar instead.
-        if (entity.type === 'group') {
-            const grpTemplate = getGroupAvatar(entity.item);
-
-            avatarTemplate.addClass(grpTemplate.attr('class'));
-            avatarTemplate.empty();
-            avatarTemplate.append(grpTemplate.children());
-            avatarTemplate.attr({ 'data-grid': id, 'data-chid': null });
-            avatarTemplate.attr('title', `[Group] ${entity.item.name}`);
-        } else if (entity.type === 'persona') {
+        if (entity.type === 'persona') {
             avatarTemplate.attr({ 'data-pid': id, 'data-chid': null });
             avatarTemplate.find('img').attr('src', getThumbnailUrl('persona', entity.item.avatar));
             avatarTemplate.attr('title', `[Persona] ${entity.item.name}\nFile: ${entity.item.avatar}`);
@@ -11812,7 +11257,6 @@ export function buildAvatarList(block, entities, { templateId = 'inline_avatar_t
         if (interactable) {
             avatarTemplate.addClass(INTERACTABLE_CONTROL_CLASS);
             avatarTemplate.toggleClass('character_select', entity.type === 'character');
-            avatarTemplate.toggleClass('group_select', entity.type === 'group');
         }
 
         block.append(avatarTemplate);
@@ -12197,9 +11641,8 @@ async function applyStartupSettingsCore(data, initLoaderHandle = null) {
         initUserAvatar(settings.user_avatar);
         setPersonaDescription();
 
-        //Load the active character and group
+        // Load the active character
         active_character = settings.active_character;
-        active_group = null;
 
         setWorldInfoSettings(settings.world_info_settings ?? settings, data);
 
@@ -12276,7 +11719,6 @@ export async function saveSettings(loopCounter = 0) {
         currentVersion: persistedCurrentVersion ?? undefined,
         username: name1,
         active_character: active_character,
-        active_group: active_group,
         user_avatar: user_avatar,
         amount_gen: amount_gen,
         max_context: max_context,
@@ -12424,7 +11866,7 @@ function updateMessage(div) {
 function openMessageDelete(fromSlashCommand) {
     closeMessageEditor();
     hideSwipeButtons();
-    if (fromSlashCommand || (!is_send_press) || (selected_group && !is_group_generating)) {
+    if (fromSlashCommand || !is_send_press) {
         $('#dialogue_del_mes').css('display', 'block');
         $('#send_form').css('display', 'none');
         $('.del_checkbox').each(function () {
@@ -12437,9 +11879,7 @@ function openMessageDelete(fromSlashCommand) {
         console.debug(`
             ERR -- could not enter del mode
             this_chid: ${this_chid}
-            is_send_press: ${is_send_press}
-            selected_group: ${selected_group}
-            is_group_generating: ${is_group_generating}`);
+            is_send_press: ${is_send_press}`);
     }
     this_del_mes = -1;
     is_delete_mode = true;
@@ -12980,61 +12420,42 @@ async function messageEditDone(div) {
 }
 
 /**
- * Fetches the chat content for each chat file from the server and compiles them into a dictionary.
- * The function iterates over a provided list of chat metadata and requests the actual chat content
- * for each chat, either as an individual chat or a group chat based on the context.
+ * Fetches the contents of character chat files.
  *
- * @param {Array} data - An array containing metadata about each chat such as file_name.
- * @param {boolean} isGroupChat - A flag indicating if the chat is a group chat.
- * @returns {Promise<Object>} chat_dict - A dictionary where each key is a file_name and the value is the
- * corresponding chat content fetched from the server.
+ * The group argument remains for extension compatibility, but retired group
+ * callers must not issue requests to the retired endpoint.
  */
 export async function getChatsFromFiles(data, isGroupChat) {
+    if (isGroupChat) {
+        return {};
+    }
+
     const context = getContext();
-    let chat_dict = {};
-    let chat_list = Object.values(data).sort((a, b) => a.file_name.localeCompare(b.file_name)).reverse();
-
-    let chat_promise = chat_list.map(({ file_name }) => {
-        return new Promise(async (res, rej) => {
-            try {
-                const endpoint = isGroupChat ? '/api/chats/group/get' : '/api/chats/get';
-                const requestBody = isGroupChat
-                    ? JSON.stringify({ id: file_name })
-                    : JSON.stringify({
-                        ch_name: characters[context.characterId].name,
-                        file_name: file_name.replace('.jsonl', ''),
-                        avatar_url: characters[context.characterId].avatar,
-                    });
-
-                const chatResponse = await fetch(endpoint, {
-                    method: 'POST',
-                    headers: getRequestHeaders(),
-                    body: requestBody,
-                    cache: 'no-cache',
-                });
-
-                if (!chatResponse.ok) {
-                    return res();
-                    // continue;
-                }
-
-                const currentChat = await chatResponse.json();
-                if (!isGroupChat) {
-                    // remove the first message, which is metadata, only for individual chats
-                    currentChat.shift();
-                }
-                chat_dict[file_name] = currentChat;
-            } catch (error) {
-                console.error(error);
+    const chatDict = {};
+    const chatList = Object.values(data).sort((a, b) => a.file_name.localeCompare(b.file_name)).reverse();
+    await Promise.all(chatList.map(async ({ file_name }) => {
+        try {
+            const chatResponse = await fetch('/api/chats/get', {
+                method: 'POST',
+                headers: getRequestHeaders(),
+                body: JSON.stringify({
+                    ch_name: characters[context.characterId].name,
+                    file_name: file_name.replace('.jsonl', ''),
+                    avatar_url: characters[context.characterId].avatar,
+                }),
+                cache: 'no-cache',
+            });
+            if (!chatResponse.ok) {
+                return;
             }
-
-            return res();
-        });
-    });
-
-    await Promise.all(chat_promise);
-
-    return chat_dict;
+            const currentChat = await chatResponse.json();
+            currentChat.shift();
+            chatDict[file_name] = currentChat;
+        } catch (error) {
+            console.error(error);
+        }
+    }));
+    return chatDict;
 }
 
 /**
@@ -13075,24 +12496,18 @@ export async function getPastCharacterChats(characterId = null) {
  * Helper for `displayPastChats`, to make the same info consistently available for other functions
  */
 export function getCurrentChatDetails() {
-    if (!characters[this_chid] && !selected_group) {
+    if (!characters[this_chid]) {
         return { sessionName: '', group: null, characterName: '', avatarImgURL: '' };
     }
 
-    const group = selected_group ? groups.find(x => x.id === selected_group) : null;
-    const currentChat = selected_group ? group?.chat_id : characters[this_chid].chat;
-    const displayName = selected_group ? group?.name : characters[this_chid].name;
-    const avatarImg = selected_group ? '' : getThumbnailUrl('avatar', characters[this_chid].avatar);
-    return { sessionName: currentChat, group: group, characterName: displayName, avatarImgURL: avatarImg };
+    return {
+        sessionName: characters[this_chid].chat,
+        group: null,
+        characterName: characters[this_chid].name,
+        avatarImgURL: getThumbnailUrl('avatar', characters[this_chid].avatar),
+    };
 }
 
-/**
- * Displays the past chats for a character or a group based on the selected context.
- * The function first fetches the chats, processes them, and then displays them in
- * the HTML. It also has a built-in search functionality that allows filtering the
- * displayed chats based on a search query.
- * @param {string[]} hightlightNames - An array of chat names to highlight
- */
 export async function displayPastChats(hightlightNames = []) {
     $('#select_chat_div').empty();
     $('#select_chat_search').val('').off('input');
@@ -13101,12 +12516,10 @@ export async function displayPastChats(hightlightNames = []) {
     const currentChat = chatDetails.sessionName;
     const displayName = chatDetails.characterName;
     const avatarImg = chatDetails.avatarImgURL;
-    const groupAvatar = selected_group && chatDetails.group ? getGroupAvatar(chatDetails.group) : null;
-
-    await displayChats('', currentChat, displayName, avatarImg, groupAvatar, selected_group, hightlightNames);
+    await displayChats('', currentChat, displayName, avatarImg, hightlightNames);
 
     const debouncedDisplay = debounce((searchQuery) => {
-        displayChats(searchQuery, currentChat, displayName, avatarImg, groupAvatar, selected_group, []);
+        displayChats(searchQuery, currentChat, displayName, avatarImg, []);
     });
 
     // Define the search input listener
@@ -13124,15 +12537,14 @@ export async function displayPastChats(hightlightNames = []) {
     addChatBackupsBrowser();
 }
 
-async function displayChats(searchQuery, currentChat, displayName, avatarImg, groupAvatar, selected_group, highlightNames) {
+async function displayChats(searchQuery, currentChat, displayName, avatarImg, highlightNames) {
     try {
         const response = await fetch('/api/chats/search', {
             method: 'POST',
             headers: getRequestHeaders(),
             body: JSON.stringify({
                 query: searchQuery,
-                avatar_url: selected_group ? null : characters[this_chid].avatar,
-                group_id: selected_group || null,
+                avatar_url: characters[this_chid].avatar,
             }),
         });
 
@@ -13170,15 +12582,7 @@ async function displayChats(searchQuery, currentChat, displayName, avatarImg, gr
             const isSelected = currentChat === chat.file_name;
             const template = $('#past_chat_template .select_chat_block_wrapper').clone();
             template.find('.select_chat_block').attr('file_name', chat.file_name);
-            if (selected_group) {
-                if (groupAvatar) {
-                    template.find('.avatar').replaceWith(groupAvatar.clone());
-                } else {
-                    template.find('.avatar').remove();
-                }
-            } else {
-                template.find('.avatar img').attr('src', avatarImg);
-            }
+            template.find('.avatar img').attr('src', avatarImg);
             template.find('.select_chat_block_filename').text(chat.file_name);
             template.find('.chat_file_size').text(`(${chat.file_size},`);
             template.find('.chat_messages_num').text(`${chat.message_count} 💬)`);
@@ -13206,7 +12610,6 @@ async function displayChats(searchQuery, currentChat, displayName, avatarImg, gr
 
 export function selectRightMenuWithAnimation(selectedMenuId) {
     const displayModes = {
-        'rm_group_chats_block': 'flex',
         'rm_api_block': 'grid',
         'rm_characters_block': 'flex',
     };
@@ -13233,9 +12636,7 @@ export function select_rm_info(type, charId, previousCharId = null) {
         toastr.error(t`Invalid process (no 'type')`);
         return;
     }
-    if (type !== 'group_create') {
-        var displayName = String(charId).replace('.png', '');
-    }
+    const displayName = String(charId).replace('.png', '');
 
     if (type === 'char_delete') {
         toastr.warning(t`Character Deleted: ${displayName}`);
@@ -13243,13 +12644,6 @@ export function select_rm_info(type, charId, previousCharId = null) {
     if (type === 'char_create') {
         toastr.success(t`Character Created: ${displayName}`);
     }
-    if (type === 'group_create') {
-        toastr.success(t`Group Created`);
-    }
-    if (type === 'group_delete') {
-        toastr.warning(t`Group Deleted`);
-    }
-
     if (type === 'char_import') {
         toastr.success(t`Character Imported: ${displayName}`);
     }
@@ -13284,32 +12678,6 @@ export function select_rm_info(type, charId, previousCharId = null) {
                         return;
                     }
 
-                    const scrollOffset = element.offset().top - element.parent().offset().top;
-                    element.parent().scrollTop(scrollOffset);
-                    flashHighlight(element, 5000);
-                });
-            } catch (e) {
-                console.error(e);
-            }
-        }
-
-        if (type === 'group_create') {
-            // Find the page at which the character is located
-            const charData = getEntitiesList({ doFilter: true });
-            const charIndex = charData.findIndex((x) => String(x?.item?.id) === String(charId));
-
-            if (charIndex === -1) {
-                console.log(`Could not find group ${charId} in the list`);
-                return;
-            }
-
-            const perPage = Number(accountStorage.getItem('Characters_PerPage')) || per_page_default;
-            const page = Math.floor(charIndex / perPage) + 1;
-            $('#rm_print_characters_pagination').pagination('go', page);
-            const selector = `#rm_print_characters_block [grid="${charId}"]`;
-            try {
-                waitUntilCondition(() => document.querySelector(selector) !== null).then(() => {
-                    const element = $(selector);
                     const scrollOffset = element.offset().top - element.parent().offset().top;
                     element.parent().scrollTop(scrollOffset);
                     flashHighlight(element, 5000);
@@ -13364,13 +12732,8 @@ export function select_selected_character(chid, { switchMenu = true } = {}) {
     $('#char_connections_button').show();
     $('.character-detail-edit-action').show();
 
-    // Hide the chat scenario button if we're peeking the group member defs
-    $('#set_chat_character_settings').toggle(!selected_group);
-
-    // Don't update the navbar name if we're peeking the group member defs
-    if (!selected_group) {
-        $('#rm_button_selected_ch').children('h2').text(character.name);
-    }
+    $('#set_chat_character_settings').show();
+    $('#rm_button_selected_ch').children('h2').text(character.name);
 
     $('#add_avatar_button').val('');
 
@@ -13392,7 +12755,6 @@ export function select_selected_character(chid, { switchMenu = true } = {}) {
     $('#depth_prompt_prompt').val(character.data?.extensions?.depth_prompt?.prompt ?? '');
     $('#depth_prompt_depth').val(character.data?.extensions?.depth_prompt?.depth ?? depth_prompt_depth_default);
     $('#depth_prompt_role').val(character.data?.extensions?.depth_prompt?.role ?? depth_prompt_role_default);
-    $('#talkativeness_slider').val(character.talkativeness || talkativeness_default);
     $('#mes_example_textarea').val(character.mes_example);
     $('#selected_chat_pole').val(character.chat);
     $('#create_date_pole').val(timestampToMoment(character.create_date).toISOString());
@@ -13418,7 +12780,7 @@ export function select_selected_character(chid, { switchMenu = true } = {}) {
     $('.form_create_bottom_buttons_block .chat_lorebook_button').show();
 
     const externalMediaState = isExternalMediaAllowed();
-    $('#character_open_media_overrides').toggle(!selected_group);
+    $('#character_open_media_overrides').show();
     $('#character_media_allowed_icon').toggle(externalMediaState);
     $('#character_media_forbidden_icon').toggle(!externalMediaState);
 
@@ -13474,7 +12836,6 @@ function select_rm_create({ switchMenu = true } = {}) {
     $('#character_version_textarea').val(create_save.character_version);
     $('#personality_textarea').val(create_save.personality);
     $('#firstmessage_textarea').val(create_save.first_message);
-    $('#talkativeness_slider').val(create_save.talkativeness);
     $('#scenario_pole').val(create_save.scenario);
     $('#depth_prompt_prompt').val(create_save.depth_prompt_prompt);
     $('#depth_prompt_depth').val(create_save.depth_prompt_depth);
@@ -13551,7 +12912,7 @@ export function getExtensionPromptRoleByName(roleName) {
 
 /**
  * Removes all char A/N prompt injections from the chat.
- * To clean up when switching from groups to solo and vice versa.
+ * Clears character depth prompts before applying the current prompt.
  */
 export function removeDepthPrompts() {
     for (const key of Object.keys(extension_prompts)) {
@@ -13585,19 +12946,15 @@ function updateFavButtonState(state) {
 }
 
 export async function setCharacterSettingsOverrides() {
-    if (!selected_group && (this_chid === undefined || !characters[this_chid])) {
-        console.warn('setCharacterSettingsOverrides() -- no selected group or character');
+    if (this_chid === undefined || !characters[this_chid]) {
+        console.warn('setCharacterSettingsOverrides() -- no selected character');
         return;
     }
 
     const scenarioOverrideValue = chat_metadata.scenario || '';
     const exampleMessagesValue = chat_metadata.mes_example || '';
     const systemPromptValue = chat_metadata.system_prompt || '';
-    const isGroup = !!selected_group;
-
     const $template = $(await renderTemplateAsync('scenarioOverride'));
-    $template.find('[data-group="true"]').toggle(isGroup);
-    $template.find('[data-character="true"]').toggle(!isGroup);
     const pendingChanges = {
         scenario: scenarioOverrideValue,
         examples: exampleMessagesValue,
@@ -14038,11 +13395,7 @@ export async function saveChatConditional() {
 
         isChatSaving = true;
 
-        if (selected_group) {
-            await saveGroupChat(selected_group, true);
-        } else {
-            await saveChat();
-        }
+        await saveChat();
 
         // Save token and prompts cache to IndexedDB storage
         saveTokenCache();
@@ -14058,7 +13411,6 @@ export async function saveChatConditional() {
  * Saves the chat to the server.
  * @param {FormData} formData Form data to send to the server.
  * @param {object} [options={}] Options for the import
- * @param {boolean} [options.refresh] Whether to refresh the group chat list after import
  * @returns {Promise<string[]>} List of imported file names.
  */
 export async function importCharacterChat(formData, { refresh = true } = {}) {
@@ -14398,7 +13750,7 @@ export async function createOrEditCharacter(e) {
             toastr.error(t`Name is required`);
             return;
         }
-        if (is_group_generating || is_send_press) {
+        if (is_send_press) {
             toastr.error(t`Cannot create characters while generating. Stop the request and try again.`, t`Creation aborted`);
             return;
         }
@@ -14442,7 +13794,6 @@ export async function createOrEditCharacter(e) {
                 { id: '#creator_textarea', callback: value => create_save.creator = value },
                 { id: '#personality_textarea', callback: value => create_save.personality = value },
                 { id: '#firstmessage_textarea', callback: value => create_save.first_message = value },
-                { id: '#talkativeness_slider', callback: value => create_save.talkativeness = value, defaultValue: talkativeness_default },
                 { id: '#scenario_pole', callback: value => create_save.scenario = value },
                 { id: '#depth_prompt_prompt', callback: value => create_save.depth_prompt_prompt = value },
                 { id: '#depth_prompt_depth', callback: value => create_save.depth_prompt_depth = value, defaultValue: depth_prompt_depth_default },
@@ -14540,7 +13891,6 @@ export async function createOrEditCharacter(e) {
             const shouldRegenerateMessage =
                 !isNewChat &&
                 message.mes &&
-                !selected_group &&
                 !chat_metadata.tainted &&
                 (chat.length === 0 || (chat.length === 1 && !chat[0].is_user && !chat[0].is_system));
 
@@ -15295,7 +14645,7 @@ function selectImportedChar(charId) {
  * @returns {Promise<string>}
  */
 async function importCharacter(file, { preserveFileName = '', importTags = false } = {}) {
-    if (is_group_generating || is_send_press) {
+    if (is_send_press) {
         toastr.error(t`Cannot import characters while generating. Stop the request and try again.`, t`Import aborted`);
         throw new Error('Cannot import character while generating');
     }
@@ -15383,8 +14733,8 @@ async function importFromURL(items, files) {
 }
 
 export async function doNewChat({ deleteCurrentChat = false } = {}) {
-    //Make a new chat for selected character
-    if ((!selected_group && this_chid == undefined) || menu_type == 'create') {
+    // Make a new chat for the selected character.
+    if (this_chid === undefined || menu_type == 'create') {
         return;
     }
 
@@ -15399,33 +14749,26 @@ export async function doNewChat({ deleteCurrentChat = false } = {}) {
         await saveChatConditional();
     }
 
-    if (selected_group) {
-        await createNewGroupChat(selected_group);
-        if (deleteCurrentChat) await deleteGroupChat(selected_group, chat_file_for_del, { jumpToNewChat: false }); // don't jump, new chat was already created and jumped to above
-    } else {
-        //RossAscends: added character name to new chat filenames and replaced Date.now() with humanizedDateTime;
-        chat_metadata = {};
-        characters[this_chid].chat = `${name2} - ${humanizedDateTime()}`;
-        $('#selected_chat_pole').val(characters[this_chid].chat);
-        await getChat();
-        await createOrEditCharacter(new CustomEvent('newChat'));
-        if (deleteCurrentChat) await delChat(chat_file_for_del + '.jsonl');
-    }
+    chat_metadata = {};
+    characters[this_chid].chat = `${name2} - ${humanizedDateTime()}`;
+    $('#selected_chat_pole').val(characters[this_chid].chat);
+    await getChat();
+    await createOrEditCharacter(new CustomEvent('newChat'));
+    if (deleteCurrentChat) await delChat(chat_file_for_del + '.jsonl');
 }
 
 /**
- * Renames a group or character chat.
+ * Renames a character chat.
  * @param {object} param Parameters for renaming chat
  * @param {string} [param.characterId] Character ID to rename chat for
- * @param {string} [param.groupId] Group ID to rename chat for
  * @param {string} param.oldFileName Old name of the chat (no JSONL extension)
  * @param {string} param.newFileName New name for the chat (no JSONL extension)
  * @param {boolean} [param.loader=true] Whether to show loader during the operation
  */
-export async function renameGroupOrCharacterChat({ characterId, groupId, oldFileName, newFileName, loader: showLoader }) {
+export async function renameCharacterChat({ characterId, oldFileName, newFileName, loader: showLoader }) {
     const currentChatId = getCurrentChatId();
     const body = {
-        is_group: !!groupId,
+        is_group: false,
         avatar_url: characters[characterId]?.avatar,
         original_file: `${oldFileName}.jsonl`,
         renamed_file: `${newFileName.trim()}.jsonl`,
@@ -15468,9 +14811,7 @@ export async function renameGroupOrCharacterChat({ characterId, groupId, oldFile
             newFileName = data.sanitizedFileName;
         }
 
-        if (groupId) {
-            await renameGroupChat(groupId, oldFileName, newFileName);
-        } else if (characterId !== undefined && String(characterId) === String(this_chid) && characters[characterId]?.chat === oldFileName) {
+        if (characterId !== undefined && String(characterId) === String(this_chid) && characters[characterId]?.chat === oldFileName) {
             characters[characterId].chat = newFileName;
             $('#selected_chat_pole').val(characters[characterId].chat);
             await createOrEditCharacter();
@@ -15480,7 +14821,7 @@ export async function renameGroupOrCharacterChat({ characterId, groupId, oldFile
             await reloadCurrentChat();
         }
 
-        const eventData = { avatarId: body.avatar_url, groupId, oldFileName: body.original_file, newFileName: body.renamed_file };
+        const eventData = { avatarId: body.avatar_url, oldFileName: body.original_file, newFileName: body.renamed_file };
         await eventSource.emit(event_types.CHAT_RENAMED, eventData);
     } catch {
         await delay(500);
@@ -15496,9 +14837,8 @@ export async function renameGroupOrCharacterChat({ characterId, groupId, oldFile
  * @param {string} newName New name for the chat (no JSONL extension)
  */
 export async function renameChat(oldFileName, newName) {
-    return await renameGroupOrCharacterChat({
+    return await renameCharacterChat({
         characterId: this_chid,
-        groupId: selected_group,
         oldFileName: oldFileName,
         newFileName: newName,
         loader: true,
@@ -15514,11 +14854,9 @@ export async function closeCurrentChat() {
     if (is_send_press == false) {
         await waitUntilCondition(() => !isChatSaving, debounce_timeout.extended, 10);
         await clearChat({ clearData: true });
-        resetSelectedGroup();
         setCharacterId(undefined);
         setCharacterName('');
         setActiveCharacter(null);
-        setActiveGroup(null);
         this_edit_mes_id = undefined;
         chat_metadata = {};
         selected_button = 'characters';
@@ -15544,14 +14882,10 @@ async function closeCurrentChatForDelete() {
         clearCurrentChat: async () => {
             await clearChat({ clearData: true });
         },
-        resetSelectedGroup: () => {
-            resetSelectedGroup();
-        },
         resetSelectionState: () => {
             setCharacterId(undefined);
             setCharacterName('');
             setActiveCharacter(null);
-            setActiveGroup(null);
             this_edit_mes_id = undefined;
             chat_metadata = {};
             selected_button = 'characters';
@@ -15781,8 +15115,7 @@ function getCharacterDeleteDialogTitle(characterName) {
 /**
  * Function to delete a character from UI after character deletion API success.
  * It manages necessary UI changes such as closing advanced editing popup, unsetting
- * character ID, resetting characters array and chat metadata, deselecting character's tab
- * panel, removing deleted characters from the in-memory list, refreshing groups, and reprinting the list.
+ * panel, removing deleted characters from the in-memory list, and reprinting the list.
  * It also ensures to save the settings after all the operations.
  */
 async function removeCharacterFromUI(deletedAvatars = [], { deleteContext = null } = {}) {
@@ -15799,9 +15132,6 @@ async function removeCharacterFromUI(deletedAvatars = [], { deleteContext = null
     $(document.getElementById('rm_button_selected_ch')).children('h2').text('');
     restoreNeutralChat();
     removeCharactersFromState(characters, deletedAvatars);
-    const groupsRefreshStartedAt = performance.now();
-    await getGroups();
-    markPerfInteractionMetric('groupsRefreshMs', performance.now() - groupsRefreshStartedAt);
     const reconcileStartedAt = performance.now();
     const reconciled = await reconcileCharacterListAfterDelete({
         beforeSnapshot: beforeDeleteSnapshot,
@@ -16076,7 +15406,6 @@ async function measureCharacterSearchForPerf(query) {
         payload: {
             query: normalizedQuery,
             renderedCharacterCount: listElement.querySelectorAll('.character_select').length,
-            renderedGroupCount: listElement.querySelectorAll('.group_select').length,
             busyCleared: true,
             pageLoaded: pageLoadedAt !== null,
             metrics: {
@@ -16089,11 +15418,6 @@ async function measureCharacterSearchForPerf(query) {
 
 // MARK: DOM Handlers Start
 jQuery(async function () {
-    setTimeout(function () {
-        $('#groupControlsToggle').trigger('click');
-        $('#groupCurrentMemberListToggle .inline-drawer-icon').trigger('click');
-    }, 200);
-
     $(document).on('click', '.api_loading', () => cancelStatusCheck('Canceled because connecting was manually canceled'));
 
     //////////INPUT BAR FOCUS-KEEPING LOGIC/////////////
@@ -16184,9 +15508,7 @@ jQuery(async function () {
         queueReactCharacterAuthoringRemount();
     });
     $('#rm_button_selected_ch').on('click', function () {
-        if (selected_group) {
-            select_group_chats(selected_group, false);
-        } else if (this_chid !== undefined && characters[this_chid]) {
+        if (this_chid !== undefined && characters[this_chid]) {
             selected_button = 'character_edit';
             select_selected_character(this_chid);
         } else {
@@ -16273,15 +15595,8 @@ jQuery(async function () {
         }
     });
 
-    /**
-     * Handles the deletion of a chat file, including group chats.
-     *
-     * @param {string} chatFile - The name of the chat file to delete.
-     * @param {object} group - The group object if the chat is part of a group.
-     * @param {boolean} [fromSlashCommand=false] - Whether the deletion was triggered from a slash command.
-     * @returns {Promise<void>}
-     */
-    async function handleDeleteChat(chatFile, group, fromSlashCommand = false) {
+    /** Handles deletion of a character chat file. */
+    async function handleDeleteChat(chatFile, _group, fromSlashCommand = false) {
         // Close past chat popup.
         $('#select_chat_cross').trigger('click');
 
@@ -16293,11 +15608,7 @@ jQuery(async function () {
         });
 
         try {
-            if (group) {
-                await deleteGroupChat(group, chatFile);
-            } else {
-                await delChat(`${chatFile}.jsonl`);
-            }
+            await delChat(`${chatFile}.jsonl`);
         } catch (error) {
             loaderHandle.hide();
             throw error;
@@ -16322,13 +15633,13 @@ jQuery(async function () {
 
         // Skip confirmation if called from a slash command.
         if (fromSlashCommand) {
-            await handleDeleteChat(deleteFileName, selected_group, true);
+            await handleDeleteChat(deleteFileName, null, true);
             return;
         }
 
         const result = await callGenericPopup('<h3>' + t`Delete the Chat File?` + '</h3>', POPUP_TYPE.CONFIRM);
         if (result === POPUP_RESULT.AFFIRMATIVE) {
-            await handleDeleteChat(deleteFileName, selected_group, false);
+            await handleDeleteChat(deleteFileName, null, false);
         }
     });
 
@@ -16515,7 +15826,6 @@ jQuery(async function () {
         '#scenario_pole': function () { create_save.scenario = String($('#scenario_pole').val()); },
         '#mes_example_textarea': function () { create_save.mes_example = String($('#mes_example_textarea').val()); },
         '#firstmessage_textarea': function () { create_save.first_message = String($('#firstmessage_textarea').val()); },
-        '#talkativeness_slider': function () { create_save.talkativeness = Number($('#talkativeness_slider').val()); },
         '#depth_prompt_prompt': function () { create_save.depth_prompt_prompt = String($('#depth_prompt_prompt').val()); },
         '#depth_prompt_depth': function () { create_save.depth_prompt_depth = Number($('#depth_prompt_depth').val()); },
         '#depth_prompt_role': function () { create_save.depth_prompt_role = String($('#depth_prompt_role').val()); },
@@ -16575,7 +15885,7 @@ jQuery(async function () {
         console.log(`exporting ${filename} in ${format} format`);
 
         const body = {
-            is_group: !!selected_group,
+            is_group: false,
             avatar_url: characters[this_chid]?.avatar,
             file: `${filename}.jsonl`,
             exportfilename: `${filename}.${format}`,
@@ -16660,10 +15970,10 @@ jQuery(async function () {
         });
 
         if (id == 'option_select_chat') {
-            if (this_chid === undefined && !is_send_press && !selected_group) {
+            if (this_chid === undefined && !is_send_press) {
                 await openPermanentAssistantCard();
             }
-            if ((selected_group && !is_group_generating) || (this_chid !== undefined && !is_send_press) || fromSlashCommand) {
+            if ((this_chid !== undefined && !is_send_press) || fromSlashCommand) {
                 await displayPastChats();
                 //this is just to avoid the shadow for past chat view when using /delchat
                 //however, the dialog popup still gets one..
@@ -16679,7 +15989,7 @@ jQuery(async function () {
                 }
             }
         } else if (id == 'option_start_new_chat') {
-            if ((selected_group || this_chid !== undefined) && !is_send_press) {
+            if (this_chid !== undefined && !is_send_press) {
                 let deleteCurrentChat = false;
                 const result = await Popup.show.confirm(t`Start new chat?`, await renderTemplateAsync('newChatConfirm'), {
                     onClose: () => { deleteCurrentChat = !!$('#del_chat_checkbox').prop('checked'); },
@@ -16690,7 +16000,7 @@ jQuery(async function () {
 
                 await doNewChat({ deleteCurrentChat: deleteCurrentChat });
             }
-            if (!selected_group && this_chid === undefined && !is_send_press) {
+            if (this_chid === undefined && !is_send_press) {
                 const alreadyInTempChat = this_chid === undefined && name2 === neutralCharacterName;
                 await newAssistantChat({ temporary: alreadyInTempChat });
             }
@@ -16701,12 +16011,8 @@ jQuery(async function () {
                 return;
             }
             if (is_send_press == false) {
-                if (selected_group) {
-                    regenerateGroup();
-                } else {
-                    is_send_press = true;
-                    Generate('regenerate', buildOrFillAdditionalArgs());
-                }
+                is_send_press = true;
+                Generate('regenerate', buildOrFillAdditionalArgs());
             }
         } else if (id == 'option_impersonate') {
             if (is_send_press == false || fromSlashCommand) {
@@ -16882,7 +16188,7 @@ jQuery(async function () {
         if (isReactMainChatOwner() && $(this).closest('[data-main-chat-message-row-owner="react"]').length > 0) {
             return;
         }
-        if (this_chid !== undefined || selected_group || name2 === neutralCharacterName) {
+        if (this_chid !== undefined || name2 === neutralCharacterName) {
             try {
                 const messageId = $(this).closest('.mes').attr('mesid');
                 const text = chat[messageId].mes;
@@ -16903,7 +16209,7 @@ jQuery(async function () {
         if (is_delete_mode) {
             return;
         }
-        if (this_chid !== undefined || selected_group || name2 === neutralCharacterName) {
+        if (this_chid !== undefined || name2 === neutralCharacterName) {
             // Previously system messages we're allowed to be edited
             /*const message = $(this).closest(".mes");
 
@@ -17130,18 +16436,12 @@ jQuery(async function () {
                 continue;
             }
 
-            if (selected_group && format === 'json') {
-                toastr.warning(t`Only EmberDesk's own format is supported for group chat imports. Sorry!`);
-                continue;
-            }
-
             const formData = new FormData(formElement);
             formData.set('file_type', format);
             formData.set('avatar', file);
             formData.set('user_name', name1);
 
-            const importFn = selected_group ? importGroupChat : importCharacterChat;
-            const result = await importFn(formData, { refresh: false });
+            const result = await importCharacterChat(formData, { refresh: false });
             importedFileNames.push(...result);
         }
 
@@ -17152,15 +16452,6 @@ jQuery(async function () {
         await displayPastChats(importedFileNames);
 
         targetElement.value = '';
-    });
-
-    $('#rm_button_group_chats').on('click', function () {
-        toastr?.warning?.(t`Group chats have been removed from EmberDesk.`);
-    });
-
-    $('#rm_button_back_from_group').on('click', function () {
-        selected_button = 'characters';
-        select_rm_characters();
     });
 
     $('#dupe_button').on('click', async function () {

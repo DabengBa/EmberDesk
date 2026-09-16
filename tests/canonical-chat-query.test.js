@@ -99,7 +99,7 @@ afterEach(() => {
 });
 
 describe('canonical chat query service', () => {
-    test('matches legacy search payloads for character and group chats after JSONL drifts out of band', async () => {
+    test('matches legacy search payloads for character chats and never exposes group chats after JSONL drifts out of band', async () => {
         const directories = makeDirectories();
         const dependencies = createDependencies();
         const manager = createManager();
@@ -122,12 +122,6 @@ describe('canonical chat query service', () => {
             directories,
             query: 'logic',
             avatarUrl: 'Ada.png',
-            dependencies,
-        });
-        const expectedGroup = await searchChatPayload({
-            directories,
-            query: 'memory',
-            groupId: 'group-1',
             dependencies,
         });
 
@@ -167,13 +161,21 @@ describe('canonical chat query service', () => {
             avatarUrl: 'Ada.png',
             dependencies,
         })).resolves.toEqual(expectedCharacter);
+        const groupRow = db.prepare('SELECT owner_id FROM chat_sessions WHERE owner_type = \'group\'').get();
+        expect(groupRow?.owner_id).toBeTruthy();
+        // Retired group sessions must never surface in user-facing search, even
+        // when the queried character name collides with the group owner id.
         await expect(searchCanonicalChatPayload({
             db,
+            query: 'memory',
+            avatarUrl: `${groupRow.owner_id}.png`,
+        })).resolves.toEqual([]);
+        await expect(searchChatPayload({
             directories,
             query: 'memory',
-            groupId: 'group-1',
+            avatarUrl: `${groupRow.owner_id}.png`,
             dependencies,
-        })).resolves.toEqual(expectedGroup);
+        })).resolves.toEqual([]);
     });
 
     test('matches legacy recent payloads for canonical character and group chats while preserving root-chat fallback', async () => {

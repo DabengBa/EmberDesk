@@ -1,7 +1,6 @@
 'use strict';
 
 import { extension_prompt_types, name1, name2, online_status, saveSettingsDebounced, substituteParams } from '../script.js';
-import { selected_group } from './group-chats.js';
 import { parseExampleIntoIndividual } from './openai.js';
 import {
     power_user,
@@ -388,7 +387,7 @@ export function formatInstructModeChat(name, mes, isUser, isNarrator, forceAvata
     const instruct = structuredClone(customInstruct ?? power_user.instruct);
     let includeNames = isNarrator ? false : instruct.names_behavior === names_behavior_types.ALWAYS;
 
-    if (!isNarrator && instruct.names_behavior === names_behavior_types.FORCE && ((selected_group && name !== name1) || (forceAvatar && name !== name1))) {
+    if (!isNarrator && instruct.names_behavior === names_behavior_types.FORCE && forceAvatar && name !== name1) {
         includeNames = true;
     }
 
@@ -516,7 +515,6 @@ export function formatInstructModeExamples(mesExamplesArray, name1, name2) {
     }
 
     const includeNames = power_user.instruct.names_behavior === names_behavior_types.ALWAYS;
-    const includeGroupNames = selected_group && [names_behavior_types.ALWAYS, names_behavior_types.FORCE].includes(power_user.instruct.names_behavior);
 
     let inputPrefix = power_user.instruct.input_sequence || '';
     let outputPrefix = power_user.instruct.output_sequence || '';
@@ -548,7 +546,7 @@ export function formatInstructModeExamples(mesExamplesArray, name1, name2) {
 
     for (const item of mesExamplesArray) {
         const cleanedItem = item.replace(/<START>/i, '{Example Dialogue:}').replace(/\r/gm, '');
-        const blockExamples = parseExampleIntoIndividual(cleanedItem, includeGroupNames);
+        const blockExamples = parseExampleIntoIndividual(cleanedItem, false);
 
         if (blockExamples.length === 0) {
             continue;
@@ -559,9 +557,7 @@ export function formatInstructModeExamples(mesExamplesArray, name1, name2) {
         }
 
         for (const example of blockExamples) {
-            // If group names were included, we don't want to add any additional prefix as it already was applied.
-            // Otherwise, if force group/persona names is set, we should override the include names for the user placeholder
-            const includeThisName = !includeGroupNames && (includeNames || (power_user.instruct.names_behavior === names_behavior_types.FORCE && example.name == 'example_user'));
+            const includeThisName = includeNames || (power_user.instruct.names_behavior === names_behavior_types.FORCE && example.name == 'example_user');
 
             const prefix = example.name == 'example_user' ? inputPrefix : outputPrefix;
             const suffix = example.name == 'example_user' ? inputSuffix : outputSuffix;
@@ -592,7 +588,7 @@ export function formatInstructModeExamples(mesExamplesArray, name1, name2) {
  */
 export function formatInstructModePrompt(name, isImpersonate, promptBias, name1, name2, isQuiet, isQuietToLoud, customInstruct = null) {
     const instruct = structuredClone(customInstruct ?? power_user.instruct);
-    const includeNames = name && (instruct.names_behavior === names_behavior_types.ALWAYS || (!!selected_group && instruct.names_behavior === names_behavior_types.FORCE)) && !(isQuiet && !isQuietToLoud);
+    const includeNames = name && instruct.names_behavior === names_behavior_types.ALWAYS && !(isQuiet && !isQuietToLoud);
 
     function getSequence() {
         // User impersonation prompt

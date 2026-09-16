@@ -11,7 +11,6 @@ describe('runDeleteCharacterClosePreflight', () => {
             onGenerationBlocked: () => calls.push('blocked'),
             waitForPendingChatSave: async () => calls.push('wait'),
             clearCurrentChat: async () => calls.push('clear'),
-            resetSelectedGroup: () => calls.push('reset-group'),
             resetSelectionState: () => calls.push('reset-selection'),
         });
 
@@ -26,7 +25,6 @@ describe('runDeleteCharacterClosePreflight', () => {
             isGenerationInProgress: () => false,
             waitForPendingChatSave: async () => calls.push('wait'),
             clearCurrentChat: async () => calls.push('clear'),
-            resetSelectedGroup: () => calls.push('reset-group'),
             resetSelectionState: () => calls.push('reset-selection'),
             selectCharactersView: () => calls.push('select-characters-view'),
             suppressWelcomeScreen: () => calls.push('suppress-welcome-screen'),
@@ -37,7 +35,6 @@ describe('runDeleteCharacterClosePreflight', () => {
         expect(calls).toEqual([
             'wait',
             'clear',
-            'reset-group',
             'reset-selection',
             'select-characters-view',
             'suppress-welcome-screen',
@@ -55,7 +52,6 @@ describe('runDeleteCharacterClosePreflight', () => {
                 throw new Error('save-timeout');
             },
             clearCurrentChat: async () => calls.push('clear'),
-            resetSelectedGroup: () => calls.push('reset-group'),
             resetSelectionState: () => calls.push('reset-selection'),
         })).rejects.toThrow('save-timeout');
 
