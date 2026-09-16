@@ -106,7 +106,7 @@ describe('settings React route flag', () => {
         expect(helperModule.defaultSettingsFormValues.userInterface).not.toHaveProperty('waifuMode');
         expect(indexSource).not.toContain('id="waifuMode"');
         expect(indexSource).toContain('id="bg1"');
-        expect(indexSource).toContain('id="rm_group_hidemutedsprites"');
+        expect(indexSource).not.toContain('id="rm_group_hidemutedsprites"');
 
         expect(routeSource).toContain("import { useMutation, useQuery } from '@tanstack/react-query';");
         expect(routeSource).toContain("import { z } from 'zod';");

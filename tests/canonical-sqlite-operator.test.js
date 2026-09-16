@@ -844,7 +844,7 @@ describe('canonical sqlite operator helpers', () => {
             featureFlags: { enabled: true, strict: false },
         });
         runCanonicalMigrations(db, { nowMs: 1735689600000 });
-        fs.writeFileSync(path.join(directories.backgrounds, 'sky.png'), 'background', 'utf8');
+        fs.writeFileSync(path.join(directories.assets, 'sky.png'), 'background', 'utf8');
 
         const audit = await runCanonicalSliceAudit({
             sliceKey: 'managed_media',
@@ -862,7 +862,7 @@ describe('canonical sqlite operator helpers', () => {
         }));
         expect(audit.entries).toEqual(expect.arrayContaining([
             expect.objectContaining({
-                compatibility_path: 'backgrounds/sky.png',
+                compatibility_path: 'assets/sky.png',
                 drift_types: ['orphan'],
             }),
         ]));
