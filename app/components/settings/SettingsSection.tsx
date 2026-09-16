@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react';
+import * as stylex from '@stylexjs/stylex';
+import { settingsStyles } from '@/styles/settings-surface.styles';
 
 type SettingsSectionProps = {
     title: string;
@@ -8,12 +10,12 @@ type SettingsSectionProps = {
 
 export function SettingsSection({ title, description, children }: SettingsSectionProps) {
     return (
-        <section className="settings-section">
-            <header className="settings-section-header">
-                <h2 className="settings-section-title">{title}</h2>
-                {description && <p className="settings-section-description">{description}</p>}
+        <section {...stylex.props(settingsStyles.section)}>
+            <header {...stylex.props(settingsStyles.sectionHeader)}>
+                <h2 {...stylex.props(settingsStyles.sectionTitle)}>{title}</h2>
+                {description && <p {...stylex.props(settingsStyles.mutedText, settingsStyles.sectionDescription)}>{description}</p>}
             </header>
-            <div className="settings-grid">{children}</div>
+            <div {...stylex.props(settingsStyles.grid)}>{children}</div>
         </section>
     );
 }

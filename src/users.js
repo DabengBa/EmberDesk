@@ -50,7 +50,6 @@ import { DEFAULT_USER, PUBLIC_DIRECTORIES } from './constants.js';
 import { getConfigValue, color, generateTimestamp, isPathUnderParent, invalidateFirefoxCache } from './util.js';
 import { allowKeysExposure, SECRETS_FILE } from './endpoints/secrets.js';
 import { extensionsEnabledFeatureGuard } from './endpoints/extensions.js';
-import { serverDirectory } from './server-directory.js';
 import { getEnableAccounts, toKey, getAccountVersion, getAllEnabledUsers, needsSetup } from './user-storage.js';
 import { getUserDirectories } from './user-directories.js';
 import { shouldRedirectToLogin, tryAutoLogin } from './user-auth.js';

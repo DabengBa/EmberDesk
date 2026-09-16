@@ -53,7 +53,12 @@ import {
     type WorldInfoWorkspacePanelState as WorldInfoWorkbenchPanelState,
 } from './world-info-workbench';
 import { SettingsSurface } from './components/settings/SettingsSurface';
-import './styles/settings-surface.css';
+import * as stylex from '@stylexjs/stylex';
+import { authoringStyles, workspacePanelStyles, workspaceShellStyles } from './styles/workspace-panels.styles.js';
+import { Theme } from '@astryxdesign/core';
+import { emberDeskTheme } from './lib/theme-tokens';
+import { settingsStyles } from './styles/settings-surface.styles';
+import '@astryxdesign/core/astryx.css';
 
 export type WorkspacePanelKind = 'worldInfo' | 'extensionsHost' | 'mainChatMessageList' | 'characterAuthoring';
 interface WorkspacePanelMount {
@@ -166,6 +171,40 @@ interface MainChatMessageListWorkspacePanelState {
     mainChatSnapshot?: MainChatSnapshot;
 }
 
+const panelShellStyles = stylex.create({
+    diagnostics: {
+        color: 'color-mix(in srgb, var(--SmartThemeBodyColor) 72%, var(--SmartThemeBlurTintColor) 28%)',
+        borderWidth: '1px',
+        borderStyle: 'solid',
+        borderColor: 'color-mix(in srgb, var(--SmartThemeBorderColor) 70%, transparent)',
+        borderRadius: '5px',
+        backgroundColor: 'color-mix(in srgb, var(--SmartThemeBlurTintColor) 70%, var(--black50a) 30%)',
+        padding: {
+            default: '2px 5px',
+            '[open]': '2px 5px 5px',
+        },
+        fontSize: 'calc(var(--mainFontSize) * 0.9)',
+    },
+    diagnosticsSummary: {
+        width: 'fit-content',
+        cursor: 'pointer',
+        color: {
+            default: 'var(--SmartThemeEmColor)',
+            ':hover': 'var(--SmartThemeBodyColor)',
+            ':focus-visible': 'var(--SmartThemeBodyColor)',
+        },
+        listStylePosition: 'inside',
+        outlineWidth: { ':focus-visible': '1px' },
+        outlineStyle: { ':focus-visible': 'solid' },
+        outlineColor: { ':focus-visible': 'var(--interactable-outline-color)' },
+        outlineOffset: { ':focus-visible': '2px' },
+        borderRadius: { ':focus-visible': '3px' },
+        marginBottom: {
+            [stylex.when.ancestor('[open]')]: '5px',
+        },
+    },
+});
+
 interface AuthoringWorkspacePanelState {
     mode?: 'create' | 'edit';
     title?: string;
@@ -263,7 +302,10 @@ function WorkspacePanelShell({
                     <div className="title_restorable">{title}</div>
                     {status === 'loading' || status === 'error' ? (
                         <span
-                            className="workspace-panel-status-badge"
+                            {...stylex.props(
+                                workspacePanelStyles.statusBadge,
+                                status === 'loading' ? workspacePanelStyles.statusBadgeLoading : workspacePanelStyles.statusBadgeError,
+                            )}
                             data-workspace-panel-status={status}
                         >
                             {getWorkspacePanelVisibleStatusLabel(status)}
@@ -272,15 +314,15 @@ function WorkspacePanelShell({
                 </div>
                 {actions.length > 0 ? (
                     <div
-                        className="workspace-panel-recovery"
+                        {...stylex.props(workspacePanelStyles.recovery)}
                         data-workspace-panel-recovery-state={status}
                     >
-                        <div className="workspace-panel-recovery-actions">
+                        <div {...stylex.props(workspacePanelStyles.recoveryActions)}>
                             {actions.map(action => (
                                 <button
                                     key={action.id}
                                     type="button"
-                                    className="menu_button menu_button_icon"
+                                    className={`menu_button menu_button_icon ${stylex.props(workspacePanelStyles.recoveryActionButton).className ?? ''}`}
                                     data-workspace-panel-recovery-action={action.id}
                                     onClick={action.onClick}
                                     disabled={action.disabled}
@@ -293,12 +335,21 @@ function WorkspacePanelShell({
                 ) : null}
                 {children}
                 {!hideDiagnostics && (slots.length > 0 || status !== 'idle') ? (
-                    <details className="workspace-panel-diagnostics" data-workspace-panel-diagnostics={kind}>
-                        <summary>Diagnostics</summary>
+                    <details
+                        {...stylex.props(panelShellStyles.diagnostics, stylex.defaultMarker())}
+                        data-workspace-panel-diagnostics={kind}
+                    >
+                        <summary {...stylex.props(panelShellStyles.diagnosticsSummary)}>Diagnostics</summary>
                         <div className="flex-container flexFlowColumn gap4">
                             <div className="flex-container justifyspacebetween alignitemscenter gap8">
                                 <span>Status</span>
-                                <span className="workspace-panel-status-badge" data-workspace-panel-status={status}>{status}</span>
+                                <span
+                                    {...stylex.props(
+                                        workspacePanelStyles.statusBadge,
+                                        status === 'loading' ? workspacePanelStyles.statusBadgeLoading : status === 'error' ? workspacePanelStyles.statusBadgeError : null,
+                                    )}
+                                    data-workspace-panel-status={status}
+                                >{status}</span>
                             </div>
                             {slots.length > 0 ? (
                                 <div className="flex-container flexFlowColumn gap4" data-workspace-legacy-slots={kind}>
@@ -312,13 +363,16 @@ function WorkspacePanelShell({
                                         return (
                                             <div
                                                 key={slot.id}
-                                                className={protectedSlot ? 'workspace-panel-legacy-slot workspace-panel-legacy-slot-protected' : 'workspace-panel-legacy-slot'}
+                                                {...stylex.props(workspacePanelStyles.legacySlot, protectedSlot ? workspacePanelStyles.legacySlotProtected : null)}
                                                 data-workspace-legacy-slot={slot.id}
                                                 data-workspace-legacy-slot-ready={slot.ready ? 'true' : 'false'}
                                             >
                                                 <span>{slot.label}</span>
                                                 <span
-                                                    className="workspace-panel-legacy-slot-status"
+                                                    {...stylex.props(
+                                                        workspacePanelStyles.legacySlotStatus,
+                                                        slot.ready ? workspacePanelStyles.legacySlotStatusReady : workspacePanelStyles.legacySlotStatusPending,
+                                                    )}
                                                     data-workspace-panel-legacy-ready={slot.ready ? 'true' : 'false'}
                                                 >
                                                     {slot.ready ? 'Ready' : 'Legacy'}
@@ -470,34 +524,34 @@ function AuthoringWorkspacePanel({
             status={authoringCommandMutation.isError ? 'error' : 'success'}
         >
             <section
-                className="react-authoring-panel"
+                {...stylex.props(authoringStyles.panel)}
                 data-doc-id="feature.character_library_panel term.character_card page.chat_workspace"
                 data-react-authoring-owner={kind}
                 data-react-authoring-mode={bridgeState.mode ?? 'create'}
                 data-react-authoring-dirty={authoringSession.dirty ? 'true' : 'false'}
             >
-                <header className="react-authoring-panel-header">
+                <header {...stylex.props(authoringStyles.panelHeader)}>
                     <div>
-                        <div className="react-authoring-panel-kicker">{bridgeState.mode === 'edit' ? 'Editing' : 'Creating'}</div>
-                        <h3>{title}</h3>
-                        <p>{subtitle}</p>
+                        <div {...stylex.props(authoringStyles.panelKicker)}>{bridgeState.mode === 'edit' ? 'Editing' : 'Creating'}</div>
+                        <h3 {...stylex.props(authoringStyles.panelHeaderTitle)}>{title}</h3>
+                        <p {...stylex.props(authoringStyles.panelHeaderText)}>{subtitle}</p>
                     </div>
-                    <span className="react-authoring-panel-state" aria-live="polite">
+                    <span {...stylex.props(authoringStyles.panelState)} aria-live="polite">
                         {statusLabel}
                     </span>
                 </header>
                 {unsupportedFields.length > 0 ? (
-                    <div className="react-authoring-panel-warning" role="status">
+                    <div {...stylex.props(authoringStyles.panelWarning)} role="status">
                         Unsupported extension fields are preserved server-side and not edited here: {unsupportedFields.join(', ')}
                     </div>
                 ) : null}
-                <div className="react-authoring-panel-actions" aria-label={`${title} actions`}>
-                    <button type="button" className="menu_button react-authoring-save" disabled={isActionPending} onClick={submitDraft}>Save</button>
-                    <button type="button" className="menu_button react-authoring-secondary-action" disabled={isActionPending} onClick={cancelDraft}>Cancel</button>
+                <div {...stylex.props(authoringStyles.panelActions)} aria-label={`${title} actions`}>
+                    <button type="button" className={`menu_button ${stylex.props(authoringStyles.saveButton).className ?? ''}`} disabled={isActionPending} onClick={submitDraft}>Save</button>
+                    <button type="button" className={`menu_button ${stylex.props(authoringStyles.secondaryAction).className ?? ''}`} disabled={isActionPending} onClick={cancelDraft}>Cancel</button>
                     <>
                             <button
                                 type="button"
-                                className="menu_button react-authoring-tool-action"
+                                className={`menu_button ${stylex.props(authoringStyles.toolAction).className ?? ''}`}
                                 disabled={isActionPending}
                                 onClick={() => void commands?.openWorldInfo?.(characterToolActionPayload)}
                             >
@@ -505,34 +559,34 @@ function AuthoringWorkspacePanel({
                             </button>
                             <button
                                 type="button"
-                                className="menu_button react-authoring-tool-action"
+                                className={`menu_button ${stylex.props(authoringStyles.toolAction).className ?? ''}`}
                                 disabled={isActionPending}
                                 onClick={() => void commands?.openAlternateGreetings?.(characterToolActionPayload)}
                             >
                                 Alternate Greetings
                             </button>
-                            <button type="button" className="menu_button react-authoring-tool-action" disabled={isActionPending} onClick={() => void commands?.duplicateAuthoring?.(kind)}>Duplicate</button>
-                            <button type="button" className="menu_button react-authoring-tool-action" disabled={isActionPending} onClick={() => void commands?.exportAuthoring?.(characterActionPayload)}>Export</button>
+                            <button type="button" className={`menu_button ${stylex.props(authoringStyles.toolAction).className ?? ''}`} disabled={isActionPending} onClick={() => void commands?.duplicateAuthoring?.(kind)}>Duplicate</button>
+                            <button type="button" className={`menu_button ${stylex.props(authoringStyles.toolAction).className ?? ''}`} disabled={isActionPending} onClick={() => void commands?.exportAuthoring?.(characterActionPayload)}>Export</button>
                     </>
                 </div>
                 <fieldset
-                    className="react-authoring-fields"
+                    {...stylex.props(authoringStyles.fields)}
                     disabled={isActionPending}
                     style={{ border: 0, margin: 0, minWidth: 0, padding: 0 }}
                 >
-                    <label className="react-authoring-field" data-react-authoring-field="name">
-                        <span>Name</span>
+                    <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="name">
+                        <span {...stylex.props(authoringStyles.fieldLabel)}>Name</span>
                         <input
                             className="text_pole"
                             value={nameValue}
                             aria-invalid={fieldErrors.name ? 'true' : 'false'}
                             onChange={(event) => updateDraft({ name: event.target.value })}
                         />
-                        {fieldErrors.name ? <small role="alert">{fieldErrors.name}</small> : null}
+                        {fieldErrors.name ? <small role="alert" {...stylex.props(authoringStyles.fieldWarning)}>{fieldErrors.name}</small> : null}
                     </label>
                     <>
-                            <div className="react-authoring-field" data-react-authoring-field="avatar">
-                                <span>Avatar</span>
+                            <div {...stylex.props(authoringStyles.field)} data-react-authoring-field="avatar">
+                                <span {...stylex.props(authoringStyles.fieldLabel)}>Avatar</span>
                                 <input
                                     className="text_pole"
                                     value={stringDraft('avatar')}
@@ -558,16 +612,16 @@ function AuthoringWorkspacePanel({
                                     }}
                                 />
                             </div>
-                            <label className="react-authoring-field" data-react-authoring-field="favorite">
-                                <span>Favorite</span>
+                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="favorite">
+                                <span {...stylex.props(authoringStyles.fieldLabel)}>Favorite</span>
                                 <input
                                     type="checkbox"
                                     checked={Boolean(draft.favorite)}
                                     onChange={(event) => updateDraft({ favorite: event.target.checked })}
                                 />
                             </label>
-                            <label className="react-authoring-field" data-react-authoring-field="description">
-                                <span>Description</span>
+                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="description">
+                                <span {...stylex.props(authoringStyles.fieldLabel)}>Description</span>
                                 <textarea
                                     className="text_pole"
                                     rows={5}
@@ -575,8 +629,8 @@ function AuthoringWorkspacePanel({
                                     onChange={(event) => updateDraft({ description: event.target.value })}
                                 />
                             </label>
-                            <label className="react-authoring-field" data-react-authoring-field="firstMessage">
-                                <span>First message</span>
+                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="firstMessage">
+                                <span {...stylex.props(authoringStyles.fieldLabel)}>First message</span>
                                 <textarea
                                     className="text_pole"
                                     rows={4}
@@ -584,8 +638,8 @@ function AuthoringWorkspacePanel({
                                     onChange={(event) => updateDraft({ firstMessage: event.target.value })}
                                 />
                             </label>
-                            <label className="react-authoring-field" data-react-authoring-field="alternateGreetings">
-                                <span>Alternate greetings</span>
+                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="alternateGreetings">
+                                <span {...stylex.props(authoringStyles.fieldLabel)}>Alternate greetings</span>
                                 <textarea
                                     className="text_pole"
                                     rows={3}
@@ -599,8 +653,8 @@ function AuthoringWorkspacePanel({
                                     placeholder="One greeting per line"
                                 />
                             </label>
-                            <label className="react-authoring-field" data-react-authoring-field="personality">
-                                <span>Personality</span>
+                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="personality">
+                                <span {...stylex.props(authoringStyles.fieldLabel)}>Personality</span>
                                 <textarea
                                     className="text_pole"
                                     rows={3}
@@ -608,8 +662,8 @@ function AuthoringWorkspacePanel({
                                     onChange={(event) => updateDraft({ personality: event.target.value })}
                                 />
                             </label>
-                            <label className="react-authoring-field" data-react-authoring-field="scenario">
-                                <span>Scenario</span>
+                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="scenario">
+                                <span {...stylex.props(authoringStyles.fieldLabel)}>Scenario</span>
                                 <textarea
                                     className="text_pole"
                                     rows={3}
@@ -617,8 +671,8 @@ function AuthoringWorkspacePanel({
                                     onChange={(event) => updateDraft({ scenario: event.target.value })}
                                 />
                             </label>
-                            <label className="react-authoring-field" data-react-authoring-field="exampleMessages">
-                                <span>Example messages</span>
+                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="exampleMessages">
+                                <span {...stylex.props(authoringStyles.fieldLabel)}>Example messages</span>
                                 <textarea
                                     className="text_pole"
                                     rows={4}
@@ -626,8 +680,8 @@ function AuthoringWorkspacePanel({
                                     onChange={(event) => updateDraft({ exampleMessages: event.target.value })}
                                 />
                             </label>
-                            <label className="react-authoring-field" data-react-authoring-field="systemPrompt">
-                                <span>System prompt</span>
+                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="systemPrompt">
+                                <span {...stylex.props(authoringStyles.fieldLabel)}>System prompt</span>
                                 <textarea
                                     className="text_pole"
                                     rows={3}
@@ -635,8 +689,8 @@ function AuthoringWorkspacePanel({
                                     onChange={(event) => updateDraft({ systemPrompt: event.target.value })}
                                 />
                             </label>
-                            <label className="react-authoring-field" data-react-authoring-field="postHistoryInstructions">
-                                <span>Post-history instructions</span>
+                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="postHistoryInstructions">
+                                <span {...stylex.props(authoringStyles.fieldLabel)}>Post-history instructions</span>
                                 <textarea
                                     className="text_pole"
                                     rows={3}
@@ -644,8 +698,8 @@ function AuthoringWorkspacePanel({
                                     onChange={(event) => updateDraft({ postHistoryInstructions: event.target.value })}
                                 />
                             </label>
-                            <label className="react-authoring-field" data-react-authoring-field="creatorNotes">
-                                <span>Creator notes</span>
+                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="creatorNotes">
+                                <span {...stylex.props(authoringStyles.fieldLabel)}>Creator notes</span>
                                 <textarea
                                     className="text_pole"
                                     rows={3}
@@ -653,24 +707,24 @@ function AuthoringWorkspacePanel({
                                     onChange={(event) => updateDraft({ creatorNotes: event.target.value })}
                                 />
                             </label>
-                            <label className="react-authoring-field" data-react-authoring-field="creator">
-                                <span>Creator</span>
+                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="creator">
+                                <span {...stylex.props(authoringStyles.fieldLabel)}>Creator</span>
                                 <input
                                     className="text_pole"
                                     value={stringDraft('creator')}
                                     onChange={(event) => updateDraft({ creator: event.target.value })}
                                 />
                             </label>
-                            <label className="react-authoring-field" data-react-authoring-field="characterVersion">
-                                <span>Character version</span>
+                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="characterVersion">
+                                <span {...stylex.props(authoringStyles.fieldLabel)}>Character version</span>
                                 <input
                                     className="text_pole"
                                     value={stringDraft('characterVersion')}
                                     onChange={(event) => updateDraft({ characterVersion: event.target.value })}
                                 />
                             </label>
-                            <label className="react-authoring-field" data-react-authoring-field="tags">
-                                <span>Tags</span>
+                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="tags">
+                                <span {...stylex.props(authoringStyles.fieldLabel)}>Tags</span>
                                 <input
                                     className="text_pole"
                                     value={tagsText}
@@ -683,8 +737,8 @@ function AuthoringWorkspacePanel({
                                     placeholder="Comma-separated tags"
                                 />
                             </label>
-                            <label className="react-authoring-field" data-react-authoring-field="characterWorld">
-                                <span>World Info</span>
+                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="characterWorld">
+                                <span {...stylex.props(authoringStyles.fieldLabel)}>World Info</span>
                                 <input
                                     className="text_pole"
                                     value={stringDraft('characterWorld')}
@@ -692,8 +746,8 @@ function AuthoringWorkspacePanel({
                                     placeholder="Linked world file name"
                                 />
                             </label>
-                            <label className="react-authoring-field" data-react-authoring-field="depthPrompt.prompt">
-                                <span>Depth prompt</span>
+                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="depthPrompt.prompt">
+                                <span {...stylex.props(authoringStyles.fieldLabel)}>Depth prompt</span>
                                 <textarea
                                     className="text_pole"
                                     rows={3}
@@ -703,8 +757,8 @@ function AuthoringWorkspacePanel({
                                     })}
                                 />
                             </label>
-                            <label className="react-authoring-field" data-react-authoring-field="depthPrompt.depth">
-                                <span>Depth</span>
+                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="depthPrompt.depth">
+                                <span {...stylex.props(authoringStyles.fieldLabel)}>Depth</span>
                                 <input
                                     className="text_pole"
                                     type="number"
@@ -718,8 +772,8 @@ function AuthoringWorkspacePanel({
                                     })}
                                 />
                             </label>
-                            <label className="react-authoring-field" data-react-authoring-field="depthPrompt.role">
-                                <span>Depth role</span>
+                            <label {...stylex.props(authoringStyles.field)} data-react-authoring-field="depthPrompt.role">
+                                <span {...stylex.props(authoringStyles.fieldLabel)}>Depth role</span>
                                 <select
                                     className="text_pole"
                                     value={String(depthPrompt.role ?? 'system')}
@@ -736,7 +790,7 @@ function AuthoringWorkspacePanel({
 
                 </fieldset>
                 {!isCreateMode ? (
-                    <div className="react-authoring-danger-zone">
+                    <div {...stylex.props(authoringStyles.dangerZone)}>
                         <button type="button" className="menu_button red_button" disabled={isActionPending} onClick={() => void commands?.deleteAuthoring?.(kind)}>Delete</button>
                     </div>
                 ) : null}
@@ -1321,16 +1375,16 @@ function ReactWorkspaceShellChrome({
 
     return (
         <header
-            className="react-workspace-shell-chrome"
+            {...stylex.props(workspaceShellStyles.chrome)}
             data-react-workspace-shell-chrome="true"
             data-react-workspace-shell-chrome-status={status}
             data-react-workspace-shell-chrome-context={state.activeContext ?? 'none'}
             data-doc-id="feature.next_workspace_shell page.chat_workspace"
         >
-            <section className="react-workspace-shell-context" aria-label="Current workspace context">
-                <div className="react-workspace-shell-title">{contextTitle}</div>
+            <section {...stylex.props(workspaceShellStyles.context)} aria-label="Current workspace context">
+                <div {...stylex.props(workspaceShellStyles.title)}>{contextTitle}</div>
             </section>
-            <nav className="react-workspace-shell-nav" aria-label="Workspace navigation">
+            <nav {...stylex.props(workspaceShellStyles.nav)} aria-label="Workspace navigation">
                 {workspaceShellNavigationEntries.map(entry => {
                     const isPanelEntryActive = Boolean(entry.panelKind && dockSnapshot.activePanelKind === entry.panelKind);
                     const isPinned = Boolean(entry.panelKind && dockSnapshot.pinnedPanelKinds.includes(entry.panelKind));
@@ -1343,7 +1397,7 @@ function ReactWorkspaceShellChrome({
                         <Fragment key={entry.command}>
                             <button
                                 type="button"
-                                className="react-workspace-shell-nav-button"
+                                {...stylex.props(workspaceShellStyles.navButton, isPanelEntryActive ? workspaceShellStyles.navButtonActive : null)}
                                 aria-label={panelActionLabel}
                                 title={panelActionLabel}
                                 aria-pressed={entry.panelKind ? isPanelEntryActive : undefined}
@@ -1366,12 +1420,12 @@ function ReactWorkspaceShellChrome({
                                 }}
                             >
                                 <i className={`fa-solid ${entry.icon}`} aria-hidden="true" />
-                                <span>{entry.label}</span>
+                                <span {...stylex.props(workspaceShellStyles.navButtonLabel)}>{entry.label}</span>
                             </button>
                             {entry.panelKind && entry.slotKey && isPanelEntryActive ? (
                                 <button
                                     type="button"
-                                    className="react-workspace-shell-pin-button"
+                                    {...stylex.props(workspaceShellStyles.pinButton, isPinned ? workspaceShellStyles.pinButtonPressed : null)}
                                     aria-label={`${isPinned ? 'Unpin' : 'Pin'} ${entry.label}`}
                                     aria-pressed={isPinned}
                                     data-workspace-shell-panel-pin={entry.panelKind}
@@ -1393,9 +1447,11 @@ function ReactWorkspaceShellChrome({
 function renderIntoShellChrome(mount: WorkspaceShellChromeMount) {
     mount.root.render(
         <StrictMode>
-            <QueryClientProvider client={queryClient}>
-                <ReactWorkspaceShellChrome state={mount.state} commands={mount.commands} runtime={mount.runtime} />
-            </QueryClientProvider>
+            <Theme theme={emberDeskTheme} mode="dark">
+                <QueryClientProvider client={queryClient}>
+                    <ReactWorkspaceShellChrome state={mount.state} commands={mount.commands} runtime={mount.runtime} />
+                </QueryClientProvider>
+            </Theme>
         </StrictMode>,
     );
 }
@@ -1423,9 +1479,11 @@ function renderIntoPanel(mount: WorkspacePanelMount) {
     queryClient.setQueryData(workspacePanelStateQueryKey(mount.kind), mount.state ?? null);
     mount.root.render(
         <StrictMode>
-            <QueryClientProvider client={queryClient}>
-                <WorkspacePanelRoot kind={mount.kind} commands={mount.commands} />
-            </QueryClientProvider>
+            <Theme theme={emberDeskTheme} mode="dark">
+                <QueryClientProvider client={queryClient}>
+                    <WorkspacePanelRoot kind={mount.kind} commands={mount.commands} />
+                </QueryClientProvider>
+            </Theme>
         </StrictMode>,
     );
 }
@@ -1508,12 +1566,12 @@ function SettingsOverlayHost({
         <>
             <div
                 ref={backdropRef}
-                className="settings-overlay-backdrop"
+                {...stylex.props(settingsStyles.overlayBackdrop)}
                 data-settings-overlay-backdrop="true"
             />
             <dialog
                 ref={dialogRef}
-                className="settings-overlay"
+                {...stylex.props(settingsStyles.overlay)}
                 data-settings-overlay="true"
                 aria-label="Settings"
                 tabIndex={-1}
@@ -1537,14 +1595,16 @@ function SettingsOverlayHost({
 function renderSettingsOverlay(mount: SettingsOverlayMount) {
     mount.root.render(
         <StrictMode>
-            <QueryClientProvider client={queryClient}>
-                <SettingsOverlayHost
-                    initialTab={mount.initialTab}
-                    panelKind={mount.panelKind}
-                    onRequestClose={mount.onRequestClose}
-                    runtime={mount.runtime}
-                />
-            </QueryClientProvider>
+            <Theme theme={emberDeskTheme} mode="dark">
+                <QueryClientProvider client={queryClient}>
+                    <SettingsOverlayHost
+                        initialTab={mount.initialTab}
+                        panelKind={mount.panelKind}
+                        onRequestClose={mount.onRequestClose}
+                        runtime={mount.runtime}
+                    />
+                </QueryClientProvider>
+            </Theme>
         </StrictMode>,
     );
 }
@@ -1575,6 +1635,7 @@ export function mountSettingsOverlay(options: {
     const host = document.createElement('div');
     host.id = 'emberdesk-react-settings-overlay-host';
     host.setAttribute('data-react-settings-overlay-host', 'true');
+    host.className = stylex.props(settingsStyles.overlayHost).className ?? '';
     document.body.appendChild(host);
 
     mountedSettingsOverlay = {

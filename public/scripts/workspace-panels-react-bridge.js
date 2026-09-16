@@ -5,11 +5,26 @@ import {
 } from './workspace-panel-mount-contract.js';
 
 export const REACT_WORKSPACE_PANELS_ASSET_PATH = '/react/login/assets/workspace-panels.js';
+export const REACT_WORKSPACE_PANELS_STYLES_PATH = '/react/login/assets/workspace-panels.css';
 const REACT_WORKSPACE_PANELS_ASSET_CACHE_KEY = Date.now().toString(36);
 
 export function getReactWorkspacePanelsAssetPath() {
     const cacheKey = globalThis.__emberDeskReactWorkspacePanelsAssetCacheKey ??= REACT_WORKSPACE_PANELS_ASSET_CACHE_KEY;
     return `${REACT_WORKSPACE_PANELS_ASSET_PATH}?v=${encodeURIComponent(String(cacheKey))}`;
+}
+
+export function ensureReactPanelStylesheet(href, doc = globalThis.document) {
+    if (!doc?.head || !href) {
+        return;
+    }
+    if (doc.head.querySelector(`link[data-emberdesk-react-panel-styles="${href}"]`)) {
+        return;
+    }
+    const link = doc.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = href;
+    link.dataset.emberdeskReactPanelStyles = href;
+    doc.head.appendChild(link);
 }
 
 export function getDefaultWorkspaceReactFeatures() {
@@ -35,6 +50,7 @@ export function createWorkspacePanelsModuleLoader(importModule = assetPath => im
 
     return function loadWorkspacePanelsModule() {
         if (!modulePromise) {
+            ensureReactPanelStylesheet(REACT_WORKSPACE_PANELS_STYLES_PATH);
             modulePromise = importModule(getReactWorkspacePanelsAssetPath()).catch(error => {
                 modulePromise = null;
                 throw error;

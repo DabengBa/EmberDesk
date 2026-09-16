@@ -1,3 +1,6 @@
+import * as stylex from '@stylexjs/stylex';
+import { settingsStyles } from '@/styles/settings-surface.styles';
+
 type SettingsTab = {
     id: string;
     label: string;
@@ -15,18 +18,18 @@ export function SettingsTabs({ tabs, activeTab, onChange, showDescription = true
     const currentTab = tabs.find(tab => tab.id === activeTab) ?? tabs[0];
 
     return (
-        <div className="settings-tabs">
-            <div className="settings-tabs-list" aria-label="Settings sections">
+        <div {...stylex.props(settingsStyles.tabs)}>
+            <div {...stylex.props(settingsStyles.tabsList)} aria-label="Settings sections">
                 {tabs.map(tab => {
                     const isActive = tab.id === activeTab;
                     return (
                         <button
                             key={tab.id}
                             type="button"
+                            className={`settings-tab ${stylex.props(settingsStyles.tab, isActive && settingsStyles.tabActive).className ?? ''}`}
                             aria-pressed={isActive}
                             data-active={isActive}
                             onClick={() => onChange(tab.id)}
-                            className="settings-tab"
                         >
                             {tab.label}
                         </button>
@@ -35,9 +38,9 @@ export function SettingsTabs({ tabs, activeTab, onChange, showDescription = true
             </div>
 
             {showDescription ? (
-                <p className="settings-tabs-description">{currentTab?.description}</p>
+                <p {...stylex.props(settingsStyles.tabsDescription)}>{currentTab?.description}</p>
             ) : (
-                <p className="settings-tabs-description settings-tabs-description--visually-hidden">
+                <p {...stylex.props(settingsStyles.tabsDescription, settingsStyles.visuallyHidden)}>
                     {currentTab?.description}
                 </p>
             )}

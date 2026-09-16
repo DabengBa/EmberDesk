@@ -1,5 +1,7 @@
 import type { ChangeEventHandler } from 'react';
+import * as stylex from '@stylexjs/stylex';
 import { getSetupPasswordVisibilityState } from '@/lib/setup-helpers';
+import { loginStyles } from '@/styles/login.styles';
 
 type SetupPasswordInputProps = {
     id: string;
@@ -27,10 +29,11 @@ export function SetupPasswordInput({
     const state = getSetupPasswordVisibilityState(visible ? 'password' : 'text');
 
     return (
-        <div className="login-field login-field--password">
-            <label htmlFor={id}>{label}</label>
-            <div className="login-input-wrap">
+        <div {...stylex.props(loginStyles.field)}>
+            <label htmlFor={id} {...stylex.props(loginStyles.fieldLabel)}>{label}</label>
+            <div {...stylex.props(loginStyles.inputWrap)}>
                 <input
+                    {...stylex.props(loginStyles.input, loginStyles.inputInWrap)}
                     id={id}
                     name={id}
                     type={state.type}
@@ -43,7 +46,7 @@ export function SetupPasswordInput({
                 <button
                     type="button"
                     id={toggleId}
-                    className="password-toggle"
+                    {...stylex.props(loginStyles.passwordToggle)}
                     aria-label={state.ariaLabel}
                     aria-pressed={state.ariaPressed === 'true'}
                     disabled={disabled}

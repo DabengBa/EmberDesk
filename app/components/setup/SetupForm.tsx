@@ -1,5 +1,7 @@
 import type { FormEvent } from 'react';
+import * as stylex from '@stylexjs/stylex';
 import { setupMessages } from '@/lib/setup-helpers';
+import { loginStyles } from '@/styles/login.styles';
 import { SetupPasswordInput } from './SetupPasswordInput';
 
 type SetupMode = 'fresh' | 'set-password';
@@ -38,7 +40,6 @@ export function SetupForm({
     onSubmit,
 }: SetupFormProps) {
     const isSetPasswordMode = mode === 'set-password';
-    const alertClassName = `login-error${errorMessage ? ' login-error--visible' : ''}`;
     let buttonText = isSetPasswordMode ? '设置密码并登录' : '创建管理员账户';
 
     if (isSubmitting) {
@@ -50,19 +51,20 @@ export function SetupForm({
     }
 
     return (
-        <section className="login-card login-card--setup" id="setupCard" aria-labelledby="setup-title">
-            <header className="login-header">
-                <img src="/img/logo.png" alt="" className="login-logo" />
-                <h1 id="setup-title">{isSetPasswordMode ? '设置密码' : '初始设置'}</h1>
+        <section {...stylex.props(loginStyles.card)} id="setupCard" aria-labelledby="setup-title">
+            <header {...stylex.props(loginStyles.header)}>
+                <img src="/img/logo.png" alt="" {...stylex.props(loginStyles.logo)} />
+                <h1 id="setup-title" {...stylex.props(loginStyles.headerTitle)}>{isSetPasswordMode ? '设置密码' : '初始设置'}</h1>
             </header>
 
-            <form id="setupForm" className="login-form" noValidate onSubmit={onSubmit}>
-                <div className="login-field-group login-field-group--identity">
+            <form id="setupForm" {...stylex.props(loginStyles.form)} noValidate onSubmit={onSubmit}>
+                <div {...stylex.props(loginStyles.fieldGroup)}>
                     <form.Field name="handle">
                         {(field: any) => (
-                            <div id="handleField" className="login-field" style={{ display: isSetPasswordMode ? 'none' : undefined }}>
-                                <label htmlFor="handle">用户名</label>
+                            <div id="handleField" {...stylex.props(loginStyles.field)} style={{ display: isSetPasswordMode ? 'none' : undefined }}>
+                                <label htmlFor="handle" {...stylex.props(loginStyles.fieldLabel)}>用户名</label>
                                 <input
+                                    {...stylex.props(loginStyles.input)}
                                     id="handle"
                                     name="handle"
                                     type="text"
@@ -84,9 +86,10 @@ export function SetupForm({
 
                     <form.Field name="displayName">
                         {(field: any) => (
-                            <div id="nameField" className="login-field" style={{ display: isSetPasswordMode ? 'none' : undefined }}>
-                                <label htmlFor="name">显示名称 <span className="login-label-note">（可选）</span></label>
+                            <div id="nameField" {...stylex.props(loginStyles.field)} style={{ display: isSetPasswordMode ? 'none' : undefined }}>
+                                <label htmlFor="name" {...stylex.props(loginStyles.fieldLabel)}>显示名称 <span {...stylex.props(loginStyles.labelNote)}>（可选）</span></label>
                                 <input
+                                    {...stylex.props(loginStyles.input)}
                                     id="name"
                                     name="name"
                                     type="text"
@@ -105,7 +108,7 @@ export function SetupForm({
                     </form.Field>
                 </div>
 
-                <div className="login-field-group login-field-group--security">
+                <div {...stylex.props(loginStyles.fieldGroup, loginStyles.fieldGroupSecurity)}>
                     <form.Field name="password">
                         {(field: any) => (
                             <SetupPasswordInput
@@ -145,14 +148,14 @@ export function SetupForm({
                     </form.Field>
                 </div>
 
-                <div className="login-actions">
-                    <button type="submit" className="login-btn" id="setupButton" disabled={isSubmitting}>
+                <div {...stylex.props(loginStyles.actions)}>
+                    <button type="submit" {...stylex.props(loginStyles.btn)} id="setupButton" disabled={isSubmitting}>
                         {buttonText}
                     </button>
                 </div>
             </form>
 
-            <div className={alertClassName} id="errorMessage" role="alert" aria-live="assertive">
+            <div {...stylex.props(loginStyles.error, errorMessage ? loginStyles.errorVisible : null)} id="errorMessage" role="alert" aria-live="assertive">
                 {errorMessage}
             </div>
         </section>

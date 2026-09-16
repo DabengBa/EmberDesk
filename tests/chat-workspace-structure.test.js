@@ -67,8 +67,9 @@ describe('chat workspace structure', () => {
         expect(scriptSource).not.toContain('document.getElementById(\'top-settings-holder\').hidden = true');
         expect(scriptSource).not.toContain('workspace-next');
         expect(styleSource).toContain('#emberdesk-react-workspace-shell-chrome-host');
-        expect(styleSource).toContain('.react-workspace-shell-chrome');
-        expect(styleSource).toContain('.react-workspace-shell-nav-button[data-workspace-shell-panel-active="true"]');
+        const panelStyleSource = readRepoFile('app/styles/workspace-panels.styles.ts');
+        expect(panelStyleSource).toContain('chrome:');
+        expect(panelStyleSource).toContain('navButtonActive');
         expect(styleSource).not.toContain('.react-workspace-panel-dock-status');
         expect(styleSource).toContain('body[data-react-workspace-shell-chrome="mounted"] .drawer-opener[data-target="rightNavHolder"]');
         expect(styleSource).toContain('body[data-react-workspace-shell-chrome="mounted"] .drawer-opener[data-target="extensions-settings-button"]');

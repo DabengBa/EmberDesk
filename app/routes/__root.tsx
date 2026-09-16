@@ -1,5 +1,5 @@
 import { createRootRoute, Outlet } from '@tanstack/react-router';
-import '../styles/globals.css';
+import '@astryxdesign/core/astryx.css';
 
 export const Route = createRootRoute({
     component: () => (

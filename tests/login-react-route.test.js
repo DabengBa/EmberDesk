@@ -129,7 +129,7 @@ describe('login React sole owner route', () => {
         const recoveryFormSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'login', 'RecoveryForm.tsx'), 'utf8');
 
         expect(recoveryFormSource).toContain('{currentStep === 2 && (');
-        expect(recoveryFormSource).toContain('className="login-recovery-note"');
+        expect(recoveryFormSource).toContain('loginStyles.recoveryNote');
         expect(recoveryFormSource).toContain('恢复码会输出到服务端控制台，请联系管理员获取。');
     });
 

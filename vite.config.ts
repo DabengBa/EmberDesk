@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { TanStackRouterVite } from '@tanstack/router-vite-plugin';
+import stylex from '@stylexjs/unplugin/vite';
 import path from 'node:path';
 
 export default defineConfig(({ mode }) => {
@@ -40,6 +41,7 @@ export default defineConfig(({ mode }) => {
             },
             plugins: [
                 react(),
+                stylex(),
             ],
             resolve: {
                 alias: {
@@ -52,11 +54,15 @@ export default defineConfig(({ mode }) => {
                     entry: path.resolve(process.cwd(), 'app/character-library-panel.tsx'),
                     formats: ['es'] as const,
                     fileName: () => 'assets/character-library-panel.js',
+                    cssFileName: 'character-library-panel',
                 },
                 outDir: 'app/dist',
                 emptyOutDir: false,
                 rollupOptions: {
                     external: [],
+                    output: {
+                        assetFileNames: 'assets/[name][extname]',
+                    },
                 },
             },
         };
@@ -70,6 +76,7 @@ export default defineConfig(({ mode }) => {
             },
             plugins: [
                 react(),
+                stylex(),
             ],
             resolve: {
                 alias: {
@@ -82,11 +89,15 @@ export default defineConfig(({ mode }) => {
                     entry: path.resolve(process.cwd(), 'app/workspace-panels.tsx'),
                     formats: ['es'] as const,
                     fileName: () => 'assets/workspace-panels.js',
+                    cssFileName: 'workspace-panels',
                 },
                 outDir: 'app/dist',
                 emptyOutDir: false,
                 rollupOptions: {
                     external: [],
+                    output: {
+                        assetFileNames: 'assets/[name][extname]',
+                    },
                 },
             },
         };
@@ -104,6 +115,7 @@ export default defineConfig(({ mode }) => {
                 autoCodeSplitting: true,
             }),
             react(),
+            stylex(),
         ],
 
         resolve: {

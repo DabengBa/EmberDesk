@@ -316,7 +316,7 @@ import {
     parseCharacterLibraryFetchResponse,
     projectCharacterLibraryQueryAgainstDeletedAvatars,
 } from './scripts/character-library-query-helpers.js';
-import { mountReactWorkspaceShellChrome, mountReactSettingsOverlay, unmountReactSettingsOverlay } from './scripts/workspace-panels-react-bridge.js';
+import { ensureReactPanelStylesheet, mountReactWorkspaceShellChrome, mountReactSettingsOverlay, unmountReactSettingsOverlay } from './scripts/workspace-panels-react-bridge.js';
 import { runDeleteCharacterClosePreflight } from './scripts/delete-character-preflight.js';
 import { getRequestHeaders, installAjaxCsrfPrefilter, loadCsrfToken } from './scripts/request-context.js';
 import { installPublicBrowserApi } from './scripts/public-api.js';
@@ -3114,6 +3114,7 @@ function getReactCharacterLibraryPanelBridge() {
 
 async function loadReactCharacterLibraryPanelModule() {
     if (!reactCharacterLibraryPanelModulePromise) {
+        ensureReactPanelStylesheet('/react/login/assets/character-library-panel.css');
         reactCharacterLibraryPanelModulePromise = import(getReactCharacterLibraryPanelAssetPath()).catch(error => {
             reactCharacterLibraryPanelModulePromise = null;
             throw error;

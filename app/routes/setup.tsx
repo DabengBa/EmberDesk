@@ -1,10 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router';
+import * as stylex from '@stylexjs/stylex';
 import { useForm } from '@tanstack/react-form';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { z } from 'zod';
 import { SetupForm } from '@/components/setup/SetupForm';
 import { buildSetupRequestBody, getSetupErrorMessage, setupMessages } from '@/lib/setup-helpers';
+import { loginStyles } from '@/styles/login.styles';
 
 export const Route = createFileRoute('/setup')({
     component: SetupPage,
@@ -206,7 +208,7 @@ function SetupPage() {
     }, [setupModeData]);
 
     return (
-        <main className="login-page">
+        <main {...stylex.props(loginStyles.page)}>
             <SetupForm
                 form={setupForm}
                 mode={setupMode}

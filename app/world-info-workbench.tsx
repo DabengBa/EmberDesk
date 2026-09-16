@@ -2,10 +2,12 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useForm } from '@tanstack/react-form';
 import { z } from 'zod';
+import * as stylex from '@stylexjs/stylex';
 import {
     buildWorldInfoPanelFormDefaults,
     getWorldInfoPanelStatus,
 } from './lib/world-info-workbench-helpers';
+import { worldInfoWorkbenchStyles as s } from '@/styles/world-info-workbench.styles';
 import type { WorldInfoCommands } from './compat/workspace-commands';
 
 function parseFiniteNumber(value: string): number | undefined {
@@ -223,12 +225,12 @@ function AdvancedSection({
     children: ReactNode;
 }) {
     return (
-        <details className="wi-workbench-advanced" data-world-info-react-advanced={id} open={defaultOpen || Boolean(summary)}>
-            <summary className="wi-workbench-advanced-summary">
+        <details {...stylex.props(s.advanced)} data-world-info-react-advanced={id} open={defaultOpen || Boolean(summary)}>
+            <summary {...stylex.props(s.advancedSummary)}>
                 <span>{title}</span>
-                {summary ? <span className="wi-workbench-advanced-chip">{summary}</span> : null}
+                {summary ? <span {...stylex.props(s.advancedChip)}>{summary}</span> : null}
             </summary>
-            <div className="wi-workbench-advanced-body">{children}</div>
+            <div {...stylex.props(s.advancedBody)}>{children}</div>
         </details>
     );
 }
@@ -265,7 +267,7 @@ function EntryEditor({
 
     if (!entry || !draft) {
         return (
-            <div className="wi-workbench-editor empty" data-world-info-react-editor="empty">
+            <div {...stylex.props(s.editor, s.editorEmpty)} data-world-info-react-editor="empty">
                 <p>{emptyMessage}</p>
             </div>
         );
@@ -277,11 +279,11 @@ function EntryEditor({
     };
 
     return (
-        <div className="wi-workbench-editor" data-world-info-react-editor="active" data-world-info-react-entry-uid={entry.uid}>
+        <div {...stylex.props(s.editor)} data-world-info-react-editor="active" data-world-info-react-entry-uid={entry.uid}>
             {onBack ? (
                 <button
                     type="button"
-                    className="menu_button wi-workbench-back"
+                    className={`menu_button ${stylex.props(s.button).className ?? ''}`}
                     data-world-info-react-action="back-to-list"
                     onClick={onBack}
                 >
@@ -289,11 +291,11 @@ function EntryEditor({
                 </button>
             ) : null}
 
-            <section className="wi-workbench-editor-section" data-world-info-react-section="basic">
-                <header>
-                    <h4>基本信息</h4>
+            <section {...stylex.props(s.editorSection)} data-world-info-react-section="basic">
+                <header {...stylex.props(s.editorSectionHeader)}>
+                    <h4 {...stylex.props(s.editorSectionTitle)}>基本信息</h4>
                 </header>
-                <label className="wi-workbench-field">
+                <label {...stylex.props(s.field)}>
                     <span>标题</span>
                     <input
                         className="text_pole"
@@ -305,7 +307,7 @@ function EntryEditor({
                         onBlur={event => saveFields({ comment: event.target.value })}
                     />
                 </label>
-                <div className="wi-workbench-inline-fields">
+                <div {...stylex.props(s.flexRow)}>
                     <label className="checkbox_label">
                         <input
                             type="checkbox"
@@ -327,13 +329,13 @@ function EntryEditor({
                 </div>
             </section>
 
-            <section className="wi-workbench-editor-section" data-world-info-react-section="trigger">
-                <header>
-                    <h4>何时触发</h4>
+            <section {...stylex.props(s.editorSection)} data-world-info-react-section="trigger">
+                <header {...stylex.props(s.editorSectionHeader)}>
+                    <h4 {...stylex.props(s.editorSectionTitle)}>何时触发</h4>
                 </header>
                 {!draft.constant ? (
                     <>
-                        <label className="wi-workbench-field">
+                        <label {...stylex.props(s.field)}>
                             <span>主要关键词</span>
                             <input
                                 className="text_pole"
@@ -343,7 +345,7 @@ function EntryEditor({
                                 onBlur={event => saveFields({ key: splitKeywords(event.target.value) })}
                             />
                         </label>
-                        <label className="wi-workbench-field">
+                        <label {...stylex.props(s.field)}>
                             <span>可选条件</span>
                             <input
                                 className="text_pole"
@@ -353,7 +355,7 @@ function EntryEditor({
                                 onBlur={event => saveFields({ keysecondary: splitKeywords(event.target.value) })}
                             />
                         </label>
-                        <label className="wi-workbench-field">
+                        <label {...stylex.props(s.field)}>
                             <span>逻辑</span>
                             <select
                                 className="text_pole"
@@ -372,12 +374,12 @@ function EntryEditor({
                 )}
             </section>
 
-            <section className="wi-workbench-editor-section" data-world-info-react-section="content">
-                <header>
-                    <h4>注入内容</h4>
+            <section {...stylex.props(s.editorSection)} data-world-info-react-section="content">
+                <header {...stylex.props(s.editorSectionHeader)}>
+                    <h4 {...stylex.props(s.editorSectionTitle)}>注入内容</h4>
                 </header>
                 <textarea
-                    className="text_pole wi-workbench-content"
+                    className={`text_pole ${stylex.props(s.content).className ?? ''}`}
                     aria-label="注入内容"
                     value={draft.content}
                     data-world-info-react-field="content"
@@ -387,11 +389,11 @@ function EntryEditor({
                 />
             </section>
 
-            <section className="wi-workbench-editor-section" data-world-info-react-section="placement">
-                <header>
-                    <h4>注入位置</h4>
+            <section {...stylex.props(s.editorSection)} data-world-info-react-section="placement">
+                <header {...stylex.props(s.editorSectionHeader)}>
+                    <h4 {...stylex.props(s.editorSectionTitle)}>注入位置</h4>
                 </header>
-                <label className="wi-workbench-field">
+                <label {...stylex.props(s.field)}>
                     <span>位置</span>
                     <select
                         className="text_pole"
@@ -404,8 +406,8 @@ function EntryEditor({
                         ))}
                     </select>
                 </label>
-                <div className="wi-workbench-inline-fields">
-                    <label className="wi-workbench-field">
+                <div {...stylex.props(s.flexRow)}>
+                    <label {...stylex.props(s.field)}>
                         <span>顺序</span>
                         <input
                             className="text_pole"
@@ -427,7 +429,7 @@ function EntryEditor({
                         />
                     </label>
                     {draft.position === 4 ? (
-                        <label className="wi-workbench-field">
+                        <label {...stylex.props(s.field)}>
                             <span>深度</span>
                             <input
                                 className="text_pole"
@@ -449,7 +451,7 @@ function EntryEditor({
                             />
                         </label>
                     ) : null}
-                    <label className="wi-workbench-field">
+                    <label {...stylex.props(s.field)}>
                         <span>概率</span>
                         <input
                             className="text_pole"
@@ -475,30 +477,30 @@ function EntryEditor({
                 </div>
             </section>
 
-            <section className="wi-workbench-editor-section" data-world-info-react-section="advanced">
-                <header>
-                    <h4>高级设置</h4>
+            <section {...stylex.props(s.editorSection)} data-world-info-react-section="advanced">
+                <header {...stylex.props(s.editorSectionHeader)}>
+                    <h4 {...stylex.props(s.editorSectionTitle)}>高级设置</h4>
                     {buildAdvancedSummary(entry) ? (
-                        <span className="wi-workbench-advanced-chip">{buildAdvancedSummary(entry)}</span>
+                        <span {...stylex.props(s.advancedChip)}>{buildAdvancedSummary(entry)}</span>
                     ) : null}
                 </header>
                 <AdvancedSection id="timing" title="递归与时序" summary={advanced.timing ? buildAdvancedSummary(entry).split(' · ')[0] : ''}>
-                    <div className="wi-workbench-inline-fields">
-                        <label className="wi-workbench-field">
+                    <div {...stylex.props(s.flexRow)}>
+                        <label {...stylex.props(s.field)}>
                             <span>黏性</span>
                             <input className="text_pole" type="number" value={draft.sticky ?? ''} data-world-info-react-field="sticky"
                                 onBlur={event => saveFields({ sticky: event.target.value === '' ? null : Number(event.target.value) })}
                                 onChange={event => setDraft({ ...draft, sticky: event.target.value === '' ? null : Number(event.target.value) })}
                             />
                         </label>
-                        <label className="wi-workbench-field">
+                        <label {...stylex.props(s.field)}>
                             <span>冷却</span>
                             <input className="text_pole" type="number" value={draft.cooldown ?? ''} data-world-info-react-field="cooldown"
                                 onBlur={event => saveFields({ cooldown: event.target.value === '' ? null : Number(event.target.value) })}
                                 onChange={event => setDraft({ ...draft, cooldown: event.target.value === '' ? null : Number(event.target.value) })}
                             />
                         </label>
-                        <label className="wi-workbench-field">
+                        <label {...stylex.props(s.field)}>
                             <span>延迟</span>
                             <input className="text_pole" type="number" value={draft.delay ?? ''} data-world-info-react-field="delay"
                                 onBlur={event => saveFields({ delay: event.target.value === '' ? null : Number(event.target.value) })}
@@ -506,7 +508,7 @@ function EntryEditor({
                             />
                         </label>
                     </div>
-                    <div className="wi-workbench-inline-fields">
+                    <div {...stylex.props(s.flexRow)}>
                         <label className="checkbox_label">
                             <input type="checkbox" checked={draft.excludeRecursion} data-world-info-react-field="excludeRecursion"
                                 onChange={event => saveFields({ excludeRecursion: event.target.checked })} />
@@ -520,7 +522,7 @@ function EntryEditor({
                     </div>
                 </AdvancedSection>
                 <AdvancedSection id="group" title="包含组" summary={advanced.group ? (entry.group ? `组：${entry.group}` : '已配置') : ''}>
-                    <label className="wi-workbench-field">
+                    <label {...stylex.props(s.field)}>
                         <span>组名</span>
                         <input className="text_pole" value={draft.group} data-world-info-react-field="group"
                             onChange={event => setDraft({ ...draft, group: event.target.value })}
@@ -534,14 +536,14 @@ function EntryEditor({
                     </label>
                 </AdvancedSection>
                 <AdvancedSection id="automation" title="自动化与 Outlet" summary={advanced.automation ? (entry.automationId || entry.outletName || '已配置') : ''}>
-                    <label className="wi-workbench-field">
+                    <label {...stylex.props(s.field)}>
                         <span>自动化 ID</span>
                         <input className="text_pole" value={draft.automationId} data-world-info-react-field="automationId"
                             onChange={event => setDraft({ ...draft, automationId: event.target.value })}
                             onBlur={event => saveFields({ automationId: event.target.value })}
                         />
                     </label>
-                    <label className="wi-workbench-field">
+                    <label {...stylex.props(s.field)}>
                         <span>出口</span>
                         <input className="text_pole" value={draft.outletName} data-world-info-react-field="outletName"
                             onChange={event => setDraft({ ...draft, outletName: event.target.value })}
@@ -671,14 +673,14 @@ export function WorldInfoWorkbenchPanel({
         recoveryActions,
         children: (
             <div
-                className="wi-workbench-root"
+                {...stylex.props(s.root)}
                 data-world-info-react-workflow="workbench"
                 data-world-info-react-mobile-view={mobileView}
                 data-doc-id="feature.world_info_panel"
             >
-                <div className="wi-workbench-global" data-world-info-react-global="summary">
-                    <div className="wi-workbench-global-summary">
-                        <label className="wi-workbench-field">
+                <div {...stylex.props(s.global)} data-world-info-react-global="summary">
+                    <div {...stylex.props(s.globalSummary)}>
+                        <label {...stylex.props(s.field)}>
                             <span>全局启用</span>
                             <select
                                 className="text_pole"
@@ -699,7 +701,7 @@ export function WorldInfoWorkbenchPanel({
                         <span>{globalSummary}</span>
                         <button
                             type="button"
-                            className="menu_button"
+                            className={`menu_button ${stylex.props(s.button).className ?? ''}`}
                             data-world-info-react-action="toggle-activation-rules"
                             aria-expanded={activationOpen}
                             onClick={() => {
@@ -712,18 +714,18 @@ export function WorldInfoWorkbenchPanel({
                         </button>
                     </div>
                     {activationOpen ? (
-                        <p className="wi-workbench-global-hint opacity50" data-world-info-react-global="rules-hint">
+                        <p className="opacity50" data-world-info-react-global="rules-hint">
                             已展开全局扫描规则（仍由既有激活控件承载，不复制第二套状态机）。
                         </p>
                     ) : null}
                 </div>
 
-                <header className="wi-workbench-book-header" data-world-info-react-header="editor-book">
-                    <div className="wi-workbench-book-title-row">
+                <header {...stylex.props(s.bookHeader)} data-world-info-react-header="editor-book">
+                    <div {...stylex.props(s.flexRow)}>
                         <worldInfoForm.Field name="selectedWorldIndex">
                             {field => (
                                 <select
-                                    className="text_pole"
+                                    className={`text_pole ${stylex.props(s.flexInput).className ?? ''}`}
                                     data-world-info-react-control="world-select"
                                     aria-label="选择要编辑的世界书"
                                     value={field.state.value}
@@ -741,17 +743,17 @@ export function WorldInfoWorkbenchPanel({
                                 </select>
                             )}
                         </worldInfoForm.Field>
-                        <output className="wi-workbench-book-meta" data-world-info-react-meta="entry-count">
+                        <output {...stylex.props(s.entryMeta)} data-world-info-react-meta="entry-count">
                             {selectedWorldName ? `${bridgeState.entryCount ?? entrySummaries.length} 条目` : '未选择'}
                         </output>
                     </div>
-                    <div className="wi-workbench-book-tools">
+                    <div {...stylex.props(s.flexRow)}>
                         {selectedWorldName ? (
                             <>
                                 <worldInfoForm.Field name="searchQuery">
                                     {field => (
                                         <input
-                                            className="text_pole"
+                                            className={`text_pole ${stylex.props(s.flexInput).className ?? ''}`}
                                             type="search"
                                             data-world-info-react-control="search"
                                             aria-label="搜索条目"
@@ -768,7 +770,7 @@ export function WorldInfoWorkbenchPanel({
                                 <worldInfoForm.Field name="sortValue">
                                     {field => (
                                         <select
-                                            className="text_pole"
+                                            className={`text_pole ${stylex.props(s.flexInput).className ?? ''}`}
                                             data-world-info-react-control="sort"
                                             aria-label="排序"
                                             value={field.state.value}
@@ -786,39 +788,39 @@ export function WorldInfoWorkbenchPanel({
                                 </worldInfoForm.Field>
                                 <button
                                     type="button"
-                                    className="menu_button"
+                                    className={`menu_button ${stylex.props(s.button).className ?? ''}`}
                                     data-world-info-react-action="new-entry"
                                     disabled={!bridgeState.canCreateEntry}
                                     onClick={() => worldInfoCommandMutation.mutate(() => commands.createEntry())}
                                 >
                                     新建条目
                                 </button>
-                                <button type="button" className="menu_button" data-world-info-react-action="new-world"
+                                <button type="button" className={`menu_button ${stylex.props(s.button).className ?? ''}`} data-world-info-react-action="new-world"
                                     onClick={() => worldInfoCommandMutation.mutate(() => commands.createWorld())}>新建</button>
-                                <button type="button" className="menu_button" data-world-info-react-action="import"
+                                <button type="button" className={`menu_button ${stylex.props(s.button).className ?? ''}`} data-world-info-react-action="import"
                                     disabled={Boolean(bridgeState.importBusy)}
                                     onClick={() => worldInfoCommandMutation.mutate(() => commands.importWorld())}>导入</button>
-                                <button type="button" className="menu_button" data-world-info-react-action="export"
+                                <button type="button" className={`menu_button ${stylex.props(s.button).className ?? ''}`} data-world-info-react-action="export"
                                     disabled={!bridgeState.exportMenuPresent}
                                     onClick={() => worldInfoCommandMutation.mutate(() => commands.exportWorld())}>导出</button>
-                                <button type="button" className="menu_button" data-world-info-react-action="refresh"
+                                <button type="button" className={`menu_button ${stylex.props(s.button).className ?? ''}`} data-world-info-react-action="refresh"
                                     disabled={!bridgeState.refreshMenuPresent}
                                     onClick={() => worldInfoCommandMutation.mutate(() => commands.refreshWorld())}>刷新</button>
-                                <button type="button" className="menu_button" data-world-info-react-action="rename"
+                                <button type="button" className={`menu_button ${stylex.props(s.button).className ?? ''}`} data-world-info-react-action="rename"
                                     disabled={!bridgeState.renameMenuPresent}
                                     onClick={() => worldInfoCommandMutation.mutate(() => commands.renameWorld())}>重命名</button>
-                                <button type="button" className="menu_button" data-world-info-react-action="duplicate"
+                                <button type="button" className={`menu_button ${stylex.props(s.button).className ?? ''}`} data-world-info-react-action="duplicate"
                                     disabled={!bridgeState.duplicateMenuPresent}
                                     onClick={() => worldInfoCommandMutation.mutate(() => commands.duplicateWorld())}>复制</button>
-                                <button type="button" className="menu_button redWarningBG" data-world-info-react-action="delete"
+                                <button type="button" className={`menu_button redWarningBG ${stylex.props(s.button).className ?? ''}`} data-world-info-react-action="delete"
                                     disabled={!bridgeState.deleteMenuPresent}
                                     onClick={() => worldInfoCommandMutation.mutate(() => commands.deleteWorld())}>删除</button>
                             </>
                         ) : (
                             <>
-                                <button type="button" className="menu_button" data-world-info-react-action="new-world"
+                                <button type="button" className={`menu_button ${stylex.props(s.button).className ?? ''}`} data-world-info-react-action="new-world"
                                     onClick={() => worldInfoCommandMutation.mutate(() => commands.createWorld())}>新建世界书</button>
-                                <button type="button" className="menu_button" data-world-info-react-action="import"
+                                <button type="button" className={`menu_button ${stylex.props(s.button).className ?? ''}`} data-world-info-react-action="import"
                                     disabled={Boolean(bridgeState.importBusy)}
                                     onClick={() => worldInfoCommandMutation.mutate(() => commands.importWorld())}>导入世界书</button>
                             </>
@@ -826,14 +828,14 @@ export function WorldInfoWorkbenchPanel({
                     </div>
                 </header>
 
-                <div className="wi-workbench-body" data-world-info-react-layout="split">
+                <div {...stylex.props(s.body)} data-world-info-react-layout="split">
                     <div
-                        className="wi-workbench-list-pane"
+                        {...stylex.props(s.pane, showListPane ? null : s.paneHidden)}
                         data-world-info-react-pane="list"
                         hidden={!showListPane}
                     >
                         <div
-                            className="wi-workbench-list"
+                            {...stylex.props(s.list)}
                             data-world-info-react-list-scroll
                             tabIndex={-1}
                         >
@@ -841,33 +843,33 @@ export function WorldInfoWorkbenchPanel({
                                 <button
                                     key={entry.uid}
                                     type="button"
-                                    className={`wi-workbench-entry-row${bridgeState.selectedEntryUid === entry.uid ? ' is-selected' : ''}`}
+                                    {...stylex.props(s.entryRow, bridgeState.selectedEntryUid === entry.uid ? s.entryRowSelected : null)}
                                     data-world-info-react-entry={entry.uid}
                                     aria-current={bridgeState.selectedEntryUid === entry.uid ? 'true' : undefined}
                                     onClick={() => openEntry(entry.uid)}
                                 >
-                                    <span className="wi-workbench-entry-title">
-                                        <span className={`wi-workbench-entry-state${entry.disabled ? ' is-disabled' : ''}`}>
+                                    <span {...stylex.props(s.entryTitle)}>
+                                        <span {...stylex.props(s.entryState, entry.disabled ? s.entryStateDisabled : null)}>
                                             {entry.disabled ? '停用' : '启用'}
                                         </span>
                                         {entry.title}
                                     </span>
-                                    <span className="wi-workbench-entry-meta">
+                                    <span {...stylex.props(s.entryMeta)}>
                                         {entry.keywordsSummary || '无关键词'}
                                     </span>
-                                    <span className="wi-workbench-entry-meta">
+                                    <span {...stylex.props(s.entryMeta)}>
                                         {entry.positionLabel || '位置未设'}
                                     </span>
                                 </button>
                             )) : (
-                                <div className="wi-workbench-empty" data-world-info-react-empty="entries">
+                                <div {...stylex.props(s.empty)} data-world-info-react-empty="entries">
                                     {selectedWorldName ? (
                                         activeSearchQuery ? (
                                             <>
                                                 <span>没有匹配“{activeSearchQuery}”的条目</span>
                                                 <button
                                                     type="button"
-                                                    className="menu_button wi-workbench-empty-action"
+                                                    className={`menu_button ${stylex.props(s.emptyAction).className ?? ''}`}
                                                     data-world-info-react-action="clear-search"
                                                     onClick={clearSearch}
                                                 >
@@ -881,7 +883,7 @@ export function WorldInfoWorkbenchPanel({
                         </div>
                     </div>
                     <div
-                        className="wi-workbench-editor-pane"
+                        {...stylex.props(s.pane, showEditorPane ? null : s.paneHidden)}
                         data-world-info-react-pane="editor"
                         hidden={!showEditorPane}
                         data-world-info-react-editor-visible={showEditorPane || undefined}

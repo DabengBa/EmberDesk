@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
+import * as stylex from '@stylexjs/stylex';
 import { useForm } from '@tanstack/react-form';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
@@ -11,6 +12,7 @@ import {
 } from '@/lib/login-helpers';
 import { LoginForm } from '@/components/login/LoginForm';
 import { RecoveryForm } from '@/components/login/RecoveryForm';
+import { loginStyles } from '@/styles/login.styles';
 
 export const Route = createFileRoute('/login')({
     component: LoginPage,
@@ -320,7 +322,7 @@ function LoginPage() {
     }
 
     return (
-        <main className="login-page">
+        <main {...stylex.props(loginStyles.page)}>
             <LoginForm
                 form={loginForm}
                 passwordVisible={passwordVisible}

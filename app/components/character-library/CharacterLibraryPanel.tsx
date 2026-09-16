@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import * as stylex from '@stylexjs/stylex';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { CharacterLibraryCharacterRow } from './CharacterLibraryCharacterRow';
 import { CharacterLibraryFolderRow } from './CharacterLibraryFolderRow';
@@ -16,6 +17,7 @@ import {
     getCharacterLibraryGridRowCount,
     getCharacterLibraryGridRowRange,
 } from '@/lib/character-library-grid-helpers.js';
+import { characterLibraryStyles } from '@/styles/workspace-panels.styles';
 
 export interface CharacterLibraryPanelEntity {
     type: string;
@@ -218,7 +220,7 @@ export function CharacterLibraryPanel({ bridge, state }: { bridge: CharacterLibr
                         return (
                             <div
                                 key={rowEntities[0]?.renderKey ?? `${rowEntities[0]?.type}:${rowEntities[0]?.id}`}
-                                className="character-library-react-panel__row"
+                                className={`character-library-react-panel__row ${stylex.props(characterLibraryStyles.panelRow, isGrid ? characterLibraryStyles.panelRowGrid : null).className ?? ''}`}
                                 data-index={item.index}
                                 ref={virtualizer.measureElement}
                                 style={{
@@ -232,7 +234,7 @@ export function CharacterLibraryPanel({ bridge, state }: { bridge: CharacterLibr
                             >
                                 {rowEntities.map(rowEntity => (
                                     <div
-                                        className="character-library-react-panel__cell"
+                                        className={`character-library-react-panel__cell ${stylex.props(characterLibraryStyles.panelCell).className ?? ''}`}
                                         key={rowEntity.renderKey ?? `${rowEntity.type}:${rowEntity.id}`}
                                     >
                                         <EntityRow

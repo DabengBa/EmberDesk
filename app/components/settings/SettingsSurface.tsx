@@ -1,3 +1,4 @@
+import * as stylex from '@stylexjs/stylex';
 import { useForm, useStore } from '@tanstack/react-form';
 
 // Zod `z.coerce.*` fields widen the StandardSchema `input` to `unknown`, which TS 7
@@ -19,6 +20,7 @@ import {
 } from '../../../public/scripts/provider-secret-field-state.js';
 import { SettingField } from '@/components/settings/SettingField';
 import { SettingsSection } from '@/components/settings/SettingsSection';
+import { settingsStyles } from '@/styles/settings-surface.styles';
 import { SettingsTabs } from '@/components/settings/SettingsTabs';
 import type { RuntimePort } from '@/compat/runtime-port';
 import {
@@ -752,20 +754,24 @@ export function SettingsSurface({
         : 'Disabled';
 
     return (
-        <main className={`settings-page${isOverlay ? ' settings-page--overlay' : ''}`} data-settings-surface={variant} data-doc-id="page.settings">
-            <div className="settings-layout">
-                <section className="settings-main-panel">
-                    <header className="settings-page-header">
-                        <div className="settings-page-header-row">
+        <main
+            className={`settings-page ${stylex.props(settingsStyles.page, isOverlay && settingsStyles.pageOverlay).className ?? ''}`}
+            data-settings-surface={variant}
+            data-doc-id="page.settings"
+        >
+            <div {...stylex.props(settingsStyles.layout, isOverlay && settingsStyles.layoutOverlay)}>
+                <section {...stylex.props(settingsStyles.mainPanel, isOverlay && settingsStyles.mainPanelOverlay)}>
+                    <header {...stylex.props(settingsStyles.pageHeader)}>
+                        <div {...stylex.props(settingsStyles.pageHeaderRow)}>
                             <div>
                                 {isOverlay ? (
-                                    <h1 className="settings-page-title settings-page-title--overlay">
+                                    <h1 {...stylex.props(settingsStyles.pageTitle, settingsStyles.pageTitleOverlay)}>
                                         {settingsTabDefinitions.find(tab => tab.id === activeTab)?.label ?? 'Settings'}
                                     </h1>
                                 ) : (
                                     <>
-                                        <h1 className="settings-page-title">Settings</h1>
-                                        <p className="settings-page-summary">
+                                        <h1 {...stylex.props(settingsStyles.pageTitle)}>Settings</h1>
+                                        <p {...stylex.props(settingsStyles.pageSummary)}>
                                             Defaults, providers, workspace display, and power-user controls.
                                         </p>
                                     </>
@@ -774,7 +780,7 @@ export function SettingsSurface({
                             {isOverlay ? (
                                 <button
                                     type="button"
-                                    className="settings-button settings-button--secondary settings-overlay-close"
+                                    {...stylex.props(settingsStyles.button, settingsStyles.buttonSecondary, settingsStyles.overlayClose)}
                                     aria-label="Close settings"
                                     onClick={() => onRequestClose?.()}
                                 >
@@ -782,7 +788,8 @@ export function SettingsSurface({
                                 </button>
                             ) : (
                                 <a
-                                    className="settings-button settings-button--secondary settings-workspace-link"
+                                    {...stylex.props(settingsStyles.button, settingsStyles.buttonSecondary, settingsStyles.workspaceLink)}
+                                    className={`settings-workspace-link ${stylex.props(settingsStyles.button, settingsStyles.buttonSecondary, settingsStyles.workspaceLink).className ?? ''}`}
                                     href="/"
                                     data-doc-id="page.chat_workspace"
                                 >
@@ -799,25 +806,25 @@ export function SettingsSurface({
                         showDescription={!isOverlay}
                     />
 
-                    <div className="settings-stack">
+                    <div {...stylex.props(settingsStyles.stack, isOverlay && settingsStyles.stackOverlay)}>
                         {settingsQuery.isPending && (
-                            <div className="settings-status settings-status--info">
+                            <div {...stylex.props(settingsStyles.status, settingsStyles.statusInfo)}>
                                 正在加载当前设置...
                             </div>
                         )}
 
                         {pageError && (
-                            <div className="settings-status settings-status--error">
+                            <div {...stylex.props(settingsStyles.status, settingsStyles.statusError)}>
                                 {pageError}
                             </div>
                         )}
 
                         {hasRevisionConflict && (
-                            <div className="settings-status settings-status--error">
+                            <div {...stylex.props(settingsStyles.status, settingsStyles.statusError)}>
                                 <p>当前草稿基于过期版本，尚未丢失。重新加载会放弃本地草稿，并显示当前保存的设置。</p>
                                 <button
                                     type="button"
-                                    className="settings-button settings-button--secondary"
+                                    {...stylex.props(settingsStyles.button, settingsStyles.buttonSecondary)}
                                     onClick={() => void reloadCurrentSettings()}
                                     disabled={isBusy}
                                 >
@@ -828,7 +835,7 @@ export function SettingsSurface({
 
                         {saveStatus && (
                             <output
-                                className="settings-status settings-status--success"
+                                className={`settings-status settings-status--success ${stylex.props(settingsStyles.status, settingsStyles.statusSuccess).className ?? ''}`}
                                 aria-live="polite"
                             >
                                 {saveStatus.message}
@@ -837,14 +844,14 @@ export function SettingsSurface({
 
                         {isSettingsFormReady ? (
                         <form
-                            className="settings-form"
+                            {...stylex.props(settingsStyles.form, isOverlay && settingsStyles.stackOverlay)}
                             onSubmit={(event) => {
                                 event.preventDefault();
                                 event.stopPropagation();
                                 void settingsForm.handleSubmit();
                             }}
                         >
-                            <div className="settings-tab-panel">
+                            <div className={`settings-tab-panel ${stylex.props(isOverlay && settingsStyles.tabPanelOverlay).className ?? ''}`}>
                             {activeTab === 'general' ? (
                             <div>
                                 <SettingsSection
@@ -1368,27 +1375,27 @@ export function SettingsSurface({
                                         disabled={isBusy || !providerSettingsValues.fallbackProviderEnabled}
                                         onValueChange={clearTransientState}
                                     />
-                                    <div className="settings-inline-panel">
-                                        <div className="settings-inline-header">
+                                    <div {...stylex.props(settingsStyles.inlinePanel)}>
+                                        <div {...stylex.props(settingsStyles.inlineHeader)}>
                                             <div>
-                                                <h3 className="settings-card-title">Provider API Key</h3>
-                                                <p className="settings-card-description">
+                                                <h3 {...stylex.props(settingsStyles.sectionTitle)}>Provider API Key</h3>
+                                                <p {...stylex.props(settingsStyles.mutedText, settingsStyles.sectionDescription)}>
                                                     Secret storage is kept separate from normal settings.
                                                 </p>
                                             </div>
-                                            <span className="settings-pill">
+                                            <span {...stylex.props(settingsStyles.pill)}>
                                                 {unifiedKeyFieldState.placeholder}
                                             </span>
                                         </div>
 
                                         {directSecretMode ? (
-                                            <div className="settings-inline-actions">
+                                            <div {...stylex.props(settingsStyles.inlineActions)}>
                                                 {unifiedKeyFieldState.isServiceAccount ? (
                                                     <textarea
                                                         id="provider-secret-input"
                                                         name="provider-secret-input"
                                                         aria-label="Vertex AI Service Account JSON"
-                                                        className="settings-input"
+                                                        {...stylex.props(settingsStyles.input, settingsStyles.inlineActionsInput)}
                                                         rows={6}
                                                         placeholder={unifiedKeyFieldState.placeholder}
                                                         value={providerSecretInput}
@@ -1405,7 +1412,7 @@ export function SettingsSurface({
                                                     id="provider-secret-input"
                                                     name="provider-secret-input"
                                                     aria-label="Provider API Key"
-                                                    className="settings-input"
+                                                    {...stylex.props(settingsStyles.input, settingsStyles.inlineActionsInput)}
                                                     placeholder={unifiedKeyFieldState.placeholder}
                                                     value={providerSecretInput}
                                                     disabled={providerSecretMutation.isPending}
@@ -1418,7 +1425,7 @@ export function SettingsSurface({
                                                 )}
                                                 <button
                                                     type="button"
-                                                    className="settings-button settings-button--primary"
+                                                    {...stylex.props(settingsStyles.button, settingsStyles.buttonPrimary)}
                                                     disabled={providerSecretMutation.isPending}
                                                     onClick={() => {
                                                         if (!currentSecretKey) {
@@ -1439,7 +1446,7 @@ export function SettingsSurface({
                                                 </button>
                                                 <button
                                                     type="button"
-                                                    className="settings-button settings-button--secondary"
+                                                    {...stylex.props(settingsStyles.button, settingsStyles.buttonSecondary)}
                                                     disabled={providerSecretMutation.isPending}
                                                     onClick={() => {
                                                         if (!currentSecretKey) {
@@ -1460,7 +1467,7 @@ export function SettingsSurface({
                                                 </button>
                                             </div>
                                         ) : (
-                                            <p className="settings-card-description">
+                                            <p {...stylex.props(settingsStyles.mutedText, settingsStyles.sectionDescription)}>
                                                 {unifiedKeyFieldState.vertexAiActive
                                                     ? 'Vertex Express key uses the secrets store.'
                                                     : 'Reverse proxy mode uses Proxy Password instead of provider secrets.'}
@@ -1468,25 +1475,25 @@ export function SettingsSurface({
                                         )}
                                     </div>
 
-                                    <div className="settings-inline-panel">
-                                        <div className="settings-inline-header">
+                                    <div {...stylex.props(settingsStyles.inlinePanel)}>
+                                        <div {...stylex.props(settingsStyles.inlineHeader)}>
                                             <div>
-                                                <h3 className="settings-card-title">Fallback Provider Secret</h3>
-                                                <p className="settings-card-description">
+                                                <h3 {...stylex.props(settingsStyles.sectionTitle)}>Fallback Provider Secret</h3>
+                                                <p {...stylex.props(settingsStyles.mutedText, settingsStyles.sectionDescription)}>
                                                     Separate server-side key for fallback routing.
                                                 </p>
                                             </div>
-                                            <span className="settings-pill">
+                                            <span {...stylex.props(settingsStyles.pill)}>
                                                 {activeFallbackStatus}
                                             </span>
                                         </div>
-                                        <div className="settings-inline-actions">
+                                        <div {...stylex.props(settingsStyles.inlineActions)}>
                                             <input
                                                 type="password"
                                                 id="fallback-provider-secret-input"
                                                 name="fallback-provider-secret-input"
                                                 aria-label="Fallback Provider API Key"
-                                                className="settings-input"
+                                                {...stylex.props(settingsStyles.input, settingsStyles.inlineActionsInput)}
                                                 placeholder="Fallback API Key"
                                                 value={fallbackSecretInput}
                                                 disabled={providerSecretMutation.isPending || !providerSettingsValues.fallbackProviderEnabled}
@@ -1498,7 +1505,7 @@ export function SettingsSurface({
                                             />
                                             <button
                                                 type="button"
-                                                className="settings-button settings-button--primary"
+                                                {...stylex.props(settingsStyles.button, settingsStyles.buttonPrimary)}
                                                 disabled={providerSecretMutation.isPending || !providerSettingsValues.fallbackProviderEnabled}
                                                 onClick={() => {
                                                     void handleProviderSecretAction({
@@ -1514,7 +1521,7 @@ export function SettingsSurface({
                                             </button>
                                             <button
                                                 type="button"
-                                                className="settings-button settings-button--secondary"
+                                                {...stylex.props(settingsStyles.button, settingsStyles.buttonSecondary)}
                                                 disabled={providerSecretMutation.isPending || !providerSettingsValues.fallbackProviderEnabled}
                                                 onClick={() => {
                                                     void handleProviderSecretAction({
@@ -3066,15 +3073,15 @@ export function SettingsSurface({
                             ) : null}
                             </div>
 
-                            <div className="settings-save-bar">
-                                <p className="settings-save-note">
+                            <div {...stylex.props(settingsStyles.saveBar, isOverlay && settingsStyles.saveBarOverlay)}>
+                                <p {...stylex.props(settingsStyles.mutedText, settingsStyles.sectionDescription)}>
                                     只保存本页字段。
                                 </p>
                                 <settingsForm.Subscribe selector={state => state.isPristine}>
                                     {isPristine => (
                                         <button
                                             type="submit"
-                                            className="settings-button settings-button--primary"
+                                            {...stylex.props(settingsStyles.button, settingsStyles.buttonPrimary)}
                                             disabled={isBusy || settingsQuery.isPending || isPristine || hasRevisionConflict}
                                         >
                                             {saveMutation.isPending ? '保存中...' : isPristine ? '修改后可保存' : '保存设置'}
@@ -3087,30 +3094,30 @@ export function SettingsSurface({
                     </div>
                 </section>
 
-                <aside className="settings-side">
-                    <section className="settings-side-panel">
-                        <h2 className="settings-side-title">Payload Summary</h2>
-                        <div className="settings-metrics">
+                <aside {...stylex.props(settingsStyles.side)}>
+                    <section {...stylex.props(settingsStyles.sidePanel)}>
+                        <h2 {...stylex.props(settingsStyles.sectionTitle)}>Payload Summary</h2>
+                        <div {...stylex.props(settingsStyles.metrics)}>
                             {payloadSummary.map(item => (
-                                <div key={item.label} className="settings-metric">
-                                    <div className="settings-metric-label">{item.label}</div>
-                                    <div className="settings-metric-value">{item.value}</div>
+                                <div key={item.label} {...stylex.props(settingsStyles.metric)}>
+                                    <div {...stylex.props(settingsStyles.metricLabel)}>{item.label}</div>
+                                    <div {...stylex.props(settingsStyles.metricValue)}>{item.value}</div>
                                 </div>
                             ))}
                         </div>
                     </section>
 
-                    <section className="settings-side-panel">
-                        <div className="settings-diagnostics-header">
+                    <section {...stylex.props(settingsStyles.sidePanel)}>
+                        <div {...stylex.props(settingsStyles.inlineHeader)}>
                             <div>
-                                <h2 className="settings-side-title">Diagnostics</h2>
-                                <p className="settings-card-description">
+                                <h2 {...stylex.props(settingsStyles.sectionTitle)}>Diagnostics</h2>
+                                <p {...stylex.props(settingsStyles.mutedText, settingsStyles.sectionDescription)}>
                                     Field ownership for debugging.
                                 </p>
                             </div>
                             <button
                                 type="button"
-                                className="settings-button settings-button--secondary"
+                                {...stylex.props(settingsStyles.button, settingsStyles.buttonSecondary)}
                                 onClick={() => setShowDiagnostics(value => !value)}
                                 aria-expanded={showDiagnostics}
                             >
@@ -3119,12 +3126,12 @@ export function SettingsSurface({
                         </div>
 
                         {showDiagnostics && (
-                            <div className="settings-diagnostics-body">
+                            <div {...stylex.props(settingsStyles.diagnosticsBody)}>
                                 <div>
                                     {Object.entries(settingsCoverage.reactOwned as Record<string, string[]>).map(([tabId, paths]) => (
-                                        <div key={tabId} className="settings-diagnostics-group">
-                                            <h3 className="settings-diagnostics-title">{settingsTabDefinitions.find(tab => tab.id === tabId)?.label}</h3>
-                                            <ul className="settings-diagnostics-list">
+                                        <div key={tabId} {...stylex.props(settingsStyles.diagnosticsGroup)}>
+                                            <h3 {...stylex.props(settingsStyles.diagnosticsTitle)}>{settingsTabDefinitions.find(tab => tab.id === tabId)?.label}</h3>
+                                            <ul {...stylex.props(settingsStyles.diagnosticsList)}>
                                                 {paths.map((coveragePath: string) => (
                                                     <li key={coveragePath}>{coveragePath}</li>
                                                 ))}
@@ -3133,9 +3140,9 @@ export function SettingsSurface({
                                     ))}
                                 </div>
 
-                                <div className="settings-diagnostics-group">
-                                    <h3 className="settings-diagnostics-title">Legacy-owned</h3>
-                                    <ul className="settings-diagnostics-list">
+                                <div {...stylex.props(settingsStyles.diagnosticsGroup)}>
+                                    <h3 {...stylex.props(settingsStyles.diagnosticsTitle)}>Legacy-owned</h3>
+                                    <ul {...stylex.props(settingsStyles.diagnosticsList)}>
                                             {settingsCoverage.legacyOwned.map(path => (
                                             <li key={path}>{path}</li>
                                         ))}

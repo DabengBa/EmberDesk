@@ -1,6 +1,14 @@
 allowBuilds:
-  protobufjs: set this to true or false
+  '@astryxdesign/core': false
+  protobufjs: false
 minimumReleaseAge: 10080
+minimumReleaseAgeExclude:
+  - '@stylexjs/babel-plugin@0.19.1'
+  - '@stylexjs/postcss-plugin@0.19.1'
+  - '@stylexjs/shared@0.19.1'
+  - '@stylexjs/stylex@0.19.1'
+  - '@stylexjs/unplugin@0.19.1'
+  - '@astryxdesign/core@0.6.2'
 trustPolicy: no-downgrade
 trustPolicyExclude:
   - protobufjs@6.11.6

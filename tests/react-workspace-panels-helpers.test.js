@@ -261,11 +261,13 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).not.toContain('openGroupChats: openWorkspaceShellGroupChats,');
         expect(scriptSource).not.toContain('function openWorkspaceShellGroupChats()');
 
-        const styleSource = read('public/style.css');
-        expect(styleSource).toContain('.react-workspace-shell-nav-button[data-workspace-shell-panel-active="true"]');
-        expect(styleSource).not.toMatch(/\.react-workspace-shell-nav\s*\{[^}]*overflow-x:\s*auto/);
-        expect(styleSource).not.toContain('.react-workspace-shell-status');
-        expect(styleSource).not.toContain('.react-workspace-panel-dock-status');
+        const styleSource = read('app/styles/workspace-panels.styles.ts');
+        const panelSource = read('app/workspace-panels.tsx');
+        expect(styleSource).toContain('navButtonActive');
+        expect(panelSource).toContain('isPanelEntryActive ? workspaceShellStyles.navButtonActive : null');
+        expect(styleSource).not.toMatch(/nav:\s*\{[^}]*overflow-x:\s*auto/);
+        expect(panelSource).not.toContain('react-workspace-shell-status');
+        expect(panelSource).not.toContain('react-workspace-panel-dock-status');
     });
 
     test('publishes explicit React shell child-slot contracts before dispatching feature-local capabilities', () => {
@@ -421,10 +423,10 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).not.toContain("id: 'retry-authoring-save'");
         expect(workspacePanelSource).not.toContain('actions={shellActions}');
         expect(workspacePanelSource).not.toContain('recoveryActions={[]}');
-        expect(workspacePanelSource).toContain('react-authoring-secondary-action');
-        expect(workspacePanelSource).toContain('react-authoring-tool-action');
-        expect(workspacePanelSource).toContain('react-authoring-danger-zone');
-        expect(workspacePanelSource).toContain('className="react-authoring-panel-warning" role="status"');
+        expect(workspacePanelSource).toContain('authoringStyles.secondaryAction');
+        expect(workspacePanelSource).toContain('authoringStyles.toolAction');
+        expect(workspacePanelSource).toContain('authoringStyles.dangerZone');
+        expect(workspacePanelSource).toContain('{...stylex.props(authoringStyles.panelWarning)} role="status"');
         expect(workspacePanelSource).toContain('disabled={isActionPending}');
         expect(workspacePanelSource).toContain('{!isCreateMode ? (');
         expect(scriptSource).toContain('function getCharacterAuthoringReactCommands()');
@@ -458,23 +460,20 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('void commands?.cancelAuthoring?.(kind);');
     });
 
-    test('keeps authoring action hierarchy and narrow member rows visible in CSS', () => {
-        const styleSource = read('public/style.css');
+    test('keeps authoring action hierarchy visible through the StyleX module', () => {
+        const styleSource = read('app/styles/workspace-panels.styles.ts');
+        const panelSource = read('app/workspace-panels.tsx');
 
-        expect(styleSource).toContain('.react-authoring-panel-actions .react-authoring-save');
-        expect(styleSource).toContain('.react-authoring-panel-actions .react-authoring-secondary-action');
-        expect(styleSource).toContain('.react-authoring-panel-actions .react-authoring-tool-action');
-        expect(styleSource).toContain('.react-authoring-candidates');
-        expect(styleSource).toContain('grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));');
-        expect(styleSource).toContain('max-height: min(220px, 34dvh);');
-        expect(styleSource).toContain('max-height: min(180px, 28dvh);');
-        expect(styleSource).toContain('filter: grayscale(0.35);');
-        expect(styleSource).toContain('position: sticky;');
-        expect(styleSource).toContain('bottom: 0;');
-        expect(styleSource).toContain('.react-authoring-member-row:first-of-type');
-        expect(styleSource).toContain('.react-authoring-member-row .menu_button');
-        expect(styleSource).toContain('min-height: 38px;');
-        expect(styleSource).toContain('width: 100%;');
+        expect(styleSource).toContain('saveButton');
+        expect(styleSource).toContain('secondaryAction');
+        expect(styleSource).toContain('toolAction');
+        expect(styleSource).toContain("filter: 'grayscale(0.35)'");
+        expect(styleSource).toContain("position: 'sticky'");
+        expect(panelSource).toContain('authoringStyles.saveButton');
+        expect(panelSource).toContain('authoringStyles.secondaryAction');
+        expect(panelSource).toContain('authoringStyles.toolAction');
+        expect(styleSource).not.toContain('memberRow');
+        expect(styleSource).not.toContain('candidates');
     });
 
     test('routes quiet/background requests through the generation service without owner markers', () => {
@@ -707,8 +706,9 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('getWorkspacePanelVisibleStatusLabel(status)');
         expect(workspacePanelSource).toContain('data-workspace-panel-recovery-state={status}');
         expect(workspacePanelSource).toContain('data-workspace-panel-recovery-action={action.id}');
-        expect(workspacePanelSource).toContain('className="workspace-panel-diagnostics"');
-        expect(workspacePanelSource).toContain('<summary>Diagnostics</summary>');
+        expect(workspacePanelSource).toContain('data-workspace-panel-diagnostics={kind}');
+        expect(workspacePanelSource).toContain('panelShellStyles.diagnostics');
+        expect(workspacePanelSource).toContain('Diagnostics</summary>');
         expect(workspacePanelSource).toContain('data-workspace-legacy-slot={slot.id}');
         expect(workspacePanelSource).toContain('slot.id === \'extensions-settings\'');
         expect(workspacePanelSource).not.toContain('React workspace panel host');
@@ -827,13 +827,12 @@ describe('React workspace panels bridge helpers', () => {
         expect(read('app/world-info-workbench.tsx')).toContain('commands.importWorld()');
         expect(read('app/world-info-workbench.tsx')).toContain('commands.exportWorld()');
         expect(read('app/world-info-workbench.tsx')).toContain('data-world-info-react-workflow="workbench"');
-        expect(read('public/css/world-info.css')).toContain('.wi-workbench-body');
+        expect(read('app/styles/world-info-workbench.styles.ts')).toContain('worldInfoWorkbenchStyles');
 
-        const styleSource = read('public/style.css');
-        expect(styleSource).toContain('.workspace-panel-item-row.menu_button');
-        expect(styleSource).toContain('width: 100%;');
-        expect(styleSource).toContain('overflow-wrap: anywhere;');
-        expect(styleSource).toContain('white-space: nowrap;');
+        const panelStyleSource = read('app/styles/workspace-panels.styles.ts');
+        expect(panelStyleSource).toContain('workspacePanelStyles');
+        expect(panelStyleSource).toContain('workspaceShellStyles');
+        expect(panelStyleSource).toContain('authoringStyles');
     });
 
     test('wires Extensions Host to an independent React host without replacing protected mount points', () => {

@@ -51,14 +51,14 @@ describe('character library React panel scaffold', () => {
         expect(toolbarSource).toContain('bridge.applySearchQuery');
         expect(toolbarSource).toContain('bridge.applySortOption');
         expect(toolbarSource).toContain('disabled?: boolean;');
-        expect(toolbarSource).toContain("className={`menu_button character-list-action${disabled ? ' disabled' : ''}`}");
+        expect(toolbarSource).toContain("className={`menu_button character-list-action${disabled ? ' disabled' : ''}");
         expect(toolbarSource).toContain('disabled={disabled}');
         expect(toolbarSource).toContain('aria-disabled={disabled}');
-        expect(toolbarSource).toContain('className="character-library-bulk-selected-count paginationjs-nav"');
+        expect(toolbarSource).toContain('character-library-bulk-selected-count paginationjs-nav');
         expect(toolbarSource).toContain('<output');
         expect(toolbarSource).toContain('aria-label={bulkSelectedLabel}');
         expect(toolbarSource).toContain('disabled={state.bulkSelectedCount === 0}');
-        expect(toolbarSource).toContain('className="character-library-toolbar-filters"');
+        expect(toolbarSource).toContain('character-library-toolbar-filters');
         expect(helperSource).toContain('export const characterLibraryToolbarSchema = z.object(');
         expect(helperSource).toContain('export function getCharacterLibraryBulkSelectionShortText(');
         expect(helperSource).toContain('locale.toLowerCase().startsWith(\'zh\')');

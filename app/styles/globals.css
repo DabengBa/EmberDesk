@@ -1,6 +1,0 @@
-@import 'tailwindcss';
-@import './settings-surface.css';
-
-#root {
-    min-height: 100dvh;
-}

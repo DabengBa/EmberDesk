@@ -1680,10 +1680,6 @@ export function loadMovingUIState() {
     }
 }
 
-function loadMaxContextUnlocked() {
-    switchMaxContextSize();
-}
-
 function switchMaxContextSize() {
     const elements = [
         $('#max_context'),

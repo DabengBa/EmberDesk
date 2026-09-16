@@ -1,4 +1,6 @@
+import * as stylex from '@stylexjs/stylex';
 import { getFieldErrorMessage, getValueAtPath } from '@/lib/settings-helpers.js';
+import { settingsStyles } from '@/styles/settings-surface.styles';
 
 type SettingOption = {
     value: string;
@@ -49,12 +51,12 @@ export function SettingField({
                 return (
                     <form.Subscribe selector={(state: any) => getValueAtPath(state.values, name)}>
                         {(currentValue: any) => (
-                            <label className={`settings-field ${variant === 'toggle' ? 'settings-field--wide' : ''}`}>
+                            <label {...stylex.props(settingsStyles.field, stylex.defaultMarker(), variant === 'toggle' && settingsStyles.spanAll)}>
                                 {variant !== 'toggle' && (
                                     <div>
-                                        <span className="settings-field-label">{label}</span>
+                                        <span {...stylex.props(settingsStyles.fieldLabel)}>{label}</span>
                                         {description && (
-                                            <span id={descriptionId} className="settings-field-description">
+                                            <span id={descriptionId} {...stylex.props(settingsStyles.fieldDescription)}>
                                                 {description}
                                             </span>
                                         )}
@@ -65,7 +67,7 @@ export function SettingField({
                                     <textarea
                                         id={fieldId}
                                         name={name}
-                                        className="settings-input settings-textarea"
+                                        {...stylex.props(settingsStyles.input, settingsStyles.textarea)}
                                         value={String(currentValue ?? '')}
                                         placeholder={placeholder}
                                         disabled={disabled}
@@ -83,7 +85,7 @@ export function SettingField({
                                         type="text"
                                         id={fieldId}
                                         name={name}
-                                        className="settings-input"
+                                        {...stylex.props(settingsStyles.input)}
                                         value={String(currentValue ?? '')}
                                         placeholder={placeholder}
                                         disabled={disabled}
@@ -101,7 +103,7 @@ export function SettingField({
                                         type="number"
                                         id={fieldId}
                                         name={name}
-                                        className="settings-input"
+                                        {...stylex.props(settingsStyles.input)}
                                         value={Number(currentValue ?? 0)}
                                         min={min}
                                         max={max}
@@ -121,7 +123,7 @@ export function SettingField({
                                     <select
                                         id={fieldId}
                                         name={name}
-                                        className="settings-input settings-select"
+                                        {...stylex.props(settingsStyles.input, settingsStyles.select)}
                                         value={String(currentValue ?? '')}
                                         disabled={disabled}
                                         aria-describedby={describedBy}
@@ -143,11 +145,11 @@ export function SettingField({
                                 )}
 
                                 {variant === 'toggle' && (
-                                    <span className="settings-toggle">
-                                        <span className="settings-toggle-body">
-                                            <span className="settings-toggle-label">{label}</span>
+                                    <span {...stylex.props(settingsStyles.toggle)}>
+                                        <span {...stylex.props(settingsStyles.toggleBody)}>
+                                            <span {...stylex.props(settingsStyles.fieldLabel)}>{label}</span>
                                             {description && (
-                                                <span id={descriptionId} className="settings-field-description">
+                                                <span id={descriptionId} {...stylex.props(settingsStyles.fieldDescription)}>
                                                     {description}
                                                 </span>
                                             )}
@@ -156,7 +158,7 @@ export function SettingField({
                                             type="checkbox"
                                             id={fieldId}
                                             name={name}
-                                            className="settings-checkbox"
+                                            {...stylex.props(settingsStyles.checkbox)}
                                             checked={Boolean(currentValue)}
                                             disabled={disabled}
                                             aria-describedby={describedBy}
@@ -169,7 +171,7 @@ export function SettingField({
                                     </span>
                                 )}
 
-                                {errorMessage && <span id={errorId} className="settings-field-error">{errorMessage}</span>}
+                                {errorMessage && <span id={errorId} {...stylex.props(settingsStyles.fieldError)}>{errorMessage}</span>}
                             </label>
                         )}
                     </form.Subscribe>

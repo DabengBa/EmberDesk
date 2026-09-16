@@ -11,6 +11,9 @@ import {
     type CharacterLibraryToolbarBridge,
 } from './components/character-library/CharacterLibraryToolbar';
 import type { CharacterLibraryToolbarState } from './lib/character-library-helpers';
+import { Theme } from '@astryxdesign/core';
+import { emberDeskTheme } from './lib/theme-tokens';
+import '@astryxdesign/core/astryx.css';
 
 let reactRoot: Root | null = null;
 let mountContainer: HTMLElement | null = null;
@@ -31,9 +34,11 @@ function renderPanel() {
     reactRoot ??= createRoot(mountContainer);
     reactRoot.render(
         <StrictMode>
-            <QueryClientProvider client={queryClient}>
-                <CharacterLibraryPanel bridge={bridgeRef} state={currentState} />
-            </QueryClientProvider>
+            <Theme theme={emberDeskTheme} mode="dark">
+                <QueryClientProvider client={queryClient}>
+                    <CharacterLibraryPanel bridge={bridgeRef} state={currentState} />
+                </QueryClientProvider>
+            </Theme>
         </StrictMode>,
     );
 }
@@ -62,9 +67,11 @@ function renderToolbar() {
     toolbarRoot ??= createRoot(toolbarContainer);
     toolbarRoot.render(
         <StrictMode>
-            <QueryClientProvider client={queryClient}>
-                <CharacterLibraryToolbar bridge={toolbarBridgeRef} state={currentToolbarState} />
-            </QueryClientProvider>
+            <Theme theme={emberDeskTheme} mode="dark">
+                <QueryClientProvider client={queryClient}>
+                    <CharacterLibraryToolbar bridge={toolbarBridgeRef} state={currentToolbarState} />
+                </QueryClientProvider>
+            </Theme>
         </StrictMode>,
     );
 }

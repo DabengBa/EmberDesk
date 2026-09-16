@@ -1,4 +1,6 @@
 import type { FormEvent } from 'react';
+import * as stylex from '@stylexjs/stylex';
+import { loginStyles } from '@/styles/login.styles';
 type RecoveryFormProps = {
     form: any;
     recoveryVisible: boolean;
@@ -24,22 +26,21 @@ export function RecoveryForm({
     onSubmit,
     onCancel,
 }: RecoveryFormProps) {
-    const alertClassName = `login-error${errorMessage ? ' login-error--visible' : ''}`;
-
     return (
-        <section className="login-card login-card--entry" id="recoveryCard" style={{ display: recoveryVisible ? 'block' : 'none' }} aria-labelledby="recovery-title">
-            <header className="login-header">
-                <img src="/img/logo.png" alt="" className="login-logo" />
-                <h1 id="recovery-title">重置密码</h1>
+        <section {...stylex.props(loginStyles.card)} id="recoveryCard" style={{ display: recoveryVisible ? 'block' : 'none' }} aria-labelledby="recovery-title">
+            <header {...stylex.props(loginStyles.header)}>
+                <img src="/img/logo.png" alt="" {...stylex.props(loginStyles.logo)} />
+                <h1 id="recovery-title" {...stylex.props(loginStyles.headerTitle)}>重置密码</h1>
             </header>
 
-            <form id="recoveryForm" className="login-form" noValidate onSubmit={onSubmit}>
-                <div className="login-field-stack">
+            <form id="recoveryForm" {...stylex.props(loginStyles.form)} noValidate onSubmit={onSubmit}>
+                <div {...stylex.props(loginStyles.fieldStack)}>
                     <form.Field name="handle">
                         {(field: any) => (
-                            <div className="login-field">
-                                <label htmlFor="recoverHandle">用户名</label>
+                            <div {...stylex.props(loginStyles.field)}>
+                                <label htmlFor="recoverHandle" {...stylex.props(loginStyles.fieldLabel)}>用户名</label>
                                 <input
+                                    {...stylex.props(loginStyles.input)}
                                     id="recoverHandle"
                                     name="recoverHandle"
                                     type="text"
@@ -59,22 +60,23 @@ export function RecoveryForm({
                     </form.Field>
                 </div>
 
-                <div id="recoveryStep1" className="login-actions" style={{ display: currentStep === 1 ? 'flex' : 'none' }}>
-                    <button type="submit" className="login-btn" id="sendCodeBtn" disabled={isSubmitting}>发送恢复码</button>
+                <div id="recoveryStep1" {...stylex.props(loginStyles.actions)} style={{ display: currentStep === 1 ? 'flex' : 'none' }}>
+                    <button type="submit" {...stylex.props(loginStyles.btn)} id="sendCodeBtn" disabled={isSubmitting}>发送恢复码</button>
                 </div>
 
                 <div id="recoveryStep2" style={{ display: currentStep === 2 ? 'block' : 'none' }}>
                     {currentStep === 2 && (
-                        <p className="login-recovery-note">
+                        <p {...stylex.props(loginStyles.recoveryNote)}>
                             恢复码会输出到服务端控制台，请联系管理员获取。
                         </p>
                     )}
-                    <div className="login-field-stack">
+                    <div {...stylex.props(loginStyles.fieldStack)}>
                         <form.Field name="code">
                             {(field: any) => (
-                                <div className="login-field">
-                                    <label htmlFor="recoveryCode">恢复码</label>
+                                <div {...stylex.props(loginStyles.field)}>
+                                    <label htmlFor="recoveryCode" {...stylex.props(loginStyles.fieldLabel)}>恢复码</label>
                                     <input
+                                        {...stylex.props(loginStyles.input)}
                                         id="recoveryCode"
                                         name="recoveryCode"
                                         type="text"
@@ -95,9 +97,10 @@ export function RecoveryForm({
                         </form.Field>
                         <form.Field name="newPassword">
                             {(field: any) => (
-                                <div className="login-field">
-                                    <label htmlFor="newPassword">新密码</label>
+                                <div {...stylex.props(loginStyles.field)}>
+                                    <label htmlFor="newPassword" {...stylex.props(loginStyles.fieldLabel)}>新密码</label>
                                     <input
+                                        {...stylex.props(loginStyles.input)}
                                         id="newPassword"
                                         name="newPassword"
                                         type="password"
@@ -115,17 +118,17 @@ export function RecoveryForm({
                             )}
                         </form.Field>
                     </div>
-                    <div className="login-actions">
-                        <button type="submit" className="login-btn" id="resetBtn" disabled={isSubmitting}>重置密码</button>
+                    <div {...stylex.props(loginStyles.actions)}>
+                        <button type="submit" {...stylex.props(loginStyles.btn)} id="resetBtn" disabled={isSubmitting}>重置密码</button>
                     </div>
                 </div>
             </form>
 
-            <div className={alertClassName} id="recoveryError" role="alert" aria-live="assertive">
+            <div {...stylex.props(loginStyles.error, errorMessage ? loginStyles.errorVisible : null)} id="recoveryError" role="alert" aria-live="assertive">
                 {errorMessage}
             </div>
 
-            <button type="button" className="login-forgot" id="cancelRecovery" onClick={() => {
+            <button type="button" {...stylex.props(loginStyles.forgot)} id="cancelRecovery" onClick={() => {
                 onCancel();
             }}
             >
