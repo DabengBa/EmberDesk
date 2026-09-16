@@ -55,15 +55,6 @@ import {
 import { SettingsSurface } from './components/settings/SettingsSurface';
 import './styles/settings-surface.css';
 
-function parseFiniteNumber(value: string): number | undefined {
-    if (value.trim() === '') {
-        return undefined;
-    }
-
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : undefined;
-}
-
 export type WorkspacePanelKind = 'worldInfo' | 'extensionsHost' | 'mainChatMessageList' | 'characterAuthoring';
 interface WorkspacePanelMount {
     root: Root;
