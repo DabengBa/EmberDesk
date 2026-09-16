@@ -7,7 +7,6 @@ import {
 } from '../script.js';
 import { eventSource, event_types } from './events.js';
 import { extension_settings, saveMetadataDebounced } from './extensions.js';
-import { selected_group } from './group-chats.js';
 import { getCharaFilename, delay } from './utils.js';
 import { power_user } from './power-user.js';
 
@@ -111,7 +110,7 @@ function setChatCfg(tempValue, setting) {
 
 // TODO: Only change CFG when character is selected
 function onCfgMenuItemClick() {
-    if (!selected_group && this_chid === undefined) {
+    if (this_chid === undefined) {
         toastr.warning('Select a character before trying to configure CFG', '', { timeOut: 2000 });
         return;
     }
@@ -157,19 +156,6 @@ function onCfgMenuItemClick() {
 
 async function onChatChanged() {
     loadSettings();
-    await modifyCharaHtml();
-}
-
-// Rearrange the panel if a group chat is present
-async function modifyCharaHtml() {
-    if (selected_group) {
-        $('#chara_cfg_container').hide();
-        $('#groupchat_cfg_use_chara_container').show();
-    } else {
-        $('#chara_cfg_container').show();
-        $('#groupchat_cfg_use_chara_container').hide();
-        // TODO: Remove chat checkbox here
-    }
 }
 
 // Reloads chat-specific settings
@@ -179,7 +165,6 @@ function loadSettings() {
     $('#chat_cfg_guidance_scale_counter').val(chat_metadata[metadataKeys.guidance_scale]?.toFixed(2) ?? 1.0.toFixed(2));
     $('#chat_cfg_negative_prompt').val(chat_metadata[metadataKeys.negative_prompt] ?? '');
     $('#chat_cfg_positive_prompt').val(chat_metadata[metadataKeys.positive_prompt] ?? '');
-    $('#groupchat_cfg_use_chara').prop('checked', chat_metadata[metadataKeys.groupchat_individual_chars] ?? false);
     if (chat_metadata[metadataKeys.prompt_combine]?.length > 0) {
         chat_metadata[metadataKeys.prompt_combine].forEach((element) => {
             $(`input[name="cfg_prompt_combine"][value="${element}"]`)
@@ -205,14 +190,11 @@ function loadSettings() {
 
     $('#cfg_prompt_insertion_depth').val(chat_metadata[metadataKeys.prompt_insertion_depth] ?? 1);
 
-    // Set character CFG if it exists
-    if (!selected_group) {
-        const charaCfg = extension_settings.cfg.chara.find((e) => e.name === getCharaFilename());
-        $('#chara_cfg_guidance_scale').val(charaCfg?.guidance_scale ?? 1.00);
-        $('#chara_cfg_guidance_scale_counter').val(charaCfg?.guidance_scale?.toFixed(2) ?? 1.0.toFixed(2));
-        $('#chara_cfg_negative_prompt').val(charaCfg?.negative_prompt ?? '');
-        $('#chara_cfg_positive_prompt').val(charaCfg?.positive_prompt ?? '');
-    }
+    const charaCfg = extension_settings.cfg.chara.find((e) => e.name === getCharaFilename());
+    $('#chara_cfg_guidance_scale').val(charaCfg?.guidance_scale ?? 1.00);
+    $('#chara_cfg_guidance_scale_counter').val(charaCfg?.guidance_scale?.toFixed(2) ?? 1.0.toFixed(2));
+    $('#chara_cfg_negative_prompt').val(charaCfg?.negative_prompt ?? '');
+    $('#chara_cfg_positive_prompt').val(charaCfg?.positive_prompt ?? '');
 }
 
 // Load initial extension settings
@@ -354,17 +336,6 @@ export function initCfg() {
         saveMetadataDebounced();
     });
 
-    $('#groupchat_cfg_use_chara').on('input', function () {
-        const checked = !!$(this).prop('checked');
-        chat_metadata[metadataKeys.groupchat_individual_chars] = checked;
-
-        if (checked) {
-            toastr.info('You can edit character CFG values in their respective character chats.');
-        }
-
-        saveMetadataDebounced();
-    });
-
     initialLoadSettings();
 
     if (extension_settings.cfg) {
@@ -390,7 +361,6 @@ export const metadataKeys = {
     negative_prompt: 'cfg_negative_prompt',
     positive_prompt: 'cfg_positive_prompt',
     prompt_combine: 'cfg_prompt_combine',
-    groupchat_individual_chars: 'cfg_groupchat_individual_chars',
     prompt_insertion_depth: 'cfg_prompt_insertion_depth',
     prompt_separator: 'cfg_prompt_separator',
 };
@@ -405,16 +375,15 @@ export function getGuidanceScale() {
 
     const charaCfg = extension_settings.cfg.chara?.find((e) => e.name === getCharaFilename(this_chid));
     const chatGuidanceScale = chat_metadata[metadataKeys.guidance_scale];
-    const groupchatCharOverride = chat_metadata[metadataKeys.groupchat_individual_chars] ?? false;
 
-    if (chatGuidanceScale && chatGuidanceScale !== 1 && !groupchatCharOverride) {
+    if (chatGuidanceScale && chatGuidanceScale !== 1) {
         return {
             type: cfgType.chat,
             value: chatGuidanceScale,
         };
     }
 
-    if ((!selected_group && charaCfg || groupchatCharOverride) && charaCfg?.guidance_scale !== 1) {
+    if (charaCfg && charaCfg.guidance_scale !== 1) {
         return {
             type: cfgType.chara,
             value: charaCfg.guidance_scale,

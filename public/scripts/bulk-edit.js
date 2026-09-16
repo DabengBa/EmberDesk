@@ -100,7 +100,7 @@ function enableBulkSelect() {
         $(el).attr('aria-describedby', 'bulkSelectionHint');
         $(el).prepend(checkbox);
     });
-    $('#rm_print_characters_block.group_overlay_mode_select .bogus_folder_select, #rm_print_characters_block.group_overlay_mode_select .group_select')
+    $('#rm_print_characters_block.group_overlay_mode_select .bogus_folder_select')
         .addClass('disabled');
 
     $('#rm_print_characters_block').addClass('bulk_select');
@@ -118,7 +118,7 @@ function disableBulkSelect() {
     $('#rm_print_characters_block .character_select').removeAttr('role');
     $('#rm_print_characters_block .character_select').removeAttr('aria-selected');
     $('#rm_print_characters_block .character_select').removeAttr('aria-checked aria-describedby');
-    $('#rm_print_characters_block.group_overlay_mode_select .bogus_folder_select, #rm_print_characters_block.group_overlay_mode_select .group_select')
+    $('#rm_print_characters_block.group_overlay_mode_select .bogus_folder_select')
         .removeClass('disabled');
     $('#rm_print_characters_block').removeClass('bulk_select');
     $(document).off('click.bulkSelectCheckbox');

@@ -52,7 +52,6 @@ export function summarizeInteractionSamples(samples) {
     const deleteFlowMs = collectNumericMetric(samples, 'deleteFlowMs');
     const deleteRequestMs = collectNumericMetric(samples, 'deleteRequestMs');
     const preDeleteChatLookupMs = collectNumericMetric(samples, 'preDeleteChatLookupMs');
-    const groupsRefreshMs = collectNumericMetric(samples, 'groupsRefreshMs');
     const characterPrintMs = collectNumericMetric(samples, 'characterPrintMs');
     const characterPageLoadedLagMs = collectNumericMetric(samples, 'characterPageLoadedLagMs');
     const firstListItemVisibleMs = collectNumericMetric(samples, 'firstListItemVisibleMs');
@@ -73,7 +72,6 @@ export function summarizeInteractionSamples(samples) {
         deleteFlowMs: summarizeMetric(deleteFlowMs),
         deleteRequestMs: summarizeMetric(deleteRequestMs),
         preDeleteChatLookupMs: summarizeMetric(preDeleteChatLookupMs),
-        groupsRefreshMs: summarizeMetric(groupsRefreshMs),
         characterPrintMs: summarizeMetric(characterPrintMs),
         characterPageLoadedLagMs: summarizeMetric(characterPageLoadedLagMs),
         firstListItemVisibleMs: summarizeMetric(firstListItemVisibleMs),
@@ -123,7 +121,6 @@ export function buildVariantComparison(onSamples, offSamples) {
             deleteFlowMsMedian: calculateDelta(onSummary.deleteFlowMs.median, offSummary.deleteFlowMs.median),
             deleteRequestMsMedian: calculateDelta(onSummary.deleteRequestMs.median, offSummary.deleteRequestMs.median),
             preDeleteChatLookupMsMedian: calculateDelta(onSummary.preDeleteChatLookupMs.median, offSummary.preDeleteChatLookupMs.median),
-            groupsRefreshMsMedian: calculateDelta(onSummary.groupsRefreshMs.median, offSummary.groupsRefreshMs.median),
             characterPrintMsMedian: calculateDelta(onSummary.characterPrintMs.median, offSummary.characterPrintMs.median),
             characterPageLoadedLagMsMedian: calculateDelta(onSummary.characterPageLoadedLagMs.median, offSummary.characterPageLoadedLagMs.median),
             firstListItemVisibleMsMedian: calculateDelta(onSummary.firstListItemVisibleMs.median, offSummary.firstListItemVisibleMs.median),
@@ -261,9 +258,7 @@ function normalizeDeleteRefreshPayload(payload, { includeMetrics = false } = {})
         deletedAvatar: payload.deletedAvatar ?? '',
         characterCountBefore: Number(payload.characterCountBefore ?? 0),
         characterCountAfter: Number(payload.characterCountAfter ?? 0),
-        groupCountAfter: Number(payload.groupCountAfter ?? 0),
         renderedCharacterCount: Number(payload.renderedCharacterCount ?? 0),
-        renderedGroupCount: Number(payload.renderedGroupCount ?? 0),
     };
 
     if (includeMetrics) {
@@ -271,7 +266,6 @@ function normalizeDeleteRefreshPayload(payload, { includeMetrics = false } = {})
             deleteFlowMs: round(Number(payload.metrics?.deleteFlowMs ?? 0)),
             deleteRequestMs: round(Number(payload.metrics?.deleteRequestMs ?? 0)),
             preDeleteChatLookupMs: round(Number(payload.metrics?.preDeleteChatLookupMs ?? 0)),
-            groupsRefreshMs: round(Number(payload.metrics?.groupsRefreshMs ?? 0)),
             characterPrintMs: round(Number(payload.metrics?.characterPrintMs ?? 0)),
             characterPageLoadedLagMs: round(Number(payload.metrics?.characterPageLoadedLagMs ?? 0)),
         };
@@ -288,7 +282,6 @@ function normalizeCharacterLibraryUxPayload(payload) {
     return {
         query: payload.query ?? '',
         renderedCharacterCount: Number(payload.renderedCharacterCount ?? 0),
-        renderedGroupCount: Number(payload.renderedGroupCount ?? 0),
         firstListItemClickable: Boolean(payload.firstListItemClickable),
         busyCleared: Boolean(payload.busyCleared),
         pageLoaded: Boolean(payload.pageLoaded),

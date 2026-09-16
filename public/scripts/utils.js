@@ -15,7 +15,6 @@ import { debounce_timeout } from './constants.js';
 import { Popup, POPUP_RESULT, POPUP_TYPE } from './popup.js';
 import { SlashCommandClosure } from './slash-commands/SlashCommandClosure.js';
 import { getTagsList } from './tags.js';
-import { groups, selected_group } from './group-chats.js';
 import { getCurrentLocale, t, translate } from './i18n.js';
 import { importWorldInfo } from './world-info.js';
 
@@ -2682,10 +2681,7 @@ export function findChar({ name = null, allowAvatar = true, insensitive = true, 
         });
     }
 
-    // Get the current character(s)
-    /** @type {any[]} */
-    const currentChars = selected_group ? groups.find(group => group.id === selected_group)?.members.map(member => filteredCharacters.find(char => char.avatar === member))
-        : filteredCharacters.filter(char => characters[this_chid]?.avatar === char.avatar);
+    const currentChars = filteredCharacters.filter(char => characters[this_chid]?.avatar === char.avatar);
 
     // If we have a current char and prefer it, return that if it matches
     if (preferCurrentChar) {

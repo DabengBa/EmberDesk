@@ -82,13 +82,11 @@ const settingsSchema = z.object({
         sendIfEmpty: z.string(),
         impersonationPrompt: z.string(),
         newChatPrompt: z.string(),
-        newGroupChatPrompt: z.string(),
         newExampleChatPrompt: z.string(),
         continueNudgePrompt: z.string(),
         wiFormat: z.string(),
         scenarioFormat: z.string(),
         personalityFormat: z.string(),
-        groupNudgePrompt: z.string(),
         assistantPrefill: z.string(),
         assistantImpersonation: z.string(),
         namesBehavior: z.coerce.number(),
@@ -134,8 +132,8 @@ const settingsSchema = z.object({
         mesIDDisplayEnabled: z.boolean(),
         hideChatAvatarsEnabled: z.boolean(),
         compactInputArea: z.boolean(),
-        waifuMode: z.boolean(),
         expandMessageActions: z.boolean(),
+
         enableZenSliders: z.boolean(),
         enableLabMode: z.boolean(),
         messageTokenCountEnabled: z.boolean(),
@@ -178,10 +176,8 @@ const settingsSchema = z.object({
         allowName1Display: z.boolean(),
         allowName2Display: z.boolean(),
         encodeTags: z.boolean(),
-        disableGroupTrimming: z.boolean(),
         consoleLogPrompts: z.boolean(),
         requestTokenProbabilities: z.boolean(),
-        showGroupChatQueue: z.boolean(),
         pinStyles: z.boolean(),
         fuzzySearch: z.boolean(),
         preferCharacterPrompt: z.boolean(),
@@ -1135,15 +1131,6 @@ export function SettingsSurface({
                                     />
                                     <SettingField
                                         form={settingsForm}
-                                        name="general.newGroupChatPrompt"
-                                        label="New Group Chat Prompt"
-                                        description="Settings path binding for general.newGroupChatPrompt."
-                                        variant="textarea"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
                                         name="general.newExampleChatPrompt"
                                         label="New Example Chat Prompt"
                                         description="Settings path binding for general.newExampleChatPrompt."
@@ -1183,15 +1170,6 @@ export function SettingsSurface({
                                         name="general.personalityFormat"
                                         label="Personality Format"
                                         description="Settings path binding for general.personalityFormat."
-                                        variant="textarea"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.groupNudgePrompt"
-                                        label="Group Nudge Prompt"
-                                        description="Settings path binding for general.groupNudgePrompt."
                                         variant="textarea"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
@@ -1770,15 +1748,6 @@ export function SettingsSurface({
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
-                                                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.waifuMode"
-                                        label="Waifu Mode"
-                                        description="Settings path binding for userInterface.waifuMode."
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
                                     <SettingField
                                         form={settingsForm}
                                         name="userInterface.expandMessageActions"
@@ -2161,15 +2130,6 @@ export function SettingsSurface({
                                     />
                                     <SettingField
                                         form={settingsForm}
-                                        name="userInterface.disableGroupTrimming"
-                                        label="Disable Group Trimming"
-                                        description="Settings path binding for userInterface.disableGroupTrimming."
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
                                         name="userInterface.consoleLogPrompts"
                                         label="Console Log Prompts"
                                         description="Settings path binding for userInterface.consoleLogPrompts."
@@ -2182,15 +2142,6 @@ export function SettingsSurface({
                                         name="userInterface.requestTokenProbabilities"
                                         label="Request Token Probabilities"
                                         description="Settings path binding for userInterface.requestTokenProbabilities."
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.showGroupChatQueue"
-                                        label="Show Group Chat Queue"
-                                        description="Settings path binding for userInterface.showGroupChatQueue."
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}

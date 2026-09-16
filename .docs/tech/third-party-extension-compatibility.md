@@ -12,6 +12,14 @@ The boundary covers:
 - the extension panel mount points in `public/index.html`
 - the extension wand menu templates under `public/scripts/templates/`
 - the bundled local copy of `N0VI028/JS-Slash-Runner` under `public/scripts/extensions/third-party/JS-Slash-Runner/`
+
+`public/scripts/extensions/third-party/` is gitignored, so isolated worktrees and fresh clones do not carry the bundled copy. To install the pinned compatibility fixture reproducibly, run:
+
+```bash
+node scripts/fetch-third-party-extension-fixtures.mjs
+```
+
+The script fetches the pinned upstream commit recorded in `FIXTURES` into the gitignored directory. It refuses to overwrite a manually installed (non-git) extension directory.
 - the `@sillytavern/*` browser import aliases used by Tavern Helper
 - the event and data shapes that Tavern Helper reads from SillyTavern modules
 - the character list DOM identity contract that frontend slices must preserve for first-party modules and extension-adjacent scripts

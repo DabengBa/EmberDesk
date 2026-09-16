@@ -303,8 +303,6 @@ describe('character authoring facade', () => {
             },
         });
     });
-});
-
 
     test('builds multipart write payload and endpoint without DOM write-through', () => {
         const saveModel = createCharacterAuthoringSaveModel({
@@ -313,6 +311,7 @@ describe('character authoring facade', () => {
             firstMessage: 'Stay with me.',
             tags: ['medic'],
             favorite: true,
+            talkativeness: 0,
             alternateGreetings: ['Move.', 'Hold still.'],
             characterWorld: 'Colony Lore',
             depthPrompt: { prompt: 'Stay tense', depth: 3, role: 'system' },
@@ -329,6 +328,7 @@ describe('character authoring facade', () => {
         expect(formData.get('first_mes')).toBe('Stay with me.');
         expect(formData.get('avatar_url')).toBe('Mira.png');
         expect(formData.get('fav')).toBe('true');
+        expect(formData.get('talkativeness')).toBe('0');
         expect(formData.get('world')).toBe('Colony Lore');
         expect(formData.getAll('alternate_greetings')).toEqual(['Move.', 'Hold still.']);
         expect(JSON.parse(String(formData.get('extensions')))).toMatchObject({
@@ -369,3 +369,5 @@ describe('character authoring facade', () => {
             ok: false,
         })).toBe(false);
     });
+
+});

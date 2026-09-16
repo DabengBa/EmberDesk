@@ -8,8 +8,6 @@ import {
     default_user_avatar,
     getCurrentChatId,
     getThumbnailUrl,
-    groupToEntity,
-    menu_type,
     name1,
     name2,
     reloadCurrentChat,
@@ -52,7 +50,6 @@ import {
 } from './utils.js';
 import { debounce_timeout } from './constants.js';
 import { FILTER_TYPES, FilterHelper } from './filters.js';
-import { groups, selected_group } from './group-chats.js';
 import { POPUP_RESULT, POPUP_TYPE, Popup, callGenericPopup } from './popup.js';
 import { t } from './i18n.js';
 import { openWorldInfoEditor, world_names } from './world-info.js';
@@ -68,9 +65,9 @@ import { isFirefox } from './browser-fixes.js';
 import { slashCommandReturnHelper } from './slash-commands/SlashCommandReturnHelper.js';
 
 /**
- * @typedef {object} PersonaConnection A connection between a character and a character or group entity
- * @property {'character' | 'group'} type - Type of connection
- * @property {string} id - ID of the connection (character key (avatar url), group id)
+ * @typedef {object} PersonaConnection A connection between a persona and a character entity
+ * @property {'character'} type - Type of connection
+ * @property {string} id - Character key (avatar url)
  */
 
 /** @typedef {'chat' | 'character' | 'default'} PersonaLockType Type of the persona lock */
@@ -81,7 +78,7 @@ import { slashCommandReturnHelper } from './slash-commands/SlashCommandReturnHel
  * @property {boolean} default - Whether this persona is the default one for all new chats
  * @property {object} locked - An object containing the lock states
  * @property {boolean} locked.chat - Whether the persona is locked to the currently open chat
- * @property {boolean} locked.character - Whether the persona is locked to the currently open character or group
+ * @property {boolean} locked.character - Whether the persona is locked to the currently open character
  */
 
 export const persona_description_positions = {
@@ -106,8 +103,21 @@ const DEFAULT_ROLE = 0;
 /** @type {string} The currently selected persona (identified by its avatar) */
 export let user_avatar = '';
 
-/** @type {FilterHelper} Filter helper for the persona list */
-export const personasFilter = new FilterHelper(debounce(getUserAvatars, debounce_timeout.quick));
+/**
+ * @type {FilterHelper} Filter helper for the persona list.
+ * Lazily assigned by getPersonasFilter() because constructing it at module
+ * evaluation time participates in an import cycle with filters.js.
+ */
+export let personasFilter = null;
+
+/**
+ * Returns the persona list filter helper, creating it on first use.
+ * @returns {FilterHelper}
+ */
+function getPersonasFilter() {
+    personasFilter ??= new FilterHelper(debounce(getUserAvatars, debounce_timeout.quick));
+    return personasFilter;
+}
 
 /** @type {string} The last loaded chat id to remember for persona loading */
 let personaLastLoadedChatId = null;
@@ -187,8 +197,8 @@ function sortPersonas(personas) {
     const option = $('#persona_sort_order').find(':selected');
     if (option.attr('value') === 'search') {
         personas.sort((a, b) => {
-            const aScore = personasFilter.getScore(FILTER_TYPES.PERSONA_SEARCH, a);
-            const bScore = personasFilter.getScore(FILTER_TYPES.PERSONA_SEARCH, b);
+            const aScore = getPersonasFilter().getScore(FILTER_TYPES.PERSONA_SEARCH, a);
+            const bScore = getPersonasFilter().getScore(FILTER_TYPES.PERSONA_SEARCH, b);
             return (aScore - bScore);
         });
     } else {
@@ -204,7 +214,7 @@ function sortPersonas(personas) {
 
 /** Checks the state of the current search, and adds/removes the search sorting option accordingly */
 function verifyPersonaSearchSortRule() {
-    const searchTerm = personasFilter.getFilterData(FILTER_TYPES.PERSONA_SEARCH);
+    const searchTerm = getPersonasFilter().getFilterData(FILTER_TYPES.PERSONA_SEARCH);
     const searchOption = $('#persona_sort_order option[value="search"]');
     const selector = $('#persona_sort_order');
     const isHidden = searchOption.attr('hidden') !== undefined;
@@ -292,7 +302,7 @@ export async function getUserAvatars(doRender = true, openPageAt = '') {
         // Before printing the personas, we check if we should enable/disable search sorting
         verifyPersonaSearchSortRule();
 
-        let entities = personasFilter.applyFilters(allEntities);
+        let entities = getPersonasFilter().applyFilters(allEntities);
         entities = sortPersonas(entities);
 
         const storageKey = 'Personas_PerPage';
@@ -689,15 +699,11 @@ export function updatePersonaConnectionsAvatarList() {
     /** @type {PersonaConnection[]} */
     const connections = power_user.persona_descriptions[user_avatar]?.connections ?? [];
     const entities = connections.map(connection => {
-        if (connection.type === 'character') {
-            const character = characters.find(c => c.avatar === connection.id);
-            if (character) return characterToEntity(character, getCharIndex(character));
+        if (connection.type !== 'character') {
+            return undefined;
         }
-        if (connection.type === 'group') {
-            const group = groups.find(g => g.id === connection.id);
-            if (group) return groupToEntity(group);
-        }
-        return undefined;
+        const character = characters.find(c => c.avatar === connection.id);
+        return character ? characterToEntity(character, getCharIndex(character)) : undefined;
     }).filter(entity => entity?.item !== undefined);
 
     if (entities.length)
@@ -717,7 +723,7 @@ export function updatePersonaConnectionsAvatarList() {
  * @param {string} [options.okButton='None'] - The label for the OK button
  * @param {(element: HTMLElement, ev: MouseEvent) => any} [options.shiftClickHandler] - A function to handle shift-click
  * @param {boolean|string[]} [options.highlightPersonas=false] - Whether to highlight personas - either by providing a list of persona keys, or true to highlight all present in current chat
- * @param {PersonaConnection} [options.targetedChar] - The targeted character or gorup for this persona selection
+ * @param {PersonaConnection} [options.targetedChar] Character targeted by this persona selection
  * @returns {Promise<string?>} - A promise that resolves to the selected persona id or null if no selection was made
  */
 export async function askForPersonaSelection(title, text, personas, { okButton = 'None', shiftClickHandler = undefined, highlightPersonas = false, targetedChar = undefined } = {}) {
@@ -783,7 +789,7 @@ export async function askForPersonaSelection(title, text, personas, { okButton =
                 saveSettingsDebounced();
                 updatePersonaConnectionsAvatarList();
                 if (power_user.persona_show_notifications) {
-                    const name = targetedChar.type == 'character' ? characters[targetedChar.id]?.name : groups[targetedChar.id]?.name;
+                    const name = characters[targetedChar.id]?.name;
                     toastr.info(t`All connections to ${name} have been removed.`, t`Personas Unlocked`);
                 }
             },
@@ -957,13 +963,12 @@ async function selectCurrentPersona({ toastPersonaNameChange = true } = {}) {
 }
 
 /**
- * Checks if a connection is locked for the current character or group edit menu
- * @param {PersonaConnection} connection - Connection to check
+ * Checks if a connection is locked for the current character edit menu
+ * @param {PersonaConnection} connection - Character connection to check
  * @returns {boolean} Whether the connection is locked
  */
 export function isPersonaConnectionLocked(connection) {
-    return (!selected_group && connection.type === 'character' && connection.id === characters[this_chid]?.avatar)
-        || (selected_group && connection.type === 'group' && connection.id === selected_group);
+    return connection.type === 'character' && connection.id === characters[this_chid]?.avatar;
 }
 
 /**
@@ -1413,7 +1418,7 @@ async function toggleDefaultPersona(avatarId, { quiet = false } = {}) {
  * - default: Whether this persona is the default one for all new chats
  * - locked: An object containing the lock states
  *   - chat: Whether the persona is locked to the currently open chat
- *   - character: Whether the persona is locked to the currently open character or group
+ *   - character: Whether the persona is locked to the currently open character
  * @param {string} avatarId - The avatar id of the persona to get the state for
  * @returns {PersonaState} An object describing the state of the given persona
  */
@@ -1424,8 +1429,7 @@ function getPersonaStates(avatarId) {
     /** @type {PersonaConnection[]} */
     const connections = power_user.persona_descriptions[avatarId]?.connections;
     const hasCharLock = !!connections?.some(c =>
-        (!selected_group && c.type === 'character' && c.id === characters[Number(this_chid)]?.avatar)
-        || (selected_group && c.type === 'group' && c.id === selected_group));
+        c.type === 'character' && c.id === characters[Number(this_chid)]?.avatar);
 
     return {
         avatarId: avatarId,
@@ -1666,12 +1670,12 @@ async function loadPersonaForCurrentChat({ doRender = false } = {}) {
 
 /**
  * Returns an array of persona keys that are connected to the given character key.
- * If the character key is not provided, it defaults to the currently selected group or character.
+ * If the character key is not provided, it defaults to the currently selected character.
  * @param {string} [characterKey] - The character key to query
  * @returns {string[]} - An array of persona keys that are connected to the given character key
  */
 export function getConnectedPersonas(characterKey = undefined) {
-    characterKey ??= selected_group || characters[Number(this_chid)]?.avatar;
+    characterKey ??= characters[Number(this_chid)]?.avatar;
     const connectedPersonas = Object.entries(power_user.persona_descriptions)
         .filter(([_, { connections }]) => connections?.some(conn => conn.id === characterKey))
         .map(([key, _]) => key);
@@ -1680,8 +1684,8 @@ export function getConnectedPersonas(characterKey = undefined) {
 
 
 /**
- * Shows a popup with all personas connected to the currently selected character or group.
- * In the popup, the user can select a persona to load for the current character or group, or shift-click to remove the connection.
+ * Shows a popup with all personas connected to the currently selected character.
+ * In the popup, the user can select a persona to load for the current character, or shift-click to remove the connection.
  * @return {Promise<void>}
  */
 export async function showCharConnections() {
@@ -1701,8 +1705,7 @@ export async function showCharConnections() {
             if (connections) {
                 console.log(`Unlocking persona ${personaId} from current character ${name2}`);
                 power_user.persona_descriptions[personaId].connections = connections.filter(c => {
-                    if (menu_type == 'group_edit' && c.type == 'group' && c.id == selected_group) return false;
-                    else if (c.type == 'character' && c.id == characters[Number(this_chid)]?.avatar) return false;
+                    if (c.type == 'character' && c.id == characters[Number(this_chid)]?.avatar) return false;
                     return true;
                 });
                 saveSettingsDebounced();
@@ -1727,13 +1730,11 @@ export async function showCharConnections() {
 }
 
 /**
- * Retrieves the current connection object based on whether the current chat is with a char or a group.
+ * Retrieves the current character connection object.
  *
  * @returns {PersonaConnection} An object representing the current connection
  */
 export function getCurrentConnectionObj() {
-    if (selected_group)
-        return { type: 'group', id: selected_group };
     if (characters[Number(this_chid)]?.avatar)
         return { type: 'character', id: characters[Number(this_chid)]?.avatar };
     return null;
@@ -1875,10 +1876,7 @@ export async function retriggerFirstMessageOnEmptyChat() {
     if (chat_metadata.tainted) {
         return;
     }
-    if (selected_group) {
-        await reloadCurrentChat();
-    }
-    if (!selected_group && Number(this_chid) >= 0 && chat.length === 1) {
+    if (Number(this_chid) >= 0 && chat.length === 1) {
         await createOrEditCharacter();
     }
 }
@@ -2654,7 +2652,7 @@ function registerPersonaSlashCommands() {
                     new SlashCommandEnumValue('lorebook', t`Attached lorebook name`, enumTypes.enum, enumIcons.world),
                     new SlashCommandEnumValue('avatar', t`Avatar filename (unique key)`, enumTypes.enum, enumIcons.persona),
                     new SlashCommandEnumValue('default', t`Whether this is the default persona`, enumTypes.enum, enumIcons.default),
-                    new SlashCommandEnumValue('connections', t`Character/group connections (array)`, enumTypes.enum, enumIcons.character),
+                    new SlashCommandEnumValue('connections', t`Character connections (array)`, enumTypes.enum, enumIcons.character),
                 ],
             }),
             SlashCommandNamedArgument.fromProps({
@@ -2957,7 +2955,7 @@ export async function initPersonas() {
     });
 
     const debouncedPersonaSearch = debounce((searchQuery) => {
-        personasFilter.setFilterData(FILTER_TYPES.PERSONA_SEARCH, searchQuery);
+        getPersonasFilter().setFilterData(FILTER_TYPES.PERSONA_SEARCH, searchQuery);
     });
 
     $('#persona_search_bar').on('input', function () {

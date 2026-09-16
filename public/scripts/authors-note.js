@@ -8,7 +8,6 @@ import {
     this_chid,
 } from '../script.js';
 import { eventSource, event_types } from './events.js';
-import { selected_group } from './group-chats.js';
 import { extension_settings, getContext, saveMetadataDebounced } from './extensions.js';
 import { getCharaFilename, debounce, delay } from './utils.js';
 import { getTokenCountAsync } from './tokenizers.js';
@@ -322,7 +321,7 @@ function loadSettings() {
 
 export function setFloatingPrompt() {
     const context = getContext();
-    if (!context.groupId && context.characterId === undefined) {
+    if (context.characterId === undefined) {
         console.debug('setFloatingPrompt: Not in a chat. Skipping.');
         shouldWIAddPrompt = false;
         return;
@@ -391,7 +390,7 @@ export function setFloatingPrompt() {
 }
 
 function onANMenuItemClick() {
-    if (!selected_group && this_chid === undefined) {
+    if (this_chid === undefined) {
         toastr.warning(t`Select a character before trying to use Author's Note`, '', { timeOut: 2000 });
         return;
     }
@@ -442,8 +441,7 @@ async function onChatChanged() {
     setFloatingPrompt();
     const context = getContext();
 
-    // Disable the chara note if in a group
-    $('#extension_floating_chara').prop('disabled', !!context.groupId);
+    $('#extension_floating_chara').prop('disabled', false);
 
     const tokenCounter1 = chat_metadata[metadata_keys.prompt] ? await getTokenCountAsync(chat_metadata[metadata_keys.prompt]) : 0;
     $('#extension_floating_prompt_token_counter').text(tokenCounter1);

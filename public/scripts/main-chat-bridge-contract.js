@@ -14,7 +14,6 @@ export const MAIN_CHAT_VISIBLE_TRANSPORT_STATUSES = Object.freeze({
 export const MAIN_CHAT_VISIBLE_TRANSPORT_PATHS = Object.freeze({
     STANDARD_OPENAI_VISIBLE_DIRECT_CHAT: 'standard-openai-visible-direct-chat',
     NON_OPENAI_PROVIDER: 'non-openai-provider',
-    GROUP_CHAT: 'group-chat',
     DRY_RUN: 'dry-run',
     NESTED_VISIBLE_GENERATION: 'nested-visible-generation',
     QUIET_GENERATION: 'quiet-generation',
@@ -28,7 +27,6 @@ export const MAIN_CHAT_VISIBLE_TRANSPORT_PATHS = Object.freeze({
 export const MAIN_CHAT_VISIBLE_TRANSPORT_REASONS = Object.freeze({
     SUPPORTED_KIND: 'supported-kind',
     UNSUPPORTED_API: 'unsupported-api',
-    GROUP_CHAT: 'group-chat',
     DRY_RUN: 'dry-run',
     NESTED_GENERATION: 'nested-generation',
     QUIET_GENERATION: 'quiet-generation',

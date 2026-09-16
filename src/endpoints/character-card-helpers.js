@@ -12,11 +12,31 @@ export const calculateDataSize = (data) => {
 };
 
 /**
+ * Normalize the legacy talkativeness card field without turning an explicit zero into the default.
+ * @param {unknown} value
+ * @returns {number}
+ */
+export function normalizeTalkativeness(value) {
+    if (value === null || value === undefined || value === '') {
+        return 0.5;
+    }
+
+    const normalized = typeof value === 'number'
+        ? value
+        : typeof value === 'string' && value.trim() !== ''
+            ? Number(value)
+            : Number.NaN;
+    return Number.isFinite(normalized) ? normalized : 0.5;
+}
+
+/**
  * Only get fields that are used to display the character list.
  * @param {object} character Character object
  * @returns {{shallow: true, [key: string]: any}} Shallow character
  */
 export const toShallow = (character) => {
+    const talkativeness = normalizeTalkativeness(_.get(character, 'talkativeness', _.get(character, 'data.extensions.talkativeness')));
+
     return {
         shallow: true,
         name: character.name,
@@ -35,7 +55,7 @@ export const toShallow = (character) => {
         first_mes: _.get(character, 'first_mes', _.get(character, 'data.first_mes', '')),
         mes_example: _.get(character, 'mes_example', _.get(character, 'data.mes_example', '')),
         creatorcomment: _.get(character, 'creatorcomment', _.get(character, 'data.creator_notes', '')),
-        talkativeness: _.get(character, 'talkativeness', _.get(character, 'data.extensions.talkativeness', 0)),
+        talkativeness,
         data: {
             name: _.get(character, 'data.name', ''),
             character_version: _.get(character, 'data.character_version', ''),
@@ -51,7 +71,7 @@ export const toShallow = (character) => {
             extensions: {
                 fav: _.get(character, 'data.extensions.fav', false),
                 world: _.get(character, 'data.extensions.world', ''),
-                talkativeness: _.get(character, 'data.extensions.talkativeness', _.get(character, 'talkativeness', 0)),
+                talkativeness,
             },
         },
     };

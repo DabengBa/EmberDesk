@@ -35,8 +35,6 @@
     <link rel="apple-touch-icon" sizes="144x144" href="img/apple-icon-144x144.png" />
     <link rel="stylesheet" type="text/css" href="style.css">
     <link rel="stylesheet" type="text/css" href="css/st-tailwind.css">
-    <link rel="stylesheet" type="text/css" href="css/rm-groups.css">
-    <link rel="stylesheet" type="text/css" href="css/group-avatars.css">
     <link rel="stylesheet" type="text/css" href="css/toggle-dependent.css">
     <link rel="stylesheet" type="text/css" href="css/world-info.css">
     <link rel="stylesheet" type="text/css" href="css/extensions-panel.css">
@@ -436,29 +434,11 @@
                         </div>
                         <div class="range-block">
                             <div class="range-block-title openai_restorable">
-                                <span data-i18n="Group Nudge Prompt Template">Group Nudge</span>
-                                <div id="group_nudge_prompt_restore" data-i18n="[title]Restore default format" title="Restore default format" class="right_menu_button"><div class="fa-solid fa-clock-rotate-left"></div></div>
-                            </div>
-                            <div class="wide100p">
-                                <textarea id="group_nudge_prompt_textarea" class="text_pole textarea_compact autoSetHeight" rows="3" placeholder="&mdash;"></textarea>
-                            </div>
-                        </div>
-                        <div class="range-block">
-                            <div class="range-block-title openai_restorable">
                                 <span data-i18n="New Chat">New Chat</span>
                                 <div id="newchat_prompt_restore" data-i18n="[title]Restore new chat prompt" title="Restore new chat prompt" class="right_menu_button"><div class="fa-solid fa-clock-rotate-left"></div></div>
                             </div>
                             <div class="wide100p">
                                 <textarea id="newchat_prompt_textarea" class="text_pole textarea_compact autoSetHeight" name="new_chat" rows="3" placeholder="&mdash;"></textarea>
-                            </div>
-                        </div>
-                        <div class="range-block">
-                            <div class="range-block-title openai_restorable">
-                                <span data-i18n="New Group Chat">New Group Chat</span>
-                                <div id="newgroupchat_prompt_restore" title="Restore default prompt" data-i18n="[title]Restore new group chat prompt" class="right_menu_button"><div class="fa-solid fa-clock-rotate-left"></div></div>
-                            </div>
-                            <div class="wide100p">
-                                <textarea id="newgroupchat_prompt_textarea" class="text_pole textarea_compact autoSetHeight" name="new_group_chat" rows="3" placeholder="&mdash;"></textarea>
                             </div>
                         </div>
                         <div class="range-block">
@@ -881,7 +861,7 @@
                                     </small>
                                     <select id="instruct_names_behavior">
                                         <option value="none" data-i18n="Never">Never</option>
-                                        <option value="force" data-i18n="Groups and Past Personas">Groups and Past Personas</option>
+                                        <option value="force" data-i18n="Force">Force</option>
                                         <option value="always" data-i18n="Always">Always</option>
                                     </select>
                                 </div>
@@ -1616,10 +1596,6 @@
                                     <input id="noShadowsmode" type="checkbox" />
                                     <small data-i18n="No Text Shadows">No Text Shadows</small>
                                 </label>
-                                <label for="waifuMode" class="checkbox_label" title="Reduce chat height, and put a static sprite behind the chat window." data-i18n="[title]Reduce chat height, and put a static sprite behind the chat window">
-                                    <input id="waifuMode" type="checkbox" />
-                                    <small data-i18n="Waifu Mode">Visual Novel Mode</small>
-                                </label>
                                 <label for="expandMessageActions" class="checkbox_label" title="Always show the full list of the Message Actions context items for chat messages, instead of hiding them behind '...'." data-i18n="[title]Always show the full list of the Message Actions context items for chat messages, instead of hiding them behind '...'">
                                     <input id="expandMessageActions" type="checkbox" />
                                     <small data-i18n="Auto-Expand Message Actions">Expand Message Actions</small>
@@ -1977,10 +1953,6 @@
                                     <small data-i18n="Experimental Macro Engine">Experimental Macro Engine</small>
                                     <i class="fa-solid fa-flask" title="Experimental feature. Currently in development to test." data-i18n="[title]Experimental feature. Currently in development to test."></i>
                                 </label>
-                                <label class="checkbox_label" for="disable_group_trimming" title="Allow AI messages in groups to contain lines spoken by other group members." data-i18n="[title]Allow AI messages in groups to contain lines spoken by other group members">
-                                    <input id="disable_group_trimming" type="checkbox" />
-                                    <small data-i18n="Relax message trim in Groups">Relax message trim in Groups</small>
-                                </label>
                                 <label class="checkbox_label" for="console_log_prompts">
                                     <input id="console_log_prompts" type="checkbox" />
                                     <small data-i18n="Log prompts to console">Log prompts to console</small>
@@ -1988,10 +1960,6 @@
                                 <label class="checkbox_label" for="request_token_probabilities" title="Requests logprobs from the API for the Token Probabilities feature." data-i18n="[title]Requests logprobs from the API for the Token Probabilities feature">
                                     <input id="request_token_probabilities" type="checkbox" />
                                     <small data-i18n="Request token probabilities">Request token probabilities</small>
-                                </label>
-                                <label class="checkbox_label" for="show_group_chat_queue" title="In group chat, highlight the character(s) that are currently queued to generate responses and the order in which they will respond." data-i18n="[title]In group chat, highlight the character(s) that are currently queued to generate responses and the order in which they will respond.">
-                                    <input id="show_group_chat_queue" type="checkbox" />
-                                    <small data-i18n="Show group chat queue">Show group chat queue</small>
                                 </label>
                                 <label class="checkbox_label" for="pin_styles" title="Always render style tags from greetings, even if the message is unloaded due to lazy loading." data-i18n="[title]Always render style tags from greetings, even if the message is unloaded due to lazy loading.">
                                     <input id="pin_styles" type="checkbox" />
@@ -2541,7 +2509,7 @@
                     </div>
                 </div>
 
-                <!-- this div structure must be preserved until group peeking can adjust -->
+                <!-- Keep this wrapper stable for the right navigation panel. -->
                 <div id="rm_PinAndTabs">
                     <div id="right-nav-panel-tabs" class="">
                         <div id="rm_button_selected_ch">
@@ -2565,7 +2533,7 @@
                         </div>
                     </div>
                 </div>
-                <!-- end group peeking cope structure-->
+                <!-- end right navigation panel wrapper -->
 
                 <div class="scrollableInner">
                     <div name="Solo Char Create/Edit Panel" id="rm_ch_create_block" class="right_menu flex-container flexFlowColumn character-detail-panel" style="display: none;">
@@ -2740,155 +2708,6 @@
                             <!-- now back to normal divs for display purposes-->
                         </form>
                     </div>
-                    <div name="Group Chat Edit Panel" id="rm_group_chats_block" class="right_menu flex-container flexNoGap">
-                        <div class="inline-drawer wide100p flexFlowColumn">
-                            <div id="groupControlsToggle" class="inline-drawer-toggle inline-drawer-header">
-                                <span>
-                                    <span data-i18n="Group Controls">Group Controls</span>
-                                    <a href="usage/core-concepts/groupchats/" class="notes-link" target="_blank">
-                                        <span class="fa-solid fa-circle-question note-link-span"></span>
-                                    </a>
-                                </span>
-                                <div class="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
-                            </div>
-                            <div class="inline-drawer-content">
-                                <div id="group-metadata-controls" class="marginTopBot5">
-                                    <div class="flex-container wide100p">
-                                        <input id="rm_group_chat_name" class="text_pole flex1" type="text" name="chat_name" data-i18n="[placeholder]Chat Name (Optional)" placeholder="Chat Name (Optional)" />
-                                        <div class="chat_lorebook_button menu_button fa-solid fa-passport" title="Chat Lore&#10;&#10;Click to load&#10;Shift/Alt-click or long-press to open 'Link to Chat Lorebook' popup" data-i18n="[title]chat_lorebook_button_title"></div>
-                                    </div>
-                                    <label class="flex1 height100p" for="group-chat-lorebook-dropdown">
-                                        <select id="group-chat-lorebook-dropdown" class="text_pole">
-                                            <option value="default" disabled selected data-i18n="More...">More...</option>
-                                            <option id="group_chat_lorebook_link" data-i18n="Link to Chat Lorebook">Link to Chat Lorebook</option>
-                                        </select>
-                                    </label>
-                                    <div id="group_tags_div" class="wide100p">
-                                        <div class="tag_controls">
-                                            <input id="groupTagInput" class="text_pole textarea_compact tag_input flex1 margin0" data-i18n="[placeholder]Search / Create Tags" placeholder="Search / Create tags" />
-                                            <div class="tags_view menu_button fa-solid fa-tags margin0" title="View all tags" data-i18n="[title]View all tags"></div>
-                                        </div>
-                                        <div id="groupTagList" class="tags paddingTopBot5"></div>
-                                    </div>
-                                    <div id="rm_group_top_bar" class="flex-container alignitemscenter spaceBetween width100p fontsize80p">
-                                        <div>
-                                            <label class="add_avatar avatar flex-container justifyCenter" for="group_avatar_button" title="Click to select a new avatar for this group" data-i18n="[title]Click to select a new avatar for this group">
-                                                <div id="group_avatar_preview">
-                                                    <div class="avatar">
-                                                        <img src="img/ai4.png" alt="avatar">
-                                                    </div>
-                                                </div>
-                                                <input hidden type="file" id="group_avatar_button" name="avatar" accept="image/png, image/jpeg, image/jpg, image/gif, image/bmp">
-                                            </label>
-                                        </div>
-                                        <div name="GroupStragegyAndOrder" id="rm_group_buttons" class="flex-container paddingLeftRight5 flex2">
-                                            <div class="flex1 flexGap5">
-                                                <label for="rm_group_activation_strategy" class="flexnowrap width100p whitespacenowrap">
-                                                    <span data-i18n="Group reply strategy">Group reply strategy</span>
-                                                </label>
-                                                <select id="rm_group_activation_strategy">
-                                                    <option value="2" data-i18n="Manual">Manual</option>
-                                                    <option value="0" data-i18n="Natural order">Natural order</option>
-                                                    <option value="1" data-i18n="List order">List order</option>
-                                                    <option value="3" data-i18n="Pooled order">Pooled order</option>
-                                                </select>
-                                            </div>
-                                            <div class="flex1 flexGap5">
-                                                <label for="rm_group_generation_mode" class="flexnowrap width100p whitespacenowrap">
-                                                    <span data-i18n="Group generation handling mode">Group generation handling mode</span>
-                                                </label>
-                                                <select id="rm_group_generation_mode">
-                                                    <option value="0" data-i18n="Swap character cards">Swap character cards</option>
-                                                    <option value="1" data-i18n="Join character cards (exclude muted)">Join character cards (exclude muted)</option>
-                                                    <option value="2" data-i18n="Join character cards (include muted)">Join character cards (include muted)</option>
-                                                </select>
-                                            </div>
-                                            <div class="flex1 flexGap5" title="Inserted before each part of the joined fields." data-i18n="[title]Inserted before each part of the joined fields.">
-                                                <label for="rm_group_generation_mode_join_prefix" class="flexnowrap width100p whitespacenowrap">
-                                                    <span data-i18n="Join Prefix">Join Prefix</span>
-                                                    <div class="fa-solid fa-circle-info opacity50p" data-i18n="[title]When 'Join character cards' is selected, all respective fields of the characters are being joined together.This means that in the story string for example all character descriptions will be joined to one big text.If you want those fields to be separated, you can define a prefix or suffix here.This value supports normal macros and will also replace {{char}} with the relevant char's name and &lt;FIELDNAME&gt; with the name of the part (e.g.: description, personality, scenario, etc.)" title="When 'Join character cards' is selected, all respective fields of the characters are being joined together.&#13;This means that in the story string for example all character descriptions will be joined to one big text.&#13;If you want those fields to be separated, you can define a prefix or suffix here.&#13;&#13;This value supports normal macros and will also replace {{char}} with the relevant char's name and &lt;FIELDNAME&gt; with the name of the part (e.g.: description, personality, scenario, etc.)">
-                                                    </div>
-                                                </label>
-                                                <textarea id="rm_group_generation_mode_join_prefix" class="text_pole wide100p textarea_compact autoSetHeight" placeholder="&mdash;" rows="1"></textarea>
-                                            </div>
-                                            <div class="flex1 flexGap5" title="Inserted after each part of the joined fields." data-i18n="[title]Inserted after each part of the joined fields.">
-                                                <label for="rm_group_generation_mode_join_suffix" class="flexnowrap width100p whitespacenowrap">
-                                                    <span data-i18n="Join Suffix">Join Suffix</span>
-                                                    <div class="fa-solid fa-circle-info opacity50p" data-i18n="[title]When 'Join character cards' is selected, all respective fields of the characters are being joined together.This means that in the story string for example all character descriptions will be joined to one big text.If you want those fields to be separated, you can define a prefix or suffix here.This value supports normal macros and will also replace {{char}} with the relevant char's name and &lt;FIELDNAME&gt; with the name of the part (e.g.: description, personality, scenario, etc.)" title="When 'Join character cards' is selected, all respective fields of the characters are being joined together.&#13;This means that in the story string for example all character descriptions will be joined to one big text.&#13;If you want those fields to be separated, you can define a prefix or suffix here.&#13;&#13;This value supports normal macros and will also replace {{char}} with the relevant char's name and &lt;FIELDNAME&gt; with the name of the part (e.g.: description, personality, scenario, etc.)">
-                                                    </div>
-                                                </label>
-                                                <textarea id="rm_group_generation_mode_join_suffix" class="text_pole wide100p textarea_compact autoSetHeight" placeholder="&mdash;" rows="1"></textarea>
-                                            </div>
-                                        </div>
-                                        <div id="GroupFavDelOkBack" class="flex-container flexGap5 spaceEvenly flex1">
-                                            <div id="rm_button_back_from_group" class="heightFitContent margin0 menu_button fa-solid fa-fw fa-left-long"></div>
-                                            <div id="rm_group_scenario" class="heightFitContent margin0 menu_button fa-solid fa-fw fa-scroll" title="Set group chat character settings overrides" data-i18n="[title]Set group chat character settings overrides"></div>
-                                            <div id="group_favorite_button" class="heightFitContent margin0 menu_button fa-solid fa-fw fa-star" title="Add to Favorites" data-i18n="[title]Add to Favorites"></div>
-                                            <input id="rm_group_fav" type="hidden" />
-                                            <div id="group_open_media_overrides" class="heightFitContent margin0 menu_button menu_button_icon open_media_overrides" title="Click to allow/forbid the use of external media for this group." data-i18n="[title]Click to allow/forbid the use of external media for this group.">
-                                                <i id="group_media_allowed_icon" class="fa-solid fa-fw fa-link"></i>
-                                                <i id="group_media_forbidden_icon" class="fa-solid fa-fw fa-link-slash"></i>
-                                            </div>
-                                            <div id="rm_group_submit" class="heightFitContent margin0 menu_button fa-solid fa-fw fa-check" title="Create" data-i18n="[title]Create"></div>
-                                            <div id="rm_group_restore_avatar" class="heightFitContent margin0 menu_button fa-solid fa-fw fa-images" title="Restore collage avatar" data-i18n="[title]Restore collage avatar"></div>
-                                            <div id="rm_group_delete" class="heightFitContent margin0 menu_button fa-solid fa-fw fa-trash-can" title="Delete" data-i18n="[title]Delete"></div>
-                                            <div class="flex1">
-                                                <label class="checkbox_label whitespacenowrap">
-                                                    <input id="rm_group_allow_self_responses" type="checkbox" />
-                                                    <span data-i18n="Allow self responses">Allow self responses</span>
-                                                </label>
-                                                <label id="rm_group_automode_label" class="checkbox_label whitespacenowrap">
-                                                    <input id="rm_group_automode" type="checkbox" />
-                                                    <span data-i18n="Auto Mode">Auto Mode</span>
-                                                    <input id="rm_group_automode_delay" class="text_pole textarea_compact widthUnset" type="number" min="1" max="999" step="1" value="5" title="Auto Mode delay" data-i18n="[title]Auto Mode delay" />
-                                                </label>
-                                                <label id="rm_group_hidemutedsprites_label" class="checkbox_label whitespacenowrap">
-                                                    <input id="rm_group_hidemutedsprites" type="checkbox" />
-                                                    <span data-i18n="Hide Muted Member Sprites">Hide Muted Member Sprites</span>
-                                                </label>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="inline-drawer wide100p flexFlowColumn">
-                            <div id="groupCurrentMemberListToggle" class="inline-drawer-toggle inline-drawer-header">
-                                <span data-i18n="Current Members">Current Members </span><i id="groupCurrentMemberPopoutButton" class="fa-solid fa-window-restore menu_button"></i>
-                                <div class="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
-                            </div>
-                            <div class="inline-drawer-content">
-                                <div id="currentGroupMembers" name="Current Group Members" class="flex-container flexFlowColumn overflowYAuto flex1">
-                                    <div id="rm_group_members_header">
-                                        <input id="rm_group_members_filter" class="text_pole margin0" type="search" data-i18n="[placeholder]Search..." placeholder="Search..." />
-                                    </div>
-                                    <div class="rm_tag_controls">
-                                        <div class="tags rm_tag_filter"></div>
-                                    </div>
-                                    <div id="rm_group_members_pagination" class="rm_group_members_pagination group_pagination"></div>
-                                    <div id="rm_group_members" class="rm_group_members overflowYAuto flex-container" group_empty_text="Group is empty." data-i18n="[group_empty_text]Group is empty."></div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="inline-drawer wide100p flexFlowColumn">
-                            <div id="groupAddMemberListToggle" class="inline-drawer-toggle inline-drawer-header">
-                                <span data-i18n="Add Members">Add Members</span>
-                                <div class="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
-                            </div>
-                            <div class="inline-drawer-content">
-                                <div id="unaddedCharList" name="Unadded Char List" class="flex-container flexFlowColumn overflowYAuto flex1">
-                                    <div id="rm_group_add_members_header">
-                                        <input id="rm_group_filter" class="text_pole margin0" type="search" data-i18n="[placeholder]Search..." placeholder="Search..." />
-                                    </div>
-                                    <div class="rm_tag_controls">
-                                        <div class="tags rm_tag_filter"></div>
-                                    </div>
-                                    <div id="rm_group_add_members_pagination" class="group_pagination"></div>
-                                    <div id="rm_group_add_members" class="overflowYAuto flex-container" no_characters_text="No characters available" data-i18n="[no_characters_text]No characters available"></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
                     <div id="rm_character_import" class="right_menu" style="display: none;">
                         <form id="form_import" action="javascript:void(null);" method="post" enctype="multipart/form-data">
                             <input multiple type="file" id="character_import_file" accept=".json, image/png, .yaml, .yml, .charx, .byaf" name="avatar">
@@ -2903,7 +2722,6 @@
                                     <div id="rm_button_create" title="Create New Character" data-i18n="[title]Create New Character" class="menu_button fa-solid fa-user-plus character-list-action" role="button" aria-label="Create New Character"><span class="character-list-action-label" data-i18n="Character Toolbar New">New</span></div>
                                     <div id="character_import_button" title="Import Character from File" data-i18n="[title]Import Character from File" class="menu_button fa-solid fa-file-import character-list-action" role="button" aria-label="Import Character from File"><span class="character-list-action-label" data-i18n="Character Toolbar File">File</span></div>
                                     <div id="external_import_button" title="Import content from external URL" data-i18n="[title]Import content from external URL" class="menu_button fa-solid fa-cloud-arrow-down character-list-action" role="button" aria-label="Import content from external URL"><span class="character-list-action-label" data-i18n="Character Toolbar URL">URL</span></div>
-                                    <div id="rm_button_group_chats" title="Create New Chat Group" data-i18n="[title]Create New Chat Group" class="menu_button fa-solid fa-users-gear character-list-action" role="button" aria-label="Create New Chat Group"><span class="character-list-action-label" data-i18n="Character Toolbar Group">Group</span></div>
                                     <div id="rm_buttons_container">
                                         <!-- Container for additional buttons added by extensions -->
                                     </div>
@@ -3175,18 +2993,6 @@
                     <div class="extension_token_counter">
                         <span data-i18n="extension_token_counter">Tokens:</span> <span data-token-counter="depth_prompt_prompt" data-token-permanent="true">counting...</span>
                     </div>
-                </div>
-            </div>
-            <div id="talkativeness_div">
-                <h4><span data-i18n="Talkativeness">Talkativeness</span></h4>
-                <h5 data-i18n="How often the character speaks in group chats!"><!-- This data-i18n attribute on the left is kept for backward compatibility, use the ones below when translating -->
-                    <span data-i18n="How often the character speaks in">How often the character speaks in</span>&nbsp;<span class="warning" data-i18n="group chats!">group chats!</span>
-                </h5>
-                <input id="talkativeness_slider" name="talkativeness" type="range" min="0" max="1" step="0.05" value="0.5" form="form_create">
-                <div class="slider_hint">
-                    <span data-i18n="Shy">Shy</span>
-                    <span data-i18n="Normal">Normal</span>
-                    <span data-i18n="Chatty">Chatty</span>
                 </div>
             </div>
             <hr>
@@ -3958,27 +3764,6 @@
                 </div>
             </div>
         </div>
-        <div id="group_avatars_template" class="template_element">
-            <div class="avatar avatar_collage collage_1">
-                <img alt="img1" class="img_1" src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async">
-            </div>
-            <div class="avatar avatar_collage collage_2">
-                <img alt="img1" class="img_1" src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async">
-                <img alt="img2" class="img_2" src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async">
-            </div>
-            <div class="avatar avatar_collage collage_3">
-                <img alt="img1" class="img_1" src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async">
-                <img alt="img2" class="img_2" src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async">
-                <img alt="img3" class="img_3" src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async">
-            </div>
-            <div class="avatar avatar_collage collage_4">
-                <img alt="img1" class="img_1" src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async">
-                <img alt="img2" class="img_2" src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async">
-                <img alt="img3" class="img_3" src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async">
-                <img alt="img4" class="img_4" src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async">
-            </div>
-        </div>
-
         <div id="onboarding_template" class="template_element">
             <div class="onboarding">
                 <h3 data-i18n="Welcome to EmberDesk!">Welcome to EmberDesk!</h3>
@@ -4028,53 +3813,6 @@
                 <h4 data-i18n="Persona Name:">Persona Name:</h4>
             </div>
         </div>
-        <div id="group_member_template" class="template_element">
-            <div class="group_member">
-                <div class="avatar">
-                    <img alt="Avatar" src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async" />
-                </div>
-                <div class="group_member_name">
-                    <div class="character_name_block">
-                        <span class="ch_name"></span>
-                        <small class="ch_additional_info character_version"></small>
-                    </div>
-                    <div class="tags tags_inline"></div>
-                </div>
-                <input class="ch_fav" value="" hidden />
-                <div class="queue_position"></div>
-                <div class="group_member_icon">
-                    <div title="Temporarily disable automatic replies from this character" data-action="disable" class="right_menu_button fa-solid fa-lg fa-comment-slash" data-i18n="[title]Temporarily disable automatic replies from this character"></div>
-                    <div title="Enable automatic replies from this character" data-action="enable" class="right_menu_button fa-solid fa-lg fa-comment-slash" data-i18n="[title]Enable automatic replies from this character"></div>
-                    <div title="Trigger a message from this character" data-action="speak" class="right_menu_button fa-solid fa-lg fa-comment" data-i18n="[title]Trigger a message from this character"></div>
-                    <div class="flexFlowColumn flex-container">
-                        <div title="Move up" data-action="up" class="right_menu_button fa-solid fa-chevron-up" data-i18n="[title]Move up"></div>
-                        <div title="Move down" data-action="down" class="right_menu_button fa-solid fa-chevron-down" data-i18n="[title]Move down"></div>
-                    </div>
-                    <div title="View character card" data-action="view" class="right_menu_button fa-solid fa-xl fa-image-portrait" data-i18n="[title]View character card"></div>
-                    <div title="Remove from group" data-action="remove" class="right_menu_button fa-solid fa-xl fa-xmark" data-i18n="[title]Remove from group"></div>
-                    <div title="Add to group" data-action="add" class="right_menu_button fa-solid fa-xl fa-plus" data-i18n="[title]Add to group"></div>
-                </div>
-            </div>
-        </div>
-        <div id="group_list_template" class="template_element">
-            <div class="group_select entity_block flex-container wide100p alignitemsflexstart">
-                <div class="avatar">
-                    <img src="img/No-Image-Placeholder.svg">
-                </div>
-                <div class="flex-container wide100pLess70px gap5px group_select_container">
-                    <div class="wide100p group_name_block character_name_block">
-                        <small class="entity_type_badge group_type_badge" data-i18n="Group">Group</small>
-                        <div class="ch_name"></div>
-                        <small class="ch_additional_info group_select_counter"></small>
-                    </div>
-                    <small class="character_name_block_sub_line" data-i18n="in this group">in this group</small>
-                    <i class='group_fav_icon fa-solid fa-star'></i>
-                    <input class="ch_fav" value="" hidden />
-                    <div class="group_select_block_list ch_description"></div>
-                    <div class="tags tags_inline"></div>
-                </div>
-            </div>
-        </div>
         <div id="bogus_folder_template" class="template_element">
             <div class="bogus_folder_select entity_block flex-container wide100p alignitemsflexstart">
                 <div class="avatar flex alignitemscenter textAlignCenter">
@@ -4121,7 +3859,6 @@
                 </div>
                 <small class="justifyLeft" data-i18n="Alternate_Greetings_desc">
                     These will be displayed as swipes on the first message when starting a new chat.
-                    Group members can select one of them to initiate the conversation.
                 </small>
                 <hr>
                 <div class="alternate_greetings_list flexFlowColumn flex-container wide100p">
@@ -4298,8 +4035,7 @@
                         <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
                     </div>
                     <div class="inline-drawer-content">
-                        <small data-i18n="Will be automatically added as the author's note for this character. Will be used in groups, but can't be modified when a group chat is open.">Will be automatically added as the author's note for this character. Will be used in groups, but
-                            can't be modified when a group chat is open.</small>
+                        <small data-i18n="Will be automatically added as the author's note for this character.">Will be automatically added as the author's note for this character.</small>
                         <textarea id="extension_floating_chara" data-macros class="text_pole textarea_compact" rows="8" placeholder="Example:&#10;[Scenario: wacky adventures; Genre: romantic comedy; Style: verbose, creative]"></textarea>
                         <div class="extension_token_counter">
                             <span data-i18n="extension_token_counter">Tokens:</span> <span id="extension_floating_chara_token_counter">0</span>
@@ -4409,16 +4145,10 @@
                                 </label>
                                 <textarea id="chat_cfg_positive_prompt" rows="2" class="text_pole textarea_compact" data-i18n="[placeholder]write short replies, write replies using past tense" placeholder="write short replies, write replies using past tense"></textarea>
                             </div>
-                            <div id="groupchat_cfg_use_chara_container">
-                                <label class="checkbox_label" for="groupchat_cfg_use_chara">
-                                    <input type="checkbox" id="groupchat_cfg_use_chara" />
-                                    <span data-i18n="Use character CFG scales">Use character CFG scales</span>
-                                </label>
-                            </div>
                         </div>
                     </div>
                 </div>
-                <div id="chara_cfg_container" style="display: none;">
+                <div id="chara_cfg_container">
                     <hr class="sysHR">
                     <div class="inline-drawer">
                         <div id="charaANBlockToggle" class="inline-drawer-toggle inline-drawer-header">
@@ -4647,10 +4377,6 @@
             <a id="option_new_bookmark">
                 <i class="fa-lg fa-solid fa-flag"></i>
                 <span data-i18n="Save checkpoint">Save checkpoint</span>
-            </a>
-            <a id="option_convert_to_group">
-                <i class="fa-lg fa-solid fa-people-arrows"></i>
-                <span data-i18n="Convert to group">Convert to group</span>
             </a>
             <hr>
             <a id="option_start_new_chat" role="button" tabindex="0">

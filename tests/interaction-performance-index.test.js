@@ -20,6 +20,7 @@ import {
 } from '../src/endpoints/character-index.js';
 import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import { groupChatRetirementHandler } from '../src/endpoints/group-chat-retirement.js';
 import {
     getPersistedCanonicalAuditStatus,
     persistCanonicalAuditStatus,
@@ -80,9 +81,16 @@ function writeAvatarFile(directories, avatar, contents = 'avatar') {
  * @param {{characters: string}} directories
  * @param {string} avatar
  * @param {string} name
+ * @param {number|string|null} [talkativeness=0.5]
+ * @param {{ omitV2Talkativeness?: boolean, legacyTalkativeness?: number|string|null }} [options]
  */
-function writeCharacterCardFile(directories, avatar, name) {
-    const payload = JSON.stringify({
+function writeCharacterCardFile(directories, avatar, name, talkativeness = 0.5, options = {}) {
+    const extensions = {
+        ...(options.omitV2Talkativeness ? {} : { talkativeness }),
+        fav: false,
+        world: '',
+    };
+    const payload = {
         spec: 'chara_card_v2',
         spec_version: '2.0',
         data: {
@@ -96,14 +104,13 @@ function writeCharacterCardFile(directories, avatar, name) {
             tags: [],
             creator: 'tester',
             character_version: '2.0',
-            extensions: {
-                talkativeness: 0.5,
-                fav: false,
-                world: '',
-            },
+            extensions,
         },
-    });
-    const pngBuffer = writeCharacterCardPngData(DEFAULT_AVATAR_BUFFER, payload);
+    };
+    if (Object.hasOwn(options, 'legacyTalkativeness')) {
+        payload.talkativeness = options.legacyTalkativeness;
+    }
+    const pngBuffer = writeCharacterCardPngData(DEFAULT_AVATAR_BUFFER, JSON.stringify(payload));
     fs.writeFileSync(path.join(directories.characters, avatar), pngBuffer);
 }
 
@@ -113,7 +120,7 @@ function writeCharacterCardFile(directories, avatar, name) {
  * @param {string} name
  * @param {string} world
  */
-function writeLegacyCharacterCardFile(directories, avatar, name, world) {
+function writeLegacyCharacterCardFile(directories, avatar, name, world, talkativeness = 0.5) {
     const payload = JSON.stringify({
         name,
         description: `Description ${name}`,
@@ -122,7 +129,7 @@ function writeLegacyCharacterCardFile(directories, avatar, name, world) {
         first_mes: `First ${name}`,
         mes_example: `Example ${name}`,
         creatorcomment: `Creator notes ${name}`,
-        talkativeness: 0.5,
+        talkativeness,
         fav: false,
         tags: [],
         world,
@@ -336,6 +343,10 @@ function createMockResponse(statusCode = 200) {
         body: undefined,
         headers: {},
         send(payload) {
+            this.body = payload;
+            return this;
+        },
+        json(payload) {
             this.body = payload;
             return this;
         },
@@ -829,7 +840,6 @@ async function invokeChatImport(directories, avatar, file, format = 'jsonl') {
 }
 
 async function invokeGroupChatSave(directories, id, chat) {
-    const handler = getChatsRouteHandler('/group/save');
     const request = {
         body: {
             id,
@@ -839,14 +849,7 @@ async function invokeGroupChatSave(directories, id, chat) {
         user: { directories, profile: { handle: `chat-test-${path.basename(directories.root)}` } },
     };
     const response = createMockResponse();
-    jest.useFakeTimers();
-    try {
-        await handler(request, response);
-        jest.runAllTimers();
-        jest.clearAllTimers();
-    } finally {
-        jest.useRealTimers();
-    }
+    await groupChatRetirementHandler(request, response);
     return response;
 }
 
@@ -890,6 +893,69 @@ afterAll(() => {
 });
 
 describe('character index', () => {
+    test('normalizes legacy talkativeness while reading V2 character cards', async () => {
+        const missingDirectories = makeDirectories('emberdesk-character-talkativeness-');
+        const emptyDirectories = makeDirectories('emberdesk-character-talkativeness-');
+        const invalidDirectories = makeDirectories('emberdesk-character-talkativeness-');
+        const stringDirectories = makeDirectories('emberdesk-character-talkativeness-');
+        const zeroDirectories = makeDirectories('emberdesk-character-talkativeness-');
+        const legacyFallbackDirectories = makeDirectories('emberdesk-character-talkativeness-');
+        tempRoots.push(missingDirectories.root, emptyDirectories.root, invalidDirectories.root, stringDirectories.root, zeroDirectories.root, legacyFallbackDirectories.root);
+
+        writeCharacterCardFile(missingDirectories, 'missing.png', 'Missing', null);
+        writeCharacterCardFile(emptyDirectories, 'empty.png', 'Empty', '');
+        writeCharacterCardFile(invalidDirectories, 'invalid.png', 'Invalid', 'not-a-number');
+        writeCharacterCardFile(stringDirectories, 'string.png', 'String', '0');
+        writeCharacterCardFile(zeroDirectories, 'zero.png', 'Zero', 0);
+        writeCharacterCardFile(legacyFallbackDirectories, 'legacy.png', 'Legacy', 0.5, {
+            omitV2Talkativeness: true,
+            legacyTalkativeness: 0,
+        });
+
+        const [missingResponse, emptyResponse, invalidResponse, stringResponse, zeroResponse, legacyFallbackResponse] = await Promise.all([
+            invokeCharacterGet(missingDirectories, 'missing.png'),
+            invokeCharacterGet(emptyDirectories, 'empty.png'),
+            invokeCharacterGet(invalidDirectories, 'invalid.png'),
+            invokeCharacterGet(stringDirectories, 'string.png'),
+            invokeCharacterGet(zeroDirectories, 'zero.png'),
+            invokeCharacterGet(legacyFallbackDirectories, 'legacy.png'),
+        ]);
+
+        expect(missingResponse.statusCode).toBe(200);
+        expect(emptyResponse.statusCode).toBe(200);
+        expect(invalidResponse.statusCode).toBe(200);
+        expect(stringResponse.statusCode).toBe(200);
+        expect(zeroResponse.statusCode).toBe(200);
+        expect(legacyFallbackResponse.statusCode).toBe(200);
+        expect(missingResponse.body.talkativeness).toBe(0.5);
+        expect(emptyResponse.body.talkativeness).toBe(0.5);
+        expect(invalidResponse.body.talkativeness).toBe(0.5);
+        expect(stringResponse.body.talkativeness).toBe(0);
+        expect(zeroResponse.body.talkativeness).toBe(0);
+        expect(legacyFallbackResponse.body.talkativeness).toBe(0);
+    });
+
+    test('normalizes legacy V1 talkativeness while preserving zero and numeric strings', async () => {
+        const invalidDirectories = makeDirectories('emberdesk-character-talkativeness-v1-');
+        const stringDirectories = makeDirectories('emberdesk-character-talkativeness-v1-');
+        const zeroDirectories = makeDirectories('emberdesk-character-talkativeness-v1-');
+        tempRoots.push(invalidDirectories.root, stringDirectories.root, zeroDirectories.root);
+
+        writeLegacyCharacterCardFile(invalidDirectories, 'invalid.png', 'Invalid', '', 'not-a-number');
+        writeLegacyCharacterCardFile(stringDirectories, 'string.png', 'String', '', '0');
+        writeLegacyCharacterCardFile(zeroDirectories, 'zero.png', 'Zero', '', 0);
+
+        const [invalidResponse, stringResponse, zeroResponse] = await Promise.all([
+            invokeCharacterGet(invalidDirectories, 'invalid.png'),
+            invokeCharacterGet(stringDirectories, 'string.png'),
+            invokeCharacterGet(zeroDirectories, 'zero.png'),
+        ]);
+
+        expect(invalidResponse.body.talkativeness).toBe(0.5);
+        expect(stringResponse.body.talkativeness).toBe(0);
+        expect(zeroResponse.body.talkativeness).toBe(0);
+    });
+
     test('rejects oversized delete preflight avatar batches before scanning files', async () => {
         const directories = makeDirectories('emberdesk-character-delete-preflight-');
         tempRoots.push(directories.root);
@@ -1790,7 +1856,7 @@ describe('character index', () => {
         }
     });
 
-    test('does not update character chat stats after saving a group chat', async () => {
+    test('rejects retired group chat saves without updating character chat stats', async () => {
         const directories = makeDirectories('emberdesk-chat-stats-route-');
         tempRoots.push(directories.root);
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
@@ -1812,8 +1878,11 @@ describe('character index', () => {
                 { name: 'Alpha', mes: 'hello group' },
             ]);
 
-            expect(response.statusCode).toBe(200);
-            expect(response.body).toEqual({ ok: true });
+            expect(response.statusCode).toBe(410);
+            expect(response.body).toEqual({
+                error: 'group_chat_feature_removed',
+                message: 'Group chat functionality has been removed from EmberDesk.',
+            });
             const stats = db.prepare('SELECT chat_count, chat_size_bytes, date_last_chat_ms, stats_updated_at_ms FROM character_chat_stats WHERE character_id = ?').get('char-alpha');
             expect(stats).toEqual({
                 chat_count: 0,

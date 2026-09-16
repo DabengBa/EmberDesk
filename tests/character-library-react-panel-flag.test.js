@@ -25,7 +25,7 @@ describe('character library React sole owner', () => {
     test('renders React-owned character rows instead of LegacyElementHost list rows', () => {
         const panelSource = read('app/components/character-library/CharacterLibraryPanel.tsx');
         expect(panelSource).toContain('CharacterLibraryCharacterRow');
-        expect(panelSource).toContain('CharacterLibraryGroupRow');
+        expect(panelSource).not.toContain('CharacterLibraryGroupRow');
         expect(panelSource).toContain('CharacterLibraryFolderRow');
         expect(panelSource).not.toContain('LegacyElementHost');
         expect(fs.existsSync(path.join(repoRoot, 'app/components/character-library/LegacyElementHost.tsx'))).toBe(false);

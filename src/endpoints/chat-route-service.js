@@ -68,7 +68,6 @@ export function createTextMatcher(query) {
  * @param {import('../users.js').UserDirectoryList} options.directories
  * @param {string} [options.query]
  * @param {string} [options.avatarUrl]
- * @param {string} [options.groupId]
  * @param {ChatRouteServiceDependencies} options.dependencies
  * @returns {Promise<object[]>}
  */
@@ -76,51 +75,22 @@ export async function searchChatPayload({
     directories,
     query = '',
     avatarUrl = '',
-    groupId,
     dependencies,
 }) {
     const deps = normalizeDependencies(dependencies);
-    /** @type {string[]} */
-    let chatFiles = [];
-
-    if (groupId) {
-        // Group chat retirement: group-owned chat lookups are disabled.
+    const characterName = String(avatarUrl ?? '').replace('.png', '');
+    if (!characterName) {
         return [];
-        const groupFiles = deps.fs.readdirSync(directories.groups)
-            .filter(file => deps.path.extname(file) === '.json');
-
-        let targetGroup;
-        for (const groupFile of groupFiles) {
-            try {
-                const groupData = JSON.parse(deps.fs.readFileSync(deps.path.join(directories.groups, groupFile), 'utf8'));
-                if (groupData.id === groupId) {
-                    targetGroup = groupData;
-                    break;
-                }
-            } catch (error) {
-                deps.warn(groupFile, 'group file is corrupted:', error);
-            }
-        }
-
-        if (!Array.isArray(targetGroup?.chats)) {
-            return [];
-        }
-
-        chatFiles = targetGroup.chats
-            .map(chatId => deps.path.join(directories.groupChats, `${chatId}.jsonl`))
-            .filter(fileName => deps.fs.existsSync(fileName));
-    } else {
-        const characterName = avatarUrl.replace('.png', '');
-        const directoryPath = deps.path.join(directories.chats, characterName);
-
-        if (!deps.fs.existsSync(directoryPath)) {
-            return [];
-        }
-
-        chatFiles = deps.fs.readdirSync(directoryPath)
-            .filter(file => deps.path.extname(file) === '.jsonl')
-            .map(fileName => deps.path.join(directoryPath, fileName));
     }
+    const directoryPath = deps.path.join(directories.chats, characterName);
+
+    if (!deps.fs.existsSync(directoryPath)) {
+        return [];
+    }
+
+    const chatFiles = deps.fs.readdirSync(directoryPath)
+        .filter(file => deps.path.extname(file) === '.jsonl')
+        .map(fileName => deps.path.join(directoryPath, fileName));
 
     const results = [];
     const hasTextMatch = createTextMatcher(query);
@@ -153,7 +123,7 @@ export async function searchChatPayload({
 }
 
 /**
- * @typedef {{pngFile?: string, groupId?: string, filePath: string, mtime: number}} ChatFile
+ * @typedef {{pngFile?: string, filePath: string, mtime: number}} ChatFile
  */
 
 /**
@@ -215,7 +185,7 @@ export async function readRecentChatPayload({
     await Promise.allSettled([getCharacterChatFiles(), getRootChatFiles()]);
 
     const maxWithPinned = parseInt(max ?? Number.MAX_SAFE_INTEGER) + pinnedChats.length;
-    const isPinned = (/** @type {ChatFile} */ chatFile) => pinnedChats.some(p => p.file_name === deps.path.basename(chatFile.filePath) && (p.avatar === chatFile.pngFile || p.group === chatFile.groupId));
+    const isPinned = (/** @type {ChatFile} */ chatFile) => pinnedChats.some(p => p.file_name === deps.path.basename(chatFile.filePath) && p.avatar === chatFile.pngFile);
     const recentChats = allChatFiles.sort((a, b) => {
         const isAPinned = isPinned(a);
         const isBPinned = isPinned(b);
@@ -228,9 +198,7 @@ export async function readRecentChatPayload({
 
     const jsonFilesPromise = recentChats.map((file) => {
         const withMetadata = !!metadata;
-        return file.groupId
-            ? deps.getChatInfo(file.filePath, { group: file.groupId }, withMetadata)
-            : deps.getChatInfo(file.filePath, { avatar: file.pngFile }, withMetadata);
+        return deps.getChatInfo(file.filePath, { avatar: file.pngFile }, withMetadata);
     });
 
     const chatData = (await Promise.allSettled(jsonFilesPromise)).filter(x => x.status === 'fulfilled').map(x => x.value);

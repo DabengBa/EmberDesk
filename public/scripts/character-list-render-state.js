@@ -20,8 +20,6 @@ export function getCharacterListEntityKey(entity) {
     switch (entity?.type) {
         case 'character':
             return `character:${normalizeKeyPart(entity.item?.avatar, entity.id)}`;
-        case 'group':
-            return `group:${normalizeKeyPart(entity.item?.id, entity.id)}`;
         case 'tag':
             return `tag:${normalizeKeyPart(entity.item?.id, entity.id)}`;
         default:
@@ -88,7 +86,6 @@ export function getCharacterListPageEntities(snapshot, currentPage, pageSize) {
  * @param {Array<object>} options.pageEntities
  * @param {boolean} [options.includeBackBlock]
  * @param {number} options.totalCharacters
- * @param {number} options.totalGroups
  * @param {boolean} options.hasActiveFilter
  * @returns {{pageEntities: Array<object>, includeBackBlock: boolean, displayCount: number, hiddenCount: number, showEmptyBlock: boolean, showHiddenBlock: boolean}}
  */
@@ -96,11 +93,10 @@ export function createCharacterListPageRenderPlan({
     pageEntities,
     includeBackBlock = false,
     totalCharacters,
-    totalGroups,
     hasActiveFilter,
 }) {
-    const displayCount = pageEntities.filter(entity => entity.type === 'character' || entity.type === 'group').length;
-    const hiddenCount = (totalCharacters + totalGroups) - displayCount;
+    const displayCount = pageEntities.filter(entity => entity.type === 'character').length;
+    const hiddenCount = totalCharacters - displayCount;
 
     return {
         pageEntities,
@@ -158,7 +154,6 @@ function hasDuplicateValues(values) {
  * @param {number} options.currentPage
  * @param {number} options.pageSize
  * @param {number} options.totalCharacters
- * @param {number} options.totalGroups
  * @param {boolean} options.hasActiveFilter
  * @param {boolean} [options.includeBackBlock]
  * @returns {{mode: 'incremental', orderedKeys: string[], reusedKeys: string[], insertedKeys: string[], removedKeys: string[], pageEntities: Array<object>, renderPlan: object, requiresIdentitySync: boolean, paginationLabel: string, currentPage: number, pageSize: number}|{mode: 'fallback', reason: string}}
@@ -170,7 +165,6 @@ export function createCharacterListPageReconcilePlan({
     currentPage,
     pageSize,
     totalCharacters,
-    totalGroups,
     hasActiveFilter,
     includeBackBlock = false,
 }) {
@@ -208,7 +202,6 @@ export function createCharacterListPageReconcilePlan({
             pageEntities,
             includeBackBlock: false,
             totalCharacters,
-            totalGroups,
             hasActiveFilter,
         }),
         requiresIdentitySync: true,

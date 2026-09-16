@@ -99,6 +99,7 @@ export function redirectDeprecatedEndpoints(app) {
     redirect('/getgroupchat', '/api/chats/group/get');
     redirect('/deletegroupchat', '/api/chats/group/delete');
     redirect('/savegroupchat', '/api/chats/group/save');
+    // Group-authoring redirects target a retired router that returns the stable 410 contract.
     redirect('/getgroups', '/api/groups/all');
     redirect('/creategroup', '/api/groups/create');
     redirect('/editgroup', '/api/groups/edit');

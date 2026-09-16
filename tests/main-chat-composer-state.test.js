@@ -24,14 +24,14 @@ describe('main chat composer bridge state', () => {
             isGenerating: false,
             activeContext: 'character',
         }],
-        ['focused', { valueLength: 3, hasValue: true, canSubmit: true, isFocused: true, activeContext: 'group' }, {
+        ['retired group context', { valueLength: 3, hasValue: true, canSubmit: true, isFocused: true, activeContext: 'group' }, {
             valueLength: 3,
             isEmpty: false,
-            canSubmit: true,
+            canSubmit: false,
             isFocused: true,
             isDisabled: false,
             isGenerating: false,
-            activeContext: 'group',
+            activeContext: 'none',
         }],
         ['disabled while generating', { valueLength: 8, hasValue: true, canSubmit: true, isDisabled: true, isGenerating: true, activeContext: 'assistant' }, {
             valueLength: 8,

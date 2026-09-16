@@ -15,7 +15,7 @@ export function isReactPageEnabled(pageName) {
  * @returns {boolean}
  */
 export function isReactWorkspacePanelEnabled(panelName) {
-    if (panelName === 'characterAuthoring' || panelName === 'groupAuthoring' || panelName === 'worldInfo') {
+    if (panelName === 'characterAuthoring' || panelName === 'worldInfo') {
         // Sole-owner panels; product flags retired.
         return true;
     }

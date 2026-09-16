@@ -46,7 +46,6 @@ import {
     sendMessageAsUser,
     sendSystemMessage,
     setActiveCharacter,
-    setActiveGroup,
     setCharacterId,
     setCharacterName,
     setExtensionPrompt,
@@ -68,12 +67,12 @@ import { getMessageTimeStamp, isMobile } from './RossAscends-mods.js';
 import { hideChatMessageRange } from './chats.js';
 import { getContext, saveMetadataDebounced } from './extensions.js';
 import { getRegexedString, regex_placement } from './extensions/regex/engine.js';
-import { findGroupMemberId, groups, is_group_generating, openGroupById, regenerateGroup, resetSelectedGroup, saveGroupChat, selected_group, getGroupMembers } from './group-chats.js';
+
 import { chat_completion_sources, MINIMAX_ENDPOINT, oai_settings, promptManager, SILICONFLOW_ENDPOINT, ZAI_ENDPOINT } from './openai.js';
 import { user_avatar } from './personas.js';
 import { addEphemeralStoppingString, chat_styles, context_presets, flushEphemeralStoppingStrings, playMessageSound, power_user } from './power-user.js';
 import { decodeTextTokens, getAvailableTokenizers, getFriendlyTokenizerName, getTextTokens, getTokenCountAsync, selectTokenizer } from './tokenizers.js';
-import { debounce, delay, equalsIgnoreCaseAndAccents, findChar, getCharIndex, isFalseBoolean, isTrueBoolean, onlyUnique, regexFromString, showFontAwesomePicker, stringToRange, trimToEndSentence, trimToStartSentence, waitUntilCondition } from './utils.js';
+import { debounce, delay, findChar, getCharIndex, isFalseBoolean, isTrueBoolean, onlyUnique, regexFromString, showFontAwesomePicker, stringToRange, trimToEndSentence, trimToStartSentence, waitUntilCondition } from './utils.js';
 import { registerVariableCommands, resolveVariable } from './variables.js';
 import { registerActionLoaderSlashCommands } from './action-loader-slashcommands.js';
 import { background_settings } from './backgrounds.js';
@@ -376,7 +375,7 @@ export function initDefaultSlashCommands() {
             const shouldAwait = isTrueBoolean(args?.await?.toString());
             const outerPromise = new Promise((outerResolve) => setTimeout(async () => {
                 try {
-                    await waitUntilCondition(() => !is_send_press && !is_group_generating, 10000, 100);
+                    await waitUntilCondition(() => !is_send_press, 10000, 100);
                 } catch {
                     console.warn('Timeout waiting for generation unlock');
                     toastr.warning(t`Cannot run /impersonate command while the reply is being generated.`);
@@ -445,16 +444,12 @@ export function initDefaultSlashCommands() {
                         return;
                     }
                     resolved = true;
-                    [event_types.CHAT_DELETED, event_types.GROUP_CHAT_DELETED].forEach((eventType) => {
-                        eventSource.removeListener(eventType, setResolved);
-                    });
+                    eventSource.removeListener(event_types.CHAT_DELETED, setResolved);
                     clearTimeout(timeOutId);
                     resolve('');
                 };
 
-                [event_types.CHAT_DELETED, event_types.GROUP_CHAT_DELETED].forEach((eventType) => {
-                    eventSource.on(eventType, setResolved);
-                });
+                eventSource.on(event_types.CHAT_DELETED, setResolved);
 
                 const currentChatDeleteButton = $('.select_chat_block[highlight=\'true\']').parent().find('.PastChat_cross');
                 $(currentChatDeleteButton).trigger('click', { fromSlashCommand: true });
@@ -682,7 +677,7 @@ export function initDefaultSlashCommands() {
             return '';
         },
         aliases: ['chat-history', 'manage-chats'],
-        helpString: t`Opens the chat manager for the current character/group.`,
+        helpString: t`Opens the chat manager for the current character.`,
     }));
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: '?',
@@ -754,7 +749,7 @@ export function initDefaultSlashCommands() {
             }),
             SlashCommandNamedArgument.fromProps({
                 name: 'preferCurrent',
-                description: t`Prefer current character or characters in a group, if multiple characters match`,
+                description: t`Prefer the current character if multiple characters match`,
                 typeList: [ARGUMENT_TYPE.BOOLEAN],
                 defaultValue: 'true',
             }),
@@ -898,12 +893,6 @@ export function initDefaultSlashCommands() {
             typeList: [ARGUMENT_TYPE.BOOLEAN],
             defaultValue: 'true',
             enumProvider: commonEnumProviders.boolean('trueFalse'),
-        }),
-        SlashCommandNamedArgument.fromProps({
-            name: 'talkativeness',
-            description: t`How often the character speaks in group chats (0.0 to 1.0)`,
-            typeList: [ARGUMENT_TYPE.NUMBER],
-            isRequired: requiredFields.includes('talkativeness'),
         }),
         SlashCommandNamedArgument.fromProps({
             name: 'world',
@@ -1100,7 +1089,6 @@ export function initDefaultSlashCommands() {
                     new SlashCommandEnumValue('creator', t`Creator name`, enumTypes.enum),
                     new SlashCommandEnumValue('character_version', t`Character version`, enumTypes.enum),
                     new SlashCommandEnumValue('tags', t`Character tags`, enumTypes.enum),
-                    new SlashCommandEnumValue('talkativeness', t`Talkativeness`, enumTypes.enum),
                     new SlashCommandEnumValue('avatar', t`Avatar filename`, enumTypes.enum),
                     new SlashCommandEnumValue('fav', t`Favorite status`, enumTypes.enum),
                 ],
@@ -1618,16 +1606,16 @@ export function initDefaultSlashCommands() {
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'go',
         callback: goToCharacterCallback,
-        returns: t`The character/group name`,
+        returns: t`The character name`,
         unnamedArgumentList: [
             SlashCommandArgument.fromProps({
                 description: t`Character name - or unique character identifier (avatar key)`,
                 typeList: [ARGUMENT_TYPE.STRING],
                 isRequired: true,
-                enumProvider: commonEnumProviders.characters('all'),
+                enumProvider: commonEnumProviders.characters('character'),
             }),
         ],
-        helpString: t`Opens up a chat with the character or group by its name`,
+        helpString: t`Opens up a chat with the character by its name`,
         aliases: ['char'],
     }));
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
@@ -1843,22 +1831,7 @@ export function initDefaultSlashCommands() {
                 'false',
             ),
         ],
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: t`group member index (starts with 0) or name`,
-                typeList: [ARGUMENT_TYPE.NUMBER, ARGUMENT_TYPE.STRING],
-                isRequired: false,
-                enumProvider: commonEnumProviders.groupMembers(),
-            }),
-        ],
-        helpString: `
-        <div>
-            ${t`Triggers a message generation. If in group, can trigger a message for the specified group member index or name.`}
-        </div>
-        <div>
-            ${t`If <code>await=true</code> named argument is passed, the command will await for the triggered generation before continuing.`}
-        </div>
-    `,
+        helpString: t`Triggers a message generation.`,
     }));
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'hide',
@@ -1905,199 +1878,6 @@ export function initDefaultSlashCommands() {
             }),
         ],
         helpString: t`Unhides a message from the prompt.`,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'member-get',
-        aliases: ['getmember', 'memberget'],
-        callback: (async ({ field = 'name' }, arg) => {
-            if (!selected_group) {
-                toastr.warning(t`Cannot run /member-get command outside of a group chat.`);
-                return '';
-            }
-            if (field === '') {
-                toastr.warning(t`'/member-get field=' argument required!`);
-                return '';
-            }
-            field = field.toString();
-            arg = arg.toString();
-            if (!['name', 'index', 'id', 'avatar'].includes(field)) {
-                toastr.warning(t`'/member-get field=' argument required!`);
-                return '';
-            }
-            const isId = !isNaN(parseInt(arg));
-            const groupMember = findGroupMemberId(arg, true);
-            if (!groupMember) {
-                toastr.warning(t`No group member found using ${isId ? 'id' : 'string'} ${arg}`);
-                return '';
-            }
-            return groupMember[field];
-        }),
-        namedArgumentList: [
-            SlashCommandNamedArgument.fromProps({
-                name: 'field',
-                description: t`Whether to retrieve the name, index, id, or avatar.`,
-                typeList: [ARGUMENT_TYPE.STRING],
-                isRequired: true,
-                defaultValue: 'name',
-                enumList: [
-                    new SlashCommandEnumValue('name', t`Character name`),
-                    new SlashCommandEnumValue('index', t`Group member index`),
-                    new SlashCommandEnumValue('avatar', t`Character avatar`),
-                    new SlashCommandEnumValue('id', t`Character index`),
-                ],
-            }),
-        ],
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: t`member index (starts with 0), name, or avatar`,
-                typeList: [ARGUMENT_TYPE.NUMBER, ARGUMENT_TYPE.STRING],
-                isRequired: true,
-                enumProvider: commonEnumProviders.groupMembers(),
-            }),
-        ],
-        helpString: t`Retrieves a group member's name, index, id, or avatar.`,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'member-disable',
-        callback: disableGroupMemberCallback,
-        aliases: ['disable', 'disablemember', 'memberdisable'],
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: t`member index (starts with 0) or name`,
-                typeList: [ARGUMENT_TYPE.NUMBER, ARGUMENT_TYPE.STRING],
-                isRequired: true,
-                enumProvider: commonEnumProviders.groupMembers(),
-            }),
-        ],
-        helpString: t`Disables a group member from being drafted for replies.`,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'member-enable',
-        aliases: ['enable', 'enablemember', 'memberenable'],
-        callback: enableGroupMemberCallback,
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: t`member index (starts with 0) or name`,
-                typeList: [ARGUMENT_TYPE.NUMBER, ARGUMENT_TYPE.STRING],
-                isRequired: true,
-                enumProvider: commonEnumProviders.groupMembers(),
-            }),
-        ],
-        helpString: t`Enables a group member to be drafted for replies.`,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'member-add',
-        callback: addGroupMemberCallback,
-        aliases: ['addmember', 'memberadd'],
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: t`Character name - or unique character identifier (avatar key)`,
-                typeList: [ARGUMENT_TYPE.STRING],
-                isRequired: true,
-                enumProvider: () => selected_group ? commonEnumProviders.characters('character')() : [],
-            }),
-        ],
-        helpString: `
-        <div>
-            ${t`Adds a new group member to the group chat.`}
-        </div>
-        <div>
-            <strong>${t`Example:`}</strong>
-            <ul>
-                <li>
-                    <pre><code>/member-add John Doe</code></pre>
-                </li>
-            </ul>
-        </div>
-    `,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'member-remove',
-        callback: removeGroupMemberCallback,
-        aliases: ['removemember', 'memberremove'],
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: t`member index (starts with 0) or name`,
-                typeList: [ARGUMENT_TYPE.NUMBER, ARGUMENT_TYPE.STRING],
-                isRequired: true,
-                enumProvider: commonEnumProviders.groupMembers(),
-            }),
-        ],
-        helpString: `
-        <div>
-            ${t`Removes a group member from the group chat.`}
-        </div>
-        <div>
-            <strong>${t`Example:`}</strong>
-            <ul>
-                <li>
-                    <pre><code>/member-remove 2</code></pre>
-                    <pre><code>/member-remove John Doe</code></pre>
-                </li>
-            </ul>
-        </div>
-    `,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'member-up',
-        callback: moveGroupMemberUpCallback,
-        aliases: ['upmember', 'memberup'],
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: t`member index (starts with 0) or name`,
-                typeList: [ARGUMENT_TYPE.NUMBER, ARGUMENT_TYPE.STRING],
-                isRequired: true,
-                enumProvider: commonEnumProviders.groupMembers(),
-            }),
-        ],
-        helpString: t`Moves a group member up in the group chat list.`,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'member-down',
-        callback: moveGroupMemberDownCallback,
-        aliases: ['downmember', 'memberdown'],
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: t`member index (starts with 0) or name`,
-                typeList: [ARGUMENT_TYPE.NUMBER, ARGUMENT_TYPE.STRING],
-                isRequired: true,
-                enumProvider: commonEnumProviders.groupMembers(),
-            }),
-        ],
-        helpString: t`Moves a group member down in the group chat list.`,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'member-peek',
-        aliases: ['peek', 'memberpeek', 'peekmember'],
-        callback: peekCallback,
-        unnamedArgumentList: [
-            SlashCommandArgument.fromProps({
-                description: t`member index (starts with 0) or name`,
-                typeList: [ARGUMENT_TYPE.NUMBER, ARGUMENT_TYPE.STRING],
-                isRequired: true,
-                enumProvider: commonEnumProviders.groupMembers(),
-            }),
-        ],
-        helpString: `
-        <div>
-            ${t`Shows a group member character card without switching chats.`}
-        </div>
-        <div>
-            <strong>${t`Examples:`}</strong>
-            <ul>
-                <li>
-                    <pre><code>/peek Gloria</code></pre>
-                    ${t`Shows the character card for the character named "Gloria".`}
-                </li>
-            </ul>
-        </div>
-    `,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'member-count',
-        callback: countGroupMemberCallback,
-        aliases: ['countmember', 'membercount'],
-        helpString: t`Returns the total number of group members in the group chat list.`,
     }));
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'delswipe',
@@ -4535,7 +4315,6 @@ async function generateCallback(args, value) {
             quietName: char?.name ?? name,
             responseLength: length,
             trimToSentence: trim,
-            forceChId: char ? characters.indexOf(char) : null,
         };
         const result = await generateQuietPrompt(params);
         return result;
@@ -4716,13 +4495,6 @@ async function askCharacter(args, text) {
     // Prevent generate recursion
     $('#send_textarea').val('')[0].dispatchEvent(new Event('input', { bubbles: true }));
 
-    // Not supported in group chats
-    // TODO: Maybe support group chats?
-    if (selected_group) {
-        toastr.warning(t`Cannot run /ask command in a group chat!`);
-        return '';
-    }
-
     if (!args.name) {
         toastr.warning(t`You must specify a name of the character to ask.`);
         return '';
@@ -4824,198 +4596,11 @@ async function unhideMessageCallback(args, value) {
     return '';
 }
 
-/**
- * Copium for running group actions when the member is offscreen.
- * @param {number} chid - character ID
- * @param {string} action - one of 'enable', 'disable', 'up', 'down', 'view', 'remove'
- * @returns {void}
- */
-function performGroupMemberAction(chid, action) {
-    const memberSelector = `.group_member[data-chid="${chid}"]`;
-    // Do not optimize. Paginator gets recreated on every action
-    const paginationSelector = '#rm_group_members_pagination';
-    const pageSizeSelector = '#rm_group_members_pagination select';
-    let wasOffscreen = false;
-    let paginationValue = null;
-    let pageValue = null;
-
-    if ($(memberSelector).length === 0) {
-        wasOffscreen = true;
-        paginationValue = Number($(pageSizeSelector).val());
-        pageValue = $(paginationSelector).pagination('getCurrentPageNum');
-        $(pageSizeSelector).val($(pageSizeSelector).find('option').last().val()).trigger('change');
-    }
-
-    $(memberSelector).find(`[data-action="${action}"]`).trigger('click');
-
-    if (wasOffscreen) {
-        $(pageSizeSelector).val(paginationValue).trigger('change');
-        if ($(paginationSelector).length) {
-            $(paginationSelector).pagination('go', pageValue);
-        }
-    }
-}
-
-async function disableGroupMemberCallback(_, arg) {
-    if (!selected_group) {
-        toastr.warning(t`Cannot run /member-disable command outside of a group chat.`);
-        return '';
-    }
-
-    const chid = findGroupMemberId(arg);
-
-    if (chid === undefined) {
-        console.warn(`WARN: No group member found for argument ${arg}`);
-        return '';
-    }
-
-    performGroupMemberAction(chid, 'disable');
-    return '';
-}
-
-async function enableGroupMemberCallback(_, arg) {
-    if (!selected_group) {
-        toastr.warning(t`Cannot run /member-enable command outside of a group chat.`);
-        return '';
-    }
-
-    const chid = findGroupMemberId(arg);
-
-    if (chid === undefined) {
-        console.warn(`WARN: No group member found for argument ${arg}`);
-        return '';
-    }
-
-    performGroupMemberAction(chid, 'enable');
-    return '';
-}
-
-async function moveGroupMemberUpCallback(_, arg) {
-    if (!selected_group) {
-        toastr.warning(t`Cannot run /member-up command outside of a group chat.`);
-        return '';
-    }
-
-    const chid = findGroupMemberId(arg);
-
-    if (chid === undefined) {
-        console.warn(`WARN: No group member found for argument ${arg}`);
-        return '';
-    }
-
-    performGroupMemberAction(chid, 'up');
-    return '';
-}
-
-async function moveGroupMemberDownCallback(_, arg) {
-    if (!selected_group) {
-        toastr.warning(t`Cannot run /member-down command outside of a group chat.`);
-        return '';
-    }
-
-    const chid = findGroupMemberId(arg);
-
-    if (chid === undefined) {
-        console.warn(`WARN: No group member found for argument ${arg}`);
-        return '';
-    }
-
-    performGroupMemberAction(chid, 'down');
-    return '';
-}
-
-async function peekCallback(_, arg) {
-    if (!selected_group) {
-        toastr.warning(t`Cannot run /member-peek command outside of a group chat.`);
-        return '';
-    }
-
-    if (is_group_generating) {
-        toastr.warning(t`Cannot run /member-peek command while the group reply is generating.`);
-        return '';
-    }
-
-    const chid = findGroupMemberId(arg);
-
-    if (chid === undefined) {
-        console.warn(`WARN: No group member found for argument ${arg}`);
-        return '';
-    }
-
-    performGroupMemberAction(chid, 'view');
-    return '';
-}
-
-async function countGroupMemberCallback() {
-    if (!selected_group) {
-        toastr.warning(t`Cannot run /member-count command outside of a group chat.`);
-        return '';
-    }
-
-    return String(getGroupMembers(selected_group).length);
-}
-
-async function removeGroupMemberCallback(_, arg) {
-    if (!selected_group) {
-        toastr.warning(t`Cannot run /member-remove command outside of a group chat.`);
-        return '';
-    }
-
-    const chid = findGroupMemberId(arg);
-
-    if (chid === undefined) {
-        console.warn(`WARN: No group member found for argument ${arg}`);
-        return '';
-    }
-
-    performGroupMemberAction(chid, 'remove');
-    return '';
-}
-
-async function addGroupMemberCallback(_, name) {
-    if (!selected_group) {
-        toastr.warning(t`Cannot run /memberadd command outside of a group chat.`);
-        return '';
-    }
-
-    if (!name) {
-        console.warn('WARN: No argument provided for /memberadd command');
-        return '';
-    }
-
-    const character = findChar({ name: name, preferCurrentChar: false });
-    if (!character) {
-        console.warn(`WARN: No character found for argument ${name}`);
-        return '';
-    }
-
-    const group = groups.find(x => x.id === selected_group);
-
-    if (!group || !Array.isArray(group.members)) {
-        console.warn(`WARN: No group found for ID ${selected_group}`);
-        return '';
-    }
-
-    const avatar = character.avatar;
-
-    if (group.members.includes(avatar)) {
-        toastr.warning(t`${character.name} is already a member of this group.`);
-        return '';
-    }
-
-    group.members.push(avatar);
-    await saveGroupChat(selected_group, true);
-
-    // Trigger to reload group UI
-    $('#rm_button_selected_ch').trigger('click');
-    return character.name;
-}
-
-async function triggerGenerationCallback(args, value) {
+async function triggerGenerationCallback(args) {
     const shouldAwait = isTrueBoolean(args?.await);
     const outerPromise = new Promise((outerResolve) => setTimeout(async () => {
         try {
-            await waitUntilCondition(() => !is_send_press && !is_group_generating, 10000, 100);
+            await waitUntilCondition(() => !is_send_press, 10000, 100);
         } catch {
             console.warn('Timeout waiting for generation unlock');
             toastr.warning(t`Cannot run /trigger command while the reply is being generated.`);
@@ -5025,18 +4610,7 @@ async function triggerGenerationCallback(args, value) {
 
         // Prevent generate recursion
         $('#send_textarea').val('')[0].dispatchEvent(new Event('input', { bubbles: true }));
-
-        let chid = undefined;
-
-        if (selected_group && value) {
-            chid = findGroupMemberId(value);
-
-            if (chid === undefined) {
-                console.warn(`WARN: No group member found for argument ${value}`);
-            }
-        }
-
-        outerResolve(new Promise(innerResolve => setTimeout(() => innerResolve(Generate('normal', { force_chid: chid })), 100)));
+        outerResolve(new Promise(innerResolve => setTimeout(() => innerResolve(Generate('normal')), 100)));
     }, 1));
 
     if (shouldAwait) {
@@ -5120,22 +4694,13 @@ async function goToCharacterCallback(_, name) {
         const chid = getCharIndex(character);
         await openChat(String(chid));
         setActiveCharacter(character.avatar);
-        setActiveGroup(null);
         return character.name;
-    }
-    const group = groups.find(it => equalsIgnoreCaseAndAccents(it.name, name));
-    if (group) {
-        await openGroupById(group.id);
-        setActiveCharacter(null);
-        setActiveGroup(group.id);
-        return group.name;
     }
     console.warn(`No matches found for name "${name}"`);
     return '';
 }
 
 async function openChat(chid) {
-    resetSelectedGroup();
     setCharacterId(chid);
     await delay(1);
     await reloadCurrentChat();
@@ -5247,7 +4812,6 @@ async function createCharacterCallback(args) {
         creator: args.creator ?? '',
         character_version: args.characterVersion ?? '',
         tags: args.tags ? args.tags.split(',').map(t => t.trim()).filter(t => t) : [],
-        talkativeness: args.talkativeness ?? '0.5',
         world: args.world ?? '',
         depth_prompt_prompt: args.depthPrompt ?? '',
         depth_prompt_depth: args.depthPromptDepth ?? '4',
@@ -5292,7 +4856,7 @@ async function createCharacterCallback(args) {
         if (shouldSelect) {
             const characterIndex = characters.findIndex(c => c.avatar === avatarKey);
             if (characterIndex !== -1) {
-                // selectCharacterById handles group reset and active character setting
+                // Select the character and restore its active chat.
                 await selectCharacterById(characterIndex);
             }
         }
@@ -5381,18 +4945,6 @@ async function updateCharacterCallback(args) {
         }
         updateData.data.extensions.world = value;
         hasUpdates = true;
-    }
-
-    // Handle talkativeness (stored in extensions)
-    if (args.talkativeness !== undefined) {
-        const talkValue = parseFloat(args.talkativeness);
-        if (!isNaN(talkValue)) {
-            updateData.talkativeness = talkValue;
-            if (!updateData.data) updateData.data = {};
-            if (!updateData.data.extensions) updateData.data.extensions = {};
-            updateData.data.extensions.talkativeness = talkValue;
-            hasUpdates = true;
-        }
     }
 
     // Handle favorite
@@ -5540,13 +5092,9 @@ async function getCharacterDataCallback(args) {
     if (args.field) {
         const fieldName = args.field;
 
-        // Try to get from data object first (V2 spec), then fall back to root
         let value = character.data?.[fieldName] ?? character[fieldName];
 
         // Handle special cases for nested fields
-        if (fieldName === 'talkativeness') {
-            value = character.data?.extensions?.talkativeness ?? character.talkativeness ?? 0.5;
-        }
         if (fieldName === 'tags') {
             value = character.data?.tags ?? character.tags ?? [];
             if (Array.isArray(value)) {
@@ -5576,7 +5124,6 @@ async function getCharacterDataCallback(args) {
         creator: character.data?.creator ?? '',
         character_version: character.data?.character_version ?? '',
         tags: character.data?.tags ?? character.tags ?? [],
-        talkativeness: character.data?.extensions?.talkativeness ?? character.talkativeness ?? 0.5,
         fav: character.fav ?? character.data?.extensions?.fav ?? false,
         chat: character.chat,
         create_date: character.create_date,
@@ -5639,7 +5186,7 @@ async function continueChatCallback(args, prompt) {
 
     const outerPromise = new Promise(async (resolve, reject) => {
         try {
-            await waitUntilCondition(() => !is_send_press && !is_group_generating, 10000, 100);
+            await waitUntilCondition(() => !is_send_press, 10000, 100);
         } catch {
             console.warn('Timeout waiting for generation unlock');
             toastr.warning(t`Cannot run /continue command while the reply is being generated.`);
@@ -5672,16 +5219,11 @@ async function regenerateChatCallback(args) {
 
     const outerPromise = new Promise((outerResolve) => setTimeout(async () => {
         try {
-            await waitUntilCondition(() => !is_send_press && !is_group_generating, 10000, 100);
+            await waitUntilCondition(() => !is_send_press, 10000, 100);
         } catch {
             console.warn('Timeout waiting for generation unlock');
             toastr.warning(t`Cannot run /regenerate command while the reply is being generated.`);
             outerResolve(Promise.resolve(''));
-            return '';
-        }
-
-        if (selected_group) {
-            outerResolve(Promise.resolve(regenerateGroup()));
             return '';
         }
 
@@ -5705,7 +5247,7 @@ async function swipeChatCallback(args) {
 
     const outerPromise = new Promise((outerResolve) => setTimeout(async () => {
         try {
-            await waitUntilCondition(() => !is_send_press && !is_group_generating, 10000, 100);
+            await waitUntilCondition(() => !is_send_press, 10000, 100);
         } catch {
             console.warn('Timeout waiting for generation unlock');
             toastr.warning(t`Cannot run /swipe command while the reply is being generated.`);

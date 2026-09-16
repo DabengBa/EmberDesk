@@ -2,7 +2,6 @@ import { Popper } from '../../../lib.js';
 import {
     animation_duration,
     appendMediaToMessage,
-    formatCharacterAvatar,
     generateQuietPrompt,
     getCharacterAvatar,
     getCurrentChatId,
@@ -10,7 +9,6 @@ import {
     saveSettingsDebounced,
     substituteParams,
     substituteParamsExtended,
-    systemUserName,
     this_chid,
     user_avatar,
 } from '../../../script.js';
@@ -25,7 +23,6 @@ import {
     renderExtensionTemplateAsync,
     writeExtensionField,
 } from '../../extensions.js';
-import { selected_group } from '../../group-chats.js';
 import {
     clamp,
     debounce,
@@ -871,7 +868,7 @@ async function refinePrompt(prompt, args = null) {
 }
 
 async function onChatChanged() {
-    if (this_chid === undefined || selected_group) {
+    if (this_chid === undefined) {
         $('#sd_character_prompt_block').hide();
         return;
     }
@@ -931,7 +928,7 @@ async function onCharacterNegativePromptInput() {
 }
 
 function getCharacterPrefix() {
-    if (this_chid === undefined || selected_group) {
+    if (this_chid === undefined) {
         return '';
     }
 
@@ -945,7 +942,7 @@ function getCharacterPrefix() {
 }
 
 function getCharacterNegativePrefix() {
-    if (this_chid === undefined || selected_group) {
+    if (this_chid === undefined) {
         return '';
     }
 
@@ -2945,9 +2942,7 @@ function getRawLastMessage() {
 
     const context = getContext();
     const lastMessage = getLastUsableMessage();
-    const character = context.groupId
-        ? context.characters.find(c => c.avatar === lastMessage.original_avatar)
-        : context.characters[context.characterId];
+    const character = context.characters[context.characterId];
 
     if (!character) {
         console.debug('Character not found, using raw message.');
@@ -3007,10 +3002,7 @@ async function generatePicture(initiator, args, trigger, message, callback) {
 
     const quietPrompt = getQuietPrompt(generationType, trigger);
     const context = getContext();
-
-    let characterName = context.groupId
-        ? context.groups[Object.keys(context.groups).filter(x => context.groups[x].id === context.groupId)[0]]?.id?.toString()
-        : context.characters[context.characterId]?.name;
+    let characterName = context.characters[context.characterId]?.name;
 
     if (generationType === generationMode.BACKGROUND) {
         const callbackOriginal = callback;
@@ -3267,16 +3259,7 @@ async function generateMultimodalPrompt(generationType, quietPrompt) {
 
 function getCharacterAvatarUrl() {
     const context = getContext();
-
-    if (context.groupId) {
-        const groupMembers = context.groups.find(x => x.id === context.groupId)?.members;
-        const lastMessageAvatar = context.chat?.filter(x => !x.is_system && !x.is_user)?.slice(-1)[0]?.original_avatar;
-        const randomMemberAvatar = Array.isArray(groupMembers) ? groupMembers[Math.floor(Math.random() * groupMembers.length)] : null;
-        const avatarToUse = lastMessageAvatar || randomMemberAvatar;
-        return formatCharacterAvatar(avatarToUse);
-    } else {
-        return getCharacterAvatar(context.characterId);
-    }
+    return getCharacterAvatar(context.characterId);
 }
 
 function getUserAvatarUrl() {
@@ -3315,7 +3298,7 @@ async function generatePrompt(quietPrompt) {
  */
 async function sendGenerationRequest(generationType, prompt, additionalNegativePrefix, characterName, callback, initiator, signal) {
     const noCharPrefix = [generationMode.FREE, generationMode.BACKGROUND, generationMode.USER, generationMode.USER_MULTIMODAL, generationMode.FREE_EXTENDED];
-    const isCharChat = this_chid !== undefined && !selected_group;
+    const isCharChat = this_chid !== undefined;
     const ignoreNoCharForSwipe = initiator === initiators.swipe && isCharChat;
 
     const skipCharPrefix = !ignoreNoCharForSwipe && noCharPrefix.includes(generationType);
@@ -4964,7 +4947,7 @@ async function onComfyRenameWorkflowClick() {
  */
 async function sendMessage(prompt, image, generationType, additionalNegativePrefix, initiator, prefixedPrompt, format) {
     const context = getContext();
-    const name = context.groupId ? systemUserName : context.name2;
+    const name = context.name2;
     const template = extension_settings.sd.prompts[generationMode.MESSAGE] || '{{prompt}}';
     const messageText = substituteParamsExtended(template, { char: name, prompt: prompt, prefixedPrompt: prefixedPrompt });
     const mediaType = isVideo(format) ? MEDIA_TYPE.VIDEO : MEDIA_TYPE.IMAGE;
@@ -5234,7 +5217,7 @@ async function sdMessageButton($icon, { animate } = {}) {
 
 async function onCharacterPromptShareInput() {
     // Not a valid state to share character prompt
-    if (this_chid === undefined || selected_group) {
+    if (this_chid === undefined) {
         return;
     }
 
@@ -5295,9 +5278,7 @@ async function generateMediaSwipe(mediaAttachment, message, onStart, onComplete,
         dimensions = setTypeSpecificDimensions(generationType, refineArgs.resolution ? mediaAttachment : null);
 
         const context = getContext();
-        const characterName = context.groupId
-            ? context.groups[Object.keys(context.groups).filter(x => context.groups[x].id === context.groupId)[0]]?.id?.toString()
-            : context.characters[context.characterId]?.name;
+        const characterName = context.characters[context.characterId]?.name;
 
         // Show non-blocking stoppable toast for this generation
         loaderHandle = loader.show({
@@ -5952,7 +5933,7 @@ export async function init() {
     $('body').addClass('sd');
 
     const getMacroValue = ({ isNegative }) => {
-        if (selected_group || this_chid === undefined) {
+        if (this_chid === undefined) {
             return '';
         }
 

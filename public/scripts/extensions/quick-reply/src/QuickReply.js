@@ -42,7 +42,6 @@ export class QuickReply {
     /**@type {boolean}*/ executeOnUser = false;
     /**@type {boolean}*/ executeOnAi = false;
     /**@type {boolean}*/ executeOnChatChange = false;
-    /**@type {boolean}*/ executeOnGroupMemberDraft = false;
     /**@type {boolean}*/ executeOnNewChat = false;
     /**@type {boolean}*/ executeBeforeGeneration = false;
     /**@type {string}*/ automationId = '';
@@ -1051,14 +1050,6 @@ export class QuickReply {
                 this.executeOnChatChange = executeOnChatChange.checked;
                 this.updateContext();
             });
-            /**@type {HTMLInputElement}*/
-            const executeOnGroupMemberDraft = dom.querySelector('#qr--executeOnGroupMemberDraft');
-            executeOnGroupMemberDraft.checked = this.executeOnGroupMemberDraft;
-            executeOnGroupMemberDraft.addEventListener('click', () => {
-                this.executeOnGroupMemberDraft = executeOnGroupMemberDraft.checked;
-                this.updateContext();
-            });
-            /**@type {HTMLInputElement}*/
             const executeBeforeGeneration = dom.querySelector('#qr--executeBeforeGeneration');
             executeBeforeGeneration.checked = this.executeBeforeGeneration;
             executeBeforeGeneration.addEventListener('click', () => {
@@ -1914,7 +1905,6 @@ export class QuickReply {
             executeOnUser: this.executeOnUser,
             executeOnAi: this.executeOnAi,
             executeOnChatChange: this.executeOnChatChange,
-            executeOnGroupMemberDraft: this.executeOnGroupMemberDraft,
             executeOnNewChat: this.executeOnNewChat,
             executeBeforeGeneration: this.executeBeforeGeneration,
             automationId: this.automationId,

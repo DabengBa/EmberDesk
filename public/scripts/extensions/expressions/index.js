@@ -3,12 +3,10 @@ import { Fuse } from '../../../lib.js';
 import { characters, generateQuietPrompt, generateRaw, online_status, saveSettingsDebounced, substituteParams, substituteParamsExtended, system_message_types, this_chid } from '../../../script.js';
 import { eventSource, event_types } from '../../events.js';
 import { getRequestHeaders } from '../../request-context.js';
-import { dragElement, isMobile } from '../../RossAscends-mods.js';
+import { dragElement } from '../../RossAscends-mods.js';
 import { getContext, getApiUrl, modules, extension_settings, ModuleWorkerWrapper, doExtrasFetch, renderExtensionTemplateAsync } from '../../extensions.js';
-import { loadMovingUIState, performFuzzySearch, power_user } from '../../power-user.js';
-import { onlyUnique, debounce, getCharaFilename, trimToEndSentence, trimToStartSentence, waitUntilCondition, findChar, isFalseBoolean, includesIgnoreCaseAndAccents } from '../../utils.js';
-import { hideMutedSprites, selected_group } from '../../group-chats.js';
-import { debounce_timeout } from '../../constants.js';
+import { loadMovingUIState, performFuzzySearch } from '../../power-user.js';
+import { onlyUnique, getCharaFilename, trimToEndSentence, trimToStartSentence, waitUntilCondition, findChar, isFalseBoolean, includesIgnoreCaseAndAccents } from '../../utils.js';
 import { SlashCommandParser } from '../../slash-commands/SlashCommandParser.js';
 import { SlashCommand } from '../../slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from '../../slash-commands/SlashCommandArgument.js';
@@ -121,395 +119,24 @@ function getPlaceholderImage(expression, isCustom = false) {
     };
 }
 
-function isVisualNovelMode() {
-    return Boolean(!isMobile() && power_user.waifuMode && getContext().groupId);
-}
-
-async function forceUpdateVisualNovelMode() {
-    if (isVisualNovelMode()) {
-        await updateVisualNovelMode();
-    }
-}
-
-const updateVisualNovelModeDebounced = debounce(forceUpdateVisualNovelMode, debounce_timeout.quick);
-
-async function updateVisualNovelMode(spriteFolderName, expression) {
-    const vnContainer = $('#visual-novel-wrapper');
-
-    await visualNovelRemoveInactive(vnContainer);
-
-    const setSpritePromises = await visualNovelSetCharacterSprites(vnContainer, spriteFolderName, expression);
-
-    // calculate layer indices based on recent messages
-    await visualNovelUpdateLayers(vnContainer);
-
-    await Promise.allSettled(setSpritePromises);
-
-    // update again based on new sprites
-    if (setSpritePromises.length > 0) {
-        await visualNovelUpdateLayers(vnContainer);
-    }
-}
-
-async function visualNovelRemoveInactive(container) {
-    const context = getContext();
-    const group = context.groups.find(x => x.id == context.groupId);
-    const removeInactiveCharactersPromises = [];
-
-    // remove inactive characters after 1 second
-    container.find('.expression-holder').each((_, current) => {
-        const promise = new Promise(resolve => {
-            const element = $(current);
-            const avatar = element.data('avatar');
-
-            if (!group.members.includes(avatar) || group.disabled_members.includes(avatar)) {
-                element.fadeOut(250, () => {
-                    element.remove();
-                    resolve();
-                });
-            } else {
-                resolve();
-            }
-        });
-
-        removeInactiveCharactersPromises.push(promise);
-    });
-
-    await Promise.allSettled(removeInactiveCharactersPromises);
-}
-
-/**
- * Sets the character sprites for visual novel mode based on the provided container, name, and expression.
- *
- * @param {JQuery<HTMLElement>} vnContainer - The container element where the sprites will be set
- * @param {string} spriteFolderName - The name of the sprite folder
- * @param {string} expression - The expression to set for the characters
- * @returns {Promise<Array>} - An array of promises that resolve when the sprites are set
- */
-async function visualNovelSetCharacterSprites(vnContainer, spriteFolderName, expression) {
-    const originalExpression = expression;
-    const context = getContext();
-    const group = context.groups.find(x => x.id == context.groupId);
-
-    const setSpritePromises = [];
-
-    for (const avatar of group.members) {
-        // skip disabled characters
-        const isDisabled = group.disabled_members.includes(avatar);
-        if (isDisabled && hideMutedSprites) {
-            continue;
-        }
-
-        const character = context.characters.find(x => x.avatar == avatar);
-        if (!character) {
-            continue;
-        }
-
-        const expressionImage = vnContainer.find(`.expression-holder[data-avatar="${avatar}"]`);
-        /** @type {JQuery<HTMLElement>} */
-        let img;
-
-        const memberSpriteFolderName = getSpriteFolderName({ original_avatar: character.avatar }, character.name);
-
-        // download images if not downloaded yet
-        if (spriteCache[memberSpriteFolderName] === undefined) {
-            spriteCache[memberSpriteFolderName] = await getSpritesList(memberSpriteFolderName);
-        }
-
-        const prevExpressionSrc = expressionImage.find('img').attr('src') || null;
-
-        if (!originalExpression && Array.isArray(spriteCache[memberSpriteFolderName]) && spriteCache[memberSpriteFolderName].length > 0) {
-            expression = await getLastMessageSprite(avatar);
-        }
-
-        const spriteFile = chooseSpriteForExpression(memberSpriteFolderName, expression, { prevExpressionSrc: prevExpressionSrc });
-        if (expressionImage.length) {
-            if (!spriteFolderName || spriteFolderName == memberSpriteFolderName) {
-                await validateImages(memberSpriteFolderName, true);
-                setExpressionOverrideHtml(true); // <= force clear expression override input
-                const path = spriteFile?.imageSrc || '';
-                img = expressionImage.find('img');
-                await setImage(img, path);
-            }
-            expressionImage.toggleClass('hidden', !spriteFile);
-        } else {
-            const template = $('#expression-holder').clone();
-            template.attr('id', `expression-${avatar}`);
-            template.attr('data-avatar', avatar);
-            template.find('.drag-grabber').attr('id', `expression-${avatar}header`);
-            $('#visual-novel-wrapper').append(template);
-            dragElement($(template[0]));
-            template.toggleClass('hidden', !spriteFile);
-            img = template.find('img');
-            await setImage(img, spriteFile?.imageSrc || '');
-            const fadeInPromise = new Promise(resolve => {
-                template.fadeIn(250, () => resolve());
-            });
-            setSpritePromises.push(fadeInPromise);
-        }
-
-        if (!img) {
-            continue;
-        }
-
-        img.attr('data-sprite-folder-name', spriteFolderName);
-        img.attr('data-expression', expression);
-        img.attr('data-sprite-filename', spriteFile?.fileName || null);
-        img.attr('title', expression);
-
-        if (spriteFile) console.info(`Expression set for group member ${character.name}`, { expression: spriteFile.expression, file: spriteFile.fileName });
-        else if (expressionImage.length) console.info(`Expression unset for group member ${character.name} - No sprite found`, { expression: expression });
-        else console.info(`Expression not available for group member ${character.name}`, { expression: expression });
-    }
-
-    return setSpritePromises;
-}
-
-/**
- * Classifies the text of the latest message and returns the expression label.
- * @param {string} avatar - The avatar of the character to get the last message for
- * @returns {Promise<string>} - The expression label
- */
-async function getLastMessageSprite(avatar) {
-    const context = getContext();
-    const lastMessage = context.chat.slice().reverse().find(x => x.original_avatar == avatar || (x.force_avatar && x.force_avatar.includes(encodeURIComponent(avatar))));
-
-    if (lastMessage) {
-        const text = lastMessage.mes || '';
-        return await getExpressionLabel(text);
-    }
-
-    return null;
-}
-
-export async function visualNovelUpdateLayers(container) {
-    const context = getContext();
-    const group = context.groups.find(x => x.id == context.groupId);
-    const recentMessages = context.chat.map(x => x.original_avatar).filter(x => x).reverse().filter(onlyUnique);
-    const filteredMembers = group.members.filter(x => !group.disabled_members.includes(x));
-    const layerIndices = filteredMembers.slice().sort((a, b) => {
-        const aRecentIndex = recentMessages.indexOf(a);
-        const bRecentIndex = recentMessages.indexOf(b);
-        const aFilteredIndex = filteredMembers.indexOf(a);
-        const bFilteredIndex = filteredMembers.indexOf(b);
-
-        if (aRecentIndex !== -1 && bRecentIndex !== -1) {
-            return bRecentIndex - aRecentIndex;
-        } else if (aRecentIndex !== -1) {
-            return 1;
-        } else if (bRecentIndex !== -1) {
-            return -1;
-        } else {
-            return aFilteredIndex - bFilteredIndex;
-        }
-    });
-
-    const setLayerIndicesPromises = [];
-
-    const sortFunction = (a, b) => {
-        const avatarA = $(a).data('avatar');
-        const avatarB = $(b).data('avatar');
-        const indexA = filteredMembers.indexOf(avatarA);
-        const indexB = filteredMembers.indexOf(avatarB);
-        return indexA - indexB;
-    };
-
-    const containerWidth = container.width();
-    const pivotalPoint = containerWidth * 0.5;
-
-    let images = Array.from($('#visual-novel-wrapper .expression-holder')).sort(sortFunction);
-    let imagesWidth = [];
-
-    for (const image of images) {
-        if (image instanceof HTMLImageElement && !image.complete) {
-            await new Promise(resolve => image.addEventListener('load', resolve, { once: true }));
-        }
-    }
-
-    images.forEach(image => {
-        imagesWidth.push($(image).width());
-    });
-
-    let totalWidth = imagesWidth.reduce((a, b) => a + b, 0);
-    let currentPosition = pivotalPoint - (totalWidth / 2);
-
-    if (totalWidth > containerWidth) {
-        let totalOverlap = totalWidth - containerWidth;
-        let totalWidthWithoutWidest = imagesWidth.reduce((a, b) => a + b, 0) - Math.max(...imagesWidth);
-        let overlaps = imagesWidth.map(width => (width / totalWidthWithoutWidest) * totalOverlap);
-        imagesWidth = imagesWidth.map((width, index) => width - overlaps[index]);
-        currentPosition = 0; // Reset the initial position to 0
-    }
-
-    images.forEach((current, index) => {
-        const element = $(current);
-        const elementID = element.attr('id');
-
-        // skip repositioning of dragged elements
-        if (element.data('dragged')
-            || (power_user.movingUIState[elementID]
-                && (typeof power_user.movingUIState[elementID] === 'object')
-                && Object.keys(power_user.movingUIState[elementID]).length > 0)) {
-            loadMovingUIState();
-            //currentPosition += imagesWidth[index];
-            return;
-        }
-
-        const avatar = element.data('avatar');
-        const layerIndex = layerIndices.indexOf(avatar);
-        element.css('z-index', layerIndex);
-        element.show();
-
-        const promise = new Promise(resolve => {
-            if (power_user.reduced_motion) {
-                element.css('left', currentPosition + 'px');
-                requestAnimationFrame(() => resolve());
-            } else {
-                element.animate({ left: currentPosition + 'px' }, 500, () => {
-                    resolve();
-                });
-            }
-        });
-
-        currentPosition += imagesWidth[index];
-
-        setLayerIndicesPromises.push(promise);
-    });
-
-    await Promise.allSettled(setLayerIndicesPromises);
-}
-
-/**
- * Sets the expression for the given character image.
- * @param {JQuery<HTMLElement>} img - The image element to set the image on
- * @param {string} path - The path to the image
- * @returns {Promise<void>} - A promise that resolves when the image is set
- */
-async function setImage(img, path) {
-    // Cohee: If something goes wrong, uncomment this to return to the old behavior
-    /*
-    img.attr('src', path);
-    img.removeClass('default');
-    img.off('error');
-    img.on('error', function () {
-        console.debug('Error loading image', path);
-        $(this).off('error');
-        $(this).attr('src', '');
-    });
-    */
-
-    return new Promise(resolve => {
-        const prevExpressionSrc = img.attr('src');
-        const expressionClone = img.clone();
-        const originalId = img.data('filename');
-
-        //only swap expressions when necessary
-        if (prevExpressionSrc !== path && !img.hasClass('expression-animating')) {
-            //clone expression
-            expressionClone.addClass('expression-clone');
-            //make invisible and remove id to prevent double ids
-            //must be made invisible to start because they share the same Z-index
-            expressionClone.data('filename', '').css({ opacity: 0 });
-            //add new sprite path to clone src
-            expressionClone.attr('src', path);
-            //add invisible clone to html
-            expressionClone.appendTo(img.parent());
-
-            const duration = 200;
-
-            //add animation flags to both images
-            //to prevent multiple expression changes happening simultaneously
-            img.addClass('expression-animating');
-
-            // Set the parent container's min width and height before running the transition
-            const imgWidth = img.width();
-            const imgHeight = img.height();
-            const expressionHolder = img.parent();
-            expressionHolder.css('min-width', imgWidth > 100 ? imgWidth : 100);
-            expressionHolder.css('min-height', imgHeight > 100 ? imgHeight : 100);
-
-            //position absolute prevent the original from jumping around during transition
-            img.css('position', 'absolute').width(imgWidth).height(imgHeight);
-            expressionClone.addClass('expression-animating');
-            //fade the clone in
-            expressionClone.css({
-                opacity: 0,
-            }).animate({
-                opacity: 1,
-            }, duration)
-                //when finshed fading in clone, fade out the original
-                .promise().done(function () {
-                    img.animate({
-                        opacity: 0,
-                    }, duration);
-                    //remove old expression
-                    img.remove();
-                    //replace ID so it becomes the new 'original' expression for next change
-                    expressionClone.data('filename', originalId);
-                    expressionClone.removeClass('expression-animating');
-
-                    // Reset the expression holder min height and width
-                    expressionHolder.css('min-width', 100);
-                    expressionHolder.css('min-height', 100);
-
-                    if (expressionClone.prop('complete')) {
-                        resolve();
-                    } else {
-                        expressionClone.one('load', () => resolve());
-                    }
-                });
-
-            expressionClone.removeClass('expression-clone');
-
-            expressionClone.removeClass('default');
-            expressionClone.off('error');
-            expressionClone.on('error', function () {
-                console.debug('Expression image error', path);
-                $(this).attr('src', '');
-                $(this).off('error');
-                resolve();
-            });
-        } else {
-            resolve();
-        }
-    });
-}
-
-async function moduleWorker({ newChat = false } = {}) {
+async function moduleWorker() {
     const context = getContext();
 
-    // non-characters not supported
-    if (!context.groupId && context.characterId === undefined) {
+    // Expressions only apply to character chats.
+    if (context.characterId === undefined) {
         removeExpression();
         return;
     }
 
-    const vnMode = isVisualNovelMode();
-    const vnWrapperVisible = $('#visual-novel-wrapper').is(':visible');
-
-    if (vnMode) {
-        $('#expression-wrapper').hide();
-        $('#visual-novel-wrapper').show();
-    } else {
-        $('#expression-wrapper').show();
-        $('#visual-novel-wrapper').hide();
-    }
-
-    const vnStateChanged = vnMode !== vnWrapperVisible;
-
-    if (vnStateChanged) {
-        lastMessage = null;
-        $('#visual-novel-wrapper').empty();
-        $('#expression-holder').css({ top: '', left: '', right: '', bottom: '', height: '', width: '', margin: '' });
-    }
+    $('#expression-wrapper').show();
 
     const currentLastMessage = getLastCharacterMessage();
-    let spriteFolderName = getSpriteFolderName(currentLastMessage, currentLastMessage.name);
+    let spriteFolderName = getSpriteFolderName(currentLastMessage.name);
 
-    // character has no expressions or it is not loaded
+    // Character has no expressions or it is not loaded.
     if (Object.keys(spriteCache).length === 0) {
         await validateImages(spriteFolderName);
-        lastCharacter = context.groupId || context.characterId;
+        lastCharacter = context.characterId;
     }
 
     const offlineMode = $('.expression_settings .offline_mode');
@@ -517,61 +144,43 @@ async function moduleWorker({ newChat = false } = {}) {
         $('#open_chat_expressions').show();
         $('#no_chat_expressions').hide();
         offlineMode.css('display', 'block');
-        lastCharacter = context.groupId || context.characterId;
-
-        if (context.groupId) {
-            await validateImages(spriteFolderName, true);
-            await forceUpdateVisualNovelMode();
-        }
-
+        lastCharacter = context.characterId;
         return;
-    } else {
-        // force reload expressions list on connect to API
-        if (offlineMode.is(':visible')) {
-            expressionsList = null;
-            spriteCache = {};
-            expressionsList = await getExpressionsList();
-            await validateImages(spriteFolderName, true);
-            await forceUpdateVisualNovelMode();
-        }
-
-        if (context.groupId && !Array.isArray(spriteCache[spriteFolderName])) {
-            await validateImages(spriteFolderName, true);
-            await forceUpdateVisualNovelMode();
-        }
-
-        offlineMode.css('display', 'none');
     }
 
-    if (context.groupId && vnMode && newChat) {
-        await forceUpdateVisualNovelMode();
+    // Force reload expressions list on connect to API.
+    if (offlineMode.is(':visible')) {
+        expressionsList = null;
+        spriteCache = {};
+        expressionsList = await getExpressionsList();
+        await validateImages(spriteFolderName, true);
     }
 
-    // Don't bother classifying if current char has no sprites and no default expressions are enabled
+    offlineMode.css('display', 'none');
+
+    // Don't bother classifying if the current character has no sprites and no default expressions are enabled.
     if ((!Array.isArray(spriteCache[spriteFolderName]) || spriteCache[spriteFolderName].length === 0) && !extension_settings.expressions.showDefault) {
         return;
     }
 
-    const lastMessageChanged = !((lastCharacter === context.characterId || lastCharacter === context.groupId) && lastMessage === currentLastMessage.mes);
+    const lastMessageChanged = !(lastCharacter === context.characterId && lastMessage === currentLastMessage.mes);
 
-    // check if last message changed
     if (!lastMessageChanged) {
         return;
     }
 
-    // If using LLM api then check if streamingProcessor is finished to avoid sending multiple requests to the API
+    // If using the LLM API, wait for streaming to finish before sending another request.
     if (extension_settings.expressions.api === EXPRESSION_API.llm && context.streamingProcessor && !context.streamingProcessor.isFinished) {
         return;
     }
 
-    // API is busy
     if (inApiCall) {
         console.debug('Classification API is busy');
         return;
     }
 
-    // Throttle classification requests during streaming
-    if (!context.groupId && context.streamingProcessor && !context.streamingProcessor.isFinished) {
+    // Throttle classification requests during streaming.
+    if (context.streamingProcessor && !context.streamingProcessor.isFinished) {
         const now = Date.now();
         const timeSinceLastServerResponse = now - lastServerResponseTime;
 
@@ -585,34 +194,30 @@ async function moduleWorker({ newChat = false } = {}) {
         inApiCall = true;
         let expression = await getExpressionLabel(currentLastMessage.mes);
 
-        // If we're not already overriding the folder name, account for group chats.
-        if (spriteFolderName === currentLastMessage.name && !context.groupId) {
+        if (spriteFolderName === currentLastMessage.name) {
             spriteFolderName = context.name2;
         }
 
-        const force = !!context.groupId;
-
-        // Character won't be angry on you for swiping
+        // Character won't be angry on you for swiping.
         if (currentLastMessage.mes == '...' && expressionsList.includes(extension_settings.expressions.fallback_expression)) {
             expression = extension_settings.expressions.fallback_expression;
         }
 
-        await sendExpressionCall(spriteFolderName, expression, { force: force, vnMode: vnMode });
+        await sendExpressionCall(spriteFolderName, expression);
     } catch (error) {
         console.log(error);
     } finally {
         inApiCall = false;
-        lastCharacter = context.groupId || context.characterId;
+        lastCharacter = context.characterId;
         lastMessage = currentLastMessage.mes;
         lastServerResponseTime = Date.now();
     }
 }
 
-function getSpriteFolderName(characterMessage = null, characterName = null) {
+function getSpriteFolderName(characterName = null) {
     const context = getContext();
     let spriteFolderName = characterName ?? context.name2;
-    const message = characterMessage ?? getLastCharacterMessage();
-    const avatarFileName = getFolderNameByMessage(message);
+    const avatarFileName = getFolderNameByMessage();
     const expressionOverride = extension_settings.expressionOverrides.find(e => e.name == avatarFileName);
 
     if (expressionOverride && expressionOverride.path) {
@@ -622,15 +227,9 @@ function getSpriteFolderName(characterMessage = null, characterName = null) {
     return spriteFolderName;
 }
 
-function getFolderNameByMessage(message) {
+function getFolderNameByMessage() {
     const context = getContext();
-    let avatarPath = '';
-
-    if (context.groupId) {
-        avatarPath = message.original_avatar || context.characters.find(x => message.force_avatar && message.force_avatar.includes(encodeURIComponent(x.avatar)))?.avatar;
-    } else if (context.characterId !== undefined) {
-        avatarPath = getCharaFilename();
-    }
+    const avatarPath = context.characterId !== undefined ? getCharaFilename() : '';
 
     if (!avatarPath) {
         return '';
@@ -646,27 +245,18 @@ function getFolderNameByMessage(message) {
  * @param {string} spriteFolderName The character name, optionally with a sprite folder override, e.g. "folder/expression".
  * @param {string} expression The expression label, e.g. "amusement", "joy", etc.
  * @param {Object} [options] Additional options
- * @param {boolean} [options.force=false] If true, the expression will be sent even if it is the same as the current expression.
- * @param {boolean} [options.vnMode=null] If true, the expression will be sent in Visual Novel mode. If null, it will be determined by the current chat mode.
+ * @param {boolean} [options.force=false] Whether to force the expression update.
  * @param {string?} [options.overrideSpriteFile=null] - Set if a specific sprite file should be used. Must be sprite file name.
  */
-export async function sendExpressionCall(spriteFolderName, expression, { force = false, vnMode = null, overrideSpriteFile = null } = {}) {
+export async function sendExpressionCall(spriteFolderName, expression, { force = false, overrideSpriteFile = null } = {}) {
     lastExpression[spriteFolderName.split('/')[0]] = expression;
-    if (vnMode === null) {
-        vnMode = isVisualNovelMode();
-    }
-
-    if (vnMode) {
-        await updateVisualNovelMode(spriteFolderName, expression);
-    } else {
-        setExpression(spriteFolderName, expression, { force: force, overrideSpriteFile: overrideSpriteFile });
-    }
+    await setExpression(spriteFolderName, expression, { force, overrideSpriteFile });
 }
 
 /**
  * Slash command callback for /setspritefolder
  * @param {object} param Command parameters
- * @param {string} param.name Character name override
+ * @param {string} [characterName] Character name override
  * @param {string} folder Folder path, can be full or partial with leading slash
  * @returns {Promise<string>} Empty string
  */
@@ -730,8 +320,8 @@ async function setSpriteSlashCommand({ type }, searchTerm) {
         return '';
     }
 
-    const currentLastMessage = selected_group ? getLastCharacterMessage() : null;
-    const spriteFolderName = getSpriteFolderName(currentLastMessage, currentLastMessage?.name);
+    const currentLastMessage = getLastCharacterMessage();
+    const spriteFolderName = getSpriteFolderName(currentLastMessage?.name);
 
     let label = searchTerm;
 
@@ -1372,8 +962,8 @@ export async function getExpressionsList({ filterAvailable = false } = {}) {
     }
 
     // Get expressions with available sprites
-    const currentLastMessage = selected_group ? getLastCharacterMessage() : null;
-    const spriteFolderName = getSpriteFolderName(currentLastMessage, currentLastMessage?.name);
+    const currentLastMessage = getLastCharacterMessage();
+    const spriteFolderName = getSpriteFolderName(currentLastMessage?.name);
 
     return expressions.filter(label => {
         const expression = spriteCache[spriteFolderName]?.find(x => x.label === label);
@@ -1477,7 +1067,7 @@ function chooseSpriteForExpression(spriteFolderName, expression, { prevExpressio
  * @param {string} spriteFolderName - The name of the character (folder name - can also be a costume override)
  * @param {string} expression - The expression or sprite name to set
  * @param {Object} options - Optional parameters
- * @param {boolean} [options.force=false] - Whether to force the expression change even if Visual Novel mode is on
+ * @param {boolean} [options.force=false] - Whether to force the expression change.
  * @param {string?} [options.overrideSpriteFile=null] - Set if a specific sprite file should be used. Must be sprite file name.
  * @returns {Promise<void>} A promise that resolves when the expression has been set.
  */
@@ -1489,22 +1079,6 @@ async function setExpression(spriteFolderName, expression, { force = false, over
 
     const spriteFile = chooseSpriteForExpression(spriteFolderName, expression, { prevExpressionSrc: prevExpressionSrc, overrideSpriteFile: overrideSpriteFile });
     if (spriteFile) {
-        if (force && isVisualNovelMode()) {
-            const context = getContext();
-            const group = context.groups.find(x => x.id === context.groupId);
-
-            // If it's a folder, make sure we find the group member based on the actual name
-            const memberName = spriteFolderName.split('/')[0] ?? spriteFolderName;
-
-            const groupMember = group.members
-                .map(member => context.characters.find(x => x.avatar === member))
-                .find(groupMember => groupMember && groupMember.name === memberName);
-            if (groupMember) {
-                await setImage($(`.expression-holder[data-avatar="${groupMember.avatar}"] img`), spriteFile.imageSrc);
-                return;
-            }
-        }
-
         //only swap expressions when necessary
         if (prevExpressionSrc !== spriteFile.imageSrc
             && !img.hasClass('expression-animating')) {
@@ -1897,7 +1471,7 @@ async function onClickExpressionUpload(event) {
 async function onClickExpressionOverrideButton() {
     const context = getContext();
     const currentLastMessage = getLastCharacterMessage();
-    const avatarFileName = getFolderNameByMessage(currentLastMessage);
+    const avatarFileName = getFolderNameByMessage();
 
     // If the avatar name couldn't be found, abort.
     if (!avatarFileName) {
@@ -1939,12 +1513,10 @@ async function onClickExpressionOverrideButton() {
     // Refresh sprites list. Assume the override path has been properly handled.
     try {
         inApiCall = true;
-        $('#visual-novel-wrapper').empty();
         await validateImages(overridePath.length === 0 ? currentLastMessage.name : overridePath, true);
         const name = overridePath.length === 0 ? currentLastMessage.name : overridePath;
         const expression = await getExpressionLabel(currentLastMessage.mes);
         await sendExpressionCall(name, expression, { force: true });
-        forceUpdateVisualNovelMode();
     } catch (error) {
         console.debug(`Setting expression override for ${avatarFileName} failed with error: ${error}`);
     } finally {
@@ -1965,12 +1537,10 @@ async function onClickExpressionOverrideRemoveAllButton() {
 
     // Refresh sprites list to use the default name if applicable
     try {
-        $('#visual-novel-wrapper').empty();
         const currentLastMessage = getLastCharacterMessage();
         await validateImages(currentLastMessage.name, true);
         const expression = await getExpressionLabel(currentLastMessage.mes);
         await sendExpressionCall(currentLastMessage.name, expression, { force: true });
-        forceUpdateVisualNovelMode();
 
         console.debug(extension_settings.expressionOverrides);
     } catch (error) {
@@ -2049,8 +1619,7 @@ async function onClickExpressionDelete(event) {
 }
 
 function setExpressionOverrideHtml(forceClear = false) {
-    const currentLastMessage = getLastCharacterMessage();
-    const avatarFileName = getFolderNameByMessage(currentLastMessage);
+    const avatarFileName = getFolderNameByMessage();
     if (!avatarFileName) {
         return;
     }
@@ -2142,14 +1711,6 @@ export async function init() {
         $('body').append(html);
         loadMovingUIState();
     }
-    function addVisualNovelMode() {
-        const html = `
-        <div id="visual-novel-wrapper">
-        </div>`;
-        const element = $(html);
-        element.hide();
-        $('body').append(element);
-    }
     async function addSettings() {
         const template = await renderExtensionTemplateAsync(MODULE_NAME, 'settings');
         $('#expressions_container').append(template);
@@ -2179,7 +1740,6 @@ export async function init() {
         $(document).on('click', '.expression_list_item', onClickExpressionImage);
         $(document).on('click', '.expression_list_upload', onClickExpressionUpload);
         $(document).on('click', '.expression_list_delete', onClickExpressionDelete);
-        $(window).on('resize', () => updateVisualNovelModeDebounced());
         $('#open_chat_expressions').hide();
 
         await renderAdditionalExpressionSettings();
@@ -2213,7 +1773,6 @@ export async function init() {
     }
 
     addExpressionImage();
-    addVisualNovelMode();
     migrateSettings();
     await addSettings();
     const wrapper = new ModuleWorkerWrapper(moduleWorker);
@@ -2235,19 +1794,12 @@ export async function init() {
 
         setExpressionOverrideHtml(true); // force-clear, as the character might not have an override defined
 
-        if (isVisualNovelMode()) {
-            $('#visual-novel-wrapper').empty();
-        }
-
         updateFunction({ newChat: true });
     });
-    eventSource.on(event_types.MOVABLE_PANELS_RESET, updateVisualNovelModeDebounced);
-    eventSource.on(event_types.GROUP_UPDATED, updateVisualNovelModeDebounced);
-
     const localEnumProviders = {
         expressions: () => {
-            const currentLastMessage = selected_group ? getLastCharacterMessage() : null;
-            const spriteFolderName = getSpriteFolderName(currentLastMessage, currentLastMessage?.name);
+            const currentLastMessage = getLastCharacterMessage();
+            const spriteFolderName = getSpriteFolderName(currentLastMessage?.name);
             const expressions = getCachedExpressions();
             return expressions.map(expression => {
                 const spriteCount = spriteCache[spriteFolderName]?.find(x => x.label === expression)?.files.length ?? 0;
@@ -2261,8 +1813,8 @@ export async function init() {
             });
         },
         sprites: () => {
-            const currentLastMessage = selected_group ? getLastCharacterMessage() : null;
-            const spriteFolderName = getSpriteFolderName(currentLastMessage, currentLastMessage?.name);
+            const currentLastMessage = getLastCharacterMessage();
+            const spriteFolderName = getSpriteFolderName(currentLastMessage?.name);
             const sprites = spriteCache[spriteFolderName]?.map(x => x.files)?.flat() ?? [];
             return sprites.map(x => {
                 return new SlashCommandEnumValue(x.title,
@@ -2363,8 +1915,7 @@ export async function init() {
         ],
         helpString: `
             <div>
-                Sets an override sprite folder for the current character.<br />
-                In groups, this will apply to the character who last sent a message.
+                Sets an override sprite folder for the current character.
             </div>
             <div>
                 If the name starts with a slash or a backslash, selects a sub-folder in the character-named folder. Empty value to reset to default.
@@ -2378,10 +1929,6 @@ export async function init() {
         callback: async (_, name) => {
             if (typeof name !== 'string') throw new Error('name must be a string');
             if (!name) {
-                if (selected_group) {
-                    toastr.error(t`In group chats, you must specify a character name.`, t`No character name specified`);
-                    return '';
-                }
                 name = characters[this_chid]?.avatar;
             }
 
@@ -2394,7 +1941,7 @@ export async function init() {
         returns: 'the last set expression for the named character.',
         unnamedArgumentList: [
             SlashCommandArgument.fromProps({
-                description: 'Character name - or unique character identifier (avatar key). If not provided, the current character for this chat will be used (does not work in group chats)',
+                description: 'Character name - or unique character identifier (avatar key). If not provided, the current character for this chat will be used.',
                 typeList: [ARGUMENT_TYPE.STRING],
                 enumProvider: commonEnumProviders.characters('character'),
             }),

@@ -20,7 +20,7 @@ import { deepMerge, humanizedDateTime, tryParse, MemoryLimitedMap, getConfigValu
 import { TavernCardValidator } from '../validator/TavernCardValidator.js';
 import { parse, read, write } from '../character-card-parser.js';
 import { findCharactersBoundToWorldFromFiles, readWorldInfoFile, scanCharacterWorldBindingsFromFiles } from './worldinfo.js';
-import { processUnsetSentinels, toShallow, unsetPrivateFields } from './character-card-helpers.js';
+import { processUnsetSentinels, toShallow, unsetPrivateFields, normalizeTalkativeness } from './character-card-helpers.js';
 import {
     processCharacterFileSnapshot,
     statCharacterSnapshotFile,
@@ -767,12 +767,13 @@ function readFromV2(char) {
     _.forEach(fieldMappings, (v2Path, charField) => {
         //console.info(`Migrating field: ${charField} from ${v2Path}`);
         const v2Value = _.get(char.data, v2Path);
+        let normalizedValue = v2Value;
         if (_.isUndefined(v2Value)) {
             let defaultValue = undefined;
 
             // Backfill default values for missing ST extension fields
             if (v2Path === 'extensions.talkativeness') {
-                defaultValue = 0.5;
+                defaultValue = normalizeTalkativeness(char[charField]);
             }
 
             if (v2Path === 'extensions.fav') {
@@ -781,16 +782,21 @@ function readFromV2(char) {
 
             if (!_.isUndefined(defaultValue)) {
                 //console.warn(`Spec v2 extension data missing for field: ${charField}, using default value: ${defaultValue}`);
-                char[charField] = defaultValue;
+                normalizedValue = defaultValue;
             } else {
                 console.warn(`Char ${char.name} has Spec v2 data missing for unknown field: ${charField}`);
                 return;
             }
         }
-        if (!_.isUndefined(char[charField]) && !_.isUndefined(v2Value) && String(char[charField]) !== String(v2Value)) {
+
+        if (v2Path === 'extensions.talkativeness') {
+            normalizedValue = normalizeTalkativeness(normalizedValue);
+        }
+
+        if (!_.isUndefined(char[charField]) && String(char[charField]) !== String(normalizedValue)) {
             console.warn(`Char ${char.name} has Spec v2 data mismatch with Spec v1 for field: ${charField}`, char[charField], v2Value);
         }
-        char[charField] = v2Value;
+        char[charField] = normalizedValue;
     });
 
     char.chat = char.chat ?? `${char.name} - ${humanizedDateTime()}`;
@@ -827,10 +833,11 @@ function charaFormatData(data, directories) {
     _.set(char, 'mes_example', data.mes_example || '');
 
     // Old ST extension fields (for backward compatibility, will be deprecated)
+    const talkativeness = normalizeTalkativeness(data.talkativeness);
     _.set(char, 'creatorcomment', data.creator_notes || '');
     _.set(char, 'avatar', 'none');
     _.set(char, 'chat', data.ch_name + ' - ' + humanizedDateTime());
-    _.set(char, 'talkativeness', data.talkativeness || 0.5);
+    _.set(char, 'talkativeness', talkativeness);
     _.set(char, 'fav', data.fav == 'true');
     _.set(char, 'tags', typeof data.tags == 'string' ? (data.tags.split(',').map(x => x.trim()).filter(x => x)) : data.tags || []);
 
@@ -854,7 +861,7 @@ function charaFormatData(data, directories) {
     _.set(char, 'data.alternate_greetings', getAlternateGreetings(data));
 
     // ST extension fields to V2 object
-    _.set(char, 'data.extensions.talkativeness', data.talkativeness || 0.5);
+    _.set(char, 'data.extensions.talkativeness', talkativeness);
     _.set(char, 'data.extensions.fav', data.fav == 'true');
     _.set(char, 'data.extensions.world', data.world || '');
 

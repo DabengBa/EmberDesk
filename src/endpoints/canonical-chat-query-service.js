@@ -113,7 +113,6 @@ function buildSearchPayload(summary) {
 function buildRecentPayload(summary, {
     metadata = false,
     avatar = undefined,
-    group = undefined,
 } = {}) {
     const lastPayload = summary.lastPayloadJson
         ? parseCanonicalPayload(summary.lastPayloadJson, 'message payload')
@@ -134,7 +133,6 @@ function buildRecentPayload(summary, {
             ? { chat_metadata: headerPayload.chat_metadata }
             : {}),
         ...(avatar ? { avatar } : {}),
-        ...(group ? { group } : {}),
     };
 }
 
@@ -146,32 +144,6 @@ function readCharacterNames(directories, deps) {
     } catch {
         return new Set();
     }
-}
-
-function readGroupChatMap(directories, deps) {
-    const map = new Map();
-    let groupFiles = [];
-    try {
-        groupFiles = []; // group chat retirement: do not read group definitions
-    } catch {
-        groupFiles = [];
-    }
-
-    for (const groupFile of groupFiles) {
-        try {
-            const groupData = JSON.parse(deps.fs.readFileSync(deps.path.join(directories.groups, groupFile), 'utf8'));
-            if (!groupData?.id || !Array.isArray(groupData.chats)) {
-                continue;
-            }
-            for (const chatId of groupData.chats) {
-                map.set(String(chatId), String(groupData.id));
-            }
-        } catch (error) {
-            deps.warn(groupFile, 'group file is corrupted:', error);
-        }
-    }
-
-    return map;
 }
 
 async function readRootRecentPayload({
@@ -214,67 +186,14 @@ async function readRootRecentPayload({
 
 /**
  * Build `/api/chats/search` results from canonical rows while preserving legacy
- * fragment matching and group-owner semantics.
+ * fragment matching for character chats.
  */
 export async function searchCanonicalChatPayload({
     db,
-    directories,
     query = '',
     avatarUrl = '',
-    groupId,
-    dependencies = {},
 }) {
-    const deps = normalizeDependencies(dependencies);
     const matcher = createTextMatcher(query);
-
-    if (groupId) {
-        // Group chat retirement: ignore group-owned query paths.
-        return [];
-        let targetGroup = null;
-        try {
-            const groupFiles = []; // group chat retirement: do not read group definitions
-            for (const groupFile of groupFiles) {
-                try {
-                    const groupData = JSON.parse(deps.fs.readFileSync(deps.path.join(directories.groups, groupFile), 'utf8'));
-                    if (groupData?.id === groupId) {
-                        targetGroup = groupData;
-                        break;
-                    }
-                } catch (error) {
-                    deps.warn(groupFile, 'group file is corrupted:', error);
-                }
-            }
-        } catch {
-            targetGroup = null;
-        }
-
-        if (!Array.isArray(targetGroup?.chats)) {
-            return [];
-        }
-
-        const summariesByChatId = new Map(listCanonicalChatSummaries(db, {
-            ownerType: 'group',
-            ownerIds: targetGroup.chats.map(String),
-        }).map(summary => [summary.ownerId, summary]));
-        const results = [];
-
-        for (const chatId of targetGroup.chats.map(String)) {
-            const summary = summariesByChatId.get(chatId);
-            if (!summary) {
-                continue;
-            }
-            const nameMatches = matcher([summary.displayName]);
-            const textMatches = nameMatches || matcher(getCanonicalChatMessageTexts(db, summary.id));
-            if (query && summary.messageCount === 0 && !textMatches) {
-                continue;
-            }
-            if (!query || textMatches) {
-                results.push(buildSearchPayload(summary));
-            }
-        }
-
-        return results;
-    }
 
     const characterName = String(avatarUrl ?? '').replace('.png', '');
     if (!characterName) {
@@ -302,8 +221,8 @@ export async function searchCanonicalChatPayload({
 }
 
 /**
- * Build `/api/chats/recent` results from canonical rows for character/group
- * chats while preserving top-level root-chat compatibility files.
+ * Build `/api/chats/recent` results from canonical character chats while
+ * preserving top-level root-chat compatibility files.
  */
 export async function readCanonicalRecentChatPayload({
     db,
@@ -315,32 +234,16 @@ export async function readCanonicalRecentChatPayload({
 }) {
     const deps = normalizeDependencies(dependencies);
     const allowedCharacters = readCharacterNames(directories, deps);
-    const groupByChatId = readGroupChatMap(directories, deps);
     const characterSummaries = listCanonicalChatSummaries(db, { ownerType: 'character' })
         .filter(summary => allowedCharacters.has(summary.ownerId));
-    const groupSummaries = listCanonicalChatSummaries(db, {
-        ownerType: 'group',
-        ownerIds: Array.from(groupByChatId.keys()),
-    });
 
-    const canonicalResults = [
-        ...characterSummaries.map(summary => ({
-            payload: buildRecentPayload(summary, {
-                metadata,
-                avatar: `${summary.ownerId}.png`,
-            }),
-            mtime: summary.sourceMtimeMs,
-        })),
-        ...groupSummaries
-            .filter(summary => groupByChatId.has(summary.ownerId))
-            .map(summary => ({
-                payload: buildRecentPayload(summary, {
-                    metadata,
-                    group: groupByChatId.get(summary.ownerId),
-                }),
-                mtime: summary.sourceMtimeMs,
-            })),
-    ];
+    const canonicalResults = characterSummaries.map(summary => ({
+        payload: buildRecentPayload(summary, {
+            metadata,
+            avatar: `${summary.ownerId}.png`,
+        }),
+        mtime: summary.sourceMtimeMs,
+    }));
     const rootResults = await readRootRecentPayload({
         directories,
         metadata,
@@ -350,7 +253,7 @@ export async function readCanonicalRecentChatPayload({
     const maxWithPinned = parseInt(max ?? Number.MAX_SAFE_INTEGER) + pinnedChats.length;
     const isPinned = chat => pinnedChats.some(entry => (
         entry.file_name === chat.payload.file_name
-        && (entry.avatar === chat.payload.avatar || entry.group === chat.payload.group)
+        && entry.avatar === chat.payload.avatar
     ));
 
     return [...canonicalResults, ...rootResults]

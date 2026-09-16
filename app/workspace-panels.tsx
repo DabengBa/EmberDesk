@@ -49,26 +49,12 @@ import {
     shouldApplyCharacterAuthoringSaveResult,
 } from '../public/scripts/character-authoring.js';
 
-// Group chat retirement: group authoring helpers are no longer product-owned.
-function createGroupAuthoringSession(..._args: any[]): any {
-    throw new Error('group_chat_feature_removed');
-}
-
 import {
     WorldInfoWorkbenchPanel,
     type WorldInfoWorkspacePanelState as WorldInfoWorkbenchPanelState,
 } from './world-info-workbench';
 import { SettingsSurface } from './components/settings/SettingsSurface';
 import './styles/settings-surface.css';
-
-function parseFiniteNumber(value: string): number | undefined {
-    if (value.trim() === '') {
-        return undefined;
-    }
-
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : undefined;
-}
 
 export type WorkspacePanelKind = 'worldInfo' | 'backgroundLibrary' | 'extensionsHost' | 'mainChatMessageList' | 'characterAuthoring';
 interface WorkspacePanelMount {
@@ -124,7 +110,7 @@ interface WorkspaceShellChromeMountOptions {
 }
 
 interface WorkspaceShellChromeState {
-    activeContext?: 'none' | 'assistant' | 'character' | 'group';
+    activeContext?: 'none' | 'assistant' | 'character';
     contextTitle?: string;
     status?: 'loading' | 'empty' | 'success' | 'error';
 }
@@ -445,29 +431,20 @@ function AuthoringWorkspacePanel({
     state,
     commands,
 }: {
-    kind: 'characterAuthoring' | 'groupAuthoring';
+    kind: 'characterAuthoring';
     state?: unknown;
     commands?: AuthoringCommands;
 }) {
     const bridgeState = asAuthoringState(state);
-    const title = bridgeState.title ?? (kind === 'characterAuthoring' ? 'Character Authoring' : 'Group Authoring');
-    const subtitle = bridgeState.subtitle ?? (kind === 'characterAuthoring'
-        ? 'React owner for character drafts'
-        : 'React owner for group drafts');
+    const title = bridgeState.title ?? 'Character Authoring';
+    const subtitle = bridgeState.subtitle ?? 'React owner for character drafts';
     const unsupportedFields = Array.isArray(bridgeState.unsupportedFields) ? bridgeState.unsupportedFields : [];
-    const initialSession = useMemo(() => kind === 'characterAuthoring'
-        ? createCharacterAuthoringSession(bridgeState.draft ?? {}, { mode: bridgeState.mode ?? 'create' })
-        : createGroupAuthoringSession(bridgeState.draft ?? {}, { mode: bridgeState.mode ?? 'create' }), [bridgeState.draft, bridgeState.mode, kind]);
+    const initialSession = useMemo(() => createCharacterAuthoringSession(bridgeState.draft ?? {}, { mode: bridgeState.mode ?? 'create' }), [bridgeState.draft, bridgeState.mode]);
     const [authoringSession, setAuthoringSession] = useState(initialSession);
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
     const saveGenerationRef = useRef(0);
     const authoringCommandMutation = useMutation({
-        mutationFn: async (payload: Record<string, unknown>) => {
-            if (kind === 'characterAuthoring') {
-                return await commands?.saveCharacterAuthoring?.(payload);
-            }
-            return await commands?.saveGroupAuthoring?.(payload);
-        },
+        mutationFn: async (payload: Record<string, unknown>) => await commands?.saveCharacterAuthoring?.(payload),
         retry: false,
     });
 
@@ -503,9 +480,7 @@ function AuthoringWorkspacePanel({
                 })) {
                     return;
                 }
-                setAuthoringSession(() => kind === 'characterAuthoring'
-                    ? createCharacterAuthoringSession(submittedDraft, { mode: bridgeState.mode ?? 'create' })
-                    : createGroupAuthoringSession(submittedDraft, { mode: bridgeState.mode ?? 'create' }));
+                setAuthoringSession(() => createCharacterAuthoringSession(submittedDraft, { mode: bridgeState.mode ?? 'create' }));
             })
             .catch(() => {
                 // Mutation state carries the failed status; keep the dirty draft intact for retry.
@@ -534,32 +509,11 @@ function AuthoringWorkspacePanel({
     const depthPrompt = draft.depthPrompt && typeof draft.depthPrompt === 'object'
         ? draft.depthPrompt as { prompt?: string; depth?: number | null; role?: string | number | null }
         : { prompt: '', depth: null, role: 'system' };
-    const talkativenessValue = draft.talkativeness == null || draft.talkativeness === ''
-        ? ''
-        : String(draft.talkativeness);
-    const members = Array.isArray(draft.members) ? draft.members.filter((member): member is string => typeof member === 'string') : [];
-    const candidates = Array.isArray(bridgeState.candidates)
-        ? bridgeState.candidates.filter(candidate => candidate && typeof candidate.id === 'string' && typeof candidate.label === 'string')
-        : [];
-    const groupTagIds = Array.isArray(draft.tagIds)
-        ? draft.tagIds.filter((tagId): tagId is string => typeof tagId === 'string')
-        : [];
-    const groupTagOptions = Array.isArray(bridgeState.tagOptions)
-        ? bridgeState.tagOptions.filter(tag => tag && typeof tag.id === 'string' && typeof tag.label === 'string')
-        : [];
-    const characterToolPayload = kind === 'characterAuthoring' ? authoringSession.submit() : null;
-    const characterActionPayload = characterToolPayload && characterToolPayload.ok ? characterToolPayload.payload : undefined;
+    const characterToolPayload = authoringSession.submit();
+    const characterActionPayload = characterToolPayload.ok ? characterToolPayload.payload : undefined;
     const characterToolActionPayload = characterActionPayload ? { ...characterActionPayload, draft } : undefined;
     const isCreateMode = (bridgeState.mode ?? 'create') === 'create';
     const isActionPending = authoringCommandMutation.isPending;
-    const updateGroupSession = (
-        update: (session: ReturnType<typeof createGroupAuthoringSession>) => ReturnType<typeof createGroupAuthoringSession>,
-    ) => {
-        setAuthoringSession((currentSession: typeof initialSession) => update(
-            currentSession as ReturnType<typeof createGroupAuthoringSession>,
-        ));
-        setFieldErrors({});
-    };
 
     return (
         <WorkspacePanelShell
@@ -569,9 +523,7 @@ function AuthoringWorkspacePanel({
         >
             <section
                 className="react-authoring-panel"
-                data-doc-id={kind === 'characterAuthoring'
-                    ? 'feature.character_library_panel term.character_card page.chat_workspace'
-                    : 'feature.group_authoring page.chat_workspace'}
+                data-doc-id="feature.character_library_panel term.character_card page.chat_workspace"
                 data-react-authoring-owner={kind}
                 data-react-authoring-mode={bridgeState.mode ?? 'create'}
                 data-react-authoring-dirty={authoringSession.dirty ? 'true' : 'false'}
@@ -594,8 +546,7 @@ function AuthoringWorkspacePanel({
                 <div className="react-authoring-panel-actions" aria-label={`${title} actions`}>
                     <button type="button" className="menu_button react-authoring-save" disabled={isActionPending} onClick={submitDraft}>Save</button>
                     <button type="button" className="menu_button react-authoring-secondary-action" disabled={isActionPending} onClick={cancelDraft}>Cancel</button>
-                    {kind === 'characterAuthoring' ? (
-                        <>
+                    <>
                             <button
                                 type="button"
                                 className="menu_button react-authoring-tool-action"
@@ -614,8 +565,7 @@ function AuthoringWorkspacePanel({
                             </button>
                             <button type="button" className="menu_button react-authoring-tool-action" disabled={isActionPending} onClick={() => void commands?.duplicateAuthoring?.(kind)}>Duplicate</button>
                             <button type="button" className="menu_button react-authoring-tool-action" disabled={isActionPending} onClick={() => void commands?.exportAuthoring?.(characterActionPayload)}>Export</button>
-                        </>
-                    ) : null}
+                    </>
                 </div>
                 <fieldset
                     className="react-authoring-fields"
@@ -632,8 +582,7 @@ function AuthoringWorkspacePanel({
                         />
                         {fieldErrors.name ? <small role="alert">{fieldErrors.name}</small> : null}
                     </label>
-                    {kind === 'characterAuthoring' ? (
-                        <>
+                    <>
                             <div className="react-authoring-field" data-react-authoring-field="avatar">
                                 <span>Avatar</span>
                                 <input
@@ -795,20 +744,6 @@ function AuthoringWorkspacePanel({
                                     placeholder="Linked world file name"
                                 />
                             </label>
-                            <label className="react-authoring-field" data-react-authoring-field="talkativeness">
-                                <span>Talkativeness</span>
-                                <input
-                                    className="text_pole"
-                                    type="number"
-                                    min={0}
-                                    max={1}
-                                    step={0.05}
-                                    value={talkativenessValue}
-                                    onChange={(event) => updateDraft({
-                                        talkativeness: event.target.value === '' ? null : Number(event.target.value),
-                                    })}
-                                />
-                            </label>
                             <label className="react-authoring-field" data-react-authoring-field="depthPrompt.prompt">
                                 <span>Depth prompt</span>
                                 <textarea
@@ -850,174 +785,7 @@ function AuthoringWorkspacePanel({
                                 </select>
                             </label>
                         </>
-                    ) : (
-                        <>
-                            <label className="react-authoring-field" data-react-authoring-field="avatar">
-                                <span>Avatar URL</span>
-                                <input
-                                    className="text_pole"
-                                    value={stringDraft('avatarUrl')}
-                                    onChange={(event) => updateDraft({ avatarUrl: event.target.value })}
-                                />
-                            </label>
-                            <label className="react-authoring-field" data-react-authoring-field="groupFavorite">
-                                <span>Favorite</span>
-                                <input
-                                    type="checkbox"
-                                    checked={Boolean(draft.favorite)}
-                                    onChange={(event) => updateDraft({ favorite: event.target.checked })}
-                                />
-                            </label>
-                            <label className="react-authoring-field" data-react-authoring-field="allowSelfResponses">
-                                <span>Allow self responses</span>
-                                <input
-                                    type="checkbox"
-                                    checked={Boolean(draft.allowSelfResponses)}
-                                    onChange={(event) => updateDraft({ allowSelfResponses: event.target.checked })}
-                                />
-                            </label>
-                            <label className="react-authoring-field" data-react-authoring-field="hideMutedSprites">
-                                <span>Hide muted sprites</span>
-                                <input
-                                    type="checkbox"
-                                    checked={Boolean(draft.hideMutedSprites)}
-                                    onChange={(event) => updateDraft({ hideMutedSprites: event.target.checked })}
-                                />
-                            </label>
-                            <label className="react-authoring-field" data-react-authoring-field="activationStrategy">
-                                <span>Activation strategy</span>
-                                <select
-                                    className="text_pole"
-                                    value={String(draft.activationStrategy ?? 0)}
-                                    onChange={(event) => updateDraft({ activationStrategy: Number(event.target.value) })}
-                                >
-                                    <option value="0">Natural</option>
-                                    <option value="1">List</option>
-                                    <option value="2">Manual</option>
-                                    <option value="3">Pooled</option>
-                                </select>
-                            </label>
-                            <label className="react-authoring-field" data-react-authoring-field="generationMode">
-                                <span>Generation mode</span>
-                                <select
-                                    className="text_pole"
-                                    value={String(draft.generationMode ?? 0)}
-                                    onChange={(event) => updateDraft({ generationMode: Number(event.target.value) })}
-                                >
-                                    <option value="0">Swap</option>
-                                    <option value="1">Append</option>
-                                    <option value="2">Append disabled</option>
-                                </select>
-                            </label>
-                            <label className="react-authoring-field" data-react-authoring-field="autoModeDelay">
-                                <span>Auto mode delay</span>
-                                <input
-                                    className="text_pole"
-                                    type="number"
-                                    min={1}
-                                    value={typeof draft.autoModeDelay === 'number' && Number.isFinite(draft.autoModeDelay) ? draft.autoModeDelay : 5}
-                                    onChange={(event) => {
-                                        const value = parseFiniteNumber(event.target.value);
-                                        if (value !== undefined) {
-                                            updateDraft({ autoModeDelay: value });
-                                        }
-                                    }}
-                                />
-                            </label>
-                            <label className="react-authoring-field" data-react-authoring-field="joinPrefix">
-                                <span>Join prefix</span>
-                                <textarea
-                                    className="text_pole"
-                                    rows={2}
-                                    value={stringDraft('joinPrefix')}
-                                    onChange={(event) => updateDraft({ joinPrefix: event.target.value })}
-                                />
-                            </label>
-                            <label className="react-authoring-field" data-react-authoring-field="joinSuffix">
-                                <span>Join suffix</span>
-                                <textarea
-                                    className="text_pole"
-                                    rows={2}
-                                    value={stringDraft('joinSuffix')}
-                                    onChange={(event) => updateDraft({ joinSuffix: event.target.value })}
-                                />
-                            </label>
-                            <section className="react-authoring-tags" data-react-authoring-field="groupTags">
-                                <div className="react-authoring-section-title">Tags</div>
-                                <div className="react-authoring-candidates">
-                                    {groupTagOptions.map(tag => (
-                                        <button
-                                            key={tag.id}
-                                            type="button"
-                                            className="menu_button"
-                                            aria-pressed={groupTagIds.includes(tag.id)}
-                                            onClick={() => updateGroupSession(currentSession => currentSession.update({
-                                                tagIds: groupTagIds.includes(tag.id)
-                                                    ? groupTagIds.filter(tagId => tagId !== tag.id)
-                                                    : [...groupTagIds, tag.id],
-                                            }))}
-                                        >
-                                            {groupTagIds.includes(tag.id) ? 'Remove' : 'Add'} {tag.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </section>
-                        <section className="react-authoring-members" data-react-authoring-members>
-                            <div className="react-authoring-section-title">Members</div>
-                            {fieldErrors.members ? <small role="alert">{fieldErrors.members}</small> : null}
-                            {members.map((member, index) => (
-                                <div className="react-authoring-member-row" key={member}>
-                                    <span>{index + 1}. {member}</span>
-                                    <button
-                                        type="button"
-                                        className="menu_button"
-                                        data-react-authoring-action="remove-member"
-                                        aria-label={`Remove ${member}`}
-                                        onClick={() => updateGroupSession(currentSession => currentSession.removeMember(member))}
-                                    >
-                                        Remove
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="menu_button"
-                                        data-react-authoring-action="move-up"
-                                        aria-label={`Move ${member} up`}
-                                        disabled={index === 0}
-                                        onClick={() => updateGroupSession(currentSession => currentSession.moveMember(member, 'up'))}
-                                    >
-                                        Move up
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="menu_button"
-                                        data-react-authoring-action="move-down"
-                                        aria-label={`Move ${member} down`}
-                                        disabled={index === members.length - 1}
-                                        onClick={() => updateGroupSession(currentSession => currentSession.moveMember(member, 'down'))}
-                                    >
-                                        Move down
-                                    </button>
-                                </div>
-                            ))}
-                            <div className="react-authoring-candidates" data-react-authoring-candidates>
-                                <div className="react-authoring-section-title">Add members</div>
-                                {candidates.length > 0 ? candidates.map(candidate => (
-                                    <button
-                                        key={candidate.id}
-                                        type="button"
-                                        className="menu_button react-authoring-candidate"
-                                        data-react-authoring-action="add-member"
-                                        onClick={() => updateGroupSession(currentSession => currentSession.addMember(candidate.id))}
-                                    >
-                                        Add {candidate.label}
-                                    </button>
-                                )) : (
-                                    <small>No available candidates</small>
-                                )}
-                            </div>
-                        </section>
-                        </>
-                    )}
+
                 </fieldset>
                 {!isCreateMode ? (
                     <div className="react-authoring-danger-zone">
@@ -1780,8 +1548,6 @@ function executeWorkspaceShellNavigationCommand(
             return commands.openExtensions();
         case 'openSettings':
             return commands.openSettings();
-        case 'openGroupChats':
-            return commands.openGroupChats();
         case 'openCharacterAuthoring':
             return commands.openCharacterAuthoring();
         case 'activateWorkspaceShellSlot':

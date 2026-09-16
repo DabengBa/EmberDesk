@@ -9,7 +9,6 @@
  * @param {() => void} [dependencies.onGenerationBlocked]
  * @param {() => Promise<void>} dependencies.waitForPendingChatSave
  * @param {() => Promise<void>} dependencies.clearCurrentChat
- * @param {() => void} dependencies.resetSelectedGroup
  * @param {() => void} dependencies.resetSelectionState
  * @param {() => void} [dependencies.selectCharactersView]
  * @param {() => void} [dependencies.suppressWelcomeScreen]
@@ -21,7 +20,6 @@ export async function runDeleteCharacterClosePreflight({
     onGenerationBlocked,
     waitForPendingChatSave,
     clearCurrentChat,
-    resetSelectedGroup,
     resetSelectionState,
     selectCharactersView,
     suppressWelcomeScreen,
@@ -34,7 +32,6 @@ export async function runDeleteCharacterClosePreflight({
 
     await waitForPendingChatSave();
     await clearCurrentChat();
-    resetSelectedGroup();
     resetSelectionState();
     selectCharactersView?.();
     suppressWelcomeScreen?.();

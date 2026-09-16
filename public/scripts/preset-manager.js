@@ -12,7 +12,6 @@ import {
 } from '../script.js';
 import { eventSource, event_types } from './events.js';
 import { getRequestHeaders } from './request-context.js';
-import { groups, selected_group } from './group-chats.js';
 import { t } from './i18n.js';
 import { instruct_presets } from './instruct-mode.js';
 import { oai_settings, openai_setting_names, openai_settings } from './openai.js';
@@ -32,7 +31,7 @@ import { download, ensurePlainObject, equalsIgnoreCaseAndAccents, getSanitizedFi
 const presetManagers = {};
 
 /**
- * Automatically select a preset for current API based on character or group name.
+ * Automatically select a preset for the current character name.
  */
 function autoSelectPreset() {
     const presetManager = getPresetManager();
@@ -42,7 +41,7 @@ function autoSelectPreset() {
         return;
     }
 
-    const name = selected_group ? groups.find(x => x.id == selected_group)?.name : characters[this_chid]?.name;
+    const name = characters[this_chid]?.name;
 
     if (!name) {
         console.debug(`Preset candidate not found for API: ${main_api}`);
@@ -401,7 +400,7 @@ class PresetManager {
      */
     async savePresetAs() {
         const inputValue = this.getSelectedPresetName();
-        const popupText = !this.isAdvancedFormatting() ? '<h4>' + t`Hint: Use a character/group name to bind preset to a specific chat.` + '</h4>' : '';
+        const popupText = !this.isAdvancedFormatting() ? '<h4>' + t`Hint: Use a character name to bind preset to a specific chat.` + '</h4>' : '';
         const headerText = !this.isAdvancedFormatting() ? t`Preset name:` : t`Template name:`;
         const name = await Popup.show.input(headerText, popupText, inputValue);
         if (!name) {

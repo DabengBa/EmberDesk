@@ -31,7 +31,6 @@ import {
 } from '../script.js';
 import { eventSource, event_types } from './events.js';
 import { getRequestHeaders } from './request-context.js';
-import { getGroupNames, selected_group } from './group-chats.js';
 
 import {
     chatCompletionDefaultPrompts,
@@ -124,21 +123,19 @@ export {
 
 let openai_messages_count = 0;
 
-const default_main_prompt = 'Write {{char}}\'s next reply in a fictional chat between {{charIfNotGroup}} and {{user}}.';
+const default_main_prompt = 'Write {{char}}\'s next reply in a fictional chat between {{char}} and {{user}}.';
 const default_nsfw_prompt = '';
 const default_jailbreak_prompt = '';
 const default_impersonation_prompt = '[Write your next reply from the point of view of {{user}}, using the chat history so far as a guideline for the writing style of {{user}}. Don\'t write as {{char}} or system. Don\'t describe actions of {{char}}.]';
 const default_enhance_definitions_prompt = 'If you have more knowledge of {{char}}, add to the character\'s lore and personality to enhance them but keep the Character Sheet\'s definitions absolute.';
 const default_wi_format = '{0}';
 const default_new_chat_prompt = '[Start a new Chat]';
-const default_new_group_chat_prompt = '[Start a new group chat. Group members: {{group}}]';
 const default_new_example_chat_prompt = '[Example Chat]';
 const default_continue_nudge_prompt = '[Continue your last message without repeating its original content.]';
 const default_bias = 'Default (none)';
 const API_TEST_REQUEST_TIMEOUT_MS = 15000;
 const default_personality_format = '{{personality}}';
 const default_scenario_format = '{{scenario}}';
-const default_group_nudge_prompt = '[Write the next reply only as {{char}}.]';
 const default_bias_presets = {
     [default_bias]: [],
     'Anti-bond': [
@@ -315,7 +312,6 @@ export const settingsToUpdate = {
     send_if_empty: ['#send_if_empty_textarea', 'send_if_empty', false, false],
     impersonation_prompt: ['#impersonation_prompt_textarea', 'impersonation_prompt', false, false],
     new_chat_prompt: ['#newchat_prompt_textarea', 'new_chat_prompt', false, false],
-    new_group_chat_prompt: ['#newgroupchat_prompt_textarea', 'new_group_chat_prompt', false, false],
     new_example_chat_prompt: ['#newexamplechat_prompt_textarea', 'new_example_chat_prompt', false, false],
     continue_nudge_prompt: ['#continue_nudge_prompt_textarea', 'continue_nudge_prompt', false, false],
     bias_preset_selected: ['#openai_logit_bias_preset', 'bias_preset_selected', false, false],
@@ -323,7 +319,6 @@ export const settingsToUpdate = {
     wi_format: ['#wi_format_textarea', 'wi_format', false, false],
     scenario_format: ['#scenario_format_textarea', 'scenario_format', false, false],
     personality_format: ['#personality_format_textarea', 'personality_format', false, false],
-    group_nudge_prompt: ['#group_nudge_prompt_textarea', 'group_nudge_prompt', false, false],
     stream_openai: ['#stream_toggle', 'stream_openai', true, false],
     prompts: ['', 'prompts', false, false],
     prompt_order: ['', 'prompt_order', false, false],
@@ -370,13 +365,11 @@ const default_settings = {
     send_if_empty: '',
     impersonation_prompt: default_impersonation_prompt,
     new_chat_prompt: default_new_chat_prompt,
-    new_group_chat_prompt: default_new_group_chat_prompt,
     new_example_chat_prompt: default_new_example_chat_prompt,
     continue_nudge_prompt: default_continue_nudge_prompt,
     bias_preset_selected: default_bias,
     bias_presets: default_bias_presets,
     wi_format: default_wi_format,
-    group_nudge_prompt: default_group_nudge_prompt,
     scenario_format: default_scenario_format,
     personality_format: default_personality_format,
     openai_model: 'gpt-4-turbo',
@@ -488,12 +481,12 @@ function setOpenAIMessages(chat) {
             role = 'system';
         }
 
-        // for groups or sendas command - prepend a character's name
+        // for sendas command - prepend a character's name
         switch (oai_settings.names_behavior) {
             case character_names_behavior.NONE:
                 break;
             case character_names_behavior.DEFAULT:
-                if ((selected_group && chat[j].name !== name1) || (chat[j].force_avatar && chat[j].name !== name1 && chat[j].extra?.type !== system_message_types.NARRATOR)) {
+                if (chat[j].force_avatar && chat[j].name !== name1 && chat[j].extra?.type !== system_message_types.NARRATOR) {
                     content = `${chat[j].name}: ${content}`;
                 }
                 break;
@@ -521,10 +514,8 @@ function setOpenAIMessages(chat) {
         const originApi = chat[j]?.extra?.api;
         const originModel = chat[j]?.extra?.model;
         const isSameModel = originApi === currentApi && originModel === currentModel;
-        // In group chats, only include reasoning from the currently generating character
-        const isOtherGroupMember = selected_group && chat[j].name !== name2;
-        const signature = isSameModel && !isOtherGroupMember ? chat[j]?.extra?.reasoning_signature : null;
-        const reasoning = isSameModel && !isOtherGroupMember ? String(chat[j]?.extra?.reasoning ?? '') : '';
+        const signature = isSameModel ? chat[j]?.extra?.reasoning_signature : null;
+        const reasoning = isSameModel ? String(chat[j]?.extra?.reasoning ?? '') : '';
 
         // Remove reasoning metadata from invocations if the API/model don't match
         if (Array.isArray(invocations) && invocations.length > 0) {
@@ -556,7 +547,7 @@ function setOpenAIMessageExamples(mesExamplesArray) {
     for (let item of mesExamplesArray) {
         // remove <START> {Example Dialogue:} and replace \r\n with just \n
         let replaced = item.replace(/<START>/i, '{Example Dialogue:}').replace(/\r/gm, '');
-        let parsed = parseExampleIntoIndividual(replaced, true);
+        let parsed = parseExampleIntoIndividual(replaced);
         // add to the example message blocks array
         examples.push(parsed);
     }
@@ -620,29 +611,21 @@ function setupChatCompletionPromptManager(openAiSettings) {
 /**
  * Parses the example messages into individual messages.
  * @param {string} messageExampleString - The string containing the example messages
- * @param {boolean} appendNamesForGroup - Whether to append the character name for group chats
  * @returns {Message[]} Array of message objects
  */
-export function parseExampleIntoIndividual(messageExampleString, appendNamesForGroup = true) {
-    const groupBotNames = getGroupNames().map(name => `${name}:`);
-
+export function parseExampleIntoIndividual(messageExampleString) {
     let result = []; // array of msgs
     let tmp = messageExampleString.split('\n');
     let cur_msg_lines = [];
     let in_user = false;
     let in_bot = false;
-    let botName = name2;
 
     // DRY my cock and balls :)
     function add_msg(name, role, system_name) {
         // join different newlines (we split them by \n and join by \n)
         // remove char name
         // strip to remove extra spaces
-        let parsed_msg = cur_msg_lines.join('\n').replace(name + ':', '').trim();
-
-        if (appendNamesForGroup && selected_group && ['example_user', 'example_assistant'].includes(system_name)) {
-            parsed_msg = `${name}: ${parsed_msg}`;
-        }
+        const parsed_msg = cur_msg_lines.join('\n').replace(name + ':', '').trim();
 
         result.push({ 'role': role, 'content': parsed_msg, 'name': system_name });
         cur_msg_lines = [];
@@ -656,14 +639,10 @@ export function parseExampleIntoIndividual(messageExampleString, appendNamesForG
             in_user = true;
             // we were in the bot mode previously, add the message
             if (in_bot) {
-                add_msg(botName, 'system', 'example_assistant');
+                add_msg(name2, 'system', 'example_assistant');
             }
             in_bot = false;
-        } else if (cur_str.startsWith(name2 + ':') || groupBotNames.some(n => cur_str.startsWith(n))) {
-            if (!cur_str.startsWith(name2 + ':') && groupBotNames.length) {
-                botName = cur_str.split(':')[0];
-            }
-
+        } else if (cur_str.startsWith(name2 + ':')) {
             in_bot = true;
             // we were in the user mode previously, add the message
             if (in_user) {
@@ -678,7 +657,7 @@ export function parseExampleIntoIndividual(messageExampleString, appendNamesForG
     if (in_user) {
         add_msg(name1, 'system', 'example_user');
     } else if (in_bot) {
-        add_msg(botName, 'system', 'example_assistant');
+        add_msg(name2, 'system', 'example_assistant');
     }
     return result;
 }
@@ -786,18 +765,8 @@ async function populateChatHistory(messages, prompts, chatCompletion, type = nul
 
     chatCompletion.add(new MessageCollection('chatHistory'), prompts.index('chatHistory'));
 
-    // Reserve budget for new chat message
-    const newChat = selected_group ? oai_settings.new_group_chat_prompt : oai_settings.new_chat_prompt;
-    const newChatMessage = await Message.createAsync('system', substituteParams(newChat), 'newMainChat');
+    const newChatMessage = await Message.createAsync('system', substituteParams(oai_settings.new_chat_prompt), 'newMainChat');
     chatCompletion.reserveBudget(newChatMessage);
-
-    // Reserve budget for group nudge
-    let groupNudgeMessage = null;
-    const noGroupNudgeTypes = ['impersonate'];
-    if (selected_group && prompts.has('groupNudge') && !noGroupNudgeTypes.includes(type)) {
-        groupNudgeMessage = await Message.fromPromptAsync(prompts.get('groupNudge'));
-        chatCompletion.reserveBudget(groupNudgeMessage);
-    }
 
     // Reserve budget for continue nudge
     let continueMessageCollection = null;
@@ -974,12 +943,6 @@ async function populateChatHistory(messages, prompts, chatCompletion, type = nul
     // Insert and free new chat
     chatCompletion.freeBudget(newChatMessage);
     chatCompletion.insertAtStart(newChatMessage, 'chatHistory');
-
-    // Reserve budget for group nudge
-    if (selected_group && groupNudgeMessage) {
-        chatCompletion.freeBudget(groupNudgeMessage);
-        chatCompletion.insertAtEnd(groupNudgeMessage, 'chatHistory');
-    }
 
     // Insert and free continue nudge
     if (type === 'continue' && continueMessageCollection) {
@@ -1264,7 +1227,6 @@ async function populateChatCompletion(prompts, chatCompletion, { bias, quietProm
 async function preparePromptsForChatCompletion({ scenario, charPersonality, name2, worldInfoBefore, worldInfoAfter, charDescription, quietPrompt, bias, extensionPrompts, systemPromptOverride, jailbreakPromptOverride, type }) {
     const scenarioText = scenario && oai_settings.scenario_format ? substituteParams(oai_settings.scenario_format) : (scenario || '');
     const charPersonalityText = charPersonality && oai_settings.personality_format ? substituteParams(oai_settings.personality_format) : (charPersonality || '');
-    const groupNudge = substituteParams(oai_settings.group_nudge_prompt);
     const impersonationPrompt = oai_settings.impersonation_prompt ? substituteParams(oai_settings.impersonation_prompt) : '';
 
     // Create entries for system prompts
@@ -1278,7 +1240,6 @@ async function preparePromptsForChatCompletion({ scenario, charPersonality, name
         // Unordered prompts without marker
         { role: 'system', content: impersonationPrompt, identifier: 'impersonate' },
         { role: 'system', content: quietPrompt, identifier: 'quietPrompt' },
-        { role: 'system', content: groupNudge, identifier: 'groupNudge' },
         { role: 'assistant', content: bias, identifier: 'bias' },
     ];
 
@@ -1734,7 +1695,6 @@ export async function createGenerationParameters(settings, model, type, messages
         'n': canMultiSwipe ? settings.n : undefined,
         'user_name': name1,
         'char_name': name2,
-        'group_names': getGroupNames(),
         'include_reasoning': Boolean(settings.show_thoughts),
         'reasoning_effort': getReasoningEffort(settings, model),
         'enable_web_search': Boolean(settings.enable_web_search),
@@ -2623,7 +2583,7 @@ export class ChatCompletion {
      * @returns {Promise<void>}
      */
     async squashSystemMessages() {
-        const excludeList = ['newMainChat', 'newChat', 'groupNudge'];
+        const excludeList = ['newMainChat', 'newChat'];
         this.messages.collection = this.messages.flatten();
 
         let lastMessage = null;
@@ -3858,7 +3818,7 @@ async function onModelChange() {
 }
 
 async function onNewPresetClick() {
-    const name = await Popup.show.input(t`Preset name:`, t`Hint: Use a character/group name to bind preset to a specific chat.`, oai_settings.preset_settings_openai);
+    const name = await Popup.show.input(t`Preset name:`, t`Hint: Use a character name to bind preset to a specific chat.`, oai_settings.preset_settings_openai);
 
     if (!name) {
         return;
@@ -4322,11 +4282,6 @@ export function initOpenAI() {
         saveSettingsDebounced();
     });
 
-    $('#newgroupchat_prompt_textarea').on('input', function () {
-        oai_settings.new_group_chat_prompt = String($('#newgroupchat_prompt_textarea').val());
-        saveSettingsDebounced();
-    });
-
     $('#newexamplechat_prompt_textarea').on('input', function () {
         oai_settings.new_example_chat_prompt = String($('#newexamplechat_prompt_textarea').val());
         saveSettingsDebounced();
@@ -4352,11 +4307,6 @@ export function initOpenAI() {
         saveSettingsDebounced();
     });
 
-    $('#group_nudge_prompt_textarea').on('input', function () {
-        oai_settings.group_nudge_prompt = String($('#group_nudge_prompt_textarea').val());
-        saveSettingsDebounced();
-    });
-
     $('#update_oai_preset').on('click', async function () {
         const name = oai_settings.preset_settings_openai;
         await saveOpenAIPreset(name, oai_settings, false);
@@ -4372,12 +4322,6 @@ export function initOpenAI() {
     $('#newchat_prompt_restore').on('click', function () {
         oai_settings.new_chat_prompt = default_new_chat_prompt;
         $('#newchat_prompt_textarea').val(oai_settings.new_chat_prompt);
-        saveSettingsDebounced();
-    });
-
-    $('#newgroupchat_prompt_restore').on('click', function () {
-        oai_settings.new_group_chat_prompt = default_new_group_chat_prompt;
-        $('#newgroupchat_prompt_textarea').val(oai_settings.new_group_chat_prompt);
         saveSettingsDebounced();
     });
 
@@ -4408,12 +4352,6 @@ export function initOpenAI() {
     $('#personality_format_restore').on('click', function () {
         oai_settings.personality_format = default_personality_format;
         $('#personality_format_textarea').val(oai_settings.personality_format);
-        saveSettingsDebounced();
-    });
-
-    $('#group_nudge_prompt_restore').on('click', function () {
-        oai_settings.group_nudge_prompt = default_group_nudge_prompt;
-        $('#group_nudge_prompt_textarea').val(oai_settings.group_nudge_prompt);
         saveSettingsDebounced();
     });
 

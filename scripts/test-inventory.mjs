@@ -21,7 +21,7 @@ function stripCommentsAndStringLiterals(source) {
     return source
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .replace(/\/\/.*$/gm, '')
-        .replace(/(['"`])(?:\\.|(?!\1)[\s\S])*\1/g, '');
+        .replace(/(['"`])(?:\\.|(?!\1|\\)[\s\S])*\1/g, '');
 }
 
 function hasCleanupHook(source) {

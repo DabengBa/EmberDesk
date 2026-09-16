@@ -10,7 +10,6 @@ import { cancelDebounce, createThumbnail, flashHighlight, getBase64Async, string
 import { debounce_timeout } from './constants.js';
 import { t } from './i18n.js';
 import { callGenericPopup, Popup, POPUP_TYPE } from './popup.js';
-import { groups, selected_group } from './group-chats.js';
 import { humanizedDateTime } from './RossAscends-mods.js';
 import { deleteMediaFromServer } from './chats.js';
 import {
@@ -26,9 +25,6 @@ import {
     isCustomBackgroundUrl as domainIsCustomBackgroundUrl,
     sortBackgrounds as domainSortBackgrounds,
     getFilteredImagesByFolder as domainGetFilteredImagesByFolder,
-    resolveReplacementFilename as domainResolveReplacementFilename,
-    buildBackgroundGalleryItems as domainBuildBackgroundGalleryItems,
-    buildBackgroundLibraryReactPanelState,
 } from './background-domain.js';
 import { createBackgroundLibrarySession } from './background-library-service.js';
 export { createBackgroundLibrarySession };
@@ -79,8 +75,6 @@ const THUMBNAIL_CONFIG = {
     width: 160,
     height: 90,
 };
-
-const ANIMATED_BACKGROUND_EXTENSIONS = ['mp4', 'webp', 'gif', 'apng']; // domain owns authoritative list
 
 /**
  * Cache for image metadata.
@@ -1814,9 +1808,7 @@ async function uploadChatBackground(formData) {
         const imageDataUri = await getBase64Async(file);
         const base64Data = imageDataUri.split(',')[1];
         const extension = getFileExtension(file);
-        const characterName = selected_group
-            ? groups.find(g => g.id === selected_group)?.id?.toString()
-            : characters[this_chid]?.name;
+        const characterName = characters[this_chid]?.name;
         const filename = `${characterName}_${humanizedDateTime()}`;
         const imagePath = await saveBase64AsFile(base64Data, characterName, filename, extension);
 

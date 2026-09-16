@@ -70,7 +70,6 @@ body.charListGrid #rm_print_characters_block {
 
 body.charListGrid #rm_print_characters_block .bogus_folder_select,
 body.charListGrid #rm_print_characters_block .character_select,
-body.charListGrid #rm_print_characters_block .group_select,
 #user_avatar_block.gridView .avatar-container {
     width: 30%;
     align-items: flex-start;
@@ -89,11 +88,8 @@ body.charListGrid #rm_print_characters_block .character_name_block {
 body.charListGrid #rm_print_characters_block .bogus_folder_select .ch_name,
 body.charListGrid #rm_print_characters_block .bogus_folder_select .bogus_folder_counter,
 body.charListGrid #rm_print_characters_block .character_select .ch_name,
-body.charListGrid #rm_print_characters_block .group_select .ch_name,
-body.charListGrid #rm_print_characters_block .group_select .group_select_counter,
 #user_avatar_block.gridView .avatar-container .ch_name,
 #user_avatar_block.gridView .avatar-container .bogus_folder_counter,
-#user_avatar_block.gridView .avatar-container .group_select_counter,
 #user_avatar_block.gridView .avatar-container .ch_additional_info {
     width: 100%;
     max-width: 100px;
@@ -103,7 +99,6 @@ body.charListGrid #rm_print_characters_block .group_select .group_select_counter
 
 body.charListGrid #rm_print_characters_block .bogus_folder_select .character_name_block,
 body.charListGrid #rm_print_characters_block .character_select .character_name_block,
-body.charListGrid #rm_print_characters_block .group_select .group_name_block,
 #user_avatar_block.gridView .avatar-container .character_name_block {
     width: 100%;
     flex-direction: column;
@@ -111,30 +106,14 @@ body.charListGrid #rm_print_characters_block .group_select .group_name_block,
 
 body.charListGrid #rm_print_characters_block .bogus_folder_select .character_select_container,
 body.charListGrid #rm_print_characters_block .character_select .character_select_container,
-body.charListGrid #rm_print_characters_block .group_select .group_select_container,
-#user_avatar_block.gridView .avatar-container .character_select_container,
-#user_avatar_block.gridView .avatar-container .group_select_container {
+#user_avatar_block.gridView .avatar-container .character_select_container {
     width: 100%;
     justify-content: center;
     max-width: 100px;
 }
 
-body.charListGrid #rm_print_characters_block .group_select {
-    width: 30%;
-    height: min-content;
-    align-items: center !important;
-    flex-direction: column;
-    overflow: hidden;
-    max-width: 100px;
-}
-
-body.charListGrid #rm_print_characters_block .group_select .group_name_block {
-    width: 100%;
-}
-
 body.charListGrid #rm_print_characters_block .ch_description,
 body.charListGrid #rm_print_characters_block .tags_inline,
-body.charListGrid #rm_print_characters_block .group_select_block_list,
 body.charListGrid #rm_print_characters_block .ch_avatar_url,
 body.charListGrid #rm_print_characters_block .character_version,
 body.charListGrid #rm_print_characters_block .character_name_block_sub_line,
@@ -181,8 +160,7 @@ body.charListGrid #rm_print_characters_block .character-library-react-panel--gri
 }
 
 body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .bogus_folder_select,
-body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .character_select,
-body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .group_select {
+body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .character_select {
     box-sizing: border-box;
     width: 100%;
     min-height: calc(var(--mainFontSize) * 9.3);
@@ -196,22 +174,19 @@ body.charListGrid #rm_print_characters_block .character-library-react-panel--gri
     background-color: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
 }
 
-body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .character_select_container,
-body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .group_select_container {
+body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .character_select_container {
     max-width: none;
 }
 
 body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .bogus_folder_select .avatar,
-body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .character_select .avatar,
-body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .group_select .avatar {
+body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .character_select .avatar {
     width: calc(var(--mainFontSize) * 4.3);
     height: calc(var(--mainFontSize) * 4.3);
     flex: 0 0 auto;
 }
 
 body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .bogus_folder_select .ch_name,
-body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .character_select .ch_name,
-body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .group_select .ch_name {
+body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .character_select .ch_name {
     display: -webkit-box;
     max-width: none;
     min-height: calc(var(--mainFontSize) * 2);
@@ -224,15 +199,13 @@ body.charListGrid #rm_print_characters_block .character-library-react-panel--gri
 }
 
 body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .bogus_folder_select:hover,
-body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .character_select:hover,
-body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .group_select:hover {
+body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .character_select:hover {
     background-color: color-mix(in srgb, var(--SmartThemeBodyColor) 10%, transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {
     body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .bogus_folder_select,
-    body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .character_select,
-    body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .group_select {
+    body.charListGrid #rm_print_characters_block .character-library-react-panel--grid .character_select {
         transition: none;
     }
 }
@@ -240,7 +213,6 @@ body.charListGrid #rm_print_characters_block .character-library-react-panel--gri
 /*big avatars mode page-wide changes*/
 
 body.big-avatars .character_select .avatar,
-body.big-avatars .group_select .avatar,
 body.big-avatars .bogus_folder_select .avatar {
     flex: unset;
 }
@@ -284,21 +256,6 @@ body.big-avatars .bogus_folder_select_back .bogus_folder_back_placeholder {
     width: calc(var(--avatar-base-width) * var(--big-avatar-width-factor));
 }
 
-body:not(.big-avatars) .avatar_collage {
-    min-width: var(--avatar-base-width);
-    aspect-ratio: 1 / 1;
-}
-
-body:not(.big-avatars) .avatar_collage img {
-    border-radius: 0% !important;
-}
-
-body.big-avatars .avatar_collage {
-    min-width: calc(var(--avatar-base-width) * var(--big-avatar-width-factor));
-    max-width: calc(var(--avatar-base-width) * var(--big-avatar-width-factor));
-    aspect-ratio: 2 / 3;
-}
-
 body.big-avatars .ch_description,
 body.big-avatars .avatar-container .ch_description {
     display: -webkit-box;
@@ -329,54 +286,6 @@ body.big-avatars .avatars_inline.avatars_inline_small {
 body.big-avatars .avatars_inline.avatars_inline_small.avatars_multiline {
     height: inherit;
 }
-
-body:not(.big-avatars) .avatars_inline_small .avatar_collage {
-    min-width: calc(var(--avatar-base-width) * var(--inline-avatar-small-factor));
-}
-
-body.big-avatars .avatars_inline_small .avatar_collage {
-    min-width: calc(var(--avatar-base-width) * var(--big-avatar-width-factor) * var(--inline-avatar-small-factor));
-    max-width: calc(var(--avatar-base-width) * var(--big-avatar-width-factor) * var(--inline-avatar-small-factor));
-}
-
-/* border radius for big avatars collages */
-
-body.big-avatars .collage_2 .img_1 {
-    border-radius: calc(var(--avatar-base-border-radius) * var(--big-avatar-border-factor)) 0 0 calc(var(--avatar-base-border-radius) * var(--big-avatar-border-factor)) !important;
-}
-
-body.big-avatars .collage_2 .img_2 {
-    border-radius: 0 calc(var(--avatar-base-border-radius) * var(--big-avatar-border-factor)) calc(var(--avatar-base-border-radius) * var(--big-avatar-border-factor)) 0 !important;
-}
-
-body.big-avatars .collage_3 .img_1 {
-    border-radius: calc(var(--avatar-base-border-radius) * var(--big-avatar-border-factor)) 0 0 0 !important;
-}
-
-body.big-avatars .collage_3 .img_2 {
-    border-radius: 0 calc(var(--avatar-base-border-radius) * var(--big-avatar-border-factor)) 0 0 !important;
-}
-
-body.big-avatars .collage_3 .img_3 {
-    border-radius: 0 0 calc(var(--avatar-base-border-radius) * var(--big-avatar-border-factor)) calc(var(--avatar-base-border-radius) * var(--big-avatar-border-factor)) !important;
-}
-
-body.big-avatars .collage_4 .img_1 {
-    border-radius: calc(var(--avatar-base-border-radius) * var(--big-avatar-border-factor)) 0 0 0 !important;
-}
-
-body.big-avatars .collage_4 .img_2 {
-    border-radius: 0 calc(var(--avatar-base-border-radius) * var(--big-avatar-border-factor)) 0 0 !important;
-}
-
-body.big-avatars .collage_4 .img_3 {
-    border-radius: 0 0 0 calc(var(--avatar-base-border-radius) * var(--big-avatar-border-factor)) !important;
-}
-
-body.big-avatars .collage_4 .img_4 {
-    border-radius: 0 0 calc(var(--avatar-base-border-radius) * var(--big-avatar-border-factor)) 0 !important;
-}
-
 
 
 /*bubble chat style*/
@@ -460,62 +369,6 @@ body.no-blur #bg_custom {
 body.no-blur #top-bar,
 body.no-blur #send_form {
     background-color: var(--SmartThemeBlurTintColor) !important;
-}
-
-/* wAIfu mode*/
-
-body.waifuMode #top-bar {
-    border-radius: 0 0 20px 20px;
-    border: 1px solid var(--SmartThemeBorderColor);
-}
-
-body.waifuMode #sheld {
-    height: 40vh;
-    height: 40dvh;
-    top: calc(100% - 40vh);
-    bottom: 0;
-}
-
-body.waifuMode #chat {
-    border-top: 1px solid var(--SmartThemeBorderColor);
-    border-radius: 10px 10px 0 0;
-}
-
-body.waifuMode #expression-wrapper {
-    justify-content: center;
-}
-
-body.waifuMode .expression-holder {
-    max-height: 90vh;
-    max-width: 90vw;
-    height: 90vh;
-    width: fit-content;
-    bottom: 0;
-    filter: drop-shadow(2px 2px 2px #51515199);
-    z-index: 2;
-    margin: 0 auto;
-    left: 0;
-    right: 0;
-}
-
-body.waifuMode .zoomed_avatar {
-    min-width: 100px;
-    min-height: 100px;
-    max-height: 90vh;
-    max-width: 90vh;
-    width: calc((100vw - var(--sheldWidth)) /2);
-    position: absolute;
-    padding: 0;
-    filter: drop-shadow(2px 2px 2px #51515199);
-    z-index: 29;
-    overflow: hidden;
-    display: none;
-    left: 0;
-    right: 0;
-    margin: 0 auto;
-    top: 50px;
-    aspect-ratio: 2 / 3;
-    height: auto;
 }
 
 /* movingUI*/

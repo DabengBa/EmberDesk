@@ -1,7 +1,6 @@
 import { characters, getCurrentChatId, messageFormatting, reloadCurrentChat, saveSettingsDebounced, this_chid } from '../../../script.js';
 import { eventSource, event_types } from '../../events.js';
 import { extension_settings, renderExtensionTemplateAsync } from '../../extensions.js';
-import { selected_group } from '../../group-chats.js';
 import { callGenericPopup, Popup, POPUP_TYPE } from '../../popup.js';
 import { SlashCommand } from '../../slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from '../../slash-commands/SlashCommandArgument.js';
@@ -676,10 +675,6 @@ async function loadRegexScripts() {
         scriptHtml.find('.move_to_scoped').on('click', async function () {
             if (this_chid === undefined) {
                 toastr.error(t`No character selected.`);
-                return;
-            }
-            if (selected_group) {
-                toastr.error(t`Cannot edit scoped scripts in group chats.`);
                 return;
             }
             const confirm = await callGenericPopup(t`Are you sure you want to move this regex script to scoped?`, POPUP_TYPE.CONFIRM);
@@ -1607,7 +1602,7 @@ function purgePresetEmbeddedRegexScripts({ apiId, name }) {
 async function checkCharEmbeddedRegexScripts() {
     const chid = this_chid;
 
-    if (chid !== undefined && !selected_group) {
+    if (chid !== undefined) {
         const character = characters[chid];
         const scripts = getScriptsByType(SCRIPT_TYPES.SCOPED);
 
@@ -1738,11 +1733,6 @@ export async function init() {
             return;
         }
 
-        if (selected_group) {
-            toastr.error(t`Cannot edit scoped scripts in group chats.`);
-            return;
-        }
-
         onRegexEditorOpenClick(false, SCRIPT_TYPES.SCOPED);
     });
     $('#open_preset_editor').on('click', function () {
@@ -1861,10 +1851,6 @@ export async function init() {
             toastr.error(t`No character selected.`);
             return;
         }
-        if (selected_group) {
-            toastr.error(t`Cannot edit scoped scripts in group chats.`);
-            return;
-        }
         const confirm = await callGenericPopup(t`Are you sure you want to move the selected regex scripts to scoped?`, POPUP_TYPE.CONFIRM);
         if (!confirm) {
             return;
@@ -1956,11 +1942,6 @@ export async function init() {
     $('#regex_scoped_toggle').on('input', function () {
         if (this_chid === undefined) {
             toastr.error(t`No character selected.`);
-            return;
-        }
-
-        if (selected_group) {
-            toastr.error(t`Cannot edit scoped scripts in group chats.`);
             return;
         }
 

@@ -1,6 +1,7 @@
 import {
     UNSET_SENTINEL,
     calculateDataSize,
+    normalizeTalkativeness,
     processUnsetSentinels,
     toShallow,
     unsetPrivateFields,
@@ -16,6 +17,24 @@ describe('character-card helpers', () => {
         expect(calculateDataSize(undefined)).toBe(0);
         expect(calculateDataSize('plain text')).toBe(0);
         expect(calculateDataSize(15)).toBe(0);
+    });
+
+    test('preserves explicit zero talkativeness while defaulting missing or invalid values', () => {
+        expect(normalizeTalkativeness(0)).toBe(0);
+        expect(normalizeTalkativeness('0')).toBe(0);
+        expect(normalizeTalkativeness(undefined)).toBe(0.5);
+        expect(normalizeTalkativeness('')).toBe(0.5);
+        expect(normalizeTalkativeness('not-a-number')).toBe(0.5);
+    });
+
+    test('normalizes talkativeness in shallow list payloads without losing explicit zero', () => {
+        const missing = toShallow({ name: 'Missing' });
+        const explicitZero = toShallow({ name: 'Zero', talkativeness: 0, data: { extensions: { talkativeness: 0 } } });
+
+        expect(missing.talkativeness).toBe(0.5);
+        expect(missing.data.extensions.talkativeness).toBe(0.5);
+        expect(explicitZero.talkativeness).toBe(0);
+        expect(explicitZero.data.extensions.talkativeness).toBe(0);
     });
 
     test('toShallow keeps list payload fields and V2 fallback data stable', () => {
