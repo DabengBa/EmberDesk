@@ -1,4 +1,4 @@
-import { t, translate } from './i18n.js';
+import { t } from './i18n.js';
 import { getFileExtension } from './utils.js';
 import { displayPastChats, importCharacterChat } from '/script.js';
 import { getRequestHeaders } from './request-context.js';
@@ -89,7 +89,7 @@ export function addChatBackupsBrowser() {
                 buttonContainer,
                 listContainer,
                 refreshToken,
-                commands: { restoreChatBackup, translate },
+                commands: { restoreChatBackup },
             });
         } catch (error) {
             console.error('Failed to mount chat backups browser:', error);

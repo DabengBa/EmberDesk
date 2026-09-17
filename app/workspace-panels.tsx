@@ -56,7 +56,7 @@ import {
 } from './world-info-workbench';
 import { SettingsSurface } from './components/settings/SettingsSurface';
 import { ChatBackupsBrowser, type ChatBackupsCommands } from './components/chat-backups/ChatBackupsBrowser';
-import { DataMaidDialog, type DataMaidCommands } from './components/data-maid/DataMaidDialog';
+import { DataMaidDialog } from './components/data-maid/DataMaidDialog';
 import { PersonaManagementPanel } from './components/personas/PersonaManagementPanel';
 import { PowerUserPanel } from './components/power-user/PowerUserPanel';
 import { FloatingPromptPanel } from './components/panels/FloatingPromptPanel';
@@ -1859,19 +1859,19 @@ export function unmountChatBackupsBrowser() {
     }
 }
 
-let mountedDataMaid: { root: Root; host: HTMLElement; commands: DataMaidCommands } | null = null;
+let mountedDataMaid: { root: Root; host: HTMLElement } | null = null;
 
 function renderDataMaid(mount: NonNullable<typeof mountedDataMaid>) {
     mount.root.render(
         <StrictMode>
             <Theme theme={emberDeskTheme} mode="dark">
-                <DataMaidDialog commands={mount.commands} onRequestClose={() => unmountDataMaidDialog()} />
+                <DataMaidDialog onRequestClose={() => unmountDataMaidDialog()} />
             </Theme>
         </StrictMode>,
     );
 }
 
-export function mountDataMaidDialog(options: { commands: DataMaidCommands }) {
+export function mountDataMaidDialog() {
     attachGlobalCompatibilityBridge();
     if (mountedDataMaid) {
         return;
@@ -1885,7 +1885,6 @@ export function mountDataMaidDialog(options: { commands: DataMaidCommands }) {
     mountedDataMaid = {
         root: createRoot(host),
         host,
-        commands: options.commands,
     };
     renderDataMaid(mountedDataMaid);
 }

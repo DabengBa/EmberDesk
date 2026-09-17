@@ -1,5 +1,6 @@
 import type { MainChatCommands } from '../../compat/workspace-commands';
 import type { MainChatMessageRecord } from '../../stores/main-chat-store';
+import { translate } from '../../compat/i18n.js';
 
 const EMPTY_RENDER = {
     messageHtml: '',
@@ -77,6 +78,7 @@ function MessageActionShell({
             <div
                 title="Message Actions"
                 className="mes_button extraMesButtonsHint fa-solid fa-ellipsis"
+                data-i18n="[title]Message Actions;[aria-label]Message Actions"
                 role="button"
                 aria-label="Message Actions"
                 tabIndex={0}
@@ -100,20 +102,22 @@ function MessageActionShell({
                 className={message.actionsExpanded ? 'extraMesButtons visible' : 'extraMesButtons'}
                 style={{ display: message.actionsExpanded ? 'flex' : undefined }}
             >
-                <div className="mes_button mes_translate fa-solid fa-language" role="button" aria-label="Translate message" tabIndex={0} />
-                <div className="mes_button sd_message_gen fa-solid fa-paintbrush" role="button" aria-label="Generate Image" tabIndex={0} />
-                <div className="mes_button mes_narrate fa-solid fa-bullhorn" role="button" aria-label="Narrate" tabIndex={0} />
-                <div className="mes_button mes_prompt fa-solid fa-square-poll-horizontal" role="button" aria-label="Prompt" tabIndex={0} />
-                <div className="mes_button mes_hide fa-solid fa-eye" role="button" aria-label="Exclude message from prompts" tabIndex={0} />
-                <div className="mes_button mes_unhide fa-solid fa-eye-slash" role="button" aria-label="Include message in prompts" tabIndex={0} />
-                <div className="mes_button mes_media_gallery fa-solid fa-photo-film" role="button" aria-label="Toggle media display style" tabIndex={0} />
-                <div className="mes_button mes_media_list fa-solid fa-table-cells-large" role="button" aria-label="Toggle media display style" tabIndex={0} />
-                <div className="mes_button mes_embed fa-solid fa-paperclip" role="button" aria-label="Embed file or image" tabIndex={0} />
-                <div className="mes_button mes_swipe_picker fa-solid fa-bookmark" role="button" aria-label="Jump to swipe history" tabIndex={0} />
-                <div className="mes_button mes_create_bookmark fa-regular fa-flag-checkered" role="button" aria-label="Create checkpoint" tabIndex={0} />
-                <div className="mes_button mes_create_branch fa-regular fa-code-branch" role="button" aria-label="Create branch" tabIndex={0} />
+                <div title="Translate message" className="mes_button mes_translate fa-solid fa-language" data-i18n="[title]Translate message;[aria-label]Translate message" role="button" aria-label="Translate message" tabIndex={0} />
+                <div title="Generate Image" className="mes_button sd_message_gen fa-solid fa-paintbrush" data-i18n="[title]Generate Image;[aria-label]Generate Image" role="button" aria-label="Generate Image" tabIndex={0} />
+                <div title="Narrate" className="mes_button mes_narrate fa-solid fa-bullhorn" data-i18n="[title]Narrate;[aria-label]Narrate" role="button" aria-label="Narrate" tabIndex={0} />
+                <div title="Prompt" className="mes_button mes_prompt fa-solid fa-square-poll-horizontal" data-i18n="[title]Prompt;[aria-label]Prompt" role="button" aria-label="Prompt" tabIndex={0} style={{ display: 'none' }} />
+                <div title="Exclude message from prompts" className="mes_button mes_hide fa-solid fa-eye" data-i18n="[title]Exclude message from prompts;[aria-label]Exclude message from prompts" role="button" aria-label="Exclude message from prompts" tabIndex={0} />
+                <div title="Include message in prompts" className="mes_button mes_unhide fa-solid fa-eye-slash" data-i18n="[title]Include message in prompts;[aria-label]Include message in prompts" role="button" aria-label="Include message in prompts" tabIndex={0} />
+                <div title="Toggle media display style" className="mes_button mes_media_gallery fa-solid fa-photo-film" data-i18n="[title]Toggle media display style;[aria-label]Toggle media display style" role="button" aria-label="Toggle media display style" tabIndex={0} />
+                <div title="Toggle media display style" className="mes_button mes_media_list fa-solid fa-table-cells-large" data-i18n="[title]Toggle media display style;[aria-label]Toggle media display style" role="button" aria-label="Toggle media display style" tabIndex={0} />
+                <div title="Embed file or image" className="mes_button mes_embed fa-solid fa-paperclip" data-i18n="[title]Embed file or image;[aria-label]Embed file or image" role="button" aria-label="Embed file or image" tabIndex={0} />
+                <div title="Jump to swipe history" className="mes_button mes_swipe_picker fa-solid fa-bookmark" data-i18n="[title]Jump to swipe history;[aria-label]Jump to swipe history" role="button" aria-label="Jump to swipe history" tabIndex={0} style={{ display: 'none' }} />
+                <div title="Create checkpoint" className="mes_button mes_create_bookmark fa-regular fa-solid fa-flag-checkered" data-i18n="[title]Create checkpoint;[aria-label]Create checkpoint" role="button" aria-label="Create checkpoint" tabIndex={0} />
+                <div title="Create branch" className="mes_button mes_create_branch fa-regular fa-code-branch" data-i18n="[title]Create Branch;[aria-label]Create branch" role="button" aria-label="Create branch" tabIndex={0} />
                 <div
                     className="mes_button mes_copy fa-solid fa-copy"
+                    title="Copy"
+                    data-i18n="[title]Copy;[aria-label]Copy"
                     role="button"
                     aria-label="Copy"
                     tabIndex={0}
@@ -132,6 +136,8 @@ function MessageActionShell({
                 />
                 <div
                     className="mes_button mes_edit_delete fa-solid fa-trash-can"
+                    title="Delete this message"
+                    data-i18n="[title]Delete this message;[aria-label]Delete this message"
                     role="button"
                     aria-label="Delete this message"
                     tabIndex={0}
@@ -148,9 +154,18 @@ function MessageActionShell({
                     }}
                 />
             </div>
-            <div className="mes_button mes_bookmark fa-solid fa-flag" role="button" aria-label="Open checkpoint chat" tabIndex={0} />
+            <div
+                className="mes_button mes_bookmark fa-solid fa-flag"
+                data-tooltip={'Click to open checkpoint chat\nShift+Click to replace the existing checkpoint with a new one'}
+                data-i18n={'[data-tooltip]Open checkpoint chat\nShift+Click to replace the existing checkpoint with a new one;[aria-label]Open checkpoint chat'}
+                role="button"
+                aria-label="Open checkpoint chat"
+                tabIndex={0}
+            />
             <div
                 className="mes_button mes_edit fa-solid fa-pencil"
+                title="Edit"
+                data-i18n="[title]Edit;[aria-label]Edit"
                 role="button"
                 aria-label="Edit"
                 tabIndex={0}
@@ -259,7 +274,7 @@ export function MainChatMessageRow({
                     <div className="flex-container flex1 alignitemscenter">
                         <div className="flex-container alignItemsBaseline">
                             <span className="name_text">{message.name}</span>
-                            <i className="mes_ghost fa-solid fa-ghost" aria-hidden="true" />
+                            <i className="mes_ghost fa-solid fa-ghost" title="This message is invisible for the AI" data-i18n="[title]This message is invisible for the AI" aria-hidden="true" />
                             <small className="timestamp" title={message.timestampTitle}>{message.timestamp}</small>
                         </div>
                     </div>
@@ -267,6 +282,8 @@ export function MainChatMessageRow({
                         <div className="mes_edit_buttons" style={{ display: message.editing ? 'inline-flex' : undefined }}>
                             <div
                                 className="mes_edit_done menu_button fa-solid fa-check"
+                                title="Confirm"
+                                data-i18n="[title]Confirm;[aria-label]Confirm"
                                 role="button"
                                 aria-label="Confirm"
                                 tabIndex={0}
@@ -277,6 +294,8 @@ export function MainChatMessageRow({
                             />
                             <div
                                 className="mes_edit_copy menu_button fa-solid fa-copy"
+                                title="Copy this message"
+                                data-i18n="[title]Copy this message;[aria-label]Copy this message"
                                 role="button"
                                 aria-label="Copy this message"
                                 tabIndex={0}
@@ -289,6 +308,8 @@ export function MainChatMessageRow({
                             />
                             <div
                                 className="mes_edit_add_reasoning menu_button fa-solid fa-lightbulb"
+                                title="Add a reasoning block"
+                                data-i18n="[title]Add a reasoning block;[aria-label]Add a reasoning block"
                                 role="button"
                                 aria-label="Add a reasoning block"
                                 tabIndex={0}
@@ -306,6 +327,8 @@ export function MainChatMessageRow({
                             />
                             <div
                                 className="mes_edit_delete menu_button fa-solid fa-trash-can"
+                                title="Delete this message"
+                                data-i18n="[title]Delete this message;[aria-label]Delete this message"
                                 role="button"
                                 aria-label="Delete this message"
                                 tabIndex={0}
@@ -318,6 +341,8 @@ export function MainChatMessageRow({
                             />
                             <div
                                 className="mes_edit_up menu_button fa-solid fa-chevron-up"
+                                title="Move message up"
+                                data-i18n="[title]Move message up;[aria-label]Move message up"
                                 role="button"
                                 aria-label="Move message up"
                                 tabIndex={0}
@@ -330,6 +355,8 @@ export function MainChatMessageRow({
                             />
                             <div
                                 className="mes_edit_down menu_button fa-solid fa-chevron-down"
+                                title="Move message down"
+                                data-i18n="[title]Move message down;[aria-label]Move message down"
                                 role="button"
                                 aria-label="Move message down"
                                 tabIndex={0}
@@ -342,9 +369,12 @@ export function MainChatMessageRow({
                             />
                             <div
                                 className="mes_edit_cancel menu_button fa-solid fa-xmark"
+                                title="Cancel"
+                                data-i18n="[title]Cancel;[aria-label]Cancel"
                                 role="button"
                                 aria-label="Cancel"
                                 tabIndex={0}
+                                data-action="cancel-edit"
                                 onClick={event => {
                                     event.stopPropagation();
                                     void commands?.cancelMessageEdit(numericMessageId);
@@ -367,13 +397,15 @@ export function MainChatMessageRow({
                     >
                         <div className="mes_reasoning_header_block flex-container">
                             <div className="mes_reasoning_header flex-container">
-                                <span className="mes_reasoning_header_title">Thought for some time</span>
+                                <span className="mes_reasoning_header_title" data-i18n="Thought for some time">Thought for some time</span>
                                 <div className="mes_reasoning_arrow fa-solid fa-chevron-up" />
                             </div>
                         </div>
                         <div className="mes_reasoning_actions flex-container">
                             <div
                                 className="mes_reasoning_edit_done menu_button edit_button fa-solid fa-check"
+                                title="Confirm"
+                                data-i18n="[title]Confirm Edit;[aria-label]Confirm Edit"
                                 role="button"
                                 aria-label="Confirm Edit"
                                 tabIndex={0}
@@ -385,6 +417,8 @@ export function MainChatMessageRow({
                             />
                             <div
                                 className="mes_reasoning_delete menu_button edit_button fa-solid fa-trash-can"
+                                title="Remove reasoning"
+                                data-i18n="[title]Remove reasoning;[aria-label]Remove reasoning"
                                 role="button"
                                 aria-label="Remove reasoning"
                                 tabIndex={0}
@@ -396,6 +430,8 @@ export function MainChatMessageRow({
                             />
                             <div
                                 className="mes_reasoning_edit_cancel menu_button edit_button fa-solid fa-xmark"
+                                title="Cancel edit"
+                                data-i18n="[title]Cancel edit;[aria-label]Cancel edit"
                                 role="button"
                                 aria-label="Cancel edit"
                                 tabIndex={0}
@@ -407,6 +443,8 @@ export function MainChatMessageRow({
                             />
                             <div
                                 className="mes_reasoning_close_all mes_button fa-solid fa-minimize"
+                                title="Collapse all reasoning blocks"
+                                data-i18n="[title]Collapse all reasoning blocks;[aria-label]Collapse all reasoning blocks"
                                 role="button"
                                 aria-label="Collapse all reasoning blocks"
                                 tabIndex={0}
@@ -418,6 +456,8 @@ export function MainChatMessageRow({
                             />
                             <div
                                 className="mes_reasoning_copy mes_button fa-solid fa-copy"
+                                title="Copy reasoning"
+                                data-i18n="[title]Copy reasoning;[aria-label]Copy reasoning"
                                 role="button"
                                 aria-label="Copy reasoning"
                                 tabIndex={0}
@@ -430,6 +470,8 @@ export function MainChatMessageRow({
                             />
                             <div
                                 className="mes_reasoning_edit mes_button fa-solid fa-pencil"
+                                title="Edit reasoning"
+                                data-i18n="[title]Edit reasoning;[aria-label]Edit reasoning"
                                 role="button"
                                 aria-label="Edit reasoning"
                                 tabIndex={0}
@@ -509,7 +551,7 @@ export function MainChatMessageRow({
                         }}
                     >
                         <i className="fa-solid fa-arrow-rotate-right" aria-hidden="true" />
-                        <span>重新生成</span>
+                        <span data-i18n="Regenerate">{translate('Regenerate')}</span>
                     </div>
                 ) : null}
                 <div className="mes_media_wrapper" dangerouslySetInnerHTML={{ __html: render.mediaHtml }} />

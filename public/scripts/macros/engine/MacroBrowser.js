@@ -187,40 +187,6 @@ export function createTypeBadge(type) {
 }
 
 /**
- * Renders a single macro item for the list.
- * Order: [signature] [description (shrinks)] [alias icon?] [source icon]
- * @param {MacroDefinition} macro
- * @returns {HTMLElement}
- */
-function renderMacroItem(macro) {
-    const item = document.createElement('div');
-    item.classList.add('macro-item');
-    if (macro.aliasOf) item.classList.add('isAlias');
-    item.dataset.macroName = macro.name;
-
-    // Signature (fixed width, truncates if too long)
-    const signature = document.createElement('code');
-    signature.classList.add('macro-signature');
-    signature.textContent = formatMacroSignature(macro);
-    item.appendChild(signature);
-
-    // Description preview (shrinks to fit, truncates)
-    const desc = document.createElement('span');
-    desc.classList.add('macro-desc-preview');
-    desc.textContent = macro.description || '<no description>';
-    item.appendChild(desc);
-
-    // Alias indicator (if this is an alias entry)
-    const aliasIcon = createAliasIndicator(macro);
-    if (aliasIcon) item.appendChild(aliasIcon);
-
-    // Source indicator (fixed, stays at right edge)
-    item.appendChild(createSourceIndicator(macro));
-
-    return item;
-}
-
-/**
  * Renders detailed information for a macro.
  * Can optionally highlight the current argument being typed.
  * @param {MacroDefinition} macro

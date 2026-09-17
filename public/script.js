@@ -17254,7 +17254,7 @@ jQuery(async function () {
             $('<div>')
                 .addClass('empty_reply_regenerate')
                 .append($('<i>').addClass('fa-solid fa-arrow-rotate-right'))
-                .append($('<span>').text('重新生成'))
+                .append($('<span>').attr('data-i18n', 'Regenerate').text(translate('Regenerate')))
                 .on('click', () => { $('#option_regenerate').trigger('click'); }),
         );
         void mountReactMainChatMessageListPanel();

@@ -1,3 +1,5 @@
+import { t, translate } from '../../compat/i18n.js';
+
 interface EmptyBlockProps {
     text: string;
     message: string;
@@ -16,8 +18,8 @@ export function CharacterLibraryEmptyBlock({
             <div className="empty_block_text">{text}</div>
             <div className="empty_block_message">{message}</div>
             {showClearFilters ? (
-                <button type="button" className="menu_button clear_character_filters" onClick={onClearFilters}>
-                    Clear filters
+                <button type="button" className="menu_button clear_character_filters" data-i18n="Clear filters" onClick={onClearFilters}>
+                    {translate('Clear filters')}
                 </button>
             ) : null}
         </div>
@@ -26,8 +28,8 @@ export function CharacterLibraryEmptyBlock({
 
 export function CharacterLibraryHiddenBlock({ hiddenCount }: { hiddenCount: number }) {
     const text = hiddenCount > 1
-        ? `${hiddenCount} characters hidden.`
-        : `${hiddenCount} character hidden.`;
+        ? t`${hiddenCount} characters hidden.`
+        : t`${hiddenCount} character hidden.`;
     return (
         <div className="character_list_hidden hidden_block">
             {text}

@@ -3,11 +3,8 @@ import { createPortal } from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import { apiFetch } from '../../lib/request';
 import { humanFileSize } from '../../lib/format';
+import { translate as t } from '../../compat/i18n.js';
 import { dataMaidStyles as styles } from '../../styles/data-maid.styles';
-
-export interface DataMaidCommands {
-    translate?(text: string): string;
-}
 
 interface DataMaidRecord {
     name: string;
@@ -61,8 +58,8 @@ function formatDate(mtime: number | undefined): string {
         : date.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
 }
 
-export function DataMaidDialog({ commands, onRequestClose }: { commands: DataMaidCommands; onRequestClose?: () => void }) {
-    const t = useCallback((text: string) => commands.translate?.(text) ?? text, [commands]);
+export function DataMaidDialog({ onRequestClose }: { onRequestClose?: () => void }) {
+
 
     const categories = useMemo(() => ([
         { key: 'files', name: t('Files'), description: t('Files that are not associated with chat messages or Data Bank. WILL DELETE MANUAL UPLOADS!') },

@@ -1,4 +1,3 @@
-import { translate } from './i18n.js';
 import { loadWorkspacePanelsModule } from './workspace-panels-react-bridge.js';
 
 export function initDataMaid() {
@@ -11,7 +10,7 @@ export function initDataMaid() {
     dataMaidButton.addEventListener('click', async () => {
         try {
             const module = await loadWorkspacePanelsModule();
-            module.mountDataMaidDialog({ commands: { translate } });
+            module.mountDataMaidDialog();
         } catch (error) {
             console.error('Failed to mount Data Maid dialog:', error);
         }

@@ -2,11 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import { apiFetch } from '../../lib/request';
+import { translate as t } from '../../compat/i18n.js';
 import { chatBackupsStyles as styles } from '../../styles/chat-backups.styles';
 
 export interface ChatBackupsCommands {
     restoreChatBackup(name: string): Promise<string[] | null>;
-    translate?(text: string): string;
 }
 
 interface ChatBackupInfo {
@@ -47,7 +47,7 @@ function sortBackups(backups: ChatBackupInfo[]): ChatBackupInfo[] {
 }
 
 export function ChatBackupsBrowser({ buttonContainer, listContainer, commands, refreshToken = 0 }: ChatBackupsBrowserProps) {
-    const t = useCallback((text: string) => commands.translate?.(text) ?? text, [commands]);
+
     const [isOpen, setIsOpen] = useState(false);
     const [backups, setBackups] = useState<ChatBackupInfo[] | null>(null);
     const [viewing, setViewing] = useState<{ name: string; content: string } | null>(null);

@@ -8,6 +8,7 @@ import {
     type CharacterLibraryToolbarState,
 } from '@/lib/character-library-helpers';
 import { characterLibraryStyles } from '@/styles/workspace-panels.styles';
+import { translate } from '../../compat/i18n.js';
 import { HostedDomSlot } from './HostedDomSlot';
 
 export interface CharacterLibraryToolbarBridge {
@@ -27,6 +28,8 @@ function ToolbarActionButton({
     icon,
     compact = false,
     disabled = false,
+    labelKey,
+    titleKey,
 }: {
     label: string;
     onClick: () => void;
@@ -34,20 +37,25 @@ function ToolbarActionButton({
     icon: string;
     compact?: boolean;
     disabled?: boolean;
+    labelKey?: string;
+    titleKey?: string;
 }) {
+    const resolvedTitle = translate(title, titleKey ?? null);
+    const resolvedLabel = translate(label, labelKey ?? null);
     return (
         <button
             type="button"
             className={`menu_button character-list-action${disabled ? ' disabled' : ''} ${stylex.props(characterLibraryStyles.toolbarAction, compact ? characterLibraryStyles.toolbarActionCompact : characterLibraryStyles.toolbarActionFull).className ?? ''}`}
-            title={title}
-            aria-label={title}
+            title={resolvedTitle}
+            aria-label={resolvedTitle}
+            data-i18n={`[title]${titleKey ?? title};[aria-label]${titleKey ?? title}`}
             data-compact={compact ? 'true' : undefined}
             onClick={onClick}
             disabled={disabled}
             aria-disabled={disabled}
         >
             <i className={`fa-solid ${icon} ${stylex.props(characterLibraryStyles.toolbarActionIcon).className ?? ''}`} aria-hidden="true" />
-            <span className={compact ? 'sr-only' : 'character-list-action-label'}>{label}</span>
+            <span className={compact ? 'sr-only' : 'character-list-action-label'} data-i18n={labelKey ?? label}>{resolvedLabel}</span>
         </button>
     );
 }
@@ -85,6 +93,7 @@ export function CharacterLibraryToolbar({
                 <div {...stylex.props(characterLibraryStyles.toolbarActionsInnerNoWrap)}>
                     <ToolbarActionButton
                         label={state.isGrid ? 'List' : 'Grid'}
+                        labelKey={state.isGrid ? 'Character Toolbar List' : 'Character Toolbar Grid'}
                         icon={state.isGrid ? 'fa-list' : 'fa-table-cells-large'}
                         compact
                         title={state.isGrid ? 'Switch to character list view' : 'Switch to character grid view'}

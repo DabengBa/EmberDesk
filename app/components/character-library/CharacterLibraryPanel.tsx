@@ -18,6 +18,7 @@ import {
     getCharacterLibraryGridRowRange,
 } from '@/lib/character-library-grid-helpers.js';
 import { characterLibraryStyles } from '@/styles/workspace-panels.styles';
+import { translate } from '../../compat/i18n.js';
 
 export interface CharacterLibraryPanelEntity {
     type: string;
@@ -193,8 +194,8 @@ export function CharacterLibraryPanel({ bridge, state }: { bridge: CharacterLibr
             {state.renderPlan.showEmptyBlock
                 ? (
                     <CharacterLibraryEmptyBlock
-                        text={state.renderPlan.emptyText ?? 'No items'}
-                        message={state.renderPlan.emptyMessage ?? 'There are no items to display.'}
+                        text={state.renderPlan.emptyText ?? translate('No items')}
+                        message={state.renderPlan.emptyMessage ?? translate('There are no items to display.')}
                         showClearFilters={state.renderPlan.showClearFilters}
                         onClearFilters={() => bridge.onClearFilters?.()}
                     />
