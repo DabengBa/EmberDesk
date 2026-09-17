@@ -129,7 +129,7 @@ describe('React runtime boundary', () => {
 
     test('keeps React-owned swipe transitions data-driven instead of reading message DOM', () => {
         const scriptSource = fs.readFileSync(
-            path.join(repoRoot, 'public', 'script.js'),
+            path.join(repoRoot, 'public', 'scripts', 'generation-service.js'),
             'utf8',
         );
         const reactSwipeStart = scriptSource.indexOf(
