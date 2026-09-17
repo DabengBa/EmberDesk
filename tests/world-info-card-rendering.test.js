@@ -123,19 +123,19 @@ describe('world info card rendering', () => {
     });
 
     test('world info panel separates global activation from entry editing', () => {
-        const indexHtml = read('public/index.html');
+        const panelTsx = read('app/components/panels/WorldInfoPanel.tsx');
         const panelHtml = read('public/panels/world-info-body.html');
         const css = read('public/css/world-info.css');
 
-        expect(indexHtml).toContain('id="wiGlobalPanel"');
-        expect(indexHtml).toContain('data-i18n="Global World Info"');
-        expect(indexHtml).not.toContain('data-i18n="Enabled worlds"');
-        expect(indexHtml).toContain('id="wiGlobalCount"');
-        expect(indexHtml).toContain('data-i18n="Activation Rules"');
-        expect(indexHtml).toContain('id="wiEditorPanel"');
-        expect(indexHtml).toContain('data-i18n="World Info Editor"');
-        expect(indexHtml).toContain('id="wiTopBlock" class="wi-global-grid inline-drawer wide100p"');
-        expect(indexHtml).toContain('class="inline-drawer-content wi-global-rules-content"');
+        expect(panelTsx).toContain('id="wiGlobalPanel"');
+        expect(panelTsx).toContain('data-i18n="Global World Info"');
+        expect(panelTsx).not.toContain('data-i18n="Enabled worlds"');
+        expect(panelTsx).toContain('id="wiGlobalCount"');
+        expect(panelTsx).toContain('data-i18n="Activation Rules"');
+        expect(panelTsx).toContain('id="wiEditorPanel"');
+        expect(panelTsx).toContain('data-i18n="World Info Editor"');
+        expect(panelTsx).toContain('id="wiTopBlock" className="wi-global-grid inline-drawer wide100p"');
+        expect(panelTsx).toContain('className="inline-drawer-content wi-global-rules-content"');
         expect(panelHtml).toContain('id="world_editor_select"');
         expect(css).toContain('.wi-global-grid');
         expect(css).toContain('.wi-global-count');
@@ -153,11 +153,11 @@ describe('world info card rendering', () => {
     });
 
     test('global world selector exposes a clear empty prompt and keeps multi-select open for consecutive choices', () => {
-        const indexHtml = read('public/index.html');
+        const panelTsx = read('app/components/panels/WorldInfoPanel.tsx');
         const source = read('public/scripts/world-info.js');
 
-        expect(indexHtml).toContain('aria-label="Global World Info active in all chats"');
-        expect(indexHtml).toContain('data-placeholder="No global worlds active. Select one or more worlds."');
+        expect(panelTsx).toContain('aria-label="Global World Info active in all chats"');
+        expect(panelTsx).toContain('data-placeholder="No global worlds active. Select one or more worlds."');
         expect(source).toContain('const globalWorldInfoSelector = $(\'#world_info\');');
         expect(source).toContain('function refreshGlobalWorldInfoSelectorState()');
         expect(source).toContain('$(\'#wiGlobalCount\').text');
@@ -322,21 +322,21 @@ describe('world info card rendering', () => {
     });
 
     test('world info workbench keeps editor panel inside wi-holder with explicit containment', () => {
-        const indexHtml = read('public/index.html');
-        const wiHolderOpen = indexHtml.indexOf('id="wi-holder"');
-        const wiEditorOpen = indexHtml.indexOf('id="wiEditorPanel"');
-        const wiHolderCloseAfterEditor = indexHtml.indexOf('</div>', indexHtml.indexOf('id="world_popup"'));
+        const panelTsx = read('app/components/panels/WorldInfoPanel.tsx');
+        const wiHolderOpen = panelTsx.indexOf('id="wi-holder"');
+        const wiEditorOpen = panelTsx.indexOf('id="wiEditorPanel"');
+        const wiHolderCloseAfterEditor = panelTsx.indexOf('</div>', panelTsx.indexOf('id="world_popup"'));
 
         expect(wiHolderOpen).toBeGreaterThanOrEqual(0);
         expect(wiEditorOpen).toBeGreaterThan(wiHolderOpen);
 
-        const betweenHolderAndEditor = indexHtml.slice(wiHolderOpen, wiEditorOpen);
+        const betweenHolderAndEditor = panelTsx.slice(wiHolderOpen, wiEditorOpen);
         // wiGlobalPanel must close before editor opens; wi-holder must not close early.
         expect(betweenHolderAndEditor).toContain('id="wiGlobalPanel"');
         expect(betweenHolderAndEditor).toMatch(/<\/section>/);
         expect(betweenHolderAndEditor).not.toMatch(/id="wi-holder"[\s\S]*<\/div>\s*<section id="wiEditorPanel"/);
 
-        const afterEditorStart = indexHtml.slice(wiEditorOpen, wiEditorOpen + 2500);
+        const afterEditorStart = panelTsx.slice(wiEditorOpen, wiEditorOpen + 2500);
         expect(afterEditorStart).toContain('id="world_popup"');
         expect(afterEditorStart.indexOf('</section>')).toBeGreaterThan(-1);
         // editor section closes, then wi-holder closes

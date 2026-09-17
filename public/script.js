@@ -424,6 +424,19 @@ registerWorldInfoShellContext({
     getName1: () => name1,
     getOneCharacter: (avatar) => getOneCharacter(avatar),
     selectSelectedCharacter: (chid, options) => select_selected_character(chid, options),
+    getCharaFilename: (chid, options) => getCharaFilename(chid, options),
+    getTagKeyForEntity: (entityId) => getTagKeyForEntity(entityId),
+    getTokenCountAsync: (text, padding) => getTokenCountAsync(text, padding),
+    getRegexedString: (content, placement, options) => getRegexedString(content, placement, options),
+    regexPlacement: regex_placement,
+    getExtensionContext: () => getContext(),
+    get powerUserSettings() { return power_user; },
+    extensionSettings: extension_settings,
+    toastr,
+    authorsNoteModuleName: NOTE_MODULE_NAME,
+    authorsNoteMetadataKeys: metadata_keys,
+    shouldAddWorldInfoPrompt: () => shouldWIAddPrompt,
+    showWarningToast: (message, title) => toastr.warning(message, title),
 });
 
 export function isReactCharacterLibraryPanelEnabled() {

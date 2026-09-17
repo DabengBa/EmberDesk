@@ -116,7 +116,7 @@ describe('world info import feedback', () => {
         expect(batchSource).toContain('setWorldImportBusy(true, { showToast: false });');
         expect(batchSource).toContain('for (let index = 0; index < queue.length; index++) {');
         expect(batchSource).toContain('const file = queue[index];');
-        expect(batchSource).toContain('await importWorldInfo(file, { overwriteMode, showSuccessToast: false });');
+        expect(batchSource).toContain('await importWorldInfo(file, { overwriteMode });');
         expect(batchSource).toContain('results.push(result);');
         expect(batchSource).toContain('catch (error) {');
         expect(batchSource).toContain('createWorldInfoImportResult(\'failed\', file)');
@@ -125,17 +125,21 @@ describe('world info import feedback', () => {
         expect(batchSource).not.toContain('Promise.all');
     });
 
-    test('batch imports reserve success feedback for the final batch summary', () => {
+    test('batch imports report a final batch summary after per-file results', () => {
         const source = read('public/scripts/world-info.js');
         const importSource = extractBlock(
             source,
             'export async function importWorldInfo(file',
             'export function openWorldInfoEditor(worldName)',
         );
+        const batchSource = extractBlock(
+            source,
+            'export async function importWorldInfoFiles(files)',
+            'export async function importWorldInfo(file',
+        );
 
-        expect(importSource).toContain('showSuccessToast = true');
-        expect(importSource).toContain('if (showSuccessToast) {');
         expect(importSource).toContain('toastr.success(buildWorldInfoImportSuccessMessage(data.name, metadata));');
+        expect(batchSource).toContain('showWorldInfoBatchImportSummary(summary);');
     });
 
     test('world import batch supports drag-drop, conflict choices, and cancel remaining', () => {
@@ -307,7 +311,7 @@ describe('world info import feedback', () => {
         const parseJsonSource = extractBlock(
             utilsSource,
             'export async function parseJsonFile(file)',
-            'export function getStringHash',
+            'export function copyText',
         );
 
         expect(importSource).toContain('file.size > WORLD_INFO_IMPORT_LARGE_FILE_THRESHOLD_BYTES');

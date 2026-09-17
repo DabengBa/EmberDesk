@@ -15,6 +15,8 @@ test.describe('world info workbench', () => {
     test('react host owns workbench containment without duplicate visible selectors when mounted', async ({ page }) => {
         await testSetup.awaitST({ page });
         await openWorldInfo(page);
+        await page.locator('#emberdesk-react-world-info-panel-host > *').first()
+            .waitFor({ state: 'attached', timeout: 10_000 });
 
         const diagnostics = await page.evaluate(() => {
             const holder = document.getElementById('wi-holder');
@@ -70,8 +72,9 @@ test.describe('world info workbench', () => {
         await page.setViewportSize({ width: 390, height: 844 });
         await openWorldInfo(page);
 
-        const reactReady = await page.locator('[data-world-info-react-workflow="workbench"]').count();
-        test.skip(reactReady === 0, 'React World Info panel not mounted in this environment');
+        const reactReady = await page.locator('[data-world-info-react-workflow="workbench"]')
+            .waitFor({ state: 'attached', timeout: 10_000 }).then(() => true).catch(() => false);
+        test.skip(!reactReady, 'React World Info panel not mounted in this environment');
 
         const root = page.locator('[data-world-info-react-workflow="workbench"]');
         await expect(root).toHaveAttribute('data-world-info-react-mobile-view', 'list');
@@ -108,7 +111,8 @@ test.describe('world info workbench', () => {
         await openWorldInfo(page);
 
         const root = page.locator('[data-world-info-react-workflow="workbench"]');
-        test.skip(await root.count() === 0, 'React World Info panel not mounted in this environment');
+        const mounted = await root.waitFor({ state: 'attached', timeout: 10_000 }).then(() => true).catch(() => false);
+        test.skip(!mounted, 'React World Info panel not mounted in this environment');
 
         await expect(root).toBeVisible();
         await expect(page.locator('[data-world-info-react-control="world-select"]')).toHaveValue('');
@@ -130,7 +134,8 @@ test.describe('world info workbench', () => {
         await openWorldInfo(page);
 
         const root = page.locator('[data-world-info-react-workflow="workbench"]');
-        test.skip(await root.count() === 0, 'React World Info panel not mounted in this environment');
+        const mounted = await root.waitFor({ state: 'attached', timeout: 10_000 }).then(() => true).catch(() => false);
+        test.skip(!mounted, 'React World Info panel not mounted in this environment');
 
         await page.locator('[data-world-info-react-control="world-select"]').selectOption({ index: 1 });
         await expect(page.locator('[data-world-info-react-entry]').first()).toBeVisible({ timeout: 10_000 });

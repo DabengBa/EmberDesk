@@ -18,7 +18,7 @@ import { getTagsList } from './tags.js';
 import { getCurrentLocale, t, translate } from './i18n.js';
 import { importWorldInfo } from './world-info.js';
 import { getOptionId } from './util/primitives.js';
-export { getStringHash, setValueByPath, getOptionId as getSelect2OptionId } from './util/primitives.js';
+export { getStringHash, setValueByPath, getOptionId as getSelect2OptionId, escapeRegex } from './util/primitives.js';
 
 export const shiftUpByOne = (e, i, a) => a[i] = e + 1;
 export const shiftDownByOne = (e, i, a) => a[i] = e - 1;
@@ -1356,17 +1356,6 @@ export function extractAllWords(value) {
         words.push(match[0].toLowerCase());
     }
     return words;
-}
-
-/**
- * Escapes a string for use in a regular expression.
- * @param {string} string The string to escape.
- * @returns {string} The escaped string.
- * @example
- * escapeRegex('^Hello$'); // '\\^Hello\\$'
- */
-export function escapeRegex(string) {
-    return string.replace(/[/\-\\^$*+?.()|[\]{}]/g, '\\$&');
 }
 
 /**

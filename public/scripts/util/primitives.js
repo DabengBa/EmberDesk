@@ -62,3 +62,14 @@ export function setValueByPath(obj, path, value) {
 export function getOptionId(option) {
     return String(getStringHash(option));
 }
+
+/**
+ * Escapes a string for use in a regular expression.
+ * @param {string} string The string to escape.
+ * @returns {string} The escaped string.
+ * @example
+ * escapeRegex('^Hello$'); // '\\^Hello\\$'
+ */
+export function escapeRegex(string) {
+    return string.replace(/[/\-\\^$*+?.()|[\]{}]/g, '\\$&');
+}
