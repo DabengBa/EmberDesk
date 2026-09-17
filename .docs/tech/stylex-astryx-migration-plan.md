@@ -91,3 +91,6 @@
 - D-config 完成：`#rm_api_block`（API Connections，43 契约 ID）与 `#left-nav-panel`（AI Response Configuration，78 内部 ID）内部 markup → `ApiConnectionsPanel.tsx` / `AiConfigPanel.tsx`；两个 mount stage 均排在 `initSecrets`/`registerCoreModules`/`initPresetManager` 之前（secrets.js 读 provider key 输入、openai.js 绑定 preset/采样控件、PromptManager 依赖 `#completion_prompt_manager` 容器）。
 - 修复 html2jsx 转换器属性破坏回归：`\bfor=` 正则误伤 `data-for`/`data-preset-manager-for`/`data-macros-autocomplete*`/`no_items_text`，影响此前各波产物（power-user/world-info/advanced-formatting/cfg-config/prompt-manager）；全部回改并新增契约断言（`data-for` 计数器、preset-manager 注册、JS-Slash-Runner `getSelectedPreset` 调用链已 headless 验证恢复）。`globals.d.ts` 为 `no_items_text` 扩类型。
 - 验证基线：unit 58 套全绿、compat 全绿、tsc 干净、workspace-panels bundle 构建通过；headless 零 console 错误。
+- 2026-09-17 续：`#character_popup`（Advanced Definitions，20 ID）与 `#right-nav-panel`（角色创建/编辑表单 + 角色列表 chrome，104 ID）内部 markup → React；`form="form_create"` 关联、`.rm_tag_filter`、hotswap、token strip 契约保留。
+- 模块顶层 DOM 捕获系统性清理：RossAscends-mods 全部面板捕获 + rm_button_create/rm_ch_create_block 绑定改 init 时解析；BulkEditOverlay `container` 改 lazy getter（单例冻结 null 导致 bulk 崩溃）；logprobs REROLL_BUTTON 改 lazy getter（Wave A 起静默死绑定）。
+- index.html 降至 ~1200 行；剩余静态内容为模板（`*_template`/`popup_template`，cloneNode 契约）、扩展 `*_container` 注入槽、动态 dialog 壳（dialogue_popup/select_chat_popup）、character_context_menu 小菜单——按设计保留静态或后续小面再迁。
