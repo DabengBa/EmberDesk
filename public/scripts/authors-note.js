@@ -17,6 +17,7 @@ import { SlashCommand } from './slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandArgument } from './slash-commands/SlashCommandArgument.js';
 export { MODULE_NAME as NOTE_MODULE_NAME };
 import { t } from './i18n.js';
+import { loadWorkspacePanelsModule } from './workspace-panels-react-bridge.js';
 import { macros, MacroCategory } from './macros/macro-system.js';
 import { MacrosParser } from './macros.js';
 import { power_user } from './power-user.js';
@@ -612,5 +613,32 @@ function registerAuthorsNoteMacros() {
             () => extension_settings.note.default ?? '',
             t`The contents of the Default Author's Note`,
         );
+    }
+}
+
+/**
+ * Mounts the React-owned floating prompt (Authors Note) drawer content.
+ * Must run before feature init: legacy bindings attach to the preserved IDs.
+ */
+export async function mountFloatingPromptPanel() {
+    const drawerContent = document.getElementById('floatingPrompt');
+    if (!drawerContent) {
+        console.warn('Floating prompt drawer not found');
+        return;
+    }
+    if (drawerContent.dataset.reactFloatingPromptMounted === 'true') {
+        return;
+    }
+
+    const host = document.createElement('div');
+    host.id = 'emberdesk-react-floating-prompt-host';
+    drawerContent.replaceChildren(host);
+
+    try {
+        const module = await loadWorkspacePanelsModule();
+        module.mountFloatingPromptPanel(host);
+        drawerContent.dataset.reactFloatingPromptMounted = 'true';
+    } catch (error) {
+        console.error('Failed to mount floating prompt panel:', error);
     }
 }

@@ -10,11 +10,8 @@
 @import url(css/accounts.css);
 @import url(css/tags.css);
 @import url(css/scrollable-button.css);
-@import url(css/welcome.css);
-@import url(css/data-maid.css);
 @import url(css/secrets.css);
 @import url(css/backgrounds.css);
-@import url(css/chat-backups.css);
 @import url(css/streaming-display.css);
 @import url(css/delete-dialog.css);
 
@@ -3584,18 +3581,6 @@ select option[disabled]:not(:checked) {
     pointer-events: initial;
 }
 
-#persona_controls .persona_name {
-    text-overflow: ellipsis;
-    overflow: hidden;
-    text-align: left;
-    white-space: nowrap;
-    font-size: calc(var(--mainFontSize) * 1.25);
-    opacity: 0.5;
-}
-
-#persona_connections_buttons {
-    margin-bottom: 5px;
-}
 
 input[type=search]::-webkit-search-cancel-button {
     -webkit-appearance: none;
@@ -4733,13 +4718,6 @@ input[type='checkbox'].del_checkbox {
 }
 
 
-#user_avatar_block {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-around;
-    padding: 1px;
-}
-
 .avatar-container .avatar {
     cursor: pointer;
     border-radius: var(--avatar-base-border-radius-round);
@@ -4788,18 +4766,6 @@ input[type='checkbox'].del_checkbox {
 
 #lock_persona_to_char.locked {
     border-color: color-mix(in srgb, var(--active) 50%, var(--SmartThemeBorderColor));
-}
-
-#user_avatar_block .avatar_upload {
-    cursor: pointer;
-    width: 60px;
-    height: 60px;
-    background: var(--grey30);
-    border-radius: 100%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    font-size: 3rem;
 }
 
 #form_upload_avatar {
@@ -7492,12 +7458,6 @@ body:not(.movingUI) .drawer-content.maximized {
 #SystemPromptColumn details,
 #InstructSequencesColumn details:not(:last-of-type) {
     margin-bottom: 5px;
-}
-
-#user_avatar_block {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
 }
 
 /* Main structure for the model cards */

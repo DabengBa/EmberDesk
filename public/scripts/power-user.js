@@ -61,6 +61,7 @@ import { bindModelTemplates } from './chat-templates.js';
 import { IMAGE_OVERSWIPE, MEDIA_DISPLAY } from './constants.js';
 import { t } from './i18n.js';
 import { persona_description_positions as _persona_description_positions } from './personas.js';
+import { loadWorkspacePanelsModule } from './workspace-panels-react-bridge.js';
 
 export const toastPositionClasses = [
     'toast-top-left',
@@ -907,6 +908,8 @@ function applyChatDisplay() {
             break;
         }
     }
+    // Mirror the class for StyleX surfaces (when.ancestor only supports [attr] selectors).
+    document.body.toggleAttribute('data-bubblechat', power_user.chat_display === 1);
 }
 
 function applyToastrPosition() {
@@ -4129,3 +4132,31 @@ jQuery(() => {
         },
     }));
 });
+
+/**
+ * Mounts the React-owned User Settings (power-user) drawer content.
+ * Must run before getSettings(): loadPowerUserSettings binds every element
+ * ID that the React surface preserves.
+ */
+export async function mountPowerUserPanel() {
+    const drawerContent = document.getElementById('user-settings-block');
+    if (!drawerContent) {
+        console.warn('User Settings drawer not found');
+        return;
+    }
+    if (drawerContent.dataset.reactPowerUserMounted === 'true') {
+        return;
+    }
+
+    const host = document.createElement('div');
+    host.id = 'emberdesk-react-power-user-host';
+    drawerContent.replaceChildren(host);
+
+    try {
+        const module = await loadWorkspacePanelsModule();
+        module.mountPowerUserPanel(host);
+        drawerContent.dataset.reactPowerUserMounted = 'true';
+    } catch (error) {
+        console.error('Failed to mount power-user panel:', error);
+    }
+}

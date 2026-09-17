@@ -9,6 +9,7 @@ import { eventSource, event_types } from './events.js';
 import { extension_settings, saveMetadataDebounced } from './extensions.js';
 import { getCharaFilename, delay } from './utils.js';
 import { power_user } from './power-user.js';
+import { loadWorkspacePanelsModule } from './workspace-panels-react-bridge.js';
 
 const extensionName = 'cfg';
 const defaultSettings = {
@@ -462,4 +463,31 @@ export function getCfgPrompt(guidanceScale, isNegative, quiet = false) {
         value: combinedCfgPrompt,
         depth: insertionDepth,
     };
+}
+
+/**
+ * Mounts the React-owned CFG configuration drawer content.
+ * Must run before initCfg(): legacy bindings attach to the preserved IDs.
+ */
+export async function mountCfgConfigPanel() {
+    const drawerContent = document.getElementById('cfgConfig');
+    if (!drawerContent) {
+        console.warn('CFG config drawer not found');
+        return;
+    }
+    if (drawerContent.dataset.reactCfgConfigMounted === 'true') {
+        return;
+    }
+
+    const host = document.createElement('div');
+    host.id = 'emberdesk-react-cfg-config-host';
+    drawerContent.replaceChildren(host);
+
+    try {
+        const module = await loadWorkspacePanelsModule();
+        module.mountCfgConfigPanel(host);
+        drawerContent.dataset.reactCfgConfigMounted = 'true';
+    } catch (error) {
+        console.error('Failed to mount CFG config panel:', error);
+    }
 }

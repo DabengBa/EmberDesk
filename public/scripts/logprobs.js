@@ -13,6 +13,7 @@ import { debounce, delay, getStringHash } from './utils.js';
 import { decodeTextTokens, getTokenizerBestMatch } from './tokenizers.js';
 import { power_user } from './power-user.js';
 import { callGenericPopup, POPUP_TYPE } from './popup.js';
+import { loadWorkspacePanelsModule } from './workspace-panels-react-bridge.js';
 import { t } from './i18n.js';
 
 const TINTS = 4;
@@ -610,4 +611,31 @@ export function initLogprobs() {
     eventSource.on(event_types.MESSAGE_DELETED, debouncedRender);
     eventSource.on(event_types.MESSAGE_EDITED, debouncedRender);
     eventSource.on(event_types.MESSAGE_SWIPED, debouncedRender);
+}
+
+/**
+ * Mounts the React-owned logprobs viewer drawer chrome. Presentation-only:
+ * renderLogprobs still fills #logprobs_generation_output dynamically.
+ */
+export async function mountLogprobsViewerPanel() {
+    const drawerContent = document.getElementById('logprobsViewer');
+    if (!drawerContent) {
+        console.warn('Logprobs viewer drawer not found');
+        return;
+    }
+    if (drawerContent.dataset.reactLogprobsMounted === 'true') {
+        return;
+    }
+
+    const host = document.createElement('div');
+    host.id = 'emberdesk-react-logprobs-host';
+    drawerContent.replaceChildren(host);
+
+    try {
+        const module = await loadWorkspacePanelsModule();
+        module.mountLogprobsViewerPanel(host);
+        drawerContent.dataset.reactLogprobsMounted = 'true';
+    } catch (error) {
+        console.error('Failed to mount logprobs viewer panel:', error);
+    }
 }

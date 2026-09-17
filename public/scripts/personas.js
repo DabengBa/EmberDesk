@@ -63,6 +63,7 @@ import { SlashCommandEnumValue, enumTypes } from './slash-commands/SlashCommandE
 import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
 import { isFirefox } from './browser-fixes.js';
 import { slashCommandReturnHelper } from './slash-commands/SlashCommandReturnHelper.js';
+import { loadWorkspacePanelsModule } from './workspace-panels-react-bridge.js';
 
 /**
  * @typedef {object} PersonaConnection A connection between a persona and a character entity
@@ -2913,6 +2914,34 @@ function registerPersonaSlashCommands() {
  * Initializes the persona management and all its functionality.
  * This is called during the initialization of the page.
  */
+/**
+ * Mounts the React-owned Persona Management drawer content.
+ * Must run before getSettings/initPersonas bindings: the React surface
+ * preserves every element ID that legacy handlers attach to.
+ */
+export async function mountPersonaManagementPanel() {
+    const drawerContent = document.getElementById('PersonaManagement');
+    if (!drawerContent) {
+        console.warn('Persona Management drawer not found');
+        return;
+    }
+    if (drawerContent.dataset.reactPersonaMounted === 'true') {
+        return;
+    }
+
+    const host = document.createElement('div');
+    host.id = 'emberdesk-react-persona-host';
+    drawerContent.replaceChildren(host);
+
+    try {
+        const module = await loadWorkspacePanelsModule();
+        module.mountPersonaManagement(host);
+        drawerContent.dataset.reactPersonaMounted = 'true';
+    } catch (error) {
+        console.error('Failed to mount persona management panel:', error);
+    }
+}
+
 export async function initPersonas() {
     await migrateNonPersonaUser();
     registerPersonaSlashCommands();

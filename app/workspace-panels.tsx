@@ -1,4 +1,4 @@
-import { Fragment, StrictMode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { Fragment, StrictMode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactElement, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { useMutation } from '@tanstack/react-query';
@@ -43,6 +43,7 @@ import type {
     MainChatSnapshot,
 } from './stores/main-chat-store';
 import { MainChatMessageRow } from './components/main-chat/MainChatMessageRow';
+import { WelcomePanel } from './components/welcome/WelcomePanel';
 import {
     createCharacterAuthoringSession,
     shouldApplyCharacterAuthoringSaveResult,
@@ -53,6 +54,13 @@ import {
     type WorldInfoWorkspacePanelState as WorldInfoWorkbenchPanelState,
 } from './world-info-workbench';
 import { SettingsSurface } from './components/settings/SettingsSurface';
+import { ChatBackupsBrowser, type ChatBackupsCommands } from './components/chat-backups/ChatBackupsBrowser';
+import { DataMaidDialog, type DataMaidCommands } from './components/data-maid/DataMaidDialog';
+import { PersonaManagementPanel } from './components/personas/PersonaManagementPanel';
+import { PowerUserPanel } from './components/power-user/PowerUserPanel';
+import { FloatingPromptPanel } from './components/panels/FloatingPromptPanel';
+import { CfgConfigPanel } from './components/panels/CfgConfigPanel';
+import { LogprobsViewerPanel } from './components/panels/LogprobsViewerPanel';
 import * as stylex from '@stylexjs/stylex';
 import { authoringStyles, workspacePanelStyles, workspaceShellStyles } from './styles/workspace-panels.styles.js';
 import { Theme } from '@astryxdesign/core';
@@ -1055,6 +1063,9 @@ function MainChatMessageListWorkspacePanel({
 
     return (
         <>
+            {snapshot.welcome?.visible ? (
+                <WelcomePanel version={snapshot.welcome.version} />
+            ) : null}
             {snapshot.window.showMoreVisible ? (
                 <button
                     type="button"
@@ -1759,4 +1770,240 @@ export function unmountWorkspacePanel(kind: WorkspacePanelKind) {
     if (mountedPanels.size === 0) {
         detachGlobalCompatibilityBridge();
     }
+}
+
+interface ChatBackupsMount {
+    root: Root;
+    host: HTMLElement;
+    options: ChatBackupsMountOptions;
+}
+
+interface ChatBackupsMountOptions {
+    buttonContainer: HTMLElement;
+    listContainer: HTMLElement;
+    commands: ChatBackupsCommands;
+    /** Bump to force a list reload while the browser stays open. */
+    refreshToken?: number;
+}
+
+let mountedChatBackups: ChatBackupsMount | null = null;
+
+function renderChatBackupsBrowser(mount: ChatBackupsMount) {
+    mount.root.render(
+        <StrictMode>
+            <Theme theme={emberDeskTheme} mode="dark">
+                <ChatBackupsBrowser
+                    buttonContainer={mount.options.buttonContainer}
+                    listContainer={mount.options.listContainer}
+                    commands={mount.options.commands}
+                    refreshToken={mount.options.refreshToken ?? 0}
+                />
+            </Theme>
+        </StrictMode>,
+    );
+}
+
+export function mountChatBackupsBrowser(options: ChatBackupsMountOptions) {
+    attachGlobalCompatibilityBridge();
+    if (mountedChatBackups) {
+        mountedChatBackups.options = options;
+        renderChatBackupsBrowser(mountedChatBackups);
+        return;
+    }
+
+    const host = document.createElement('div');
+    host.id = 'emberdesk-react-chat-backups-host';
+    host.setAttribute('data-react-chat-backups-host', 'true');
+    host.style.display = 'none';
+    document.body.appendChild(host);
+
+    mountedChatBackups = {
+        root: createRoot(host),
+        host,
+        options,
+    };
+    renderChatBackupsBrowser(mountedChatBackups);
+}
+
+export function unmountChatBackupsBrowser() {
+    if (!mountedChatBackups) {
+        return;
+    }
+
+    mountedChatBackups.root.unmount();
+    mountedChatBackups.host.remove();
+    mountedChatBackups = null;
+    if (mountedPanels.size === 0 && !mountedShellChrome && !mountedSettingsOverlay) {
+        detachGlobalCompatibilityBridge();
+    }
+}
+
+let mountedDataMaid: { root: Root; host: HTMLElement; commands: DataMaidCommands } | null = null;
+
+function renderDataMaid(mount: NonNullable<typeof mountedDataMaid>) {
+    mount.root.render(
+        <StrictMode>
+            <Theme theme={emberDeskTheme} mode="dark">
+                <DataMaidDialog commands={mount.commands} onRequestClose={() => unmountDataMaidDialog()} />
+            </Theme>
+        </StrictMode>,
+    );
+}
+
+export function mountDataMaidDialog(options: { commands: DataMaidCommands }) {
+    attachGlobalCompatibilityBridge();
+    if (mountedDataMaid) {
+        return;
+    }
+
+    const host = document.createElement('div');
+    host.id = 'emberdesk-react-data-maid-host';
+    host.setAttribute('data-react-data-maid-host', 'true');
+    document.body.appendChild(host);
+
+    mountedDataMaid = {
+        root: createRoot(host),
+        host,
+        commands: options.commands,
+    };
+    renderDataMaid(mountedDataMaid);
+}
+
+export function unmountDataMaidDialog() {
+    if (!mountedDataMaid) {
+        return;
+    }
+
+    mountedDataMaid.root.unmount();
+    mountedDataMaid.host.remove();
+    mountedDataMaid = null;
+    if (mountedPanels.size === 0 && !mountedShellChrome && !mountedSettingsOverlay && !mountedChatBackups) {
+        detachGlobalCompatibilityBridge();
+    }
+}
+
+let mountedPersonaManagement: { root: Root; container: HTMLElement } | null = null;
+
+/**
+ * Mounts the Persona Management drawer content. Presentation-only: personas.js
+ * keeps behavior ownership via the preserved element IDs.
+ */
+export function mountPersonaManagement(container: HTMLElement) {
+    attachGlobalCompatibilityBridge();
+    if (mountedPersonaManagement) {
+        if (mountedPersonaManagement.container !== container) {
+            mountedPersonaManagement.root.unmount();
+        } else {
+            return;
+        }
+    }
+
+    mountedPersonaManagement = {
+        root: createRoot(container),
+        container,
+    };
+    mountedPersonaManagement.root.render(
+        <StrictMode>
+            <Theme theme={emberDeskTheme} mode="dark">
+                <PersonaManagementPanel />
+            </Theme>
+        </StrictMode>,
+    );
+}
+
+export function unmountPersonaManagement() {
+    if (!mountedPersonaManagement) {
+        return;
+    }
+
+    mountedPersonaManagement.root.unmount();
+    mountedPersonaManagement = null;
+    if (mountedPanels.size === 0 && !mountedShellChrome && !mountedSettingsOverlay && !mountedChatBackups && !mountedDataMaid) {
+        detachGlobalCompatibilityBridge();
+    }
+}
+
+let mountedPowerUser: { root: Root; container: HTMLElement } | null = null;
+
+/**
+ * Mounts the User Settings (power-user) drawer content. Presentation-only:
+ * power-user.js and related modules keep behavior ownership via the
+ * preserved element IDs and class contracts.
+ */
+export function mountPowerUserPanel(container: HTMLElement) {
+    attachGlobalCompatibilityBridge();
+    if (mountedPowerUser) {
+        if (mountedPowerUser.container !== container) {
+            mountedPowerUser.root.unmount();
+        } else {
+            return;
+        }
+    }
+
+    mountedPowerUser = {
+        root: createRoot(container),
+        container,
+    };
+    mountedPowerUser.root.render(
+        <StrictMode>
+            <Theme theme={emberDeskTheme} mode="dark">
+                <PowerUserPanel />
+            </Theme>
+        </StrictMode>,
+    );
+}
+
+export function unmountPowerUserPanel() {
+    if (!mountedPowerUser) {
+        return;
+    }
+
+    mountedPowerUser.root.unmount();
+    mountedPowerUser = null;
+    if (mountedPanels.size === 0 && !mountedShellChrome && !mountedSettingsOverlay && !mountedChatBackups && !mountedDataMaid && !mountedPersonaManagement) {
+        detachGlobalCompatibilityBridge();
+    }
+}
+
+const mountedSmallPanels = new Map<HTMLElement, Root>();
+
+function mountSmallPanel(container: HTMLElement, element: ReactElement) {
+    attachGlobalCompatibilityBridge();
+    if (mountedSmallPanels.has(container)) {
+        return;
+    }
+
+    const root = createRoot(container);
+    mountedSmallPanels.set(container, root);
+    root.render(
+        <StrictMode>
+            <Theme theme={emberDeskTheme} mode="dark">
+                {element}
+            </Theme>
+        </StrictMode>,
+    );
+}
+
+/**
+ * Mounts the floating prompt (World Info / Authors Note) drawer content.
+ * Presentation-only: power-user.js keeps behavior ownership via element IDs.
+ */
+export function mountFloatingPromptPanel(container: HTMLElement) {
+    mountSmallPanel(container, <FloatingPromptPanel />);
+}
+
+/**
+ * Mounts the CFG scale configuration drawer content. Presentation-only:
+ * cfg-scale.js keeps behavior ownership via element IDs.
+ */
+export function mountCfgConfigPanel(container: HTMLElement) {
+    mountSmallPanel(container, <CfgConfigPanel />);
+}
+
+/**
+ * Mounts the logprobs viewer drawer content. Presentation-only:
+ * logprobs.js keeps behavior ownership via element IDs and marker classes.
+ */
+export function mountLogprobsViewerPanel(container: HTMLElement) {
+    mountSmallPanel(container, <LogprobsViewerPanel />);
 }

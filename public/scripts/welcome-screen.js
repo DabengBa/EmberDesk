@@ -2,7 +2,6 @@ import {
     addOneMessage,
     characters,
     chat,
-    displayVersion,
     doNewChat,
     getCharacters,
     getCurrentChatId,
@@ -11,6 +10,7 @@ import {
     is_send_press,
     neutralCharacterName,
     printCharactersDebounced,
+    scheduleMainChatMessageListPanelRefresh,
     selectCharacterById,
     system_avatar,
     system_message_types,
@@ -22,12 +22,20 @@ import { getRequestHeaders } from './request-context.js';
 import { getRegexedString, regex_placement } from './extensions/regex/engine.js';
 import { t } from './i18n.js';
 import { getMessageTimeStamp } from './RossAscends-mods.js';
-import { renderTemplateAsync } from './templates.js';
 import { accountStorage } from './util/AccountStorage.js';
 
 const assistantAvatarKey = 'assistant';
 const defaultAssistantAvatar = 'default_Assistant.png';
 let skipNextChatChangedWelcomeScreen = false;
+let welcomePanelVisible = false;
+
+/**
+ * Whether the welcome panel should render inside the React-owned chat surface.
+ * @returns {boolean}
+ */
+export function getWelcomePanelVisible() {
+    return welcomePanelVisible;
+}
 
 /**
  * Skips the next welcome-screen open attempt triggered by CHAT_CHANGED.
@@ -66,13 +74,16 @@ export async function openWelcomeScreen({ force = false } = {}) {
 
     const currentChatId = getCurrentChatId();
     if (currentChatId !== undefined || (chat.length > 0 && !force)) {
+        welcomePanelVisible = false;
         return;
     }
 
     if (currentChatId === undefined && force) {
         console.debug('Forcing welcome screen open.');
         chat.splice(0, chat.length);
-        $('#chat').empty();
+        if (document.getElementById('chat')?.dataset.reactMainChatOwner !== 'react') {
+            $('#chat').empty();
+        }
     }
 
     await sendWelcomePanel();
@@ -142,23 +153,17 @@ function sendWelcomePrompt() {
 
 /**
  * Sends the welcome panel to the chat.
+ * The panel is projected through the main-chat snapshot and rendered by the
+ * React-owned message list (React is the sole owner of #chat).
  */
 async function sendWelcomePanel() {
-    try {
-        const chatElement = document.getElementById('chat');
-        if (!chatElement) {
-            console.error('Chat element not found');
-            return;
-        }
-        const templateData = {
-            version: displayVersion,
-        };
-        const template = await renderTemplateAsync('welcomePanel', templateData);
-        const fragment = document.createRange().createContextualFragment(template);
-        chatElement.append(fragment.firstChild);
-    } catch (error) {
-        console.error('Welcome screen error:', error);
+    const chatElement = document.getElementById('chat');
+    if (!chatElement) {
+        console.error('Chat element not found');
+        return;
     }
+    welcomePanelVisible = true;
+    scheduleMainChatMessageListPanelRefresh();
 }
 
 export async function openPermanentAssistantChat({ tryCreate = true, created = false } = {}) {

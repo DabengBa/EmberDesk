@@ -16,8 +16,6 @@ const CSS_IMPORT_RE = /import\s+(?:[^'"]*\s+from\s+)?['"]([^'"]+\.css)['"]/g;
  */
 export const ALLOWED_CSS_IMPORTS = new Set([
     '@astryxdesign/core/astryx.css',
-    './styles/settings-surface.css',
-    '../styles/globals.css',
 ]);
 
 function collectAppSourceFiles(directory, relativeDirectory = 'app') {

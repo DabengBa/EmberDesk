@@ -69,6 +69,7 @@ import {
     applyPowerUserSettings,
     generatedTextFiltered,
     applyStylePins,
+    mountPowerUserPanel,
 } from './scripts/power-user.js';
 
 import {
@@ -201,12 +202,12 @@ import {
 } from './scripts/chat-generation-command-service.js';
 import { markdownExclusionExt } from './scripts/showdown-exclusion.js';
 import { markdownUnderscoreExt } from './scripts/showdown-underscore.js';
-import { NOTE_MODULE_NAME, initAuthorsNote, metadata_keys, setFloatingPrompt, shouldWIAddPrompt } from './scripts/authors-note.js';
+import { NOTE_MODULE_NAME, initAuthorsNote, metadata_keys, mountFloatingPromptPanel, setFloatingPrompt, shouldWIAddPrompt } from './scripts/authors-note.js';
 import { registerPromptManagerMigration } from './scripts/PromptManager.js';
 import { getRegexedString, regex_placement } from './scripts/extensions/regex/engine.js';
-import { initLogprobs, saveLogprobsForActiveMessage } from './scripts/logprobs.js';
+import { initLogprobs, mountLogprobsViewerPanel, saveLogprobsForActiveMessage } from './scripts/logprobs.js';
 import { FILTER_STATES, FILTER_TYPES, FilterHelper, isFilterState } from './scripts/filters.js';
-import { getCfgPrompt, getGuidanceScale, initCfg } from './scripts/cfg-scale.js';
+import { getCfgPrompt, getGuidanceScale, initCfg, mountCfgConfigPanel } from './scripts/cfg-scale.js';
 import {
     force_output_sequence,
     formatInstructModeChat,
@@ -223,6 +224,7 @@ import {
     getUserAvatar,
     setUserAvatar,
     initPersonas,
+    mountPersonaManagementPanel,
     setPersonaDescription,
     initUserAvatar,
     updatePersonaConnectionsAvatarList,
@@ -275,7 +277,7 @@ import { initBulkEdit } from './scripts/bulk-edit.js';
 import { getContext } from './scripts/st-context.js';
 import { extractReasoningFromData, extractReasoningSignatureFromData, initReasoning, parseReasoningInSwipes, PromptReasoning, ReasoningHandler, removeReasoningFromString, updateReasoningUI } from './scripts/reasoning.js';
 import { accountStorage } from './scripts/util/AccountStorage.js';
-import { initWelcomeScreen, openPermanentAssistantChat, openPermanentAssistantCard, getPermanentAssistantAvatar, suppressNextChatChangedWelcomeScreen } from './scripts/welcome-screen.js';
+import { initWelcomeScreen, openPermanentAssistantChat, openPermanentAssistantCard, getPermanentAssistantAvatar, getWelcomePanelVisible, suppressNextChatChangedWelcomeScreen } from './scripts/welcome-screen.js';
 import { initDataMaid } from './scripts/data-maid.js';
 import { clearItemizedPrompts, deleteItemizedPromptForMessage, deleteItemizedPrompts, findItemizedPromptSet, initItemizedPrompts, itemizedParams, itemizedPrompts, loadItemizedPrompts, promptItemize, replaceItemizedPromptText, saveItemizedPrompts, swapItemizedPrompts } from './scripts/itemized-prompts.js';
 import { getSystemMessageByType, initSystemMessages, SAFETY_CHAT, sendSystemMessage, system_message_types, system_messages } from './scripts/system-messages.js';
@@ -985,7 +987,7 @@ function getMainChatDistanceFromEnd(chatContainer) {
     return Math.max(chatContainer.scrollHeight - (chatContainer.scrollTop + chatContainer.clientHeight), 0);
 }
 
-function scheduleMainChatMessageListPanelRefresh() {
+export function scheduleMainChatMessageListPanelRefresh() {
     if (mainChatMessageListBridgeRefreshFrame !== 0) {
         return;
     }
@@ -2530,6 +2532,7 @@ function getMainChatMessageListReactBridgeState() {
             errorLabel: slashCommand.errorLabel,
         },
         messageUiById: getMainChatMessageUiStateById(),
+        welcome: { visible: getWelcomePanelVisible(), version: displayVersion },
         window: {
             visibleMessageIds,
             anchorMessageId: visibleMessageIds[0] ?? null,
@@ -4006,6 +4009,13 @@ async function bootstrapWorkspace() {
     }));
     await measureStartupStage('initPresetManager', () => initPresetManager());
     await measureStartupStage('initSystemMessages', () => initSystemMessages());
+    await measureStartupStage('mountPersonaManagement', () => mountPersonaManagementPanel());
+    await measureStartupStage('mountPowerUserPanel', () => mountPowerUserPanel());
+    await measureStartupStage('mountConfigDrawers', () => Promise.all([
+        mountFloatingPromptPanel(),
+        mountCfgConfigPanel(),
+        mountLogprobsViewerPanel(),
+    ]));
     await getSettings(initLoaderHandle);
     await measureStartupStage('checkOpenRouterAuth', () => checkOpenRouterAuth());
     await measureStartupStage('bindPostSettingsUi', () => Promise.resolve().then(() => {

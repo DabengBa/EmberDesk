@@ -52,8 +52,12 @@ function MessageActionShell({
         }
     };
 
+    // Legacy welcome.css hid action buttons on assistant welcome messages via
+    // `#chat .mes[type="assistant_message"] .mes_button`. Preserve it structurally.
+    const assistantMessage = message.extraType === 'assistant_message';
+
     return (
-        <div className="mes_buttons" style={{ display: message.editing ? 'none' : undefined }}>
+        <div className="mes_buttons" style={{ display: message.editing || assistantMessage ? 'none' : undefined }}>
             {message.failureRetryVisible ? (
                 <div
                     className="mes_button generation_failure_retry fa-solid fa-rotate-right"
@@ -185,6 +189,7 @@ export function MainChatMessageRow({
         is_system: message.role === 'system' ? 'true' : 'false',
         bookmark_link: message.bookmarkLink,
         title: message.title || undefined,
+        type: message.extraType || undefined,
     };
     const hasReasoning = render.reasoningHtml !== '' || message.reasoningEditing;
     const setReasoningOpen = (open: boolean) => {
