@@ -22,7 +22,7 @@ describe('secrets input map', () => {
         expectNotContainsMarkers(frontendSecrets, [
             '[SECRET_KEYS.OPENAI_FALLBACK]: \'#api_key_openai\'',
         ], { contractName: 'fallback frontend secret mapping' });
-        expect(readRepoFile('public/index.html')).toContain('id="fallback_provider_api_key"');
+        expect(readRepoFile('app/components/api/ApiConnectionsPanel.tsx')).toContain('id="fallback_provider_api_key"');
     });
 
     test('fallback key controls write and clear only the dedicated fallback secret', () => {
@@ -41,12 +41,12 @@ describe('secrets input map', () => {
     });
 
     test('unified provider key keeps saved state and key history reachable', () => {
-        const indexHtml = readRepoFile('public/index.html');
+        const apiPanel = readRepoFile('app/components/api/ApiConnectionsPanel.tsx');
         const openaiSource = readRepoFile('public/scripts/openai.js');
 
-        expectContainsMarkers(indexHtml, [
+        expectContainsMarkers(apiPanel, [
             'id="api_key_unified_manage"',
-            'class="menu_button menu_button_icon manage-api-keys"',
+            'className="menu_button menu_button_icon manage-api-keys"',
             'aria-label="Manage API keys"',
             'data-i18n="[title][aria-label]Manage API keys"',
         ], { contractName: 'unified provider key manager entry' });

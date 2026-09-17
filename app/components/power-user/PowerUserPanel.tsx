@@ -171,7 +171,7 @@ export function PowerUserPanel() {
                                         <div className="fa-solid fa-circle-info opacity50p" data-i18n="[title]Width of the main chat window in % of screen width" title="Width of the main chat window in % of screen width"></div>
                                     </small>
                                     <input className="neo-range-slider" type="range" id="chat_width_slider" name="chat_width_slider" min="25" max="100" step="1" />
-                                    <input className="neo-range-input" type="number" min="25" max="100" step="1" data-htmlFor="chat_width_slider" id="chat_width_slider_counter" />
+                                    <input className="neo-range-input" type="number" min="25" max="100" step="1" data-for="chat_width_slider" id="chat_width_slider_counter" />
                                 </div>
 
                                 <div className="alignitemscenter flex-container flexFlowColumn flexBasis48p flexGrow flexShrink gap0">
@@ -180,7 +180,7 @@ export function PowerUserPanel() {
                                         <div className="fa-solid fa-circle-info opacity50p" data-i18n="[title]Font size" title="Font size"></div>
                                     </small>
                                     <input className="neo-range-slider" type="range" id="font_scale" name="font_scale" min="0.5" max="1.5" step="0.01" />
-                                    <input className="neo-range-input" type="number" min="0.5" max="1.5" step="0.01" data-htmlFor="font_scale" id="font_scale_counter" />
+                                    <input className="neo-range-input" type="number" min="0.5" max="1.5" step="0.01" data-for="font_scale" id="font_scale_counter" />
                                 </div>
 
                                 <div className="alignitemscenter flex-container flexFlowColumn flexBasis48p flexGrow flexShrink gap0">
@@ -189,7 +189,7 @@ export function PowerUserPanel() {
                                         <div className="fa-solid fa-circle-info opacity50p" data-i18n="[title]Blur strength on UI panels." title="Blur strength on UI panels."></div>
                                     </small>
                                     <input className="neo-range-slider" type="range" id="blur_strength" name="blur_strength" min="0" max="30" step="1" />
-                                    <input className="neo-range-input" type="number" min="0" max="30" step="1" data-htmlFor="blur_strength" id="blur_strength_counter" />
+                                    <input className="neo-range-input" type="number" min="0" max="30" step="1" data-for="blur_strength" id="blur_strength_counter" />
                                 </div>
 
                                 <div className="alignitemscenter flex-container flexFlowColumn flexBasis48p flexGrow flexShrink gap0">
@@ -198,7 +198,7 @@ export function PowerUserPanel() {
                                         <div className="fa-solid fa-circle-info opacity50p" data-i18n="[title]Strength of the text shadows" title="Strength of the text shadows"></div>
                                     </small>
                                     <input className="neo-range-slider" type="range" id="shadow_width" name="shadow_width" min="0" max="5" step="1" />
-                                    <input className="neo-range-input" type="number" min="0" max="5" step="1" data-htmlFor="shadow_width" id="shadow_width_counter" />
+                                    <input className="neo-range-input" type="number" min="0" max="5" step="1" data-for="shadow_width" id="shadow_width_counter" />
                                 </div>
                             </div>
                             <hr />
@@ -433,7 +433,7 @@ export function PowerUserPanel() {
                             <div id="CustomCSS-block" className="flex-container flexFlowColumn">
                                 <h4 className="title_restorable" title="Apply a custom CSS style to all of the ST GUI." data-i18n="[title]Apply a custom CSS style to all of the ST GUI">
                                     <span data-i18n="Custom CSS">Custom CSS</span>
-                                    <i className="editor_maximize fa-solid fa-maximize right_menu_button" data-htmlFor="customCSS" title="Expand the editor" data-i18n="[title]Expand the editor"  />
+                                    <i className="editor_maximize fa-solid fa-maximize right_menu_button" data-for="customCSS" title="Expand the editor" data-i18n="[title]Expand the editor"  />
                                 </h4>
                                 <div id="CustomCSS-textAreaBlock" className="flex-container flexnowrap alignitemscenter">
                                     <textarea id="customCSS" className="text_pole margin0 margin-r5 textarea_compact monospace" rows={8}></textarea>
@@ -454,7 +454,7 @@ export function PowerUserPanel() {
                                             <div className="fa-solid fa-circle-info opacity50p" data-i18n="[title]The number of chat history messages to load before pagination." title="The number of chat history messages to load before pagination."></div>
                                         </small>
                                         <input className="neo-range-slider" type="range" id="chat_truncation" name="chat_truncation" min="0" max="1000" step="5" />
-                                        <input className="neo-range-input" type="number" min="0" max="1000" step="5" data-htmlFor="chat_truncation" id="chat_truncation_counter" />
+                                        <input className="neo-range-input" type="number" min="0" max="1000" step="5" data-for="chat_truncation" id="chat_truncation_counter" />
                                         <small data-i18n="(0 = All)">(0 = All)</small>
                                     </div>
 
@@ -464,7 +464,7 @@ export function PowerUserPanel() {
                                             <div className="fa-solid fa-circle-info opacity50p" data-i18n="[title]Update speed of streamed text." title="Update speed of streamed text."></div>
                                         </small>
                                         <input className="neo-range-slider" type="range" id="streaming_fps" name="streaming_fps" min="5" max="100" step="5" />
-                                        <input className="neo-range-input" type="number" min="5" max="100" step="5" data-htmlFor="streaming_fps" id="streaming_fps_counter" />
+                                        <input className="neo-range-input" type="number" min="5" max="100" step="5" data-for="streaming_fps" id="streaming_fps_counter" />
                                     </div>
                                 </div>
                                 <div id="examples-behavior-block">
@@ -702,7 +702,7 @@ The new engine is designed to cleanly replace the old regex-based macro system.`
                                     <div className="flex-container flexFlowColumn gap0" title="Sets the font size of the autocomplete." data-i18n="[title]Sets the font size of the autocomplete.">
                                         <label htmlFor="stscript_autocomplete_font_scale"><small>Font Scale</small></label>
                                         <input className="neo-range-slider" type="range" id="stscript_autocomplete_font_scale" min="0.5" max="2" step="0.01" />
-                                        <input className="neo-range-input" type="number" min="0.5" max="2" step="0.01" data-htmlFor="stscript_autocomplete_font_scale" id="stscript_autocomplete_font_scale_counter" />
+                                        <input className="neo-range-input" type="number" min="0.5" max="2" step="0.01" data-for="stscript_autocomplete_font_scale" id="stscript_autocomplete_font_scale_counter" />
                                     </div>
                                     <div title="Sets the width of the autocomplete." data-i18n="[title]Sets the width of the autocomplete.">
                                         <label htmlFor="stscript_autocomplete_width">

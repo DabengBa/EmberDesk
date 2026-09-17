@@ -33,8 +33,10 @@ describe('Wave B React surfaces', () => {
             expect(indexHtml).not.toContain(`id="${id}"`);
         }
         expect(indexHtml).toContain('id="completion_prompt_manager_popup"');
-        // The dynamic prompt list container stays legacy-rendered.
-        expect(indexHtml).toContain('id="completion_prompt_manager"');
+        // The dynamic prompt list container lives in the AI config drawer
+        // (React-owned since the left-nav-panel migration).
+        const aiConfig = readRepoFile('app/components/ai-config/AiConfigPanel.tsx');
+        expect(aiConfig).toContain('id="completion_prompt_manager"');
 
         expect(openai).toContain('export async function mountPromptManagerPopup(');
         expect(openai).toContain('module.mountPromptManagerPopup(host)');

@@ -28,7 +28,7 @@ export function CfgConfigPanel() {
                                     <input type="range" id="chat_cfg_guidance_scale" name="volume" min="0.10" max="4.00" step="0.05" />
                                 </div>
                                 <div className="range-block-counter">
-                                    <input type="number" min="0.10" max="4.00" step="0.05" data-htmlFor="chat_cfg_guidance_scale" id="chat_cfg_guidance_scale_counter" />
+                                    <input type="number" min="0.10" max="4.00" step="0.05" data-for="chat_cfg_guidance_scale" id="chat_cfg_guidance_scale_counter" />
                                 </div>
                             </div>
                             <div>
@@ -63,7 +63,7 @@ export function CfgConfigPanel() {
                                     <input type="range" id="chara_cfg_guidance_scale" name="volume" min="0.10" max="4.00" step="0.05" />
                                 </div>
                                 <div className="range-block-counter">
-                                    <input type="number" min="0.10" max="4.00" step="0.05" data-htmlFor="chara_cfg_guidance_scale" id="chara_cfg_guidance_scale_counter" />
+                                    <input type="number" min="0.10" max="4.00" step="0.05" data-for="chara_cfg_guidance_scale" id="chara_cfg_guidance_scale_counter" />
                                 </div>
                             </div>
                             <div>
@@ -98,7 +98,7 @@ export function CfgConfigPanel() {
                                     <input type="range" id="global_cfg_guidance_scale" name="volume" min="0.10" max="4.00" step="0.05" />
                                 </div>
                                 <div className="range-block-counter">
-                                    <input type="number" min="0.10" max="4.00" step="0.05" data-htmlFor="global_cfg_guidance_scale" id="global_cfg_guidance_scale_counter" />
+                                    <input type="number" min="0.10" max="4.00" step="0.05" data-for="global_cfg_guidance_scale" id="global_cfg_guidance_scale_counter" />
                                 </div>
                             </div>
                             <div>

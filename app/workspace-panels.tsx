@@ -74,6 +74,8 @@ import { WorldInfoPanel } from './components/panels/WorldInfoPanel';
 import { QuickReplyEditorPanel } from './components/quick-reply/QuickReplyEditor';
 import { QuickReplySettingsPanel } from './components/quick-reply/QuickReplySettings';
 import { ChatComposer } from './components/composer/ChatComposer';
+import { ApiConnectionsPanel } from './components/api/ApiConnectionsPanel';
+import { AiConfigPanel } from './components/ai-config/AiConfigPanel';
 import * as stylex from '@stylexjs/stylex';
 import { authoringStyles, workspacePanelStyles, workspaceShellStyles } from './styles/workspace-panels.styles.js';
 import { Theme } from '@astryxdesign/core';
@@ -2116,4 +2118,20 @@ export function mountQuickReplySettings(container: HTMLElement) {
  */
 export function mountChatComposer(container: HTMLElement) {
     mountSmallPanel(container, <ChatComposer />);
+}
+
+/**
+ * Mounts the API Connections drawer markup into #rm_api_block.
+ * Synchronous commit: initOpenAI binds api_button_openai/model selects right after.
+ */
+export function mountApiConnectionsPanel(container: HTMLElement) {
+    mountSmallPanel(container, <ApiConnectionsPanel />);
+}
+
+/**
+ * Mounts the AI Response Configuration drawer markup into #left-nav-panel.
+ * Synchronous commit: initOpenAI/getSettings bind the preserved IDs right after.
+ */
+export function mountAiConfigPanel(container: HTMLElement) {
+    mountSmallPanel(container, <AiConfigPanel />);
 }

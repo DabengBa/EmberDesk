@@ -20,7 +20,7 @@ export function readRepoFile(relativePath) {
 
 export function getTagByClass(html, className, { contractName = `class ${className}` } = {}) {
     const escaped = escapeRegExp(className);
-    const tagPattern = new RegExp(`<[^>]*\\bclass="[^"]*\\b${escaped}\\b[^"]*"[^>]*>`);
+    const tagPattern = new RegExp(`<[^>]*\\bclass(?:Name)?="[^"]*\\b${escaped}\\b[^"]*"[^>]*>`);
     const match = html.match(tagPattern);
 
     if (!match) {
@@ -46,7 +46,7 @@ export function expectButtonAffordance(tag, label, { contractName = label } = {}
     if (!/\brole="button"/.test(tag)) {
         fail(contractName, 'expected role="button"');
     }
-    if (!/\btabindex="0"/.test(tag)) {
+    if (!/\btabindex="0"|\btabIndex=\{0\}/.test(tag)) {
         fail(contractName, 'expected tabindex="0"');
     }
     if (!new RegExp(`\\baria-label="${escapeRegExp(label)}"`).test(tag)) {

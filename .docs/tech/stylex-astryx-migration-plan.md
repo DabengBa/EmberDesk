@@ -88,3 +88,6 @@
 - 验证基线：unit 622/622 绿、compat 107/107 绿、tsc 干净、workspace-panels bundle 构建通过。
 - 2026-09-17：用户验收 A–C（本地免密环境手动测试通过）。Wave D 缩范围为 D-core（仅 composer），开工。
 - D-core 完成：`#send_form` 内部 markup → `ChatComposer.tsx`（17 个契约 ID 全保留，`send_textarea` 非受控）；mount 在 jQuery ready 回调顶部、`#send_but`/`#send_textarea` 绑定之前执行；修复两处模块顶层 DOM 捕获陷阱（`optionsPopper` 改 lazy init，`RossAscends-mods.js` 的 `sendTextArea` 改为 init 时填充）。headless 验证：composer 全元素就位、options 菜单开合、send 点击无异常。D-remainder（Generate service 化、script.js 瘦身）未动。
+- D-config 完成：`#rm_api_block`（API Connections，43 契约 ID）与 `#left-nav-panel`（AI Response Configuration，78 内部 ID）内部 markup → `ApiConnectionsPanel.tsx` / `AiConfigPanel.tsx`；两个 mount stage 均排在 `initSecrets`/`registerCoreModules`/`initPresetManager` 之前（secrets.js 读 provider key 输入、openai.js 绑定 preset/采样控件、PromptManager 依赖 `#completion_prompt_manager` 容器）。
+- 修复 html2jsx 转换器属性破坏回归：`\bfor=` 正则误伤 `data-for`/`data-preset-manager-for`/`data-macros-autocomplete*`/`no_items_text`，影响此前各波产物（power-user/world-info/advanced-formatting/cfg-config/prompt-manager）；全部回改并新增契约断言（`data-for` 计数器、preset-manager 注册、JS-Slash-Runner `getSelectedPreset` 调用链已 headless 验证恢复）。`globals.d.ts` 为 `no_items_text` 扩类型。
+- 验证基线：unit 58 套全绿、compat 全绿、tsc 干净、workspace-panels bundle 构建通过；headless 零 console 错误。

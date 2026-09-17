@@ -24,6 +24,8 @@ declare global {
       // send_textarea carries connection-state placeholder overrides read by legacy JS.
       no_connection_text?: string;
       connected_text?: string;
+      // List containers use this for empty-state text; i18n writes it via data-i18n="[no_items_text]...".
+      no_items_text?: string;
     }
   }
 }

@@ -313,7 +313,7 @@ describe('chat workspace structure', () => {
     });
 
     test('keeps fallback provider controls embedded in the API configuration drawer', () => {
-        const indexHtml = readRepoFile('public/index.html');
+        const indexHtml = readRepoFile('app/components/api/ApiConnectionsPanel.tsx');
         const scriptSource = readRepoFile('public/scripts/openai.js');
         const styleSource = readRepoFile('public/style.css');
 
@@ -321,7 +321,7 @@ describe('chat workspace structure', () => {
             'id="fallback_provider_section"',
             'id="fallback_provider_enabled"',
             'id="fallback_provider_status"',
-            'class="fallback-provider-details"',
+            'className="fallback-provider-details"',
             'id="fallback_provider_base_url"',
             'id="fallback_provider_model"',
             'id="fallback_provider_api_key"',
@@ -344,20 +344,20 @@ describe('chat workspace structure', () => {
         expect(indexHtml).not.toMatch(/<select id="chat_completion_source"[^>]*data-source/);
         expect(scriptSource).not.toContain("$(this).attr('data-source', oai_settings.chat_completion_source);");
         expect(scriptSource).toContain("$('[data-source]').each(function () {");
-        expect(indexHtml).toMatch(/<div class="base-url-field wide100p"[^>]*data-source="openai,claude,makersuite">[\s\S]*<label class="chat-completion-field wide100p"[^>]*for="openai_reverse_proxy"/);
+        expect(indexHtml).toMatch(/<div className="base-url-field wide100p"[^>]*data-source="openai,claude,makersuite">[\s\S]*<label className="chat-completion-field wide100p"[^>]*htmlFor="openai_reverse_proxy"/);
         expect(indexHtml).toMatch(/id="openai_reverse_proxy"[^>]*\baria-describedby="base_url_status"/);
         expect(indexHtml).toMatch(/id="base_url_status"[^>]*\brole="status"[^>]*\baria-live="polite"[^>]*\bdata-mode="direct"/);
         expect(scriptSource).toContain('function updateBaseUrlStatus()');
         expect(scriptSource).toContain(".attr('data-mode', hasCustomEndpoint ? 'custom' : 'direct')");
         expect(scriptSource).toContain('Custom endpoint active. API key field stores proxy password.');
         expect(styleSource).toContain('.base-url-status[data-mode="custom"]');
-        expect(indexHtml).toMatch(/<div class="fallback-provider-details">[\s\S]*id="fallback_provider_base_url"/);
+        expect(indexHtml).toMatch(/<div className="fallback-provider-details">[\s\S]*id="fallback_provider_base_url"/);
         expect(indexHtml).toMatch(/id="fallback_provider_base_url"[^>]*\baria-label="Fallback provider Base URL"/);
         expect(indexHtml).toMatch(/id="fallback_provider_model"[^>]*\bplaceholder="gpt-4.1-mini"/);
-        expect(indexHtml).toMatch(/id="fallback_provider_api_key"[^>]*\bautocomplete="off"/);
+        expect(indexHtml).toMatch(/id="fallback_provider_api_key"[^>]*\bautoComplete="off"/);
         expect(indexHtml).toMatch(/id="fallback_provider_status"[^>]*\baria-live="polite"/);
         expect(indexHtml).toMatch(/id="fallback_provider_cost_warning"[^>]*\brole="note"/);
-        expect(indexHtml).toMatch(/id="test_api_button"[^>]*class="[^"]*\bapi_button\b/);
+        expect(indexHtml).toMatch(/id="test_api_button"[^>]*className="[^"]*\bapi_button\b/);
         expect(scriptSource).toContain(".attr('data-state', status.state)");
         expect(styleSource).toContain('.fallback-provider-status[data-state="ready"]');
         expect(styleSource).toContain('.fallback-provider-status[data-state="needs_setup"]');

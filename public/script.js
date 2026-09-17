@@ -4004,6 +4004,8 @@ async function bootstrapWorkspace() {
         reloadMarkdownProcessor();
         applyBrowserFixes();
     }));
+    await measureStartupStage('mountApiConnectionsPanel', () => mountApiConnectionsPanel());
+    await measureStartupStage('mountAiConfigPanel', () => mountAiConfigPanel());
     await measureStartupStage('initSecrets', () => initSecrets());
     await measureStartupStage('readSecretState', () => readSecretState());
     await measureStartupStage('initLocales', () => initLocales());
@@ -15468,6 +15470,62 @@ async function mountChatComposer() {
         sendForm.dataset.reactComposerMounted = 'true';
     } catch (error) {
         console.error('Failed to mount chat composer:', error);
+    }
+}
+
+/**
+ * Mounts the React-owned API Connections drawer markup into #rm_api_block.
+ * Must complete before initOpenAI (registerCoreModules stage): api_button_openai,
+ * model selects, and secret-field inputs are bound from the preserved IDs.
+ */
+async function mountApiConnectionsPanel() {
+    const drawerContent = document.getElementById('rm_api_block');
+    if (!drawerContent) {
+        console.warn('API connections drawer not found');
+        return;
+    }
+    if (drawerContent.dataset.reactApiPanelMounted === 'true') {
+        return;
+    }
+
+    const host = document.createElement('div');
+    host.id = 'emberdesk-react-api-connections-host';
+    drawerContent.replaceChildren(host);
+
+    try {
+        const module = await loadWorkspacePanelsModule();
+        module.mountApiConnectionsPanel(host);
+        drawerContent.dataset.reactApiPanelMounted = 'true';
+    } catch (error) {
+        console.error('Failed to mount api connections panel:', error);
+    }
+}
+
+/**
+ * Mounts the React-owned AI Response Configuration markup into #left-nav-panel.
+ * Must complete before initOpenAI (registerCoreModules stage) and getSettings:
+ * preset controls, sampling fields, and prompt textareas are bound by ID.
+ */
+async function mountAiConfigPanel() {
+    const drawerContent = document.getElementById('left-nav-panel');
+    if (!drawerContent) {
+        console.warn('AI config drawer not found');
+        return;
+    }
+    if (drawerContent.dataset.reactAiConfigMounted === 'true') {
+        return;
+    }
+
+    const host = document.createElement('div');
+    host.id = 'emberdesk-react-ai-config-host';
+    drawerContent.replaceChildren(host);
+
+    try {
+        const module = await loadWorkspacePanelsModule();
+        module.mountAiConfigPanel(host);
+        drawerContent.dataset.reactAiConfigMounted = 'true';
+    } catch (error) {
+        console.error('Failed to mount ai config panel:', error);
     }
 }
 

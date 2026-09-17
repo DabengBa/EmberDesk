@@ -60,7 +60,7 @@ export function AdvancedFormattingPanel() {
                                 <div data-cc-null>
                                     <label htmlFor="context_story_string" className="flex-container">
                                         <small data-i18n="Story String">Story String</small>
-                                        <i className="editor_maximize fa-solid fa-maximize right_menu_button" data-htmlFor="context_story_string" title="Expand the editor" data-i18n="[title]Expand the editor" />
+                                        <i className="editor_maximize fa-solid fa-maximize right_menu_button" data-for="context_story_string" title="Expand the editor" data-i18n="[title]Expand the editor" />
                                     </label>
                                     <textarea id="context_story_string" data-macros className="text_pole textarea_compact autoSetHeight"></textarea>
                                 </div>
@@ -382,7 +382,7 @@ export function AdvancedFormattingPanel() {
                             <div>
                                 <label htmlFor="sysprompt_content" className="flex-container">
                                     <small data-i18n="Prompt Content">Prompt Content</small>
-                                    <i className="editor_maximize fa-solid fa-maximize right_menu_button" data-htmlFor="sysprompt_content" title="Expand the editor" data-i18n="[title]Expand the editor" />
+                                    <i className="editor_maximize fa-solid fa-maximize right_menu_button" data-for="sysprompt_content" title="Expand the editor" data-i18n="[title]Expand the editor" />
                                 </label>
                                 <textarea id="sysprompt_content" data-macros className="text_pole textarea_compact autoSetHeight"></textarea>
                             </div>
@@ -390,7 +390,7 @@ export function AdvancedFormattingPanel() {
                             <div>
                                 <label htmlFor="sysprompt_post_history" className="flex-container">
                                     <small data-i18n="Post-History Instructions">Post-History Instructions</small>
-                                    <i className="editor_maximize fa-solid fa-maximize right_menu_button" data-htmlFor="sysprompt_post_history" title="Expand the editor" data-i18n="[title]Expand the editor" />
+                                    <i className="editor_maximize fa-solid fa-maximize right_menu_button" data-for="sysprompt_post_history" title="Expand the editor" data-i18n="[title]Expand the editor" />
                                 </label>
                                 <textarea id="sysprompt_post_history" data-macros className="text_pole textarea_compact autoSetHeight"></textarea>
                             </div>

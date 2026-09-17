@@ -46,7 +46,7 @@ export function WorldInfoPanel() {
                                                 <span data-i18n="Scan Depth">Scan Depth</span>
                                             </small>
                                             <input className="neo-range-slider" type="range" id="world_info_depth" name="world_info_depth" min="0" max="1000" step="1" />
-                                            <input className="neo-range-input" type="number" min="0" max="1000" step="1" data-htmlFor="world_info_depth" id="world_info_depth_counter" />
+                                            <input className="neo-range-input" type="number" min="0" max="1000" step="1" data-for="world_info_depth" id="world_info_depth_counter" />
                                         </div>
 
                                             <div className="alignitemscenter flex-container flexFlowColumn flexGrow flexShrink gap0 flexBasis48p">
@@ -54,7 +54,7 @@ export function WorldInfoPanel() {
                                                     <span data-i18n="Context %">Context %</span>
                                                 </small>
                                                 <input className="neo-range-slider" type="range" id="world_info_budget" name="world_info_budget" min="1" max="100" step="1" />
-                                                <input className="neo-range-input" type="number" min="1" max="100" step="1" data-htmlFor="world_info_budget" id="world_info_budget_counter" />
+                                                <input className="neo-range-input" type="number" min="1" max="100" step="1" data-for="world_info_budget" id="world_info_budget_counter" />
                                             </div>
 
                                             <div className="alignitemscenter flex-container flexFlowColumn flexGrow flexShrink gap0 flexBasis48p">
@@ -63,7 +63,7 @@ export function WorldInfoPanel() {
                                                     <div className="fa-solid fa-circle-info opacity50p" data-i18n="[title](0 = disabled)" title="(0 = disabled)"></div>
                                                 </small>
                                                 <input className="neo-range-slider" type="range" id="world_info_budget_cap" name="world_info_budget_cap" min="0" max="65536" step="1" />
-                                                <input className="neo-range-input" type="number" min="0" max="65536" step="1" data-htmlFor="world_info_budget_cap" id="world_info_budget_cap_counter" />
+                                                <input className="neo-range-input" type="number" min="0" max="65536" step="1" data-for="world_info_budget_cap" id="world_info_budget_cap_counter" />
                                             </div>
 
                                             <div className="alignitemscenter flex-container flexFlowColumn flexGrow flexShrink gap0 flexBasis48p" title="Scan chronologically until reached min entries or token budget." data-i18n="[title]Scan chronologically until reached min entries or token budget.">
@@ -72,7 +72,7 @@ export function WorldInfoPanel() {
                                                     <div className="fa-solid fa-triangle-exclamation opacity50p" data-i18n="[title](disabled when max recursion steps are used)" title="(disabled when max recursion steps are used)"></div>
                                                 </small>
                                                 <input className="neo-range-slider" type="range" id="world_info_min_activations" name="world_info_min_activations" min="0" max="100" step="1" />
-                                                <input className="neo-range-input" type="number" min="0" max="100" step="1" data-htmlFor="world_info_min_activations" id="world_info_min_activations_counter" />
+                                                <input className="neo-range-input" type="number" min="0" max="100" step="1" data-for="world_info_min_activations" id="world_info_min_activations_counter" />
                                             </div>
 
                                             <div className="alignitemscenter flex-container flexFlowColumn flexGrow flexShrink gap0 flexBasis48p" title="Scan chronologically until reached min entries or token budget." data-i18n="[title]Scan chronologically until reached min entries or token budget.">
@@ -81,7 +81,7 @@ export function WorldInfoPanel() {
                                                     <div className="fa-solid fa-circle-info opacity50p" data-i18n="[title](0 = unlimited, use budget)" title="(0 = unlimited, use budget)"></div>
                                                 </small>
                                                 <input className="neo-range-slider" type="range" id="world_info_min_activations_depth_max" name="volume" min="0" max="100" step="1" />
-                                                <input className="neo-range-input" type="number" min="0" max="100" step="1" data-htmlFor="world_info_min_activations_depth_max" id="world_info_min_activations_depth_max_counter" />
+                                                <input className="neo-range-input" type="number" min="0" max="100" step="1" data-for="world_info_min_activations_depth_max" id="world_info_min_activations_depth_max_counter" />
                                             </div>
                                             <div className="alignitemscenter flex-container flexFlowColumn flexGrow flexShrink gap0 flexBasis48p" title="Cap the number of entry activation recursions" data-i18n="[title]Cap the number of entry activation recursions">
                                                 <small>
@@ -89,7 +89,7 @@ export function WorldInfoPanel() {
                                                     <div className="fa-solid fa-triangle-exclamation opacity50p" data-i18n="[title]0 = unlimited, 1 = scans once and doesn't recurse, 2 = scans once and recurses once, etc" title={"0 = unlimited, 1 = scans once and doesn't recurse, 2 = scans once and recurses once, etc\n(disabled when min activations are used)"}></div>
                                                 </small>
                                                 <input className="neo-range-slider" type="range" id="world_info_max_recursion_steps" name="world_info_max_recursion_steps" min="0" max="10" step="1" />
-                                                <input className="neo-range-input" type="number" min="0" max="10" step="1" data-htmlFor="world_info_max_recursion_steps" id="world_info_max_recursion_steps_counter" />
+                                                <input className="neo-range-input" type="number" min="0" max="10" step="1" data-for="world_info_max_recursion_steps" id="world_info_max_recursion_steps_counter" />
                                             </div>
 
                                             <div className="alignitemscenter flex-container flexFlowColumn flexGrow flexShrink flexBasis48p">
