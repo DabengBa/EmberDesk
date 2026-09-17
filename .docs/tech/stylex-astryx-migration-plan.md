@@ -56,7 +56,7 @@
 | A 低风险 | power-user 设置抽屉（React `/settings` 已是 sole owner）、persona 管理 UI、welcome screen、chat-backups UI、data-maid UI、小配置抽屉 | 完成（待用户验收） |
 | B 核心编辑 | PromptManager popup 群（`completion_prompt_manager_*`）、instruct/context settings、regex 编辑器、macros UI、tags 管理 UI | 完成（待用户验收） |
 | C 纠缠面 | `world-info.js`（service/UI 拆分，World Info 面板已 React）、`extensions.js`（第三方 settings HTML 注入仅保留容器契约）、STscript/slash 编辑器 | 完成（待用户验收）。说明：`#WorldInfo` drawer markup 已 React 化，`world-info.js` 保留 service/动态行为所有权（160 函数 / 584 DOM 触点，深度拆分超出本波范围）；extensions 注入容器由既有 `ExtensionCompatibilitySlotManager` + React host bridge 持有，未重复迁移；STscript/slash 编辑器 = quick-reply 的 qrEditor/settings 模板已 React 化 |
-| D 大骨头 | main-chat transport/generation 生命周期 + send form + message actions → `script.js` 瘦身 | **用户验收 A-C 后启动** |
+| D 大骨头 | main-chat transport/generation 生命周期 + send form + message actions → `script.js` 瘦身 | **拆分为 D-core + D-remainder**。D-core = 仅发送表单（composer）迁移：React 持 `#form_create`/`#nonQRFormItems` 外壳，`send_textarea` 非受控（jQuery/QR/STscript/macros `.val()`+input 事件是契约），按钮走既有 `triggerVisibleGeneration`/`stopVisibleGeneration` command port，`Generate()`/prompt/streaming/中断恢复内部**不动**；options popper 与 stscript 按钮可作 hosted slot。D-remainder（Generate service 化、script.js 大瘦身、options 菜单、i18n 收敛）随 Phase X 再做 |
 
 ## Phase X — 收敛
 
@@ -85,4 +85,6 @@
 - Wave A 完成：chat-backups、data-maid、welcome panel、persona 管理抽屉、power-user `user-settings-block`（144 ID 保留）、floatingPrompt/cfgConfig/logprobsViewer 小抽屉全部 React 化；`flushSync` 保证 legacy 绑定立即可查。
 - Wave B 完成：AdvancedFormatting、PromptManager popup、TagManagement、regex editor/settings/debugger/import-target、MacroBrowser（消息内 React 岛）全部迁移。
 - Wave C 完成：`#WorldInfo` drawer markup → React（35 ID 保留，world-info.js 行为所有权不变）；extensions 注入容器维持既有 React host bridge + slot manager；quick-reply qrEditor/settings 模板 → React（全量 ID 一致，`qr--ctxItem` template 保留）。
-- 验证基线：unit 622/622 绿、compat 107/107 绿、tsc 干净、workspace-panels bundle 构建通过。Wave D 未启动。
+- 验证基线：unit 622/622 绿、compat 107/107 绿、tsc 干净、workspace-panels bundle 构建通过。
+- 2026-09-17：用户验收 A–C（本地免密环境手动测试通过）。Wave D 缩范围为 D-core（仅 composer），开工。
+- D-core 完成：`#send_form` 内部 markup → `ChatComposer.tsx`（17 个契约 ID 全保留，`send_textarea` 非受控）；mount 在 jQuery ready 回调顶部、`#send_but`/`#send_textarea` 绑定之前执行；修复两处模块顶层 DOM 捕获陷阱（`optionsPopper` 改 lazy init，`RossAscends-mods.js` 的 `sendTextArea` 改为 init 时填充）。headless 验证：composer 全元素就位、options 菜单开合、send 点击无异常。D-remainder（Generate service 化、script.js 瘦身）未动。

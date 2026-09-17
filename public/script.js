@@ -321,7 +321,7 @@ import {
     parseCharacterLibraryFetchResponse,
     projectCharacterLibraryQueryAgainstDeletedAvatars,
 } from './scripts/character-library-query-helpers.js';
-import { ensureReactPanelStylesheet, mountReactWorkspaceShellChrome, mountReactSettingsOverlay, unmountReactSettingsOverlay } from './scripts/workspace-panels-react-bridge.js';
+import { ensureReactPanelStylesheet, mountReactWorkspaceShellChrome, mountReactSettingsOverlay, unmountReactSettingsOverlay, loadWorkspacePanelsModule } from './scripts/workspace-panels-react-bridge.js';
 import { runDeleteCharacterClosePreflight } from './scripts/delete-character-preflight.js';
 import { getRequestHeaders, installAjaxCsrfPrefilter, loadCsrfToken } from './scripts/request-context.js';
 import { installPublicBrowserApi } from './scripts/public-api.js';
@@ -3538,9 +3538,18 @@ export const system_avatar = 'img/five.png';
 export const comment_avatar = 'img/quill.png';
 export const default_user_avatar = 'img/user-default.png';
 export let CLIENT_VERSION = 'EmberDesk:UNKNOWN:dev'; // For Horde header
-let optionsPopper = Popper.createPopper(document.getElementById('options_button'), document.getElementById('options'), {
-    placement: 'top-start',
-});
+let optionsPopper = null;
+function getOptionsPopper() {
+    if (!optionsPopper) {
+        const button = document.getElementById('options_button');
+        const menu = document.getElementById('options');
+        if (!button || !menu) {
+            return null;
+        }
+        optionsPopper = Popper.createPopper(button, menu, { placement: 'top-start' });
+    }
+    return optionsPopper;
+}
 let exportPopper = Popper.createPopper(document.getElementById('export_button'), document.getElementById('export_format_popup'), {
     placement: 'left',
 });
@@ -15433,8 +15442,40 @@ async function measureCharacterSearchForPerf(query) {
     };
 }
 
+/**
+ * Mounts the React-owned chat composer markup into #send_form.
+ * Must complete before the DOM-ready binding block: send_but/send_textarea/
+ * options_button handlers attach to the preserved element IDs.
+ */
+async function mountChatComposer() {
+    const sendForm = document.getElementById('send_form');
+    if (!sendForm) {
+        console.warn('send_form container not found');
+        return;
+    }
+    if (sendForm.dataset.reactComposerMounted === 'true') {
+        return;
+    }
+
+    const host = document.createElement('div');
+    host.id = 'emberdesk-react-composer-host';
+    host.className = 'wide100p';
+    sendForm.replaceChildren(host);
+
+    try {
+        const module = await loadWorkspacePanelsModule();
+        module.mountChatComposer(host);
+        sendForm.dataset.reactComposerMounted = 'true';
+    } catch (error) {
+        console.error('Failed to mount chat composer:', error);
+    }
+}
+
 // MARK: DOM Handlers Start
 jQuery(async function () {
+    // React-owned composer markup must exist before handlers bind below.
+    await mountChatComposer();
+
     $(document).on('click', '.api_loading', () => cancelStatusCheck('Canceled because connecting was manually canceled'));
 
     //////////INPUT BAR FOCUS-KEEPING LOGIC/////////////
@@ -15946,13 +15987,13 @@ jQuery(async function () {
     function showMenu() {
         showBookmarksButtons();
         menu.fadeIn(animation_duration);
-        optionsPopper.update();
+        getOptionsPopper()?.update();
         isOptionsMenuVisible = true;
     }
 
     function hideMenu() {
         menu.fadeOut(animation_duration);
-        optionsPopper.update();
+        getOptionsPopper()?.update();
         isOptionsMenuVisible = false;
     }
 

@@ -618,7 +618,8 @@ export async function initMovingUI() {
 }
 
 /**@type {HTMLTextAreaElement} */
-const sendTextArea = document.querySelector('#send_textarea');
+// Populated in initRossMods: the composer markup is React-mounted after module eval.
+let sendTextArea = null;
 const chatBlock = document.getElementById('chat');
 const isFirefox = navigator.userAgent.toLowerCase().indexOf('firefox') > -1;
 
@@ -641,6 +642,8 @@ export const autoFitSendTextAreaDebounced = debounce(autoFitSendTextArea, deboun
 // ---------------------------------------------------
 
 export function initRossMods() {
+    sendTextArea = document.querySelector('#send_textarea');
+
     // initial status check
     checkStatusDebounced();
 

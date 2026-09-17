@@ -21,6 +21,9 @@ declare global {
       name?: string;
       // promptmanager.css reads this via attr(external_piece_text) and i18n writes it.
       external_piece_text?: string;
+      // send_textarea carries connection-state placeholder overrides read by legacy JS.
+      no_connection_text?: string;
+      connected_text?: string;
     }
   }
 }

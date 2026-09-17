@@ -105,6 +105,7 @@ describe('chat workspace structure', () => {
 
     test('keeps send-form controls discoverable by role and accessible name', () => {
         const indexHtml = readRepoFile('public/index.html');
+        const composerSource = readRepoFile('app/components/composer/ChatComposer.tsx');
         const scriptSource = readRepoFile('public/script.js');
         const keyboardSource = readRepoFile('public/scripts/keyboard.js');
 
@@ -115,15 +116,16 @@ describe('chat workspace structure', () => {
             ['mes_continue', 'Continue last message'],
             ['mes_impersonate', 'Ask AI to write your message'],
         ].forEach(([id, label]) => {
-            expect(indexHtml).toMatch(new RegExp(`id="${id}"[^>]*\\brole="button"`));
-            expect(indexHtml).toMatch(new RegExp(`id="${id}"[^>]*\\baria-label="${label}"`));
-            expect(indexHtml).toMatch(new RegExp(`id="${id}"[^>]*\\btabindex="0"`));
+            expect(composerSource).toMatch(new RegExp(`id="${id}"[^>]*\\brole="button"`));
+            expect(composerSource).toMatch(new RegExp(`id="${id}"[^>]*\\baria-label="${label}"`));
+            expect(composerSource).toMatch(new RegExp(`id="${id}"[^>]*\\btabIndex=\\{0\\}`));
         });
 
-        expect(indexHtml).toMatch(/id="send_textarea"[^>]*\baria-label="Chat message"/);
-        expect(indexHtml).toMatch(/id="send_textarea"[^>]*\baria-describedby="send_textarea_hint"/);
-        expect(indexHtml).toContain('id="send_textarea_hint"');
-        expect(indexHtml).toContain('data-i18n="Type /? for commands. Send requires an API connection."');
+        expect(composerSource).toMatch(/id="send_textarea"[^>]*\baria-label="Chat message"/);
+        expect(composerSource).toMatch(/id="send_textarea"[^>]*\baria-describedby="send_textarea_hint"/);
+        expect(composerSource).toContain('id="send_textarea_hint"');
+        expect(composerSource).toContain('data-i18n="Type /? for commands. Send requires an API connection."');
+        expect(indexHtml).toContain('id="send_form"');
         expect(scriptSource).toContain("const sendTextareaHint = $('#send_textarea_hint');");
         expect(scriptSource).toContain('sendTextareaHint.text(t`Type /? for commands. Send requires an API connection.`);');
         expect(scriptSource).toContain('sendTextareaHint.text(t`Type /? for commands.`);');

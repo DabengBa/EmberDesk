@@ -73,6 +73,7 @@ import { MacroBrowserPanel, type MacroBrowserProps } from './components/macros/M
 import { WorldInfoPanel } from './components/panels/WorldInfoPanel';
 import { QuickReplyEditorPanel } from './components/quick-reply/QuickReplyEditor';
 import { QuickReplySettingsPanel } from './components/quick-reply/QuickReplySettings';
+import { ChatComposer } from './components/composer/ChatComposer';
 import * as stylex from '@stylexjs/stylex';
 import { authoringStyles, workspacePanelStyles, workspaceShellStyles } from './styles/workspace-panels.styles.js';
 import { Theme } from '@astryxdesign/core';
@@ -2107,4 +2108,12 @@ export function mountQuickReplyEditor(container: HTMLElement) {
 
 export function mountQuickReplySettings(container: HTMLElement) {
     mountSmallPanel(container, <QuickReplySettingsPanel />);
+}
+
+/**
+ * Mounts the chat composer markup into #send_form. Synchronous commit:
+ * script.js binds #send_but/#send_textarea handlers immediately after.
+ */
+export function mountChatComposer(container: HTMLElement) {
+    mountSmallPanel(container, <ChatComposer />);
 }
