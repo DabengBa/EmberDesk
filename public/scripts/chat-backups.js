@@ -56,6 +56,22 @@ async function restoreChatBackup(name) {
 
 let isMounted = false;
 let refreshToken = 0;
+let buttonContainer;
+let listContainer;
+
+async function mountBrowser() {
+    try {
+        const module = await loadWorkspacePanelsModule();
+        module.mountChatBackupsBrowser({
+            buttonContainer,
+            listContainer,
+            refreshToken,
+            commands: { restoreChatBackup },
+        });
+    } catch (error) {
+        console.error('Failed to mount chat backups browser:', error);
+    }
+}
 
 export function addChatBackupsBrowser() {
     if (isMounted) {
@@ -71,28 +87,14 @@ export function addChatBackupsBrowser() {
         return;
     }
 
-    const buttonContainer = document.createElement('span');
+    buttonContainer = document.createElement('span');
     buttonContainer.setAttribute('data-chat-backups-button-host', 'true');
     searchSibling.parentNode.insertBefore(buttonContainer, searchSibling);
 
-    const listContainer = document.createElement('div');
+    listContainer = document.createElement('div');
     listContainer.setAttribute('data-chat-backups-list-host', 'true');
     listSibling.parentNode.insertBefore(listContainer, listSibling);
 
     isMounted = true;
     void mountBrowser();
-
-    async function mountBrowser() {
-        try {
-            const module = await loadWorkspacePanelsModule();
-            module.mountChatBackupsBrowser({
-                buttonContainer,
-                listContainer,
-                refreshToken,
-                commands: { restoreChatBackup },
-            });
-        } catch (error) {
-            console.error('Failed to mount chat backups browser:', error);
-        }
-    }
 }

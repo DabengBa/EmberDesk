@@ -2,14 +2,14 @@ import { expect, test } from '@playwright/test';
 import { testSetup } from './frontend/frontent-test-utils.js';
 
 async function openShellPanel(page, label) {
-    const panelButton = page.locator('.react-workspace-shell-nav-button').filter({ hasText: label });
+    const panelButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: label });
     await panelButton.click({ timeout: 10_000 });
     await expect(panelButton).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
     await expect.poll(async () => page.evaluate(() => document.readyState), { timeout: 10_000 }).toBe('complete');
 }
 
 async function clickShellPanel(page, label) {
-    await page.locator('.react-workspace-shell-nav-button').filter({ hasText: label }).click({ timeout: 10_000 });
+    await page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: label }).click({ timeout: 10_000 });
 }
 
 async function expectActivePanel(page, label) {
@@ -42,7 +42,7 @@ test.describe('workspace shell panel navigation', () => {
         ];
 
         for (const entry of registryEntries) {
-            const panelButton = page.locator('.react-workspace-shell-nav-button').filter({ hasText: entry.label });
+            const panelButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: entry.label });
             await panelButton.focus();
             await expect(panelButton).toBeFocused();
 
@@ -56,9 +56,9 @@ test.describe('workspace shell panel navigation', () => {
             await expectNoActivePanel(page);
         }
 
-        await expect(page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'Backgrounds' })).toHaveCount(0);
+        await expect(page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'Backgrounds' })).toHaveCount(0);
         await expect(page.locator('#Backgrounds')).toHaveCount(0);
-        await expect(page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'Character Authoring' })).toHaveCount(0);
+        await expect(page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'Character Authoring' })).toHaveCount(0);
     });
 
     test('panel entries can close and reopen the same panel', async ({ page }) => {
@@ -80,7 +80,7 @@ test.describe('workspace shell panel navigation', () => {
     test('React shell owns a slot pin through refocus, unpin, and close', async ({ page }) => {
         await testSetup.awaitST({ page });
 
-        const panelButton = page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'Character Library' });
+        const panelButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'Character Library' });
         await panelButton.click({ timeout: 10_000 });
         await expect(panelButton).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
 
@@ -107,9 +107,9 @@ test.describe('workspace shell panel navigation', () => {
             document.getElementById('WorldInfo')?.remove();
         });
 
-        await page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'World Info' }).click();
+        await page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'World Info' }).click();
         await expect(page.locator('.react-workspace-shell-status, .react-workspace-panel-dock-status')).toHaveCount(0);
-        await expect(page.locator('.react-workspace-shell-nav')).toBeVisible();
+        await expect(page.getByRole('navigation', { name: 'Workspace navigation' })).toBeVisible();
         await expect(page.locator('#send_textarea')).toBeVisible();
     });
 
@@ -120,7 +120,7 @@ test.describe('workspace shell panel navigation', () => {
         ];
 
         for (const entry of legacyHostedEntries) {
-            const panelButton = page.locator('.react-workspace-shell-nav-button').filter({ hasText: entry.label });
+            const panelButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: entry.label });
 
             await clickShellPanel(page, entry.label);
             await expect(panelButton).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
@@ -138,7 +138,7 @@ test.describe('workspace shell panel navigation', () => {
 
     test('shell no longer offers Group Chats after retirement', async ({ page }) => {
         await testSetup.awaitST({ page });
-        await expect(page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'Group Chats' })).toHaveCount(0);
+        await expect(page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'Group Chats' })).toHaveCount(0);
     });
 
     test('panel entries stay responsive when switching from character library to world info immediately', async ({ page }) => {
@@ -178,7 +178,7 @@ test.describe('workspace shell panel navigation', () => {
     test('opens Settings shell entry as in-workspace overlay instead of leaving chat', async ({ page }) => {
         test.setTimeout(120_000);
         await testSetup.awaitST({ page });
-        const settingsButton = page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'Settings' });
+        const settingsButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'Settings' });
         await settingsButton.click({ timeout: 10_000 });
         await expect(page).toHaveURL(/\/(?:\?|$)/);
         await expect(page.locator('[data-settings-overlay="true"]')).toBeVisible({ timeout: 15_000 });
@@ -217,15 +217,15 @@ test.describe('workspace shell panel navigation', () => {
         await page.setViewportSize({ width: 375, height: 812 });
         await testSetup.awaitST({ page });
 
-        const settingsButton = page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'Settings' });
+        const settingsButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'Settings' });
         await settingsButton.click({ timeout: 10_000 });
         const overlay = page.locator('[data-settings-overlay="true"]');
         await expect(overlay).toBeVisible({ timeout: 15_000 });
-        await expect(overlay.locator('.settings-input').first()).toBeVisible({ timeout: 30_000 });
-        const closeButton = overlay.locator('.settings-overlay-close');
+        await expect(overlay.locator('input, select, textarea').first()).toBeVisible({ timeout: 30_000 });
+        const closeButton = overlay.getByRole('button', { name: 'Close settings' });
         await expect(closeButton).toBeVisible();
         await expect.poll(async () => closeButton.evaluate(node => {
-            const panel = node.closest('.settings-main-panel');
+            const panel = node.closest('.settings-page');
             return panel
                 ? node.getBoundingClientRect().width < panel.getBoundingClientRect().width / 2
                 : false;
@@ -245,7 +245,7 @@ test.describe('workspace shell panel navigation', () => {
     test('opens AI Config and Formatting shell entries into overlay tabs without route jump', async ({ page }) => {
         await testSetup.awaitST({ page });
 
-        const aiConfigButton = page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'AI Config' });
+        const aiConfigButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'AI Config' });
         await aiConfigButton.click({ timeout: 10_000 });
         await expect(page).toHaveURL(/\/(?:\?|$)/);
         await expect(page.locator('[data-settings-overlay="true"]')).toBeVisible({ timeout: 15_000 });
@@ -255,7 +255,7 @@ test.describe('workspace shell panel navigation', () => {
         await expect(page.locator('[data-settings-overlay="true"]')).toHaveCount(0, { timeout: 10_000 });
         await expect(aiConfigButton).toBeFocused();
 
-        const formattingButton = page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'Formatting' });
+        const formattingButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'Formatting' });
         await formattingButton.click({ timeout: 10_000 });
         await expect(page).toHaveURL(/\/(?:\?|$)/);
         await expect(page.locator('[data-settings-overlay="true"]')).toBeVisible({ timeout: 15_000 });
@@ -269,13 +269,13 @@ test.describe('workspace shell panel navigation', () => {
     test('keeps a reopened Settings overlay mounted when a deferred close is superseded', async ({ page }) => {
         await testSetup.awaitST({ page });
 
-        const settingsButton = page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'Settings' });
-        const aiConfigButton = page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'AI Config' });
+        const settingsButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'Settings' });
+        const aiConfigButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'AI Config' });
         await settingsButton.click({ timeout: 10_000 });
         await expect(page.locator('[data-settings-overlay="true"]')).toBeVisible({ timeout: 15_000 });
 
         await page.evaluate(() => {
-            const buttons = Array.from(document.querySelectorAll('.react-workspace-shell-nav-button'));
+            const buttons = Array.from(document.querySelectorAll('[data-react-workspace-shell-chrome] nav button'));
             const settings = buttons.find(button => button.textContent?.trim() === 'Settings');
             const aiConfig = buttons.find(button => button.textContent?.trim() === 'AI Config');
             settings?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));

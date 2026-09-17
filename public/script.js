@@ -771,10 +771,12 @@ async function openWorkspaceSettingsOverlay({ tab = null, panelKind = 'settings'
     });
 }
 
-async function closeWorkspaceSettingsOverlay() {
+async function closeWorkspaceSettingsOverlay(reservedGeneration = null) {
     const panelKind = workspaceSettingsOverlayPanelKind || 'settings';
-    const closeGeneration = workspaceSettingsOverlayCloseGeneration + 1;
-    workspaceSettingsOverlayCloseGeneration = closeGeneration;
+    const closeGeneration = Number.isInteger(reservedGeneration)
+        ? reservedGeneration
+        : workspaceSettingsOverlayCloseGeneration + 1;
+    workspaceSettingsOverlayCloseGeneration = Math.max(workspaceSettingsOverlayCloseGeneration, closeGeneration);
     // Defer unmount so the originating click/keyboard event can finish cleanly.
     await new Promise(resolve => {
         window.setTimeout(() => {
@@ -810,10 +812,16 @@ async function openWorkspaceShellExtensions() {
 }
 
 async function closeWorkspacePanel(kind) {
-    await waitForWorkspaceShellPanelOpenTask();
     if (kind === 'settings' || kind === 'aiConfig' || kind === 'advancedFormatting') {
-        return closeWorkspaceSettingsOverlay();
+        // Reserve the close generation before awaiting; a superseding reopen
+        // must always observe a higher generation or the deferred unmount
+        // would unmount the freshly mounted overlay.
+        workspaceSettingsOverlayCloseGeneration += 1;
+        const reservedGeneration = workspaceSettingsOverlayCloseGeneration;
+        await waitForWorkspaceShellPanelOpenTask();
+        return closeWorkspaceSettingsOverlay(reservedGeneration);
     }
+    await waitForWorkspaceShellPanelOpenTask();
     return createWorkspaceShellPanelResult(kind, { kind, mounted: false, status: 'success' });
 }
 
@@ -982,8 +990,10 @@ function getMainChatRenderableMessageRows(chatContainer) {
         return [];
     }
 
-    return Array.from(chatContainer.querySelectorAll(':scope > .mes[mesid]'))
-        .filter((node) => node.parentElement === chatContainer);
+    // Message rows render nested inside the React island wrapper, so they are
+    // descendants rather than direct children of #chat.
+    return Array.from(chatContainer.querySelectorAll('.mes[mesid]'))
+        .filter((node) => node.closest('#chat') === chatContainer);
 }
 
 function getMainChatDistanceFromEnd(chatContainer) {
@@ -1172,7 +1182,8 @@ function isMainChatGenerationControlElementVisible(element) {
 }
 
 function getMainChatGenerationControlMessageId(element) {
-    const messageRow = element instanceof HTMLElement ? element.closest('#chat > .mes[mesid]') : null;
+    const candidateRow = element instanceof HTMLElement ? element.closest('.mes[mesid]') : null;
+    const messageRow = candidateRow?.closest('#chat') ? candidateRow : null;
     const messageId = Number(messageRow?.getAttribute('mesid'));
     return Number.isInteger(messageId) && messageId >= 0 ? messageId : null;
 }
@@ -3242,6 +3253,7 @@ async function mountReactCharacterLibraryPanel(state) {
             listElement.replaceChildren();
             panelModule.mountCharacterLibraryPanel(listElement, panelBridge, state);
             reactCharacterLibraryPanelMounted = true;
+            listElement.dataset.reactCharacterLibraryOwner = 'react';
             return true;
         }
 
@@ -3250,6 +3262,7 @@ async function mountReactCharacterLibraryPanel(state) {
     } catch (error) {
         console.error('React character library panel failed to load. Legacy list fallback is retired.', error);
         reactCharacterLibraryPanelMounted = false;
+        delete listElement.dataset.reactCharacterLibraryOwner;
         listElement.replaceChildren();
         const errorBlock = document.createElement('div');
         errorBlock.className = 'character_list_empty empty_block';
@@ -12763,6 +12776,9 @@ export function select_selected_character(chid, { switchMenu = true } = {}) {
 
     select_rm_create({ switchMenu });
     switchMenu && setMenuType('character_edit');
+    // Selecting a character switches the right nav to rm_ch_create_block, which
+    // hosts the sole-owner React authoring panel; mount it on this path too.
+    switchMenu && queueReactCharacterAuthoringRemount();
     $('#delete_button').css('display', 'flex');
     $('#export_button').css('display', 'flex');
     $('#world_button').css('display', 'flex');
@@ -15720,6 +15736,19 @@ async function mountExportFormatPopup() {
 jQuery(async function () {
     // React-owned composer markup must exist before handlers bind below.
     await mountChatComposer();
+    // React-owned static panels must exist before the direct $(...).on()
+    // bindings below; bootstrapWorkspace re-invokes these mounts later, and
+    // each mount is idempotent via its dataset.react*Mounted guard.
+    await Promise.all([
+        mountApiConnectionsPanel(),
+        mountAiConfigPanel(),
+        mountCharacterPopup(),
+        mountRightNavPanel(),
+        mountSelectChatPopup(),
+        mountCharacterContextMenu(),
+        mountOptionsMenu(),
+        mountExportFormatPopup(),
+    ]);
 
     $(document).on('click', '.api_loading', () => cancelStatusCheck('Canceled because connecting was manually canceled'));
 

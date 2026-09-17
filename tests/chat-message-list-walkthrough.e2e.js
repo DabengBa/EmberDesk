@@ -129,12 +129,19 @@ function createConsoleErrorCollector(page) {
 }
 
 function getUnexpectedConsoleErrors(errors) {
+    const localOrigin = new URL(BASE_URL).origin;
     return errors.filter((error) => {
         const url = error.location?.url ?? '';
         const isSeedPersonaThumbnail404 = error.text.includes('Failed to load resource')
             && url.includes('/thumbnail?type=persona&file=user-default.png');
+        // Third-party extensions fetch external CDNs (e.g. jsdelivr for Vue);
+        // offline sandboxes surface those as resource/fetch failures, not app errors.
+        const isExternalResourceFailure = error.text.includes('Failed to load resource')
+            && url !== '' && !url.startsWith(localOrigin);
+        const isThirdPartyExtensionNetworkFailure = url.includes('/scripts/extensions/third-party/')
+            && (error.text.includes('Failed to fetch') || error.text === 'Event');
 
-        return !isSeedPersonaThumbnail404;
+        return !isSeedPersonaThumbnail404 && !isExternalResourceFailure && !isThirdPartyExtensionNetworkFailure;
     });
 }
 
@@ -151,18 +158,10 @@ async function openCharacterManagement(page) {
         return;
     }
 
-    const panelButton = page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'Character Library' });
-    const legacyOpener = page.locator('.mes .drawer-opener[data-target="rightNavHolder"]').filter({ hasText: /Character Management|角色管理/ }).first();
-    await expect.poll(async () => (
-        await panelButton.isVisible() || await legacyOpener.isVisible()
-    ), { timeout: 10_000 }).toBe(true);
-
-    if (await panelButton.isVisible()) {
-        await panelButton.click({ timeout: 10_000 });
-        await expect(panelButton).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
-    } else {
-        await legacyOpener.click();
-    }
+    const panelButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'Character Library' }).first();
+    await expect(panelButton).toBeVisible({ timeout: 10_000 });
+    await panelButton.click({ timeout: 10_000 });
+    await expect(panelButton).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
     await expect(page.locator('#right-nav-panel.openDrawer #rm_characters_block')).toBeVisible({ timeout: 10_000 });
 }
 
@@ -172,7 +171,7 @@ async function closeCharacterAuthoringAfterSelection(page) {
         return;
     }
 
-    const activePanelButton = page.locator('.react-workspace-shell-nav-button[aria-pressed="true"]').first();
+    const activePanelButton = page.locator('[data-react-workspace-shell-chrome] nav button[aria-pressed="true"]').first();
     await expect(activePanelButton).toBeVisible();
     await activePanelButton.click();
     await expect(authoringPanel).toBeHidden();
@@ -217,7 +216,7 @@ async function selectPastChatByVisibleName(page, chatName) {
 async function openPastChat(page, chatName) {
     await openPastChatsPopup(page);
     await selectPastChatByVisibleName(page, chatName);
-    await expect(page.locator('#chat > .mes[mesid] .mes_text').first()).toBeVisible();
+    await expect(page.locator('#chat .mes[mesid] .mes_text').first()).toBeVisible();
 }
 
 async function openPastChatSearchThenClose(page, searchText) {
@@ -228,7 +227,7 @@ async function openPastChatSearchThenClose(page, searchText) {
 }
 
 async function openMessageActions(page, messageId) {
-    const row = page.locator(`#chat > .mes[mesid="${messageId}"]`);
+    const row = page.locator(`#chat .mes[mesid="${messageId}"]`);
     await expect(row).toBeVisible();
     await row.hover();
     const hint = row.getByRole('button', { name: 'Message Actions' });
@@ -262,7 +261,7 @@ async function expectClipboardText(page, expectedText) {
 async function getRelativeRowTop(page, messageId) {
     return page.evaluate((targetMessageId) => {
         const chatContainer = document.getElementById('chat');
-        const row = document.querySelector(`#chat > .mes[mesid="${targetMessageId}"]`);
+        const row = document.querySelector(`#chat .mes[mesid="${targetMessageId}"]`);
         if (!(chatContainer instanceof HTMLElement) || !(row instanceof HTMLElement)) {
             return null;
         }
@@ -310,7 +309,7 @@ async function expectMainChatHostPresent(page, expectedMessageCount) {
 
     await expect(page.locator('#chat')).toHaveAttribute('data-react-main-chat-owner', 'react');
     await expect(page.locator('#chat > #emberdesk-react-main-chat-message-list-host')).toHaveCount(0);
-    await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(expectedMessageCount);
+    await expect(page.locator('#chat .mes[mesid]')).toHaveCount(expectedMessageCount);
 }
 
 test.describe('main chat message list walkthrough', () => {
@@ -338,9 +337,9 @@ test.describe('main chat message list walkthrough', () => {
         await setChatTruncation(page, seededMessages.length);
         await openPastChat(page, seededChatName);
 
-        await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(seededMessages.length);
+        await expect(page.locator('#chat .mes[mesid]')).toHaveCount(seededMessages.length);
         await expectMainChatHostPresent(page, seededMessages.length);
-        const assistantRow = page.locator(`#chat > .mes[mesid="${assistantMessageIndex}"]`);
+        const assistantRow = page.locator(`#chat .mes[mesid="${assistantMessageIndex}"]`);
         await expect(assistantRow.locator('.swipe_left')).toHaveCount(1);
         await expect(assistantRow.locator('.swipe_right')).toHaveCount(1);
 
@@ -354,12 +353,12 @@ test.describe('main chat message list walkthrough', () => {
         await setChatTruncation(page, longChatLimit);
         await openPastChat(page, longChatName);
         await expect(page.locator('#show_more_messages')).toBeVisible();
-        await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(longChatLimit);
+        await expect(page.locator('#chat .mes[mesid]')).toHaveCount(longChatLimit);
         await page.locator('#show_more_messages').evaluate(element => element.click());
-        await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(longChatLimit * 2);
+        await expect(page.locator('#chat .mes[mesid]')).toHaveCount(longChatLimit * 2);
         await expectMainChatHostPresent(page, longChatLimit * 2);
         await expect(page.locator('#jump_to_latest_message')).toHaveCount(0);
-        await expect(page.locator(`#chat > .mes[mesid="${longMessages.length - 1}"] .mes_text`)).toContainText(longMessages.at(-1).mes);
+        await expect(page.locator(`#chat .mes[mesid="${longMessages.length - 1}"] .mes_text`)).toContainText(longMessages.at(-1).mes);
 
         expect(getUnexpectedConsoleErrors(consoleErrors)).toEqual([]);
     });
@@ -396,8 +395,8 @@ test.describe('main chat message list walkthrough', () => {
         await selectCharacterFromVisibleList(page, characterName);
         await openPastChat(page, reasoningChatName);
 
-        const firstReasoningRow = page.locator('#chat > .mes[mesid="1"]');
-        const secondReasoningRow = page.locator('#chat > .mes[mesid="3"]');
+        const firstReasoningRow = page.locator('#chat .mes[mesid="1"]');
+        const secondReasoningRow = page.locator('#chat .mes[mesid="3"]');
         const firstReasoningDetails = firstReasoningRow.locator('.mes_reasoning_details');
         const secondReasoningDetails = secondReasoningRow.locator('.mes_reasoning_details');
 
@@ -470,14 +469,14 @@ test.describe('main chat message list walkthrough', () => {
         await expect(page.locator('#show_more_messages')).toBeVisible();
         await expect(page.locator('#show_more_messages')).toHaveAttribute('data-main-chat-load-more-owner', 'react');
         await page.locator('#show_more_messages').evaluate(element => element.click());
-        await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(longChatLimit * 2);
+        await expect(page.locator('#chat .mes[mesid]')).toHaveCount(longChatLimit * 2);
 
         const anchorTopBeforeSwitch = await wheelRowNearViewportTop(page, anchorMessageId);
         await openPastChat(page, alternateChatName);
-        await expect(page.locator('#chat > .mes[mesid] .mes_text').first()).toBeVisible();
+        await expect(page.locator('#chat .mes[mesid] .mes_text').first()).toBeVisible();
 
         await openPastChat(page, longChatName);
-        await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(longChatLimit * 2);
+        await expect(page.locator('#chat .mes[mesid]')).toHaveCount(longChatLimit * 2);
         await expect.poll(async () => {
             const anchorTopAfterSwitch = await getRelativeRowTop(page, anchorMessageId);
             if (anchorTopAfterSwitch === null) {
@@ -496,17 +495,17 @@ test.describe('main chat message list walkthrough', () => {
             const composer = page.getByRole('textbox', { name: 'Chat message' });
             await expect(composer, `${viewport.name} composer`).toBeVisible();
             await expect.poll(async () => {
-                return page.locator('#chat > .mes[mesid]').count();
+                return page.locator('#chat .mes[mesid]').count();
             }, {
                 message: `${viewport.name} restored expanded history window`,
             }).toBeGreaterThanOrEqual(longChatLimit * 2);
-            const renderedMessageCountBeforeLoadMore = await page.locator('#chat > .mes[mesid]').count();
+            const renderedMessageCountBeforeLoadMore = await page.locator('#chat .mes[mesid]').count();
             await expect(page.locator('#show_more_messages'), `${viewport.name} load more`).toBeVisible();
             await expect(page.locator('#show_more_messages'), `${viewport.name} react load-more owner`).toHaveAttribute('data-main-chat-load-more-owner', 'react');
             // Element-owned click avoids mobile drawer/composer intercept on the hit-target.
             await page.locator('#show_more_messages').evaluate(element => element.click());
             const expectedRenderedMessageCount = Math.min(renderedMessageCountBeforeLoadMore + longChatLimit, longMessages.length);
-            await expect(page.locator('#chat > .mes[mesid]'), `${viewport.name} rendered messages`).toHaveCount(expectedRenderedMessageCount);
+            await expect(page.locator('#chat .mes[mesid]'), `${viewport.name} rendered messages`).toHaveCount(expectedRenderedMessageCount);
             await expectMainChatHostPresent(page, expectedRenderedMessageCount);
             await expect(page.locator('#jump_to_latest_message'), `${viewport.name} jump to latest removed`).toHaveCount(0);
 

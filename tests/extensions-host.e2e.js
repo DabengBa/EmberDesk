@@ -3,7 +3,7 @@ import { testSetup } from './frontend/frontent-test-utils.js';
 
 async function openExtensionsHost(page) {
     // Sole-owner proof requires the React shell nav entry — do not fall back to legacy drawer toggle.
-    const panelButton = page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'Extensions' });
+    const panelButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'Extensions' });
     await expect(panelButton).toHaveCount(1, { timeout: 20_000 });
     await panelButton.click({ timeout: 15_000 });
     await expect(panelButton).toHaveAttribute('aria-pressed', 'true', { timeout: 15_000 });

@@ -63,7 +63,7 @@ test.describe('retired group-chat context runtime', () => {
             return id;
         });
         expect(characterId).toBeGreaterThanOrEqual(0);
-        await page.locator('#chat > .mes[mesid]').first().waitFor({ state: 'attached', timeout: 15_000 }).catch(() => undefined);
+        await page.locator('#chat .mes[mesid]').first().waitFor({ state: 'attached', timeout: 15_000 }).catch(() => undefined);
 
         const characterChatState = await page.evaluate((id) => {
             const context = globalThis.SillyTavern?.getContext?.();

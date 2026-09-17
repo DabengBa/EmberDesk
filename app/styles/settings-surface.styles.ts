@@ -52,7 +52,13 @@ export const settingsStyles = stylex.create({
     layoutOverlay: {
         width: '100%',
         maxWidth: 'none',
-        height: '100%',
+        height: {
+            default: '100%',
+            // On phone the dialog itself scrolls; letting the layout grow
+            // naturally keeps the tab panel readable instead of squeezing it
+            // against the fixed-height side panels.
+            [phone]: 'auto',
+        },
         margin: 0,
         padding: '15px',
         minHeight: {

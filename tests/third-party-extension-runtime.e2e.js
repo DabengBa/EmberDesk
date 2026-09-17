@@ -24,7 +24,7 @@ test.describe('third-party extension runtime compatibility', () => {
                 await context.selectCharacterById(characterId);
             }
         }).catch(() => undefined);
-        await page.locator('#chat > .mes[mesid]').first().waitFor({ state: 'attached', timeout: 15_000 }).catch(() => undefined);
+        await page.locator('#chat .mes[mesid]').first().waitFor({ state: 'attached', timeout: 15_000 }).catch(() => undefined);
 
         await expect(page.locator('#extensions_settings')).toHaveCount(1);
         await expect(page.locator('#extensions_settings2')).toHaveCount(1);
@@ -109,7 +109,7 @@ test.describe('third-party extension runtime compatibility', () => {
                 '.character_select, .bogus_folder_select',
             ).length;
 
-            const mesRow = document.querySelector('#chat > .mes[mesid]');
+            const mesRow = document.querySelector('#chat .mes[mesid]');
             const mesText = mesRow?.querySelector('.mes_text');
             if (mesText instanceof HTMLElement && mesRow instanceof HTMLElement) {
                 const pre = document.createElement('pre');
@@ -165,7 +165,7 @@ test.describe('third-party extension runtime compatibility', () => {
         }
 
         if (publicShape.characterRows === 0) {
-            const characterButton = page.locator('#rm_button_characters, #rightNavDrawerIcon, .drawer-opener[data-target="rightNavHolder"], button:has-text("Open Character Management")').first();
+            const characterButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'Character Library' }).first();
             if (await characterButton.count()) {
                 await characterButton.click({ timeout: 5_000 }).catch(() => undefined);
             }

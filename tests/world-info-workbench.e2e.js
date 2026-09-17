@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { testSetup } from './frontend/frontent-test-utils.js';
 
 async function openWorldInfo(page) {
-    const panelButton = page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'World Info' });
+    const panelButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'World Info' });
     if (await panelButton.count()) {
         await panelButton.click({ timeout: 10_000 });
     } else {

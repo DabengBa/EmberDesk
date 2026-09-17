@@ -80,6 +80,14 @@ async function ensureSession(page) {
 
     await page.goto(BASE_URL);
 
+    // Single-user mode (enableUserAccounts: false) serves the app shell
+    // directly — no login or setup endpoints are active.
+    const landedPath = new URL(page.url()).pathname;
+    if (landedPath !== '/login' && landedPath !== '/setup') {
+        await waitForAppReady(page);
+        return;
+    }
+
     const setupModeResponse = await pageFetchJson(page, '/api/users/setup-mode');
     const mode = setupModeResponse.json?.mode;
 

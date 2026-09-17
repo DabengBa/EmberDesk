@@ -7,7 +7,7 @@ test.describe('welcome screen shortcuts', () => {
         await testSetup.awaitST({ page });
 
         const characterLibraryButton = page
-            .locator('.react-workspace-shell-nav-button')
+            .locator('[data-react-workspace-shell-chrome] nav button')
             .filter({ hasText: 'Character Library' });
 
         if (await characterLibraryButton.isVisible()) {

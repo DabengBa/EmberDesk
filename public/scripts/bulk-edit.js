@@ -1,4 +1,8 @@
 import { characterGroupOverlay, syncReactCharacterLibraryToolbarState } from '../script.js';
+
+function isReactCharacterLibraryOwner() {
+    return document.getElementById('rm_print_characters_block')?.dataset.reactCharacterLibraryOwner === 'react';
+}
 import { BulkEditOverlay, BulkEditOverlayState, CharacterContextMenu } from './BulkEditOverlay.js';
 import { event_types, eventSource } from './events.js';
 
@@ -84,6 +88,16 @@ async function onDeleteButtonClick() {
  * Enables bulk selection by adding a checkbox next to each character.
  */
 function enableBulkSelect() {
+    // The React character library owns row markup and renders its own bulk
+    // checkboxes from the bulkMode store snapshot; only the container class and
+    // delegated click guard remain relevant here.
+    if (isReactCharacterLibraryOwner()) {
+        $('#rm_print_characters_block').addClass('bulk_select');
+        $(document).off('click.bulkSelectCheckbox').on('click.bulkSelectCheckbox', '.bulk_select_checkbox', function (event) {
+            event.stopImmediatePropagation();
+        });
+        return;
+    }
     $('#rm_print_characters_block .character_select').each((i, el) => {
         // Prevent checkbox from adding multiple times (because of stage change callback)
         if ($(el).find('.bulk_select_checkbox').length > 0) {
@@ -114,6 +128,11 @@ function enableBulkSelect() {
  * Disables bulk selection by removing the checkboxes.
  */
 function disableBulkSelect() {
+    if (isReactCharacterLibraryOwner()) {
+        $('#rm_print_characters_block').removeClass('bulk_select');
+        $(document).off('click.bulkSelectCheckbox');
+        return;
+    }
     $('.bulk_select_checkbox').remove();
     $('#rm_print_characters_block .character_select').removeAttr('role');
     $('#rm_print_characters_block .character_select').removeAttr('aria-selected');

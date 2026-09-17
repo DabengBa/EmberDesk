@@ -11,14 +11,10 @@ const mobileViewports = [
 ];
 
 async function openCharacterLibrary(page) {
-    const panelButton = page.locator('.react-workspace-shell-nav-button').filter({ hasText: 'Character Library' });
-    await panelButton.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => {});
-    if (await panelButton.isVisible()) {
-        await panelButton.click({ timeout: 10_000 });
-        await expect(panelButton).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
-    } else {
-        await page.locator('.mes .drawer-opener[data-target="rightNavHolder"]').filter({ hasText: /Character Management|角色管理/ }).first().click();
-    }
+    const panelButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'Character Library' }).first();
+    await expect(panelButton).toBeVisible({ timeout: 10_000 });
+    await panelButton.click({ timeout: 10_000 });
+    await expect(panelButton).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
     await expect(page.locator('#right-nav-panel.openDrawer #rm_characters_block')).toBeVisible({ timeout: 10_000 });
     await expect(page.locator('#rm_print_characters_block .character_select[data-chid]').first()).toBeVisible({ timeout: 10_000 });
 }
@@ -287,7 +283,7 @@ async function startQuietPromptGeneration(page, options = {}) {
 }
 
 async function startRightSwipeGeneration(page, messageId) {
-    await page.locator(`#chat > .mes[mesid="${messageId}"] .swipe_right`).click();
+    await page.locator(`#chat .mes[mesid="${messageId}"] .swipe_right`).click();
 }
 
 async function triggerStopGeneration(page, { throughDom = false } = {}) {
@@ -334,7 +330,7 @@ async function waitForVisibleSendButtonGeneration(page) {
 }
 
 async function getLastVisibleMessageId(page) {
-    const lastMessageId = await page.locator('#chat > .mes[mesid]').last().getAttribute('mesid');
+    const lastMessageId = await page.locator('#chat .mes[mesid]').last().getAttribute('mesid');
     return Number(lastMessageId ?? '-1');
 }
 
@@ -348,7 +344,7 @@ function assistantMessageIdForGeneration(lastVisibleMessageIdBeforeGeneration) {
 
 function userRowForGeneration(page, lastVisibleMessageIdBeforeGeneration) {
     return page.locator(
-        `#chat > .mes[is_user="true"][mesid="${userMessageIdForGeneration(lastVisibleMessageIdBeforeGeneration)}"]`,
+        `#chat .mes[is_user="true"][mesid="${userMessageIdForGeneration(lastVisibleMessageIdBeforeGeneration)}"]`,
     );
 }
 
@@ -401,7 +397,7 @@ async function installRecoveryStatusRecorder(page) {
 
 function assistantRowForGeneration(page, lastVisibleMessageIdBeforeGeneration) {
     return page.locator(
-        `#chat > .mes[is_user="false"][is_system="false"][mesid="${assistantMessageIdForGeneration(lastVisibleMessageIdBeforeGeneration)}"]`,
+        `#chat .mes[is_user="false"][is_system="false"][mesid="${assistantMessageIdForGeneration(lastVisibleMessageIdBeforeGeneration)}"]`,
     );
 }
 
@@ -491,7 +487,7 @@ function createExactValuePattern(values) {
 }
 
 async function expectMainChatStreamingRendererStaysOnSameReactRow(page, messageId) {
-    const row = page.locator(`#chat > .mes[mesid="${messageId}"]`);
+    const row = page.locator(`#chat .mes[mesid="${messageId}"]`);
     await expect(row).toHaveCount(1);
     // React sole-owns the streaming/finalized row; must not remount as a second owner.
     await expect(row).toHaveAttribute('data-main-chat-message-row-owner', 'react');
@@ -667,8 +663,8 @@ test.describe('chat message streaming', () => {
             messageId: Number(messageId),
             expectFallback: false,
         });
-        await expect(page.locator(`#chat > .mes[mesid="${messageId}"]`)).toHaveCount(1);
-        await expect(page.locator(`#chat > .mes[mesid="${messageId}"]`).getByRole('button', { name: 'Message Actions' })).toBeVisible();
+        await expect(page.locator(`#chat .mes[mesid="${messageId}"]`)).toHaveCount(1);
+        await expect(page.locator(`#chat .mes[mesid="${messageId}"]`).getByRole('button', { name: 'Message Actions' })).toBeVisible();
         await expect(page.getByRole('button', { name: 'Abort request' })).not.toBeVisible();
         await expectMainChatTransportMarkersRetired(page);
 
@@ -735,11 +731,11 @@ test.describe('chat message streaming', () => {
             generating: false,
             context: 'character',
         });
-        const stoppedRow = page.locator(`#chat > .mes[mesid="${messageId}"]`);
+        const stoppedRow = page.locator(`#chat .mes[mesid="${messageId}"]`);
         await expect(stoppedRow).toHaveCount(1);
         const stoppedText = await stoppedRow.locator('.mes_text').textContent();
         expect(String(stoppedText ?? '').trim().length).toBeGreaterThan(0);
-        await expect(page.locator(`#chat > .mes[mesid="${messageId}"]`)).toHaveCount(1);
+        await expect(page.locator(`#chat .mes[mesid="${messageId}"]`)).toHaveCount(1);
 
         const abortCount = await page.evaluate(() => window.__emberdeskStreamingAbortCount);
         expect(abortCount).toBeGreaterThanOrEqual(1);
@@ -761,7 +757,7 @@ test.describe('chat message streaming', () => {
         });
 
         const composer = page.getByRole('textbox', { name: 'Chat message' });
-        const userRowCountBeforeSend = await page.locator('#chat > .mes[is_user="true"]').count();
+        const userRowCountBeforeSend = await page.locator('#chat .mes[is_user="true"]').count();
 
         await composer.click();
         await expect(composer).toBeFocused();
@@ -809,14 +805,14 @@ test.describe('chat message streaming', () => {
             generating: false,
             context: 'character',
         });
-        await expect(page.locator('#chat > .mes[is_user="true"]').filter({ hasText: 'Line one' })).toHaveCount(1);
-        await expect(page.locator('#chat > .mes[is_user="true"]').filter({ hasText: 'Line two' })).toHaveCount(1);
-        await expect(page.locator('#chat > .mes[is_user="true"]')).toHaveCount(userRowCountBeforeSend + 1);
+        await expect(page.locator('#chat .mes[is_user="true"]').filter({ hasText: 'Line one' })).toHaveCount(1);
+        await expect(page.locator('#chat .mes[is_user="true"]').filter({ hasText: 'Line two' })).toHaveCount(1);
+        await expect(page.locator('#chat .mes[is_user="true"]')).toHaveCount(userRowCountBeforeSend + 1);
 
-        const userRowCountBeforeEmptyClick = await page.locator('#chat > .mes[is_user="true"]').count();
+        const userRowCountBeforeEmptyClick = await page.locator('#chat .mes[is_user="true"]').count();
         await page.locator('#send_but').click();
         await page.waitForTimeout(150);
-        await expect(page.locator('#chat > .mes[is_user="true"]')).toHaveCount(userRowCountBeforeEmptyClick);
+        await expect(page.locator('#chat .mes[is_user="true"]')).toHaveCount(userRowCountBeforeEmptyClick);
         await expectMainChatComposerVisibleOwner(page, true);
         await expectMainChatComposerState(page, {
             length: 0,
@@ -867,7 +863,7 @@ test.describe('chat message streaming', () => {
         await expect.poll(async () => page.evaluate(() => window.__emberdeskStreamingRequests.length)).toBe(1);
         await expect(assistantRowForGeneration(page, lastVisibleMessageIdBeforeGeneration).locator('.mes_text')).toContainText('Serialized submit proof complete.');
         await expectMainChatComposerVisibleOwner(page, true);
-        await expect(page.locator('#chat > .mes[is_user="true"]').filter({ hasText: 'Serialized submit proof.' })).toHaveCount(1);
+        await expect(page.locator('#chat .mes[is_user="true"]').filter({ hasText: 'Serialized submit proof.' })).toHaveCount(1);
     });
 
     test('visible composer dispatches a service-owned request while the streaming renderer retains its row', async ({ page }) => {
@@ -976,7 +972,7 @@ test.describe('chat message streaming', () => {
         await expect(page.locator('#mes_continue')).toBeVisible();
         await page.locator('#mes_continue').click();
 
-        const continuedRow = page.locator(`#chat > .mes[mesid="${continuedMessageId}"]`);
+        const continuedRow = page.locator(`#chat .mes[mesid="${continuedMessageId}"]`);
         await expectMainChatTransportMarkersRetired(page);
         await expectMainChatStreamingTransportState(page, {
             phase: 'streaming',
@@ -1024,7 +1020,7 @@ test.describe('chat message streaming', () => {
             }
         });
 
-        const regeneratedRow = page.locator(`#chat > .mes[mesid="${regeneratedMessageId}"]`);
+        const regeneratedRow = page.locator(`#chat .mes[mesid="${regeneratedMessageId}"]`);
         await expectMainChatTransportMarkersRetired(page);
         await expectMainChatStreamingTransportState(page, {
             phase: ['streaming', 'completed'],
@@ -1096,7 +1092,7 @@ test.describe('chat message streaming', () => {
             delayMs: 200,
         });
 
-        const messageCountBefore = await page.locator('#chat > .mes[mesid]').count();
+        const messageCountBefore = await page.locator('#chat .mes[mesid]').count();
         await startQuietPromptGeneration(page, {
             quietPrompt: 'Return only a deterministic helper sentence.',
         });
@@ -1105,7 +1101,7 @@ test.describe('chat message streaming', () => {
 
         await waitForGeneration(page);
         await expectMainChatQuietTransportMarkersRetired(page);
-        await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(messageCountBefore);
+        await expect(page.locator('#chat .mes[mesid]')).toHaveCount(messageCountBefore);
 
         const quietReply = await page.evaluate(() => window.__emberdeskStreamingGenerationResult);
         expect(quietReply).toBe('Quiet helper reply.');
@@ -1120,7 +1116,7 @@ test.describe('chat message streaming', () => {
             delayMs: 200,
         });
 
-        const messageCountBefore = await page.locator('#chat > .mes[mesid]').count();
+        const messageCountBefore = await page.locator('#chat .mes[mesid]').count();
         await startQuietPromptGeneration(page, {
             quietPrompt: 'Choose one background title only.',
             backgroundGeneration: true,
@@ -1130,7 +1126,7 @@ test.describe('chat message streaming', () => {
 
         await waitForGeneration(page);
         await expectMainChatQuietTransportMarkersRetired(page);
-        await expect(page.locator('#chat > .mes[mesid]')).toHaveCount(messageCountBefore);
+        await expect(page.locator('#chat .mes[mesid]')).toHaveCount(messageCountBefore);
 
         const quietReply = await page.evaluate(() => window.__emberdeskStreamingGenerationResult);
         expect(quietReply).toBe('Beach sunset');
@@ -1311,7 +1307,7 @@ test.describe('chat message streaming', () => {
         expect(statusHistory).toContain('正在重试');
         expect(statusHistory).toContain('正在使用备用服务商');
 
-        const userRows = page.locator('#chat > .mes[is_user="true"]').filter({ hasText: 'Start a deterministic fallback recovery proof.' });
+        const userRows = page.locator('#chat .mes[is_user="true"]').filter({ hasText: 'Start a deterministic fallback recovery proof.' });
         await expect(userRows).toHaveCount(1);
         await expect(assistantRow).toHaveCount(1);
         await expect(assistantRow.locator('.mes_text')).not.toContainText('Discarded primary partial.');
@@ -1390,7 +1386,7 @@ test.describe('chat message streaming', () => {
         const stopped = await triggerStopGeneration(page, { throughDom: true });
         expect(stopped).toBe(true);
         await waitForGeneration(page, { allowAbort: true });
-        await expect(page.locator('#chat > .mes[is_user="false"][is_system="false"][mesid]').filter({ hasText: 'Unexpected retry.' })).toHaveCount(0);
+        await expect(page.locator('#chat .mes[is_user="false"][is_system="false"][mesid]').filter({ hasText: 'Unexpected retry.' })).toHaveCount(0);
         await expect(page.locator('.generation_auto_recovery_status')).toHaveCount(0);
 
         const requestCount = await page.evaluate(() => window.__emberdeskStreamingRequests.length);
@@ -1440,7 +1436,7 @@ test.describe('chat message streaming', () => {
             context: 'character',
         });
         await expect(page.locator(
-            `#chat > .mes[mesid="${assistantMessageIdForGeneration(lastVisibleMessageIdBeforeGeneration)}"]`,
+            `#chat .mes[mesid="${assistantMessageIdForGeneration(lastVisibleMessageIdBeforeGeneration)}"]`,
         )).toHaveCount(1);
         const failedAttemptRequestCount = await page.evaluate(() => window.__emberdeskStreamingRequests.length);
         expect(failedAttemptRequestCount).toBe(2);
@@ -1456,7 +1452,7 @@ test.describe('chat message streaming', () => {
         await expect.poll(async () => page.evaluate(() => window.SillyTavern.getContext().streamingProcessor === null)).toBe(true);
         await expect(userRow).toHaveCount(1);
         await expect(assistantRowsAfterFailure).toHaveCount(1);
-        await expect(page.locator('#chat > .mes[is_user="true"]').filter({ hasText: 'Start a deterministic provider failure proof.' })).toHaveCount(1);
+        await expect(page.locator('#chat .mes[is_user="true"]').filter({ hasText: 'Start a deterministic provider failure proof.' })).toHaveCount(1);
         const retryRequestCount = await page.evaluate(() => window.__emberdeskStreamingRequests.length);
         expect(retryRequestCount).toBe(1);
     });
@@ -1482,7 +1478,7 @@ test.describe('chat message streaming', () => {
         const userRow = userRowForGeneration(page, lastVisibleMessageIdBeforeGeneration);
         const assistantRow = assistantRowForGeneration(page, lastVisibleMessageIdBeforeGeneration);
         const duplicateAssistantRow = page.locator(
-            `#chat > .mes[is_user="false"][is_system="false"][mesid="${assistantMessageIdForGeneration(lastVisibleMessageIdBeforeGeneration) + 1}"]`,
+            `#chat .mes[is_user="false"][is_system="false"][mesid="${assistantMessageIdForGeneration(lastVisibleMessageIdBeforeGeneration) + 1}"]`,
         );
 
         await expect(userRow.locator('.mes_text')).toContainText('Start a deterministic fallback recovery proof.');
@@ -1617,7 +1613,7 @@ test.describe('chat message streaming', () => {
         }, original.messageId);
         expect(restored).toBe(original.text);
 
-        const continuedRow = page.locator(`#chat > .mes[mesid="${original.messageId}"]`);
+        const continuedRow = page.locator(`#chat .mes[mesid="${original.messageId}"]`);
         await expect(continuedRow).toHaveCount(1);
         await expect(continuedRow.locator('.mes_text')).not.toContainText('Discarded continue partial.');
         await expect(continuedRow.getByRole('button', { name: 'Retry generation' })).toBeVisible();
@@ -1717,7 +1713,7 @@ test.describe('chat message streaming', () => {
             await expect(retry, `${viewport.name} retry focus`).toBeFocused();
             await expectReachableControlGeometry(
                 page,
-                `#chat > .mes[mesid="${assistantMessageIdForGeneration(lastVisibleMessageIdBeforeGeneration)}"] .generation_failure_retry`,
+                `#chat .mes[mesid="${assistantMessageIdForGeneration(lastVisibleMessageIdBeforeGeneration)}"] .generation_failure_retry`,
                 `${viewport.name} retry`,
             );
             const failedRequestCount = await page.evaluate(() => window.__emberdeskStreamingRequests.length);
