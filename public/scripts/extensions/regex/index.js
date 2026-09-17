@@ -1,6 +1,7 @@
 import { characters, getCurrentChatId, messageFormatting, reloadCurrentChat, saveSettingsDebounced, this_chid } from '../../../script.js';
 import { eventSource, event_types } from '../../events.js';
 import { extension_settings, renderExtensionTemplateAsync } from '../../extensions.js';
+import { loadWorkspacePanelsModule } from '../../workspace-panels-react-bridge.js';
 import { callGenericPopup, Popup, POPUP_TYPE } from '../../popup.js';
 import { SlashCommand } from '../../slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from '../../slash-commands/SlashCommandArgument.js';
@@ -757,7 +758,11 @@ async function loadRegexScripts() {
  * @returns {Promise<void>}
  */
 async function onRegexEditorOpenClick(existingId, scriptType) {
-    const editorHtml = $(await renderExtensionTemplateAsync('regex', 'editor'));
+    const editorHtml = $(document.createElement('div'));
+    const regexEditorHost = document.createElement('div');
+    editorHtml.append(regexEditorHost);
+    const workspacePanels = await loadWorkspacePanelsModule();
+    workspacePanels.mountRegexEditor(regexEditorHost);
     const array = getScriptsByType(scriptType);
 
     // If an ID exists, fill in all the values
@@ -1162,8 +1167,11 @@ function populateDebuggerRuleList(container) {
  * @returns {Promise<void>}
  */
 async function onRegexDebuggerOpenClick() {
-    const templateContent = await renderExtensionTemplateAsync('regex', 'debugger');
-    const debuggerHtml = $('<div>').html(templateContent);
+    const debuggerHtml = $('<div>');
+    const debuggerHost = document.createElement('div');
+    debuggerHtml.append(debuggerHost);
+    const workspacePanels = await loadWorkspacePanelsModule();
+    workspacePanels.mountRegexDebugger(debuggerHost);
 
     const stepTemplate = debuggerHtml.find('#regex_debugger_step_template');
 
@@ -1721,8 +1729,10 @@ export async function init() {
 
     migrateSettings();
 
-    const settingsHtml = $(await renderExtensionTemplateAsync('regex', 'dropdown'));
-    $('#regex_container').append(settingsHtml);
+    const regexSettingsHost = $(document.createElement('div'));
+    $('#regex_container').append(regexSettingsHost);
+    const workspacePanels = await loadWorkspacePanelsModule();
+    workspacePanels.mountRegexSettings(regexSettingsHost.get(0));
     $('#open_regex_editor').on('click', function () {
         onRegexEditorOpenClick(false, SCRIPT_TYPES.GLOBAL);
     });
@@ -1740,7 +1750,8 @@ export async function init() {
     });
     $('#import_regex_file').on('change', async function () {
         let target = SCRIPT_TYPES.GLOBAL;
-        const template = $(await renderExtensionTemplateAsync('regex', 'importTarget'));
+        const template = $(document.createElement('div'));
+        workspacePanels.mountRegexImportTarget(template.get(0));
         template.find('#regex_import_target_global').on('input', () => (target = SCRIPT_TYPES.GLOBAL));
         template.find('#regex_import_target_scoped').on('input', () => (target = SCRIPT_TYPES.SCOPED));
         template.find('#regex_import_target_preset').on('input', () => (target = SCRIPT_TYPES.PRESET));

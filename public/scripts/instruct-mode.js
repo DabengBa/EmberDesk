@@ -7,6 +7,7 @@ import {
     context_presets,
 } from './power-user.js';
 import { onlyUnique, regexFromString, resetScrollHeight } from './utils.js';
+import { loadWorkspacePanelsModule } from './workspace-panels-react-bridge.js';
 
 /**
  * @type {InstructSettings[]} Instruct mode presets.
@@ -864,3 +865,31 @@ jQuery(() => {
         });
     }
 });
+
+/**
+ * Mounts the React-owned Advanced Formatting drawer content.
+ * Must run before getSettings(): context/instruct bindings attach to the
+ * preserved element IDs during settings load.
+ */
+export async function mountAdvancedFormattingPanel() {
+    const drawerContent = document.getElementById('AdvancedFormatting');
+    if (!drawerContent) {
+        console.warn('Advanced Formatting drawer not found');
+        return;
+    }
+    if (drawerContent.dataset.reactAdvancedFormattingMounted === 'true') {
+        return;
+    }
+
+    const host = document.createElement('div');
+    host.id = 'emberdesk-react-advanced-formatting-host';
+    drawerContent.replaceChildren(host);
+
+    try {
+        const module = await loadWorkspacePanelsModule();
+        module.mountAdvancedFormattingPanel(host);
+        drawerContent.dataset.reactAdvancedFormattingMounted = 'true';
+    } catch (error) {
+        console.error('Failed to mount advanced formatting panel:', error);
+    }
+}

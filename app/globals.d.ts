@@ -19,6 +19,8 @@ declare global {
     interface HTMLAttributes<T> {
       // Legacy markup uses name= on layout divs; CSS/JS selects them via [name=...].
       name?: string;
+      // promptmanager.css reads this via attr(external_piece_text) and i18n writes it.
+      external_piece_text?: string;
     }
   }
 }

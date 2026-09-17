@@ -65,7 +65,30 @@ describe('small configuration drawers React surface (Wave A)', () => {
         },
     ];
 
-    for (const c of cases) {
+    const advancedFormatting = {
+        name: 'Advanced Formatting (instruct/context/sysprompt)',
+        shellId: 'AdvancedFormatting',
+        component: 'app/components/panels/AdvancedFormattingPanel.tsx',
+        adapter: 'public/scripts/instruct-mode.js',
+        mountFn: 'mountAdvancedFormattingPanel',
+        ids: [
+            'context_story_string',
+            'context_story_string_position',
+            'context_story_string_depth',
+            'context_example_separator',
+            'context_chat_start',
+            'instruct_macro',
+            'instruct_activation_regex',
+            'instruct_input_sequence',
+            'instruct_output_sequence',
+            'instruct_system_sequence',
+            'instruct_stop_sequence',
+            'instruct_user_alignment_message',
+            'sysprompt_content',
+        ],
+    };
+
+    for (const c of [...cases, advancedFormatting]) {
         test(`${c.name}: React owns content, legacy shell stays`, () => {
             const component = readRepoFile(c.component);
             const indexHtml = readRepoFile('public/index.html');

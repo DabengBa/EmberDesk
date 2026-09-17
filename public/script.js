@@ -84,6 +84,7 @@ import {
     chat_completion_sources,
     getChatCompletionModel,
     initOpenAI,
+    mountPromptManagerPopup,
 } from './scripts/openai.js';
 
 import {
@@ -215,6 +216,7 @@ import {
     formatInstructModeExamples,
     formatInstructModeStoryString,
     getInstructStoppingSequences,
+    mountAdvancedFormattingPanel,
 } from './scripts/instruct-mode.js';
 import { initLocales, t, translate } from './scripts/i18n.js';
 import { getFriendlyTokenizerName, getTokenCount, getTokenCountAsync, initTokenizers, saveTokenCache } from './scripts/tokenizers.js';
@@ -4015,6 +4017,8 @@ async function bootstrapWorkspace() {
         mountFloatingPromptPanel(),
         mountCfgConfigPanel(),
         mountLogprobsViewerPanel(),
+        mountAdvancedFormattingPanel(),
+        mountPromptManagerPopup(),
     ]));
     await getSettings(initLoaderHandle);
     await measureStartupStage('checkOpenRouterAuth', () => checkOpenRouterAuth());

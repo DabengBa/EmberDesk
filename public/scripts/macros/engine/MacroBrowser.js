@@ -1,11 +1,13 @@
 /**
- * MacroBrowser - Dynamic documentation browser for macros.
- * Similar to SlashCommandBrowser but for the macro system.
+ * MacroBrowser - React-owned documentation browser for macros.
+ * This module is a thin adapter: it passes live MacroDefinition objects and
+ * the shared detail renderers to the React surface mounted via the guarded
+ * workspace-panels bundle.
  */
 
 import { MacroRegistry, MacroCategory } from './MacroRegistry.js';
-import { performFuzzySearch } from '../../power-user.js';
 import { escapeRegex } from '/scripts/utils.js';
+import { loadWorkspacePanelsModule } from '../../workspace-panels-react-bridge.js';
 
 /** @typedef {import('./MacroRegistry.js').MacroDefinition} MacroDefinition */
 /** @typedef {import('./MacroRegistry.js').MacroValueType} MacroValueType */
@@ -28,273 +30,33 @@ const CATEGORY_CONFIG = {
 };
 
 /**
- * MacroBrowser class for displaying searchable macro documentation.
+ * Adapter class preserving the legacy call contract of the macro browser.
  */
 export class MacroBrowser {
-    /** @type {Map<string, MacroDefinition[]>} */
-    macrosByCategory = new Map();
-
-    /** @type {HTMLElement} */
-    dom;
-
-    /** @type {HTMLInputElement} */
-    searchInput;
-
-    /** @type {HTMLElement} */
-    detailsPanel;
-
-    /** @type {Map<string, HTMLElement>} */
-    itemMap = new Map();
-
-    /** @type {boolean} */
-    isSorted = false;
+    /** @type {HTMLInputElement|null} */
+    searchInput = null;
 
     /**
-     * Groups macros by category in registration order.
-     * Excludes hidden aliases from the list.
-     */
-    #loadMacros() {
-        this.macrosByCategory.clear();
-        // Exclude hidden aliases - they won't show in the list
-        const allMacros = MacroRegistry.getAllMacros({ excludeHiddenAliases: true });
-
-        for (const macro of allMacros) {
-            const category = macro.category || MacroCategory.MISC;
-            if (!this.macrosByCategory.has(category)) {
-                this.macrosByCategory.set(category, []);
-            }
-            this.macrosByCategory.get(category).push(macro);
-        }
-    }
-
-    /**
-     * Sorts macros within each category alphabetically.
-     */
-    #sortMacros() {
-        for (const [, macros] of this.macrosByCategory) {
-            macros.sort((a, b) => a.name.localeCompare(b.name));
-        }
-    }
-
-    /**
-     * Gets categories sorted by their configured order.
-     * @returns {string[]}
-     */
-    #getSortedCategories() {
-        return Array.from(this.macrosByCategory.keys())
-            .sort((a, b) => getCategoryConfig(a).order - getCategoryConfig(b).order);
-    }
-
-    /**
-     * Renders the browser into a parent element.
+     * Mounts the React macro browser into a parent element.
      * @param {HTMLElement} parent
-     * @returns {HTMLElement}
+     * @returns {Promise<HTMLElement|undefined>}
      */
-    renderInto(parent) {
-        this.#loadMacros();
+    async renderInto(parent) {
+        const host = document.createElement('div');
+        parent.appendChild(host);
 
-        const root = document.createElement('div');
-        root.classList.add('macroBrowser');
-        this.dom = root;
-
-        // Search bar and sort button
-        const toolbar = document.createElement('div');
-        toolbar.classList.add('macro-toolbar');
-
-        const searchLabel = document.createElement('label');
-        searchLabel.classList.add('macro-search-label');
-        searchLabel.textContent = 'Search: ';
-
-        const searchInput = document.createElement('input');
-        searchInput.type = 'search';
-        searchInput.classList.add('macro-search-input', 'text_pole');
-        searchInput.placeholder = 'Search macros by name or description...';
-        searchInput.addEventListener('input', () => this.#handleSearch(searchInput.value));
-        this.searchInput = searchInput;
-        searchLabel.appendChild(searchInput);
-        toolbar.appendChild(searchLabel);
-
-        const sortBtn = document.createElement('button');
-        sortBtn.classList.add('macro-sort-btn', 'menu_button');
-        sortBtn.innerHTML = '<i class="fa-solid fa-arrow-down-a-z"></i> Sort A-Z';
-        sortBtn.title = 'Sort macros alphabetically within each category';
-        sortBtn.addEventListener('click', () => this.#toggleSort());
-        toolbar.appendChild(sortBtn);
-
-        root.appendChild(toolbar);
-
-        // Container for list and details
-        const container = document.createElement('div');
-        container.classList.add('macro-container');
-
-        // Macro list
-        const listPanel = document.createElement('div');
-        listPanel.classList.add('macro-list-panel');
-        this.#renderList(listPanel);
-        container.appendChild(listPanel);
-
-        // Details panel
-        const detailsPanel = document.createElement('div');
-        detailsPanel.classList.add('macro-details-panel');
-        detailsPanel.innerHTML = '<div class="macro-details-placeholder">Select a macro to view details</div>';
-        this.detailsPanel = detailsPanel;
-        container.appendChild(detailsPanel);
-
-        root.appendChild(container);
-        parent.appendChild(root);
-
-        return root;
-    }
-
-    /**
-     * Renders the macro list grouped by category.
-     * @param {HTMLElement} listPanel
-     */
-    #renderList(listPanel) {
-        listPanel.innerHTML = '';
-        this.itemMap.clear();
-
-        for (const category of this.#getSortedCategories()) {
-            const macros = this.macrosByCategory.get(category);
-            if (!macros || macros.length === 0) continue;
-
-            // Category header
-            const categoryHeader = document.createElement('div');
-            categoryHeader.classList.add('macro-category-header');
-            categoryHeader.textContent = getCategoryConfig(category).label;
-            categoryHeader.dataset.category = category;
-            listPanel.appendChild(categoryHeader);
-
-            // Macro items
-            for (const macro of macros) {
-                const item = renderMacroItem(macro);
-                item.addEventListener('click', () => this.#showDetails(macro, item));
-                this.itemMap.set(macro.name, item);
-                listPanel.appendChild(item);
-            }
-        }
-    }
-
-    /**
-     * Shows details for a selected macro.
-     * @param {MacroDefinition} macro
-     * @param {HTMLElement} item
-     */
-    #showDetails(macro, item) {
-        // Clear previous selection
-        this.dom.querySelectorAll('.macro-item.selected').forEach(el => el.classList.remove('selected'));
-        item.classList.add('selected');
-
-        // Render details
-        this.detailsPanel.innerHTML = '';
-        this.detailsPanel.appendChild(renderMacroDetails(macro));
-    }
-
-    /**
-     * Handles search input using fuzzy search.
-     * @param {string} query
-     */
-    #handleSearch(query) {
-        query = query.trim();
-
-        // Clear details on search
-        this.detailsPanel.innerHTML = '<div class="macro-details-placeholder">Select a macro to view details</div>';
-        this.dom.querySelectorAll('.macro-item.selected').forEach(el => el.classList.remove('selected'));
-
-        // If empty query, show all
-        if (!query) {
-            for (const item of this.itemMap.values()) {
-                item.classList.remove('isFiltered');
-            }
-            this.dom.querySelectorAll('.macro-category-header').forEach(h => h.classList.remove('isFiltered'));
-            return;
-        }
-
-        // Trim query of braces, as we don't have them in the macro names of the search definitions
-        query = query.replace(/[{}]/g, '');
-
-        // Build searchable data array from all macros
-        const allMacros = MacroRegistry.getAllMacros();
-        const searchData = allMacros.map(macro => ({
-            name: macro.name,
-            aliases: macro.aliases?.map(a => a.alias).join(' '),
-            description: macro.description || '',
-            category: getCategoryConfig(macro.category).label,
-            argNames: macro.unnamedArgDefs.map(d => d.name).join(' '),
-            argDescriptions: macro.unnamedArgDefs.map(d => d.description || '').join(' '),
-        }));
-
-        // Fuzzy search with weighted keys
-        const keys = [
-            { name: 'name', weight: 10 },
-            { name: 'aliases', weight: 1 }, // No need to rank those high, if they are important (visible) they have their own entry
-            { name: 'description', weight: 5 },
-            { name: 'category', weight: 3 },
-            { name: 'argNames', weight: 2 },
-            { name: 'argDescriptions', weight: 1 },
-        ];
-
-        const results = performFuzzySearch('macro-browser', searchData, keys, query);
-        const matchedNames = new Set(results.map(r => r.item.name));
-
-        // Filter items based on fuzzy results
-        for (const [name, item] of this.itemMap) {
-            item.classList.toggle('isFiltered', !matchedNames.has(name));
-        }
-
-        // Hide empty category headers
-        this.dom.querySelectorAll('.macro-category-header').forEach(header => {
-            if (!(header instanceof HTMLElement)) return;
-            const category = header.dataset.category;
-            const hasVisible = Array.from(this.itemMap.values())
-                .filter(item => item.dataset.macroName)
-                .some(item => {
-                    const macro = MacroRegistry.getMacro(item.dataset.macroName);
-                    return macro?.category === category && !item.classList.contains('isFiltered');
-                });
-            header.classList.toggle('isFiltered', !hasVisible);
+        const module = await loadWorkspacePanelsModule();
+        module.mountMacroBrowser(host, {
+            // List entries exclude hidden aliases; search corpus includes them.
+            macros: MacroRegistry.getAllMacros({ excludeHiddenAliases: true }),
+            searchCorpus: MacroRegistry.getAllMacros(),
+            helpers: { formatMacroSignature, renderMacroDetails },
+            categoryConfig: CATEGORY_CONFIG,
         });
-    }
 
-    /**
-     * Toggles alphabetical sorting.
-     */
-    #toggleSort() {
-        this.isSorted = !this.isSorted;
-
-        if (this.isSorted) {
-            this.#sortMacros();
-        } else {
-            this.#loadMacros(); // Reload to restore registration order
-        }
-
-        const listPanel = this.dom.querySelector('.macro-list-panel');
-        if (!(listPanel instanceof HTMLElement)) return;
-
-        this.#renderList(listPanel);
-        // Re-apply current search filter
-        if (this.searchInput?.value) {
-            this.#handleSearch(this.searchInput.value);
-        }
-
-        // Update button state
-        const sortBtn = this.dom.querySelector('.macro-sort-btn');
-        sortBtn?.classList.toggle('active', this.isSorted);
-    }
-
-    /**
-     * Handles keyboard shortcuts.
-     * @param {KeyboardEvent} evt
-     */
-    #handleKeyDown(evt) {
-        if (!evt.shiftKey && !evt.altKey && evt.ctrlKey && evt.key.toLowerCase() === 'f') {
-            if (!this.dom.closest('body')) return;
-            if (this.dom.closest('.mes') && !this.dom.closest('.last_mes')) return;
-            evt.preventDefault();
-            evt.stopPropagation();
-            evt.stopImmediatePropagation();
-            this.searchInput?.focus();
-        }
+        this.searchInput = host.querySelector('.macro-search-input');
+        this.searchInput?.focus();
+        return host;
     }
 }
 

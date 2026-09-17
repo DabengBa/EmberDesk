@@ -28,6 +28,7 @@ import { renderTemplateAsync } from './templates.js';
 import { t, translate } from './i18n.js';
 import { accountStorage } from './util/AccountStorage.js';
 import { enumTypes, SlashCommandEnumValue } from './slash-commands/SlashCommandEnumValue.js';
+import { loadWorkspacePanelsModule } from './workspace-panels-react-bridge.js';
 
 export {
     TAG_FOLDER_TYPES,
@@ -1528,7 +1529,10 @@ export function createTagInput(inputSelector, listSelector, tagListOptions = {})
 async function onViewTagsListClick() {
     const html = $(document.createElement('div'));
     html.attr('id', 'tag_view_list');
-    html.append(await renderTemplateAsync('tagManagement', { bogus_folders: power_user.bogus_folders }));
+    const tagManagementHost = $(document.createElement('div'));
+    html.append(tagManagementHost);
+    const workspacePanels = await loadWorkspacePanelsModule();
+    workspacePanels.mountTagManagement(tagManagementHost.get(0), { bogusFolders: Boolean(power_user.bogus_folders) });
 
     const tagContainer = $('<div class="tag_view_list_tags ui-sortable"></div>');
     html.append(tagContainer);

@@ -75,6 +75,7 @@ import { ToolManager } from './tool-calling.js';
 import { accountStorage } from './util/AccountStorage.js';
 import { IGNORE_SYMBOL, MEDIA_DISPLAY, MEDIA_TYPE } from './constants.js';
 import { buildFallbackOpenAIRequestOverrides } from './chat-generation-auto-recovery.js';
+import { loadWorkspacePanelsModule } from './workspace-panels-react-bridge.js';
 import {
     canUseDirectProviderSecret,
     clearProviderSecretField,
@@ -4638,4 +4639,32 @@ export function initOpenAI() {
         event_types.SECRET_EDITED,
     ].forEach(eventType => eventSource.on(eventType, updateUnifiedKeyField));
     updateUnifiedKeyField();
+}
+
+/**
+ * Mounts the React-owned Prompt Manager popup markup.
+ * Must run before setupChatCompletionPromptManager(): PromptManager.init
+ * attaches listeners to the preserved element IDs.
+ */
+export async function mountPromptManagerPopup() {
+    const popup = document.getElementById('completion_prompt_manager_popup');
+    if (!popup) {
+        console.warn('Prompt Manager popup not found');
+        return;
+    }
+    if (popup.dataset.reactPromptManagerMounted === 'true') {
+        return;
+    }
+
+    const host = document.createElement('div');
+    host.id = 'emberdesk-react-prompt-manager-host';
+    popup.replaceChildren(host);
+
+    try {
+        const module = await loadWorkspacePanelsModule();
+        module.mountPromptManagerPopup(host);
+        popup.dataset.reactPromptManagerMounted = 'true';
+    } catch (error) {
+        console.error('Failed to mount prompt manager popup:', error);
+    }
 }

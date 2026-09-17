@@ -1,76 +1,79 @@
-<div class="regex-debugger-container">
-    <!-- Rules List Column -->
-    <div class="regex-debugger-rules-list">
+export function RegexDebugger() {
+    return (
+        <>
+<div className="regex-debugger-container">
+    {/* Rules List Column */}
+    <div className="regex-debugger-rules-list">
         <h3>
-            <i class="fa-solid fa-list-ol"></i>
+            <i className="fa-solid fa-list-ol" />
             <span data-i18n="ext_regex_debugger_active_rules"
                 >Active Rules</span
             >
         </h3>
-        <div class="flex-container">
+        <div className="flex-container">
             <button
                 id="regex_debugger_save_order"
-                class="menu_button menu_button_icon interactable"
+                className="menu_button menu_button_icon interactable"
                 data-i18n="[title]ext_regex_debugger_save_order_help"
                 title="Save current rule order"
-                tabindex="0"
+                tabIndex={0}
             >
-                <i class="fa-solid fa-floppy-disk"></i>
+                <i className="fa-solid fa-floppy-disk" />
                 <span data-i18n="ext_regex_debugger_save_order"
                     >Save Order</span
                 >
             </button>
         </div>
-        <ul id="regex_debugger_rules" class="sortable-list">
-            <!-- Rules will be populated here by JavaScript -->
+        <ul id="regex_debugger_rules" className="sortable-list">
+            {/* Rules will be populated here by JavaScript */}
         </ul>
     </div>
 
-    <!-- Testing Area Column -->
-    <div class="regex-debugger-tester">
+    {/* Testing Area Column */}
+    <div className="regex-debugger-tester">
         <h3>
-            <i class="fa-solid fa-vial"></i>
+            <i className="fa-solid fa-vial" />
             <span data-i18n="ext_regex_debugger_testing_area"
                 >Testing Area</span
             >
         </h3>
-        <div class="regex-debugger-io">
-            <div class="regex-debugger-input">
+        <div className="regex-debugger-io">
+            <div className="regex-debugger-input">
                 <label
-                    for="regex_debugger_raw_input"
+                    htmlFor="regex_debugger_raw_input"
                     data-i18n="ext_regex_debugger_raw_input"
                     >Raw Input</label
                 >
                 <textarea
                     id="regex_debugger_raw_input"
-                    class="text_pole autoSetHeight"
-                    rows="4"
+                    className="text_pole autoSetHeight"
+                    rows={4}
                 ></textarea>
             </div>
             <div
                 id="regex_debugger_run_test_header"
-                class="flex-container"
+                className="flex-container"
             >
                 <button
                     id="regex_debugger_run_test"
-                    class="menu_button menu_button_icon interactable"
+                    className="menu_button menu_button_icon interactable"
                     data-i18n="[title]ext_regex_debugger_run_test_help"
                     title="Run the test pipeline"
-                    tabindex="0"
+                    tabIndex={0}
                 >
-                    <i class="fa-solid fa-play"></i>
+                    <i className="fa-solid fa-play" />
                     <span data-i18n="ext_regex_debugger_run_test"
                         >Run Test</span
                     >
                 </button>
-                <div class="flex-container gap10px">
-                    <div class="radio_group">
+                <div className="flex-container gap10px">
+                    <div className="radio_group">
                         <label
                             ><input
                                 type="radio"
                                 name="display_mode"
-                                value="replace"
-                                checked
+                                defaultValue="replace"
+                                defaultChecked
                             />
                             <span data-i18n="ext_regex_debugger_display_replace"
                                 >Replace</span
@@ -80,7 +83,7 @@
                             ><input
                                 type="radio"
                                 name="display_mode"
-                                value="highlight"
+                                defaultValue="highlight"
                             />
                             <span
                                 data-i18n="ext_regex_debugger_display_highlight"
@@ -106,74 +109,77 @@
                     </select>
                 </div>
             </div>
-            <div class="regex-debugger-results">
-                <div class="results-header">
+            <div className="regex-debugger-results">
+                <div className="results-header">
                     <h4>
-                        <i class="fa-solid fa-shoe-prints"></i>
+                        <i className="fa-solid fa-shoe-prints" />
                         <span data-i18n="ext_regex_debugger_step_by_step"
                             >Step-by-step Transformation</span
                         >
                     </h4>
                     <div
                         id="regex_debugger_expand_steps"
-                        class="menu_button menu_button_icon"
+                        className="menu_button menu_button_icon"
                         data-i18n="[title]Expand view"
                         title="Expand view"
                     >
-                        <i class="fa-solid fa-expand"></i>
+                        <i className="fa-solid fa-expand" />
                     </div>
                 </div>
-                <div id="regex_debugger_steps_output" class="results-box"></div>
+                <div id="regex_debugger_steps_output" className="results-box"></div>
 
-                <div class="results-header">
+                <div className="results-header">
                     <h4>
-                        <i class="fa-solid fa-flag-checkered"></i>
+                        <i className="fa-solid fa-flag-checkered" />
                         <span data-i18n="ext_regex_debugger_final_output"
                             >Final Output</span
                         >
                     </h4>
                     <div
                         id="regex_debugger_expand_final"
-                        class="menu_button menu_button_icon"
+                        className="menu_button menu_button_icon"
                         data-i18n="[title]Expand view"
                         title="Expand view"
                     >
-                        <i class="fa-solid fa-expand"></i>
+                        <i className="fa-solid fa-expand" />
                     </div>
                 </div>
                 <div
                     id="regex_debugger_final_output"
-                    class="results-box final-output"
+                    className="results-box final-output"
                 ></div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Template for a single rule item -->
+{/* Template for a single rule item */}
 <template id="regex_debugger_rule_template">
-    <li class="regex-debugger-rule" draggable="true">
-        <i class="fa-solid fa-grip-vertical handle"></i>
-        <label class="checkbox">
-            <input type="checkbox" class="rule-enabled" checked />
+    <li className="regex-debugger-rule" draggable={true}>
+        <i className="fa-solid fa-grip-vertical handle" />
+        <label className="checkbox">
+            <input type="checkbox" className="rule-enabled" defaultChecked />
         </label>
-        <div class="rule-details">
-            <span class="rule-name"></span>
-            <code class="rule-regex"></code>
-            <small class="rule-scope"></small>
+        <div className="rule-details">
+            <span className="rule-name"></span>
+            <code className="rule-regex"></code>
+            <small className="rule-scope"></small>
         </div>
-        <div class="menu_button menu_button_icon edit_rule" data-i18n="[title]Edit Rule" title="Edit Rule">
-            <i class="fa-solid fa-pencil"></i>
+        <div className="menu_button menu_button_icon edit_rule" data-i18n="[title]Edit Rule" title="Edit Rule">
+            <i className="fa-solid fa-pencil" />
         </div>
     </li>
 </template>
 
-<!-- Template for a single transformation step -->
+{/* Template for a single transformation step */}
 <template id="regex_debugger_step_template">
-    <div class="step-result">
-        <div class="step-header">
+    <div className="step-result">
+        <div className="step-header">
             <strong></strong>
         </div>
-        <pre class="step-output"></pre>
+        <pre className="step-output"></pre>
     </div>
 </template>
+        </>
+    );
+}

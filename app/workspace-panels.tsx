@@ -1,5 +1,6 @@
 import { Fragment, StrictMode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactElement, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { flushSync } from 'react-dom';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { useMutation } from '@tanstack/react-query';
 import { useForm } from '@tanstack/react-form';
@@ -61,6 +62,14 @@ import { PowerUserPanel } from './components/power-user/PowerUserPanel';
 import { FloatingPromptPanel } from './components/panels/FloatingPromptPanel';
 import { CfgConfigPanel } from './components/panels/CfgConfigPanel';
 import { LogprobsViewerPanel } from './components/panels/LogprobsViewerPanel';
+import { AdvancedFormattingPanel } from './components/panels/AdvancedFormattingPanel';
+import { PromptManagerPopup } from './components/panels/PromptManagerPopup';
+import { TagManagement } from './components/tags/TagManagement';
+import { RegexEditor } from './components/regex/RegexEditor';
+import { RegexSettingsPanel } from './components/regex/RegexSettingsPanel';
+import { RegexDebugger } from './components/regex/RegexDebugger';
+import { RegexImportTarget } from './components/regex/RegexImportTarget';
+import { MacroBrowserPanel, type MacroBrowserProps } from './components/macros/MacroBrowser';
 import * as stylex from '@stylexjs/stylex';
 import { authoringStyles, workspacePanelStyles, workspaceShellStyles } from './styles/workspace-panels.styles.js';
 import { Theme } from '@astryxdesign/core';
@@ -1975,13 +1984,15 @@ function mountSmallPanel(container: HTMLElement, element: ReactElement) {
 
     const root = createRoot(container);
     mountedSmallPanels.set(container, root);
-    root.render(
+    // Commit synchronously: adapters bind legacy handlers to the rendered
+    // IDs immediately after the mount call returns.
+    flushSync(() => root.render(
         <StrictMode>
             <Theme theme={emberDeskTheme} mode="dark">
                 {element}
             </Theme>
         </StrictMode>,
-    );
+    ));
 }
 
 /**
@@ -2006,4 +2017,71 @@ export function mountCfgConfigPanel(container: HTMLElement) {
  */
 export function mountLogprobsViewerPanel(container: HTMLElement) {
     mountSmallPanel(container, <LogprobsViewerPanel />);
+}
+
+/**
+ * Mounts the Advanced Formatting drawer content (instruct/context/sysprompt).
+ * Presentation-only: instruct-mode.js and power-user.js keep behavior
+ * ownership via the preserved element IDs.
+ */
+export function mountAdvancedFormattingPanel(container: HTMLElement) {
+    mountSmallPanel(container, <AdvancedFormattingPanel />);
+}
+
+/**
+ * Mounts the Prompt Manager popup markup. Presentation-only: PromptManager.js
+ * attaches listeners to the preserved completion_prompt_manager_* IDs.
+ */
+export function mountPromptManagerPopup(container: HTMLElement) {
+    mountSmallPanel(container, <PromptManagerPopup />);
+}
+
+/**
+ * Mounts the Tag Management popup content inside the legacy popup shell.
+ * Presentation-only: tags.js keeps behavior ownership via delegated
+ * .tag_view_* handlers and #tag_sort_mode_select.
+ */
+export function mountTagManagement(container: HTMLElement, options: { bogusFolders: boolean }) {
+    mountSmallPanel(container, <TagManagement bogusFolders={options.bogusFolders} />);
+}
+
+/**
+ * Mounts the Regex Editor popup content inside the legacy popup shell.
+ * Presentation-only: extensions/regex/index.js keeps behavior ownership via
+ * the preserved field classes and element IDs.
+ */
+export function mountRegexEditor(container: HTMLElement) {
+    mountSmallPanel(container, <RegexEditor />);
+}
+
+/**
+ * Mounts the Regex extension settings drawer content. Presentation-only:
+ * extensions/regex/index.js keeps behavior ownership.
+ */
+export function mountRegexSettings(container: HTMLElement) {
+    mountSmallPanel(container, <RegexSettingsPanel />);
+}
+
+/**
+ * Mounts the Regex Debugger popup chrome. The rule/step templates inside are
+ * rendered inertly; legacy code clones them into the dynamic lists.
+ */
+export function mountRegexDebugger(container: HTMLElement) {
+    mountSmallPanel(container, <RegexDebugger />);
+}
+
+/**
+ * Mounts the regex import target picker inside the legacy popup shell.
+ */
+export function mountRegexImportTarget(container: HTMLElement) {
+    mountSmallPanel(container, <RegexImportTarget />);
+}
+
+/**
+ * Mounts the Macro documentation browser inside a caller-provided node
+ * (e.g. inside a chat message). The adapter supplies live MacroDefinition
+ * objects and the legacy detail/signature renderers as helpers.
+ */
+export function mountMacroBrowser(container: HTMLElement, props: MacroBrowserProps) {
+    mountSmallPanel(container, <MacroBrowserPanel {...props} />);
 }
