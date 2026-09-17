@@ -4006,6 +4006,7 @@ async function bootstrapWorkspace() {
     }));
     await measureStartupStage('mountApiConnectionsPanel', () => mountApiConnectionsPanel());
     await measureStartupStage('mountAiConfigPanel', () => mountAiConfigPanel());
+    await measureStartupStage('mountCharacterPopup', () => mountCharacterPopup());
     await measureStartupStage('initSecrets', () => initSecrets());
     await measureStartupStage('readSecretState', () => readSecretState());
     await measureStartupStage('initLocales', () => initLocales());
@@ -15526,6 +15527,35 @@ async function mountAiConfigPanel() {
         drawerContent.dataset.reactAiConfigMounted = 'true';
     } catch (error) {
         console.error('Failed to mount ai config panel:', error);
+    }
+}
+
+/**
+ * Mounts the React-owned Advanced Definitions markup into #character_popup.
+ * The popup shell stays legacy (display/opacity transitions); inner markup must
+ * exist before the ready-callback binds #character_cross/#character_popup_ok
+ * and before openai.js reads the textarea fields.
+ */
+async function mountCharacterPopup() {
+    const popup = document.getElementById('character_popup');
+    if (!popup) {
+        console.warn('Character popup not found');
+        return;
+    }
+    if (popup.dataset.reactCharacterPopupMounted === 'true') {
+        return;
+    }
+
+    const host = document.createElement('div');
+    host.id = 'emberdesk-react-character-popup-host';
+    popup.replaceChildren(host);
+
+    try {
+        const module = await loadWorkspacePanelsModule();
+        module.mountCharacterPopup(host);
+        popup.dataset.reactCharacterPopupMounted = 'true';
+    } catch (error) {
+        console.error('Failed to mount character popup:', error);
     }
 }
 

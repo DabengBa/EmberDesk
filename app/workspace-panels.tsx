@@ -76,6 +76,7 @@ import { QuickReplySettingsPanel } from './components/quick-reply/QuickReplySett
 import { ChatComposer } from './components/composer/ChatComposer';
 import { ApiConnectionsPanel } from './components/api/ApiConnectionsPanel';
 import { AiConfigPanel } from './components/ai-config/AiConfigPanel';
+import { CharacterPopup } from './components/character-popup/CharacterPopup';
 import * as stylex from '@stylexjs/stylex';
 import { authoringStyles, workspacePanelStyles, workspaceShellStyles } from './styles/workspace-panels.styles.js';
 import { Theme } from '@astryxdesign/core';
@@ -2134,4 +2135,13 @@ export function mountApiConnectionsPanel(container: HTMLElement) {
  */
 export function mountAiConfigPanel(container: HTMLElement) {
     mountSmallPanel(container, <AiConfigPanel />);
+}
+
+/**
+ * Mounts the Advanced Definitions popup markup into #character_popup.
+ * The shell stays legacy-owned (display/opacity transitions); inner markup
+ * is React-rendered before script.js binds #character_cross/#character_popup_ok.
+ */
+export function mountCharacterPopup(container: HTMLElement) {
+    mountSmallPanel(container, <CharacterPopup />);
 }
