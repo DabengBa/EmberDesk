@@ -3550,14 +3550,24 @@ function getOptionsPopper() {
     }
     return optionsPopper;
 }
-let exportPopper = Popper.createPopper(document.getElementById('export_button'), document.getElementById('export_format_popup'), {
-    placement: 'left',
-});
+// Lazy: #export_button is React-mounted after module eval.
+let exportPopper = null;
+function getExportPopper() {
+    if (!exportPopper) {
+        const button = document.getElementById('export_button');
+        const popup = document.getElementById('export_format_popup');
+        if (!button || !popup) {
+            return null;
+        }
+        exportPopper = Popper.createPopper(button, popup, { placement: 'left' });
+    }
+    return exportPopper;
+}
 let isExportPopupOpen = false;
 let exportPopupTrigger = null;
 
 function updateCharacterExportPopupPosition() {
-    exportPopper?.update();
+    getExportPopper()?.update();
 }
 
 function closeCharacterExportPopup({ restoreFocus = true } = {}) {
@@ -4011,6 +4021,7 @@ async function bootstrapWorkspace() {
     await measureStartupStage('mountSelectChatPopup', () => mountSelectChatPopup());
     await measureStartupStage('mountCharacterContextMenu', () => mountCharacterContextMenu());
     await measureStartupStage('mountOptionsMenu', () => mountOptionsMenu());
+    await measureStartupStage('mountExportFormatPopup', () => mountExportFormatPopup());
     await measureStartupStage('initSecrets', () => initSecrets());
     await measureStartupStage('readSecretState', () => readSecretState());
     await measureStartupStage('initLocales', () => initLocales());
@@ -15675,6 +15686,33 @@ async function mountOptionsMenu() {
         popup.dataset.reactOptionsMenuMounted = 'true';
     } catch (error) {
         console.error('Failed to mount options menu:', error);
+    }
+}
+
+/**
+ * Mounts the export-format popup buttons into #export_format_popup.
+ * The shell stays the Popper target; clicks are document-delegated.
+ */
+async function mountExportFormatPopup() {
+    const popup = document.getElementById('export_format_popup');
+    if (!popup) {
+        console.warn('Export format popup not found');
+        return;
+    }
+    if (popup.dataset.reactExportFormatMounted === 'true') {
+        return;
+    }
+
+    const host = document.createElement('div');
+    host.id = 'emberdesk-react-export-format-host';
+    popup.replaceChildren(host);
+
+    try {
+        const module = await loadWorkspacePanelsModule();
+        module.mountExportFormatPopup(host);
+        popup.dataset.reactExportFormatMounted = 'true';
+    } catch (error) {
+        console.error('Failed to mount export format popup:', error);
     }
 }
 

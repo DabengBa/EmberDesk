@@ -81,6 +81,7 @@ import { RightNavPanel } from './components/right-nav/RightNavPanel';
 import { SelectChatPopup } from './components/select-chat/SelectChatPopup';
 import { CharacterContextMenu } from './components/context-menu/CharacterContextMenu';
 import { OptionsMenu } from './components/options-menu/OptionsMenu';
+import { ExportFormatPopup } from './components/export-format/ExportFormatPopup';
 import * as stylex from '@stylexjs/stylex';
 import { authoringStyles, workspacePanelStyles, workspaceShellStyles } from './styles/workspace-panels.styles.js';
 import { Theme } from '@astryxdesign/core';
@@ -2182,4 +2183,12 @@ export function mountCharacterContextMenu(container: HTMLElement) {
  */
 export function mountOptionsMenu(container: HTMLElement) {
     mountSmallPanel(container, <OptionsMenu />);
+}
+
+/**
+ * Mounts the export-format buttons into #export_format_popup. Clicks are
+ * delegated at document level; mount only needs to precede user interaction.
+ */
+export function mountExportFormatPopup(container: HTMLElement) {
+    mountSmallPanel(container, <ExportFormatPopup />);
 }
