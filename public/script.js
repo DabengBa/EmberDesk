@@ -27,6 +27,7 @@ import {
     wi_anchor_position,
     world_info_include_names,
     initWorldInfo,
+    mountWorldInfoPanel,
     rehydrateWorldInfoPanel,
     charUpdatePrimaryWorld,
     charSetAuxWorlds,
@@ -4019,6 +4020,7 @@ async function bootstrapWorkspace() {
         mountLogprobsViewerPanel(),
         mountAdvancedFormattingPanel(),
         mountPromptManagerPopup(),
+        mountWorldInfoPanel(),
     ]));
     await getSettings(initLoaderHandle);
     await measureStartupStage('checkOpenRouterAuth', () => checkOpenRouterAuth());

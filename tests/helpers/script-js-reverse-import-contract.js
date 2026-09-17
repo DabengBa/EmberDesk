@@ -80,7 +80,7 @@ export const FIRST_PARTY_SCRIPT_JS_IMPORT_CONTRACT = Object.freeze([
     contractEntry('util/AccountStorage.js', '../../script.js', ['saveSettingsDebounced']),
     contractEntry('utils.js', '../script.js', ['characters', 'processDroppedFiles', 'this_chid', 'user_avatar']),
     contractEntry('variables.js', '../script.js', ['chat_metadata', 'getCurrentChatId', 'saveSettingsDebounced']),
-    contractEntry('welcome-screen.js', '../script.js', ['addOneMessage', 'characters', 'chat', 'displayVersion', 'doNewChat', 'getCharacters', 'getCurrentChatId', 'getSystemMessageByType', 'getThumbnailUrl', 'is_send_press', 'neutralCharacterName', 'printCharactersDebounced', 'selectCharacterById', 'system_avatar', 'system_message_types', 'this_chid', 'unshallowCharacter']),
+    contractEntry('welcome-screen.js', '../script.js', ['addOneMessage', 'characters', 'chat', 'doNewChat', 'getCharacters', 'getCurrentChatId', 'getSystemMessageByType', 'getThumbnailUrl', 'is_send_press', 'neutralCharacterName', 'printCharactersDebounced', 'scheduleMainChatMessageListPanelRefresh', 'selectCharacterById', 'system_avatar', 'system_message_types', 'this_chid', 'unshallowCharacter']),
 ]);
 
 export const FIRST_PARTY_SCRIPT_JS_IMPORT_ALLOWLIST = Object.freeze(

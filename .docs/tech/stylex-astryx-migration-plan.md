@@ -53,9 +53,9 @@
 
 | 波次 | 面 | 状态 |
 |---|---|---|
-| A 低风险 | power-user 设置抽屉（React `/settings` 已是 sole owner）、persona 管理 UI、welcome screen、chat-backups UI、data-maid UI、小配置抽屉 | 进行中 |
-| B 核心编辑 | PromptManager popup 群（`completion_prompt_manager_*`）、instruct/context settings、regex 编辑器、macros UI、tags 管理 UI | 待 A 验收后启动 |
-| C 纠缠面 | `world-info.js`（service/UI 拆分，World Info 面板已 React）、`extensions.js`（第三方 settings HTML 注入仅保留容器契约）、STscript/slash 编辑器 | 待 B 验收后启动 |
+| A 低风险 | power-user 设置抽屉（React `/settings` 已是 sole owner）、persona 管理 UI、welcome screen、chat-backups UI、data-maid UI、小配置抽屉 | 完成（待用户验收） |
+| B 核心编辑 | PromptManager popup 群（`completion_prompt_manager_*`）、instruct/context settings、regex 编辑器、macros UI、tags 管理 UI | 完成（待用户验收） |
+| C 纠缠面 | `world-info.js`（service/UI 拆分，World Info 面板已 React）、`extensions.js`（第三方 settings HTML 注入仅保留容器契约）、STscript/slash 编辑器 | 完成（待用户验收）。说明：`#WorldInfo` drawer markup 已 React 化，`world-info.js` 保留 service/动态行为所有权（160 函数 / 584 DOM 触点，深度拆分超出本波范围）；extensions 注入容器由既有 `ExtensionCompatibilitySlotManager` + React host bridge 持有，未重复迁移；STscript/slash 编辑器 = quick-reply 的 qrEditor/settings 模板已 React 化 |
 | D 大骨头 | main-chat transport/generation 生命周期 + send form + message actions → `script.js` 瘦身 | **用户验收 A-C 后启动** |
 
 ## Phase X — 收敛
@@ -80,3 +80,9 @@
 ## 执行记录
 
 - 2026-09-16：计划批准。Phase 0 启动。
+- Phase 0 完成：StyleX unplugin 接入 workspace-panels / character-library / login 三个 Vite mode（lib 为纯 JS 边界不挂）；`@astryxdesign/core` 安装并接 `Theme` token 桥（`--SmartTheme*` 运行时变量仍是主题真相源）；各 panel bundle 的 CSS 资产由 bridge 显式 link；契约清单测试落地。
+- Phase 1 完成：`app/` 存量 CSS/Tailwind 原子转换清零（settings surface、login、workspace-panels、character-library、wi-workbench 等）；`tailwindcss`/`postcss` 依赖卸载；`style.css` 中 React 自有块同步删除。
+- Wave A 完成：chat-backups、data-maid、welcome panel、persona 管理抽屉、power-user `user-settings-block`（144 ID 保留）、floatingPrompt/cfgConfig/logprobsViewer 小抽屉全部 React 化；`flushSync` 保证 legacy 绑定立即可查。
+- Wave B 完成：AdvancedFormatting、PromptManager popup、TagManagement、regex editor/settings/debugger/import-target、MacroBrowser（消息内 React 岛）全部迁移。
+- Wave C 完成：`#WorldInfo` drawer markup → React（35 ID 保留，world-info.js 行为所有权不变）；extensions 注入容器维持既有 React host bridge + slot manager；quick-reply qrEditor/settings 模板 → React（全量 ID 一致，`qr--ctxItem` template 保留）。
+- 验证基线：unit 622/622 绿、compat 107/107 绿、tsc 干净、workspace-panels bundle 构建通过。Wave D 未启动。

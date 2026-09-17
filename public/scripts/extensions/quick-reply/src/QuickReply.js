@@ -11,6 +11,7 @@ import { SlashCommandParser } from '../../../slash-commands/SlashCommandParser.j
 import { SlashCommandParserError } from '../../../slash-commands/SlashCommandParserError.js';
 import { SlashCommandScope } from '../../../slash-commands/SlashCommandScope.js';
 import { accountStorage } from '../../../util/AccountStorage.js';
+import { loadWorkspacePanelsModule } from '../../../workspace-panels-react-bridge.js';
 import { debounce, delay, getSortableDelay, showFontAwesomePicker } from '../../../utils.js';
 import { log, quickReplyApi, warn } from '../index.js';
 import { QuickReplyContextLink } from './QuickReplyContextLink.js';
@@ -381,12 +382,16 @@ export class QuickReply {
     }
 
     async showEditor() {
-        const response = await fetch('/scripts/extensions/quick-reply/html/qrEditor.html', { cache: 'no-store' });
-        if (response.ok) {
-            this.template = document.createRange().createContextualFragment(await response.text()).querySelector('#qr--modalEditor');
+        {
+            const host = document.createElement('div');
+            const module = await loadWorkspacePanelsModule();
+            module.mountQuickReplyEditor(host);
             /**@type {HTMLElement} */
-            // @ts-ignore
-            const dom = this.template.cloneNode(true);
+            const dom = host.querySelector('#qr--modalEditor');
+            if (!dom) {
+                warn('failed to mount qrEditor markup');
+                return;
+            }
             this.editorDom = dom;
             this.editorPopup = new Popup(dom, POPUP_TYPE.TEXT, undefined, { okButton: 'OK', wide: true, large: true, rows: 1 });
             const popupResult = this.editorPopup.show();
@@ -1190,8 +1195,6 @@ export class QuickReply {
             await popupResult;
 
             window.removeEventListener('resize', resizeListener);
-        } else {
-            warn('failed to fetch qrEditor template');
         }
     }
 

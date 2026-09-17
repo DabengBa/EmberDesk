@@ -70,6 +70,9 @@ import { RegexSettingsPanel } from './components/regex/RegexSettingsPanel';
 import { RegexDebugger } from './components/regex/RegexDebugger';
 import { RegexImportTarget } from './components/regex/RegexImportTarget';
 import { MacroBrowserPanel, type MacroBrowserProps } from './components/macros/MacroBrowser';
+import { WorldInfoPanel } from './components/panels/WorldInfoPanel';
+import { QuickReplyEditorPanel } from './components/quick-reply/QuickReplyEditor';
+import { QuickReplySettingsPanel } from './components/quick-reply/QuickReplySettings';
 import * as stylex from '@stylexjs/stylex';
 import { authoringStyles, workspacePanelStyles, workspaceShellStyles } from './styles/workspace-panels.styles.js';
 import { Theme } from '@astryxdesign/core';
@@ -2084,4 +2087,24 @@ export function mountRegexImportTarget(container: HTMLElement) {
  */
 export function mountMacroBrowser(container: HTMLElement, props: MacroBrowserProps) {
     mountSmallPanel(container, <MacroBrowserPanel {...props} />);
+}
+
+/**
+ * Mounts the World Info drawer markup. Presentation-only: world-info.js keeps
+ * behavior ownership and fills dynamic containers (entry list, editor select).
+ */
+export function mountWorldInfoPanel(container: HTMLElement) {
+    mountSmallPanel(container, <WorldInfoPanel />);
+}
+
+/**
+ * Mounts the Quick Reply editor/settings markup into a legacy-provided host.
+ * Synchronous commit: callers bind listeners to qr--* IDs immediately after.
+ */
+export function mountQuickReplyEditor(container: HTMLElement) {
+    mountSmallPanel(container, <QuickReplyEditorPanel />);
+}
+
+export function mountQuickReplySettings(container: HTMLElement) {
+    mountSmallPanel(container, <QuickReplySettingsPanel />);
 }

@@ -18,6 +18,7 @@ import { commonEnumProviders, enumIcons } from './slash-commands/SlashCommandCom
 import { SlashCommandClosure } from './slash-commands/SlashCommandClosure.js';
 import { callGenericPopup, Popup, PopupUtils, POPUP_RESULT, POPUP_TYPE } from './popup.js';
 import { StructuredCloneMap } from './util/StructuredCloneMap.js';
+import { loadWorkspacePanelsModule } from './workspace-panels-react-bridge.js';
 import { renderTemplateAsync } from './templates.js';
 import { t, translate } from './i18n.js';
 import { accountStorage } from './util/AccountStorage.js';
@@ -7496,5 +7497,33 @@ export function initWorldInfo() {
         });
 
         worldInfoPanelInitialized = true;
+    }
+}
+
+/**
+ * Mounts the React-owned World Info drawer markup.
+ * Must run before initWorldInfoPanel bindings: world-info.js attaches to the
+ * preserved element IDs and fills dynamic containers at runtime.
+ */
+export async function mountWorldInfoPanel() {
+    const drawerContent = document.getElementById('WorldInfo');
+    if (!drawerContent) {
+        console.warn('World Info drawer not found');
+        return;
+    }
+    if (drawerContent.dataset.reactWorldInfoMounted === 'true') {
+        return;
+    }
+
+    const host = document.createElement('div');
+    host.id = 'emberdesk-react-world-info-host';
+    drawerContent.replaceChildren(host);
+
+    try {
+        const module = await loadWorkspacePanelsModule();
+        module.mountWorldInfoPanel(host);
+        drawerContent.dataset.reactWorldInfoMounted = 'true';
+    } catch (error) {
+        console.error('Failed to mount world info panel:', error);
     }
 }

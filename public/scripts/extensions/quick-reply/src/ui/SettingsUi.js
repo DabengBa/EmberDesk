@@ -1,5 +1,6 @@
 import { Popup } from '../../../../popup.js';
 import { getSortableDelay } from '../../../../utils.js';
+import { loadWorkspacePanelsModule } from '../../../../workspace-panels-react-bridge.js';
 import { log, warn } from '../../index.js';
 import { QuickReply } from '../QuickReply.js';
 import { QuickReplySet } from '../QuickReplySet.js';
@@ -35,12 +36,19 @@ export class SettingsUi {
     }
 
 
-    rerender() {
+    async renderSettingsMarkup() {
+        const host = document.createElement('div');
+        const module = await loadWorkspacePanelsModule();
+        module.mountQuickReplySettings(host);
+        return host.querySelector('#qr--settings');
+    }
+    async rerender() {
         if (!this.dom) return;
+        const fresh = await this.renderSettingsMarkup();
+        if (!fresh) return;
         const content = this.dom.querySelector('.inline-drawer-content');
         content.innerHTML = '';
-        // @ts-ignore
-        Array.from(this.template.querySelector('.inline-drawer-content').cloneNode(true).children).forEach(el => {
+        Array.from(fresh.querySelector('.inline-drawer-content').children).forEach(el => {
             content.append(el);
         });
         this.prepareDom();
@@ -51,14 +59,14 @@ export class SettingsUi {
     }
     async render() {
         if (!this.dom) {
-            const response = await fetch('/scripts/extensions/quick-reply/html/settings.html', { cache: 'no-store' });
-            if (response.ok) {
-                this.template = document.createRange().createContextualFragment(await response.text()).querySelector('#qr--settings');
-                // @ts-ignore
-                this.dom = this.template.cloneNode(true);
+            this.dom = await this.renderSettingsMarkup();
+            if (this.dom) {
+                // Pristine snapshot before prepareDom mutates the live markup;
+                // prepare*SetList() clone clean subtrees from this.template.
+                this.template = this.dom.cloneNode(true);
                 this.prepareDom();
             } else {
-                warn('failed to fetch settings template');
+                warn('failed to mount settings markup');
             }
         }
         return this.dom;

@@ -402,7 +402,7 @@ describe('group chat retirement', () => {
             'public/scripts/extensions/quick-reply/src/QuickReply.js',
             'public/scripts/extensions/quick-reply/src/SlashCommandHandler.js',
             'public/scripts/extensions/quick-reply/api/QuickReplyApi.js',
-            'public/scripts/extensions/quick-reply/html/qrEditor.html',
+            'app/components/quick-reply/QuickReplyEditor.tsx',
         ]) {
             const source = fs.readFileSync(path.join(repoRoot, file), 'utf8');
             expect(source).not.toMatch(/GROUP_MEMBER_DRAFTED|executeOnGroupMemberDraft|group member draft|args\.group/i);
