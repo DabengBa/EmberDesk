@@ -39,18 +39,19 @@ import { Popup } from './popup.js';
 import { accountStorage } from './util/AccountStorage.js';
 import { getCurrentUserHandle } from './user.js';
 
-var RPanelPin = document.getElementById('rm_button_panel_pin');
-var LPanelPin = document.getElementById('lm_button_panel_pin');
-var WIPanelPin = document.getElementById('WI_panel_pin');
+// Populated in initRossMods: drawer/panel markup is React-mounted after module eval.
+var RPanelPin = null;
+var LPanelPin = null;
+var WIPanelPin = null;
 
-var RightNavPanel = document.getElementById('right-nav-panel');
-var RightNavDrawerIcon = document.getElementById('rightNavDrawerIcon');
-var LeftNavPanel = document.getElementById('left-nav-panel');
-var LeftNavDrawerIcon = document.getElementById('leftNavDrawerIcon');
-var WorldInfo = document.getElementById('WorldInfo');
-var WIDrawerIcon = document.getElementById('WIDrawerIcon');
+var RightNavPanel = null;
+var RightNavDrawerIcon = null;
+var LeftNavPanel = null;
+var LeftNavDrawerIcon = null;
+var WorldInfo = null;
+var WIDrawerIcon = null;
 
-var SelectedCharacterTab = document.getElementById('rm_button_selected_ch');
+var SelectedCharacterTab = null;
 
 var connection_made = false;
 var retry_delay = 500;
@@ -190,14 +191,7 @@ export function getMessageTimeStamp(timestamp = Date.now()) {
 }
 
 
-// triggers:
-$('#rm_button_create').on('click', function () {                 //when "+New Character" is clicked
-    $(SelectedCharacterTab).children('h2').html('');        // empty nav's 3rd panel tab
-});
-//when any input is made to the create/edit character form textareas
-$('#rm_ch_create_block').on('input', function () { countTokensDebounced(); });
-//when any input is made to the advanced editing popup textareas
-$('#character_popup').on('input', function () { countTokensDebounced(); });
+// triggers are bound in initRossMods: their targets are React-mounted after module eval.
 //function:
 export async function RA_CountCharTokens() {
     counterNonce = Date.now();
@@ -643,6 +637,25 @@ export const autoFitSendTextAreaDebounced = debounce(autoFitSendTextArea, deboun
 
 export function initRossMods() {
     sendTextArea = document.querySelector('#send_textarea');
+    RPanelPin = document.getElementById('rm_button_panel_pin');
+    LPanelPin = document.getElementById('lm_button_panel_pin');
+    WIPanelPin = document.getElementById('WI_panel_pin');
+    RightNavPanel = document.getElementById('right-nav-panel');
+    RightNavDrawerIcon = document.getElementById('rightNavDrawerIcon');
+    LeftNavPanel = document.getElementById('left-nav-panel');
+    LeftNavDrawerIcon = document.getElementById('leftNavDrawerIcon');
+    WorldInfo = document.getElementById('WorldInfo');
+    WIDrawerIcon = document.getElementById('WIDrawerIcon');
+    SelectedCharacterTab = document.getElementById('rm_button_selected_ch');
+
+    //when "+New Character" is clicked
+    $('#rm_button_create').on('click', function () {
+        $(SelectedCharacterTab).children('h2').html('');        // empty nav's 3rd panel tab
+    });
+    //when any input is made to the create/edit character form textareas
+    $('#rm_ch_create_block').on('input', function () { countTokensDebounced(); });
+    //when any input is made to the advanced editing popup textareas
+    $('#character_popup').on('input', function () { countTokensDebounced(); });
 
     // initial status check
     checkStatusDebounced();

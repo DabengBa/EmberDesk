@@ -4007,6 +4007,7 @@ async function bootstrapWorkspace() {
     await measureStartupStage('mountApiConnectionsPanel', () => mountApiConnectionsPanel());
     await measureStartupStage('mountAiConfigPanel', () => mountAiConfigPanel());
     await measureStartupStage('mountCharacterPopup', () => mountCharacterPopup());
+    await measureStartupStage('mountRightNavPanel', () => mountRightNavPanel());
     await measureStartupStage('initSecrets', () => initSecrets());
     await measureStartupStage('readSecretState', () => readSecretState());
     await measureStartupStage('initLocales', () => initLocales());
@@ -15556,6 +15557,35 @@ async function mountCharacterPopup() {
         popup.dataset.reactCharacterPopupMounted = 'true';
     } catch (error) {
         console.error('Failed to mount character popup:', error);
+    }
+}
+
+/**
+ * Mounts the React-owned right navigation markup into #right-nav-panel.
+ * The <nav> shell stays legacy (drawer open/close). Inner markup must exist
+ * before initRossMods (panel pin, rm_button_create, rm_ch_create_block
+ * bindings), tags.js filter init, and the form_create submit binding.
+ */
+async function mountRightNavPanel() {
+    const panel = document.getElementById('right-nav-panel');
+    if (!panel) {
+        console.warn('Right nav panel not found');
+        return;
+    }
+    if (panel.dataset.reactRightNavMounted === 'true') {
+        return;
+    }
+
+    const host = document.createElement('div');
+    host.id = 'emberdesk-react-right-nav-host';
+    panel.replaceChildren(host);
+
+    try {
+        const module = await loadWorkspacePanelsModule();
+        module.mountRightNavPanel(host);
+        panel.dataset.reactRightNavMounted = 'true';
+    } catch (error) {
+        console.error('Failed to mount right nav panel:', error);
     }
 }
 

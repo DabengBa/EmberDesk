@@ -26,6 +26,8 @@ declare global {
       connected_text?: string;
       // List containers use this for empty-state text; i18n writes it via data-i18n="[no_items_text]...".
       no_items_text?: string;
+      // HotSwap wrapper reads no_favs for its empty-state label via .attr().
+      no_favs?: string;
     }
   }
 }

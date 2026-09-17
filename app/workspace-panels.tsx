@@ -77,6 +77,7 @@ import { ChatComposer } from './components/composer/ChatComposer';
 import { ApiConnectionsPanel } from './components/api/ApiConnectionsPanel';
 import { AiConfigPanel } from './components/ai-config/AiConfigPanel';
 import { CharacterPopup } from './components/character-popup/CharacterPopup';
+import { RightNavPanel } from './components/right-nav/RightNavPanel';
 import * as stylex from '@stylexjs/stylex';
 import { authoringStyles, workspacePanelStyles, workspaceShellStyles } from './styles/workspace-panels.styles.js';
 import { Theme } from '@astryxdesign/core';
@@ -2144,4 +2145,14 @@ export function mountAiConfigPanel(container: HTMLElement) {
  */
 export function mountCharacterPopup(container: HTMLElement) {
     mountSmallPanel(container, <CharacterPopup />);
+}
+
+/**
+ * Mounts the right navigation panel markup into #right-nav-panel.
+ * Synchronous commit: script.js binds #form_create and toolbar buttons,
+ * tags.js fills .rm_tag_filter, and the character list renders into
+ * #rm_print_characters_block — all after this mount.
+ */
+export function mountRightNavPanel(container: HTMLElement) {
+    mountSmallPanel(container, <RightNavPanel />);
 }

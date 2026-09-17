@@ -429,9 +429,13 @@ class BulkEditOverlay {
     #cancelNextToggle = false;
 
     /**
+     * Resolved lazily: #rm_print_characters_block is React-mounted after
+     * module eval, so a constructor capture would freeze null.
      * @type HTMLElement
      */
-    container = null;
+    get container() {
+        return document.getElementById(BulkEditOverlay.containerId);
+    }
 
     get state() {
         return this.#state;
@@ -479,8 +483,6 @@ class BulkEditOverlay {
     constructor() {
         if (bulkEditOverlayInstance instanceof BulkEditOverlay)
             return bulkEditOverlayInstance;
-
-        this.container = document.getElementById(BulkEditOverlay.containerId);
 
         eventSource.on(event_types.CHARACTER_GROUP_OVERLAY_STATE_CHANGE_AFTER, this.handleStateChange);
         bulkEditOverlayInstance = Object.freeze(this);

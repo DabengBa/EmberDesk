@@ -18,7 +18,8 @@ import { t } from './i18n.js';
 
 const TINTS = 4;
 const MAX_MESSAGE_LOGPROBS = 100;
-const REROLL_BUTTON = $('#logprobsReroll');
+// Resolved lazily: the logprobs panel markup is React-mounted after module eval.
+const getRerollButton = () => $('#logprobsReroll');
 
 /**
  * Tuple of a candidate token and its logarithm of probability of being chosen
@@ -99,10 +100,10 @@ function renderAlternativeTokensView() {
 
     const prefix = continueFrom || '';
     const tokenSpans = [];
-    REROLL_BUTTON.toggle(!!prefix);
+    getRerollButton().toggle(!!prefix);
 
     if (prefix) {
-        REROLL_BUTTON.off('click').on('click', () => onPrefixClicked(prefix.length));
+        getRerollButton().off('click').on('click', () => onPrefixClicked(prefix.length));
 
         let cumulativeOffset = 0;
         const words = prefix.split(/\s+/);
@@ -601,7 +602,7 @@ function convertTokenIdLogprobsToText(input) {
 }
 
 export function initLogprobs() {
-    REROLL_BUTTON.hide();
+    getRerollButton().hide();
     const debouncedRender = debounce(renderAlternativeTokensView);
     $('#logprobsViewerClose').on('click', onToggleLogprobsPanel);
     $('#option_toggle_logprobs').on('click', onToggleLogprobsPanel);
