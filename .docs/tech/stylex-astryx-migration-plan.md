@@ -93,4 +93,6 @@
 - 验证基线：unit 58 套全绿、compat 全绿、tsc 干净、workspace-panels bundle 构建通过；headless 零 console 错误。
 - 2026-09-17 续：`#character_popup`（Advanced Definitions，20 ID）与 `#right-nav-panel`（角色创建/编辑表单 + 角色列表 chrome，104 ID）内部 markup → React；`form="form_create"` 关联、`.rm_tag_filter`、hotswap、token strip 契约保留。
 - 模块顶层 DOM 捕获系统性清理：RossAscends-mods 全部面板捕获 + rm_button_create/rm_ch_create_block 绑定改 init 时解析；BulkEditOverlay `container` 改 lazy getter（单例冻结 null 导致 bulk 崩溃）；logprobs REROLL_BUTTON 改 lazy getter（Wave A 起静默死绑定）。
-- index.html 降至 ~1200 行；剩余静态内容为模板（`*_template`/`popup_template`，cloneNode 契约）、扩展 `*_container` 注入槽、动态 dialog 壳（dialogue_popup/select_chat_popup）、character_context_menu 小菜单——按设计保留静态或后续小面再迁。
+- index.html 降至 ~1100 行；剩余静态内容为模板（`*_template`/`popup_template`，cloneNode 契约）、扩展 `*_container` 注入槽、动态 dialog 壳（dialogue_popup/dialogue_del_mes）、`rm_extensions_block` 回退 chrome——按设计保留静态。
+- 2026-09-17 续二：`select_chat_popup`（13 ID）、`character_context_menu`（5 项）、`#options` 菜单（13 ID，含有意重复的 `option_close_chat`）、`export_format_popup` 全部 React 化；`exportPopper` 改 lazy init（`export_button` 已 React 化后顶层 createPopper 拿到 null）。
+- 至此 index.html 静态 markup 迁移收尾：所有 drawer/popup/menu 内容均由 workspace-panels bundle 在早期 startup stage 挂载；templates 与扩展注入槽按契约保留静态。
