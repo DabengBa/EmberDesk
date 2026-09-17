@@ -210,18 +210,21 @@ describe('chat workspace structure', () => {
         expect(serviceSource).not.toMatch(/\$\(/);
         expect(serviceSource).not.toMatch(/\bjQuery\s*\(/);
 
-        expectContainsMarkers(scriptSource, [
+        const messageServiceSource = readRepoFile('public/scripts/message-service.js');
+        expectContainsMarkers(messageServiceSource, [
             'buildChatMessageRichBodyRender',
-            'function buildChatMessageRichBody(message, { messageId = chat.indexOf(message) } = {}) {',
-            'formatMessage: messageFormatting',
+            'function buildChatMessageRichBody(message, { messageId = state.chat.indexOf(message) } = {}) {',
             'return buildChatMessageRichBody(message, { messageId }).messageHtml;',
             'const richBody = buildChatMessageRichBody(mes, { messageId });',
             'messageElement.find(\'.mes_bias\').html(richBody.biasHtml);',
+        ], { contractName: 'message service render delegation' });
+        expectContainsMarkers(scriptSource, [
+            'formatMessage: messageFormatting',
         ], { contractName: 'script.js render service delegation' });
     });
 
     test('refreshes React main-chat snapshots after async media attachments render', () => {
-        const scriptSource = readRepoFile('public/script.js');
+        const scriptSource = readRepoFile('public/scripts/message-service.js');
 
         expectContainsMarkers(scriptSource, [
             'Promise.race([Promise.all(mediaPromises), delay(debounce_timeout.short)]).then(() => {',

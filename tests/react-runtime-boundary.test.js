@@ -86,7 +86,11 @@ describe('React runtime boundary', () => {
         expect(generationGuard).not.toContain('this.messageTextDom.innerHTML');
         expect(generationGuard).not.toContain('this.messageTimerDom.textContent');
 
-        const appendMediaBlock = scriptSource.match(
+        const messageServiceSource = fs.readFileSync(
+            path.join(repoRoot, 'public', 'scripts', 'message-service.js'),
+            'utf8',
+        );
+        const appendMediaBlock = messageServiceSource.match(
             /export function appendMediaToMessage\([\s\S]*?\n\}\n\nexport function addCopyToCodeBlocks/,
         )?.[0] ?? '';
         expect(appendMediaBlock).toMatch(
