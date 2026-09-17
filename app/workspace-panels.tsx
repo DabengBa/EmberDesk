@@ -79,6 +79,8 @@ import { AiConfigPanel } from './components/ai-config/AiConfigPanel';
 import { CharacterPopup } from './components/character-popup/CharacterPopup';
 import { RightNavPanel } from './components/right-nav/RightNavPanel';
 import { SelectChatPopup } from './components/select-chat/SelectChatPopup';
+import { CharacterContextMenu } from './components/context-menu/CharacterContextMenu';
+import { OptionsMenu } from './components/options-menu/OptionsMenu';
 import * as stylex from '@stylexjs/stylex';
 import { authoringStyles, workspacePanelStyles, workspaceShellStyles } from './styles/workspace-panels.styles.js';
 import { Theme } from '@astryxdesign/core';
@@ -2164,4 +2166,20 @@ export function mountRightNavPanel(container: HTMLElement) {
  */
 export function mountSelectChatPopup(container: HTMLElement) {
     mountSmallPanel(container, <SelectChatPopup />);
+}
+
+/**
+ * Mounts the character context menu items into #character_context_menu.
+ * Must run before bulk-edit init binds CharacterContextMenu's click handlers.
+ */
+export function mountCharacterContextMenu(container: HTMLElement) {
+    mountSmallPanel(container, <CharacterContextMenu />);
+}
+
+/**
+ * Mounts the options popup items into #options. The shell keeps its
+ * display:none + Popper positioning; item click bindings land after mount.
+ */
+export function mountOptionsMenu(container: HTMLElement) {
+    mountSmallPanel(container, <OptionsMenu />);
 }

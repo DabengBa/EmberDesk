@@ -4009,6 +4009,8 @@ async function bootstrapWorkspace() {
     await measureStartupStage('mountCharacterPopup', () => mountCharacterPopup());
     await measureStartupStage('mountRightNavPanel', () => mountRightNavPanel());
     await measureStartupStage('mountSelectChatPopup', () => mountSelectChatPopup());
+    await measureStartupStage('mountCharacterContextMenu', () => mountCharacterContextMenu());
+    await measureStartupStage('mountOptionsMenu', () => mountOptionsMenu());
     await measureStartupStage('initSecrets', () => initSecrets());
     await measureStartupStage('readSecretState', () => readSecretState());
     await measureStartupStage('initLocales', () => initLocales());
@@ -15616,6 +15618,63 @@ async function mountSelectChatPopup() {
         popup.dataset.reactSelectChatMounted = 'true';
     } catch (error) {
         console.error('Failed to mount select chat popup:', error);
+    }
+}
+
+/**
+ * Mounts the React-owned character context menu items into
+ * #character_context_menu. The shell's hidden class and positioning stay
+ * legacy; item buttons must exist before bulk-edit's CharacterContextMenu
+ * constructor binds them.
+ */
+async function mountCharacterContextMenu() {
+    const menu = document.getElementById('character_context_menu');
+    if (!menu) {
+        console.warn('Character context menu not found');
+        return;
+    }
+    if (menu.dataset.reactContextMenuMounted === 'true') {
+        return;
+    }
+
+    const host = document.createElement('div');
+    host.id = 'emberdesk-react-character-context-menu-host';
+    menu.replaceChildren(host);
+
+    try {
+        const module = await loadWorkspacePanelsModule();
+        module.mountCharacterContextMenu(host);
+        menu.dataset.reactContextMenuMounted = 'true';
+    } catch (error) {
+        console.error('Failed to mount character context menu:', error);
+    }
+}
+
+/**
+ * Mounts the React-owned options popup items into #options. The shell keeps
+ * display:none and Popper positioning (options_button -> options popper is
+ * lazy-initialized). Item bindings happen in the ready callback below.
+ */
+async function mountOptionsMenu() {
+    const popup = document.getElementById('options');
+    if (!popup) {
+        console.warn('Options popup not found');
+        return;
+    }
+    if (popup.dataset.reactOptionsMenuMounted === 'true') {
+        return;
+    }
+
+    const host = document.createElement('div');
+    host.id = 'emberdesk-react-options-menu-host';
+    popup.replaceChildren(host);
+
+    try {
+        const module = await loadWorkspacePanelsModule();
+        module.mountOptionsMenu(host);
+        popup.dataset.reactOptionsMenuMounted = 'true';
+    } catch (error) {
+        console.error('Failed to mount options menu:', error);
     }
 }
 

@@ -137,7 +137,7 @@ describe('chat workspace structure', () => {
     });
 
     test('keeps chat options menu items keyboard reachable as buttons', () => {
-        const indexHtml = readRepoFile('public/index.html');
+        const indexHtml = readRepoFile('app/components/options-menu/OptionsMenu.tsx');
 
         [
             'option_toggle_AN',
@@ -151,7 +151,7 @@ describe('chat workspace structure', () => {
             'option_continue',
         ].forEach((id) => {
             expect(indexHtml).toMatch(new RegExp(`id="${id}"[^>]*\\brole="button"`));
-            expect(indexHtml).toMatch(new RegExp(`id="${id}"[^>]*\\btabindex="0"`));
+            expect(indexHtml).toMatch(new RegExp(`id="${id}"[^>]*\\btabIndex=\\{0\\}`));
         });
     });
 
