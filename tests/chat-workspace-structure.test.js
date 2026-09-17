@@ -399,18 +399,18 @@ describe('chat workspace structure', () => {
     });
 
     test('routes visible main chat generation through bounded auto recovery attempts', () => {
-        const scriptSource = readRepoFile('public/script.js');
+        const generationServiceSource = readRepoFile('public/scripts/generation-service.js');
         const commandServiceSource = readRepoFile('public/scripts/chat-generation-command-service.js');
         const lifecycleSource = readRepoFile('public/scripts/chat-generation-lifecycle.js');
 
         // Transport retirement owns lifecycle planning in the generation command service;
-        // script.js still applies failure decisions and recovery UI side effects.
+        // generation-service.js applies failure decisions and recovery UI side effects.
         expect(commandServiceSource).toContain('createGenerationLifecyclePlan({');
         expect(commandServiceSource).toContain('getGenerationFailureDecision({');
-        expect(scriptSource).toContain('getGenerationFailureDecision({');
-        expect(scriptSource).toContain('failureDecision.shouldRestoreAttemptMessage');
-        expect(scriptSource).toContain('hasFallbackProviderForGeneration({');
-        expect(scriptSource).toContain('clearGenerationAttemptMessage(activeRecoveryMessageId, getGenerationAttemptBaseline(activeRecoveryMessageId));');
+        expect(generationServiceSource).toContain('getGenerationFailureDecision({');
+        expect(generationServiceSource).toContain('failureDecision.shouldRestoreAttemptMessage');
+        expect(generationServiceSource).toContain('hasFallbackProviderForGeneration({');
+        expect(generationServiceSource).toContain('clearGenerationAttemptMessage(activeRecoveryMessageId, getGenerationAttemptBaseline(activeRecoveryMessageId));');
 
         expect(lifecycleSource).toContain("label: 'primary'");
         expect(lifecycleSource).toContain("label: 'primary_retry'");

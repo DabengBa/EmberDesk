@@ -71,8 +71,12 @@ describe('React runtime boundary', () => {
         expect(scriptSource).toContain('if (isReactMainChatOwner()) {');
         expect(scriptSource).toContain('mainChatMessageUiState');
 
-        const generationSession = scriptSource.match(
-            /class GenerationStreamSession \{[\s\S]*?\n\}\n\n\/\*\*\n \* Constructs a prompt/,
+        const generationServiceSource = fs.readFileSync(
+            path.join(repoRoot, 'public', 'scripts', 'generation-service.js'),
+            'utf8',
+        );
+        const generationSession = generationServiceSource.match(
+            /class GenerationStreamSession \{[\s\S]*?\n\}\n\nexport async function executeGenerationRequestInShell/,
         )?.[0] ?? '';
         expect(generationSession).toContain('if (isReactMainChatOwner())');
         const generationGuard = generationSession.match(
