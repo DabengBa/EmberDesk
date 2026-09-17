@@ -273,7 +273,7 @@ import { getSystemMessageByType, initSystemMessages, SAFETY_CHAT, sendSystemMess
 import { event_types, eventSource } from './scripts/events.js';
 import { initAccessibility } from './scripts/a11y.js';
 import { applyStreamFadeIn } from './scripts/util/stream-fadein.js';
-import { initDomHandlers } from './scripts/dom-handlers.js';
+import { initDomHandlers, bindLegacyShellHandlers } from './scripts/dom-handlers.js';
 import { AudioPlayer } from './scripts/audio-player.js';
 import { SimpleMutex } from './scripts/util/SimpleMutex.js';
 import { MacroEnvBuilder } from './scripts/macros/engine/MacroEnvBuilder.js';
@@ -313,6 +313,7 @@ import {
     updateMessageElement,
 } from './scripts/message-service.js';
 import { registerMessageShellContext } from './scripts/message-shell-context.js';
+import { registerDomHandlersShellContext } from './scripts/dom-handlers-shell-context.js';
 export { swipe };
 export {
     addCopyToCodeBlocks,
@@ -708,6 +709,175 @@ registerMessageShellContext({
     updateEditArrowClasses: (...args) => updateEditArrowClasses(...args),
     updateReasoningUI: (...args) => updateReasoningUI(...args),
     updateSwipeCounter: (...args) => updateSwipeCounter(...args),
+});
+registerDomHandlersShellContext({
+    state: {
+        get amount_gen() { return amount_gen; },
+        set amount_gen(value) { amount_gen = value; },
+        get animation_duration() { return animation_duration; },
+        get animation_easing() { return animation_easing; },
+        get characters() { return characters; },
+        get charDragDropHandler() { return charDragDropHandler; },
+        set charDragDropHandler(value) { charDragDropHandler = value; },
+        get chat() { return chat; },
+        get chatDragDropHandler() { return chatDragDropHandler; },
+        set chatDragDropHandler(value) { chatDragDropHandler = value; },
+        get chatElement() { return chatElement; },
+        get chat_metadata() { return chat_metadata; },
+        get create_save() { return create_save; },
+        get css_send_form_display() { return css_send_form_display; },
+        get dialogueCloseStop() { return dialogueCloseStop; },
+        set dialogueCloseStop(value) { dialogueCloseStop = value; },
+        get dialogueResolve() { return dialogueResolve; },
+        set dialogueResolve(value) { dialogueResolve = value; },
+        get DragAndDropHandler() { return DragAndDropHandler; },
+        get fav_ch_checked() { return fav_ch_checked; },
+        get is_advanced_char_open() { return is_advanced_char_open; },
+        set is_advanced_char_open(value) { is_advanced_char_open = value; },
+        get isChatSaving() { return isChatSaving; },
+        get is_delete_mode() { return is_delete_mode; },
+        set is_delete_mode(value) { is_delete_mode = value; },
+        get isExportPopupOpen() { return isExportPopupOpen; },
+        get is_send_press() { return is_send_press; },
+        set is_send_press(value) { is_send_press = value; },
+        get loader() { return loader; },
+        get mainChatMessageActionsController() { return mainChatMessageActionsController; },
+        set mainChatMessageActionsController(value) { mainChatMessageActionsController = value; },
+        get max_context() { return max_context; },
+        set max_context(value) { max_context = value; },
+        get menu_type() { return menu_type; },
+        get name1() { return name1; },
+        get name2() { return name2; },
+        get neutralCharacterName() { return neutralCharacterName; },
+        get Popup() { return Popup; },
+        get POPUP_RESULT() { return POPUP_RESULT; },
+        get popup_type() { return popup_type; },
+        set popup_type(value) { popup_type = value; },
+        get POPUP_TYPE() { return POPUP_TYPE; },
+        get power_user() { return power_user; },
+        get scrollLock() { return scrollLock; },
+        set scrollLock(value) { scrollLock = value; },
+        get selected_button() { return selected_button; },
+        set selected_button(value) { selected_button = value; },
+        get SimpleMutex() { return SimpleMutex; },
+        get streamingProcessor() { return streamingProcessor; },
+        get swipes() { return swipes; },
+        set swipes(value) { swipes = value; },
+        get swipeState() { return swipeState; },
+        get tag_import_setting() { return tag_import_setting; },
+        get this_chid() { return this_chid; },
+        get this_del_mes() { return this_del_mes; },
+        set this_del_mes(value) { this_del_mes = value; },
+        get this_edit_mes_id() { return this_edit_mes_id; },
+    },
+    bootstrapWorkspace: (...args) => bootstrapWorkspace(...args),
+    buildCascadeSectionHtml: (...args) => buildCascadeSectionHtml(...args),
+    buildTemporaryChatDeleteWarningHtml: (...args) => buildTemporaryChatDeleteWarningHtml(...args),
+    callGenericPopup: (...args) => callGenericPopup(...args),
+    cancelStatusCheck: (...args) => cancelStatusCheck(...args),
+    cancelTtsPlay: (...args) => cancelTtsPlay(...args),
+    chooseBogusFolder: (...args) => chooseBogusFolder(...args),
+    closeCharacterExportPopup: (...args) => closeCharacterExportPopup(...args),
+    closeCurrentChat: (...args) => closeCurrentChat(...args),
+    closeMessageEditor: (...args) => closeMessageEditor(...args),
+    copyText: (...args) => copyText(...args),
+    createChatMessageActionsController: (...args) => createChatMessageActionsController(...args),
+    createOrEditCharacter: (...args) => createOrEditCharacter(...args),
+    debounce: (...args) => debounce(...args),
+    delay: (...args) => delay(...args),
+    delChat: (...args) => delChat(...args),
+    deleteCharacter: (...args) => deleteCharacter(...args),
+    deleteItemizedPromptForMessage: (...args) => deleteItemizedPromptForMessage(...args),
+    deleteMessage: (...args) => deleteMessage(...args),
+    displayPastChats: (...args) => displayPastChats(...args),
+    doCharListDisplaySwitch: (...args) => doCharListDisplaySwitch(...args),
+    doDrawerOpenClick: (...args) => doDrawerOpenClick(...args),
+    doNavbarIconClick: (...args) => doNavbarIconClick(...args),
+    doNewChat: (...args) => doNewChat(...args),
+    download: (...args) => download(...args),
+    dragElement: (...args) => dragElement(...args),
+    duplicateCharacter: (...args) => duplicateCharacter(...args),
+    formatCreatorNotes: (...args) => formatCreatorNotes(...args),
+    Generate: (...args) => Generate(...args),
+    getCharacterDeleteDialogTitle: (...args) => getCharacterDeleteDialogTitle(...args),
+    getCharacters: (...args) => getCharacters(...args),
+    getCharacterSource: (...args) => getCharacterSource(...args),
+    getOptionsPopper: (...args) => getOptionsPopper(...args),
+    getRequestHeaders: (...args) => getRequestHeaders(...args),
+    getUserAvatar: (...args) => getUserAvatar(...args),
+    handleUnifiedImport: (...args) => handleUnifiedImport(...args),
+    hideSwipeButtons: (...args) => hideSwipeButtons(...args),
+    importCharacter: (...args) => importCharacter(...args),
+    importCharacterChat: (...args) => importCharacterChat(...args),
+    importEmbeddedWorldInfo: (...args) => importEmbeddedWorldInfo(...args),
+    importFromExternalUrl: (...args) => importFromExternalUrl(...args),
+    importFromURL: (...args) => importFromURL(...args),
+    importTags: (...args) => importTags(...args),
+    initCharacterSearch: (...args) => initCharacterSearch(...args),
+    isDataURL: (...args) => isDataURL(...args),
+    isReactMainChatOwner: (...args) => isReactMainChatOwner(...args),
+    isValidUrl: (...args) => isValidUrl(...args),
+    loadEarlierChatMessages: (...args) => loadEarlierChatMessages(...args),
+    loadMovingUIState: (...args) => loadMovingUIState(...args),
+    messageEdit: (...args) => messageEdit(...args),
+    messageEditAuto: (...args) => messageEditAuto(...args),
+    messageEditCancel: (...args) => messageEditCancel(...args),
+    messageEditDone: (...args) => messageEditDone(...args),
+    messageEditMove: (...args) => messageEditMove(...args),
+    mountAiConfigPanel: (...args) => mountAiConfigPanel(...args),
+    mountApiConnectionsPanel: (...args) => mountApiConnectionsPanel(...args),
+    mountCharacterContextMenu: (...args) => mountCharacterContextMenu(...args),
+    mountCharacterPopup: (...args) => mountCharacterPopup(...args),
+    mountChatComposer: (...args) => mountChatComposer(...args),
+    mountExportFormatPopup: (...args) => mountExportFormatPopup(...args),
+    mountOptionsMenu: (...args) => mountOptionsMenu(...args),
+    mountReactMainChatMessageListPanel: (...args) => mountReactMainChatMessageListPanel(...args),
+    mountReactWorkspaceShellChromeHost: (...args) => mountReactWorkspaceShellChromeHost(...args),
+    mountRightNavPanel: (...args) => mountRightNavPanel(...args),
+    mountSelectChatPopup: (...args) => mountSelectChatPopup(...args),
+    newAssistantChat: (...args) => newAssistantChat(...args),
+    openAlternateGreetings: (...args) => openAlternateGreetings(...args),
+    openCharacterChat: (...args) => openCharacterChat(...args),
+    openCharacterWorldPopup: (...args) => openCharacterWorldPopup(...args),
+    openMessageDelete: (...args) => openMessageDelete(...args),
+    openPermanentAssistantCard: (...args) => openPermanentAssistantCard(...args),
+    pauseScriptExecution: (...args) => pauseScriptExecution(...args),
+    processDroppedFiles: (...args) => processDroppedFiles(...args),
+    queueReactCharacterAuthoringRemount: (...args) => queueReactCharacterAuthoringRemount(...args),
+    read_avatar_load: (...args) => read_avatar_load(...args),
+    renameCharacter: (...args) => renameCharacter(...args),
+    renameChat: (...args) => renameChat(...args),
+    renderTemplateAsync: (...args) => renderTemplateAsync(...args),
+    resetMovableStyles: (...args) => resetMovableStyles(...args),
+    resetScrollHeight: (...args) => resetScrollHeight(...args),
+    runMainChatVisibleMessageActionsShellAction: (...args) => runMainChatVisibleMessageActionsShellAction(...args),
+    saveCharacterDebounced: (...args) => saveCharacterDebounced(...args),
+    saveChatConditional: (...args) => saveChatConditional(...args),
+    saveSettingsDebounced: (...args) => saveSettingsDebounced(...args),
+    selectCharacterById: (...args) => selectCharacterById(...args),
+    selectImportedChar: (...args) => selectImportedChar(...args),
+    selectRightMenuWithAnimation: (...args) => selectRightMenuWithAnimation(...args),
+    select_rm_characters: (...args) => select_rm_characters(...args),
+    select_rm_create: (...args) => select_rm_create(...args),
+    select_selected_character: (...args) => select_selected_character(...args),
+    sendTextareaMessage: (...args) => sendTextareaMessage(...args),
+    setCharacterSettingsOverrides: (...args) => setCharacterSettingsOverrides(...args),
+    setMainChatMessageUiState: (...args) => setMainChatMessageUiState(...args),
+    showBookmarksButtons: (...args) => showBookmarksButtons(...args),
+    showDeleteConfirmWithCascade: (...args) => showDeleteConfirmWithCascade(...args),
+    showSwipeButtons: (...args) => showSwipeButtons(...args),
+    stopGeneration: (...args) => stopGeneration(...args),
+    stopScriptExecution: (...args) => stopScriptExecution(...args),
+    t: (strings, ...values) => t(strings, ...values),
+    toggleCharacterExportPopup: (...args) => toggleCharacterExportPopup(...args),
+    toggleDrawer: (...args) => toggleDrawer(...args),
+    translate: (...args) => translate(...args),
+    updateCharacterRow: (...args) => updateCharacterRow(...args),
+    updateCharListGridToggleLabel: (...args) => updateCharListGridToggleLabel(...args),
+    updateFavButtonState: (...args) => updateFavButtonState(...args),
+    updateViewMessageIds: (...args) => updateViewMessageIds(...args),
+    userStatsHandler: (...args) => userStatsHandler(...args),
+    waitUntilCondition: (...args) => waitUntilCondition(...args),
 });
 
 
@@ -12217,1593 +12387,5 @@ async function mountExportFormatPopup() {
 
 // MARK: DOM Handlers Start
 jQuery(async function () {
-    // React-owned composer markup must exist before handlers bind below.
-    await mountChatComposer();
-    // React-owned static panels must exist before the direct $(...).on()
-    // bindings below; bootstrapWorkspace re-invokes these mounts later, and
-    // each mount is idempotent via its dataset.react*Mounted guard.
-    await Promise.all([
-        mountApiConnectionsPanel(),
-        mountAiConfigPanel(),
-        mountCharacterPopup(),
-        mountRightNavPanel(),
-        mountSelectChatPopup(),
-        mountCharacterContextMenu(),
-        mountOptionsMenu(),
-        mountExportFormatPopup(),
-    ]);
-
-    $(document).on('click', '.api_loading', () => cancelStatusCheck('Canceled because connecting was manually canceled'));
-
-    //////////INPUT BAR FOCUS-KEEPING LOGIC/////////////
-    let S_TAPreviouslyFocused = false;
-    $('#send_textarea').on('focusin focus click', () => {
-        S_TAPreviouslyFocused = true;
-    });
-    $('#send_but, #option_regenerate, #option_continue, #mes_continue, #mes_impersonate').on('click', () => {
-        if (S_TAPreviouslyFocused) {
-            $('#send_textarea').trigger('focus');
-        }
-    });
-    $(document).on('click', event => {
-        if ($(':focus').attr('id') !== 'send_textarea') {
-            var validIDs = ['options_button', 'send_but', 'mes_impersonate', 'mes_continue', 'send_textarea', 'option_regenerate', 'option_continue'];
-            if (!validIDs.includes($(event.target).attr('id'))) {
-                S_TAPreviouslyFocused = false;
-            }
-        } else {
-            S_TAPreviouslyFocused = true;
-        }
-    });
-
-    /////////////////
-
-    $('#swipes-checkbox').on('change', function () {
-        swipes = !!$('#swipes-checkbox').prop('checked');
-        if (swipes) {
-            //console.log('toggle change calling showswipebtns');
-            showSwipeButtons();
-        } else {
-            hideSwipeButtons();
-        }
-        saveSettingsDebounced();
-    });
-
-    ///// SWIPE BUTTON CLICKS ///////
-
-    //limit swiping to only last message clicks
-    $(document).on('click', '.last_mes .swipe_right', async (e, data) => await swipe(e, SWIPE_DIRECTION.RIGHT, data));
-    $(document).on('click', '.last_mes .swipe_left', async (e, data) => await swipe(e, SWIPE_DIRECTION.LEFT, data));
-    $(document).on('click keydown', '.generation_failure_retry', function (event) {
-        if (isReactMainChatOwner() && $(this).closest('[data-main-chat-message-row-owner="react"]').length > 0) {
-            return;
-        }
-        if (event.type === 'keydown' && !['Enter', ' '].includes(event.key)) {
-            return;
-        }
-        event.preventDefault();
-        $('#option_regenerate').trigger('click');
-    });
-
-    initCharacterSearch();
-
-    $('#mes_impersonate').on('click', function () {
-        $('#option_impersonate').trigger('click');
-    });
-
-    $('#mes_continue').on('click', function () {
-        $('#option_continue').trigger('click');
-    });
-
-    const userInputGenerateMutex = new SimpleMutex(sendTextareaMessage);
-    $('#send_but').on('click', async function () {
-        await userInputGenerateMutex.update();
-    });
-
-    //menu buttons setup
-
-    $('#rm_button_settings').on('click', function () {
-        selected_button = 'settings';
-        selectRightMenuWithAnimation('rm_api_block');
-    });
-    $('#rm_button_characters').on('click', function () {
-        selected_button = 'characters';
-        select_rm_characters();
-    });
-    $('#rm_button_back').on('click', function () {
-        selected_button = 'characters';
-        select_rm_characters();
-    });
-    $('#rm_button_create').on('click', function () {
-        selected_button = 'create';
-        select_rm_create();
-        // This is also the React Character Library's New action. Selecting the
-        // legacy-compatible panel does not emit CHARACTER_EDITOR_OPENED, so mount
-        // the sole-owner authoring UI explicitly for new-character drafts.
-        queueReactCharacterAuthoringRemount();
-    });
-    $('#rm_button_selected_ch').on('click', function () {
-        if (this_chid !== undefined && characters[this_chid]) {
-            selected_button = 'character_edit';
-            select_selected_character(this_chid);
-        } else {
-            selected_button = 'characters';
-            select_rm_characters();
-        }
-        $('#character_search_bar').val('').trigger('input');
-    });
-
-    $(document).on('click', '.character_select', async function () {
-        const id = Number($(this).attr('data-chid'));
-        await selectCharacterById(id);
-    });
-
-    $(document).on('click', '.bogus_folder_select', function () {
-        const tagId = $(this).attr('tagid');
-        console.debug('Bogus folder clicked', tagId);
-        chooseBogusFolder($(this), tagId);
-    });
-
-    const cssAutofit = CSS.supports('field-sizing', 'content');
-    if (!cssAutofit) {
-        /**
-         * Sets the scroll height of the edit textarea to fit the content.
-         * @param {HTMLTextAreaElement} e Textarea element to auto-fit
-         */
-        function autoFitEditTextArea(e) {
-            const scrollTop = chatElement.scrollTop();
-            e.style.height = '0px';
-            const newHeight = e.scrollHeight + 4;
-            e.style.height = `${newHeight}px`;
-            chatElement.scrollTop(scrollTop);
-        }
-        const autoFitEditTextAreaDebounced = debounce(autoFitEditTextArea, debounce_timeout.short);
-        document.addEventListener('input', e => {
-            if (e.target instanceof HTMLTextAreaElement && e.target.classList.contains('edit_textarea')) {
-                const scrollbarShown = e.target.clientWidth < e.target.offsetWidth && e.target.offsetHeight >= window.innerHeight * 0.75;
-                const immediately = (e.target.scrollHeight > e.target.offsetHeight && !scrollbarShown) || e.target.value === '';
-                immediately ? autoFitEditTextArea(e.target) : autoFitEditTextAreaDebounced(e.target);
-            }
-        });
-    }
-
-    const chatElementScroll = document.getElementById('chat');
-    const chatScrollHandler = function () {
-        const scrollIsAtBottom = Math.abs(chatElementScroll.scrollHeight - chatElementScroll.clientHeight - chatElementScroll.scrollTop) < 5;
-
-        // Resume autoscroll if the user scrolls to the bottom
-        if (scrollLock && scrollIsAtBottom) {
-            scrollLock = false;
-        }
-
-        // Cancel autoscroll if the user scrolls up
-        if (!scrollLock && !scrollIsAtBottom) {
-            scrollLock = true;
-        }
-    };
-    chatElementScroll.addEventListener('scroll', chatScrollHandler, { passive: true });
-
-    $(document).on('click', '.mes', function () {
-        //when a 'delete message' parent div is clicked
-        // and we are in delete mode and del_checkbox is visible
-        const row = $(this);
-        const deleteCheckbox = row.find('.del_checkbox').first();
-
-        if (!is_delete_mode || !deleteCheckbox.is(':visible')) {
-            return;
-        }
-        $('.mes').each(function () {
-            const candidateRow = $(this);
-            candidateRow.find('.del_checkbox').first().prop('checked', false);
-            candidateRow.removeClass('selected');
-        });
-        row.addClass('selected'); //sets the bg of the mes selected for deletion
-        var i = Number($(this).attr('mesid')); //checks the message ID in the chat
-        this_del_mes = i;
-        //as long as the current message ID is less than the total chat length
-        while (i < chat.length) {
-            //sets the bg of the all msgs BELOW the selected .mes
-            const selectedRow = $(`.mes[mesid="${i}"]`);
-            selectedRow.addClass('selected');
-            selectedRow.find('.del_checkbox').first().prop('checked', true);
-            i++;
-        }
-    });
-
-    /** Handles deletion of a character chat file. */
-    async function handleDeleteChat(chatFile, _group, fromSlashCommand = false) {
-        // Close past chat popup.
-        $('#select_chat_cross').trigger('click');
-
-        const loaderHandle = loader.show({
-            slug: 'chat-delete',
-            title: t`Delete Chat`,
-            message: t`Deleting chat…`,
-            toastMode: loader.ToastMode.STATIC,
-        });
-
-        try {
-            await delChat(`${chatFile}.jsonl`);
-        } catch (error) {
-            loaderHandle.hide();
-            throw error;
-        }
-
-        if (fromSlashCommand) {  // When called from `/delchat` command, don't re-open the history view.
-            $('#options').hide();  // Hide option popup menu.
-            await loaderHandle.hide();
-        } else {  // Open the history view again after 2 seconds (delay to avoid edge cases for deleting last chat).
-            setTimeout(async function () {
-                $('#option_select_chat').trigger('click');
-                $('#options').hide();  // Hide option popup menu.
-                await loaderHandle.hide();
-            }, 2000);
-        }
-    }
-
-    $(document).on('click', '.PastChat_cross', async function (e, { fromSlashCommand = false } = {}) {
-        e.stopPropagation();
-        const deleteFileName = $(this).attr('file_name');
-        console.debug('detected cross click for' + deleteFileName);
-
-        // Skip confirmation if called from a slash command.
-        if (fromSlashCommand) {
-            await handleDeleteChat(deleteFileName, null, true);
-            return;
-        }
-
-        const result = await callGenericPopup('<h3>' + t`Delete the Chat File?` + '</h3>', POPUP_TYPE.CONFIRM);
-        if (result === POPUP_RESULT.AFFIRMATIVE) {
-            await handleDeleteChat(deleteFileName, null, false);
-        }
-    });
-
-    $('#advanced_div').on('click', function () {
-        if (!is_advanced_char_open) {
-            is_advanced_char_open = true;
-            $('#character_popup').css({ 'display': 'flex', 'opacity': 0.0 }).addClass('open');
-            $('#character_popup').transition({
-                opacity: 1.0,
-                duration: animation_duration,
-                easing: animation_easing,
-            });
-        } else {
-            is_advanced_char_open = false;
-            $('#character_popup').css('display', 'none').removeClass('open');
-        }
-    });
-
-    $('#character_cross').on('click', function () {
-        is_advanced_char_open = false;
-        $('#character_popup').transition({
-            opacity: 0,
-            duration: animation_duration,
-            easing: animation_easing,
-        });
-        setTimeout(function () { $('#character_popup').css('display', 'none'); }, animation_duration);
-    });
-
-    $('#character_popup_ok').on('click', function () {
-        is_advanced_char_open = false;
-        $('#character_popup').css('display', 'none');
-    });
-
-    $('#dialogue_popup_ok').on('click', async function (_e) {
-        dialogueCloseStop = false;
-        $('#shadow_popup').transition({
-            opacity: 0,
-            duration: animation_duration,
-            easing: animation_easing,
-        });
-        setTimeout(function () {
-            if (dialogueCloseStop) return;
-            $('#shadow_popup').css('display', 'none');
-            $('#dialogue_popup').removeClass('large_dialogue_popup');
-            $('#dialogue_popup').removeClass('wide_dialogue_popup');
-        }, animation_duration);
-
-        if (dialogueResolve) {
-            if (popup_type == 'input') {
-                dialogueResolve($('#dialogue_popup_input').val());
-                $('#dialogue_popup_input').val('');
-            } else {
-                dialogueResolve(true);
-            }
-
-            dialogueResolve = null;
-        }
-    });
-
-    $('#dialogue_popup_cancel').on('click', function (e) {
-        dialogueCloseStop = false;
-        $('#shadow_popup').transition({
-            opacity: 0,
-            duration: animation_duration,
-            easing: animation_easing,
-        });
-        setTimeout(function () {
-            if (dialogueCloseStop) return;
-            $('#shadow_popup').css('display', 'none');
-            $('#dialogue_popup').removeClass('large_dialogue_popup');
-        }, animation_duration);
-
-        popup_type = '';
-
-        if (dialogueResolve) {
-            dialogueResolve(false);
-            dialogueResolve = null;
-        }
-    });
-
-    $('#add_avatar_button').on('change', function () {
-        const inputElement = /** @type {HTMLInputElement} */ (this);
-        read_avatar_load(inputElement);
-    });
-
-    $('#form_create').on('submit', (e) => createOrEditCharacter(e.originalEvent));
-
-    $('#delete_button').on('click', async function () {
-        if (this_chid === undefined || !characters[this_chid]) {
-            toastr.warning('No character selected.');
-            return;
-        }
-        const characterToDelete = characters[this_chid];
-        const avatarToDelete = characterToDelete.avatar;
-        const deleteDialogTitle = getCharacterDeleteDialogTitle(characterToDelete.name);
-
-        // Auto-stop generation if active
-        if (is_send_press !== false) {
-            stopGeneration();
-            try {
-                await waitUntilCondition(() => is_send_press === false, debounce_timeout.extended, 10);
-            } catch {
-                // Timeout — proceed anyway
-            }
-        }
-
-        // Preflight: gather world info metadata before showing confirmation
-        let worldInfos = [];
-        try {
-            const resp = await fetch('/api/characters/delete-preflight', {
-                method: 'POST',
-                headers: getRequestHeaders(),
-                body: JSON.stringify({ avatars: [avatarToDelete] }),
-                cache: 'no-cache',
-            });
-            if (resp.ok) {
-                const data = await resp.json();
-                worldInfos = data.worldInfos ?? [];
-            }
-        } catch {
-            // Preflight failure should not block deletion
-        }
-
-        // Build dialog content: original deleteConfirm template + world info section
-        let content = await renderTemplateAsync('deleteConfirm');
-        const inTempChat = this_chid === undefined && name2 === neutralCharacterName;
-        if (inTempChat) {
-            content += buildTemporaryChatDeleteWarningHtml();
-        }
-        const cascadeHtml = buildCascadeSectionHtml(worldInfos);
-        if (cascadeHtml) {
-            content += cascadeHtml;
-        }
-
-        // When world infos exist, use the integrated dialog with "Delete All" button;
-        // otherwise fall back to the standard confirm dialog.
-        if (cascadeHtml) {
-            const dialogResult = await showDeleteConfirmWithCascade(deleteDialogTitle, content);
-            if (!dialogResult.confirmed) {
-                return;
-            }
-            await deleteCharacter(avatarToDelete, {
-                deleteChats: dialogResult.deleteChats,
-                temporaryChatAcknowledged: inTempChat,
-                deleteWorlds: dialogResult.deleteWorlds,
-                clearWorldReferences: dialogResult.clearWorldReferences,
-            });
-        } else {
-            let deleteChats = false;
-            const confirm = await Popup.show.confirm(deleteDialogTitle, content, {
-                leftAlign: true,
-                defaultResult: POPUP_RESULT.NEGATIVE,
-                onClose: () => { deleteChats = !!$('#del_char_checkbox').prop('checked'); },
-            });
-            if (!confirm) {
-                return;
-            }
-            await deleteCharacter(avatarToDelete, {
-                deleteChats,
-                temporaryChatAcknowledged: inTempChat,
-                deleteWorlds: [],
-                clearWorldReferences: false,
-            });
-        }
-    });
-
-    //////// OPTIMIZED ALL CHAR CREATION/EDITING TEXTAREA LISTENERS ///////////////
-
-    $('#character_name_pole').on('input', function () {
-        if (menu_type == 'create') {
-            create_save.name = String($('#character_name_pole').val());
-        }
-    });
-
-    const elementsToUpdate = {
-        '#description_textarea': function () { create_save.description = String($('#description_textarea').val()); },
-        '#creator_notes_textarea': function () { create_save.creator_notes = String($('#creator_notes_textarea').val()); },
-        '#character_version_textarea': function () { create_save.character_version = String($('#character_version_textarea').val()); },
-        '#system_prompt_textarea': function () { create_save.system_prompt = String($('#system_prompt_textarea').val()); },
-        '#post_history_instructions_textarea': function () { create_save.post_history_instructions = String($('#post_history_instructions_textarea').val()); },
-        '#creator_textarea': function () { create_save.creator = String($('#creator_textarea').val()); },
-        '#tags_textarea': function () { create_save.tags = String($('#tags_textarea').val()); },
-        '#personality_textarea': function () { create_save.personality = String($('#personality_textarea').val()); },
-        '#scenario_pole': function () { create_save.scenario = String($('#scenario_pole').val()); },
-        '#mes_example_textarea': function () { create_save.mes_example = String($('#mes_example_textarea').val()); },
-        '#firstmessage_textarea': function () { create_save.first_message = String($('#firstmessage_textarea').val()); },
-        '#depth_prompt_prompt': function () { create_save.depth_prompt_prompt = String($('#depth_prompt_prompt').val()); },
-        '#depth_prompt_depth': function () { create_save.depth_prompt_depth = Number($('#depth_prompt_depth').val()); },
-        '#depth_prompt_role': function () { create_save.depth_prompt_role = String($('#depth_prompt_role').val()); },
-    };
-
-    Object.keys(elementsToUpdate).forEach(function (id) {
-        $(id).on('input', function () {
-            if (menu_type == 'create') {
-                elementsToUpdate[id]();
-            } else {
-                saveCharacterDebounced();
-            }
-        });
-    });
-
-    $('#creator_notes_textarea').on('input', function () {
-        const notes = String($('#creator_notes_textarea').val());
-        const avatar = menu_type === 'create' ? '' : characters[this_chid]?.avatar;
-        $('#creator_notes_spoiler').html(formatCreatorNotes(notes, avatar));
-    });
-
-    $('#favorite_button').on('click', function () {
-        const newFavState = !fav_ch_checked;
-        updateFavButtonState(newFavState);
-        if (menu_type != 'create') {
-            updateCharacterRow(this_chid, { fav: newFavState });
-            saveCharacterDebounced();
-        }
-    });
-
-    /* $("#renameCharButton").on('click', renameCharacter); */
-
-    $(document).on('click', '.renameChatButton', async function (e) {
-        e.stopPropagation();
-        const oldFileName = $(this).closest('.select_chat_block_wrapper').find('.select_chat_block_filename').text();
-
-        const popupText = await renderTemplateAsync('chatRename');
-        const newName = await callGenericPopup(popupText, POPUP_TYPE.INPUT, oldFileName);
-
-        if (!newName || typeof newName !== 'string' || newName == oldFileName) {
-            console.log('no new name found, aborting');
-            return;
-        }
-
-        await renameChat(oldFileName, newName);
-
-        await delay(250);
-        $('#option_select_chat').trigger('click');
-        $('#options').hide();
-    });
-
-    $(document).on('click', '.exportChatButton, .exportRawChatButton', async function (e) {
-        e.stopPropagation();
-        const format = $(this).data('format') || 'txt';
-        await saveChatConditional();
-        const filename = $(this).closest('.select_chat_block_wrapper').find('.select_chat_block_filename').text();
-        console.log(`exporting ${filename} in ${format} format`);
-
-        const body = {
-            is_group: false,
-            avatar_url: characters[this_chid]?.avatar,
-            file: `${filename}.jsonl`,
-            exportfilename: `${filename}.${format}`,
-            format: format,
-        };
-        console.log(body);
-        try {
-            const response = await fetch('/api/chats/export', {
-                method: 'POST',
-                body: JSON.stringify(body),
-                headers: getRequestHeaders(),
-            });
-            const data = await response.json();
-            if (!response.ok) {
-                // display error message
-                console.log(data.message);
-                await delay(250);
-                toastr.error(`Error: ${data.message}`);
-                return;
-            } else {
-                const mimeType = format == 'txt' ? 'text/plain' : 'application/octet-stream';
-                // success, handle response data
-                console.log(data);
-                await delay(250);
-                toastr.success(data.message);
-                download(data.result, body.exportfilename, mimeType);
-            }
-        } catch (error) {
-            // display error message
-            console.log(`An error has occurred: ${error.message}`);
-            await delay(250);
-            toastr.error(`Error: ${error.message}`);
-        }
-    });
-
-
-    const button = $('#options_button');
-    const menu = $('#options');
-    let isOptionsMenuVisible = false;
-
-    function showMenu() {
-        showBookmarksButtons();
-        menu.fadeIn(animation_duration);
-        getOptionsPopper()?.update();
-        isOptionsMenuVisible = true;
-    }
-
-    function hideMenu() {
-        menu.fadeOut(animation_duration);
-        getOptionsPopper()?.update();
-        isOptionsMenuVisible = false;
-    }
-
-    function isMouseOverButtonOrMenu() {
-        return menu.is(':hover, :focus-within') || button.is(':hover, :focus');
-    }
-
-    button.on('click', function () {
-        if (isOptionsMenuVisible) {
-            hideMenu();
-        } else {
-            showMenu();
-        }
-    });
-    $(document).on('click', function () {
-        if (!isOptionsMenuVisible) return;
-        if (!isMouseOverButtonOrMenu()) { hideMenu(); }
-    });
-
-    /* $('#set_chat_character_settings').on('click', setScenarioOverride); */
-
-    ///////////// OPTIMIZED LISTENERS FOR LEFT SIDE OPTIONS POPUP MENU //////////////////////
-    $('#options [id]').on('click', async function (event, customData) {
-        const fromSlashCommand = customData?.fromSlashCommand || false;
-        var id = $(this).attr('id');
-
-        // Check whether a custom prompt was provided via custom data (for example through a slash command)
-        const additionalPrompt = customData?.additionalPrompt?.trim() || undefined;
-        const buildOrFillAdditionalArgs = (args = {}) => ({
-            ...args,
-            ...(additionalPrompt !== undefined && { quiet_prompt: additionalPrompt, quietToLoud: true }),
-        });
-
-        if (id == 'option_select_chat') {
-            if (this_chid === undefined && !is_send_press) {
-                await openPermanentAssistantCard();
-            }
-            if ((this_chid !== undefined && !is_send_press) || fromSlashCommand) {
-                await displayPastChats();
-                //this is just to avoid the shadow for past chat view when using /delchat
-                //however, the dialog popup still gets one..
-                if (!fromSlashCommand) {
-                    console.log('displaying shadow');
-                    $('#shadow_select_chat_popup').css('display', 'block');
-                    $('#shadow_select_chat_popup').css('opacity', 0.0);
-                    $('#shadow_select_chat_popup').transition({
-                        opacity: 1.0,
-                        duration: animation_duration,
-                        easing: animation_easing,
-                    });
-                }
-            }
-        } else if (id == 'option_start_new_chat') {
-            if (this_chid !== undefined && !is_send_press) {
-                let deleteCurrentChat = false;
-                const result = await Popup.show.confirm(t`Start new chat?`, await renderTemplateAsync('newChatConfirm'), {
-                    onClose: () => { deleteCurrentChat = !!$('#del_chat_checkbox').prop('checked'); },
-                });
-                if (!result) {
-                    return;
-                }
-
-                await doNewChat({ deleteCurrentChat: deleteCurrentChat });
-            }
-            if (this_chid === undefined && !is_send_press) {
-                const alreadyInTempChat = this_chid === undefined && name2 === neutralCharacterName;
-                await newAssistantChat({ temporary: alreadyInTempChat });
-            }
-        } else if (id == 'option_regenerate') {
-            //Attempting to regenerate a user message will instead generate a new message.
-            if (chat.length && chat.length - 1 === this_edit_mes_id && chat[this_edit_mes_id]?.is_user == false) {
-                toastr.warning(t`Finish the edit before starting a generation.`, t`You cannot regenerate the message you are editing.`);
-                return;
-            }
-            if (is_send_press == false) {
-                is_send_press = true;
-                Generate('regenerate', buildOrFillAdditionalArgs());
-            }
-        } else if (id == 'option_impersonate') {
-            if (is_send_press == false || fromSlashCommand) {
-                is_send_press = true;
-                Generate('impersonate', buildOrFillAdditionalArgs());
-            }
-        } else if (id == 'option_continue') {
-            if (swipeState == SWIPE_STATE.EDITING) {
-                toastr.warning(t`Confirm the edit to start a generation.`, t`You cannot send a message during a swipe-edit.`);
-                return;
-            }
-            if (chat.length && chat.length - 1 === this_edit_mes_id) {
-                toastr.warning(t`Finish the edit before starting a generation.`, t`You cannot continue the message you are editing.`);
-                return;
-            }
-
-            if (is_send_press == false || fromSlashCommand) {
-                is_send_press = true;
-                Generate('continue', buildOrFillAdditionalArgs());
-            }
-        } else if (id == 'option_delete_mes') {
-            setTimeout(() => openMessageDelete(fromSlashCommand), animation_duration);
-        } else if (id == 'option_close_chat') {
-            await closeCurrentChat();
-        } else if (id === 'option_settings') {
-            var topBar = document.getElementById('top-bar');
-            var topSettingsHolder = document.getElementById('top-settings-holder');
-            var divchat = document.getElementById('chat');
-
-            if (!topBar || !topSettingsHolder || !divchat) {
-                return;
-            }
-
-            if (topBar.style.display === 'none') {
-                topBar.style.display = ''; // or "inline-block" if that's the original display value
-                topSettingsHolder.style.display = ''; // or "inline-block" if that's the original display value
-
-                divchat.style.borderRadius = '';
-                divchat.style.backgroundColor = '';
-            } else {
-                divchat.style.borderRadius = '10px'; // Adjust the value to control the roundness of the corners
-                divchat.style.backgroundColor = ''; // Set the background color to your preference
-
-                topBar.style.display = 'none';
-                topSettingsHolder.style.display = 'none';
-            }
-            //}
-        }
-        hideMenu();
-    });
-
-    $('#newChatFromManageScreenButton').on('click', async function () {
-        await doNewChat({ deleteCurrentChat: false });
-        $('#select_chat_cross').trigger('click');
-    });
-
-    //////////////////////////////////////////////////////////////////////////////////////////////
-
-    //functionality for the cancel delete messages button, reverts to normal display of input form
-    $('#dialogue_del_mes_cancel').on('click', function () {
-        $('#dialogue_del_mes').css('display', 'none');
-        $('#send_form').css('display', css_send_form_display);
-        $('.del_checkbox').each(function () {
-            const checkbox = $(this);
-            const row = checkbox.closest('.mes');
-            checkbox.css('display', 'none');
-            row.find('.for_checkbox').first().css('display', 'block');
-            row.removeClass('selected');
-            checkbox.prop('checked', false);
-        });
-        showSwipeButtons();
-        this_del_mes = -1;
-        is_delete_mode = false;
-    });
-
-    //confirms message deletion with the "ok" button
-    $('#dialogue_del_mes_ok').on('click', async function () {
-        $('#dialogue_del_mes').css('display', 'none');
-        $('#send_form').css('display', css_send_form_display);
-        $('.del_checkbox').each(function () {
-            const checkbox = $(this);
-            const row = checkbox.closest('.mes');
-            checkbox.css('display', 'none');
-            row.find('.for_checkbox').first().css('display', 'block');
-            row.removeClass('selected');
-            checkbox.prop('checked', false);
-        });
-
-        if (this_del_mes >= 0) {
-            for (let i = (chat.length - 1); i >= this_del_mes; i--) {
-                deleteItemizedPromptForMessage(i);
-            }
-            chatElement.find(`.mes[mesid="${this_del_mes}"]`).nextAll('div').remove();
-            chatElement.find(`.mes[mesid="${this_del_mes}"]`).remove();
-            chat.length = this_del_mes;
-            chat_metadata.tainted = true;
-            await saveChatConditional();
-            chatElement.scrollTop(chatElement[0].scrollHeight);
-            await eventSource.emit(event_types.MESSAGE_DELETED, chat.length);
-            chatElement.find('.mes').removeClass('last_mes');
-            chatElement.find('.mes').last().addClass('last_mes');
-        } else {
-            console.log('this_del_mes is not >= 0, not deleting');
-        }
-
-        showSwipeButtons();
-        this_del_mes = -1;
-        is_delete_mode = false;
-    });
-
-    ////////////////// OPTIMIZED RANGE SLIDER LISTENERS////////////////
-
-    var sliderLocked = true;
-    var sliderTimer;
-
-    $('input[type=\'range\']').on('touchstart', function () {
-        // Unlock the slider after 300ms
-        setTimeout(function () {
-            sliderLocked = false;
-            $(this).css('background-color', 'var(--SmartThemeQuoteColor)');
-        }.bind(this), 300);
-    });
-
-    $('input[type=\'range\']').on('touchend', function () {
-        clearTimeout(sliderTimer);
-        $(this).css('background-color', '');
-        sliderLocked = true;
-    });
-
-    $('input[type=\'range\']').on('touchmove', function (event) {
-        if (sliderLocked) {
-            event.preventDefault();
-        }
-    });
-
-    const sliders = [
-        {
-            sliderId: '#amount_gen',
-            counterId: '#amount_gen_counter',
-            format: (val) => `${val}`,
-            setValue: (val) => { amount_gen = Number(val); },
-        },
-        {
-            sliderId: '#max_context',
-            counterId: '#max_context_counter',
-            format: (val) => `${val}`,
-            setValue: (val) => { max_context = Number(val); },
-        },
-    ];
-
-    sliders.forEach(slider => {
-        $(document).on('input', slider.sliderId, function () {
-            const value = $(this).val();
-            const formattedValue = slider.format(value);
-            slider.setValue(value);
-            $(slider.counterId).val(formattedValue);
-            saveSettingsDebounced();
-        });
-    });
-
-    //////////////////////////////////////////////////////////////
-
-    $('#select_chat_cross').on('click', function () {
-        $('#shadow_select_chat_popup').transition({
-            opacity: 0,
-            duration: animation_duration,
-            easing: animation_easing,
-        });
-        setTimeout(function () { $('#shadow_select_chat_popup').css('display', 'none'); }, animation_duration);
-    });
-
-    $(document).on('pointerup', '.mes_copy', async function () {
-        if (isReactMainChatOwner() && $(this).closest('[data-main-chat-message-row-owner="react"]').length > 0) {
-            return;
-        }
-        if (this_chid !== undefined || name2 === neutralCharacterName) {
-            try {
-                const messageId = $(this).closest('.mes').attr('mesid');
-                const text = chat[messageId].mes;
-                await copyText(text);
-                toastr.info('Copied!', '', { timeOut: 2000 });
-            } catch (err) {
-                console.error('Failed to copy: ', err);
-            }
-        }
-    });
-
-    //********************
-    //***Message Editor***
-    $(document).on('click', '.mes_edit', async function () {
-        if (isReactMainChatOwner()) {
-            return;
-        }
-        if (is_delete_mode) {
-            return;
-        }
-        if (this_chid !== undefined || name2 === neutralCharacterName) {
-            // Previously system messages we're allowed to be edited
-            /*const message = $(this).closest(".mes");
-
-            if (message.data("isSystem")) {
-                return;
-            }*/
-
-            if (this_edit_mes_id >= 0) {
-                let mes_edited = chatElement.find(`[mesid="${this_edit_mes_id}"]`).find('.mes_edit_done');
-                if (Number(edit_mes_id) == chat.length - 1) { //if the generating swipe (...)
-                    let run_edit = true;
-                    if (chat[edit_mes_id].swipe_id !== undefined) {
-                        if (chat[edit_mes_id].swipes.length === chat[edit_mes_id].swipe_id) {
-                            run_edit = false;
-                        }
-                    }
-                    if (run_edit) {
-                        hideSwipeButtons();
-                    }
-                }
-                await messageEditDone(mes_edited);
-            }
-            var edit_mes_id = Number($(this).closest('.mes').attr('mesid'));
-
-            await messageEdit(edit_mes_id);
-        }
-    });
-
-    $(document).on('input', '#curEditTextarea', function () {
-        if (power_user.auto_save_msg_edits === true) {
-            messageEditAuto($(this));
-        }
-    });
-
-    mainChatMessageActionsController = createChatMessageActionsController(document, {
-        getExpandMessageActions: () => power_user.expand_message_actions,
-        animationDuration: animation_duration,
-        animationEasing: animation_easing,
-        onReactOwnedOutsideClick: () => {
-            if (isReactMainChatOwner()) {
-                runMainChatVisibleMessageActionsShellAction({ kind: 'close' });
-            }
-        },
-        onStateChanged: () => {
-            void mountReactMainChatMessageListPanel();
-        },
-    });
-    mainChatMessageActionsController.init();
-
-    $(document).on('click', '.mes_edit_cancel', async function () {
-        if (isReactMainChatOwner()) {
-            return;
-        }
-        await messageEditCancel.call(this, this_edit_mes_id);
-    });
-
-    $(document).on('click', '.mes_edit_up', async function () {
-        if (this_edit_mes_id <= 0) {
-            return;
-        }
-        const targetId = Number(this_edit_mes_id) - 1;
-        await messageEditMove(this_edit_mes_id, targetId);
-    });
-
-    $(document).on('click', '.mes_edit_down', async function () {
-        if (this_edit_mes_id >= chat.length - 1) {
-            return;
-        }
-
-        const targetId = Number(this_edit_mes_id) + 1;
-        await messageEditMove(this_edit_mes_id, targetId);
-    });
-
-    $(document).on('click', '.mes_edit_copy', async function () {
-        const confirmation = await callGenericPopup(t`Create a copy of this message?`, POPUP_TYPE.CONFIRM);
-        if (!confirmation) {
-            return;
-        }
-
-        hideSwipeButtons();
-        const oldScroll = chatElement[0].scrollTop;
-        const clone = structuredClone(chat[this_edit_mes_id]);
-        clone.send_date = Date.now();
-        const this_edit_mes_element = $(this).closest('.mes');
-        clone.mes = this_edit_mes_element.find('.edit_textarea').val().toString();
-
-        if (power_user.trim_spaces) {
-            clone.mes = clone.mes.trim();
-        }
-
-        chat.splice(Number(this_edit_mes_id) + 1, 0, clone);
-        const newMessageElement = updateMessageElement(clone);
-        this_edit_mes_element.after(newMessageElement);
-
-        updateViewMessageIds();
-        await saveChatConditional();
-        chatElement[0].scrollTop = oldScroll;
-        showSwipeButtons();
-    });
-
-    $(document).on('click', '.mes_edit_delete', async function (event, customData) {
-        const fromSlashCommand = customData?.fromSlashCommand || false;
-        const message = chat[this_edit_mes_id];
-        const selectedSwipe = message.swipe_id ?? undefined;
-        const swipesArray = Array.isArray(message.swipes) ? message.swipes : [];
-        const canDeleteSwipe = power_user.confirm_message_delete && !fromSlashCommand && !message.is_user && swipesArray.length > 1 && this_edit_mes_id === chat.length - 1 && selectedSwipe !== undefined;
-        await deleteMessage(Number(this_edit_mes_id), canDeleteSwipe ? selectedSwipe : undefined, power_user.confirm_message_delete && fromSlashCommand !== true);
-    });
-
-    $(document).on('click', '.mes_edit_done', async function () {
-        if (isReactMainChatOwner()) {
-            return;
-        }
-        await messageEditDone($(this));
-    });
-
-    //Select chat
-
-    //**************************CHARACTER IMPORT EXPORT*************************//
-    $('#character_import_button').on('click', function () {
-        $('#character_import_file').trigger('click');
-    });
-
-    $('#character_import_file').on('change', async function (e) {
-        $('#rm_info_avatar').html('');
-
-        if (!(e.target instanceof HTMLInputElement)) {
-            return;
-        }
-
-        if (!e.target.files.length) {
-            return;
-        }
-
-        const avatarFileNames = [];
-        for (const file of e.target.files) {
-            const avatarFileName = await importCharacter(file);
-            if (avatarFileName !== undefined) {
-                avatarFileNames.push(avatarFileName);
-            }
-        }
-
-        if (avatarFileNames.length > 0) {
-            await handleUnifiedImport(avatarFileNames);
-            selectImportedChar(avatarFileNames[avatarFileNames.length - 1]);
-        }
-
-        // Clear the file input value to allow re-uploading the same file
-        e.target.value = '';
-    });
-
-    $('#export_button').on('click', function () {
-        toggleCharacterExportPopup(this);
-    });
-
-    $(document).on('keydown', function (event) {
-        if (isExportPopupOpen && event.key === 'Escape') {
-            event.preventDefault();
-            event.stopImmediatePropagation();
-            closeCharacterExportPopup();
-        }
-    });
-
-    $(document).on('click', '.export_format', async function () {
-        const format = $(this).data('format');
-
-        if (!format) {
-            return;
-        }
-
-        closeCharacterExportPopup();
-
-        try {
-            // Save before exporting
-            await createOrEditCharacter();
-            const body = { format, avatar_url: characters[this_chid].avatar };
-
-            const response = await fetch('/api/characters/export', {
-                method: 'POST',
-                headers: getRequestHeaders(),
-                body: JSON.stringify(body),
-            });
-
-            if (!response.ok) {
-                toastr.error(t`Could not download file`, t`Export and Download`);
-                return;
-            }
-
-            const filename = characters[this_chid].avatar.replace('.png', `.${format}`);
-            const blob = await response.blob();
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.setAttribute('download', filename);
-            document.body.appendChild(a);
-            toastr.success(t`Character export download started.`, t`Export and Download`);
-            a.click();
-            URL.revokeObjectURL(a.href);
-            document.body.removeChild(a);
-        } catch (error) {
-            console.error('Character export failed', error);
-            toastr.error(t`Could not download file`, t`Export and Download`);
-        }
-    });
-    //**************************CHAT IMPORT EXPORT*************************//
-    $('#chat_import_button').on('click', function () {
-        $('#chat_import_file').trigger('click');
-    });
-
-    $('#chat_import_file').on('change', async function (e) {
-        const targetElement = e.target;
-        const formElement = document.getElementById('form_import_chat');
-        if (!(targetElement instanceof HTMLInputElement) || !(formElement instanceof HTMLFormElement)) {
-            return;
-        }
-
-        const importedFileNames = [];
-
-        for (const file of targetElement.files) {
-            const ext = file.name.match(/\.(\w+)$/);
-            const format = ext?.[1]?.toLowerCase();
-
-            if (!['json', 'jsonl'].includes(format)) {
-                toastr.warning(t`Only JSON and JSONL files are supported for chat imports.`);
-                continue;
-            }
-
-            const formData = new FormData(formElement);
-            formData.set('file_type', format);
-            formData.set('avatar', file);
-            formData.set('user_name', name1);
-
-            const result = await importCharacterChat(formData, { refresh: false });
-            importedFileNames.push(...result);
-        }
-
-        if (importedFileNames.length > 0) {
-            toastr.success(t`Successfully imported ${importedFileNames.length} chat(s).`);
-        }
-
-        await displayPastChats(importedFileNames);
-
-        targetElement.value = '';
-    });
-
-    $('#dupe_button').on('click', async function () {
-        await duplicateCharacter();
-    });
-
-    $(document).on('click', '.mes_stop', function () {
-        stopGeneration();
-    });
-
-    $(document).on('click', '#form_sheld .stscript_continue', function () {
-        pauseScriptExecution();
-    });
-
-    $(document).on('click', '#form_sheld .stscript_pause', function () {
-        pauseScriptExecution();
-    });
-
-    $(document).on('click', '#form_sheld .stscript_stop', function () {
-        stopScriptExecution();
-    });
-
-    $(document).on('click', '.drawer-opener', doDrawerOpenClick);
-
-    $('.drawer-toggle').on('click', doNavbarIconClick);
-
-    $('html').on('touchstart mousedown', async function (e) {
-        const clickTarget = $(e.target);
-
-        if (isExportPopupOpen
-            && clickTarget.closest('#export_button').length == 0
-            && clickTarget.closest('#export_format_popup').length == 0) {
-            closeCharacterExportPopup({ restoreFocus: false });
-        }
-
-        const forbiddenTargets = [
-            '#character_cross',
-            '#avatar-and-name-block',
-            '#shadow_popup',
-            '.popup',
-            '#world_popup',
-            '.ui-widget',
-            '.text_pole',
-            '#toast-container',
-            '.select2-results',
-            '.wi-content-editor-modal',
-        ];
-
-        for (const id of forbiddenTargets) {
-            if (clickTarget.closest(id).length > 0) {
-                return;
-            }
-        }
-
-        // This autocloses open drawers that are not pinned if a click happens inside the app which does not target them.
-        const targetParentHasOpenDrawer = clickTarget.parents('.openDrawer').length;
-        if (!clickTarget.hasClass('drawer-icon') && !clickTarget.hasClass('openDrawer')) {
-            const $openDrawers = $('.openDrawer').not('.pinnedOpen');
-            if ($openDrawers.length && targetParentHasOpenDrawer === 0) {
-                // Toggle icon and drawer classes
-                $('.openIcon').not('.drawerPinnedOpen').toggleClass('closedIcon openIcon');
-                $openDrawers.toggleClass('closedDrawer openDrawer');
-            }
-        }
-    });
-
-    $(document).on('click', '.inline-drawer-toggle', async function (e) {
-        if ($(e.target).hasClass('text_pole')) {
-            return;
-        }
-        const drawer = $(this).closest('.inline-drawer');
-        const icon = drawer.find('>.inline-drawer-header .inline-drawer-icon');
-        const drawerContent = drawer.find('>.inline-drawer-content');
-        icon.toggleClass('down up');
-        icon.toggleClass('fa-circle-chevron-down fa-circle-chevron-up');
-        drawer.trigger('inline-drawer-toggle');
-        drawerContent.stop(true, true).css({ display: '', height: '' }).toggleClass('openInlineDrawer');
-
-        // Set the height of "autoSetHeight" textareas within the inline-drawer to their scroll height
-        if (!CSS.supports('field-sizing', 'content')) {
-            const textareas = drawerContent.find('textarea.autoSetHeight');
-            for (const textarea of textareas) {
-                await resetScrollHeight($(textarea));
-            }
-        }
-    });
-
-    $(document).on('click', '.inline-drawer-maximize', function () {
-        const icon = $(this).find('.inline-drawer-icon, .floating_panel_maximize');
-        icon.toggleClass('fa-window-maximize fa-window-restore');
-        const drawerContent = $(this).closest('.drawer-content');
-        drawerContent.toggleClass('maximized');
-        const drawerId = drawerContent.attr('id');
-        resetMovableStyles(drawerId);
-    });
-
-    $(document).on('click', '.mes .avatar', function () {
-        const messageElement = $(this).closest('.mes');
-        const thumbURL = $(this).children('img').attr('src');
-        const charsPath = '/characters/';
-        const targetAvatarImg = thumbURL.substring(thumbURL.lastIndexOf('=') + 1);
-        const charname = targetAvatarImg.replace('.png', '');
-        const isValidCharacter = characters.some(x => x.avatar === decodeURIComponent(targetAvatarImg));
-
-        // Remove existing zoomed avatars for characters that are not the clicked character when moving UI is not enabled
-        if (!power_user.movingUI) {
-            $('.zoomed_avatar').each(function () {
-                const currentForChar = $(this).attr('forChar');
-                if (currentForChar !== charname && typeof currentForChar !== 'undefined') {
-                    console.debug(`Removing zoomed avatar for character: ${currentForChar}`);
-                    $(this).remove();
-                }
-            });
-        }
-
-        const avatarSrc = (isDataURL(thumbURL) || /^\/?img\/(?:.+)/.test(thumbURL)) ? thumbURL : charsPath + targetAvatarImg;
-        if ($(`.zoomed_avatar[forChar="${charname}"]`).length) {
-            console.debug('removing container as it already existed');
-            $(`.zoomed_avatar[forChar="${charname}"]`).fadeOut(animation_duration, () => {
-                $(`.zoomed_avatar[forChar="${charname}"]`).remove();
-            });
-        } else {
-            console.debug('making new container from template');
-            const template = $('#zoomed_avatar_template').html();
-            const newElement = $(template);
-            newElement.attr('forChar', charname);
-            newElement.attr('id', `zoomFor_${charname}`);
-            newElement.addClass('draggable');
-            newElement.find('.drag-grabber').attr('id', `zoomFor_${charname}header`);
-
-            $('body').append(newElement);
-            newElement.fadeIn(animation_duration);
-            const zoomedAvatarImgElement = $(`.zoomed_avatar[forChar="${charname}"] img`);
-            if (messageElement.attr('is_user') == 'true' || (messageElement.attr('is_system') == 'true' && !isValidCharacter)) {
-                //handle user and system avatars
-                const isValidPersona = decodeURIComponent(targetAvatarImg) in power_user.personas;
-                if (isValidPersona) {
-                    const personaSrc = getUserAvatar(targetAvatarImg);
-                    zoomedAvatarImgElement.attr('src', personaSrc);
-                    zoomedAvatarImgElement.attr('data-izoomify-url', personaSrc);
-                } else {
-                    zoomedAvatarImgElement.attr('src', thumbURL);
-                    zoomedAvatarImgElement.attr('data-izoomify-url', thumbURL);
-                }
-            } else if (messageElement.attr('is_user') == 'false') { //handle char avatars
-                zoomedAvatarImgElement.attr('src', avatarSrc);
-                zoomedAvatarImgElement.attr('data-izoomify-url', avatarSrc);
-            }
-            loadMovingUIState();
-            $(`.zoomed_avatar[forChar="${charname}"]`).css('display', 'flex');
-            dragElement(newElement);
-
-            if (power_user.zoomed_avatar_magnification) {
-                $('.zoomed_avatar_container').izoomify();
-            }
-
-            $('.zoomed_avatar, .zoomed_avatar .dragClose').on('click touchend', (e) => {
-                if (e.target.closest('.dragClose')) {
-                    $(`.zoomed_avatar[forChar="${charname}"]`).fadeOut(animation_duration, () => {
-                        $(`.zoomed_avatar[forChar="${charname}"]`).remove();
-                    });
-                }
-            });
-
-            zoomedAvatarImgElement.on('dragstart', (e) => {
-                console.log('saw drag on avatar!');
-                e.preventDefault();
-                return false;
-            });
-        }
-    });
-
-    document.addEventListener('click', function (e) {
-        if (!(e.target instanceof HTMLElement)) return;
-        if (e.target.matches('#OpenAllWIEntries')) {
-            document.querySelectorAll('#world_popup_entries_list .inline-drawer').forEach((/** @type {HTMLElement} */ drawer) => {
-                delay(0).then(() => toggleDrawer(drawer, true));
-            });
-        } else if (e.target.matches('#CloseAllWIEntries')) {
-            document.querySelectorAll('#world_popup_entries_list .inline-drawer').forEach((/** @type {HTMLElement} */ drawer) => {
-                toggleDrawer(drawer, false);
-            });
-        }
-    });
-
-    $(document).on('click', '.open_alternate_greetings', openAlternateGreetings);
-    /* $('#set_character_world').on('click', openCharacterWorldPopup); */
-
-    $(document).on('focus', 'input.auto-select, textarea.auto-select', function () {
-        if (!power_user.enable_auto_select_input) return;
-        const control = $(this)[0];
-        if (control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement) {
-            control.select();
-            console.debug('Auto-selecting content of input control', control);
-        }
-    });
-
-    $(document).on('keydown', function (e) {
-        if (e.key === 'Escape' && !e.originalEvent.isComposing) {
-            const isEditVisible = $('#curEditTextarea').is(':visible') || $('.reasoning_edit_textarea').length > 0;
-            if (isEditVisible && power_user.auto_save_msg_edits === false) {
-                closeMessageEditor('all');
-                $('#send_textarea').trigger('focus');
-                return;
-            }
-            if (isEditVisible && power_user.auto_save_msg_edits === true) {
-                chatElement.find(`.mes[mesid="${this_edit_mes_id}"] .mes_edit_done`).trigger('click');
-                closeMessageEditor('reasoning');
-                $('#send_textarea').trigger('focus');
-                return;
-            }
-            if (this_edit_mes_id === undefined && $('#mes_stop').is(':visible')) {
-                $('#mes_stop').trigger('click');
-                if (chat.length === 0) return;
-                const lastMessage = chat[chat.length - 1];
-                if (Array.isArray(lastMessage.swipes) && lastMessage.swipe_id == lastMessage.swipes.length) {
-                    $('.last_mes .swipe_left').trigger('click');
-                }
-            }
-        }
-    });
-
-    $('#char-management-dropdown').on('change', async (e) => {
-        const targetElement = /** @type {HTMLSelectElement} */ (e.target);
-        const target = $(targetElement.selectedOptions).attr('id');
-        switch (target) {
-            case 'set_character_world':
-                await openCharacterWorldPopup();
-                break;
-            case 'character_action_advanced':
-                $('#advanced_div').trigger('click');
-                break;
-            case 'character_action_chat_lorebook':
-                $('.chat_lorebook_button').first().trigger('click');
-                break;
-            case 'set_chat_character_settings':
-                await setCharacterSettingsOverrides();
-                break;
-            case 'character_action_connected_personas':
-                $('#char_connections_button').trigger('click');
-                break;
-            case 'renameCharButton':
-                await renameCharacter();
-                break;
-            case 'import_character_info':
-                await importEmbeddedWorldInfo();
-                saveCharacterDebounced();
-                break;
-            case 'character_source': {
-                const source = getCharacterSource(this_chid);
-                if (source && isValidUrl(source)) {
-                    const url = new URL(source);
-                    const confirm = await Popup.show.confirm('Open Source', `<span>Do you want to open the link to ${url.hostname} in a new tab?</span><var>${url}</var>`);
-                    if (confirm) {
-                        window.open(source, '_blank', 'noopener');
-                    }
-                } else {
-                    toastr.info('This character doesn\'t seem to have a source.');
-                }
-            } break;
-            case 'replace_update': {
-                let onlineUrl = getCharacterSource(this_chid);
-
-                const POPUP_RESULT_URL = POPUP_RESULT.CUSTOM1, POPUP_RESULT_FILE = POPUP_RESULT.CUSTOM2;
-                const result = await Popup.show.confirm(t`Replace Character`,
-                    `<p>${t`Choose a new character card to replace this character with.`}</p>` +
-                    `<p>${t`You can also replace this character with the one from the online source.`}${onlineUrl ? `<br />This character was downloaded from: <var>${onlineUrl}</var>` : ''}</p>` +
-                    `<p>${t`All chats, assets and group memberships will be preserved, but local changes to the character data will be lost.`}<br />${t`Proceed?`}</p>`,
-                    {
-                        okButton: false,
-                        customButtons: [{
-                            text: t`Replace with URL`,
-                            result: POPUP_RESULT_URL,
-                            classes: ['popup-button-ok'],
-                        }, {
-                            text: t`Replace with File`,
-                            result: POPUP_RESULT_FILE,
-                            classes: ['popup-button-ok'],
-                        }],
-                        defaultResult: onlineUrl ? POPUP_RESULT_URL : POPUP_RESULT_FILE,
-                    });
-
-                // Remember the chat currently selected, so we can reload it after the replacement
-                const currentChatFile = characters[this_chid].chat;
-                async function postReplace() {
-                    await openCharacterChat(currentChatFile);
-                }
-
-                switch (result) {
-                    case POPUP_RESULT_FILE: {
-                        async function uploadReplacementCard(e) {
-                            const file = e.target.files[0];
-                            if (!file) {
-                                return;
-                            }
-
-                            try {
-                                const data = new Map();
-                                data.set(file, characters[this_chid].avatar);
-                                await processDroppedFiles([file], data);
-                                await postReplace();
-                            } catch {
-                                toastr.error('Failed to replace the character card.', 'Something went wrong');
-                            }
-                        }
-                        $('#character_replace_file').off('change').on('change', uploadReplacementCard).trigger('click');
-                        break;
-                    }
-                    case POPUP_RESULT_URL: {
-                        const inputUrl = await Popup.show.input(t`Replace Character from URL`,
-                            `<p>${t`Enter the URL of the character card to replace this character with.`}</p>` +
-                            (onlineUrl ? `<p>${t`This character was downloaded from: <var>${onlineUrl}</var>`}</p>` : ''),
-                            onlineUrl);
-                        if (!inputUrl) {
-                            break;
-                        }
-                        onlineUrl = inputUrl;
-                        await importFromExternalUrl(onlineUrl, { preserveFileName: characters[this_chid].avatar });
-                        await postReplace();
-                        break;
-                    }
-                }
-            } break;
-            case 'import_tags': {
-                await importTags(characters[this_chid], { importSetting: tag_import_setting.ASK });
-            } break;
-            case 'character_action_export': {
-                toggleCharacterExportPopup(targetElement);
-            } break;
-            case 'character_action_duplicate': {
-                await duplicateCharacter();
-            } break;
-            case 'delete_from_dropdown': {
-                $('#delete_button').trigger('click');
-            } break;
-            /*case 'delete_button':
-                popup_type = "del_ch";
-                callPopup(`
-                        <h3>Delete the character?</h3>
-                        <b>THIS IS PERMANENT!<br><br>
-                        THIS WILL ALSO DELETE ALL<br>
-                        OF THE CHARACTER'S CHAT FILES.<br><br></b>`
-                );
-                break;*/
-            default:
-                await eventSource.emit(event_types.CHARACTER_MANAGEMENT_DROPDOWN, target);
-        }
-        $('#char-management-dropdown').prop('selectedIndex', 0);
-    });
-
-    $(window).on('beforeunload', () => {
-        cancelTtsPlay();
-        if (streamingProcessor) {
-            console.log('Page reloaded. Aborting streaming...');
-            streamingProcessor.onStopStreaming();
-        }
-    });
-
-
-    var isManualInput = false;
-    var valueBeforeManualInput;
-
-    $(document).on('input', '.range-block-counter input, .neo-range-input', function () {
-        valueBeforeManualInput = $(this).val();
-        console.log(valueBeforeManualInput);
-    });
-
-    $(document).on('change', '.range-block-counter input, .neo-range-input', function (e) {
-        if (!(e.target instanceof HTMLElement)) {
-            return;
-        }
-        e.target.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
-    });
-
-    $(document).on('keydown', '.range-block-counter input, .neo-range-input', function (e) {
-        const masterSelector = '#' + $(this).data('for');
-        const masterElement = $(masterSelector);
-        if (e.key === 'Enter') {
-            let manualInput = Number($(this).val());
-            if (isManualInput) {
-                //disallow manual inputs outside acceptable range
-                if (manualInput >= Number($(this).attr('min')) && manualInput <= Number($(this).attr('max'))) {
-                    //if value is ok, assign to slider and update handle text and position
-                    //newSlider.val(manualInput)
-                    //handleSlideEvent.call(newSlider, null, { value: parseFloat(manualInput) }, 'manual');
-                    valueBeforeManualInput = manualInput;
-                    $(masterElement).val($(this).val()).trigger('input', { forced: true });
-                } else {
-                    //if value not ok, warn and reset to last known valid value
-                    toastr.warning(`Invalid value. Must be between ${$(this).attr('min')} and ${$(this).attr('max')}`);
-                    //newSlider.val(valueBeforeManualInput)
-                    $(this).val(valueBeforeManualInput);
-                }
-            }
-        }
-    });
-
-    $(document).on('keyup', '.range-block-counter input, .neo-range-input', function () {
-        valueBeforeManualInput = $(this).val();
-        isManualInput = true;
-    });
-
-    //trigger slider changes when user clicks away
-    $(document).on('mouseup blur', '.range-block-counter input, .neo-range-input', function () {
-        const masterSelector = '#' + $(this).data('for');
-        const masterElement = $(masterSelector);
-        let manualInput = Number($(this).val());
-        if (isManualInput) {
-            //if value is between correct range for the slider
-            if (manualInput >= Number($(this).attr('min')) && manualInput <= Number($(this).attr('max'))) {
-                valueBeforeManualInput = manualInput;
-                //set the slider value to input value
-                $(masterElement).val($(this).val()).trigger('input', { forced: true });
-            } else {
-                //if value not ok, warn and reset to last known valid value
-                toastr.warning(`Invalid value. Must be between ${$(this).attr('min')} and ${$(this).attr('max')}`);
-                $(this).val(valueBeforeManualInput);
-            }
-        }
-        isManualInput = false;
-    });
-
-    $('.user_stats_button').on('click', function () {
-        userStatsHandler();
-    });
-
-    $(document).on('click', '.external_import_button, #external_import_button', async () => {
-        const html = await renderTemplateAsync('importCharacters');
-        const input = await callGenericPopup(html, POPUP_TYPE.INPUT, '', { allowVerticalScrolling: true, wider: true, okButton: $('#popup_template').attr('popup-button-import'), rows: 4 });
-
-        if (!input) {
-            console.debug('Custom content import cancelled');
-            return;
-        }
-
-        // break input into one input per line
-        const inputs = String(input).split('\n').map(x => x.trim()).filter(x => x.length > 0);
-
-        for (const url of inputs) {
-            await importFromExternalUrl(url);
-        }
-    });
-
-    charDragDropHandler = new DragAndDropHandler('body', async (files, event) => {
-        if (!files.length) {
-            await importFromURL(event.originalEvent.dataTransfer.items, files);
-        }
-        await processDroppedFiles(files);
-    }, { noAnimation: true });
-
-    chatDragDropHandler = new DragAndDropHandler('#select_chat_popup', async (_, event) => {
-        const importFile = document.getElementById('chat_import_file');
-        if (importFile instanceof HTMLInputElement) {
-            importFile.files = event.originalEvent.dataTransfer.files;
-            $(importFile).trigger('change');
-        }
-    });
-
-    $('#charListGridToggle').on('click', async () => {
-        doCharListDisplaySwitch();
-    });
-    updateCharListGridToggleLabel();
-
-    $('#hideCharPanelAvatarButton').on('click', () => {
-        $('#avatar-and-name-block').slideToggle();
-    });
-
-    // Compatibility fallback click path. React MainChatShowMoreOwnerPortal owns the
-    // primary load-more control when the message-list panel is mounted (capture phase).
-    $(document).on('click', '#show_more_messages', async function (event) {
-        event.stopPropagation();
-        event.preventDefault();
-        await loadEarlierChatMessages();
-    });
-
-    $(document).on('click', '.open_characters_library', async function () {
-        await getCharacters();
-        await eventSource.emit(event_types.OPEN_CHARACTER_LIBRARY);
-    });
-
-    // Show regenerate button for empty AI replies
-    eventSource.on(event_types.CHARACTER_MESSAGE_RENDERED, (messageId) => {
-        if (messageId !== chat.length - 1) return;
-        const message = chat[messageId];
-        if (!message || message.is_user || message.is_system) return;
-        const visibleText = (message.extra?.display_text ?? message.mes ?? '').trim();
-        if (isReactMainChatOwner()) {
-            setMainChatMessageUiState(messageId, {
-                emptyReplyRegenerateVisible: visibleText.length === 0,
-            });
-            return;
-        }
-        if (visibleText.length > 0) return;
-        const mesBlock = $(`.mes[mesid="${messageId}"] .mes_block`);
-        if (mesBlock.length === 0 || mesBlock.find('.empty_reply_regenerate').length > 0) return;
-        mesBlock.append(
-            $('<div>')
-                .addClass('empty_reply_regenerate')
-                .append($('<i>').addClass('fa-solid fa-arrow-rotate-right'))
-                .append($('<span>').attr('data-i18n', 'Regenerate').text(translate('Regenerate')))
-                .on('click', () => { $('#option_regenerate').trigger('click'); }),
-        );
-        void mountReactMainChatMessageListPanel();
-    });
-
-    eventSource.on(event_types.CHAT_CHANGED, () => {
-        void mountReactWorkspaceShellChromeHost();
-        void mountReactMainChatMessageListPanel();
-    });
-
-    eventSource.on(event_types.CHAT_LOADED, () => {
-        void mountReactWorkspaceShellChromeHost();
-        void mountReactMainChatMessageListPanel();
-    });
-
-    eventSource.on(event_types.MESSAGE_RECEIVED, () => {
-        void mountReactWorkspaceShellChromeHost();
-        void mountReactMainChatMessageListPanel();
-    });
-
-    eventSource.on(event_types.MORE_MESSAGES_LOADED, () => {
-        void mountReactWorkspaceShellChromeHost();
-        void mountReactMainChatMessageListPanel();
-    });
-
-    eventSource.on(event_types.USER_MESSAGE_RENDERED, () => {
-        void mountReactWorkspaceShellChromeHost();
-        void mountReactMainChatMessageListPanel();
-    });
-
-    // Added here to prevent execution before script.js is loaded and get rid of quirky timeouts
-    await bootstrapWorkspace();
-
-    window.addEventListener('beforeunload', (e) => {
-        if (isChatSaving || this_edit_mes_id >= 0) {
-            e.preventDefault();
-            e.returnValue = true;
-        }
-    });
+    await bindLegacyShellHandlers();
 });

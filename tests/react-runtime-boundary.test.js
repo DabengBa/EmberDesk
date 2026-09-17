@@ -118,7 +118,7 @@ describe('React runtime boundary', () => {
 
     test('does not let legacy retry delegation re-fire React-owned generation commands', () => {
         const scriptSource = fs.readFileSync(
-            path.join(repoRoot, 'public', 'script.js'),
+            path.join(repoRoot, 'public', 'scripts', 'dom-handlers.js'),
             'utf8',
         );
         const retryHandler = scriptSource.match(
