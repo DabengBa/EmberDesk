@@ -78,6 +78,7 @@ import { ApiConnectionsPanel } from './components/api/ApiConnectionsPanel';
 import { AiConfigPanel } from './components/ai-config/AiConfigPanel';
 import { CharacterPopup } from './components/character-popup/CharacterPopup';
 import { RightNavPanel } from './components/right-nav/RightNavPanel';
+import { SelectChatPopup } from './components/select-chat/SelectChatPopup';
 import * as stylex from '@stylexjs/stylex';
 import { authoringStyles, workspacePanelStyles, workspaceShellStyles } from './styles/workspace-panels.styles.js';
 import { Theme } from '@astryxdesign/core';
@@ -2155,4 +2156,12 @@ export function mountCharacterPopup(container: HTMLElement) {
  */
 export function mountRightNavPanel(container: HTMLElement) {
     mountSmallPanel(container, <RightNavPanel />);
+}
+
+/**
+ * Mounts the past-chats popup header/list shell into #select_chat_popup.
+ * #select_chat_div stays a dynamic container filled by script.js.
+ */
+export function mountSelectChatPopup(container: HTMLElement) {
+    mountSmallPanel(container, <SelectChatPopup />);
 }

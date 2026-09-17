@@ -4008,6 +4008,7 @@ async function bootstrapWorkspace() {
     await measureStartupStage('mountAiConfigPanel', () => mountAiConfigPanel());
     await measureStartupStage('mountCharacterPopup', () => mountCharacterPopup());
     await measureStartupStage('mountRightNavPanel', () => mountRightNavPanel());
+    await measureStartupStage('mountSelectChatPopup', () => mountSelectChatPopup());
     await measureStartupStage('initSecrets', () => initSecrets());
     await measureStartupStage('readSecretState', () => readSecretState());
     await measureStartupStage('initLocales', () => initLocales());
@@ -15586,6 +15587,35 @@ async function mountRightNavPanel() {
         panel.dataset.reactRightNavMounted = 'true';
     } catch (error) {
         console.error('Failed to mount right nav panel:', error);
+    }
+}
+
+/**
+ * Mounts the React-owned past-chats popup markup into #select_chat_popup.
+ * #shadow_select_chat_popup stays the display-toggled shell; the inner header
+ * buttons (chat_import_button/newChatFromManageScreenButton/select_chat_cross)
+ * are bound by the ready callback after startup stages complete.
+ */
+async function mountSelectChatPopup() {
+    const popup = document.getElementById('select_chat_popup');
+    if (!popup) {
+        console.warn('Select chat popup not found');
+        return;
+    }
+    if (popup.dataset.reactSelectChatMounted === 'true') {
+        return;
+    }
+
+    const host = document.createElement('div');
+    host.id = 'emberdesk-react-select-chat-host';
+    popup.replaceChildren(host);
+
+    try {
+        const module = await loadWorkspacePanelsModule();
+        module.mountSelectChatPopup(host);
+        popup.dataset.reactSelectChatMounted = 'true';
+    } catch (error) {
+        console.error('Failed to mount select chat popup:', error);
     }
 }
 
