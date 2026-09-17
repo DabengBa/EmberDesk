@@ -337,6 +337,22 @@ import { registerMessageShellContext } from './scripts/message-shell-context.js'
 import { registerDomHandlersShellContext } from './scripts/dom-handlers-shell-context.js';
 export { swipe };
 export {
+    clearChat,
+    closeCurrentChatForDelete,
+    deleteCharacterChatByName,
+    displayChats,
+    getChat,
+    getPastCharacterChats,
+    loadEarlierChatMessages,
+    openCharacterChat,
+    printMessages,
+    renameCharacterChat,
+    renamePastChats,
+    saveChat,
+    saveChatConditional,
+    saveChatDebounced,
+};
+export {
     createOrEditCharacter,
     deleteCharacter,
     renameCharacter,
@@ -376,6 +392,23 @@ export {
 };
 import { registerGenerationShellContext } from './scripts/generation-shell-context.js';
 import { registerCharacterLifecycleShellContext } from './scripts/character-lifecycle-shell-context.js';
+import {
+    clearChat,
+    closeCurrentChatForDelete,
+    deleteCharacterChatByName,
+    displayChats,
+    getChat,
+    getPastCharacterChats,
+    loadEarlierChatMessages,
+    openCharacterChat,
+    printMessages,
+    renameCharacterChat,
+    renamePastChats,
+    saveChat,
+    saveChatConditional,
+    saveChatDebounced,
+} from './scripts/chat-ops-service.js';
+import { registerChatOpsShellContext } from './scripts/chat-ops-shell-context.js';
 import { removeCharactersFromState } from './scripts/character-list-state.js';
 import {
     CHARACTER_LIST_PAGE_SIZE_OPTIONS,
@@ -393,7 +426,6 @@ import {
     projectCharacterLibraryQueryAgainstDeletedAvatars,
 } from './scripts/character-library-query-helpers.js';
 import { ensureReactPanelStylesheet, mountReactWorkspaceShellChrome, mountReactSettingsOverlay, unmountReactSettingsOverlay, loadWorkspacePanelsModule } from './scripts/workspace-panels-react-bridge.js';
-import { runDeleteCharacterClosePreflight } from './scripts/delete-character-preflight.js';
 import { getRequestHeaders, installAjaxCsrfPrefilter, loadCsrfToken } from './scripts/request-context.js';
 import { installPublicBrowserApi } from './scripts/public-api.js';
 import { createReactRuntimeProvider } from './scripts/react-runtime-provider.js';
@@ -689,6 +721,83 @@ registerGenerationShellContext({
     canOpenSwipePickerForMessage: (...args) => canOpenSwipePickerForMessage(...args),
     canJumpToSwipeForMessage: (...args) => canJumpToSwipeForMessage(...args),
 });
+registerChatOpsShellContext({
+    state: {
+        set chat_metadata(value) { chat_metadata = value; },
+        set extension_prompts(value) { extension_prompts = value; },
+        set selected_button(value) { selected_button = value; },
+        set this_edit_mes_id(value) { this_edit_mes_id = value; },
+        get characters() { return characters; },
+        get chat() { return chat; },
+        get chatElement() { return chatElement; },
+        get chat_metadata() { return chat_metadata; },
+        get extension_prompts() { return extension_prompts; },
+        get is_delete_mode() { return is_delete_mode; },
+        get is_send_press() { return is_send_press; },
+        get mainChatMessageUiState() { return mainChatMessageUiState; },
+        get mainChatVisibleStartIndices() { return mainChatVisibleStartIndices; },
+        get name2() { return name2; },
+        get neutralCharacterName() { return neutralCharacterName; },
+        get selected_button() { return selected_button; },
+        get this_chid() { return this_chid; },
+        get this_edit_mes_id() { return this_edit_mes_id; },
+        get DEFAULT_SAVE_EDIT_TIMEOUT() { return DEFAULT_SAVE_EDIT_TIMEOUT; },
+        get power_user() { return power_user; },
+        get itemizedPrompts() { return itemizedPrompts; },
+        get loader() { return loader; },
+        get system_message_types() { return system_message_types; },
+        get chatSaveTimeout() { return chatSaveTimeout; },
+        set chatSaveTimeout(value) { chatSaveTimeout = value; },
+        get isChatSaving() { return isChatSaving; },
+        set isChatSaving(value) { isChatSaving = value; },
+        get mainChatMessageRenderGeneration() { return mainChatMessageRenderGeneration; },
+        set mainChatMessageRenderGeneration(value) { mainChatMessageRenderGeneration = value; },
+        get reactMainChatProjectionCleared() { return reactMainChatProjectionCleared; },
+        set reactMainChatProjectionCleared(value) { reactMainChatProjectionCleared = value; },
+    },
+    applyStylePins: (...args) => applyStylePins(...args),
+    callGenericPopup: (...args) => callGenericPopup(...args),
+    cancelDebouncedChatSave: (...args) => cancelDebouncedChatSave(...args),
+    cancelDebouncedMetadataSave: (...args) => cancelDebouncedMetadataSave(...args),
+    clamp: (...args) => clamp(...args),
+    closeMessageEditor: (...args) => closeMessageEditor(...args),
+    compressRequest: (...args) => compressRequest(...args),
+    consumeMainChatMessageListScrollRestore: (...args) => consumeMainChatMessageListScrollRestore(...args),
+    delay: (...args) => delay(...args),
+    deleteMainChatMessageListScrollSnapshot: (...args) => deleteMainChatMessageListScrollSnapshot(...args),
+    equalsIgnoreCaseAndAccents: (...args) => equalsIgnoreCaseAndAccents(...args),
+    flashHighlight: (...args) => flashHighlight(...args),
+    getChatResult: (...args) => getChatResult(...args),
+    getCurrentChatId: (...args) => getCurrentChatId(...args),
+    getLastMessageId: (...args) => getLastMessageId(...args),
+    getMainChatReactVisibleWindow: (...args) => getMainChatReactVisibleWindow(...args),
+    hasMainChatMessageListScrollRestore: (...args) => hasMainChatMessageListScrollRestore(...args),
+    humanizedDateTime: (...args) => humanizedDateTime(...args),
+    isElementInViewport: (...args) => isElementInViewport(...args),
+    isReactMainChatOwner: (...args) => isReactMainChatOwner(...args),
+    mountReactMainChatMessageListPanel: (...args) => mountReactMainChatMessageListPanel(...args),
+    persistMainChatMessageListScrollSnapshotBeforeClear: (...args) => persistMainChatMessageListScrollSnapshotBeforeClear(...args),
+    queueMainChatMessageListScrollRestore: (...args) => queueMainChatMessageListScrollRestore(...args),
+    redisplayChat: (...args) => redisplayChat(...args),
+    saveItemizedPrompts: (...args) => saveItemizedPrompts(...args),
+    saveTokenCache: (...args) => saveTokenCache(...args),
+    scrollOnMediaLoad: (...args) => scrollOnMediaLoad(...args),
+    select_rm_characters: (...args) => select_rm_characters(...args),
+    setActiveCharacter: (...args) => setActiveCharacter(...args),
+    setCharacterId: (...args) => setCharacterId(...args),
+    setCharacterName: (...args) => setCharacterName(...args),
+    sortMoments: (...args) => sortMoments(...args),
+    suppressNextChatChangedWelcomeScreen: (...args) => suppressNextChatChangedWelcomeScreen(...args),
+    t: (...args) => t(...args),
+    timestampToMoment: (...args) => timestampToMoment(...args),
+    unshallowCharacter: (...args) => unshallowCharacter(...args),
+    updateRemoteChatName: (...args) => updateRemoteChatName(...args),
+    uuidv4: (...args) => uuidv4(...args),
+    waitUntilCondition: (...args) => waitUntilCondition(...args),
+    get Popup() { return Popup; },
+    get POPUP_TYPE() { return POPUP_TYPE; },
+});
+
 registerCharacterLifecycleShellContext({
     state: {
         get world_info() { return world_info; },
@@ -5335,51 +5444,6 @@ async function delChat(chatfile) {
     }
 }
 
-/**
- * Deletes a character chat by its name.
- * @param {string} characterId Character ID to delete chat for
- * @param {string} fileName Name of the chat file to delete (without .jsonl extension)
- * @returns {Promise<void>} A promise that resolves when the chat is deleted.
- */
-export async function deleteCharacterChatByName(characterId, fileName) {
-    // Make sure all the data is loaded.
-    await unshallowCharacter(characterId);
-
-    /** @type {Character} */
-    const character = characters[characterId];
-    if (!character) {
-        console.warn(`Character with ID ${characterId} not found.`);
-        return;
-    }
-
-    const response = await fetch('/api/chats/delete', {
-        method: 'POST',
-        headers: getRequestHeaders(),
-        body: JSON.stringify({
-            chatfile: `${fileName}.jsonl`,
-            avatar_url: character.avatar,
-        }),
-    });
-
-    if (!response.ok) {
-        console.error('Failed to delete chat for character.');
-        return;
-    }
-
-    if (fileName === character.chat) {
-        const chatsResponse = await fetch('/api/characters/chats', {
-            method: 'POST',
-            headers: getRequestHeaders(),
-            body: JSON.stringify({ avatar_url: character.avatar }),
-        });
-        const chats = Object.values(await chatsResponse.json());
-        chats.sort((a, b) => sortMoments(timestampToMoment(a.last_mes), timestampToMoment(b.last_mes)));
-        const newChatName = chats.length && typeof chats[0] === 'object' ? chats[0].file_name.replace('.jsonl', '') : `${character.name} - ${humanizedDateTime()}`;
-        await updateRemoteChatName(characterId, newChatName);
-    }
-
-    await eventSource.emit(event_types.CHAT_DELETED, fileName);
-}
 
 export async function replaceCurrentChat() {
     await clearChat({ clearData: true });
@@ -5410,81 +5474,6 @@ export async function replaceCurrentChat() {
     }
 }
 
-/**
- * React-owned long-chat load-earlier command.
- * Expands the immutable projection window; React renders the resulting rows.
- * @param {number|null} [messagesToLoad=null]
- * @returns {Promise<void>}
- */
-export async function loadEarlierChatMessages(messagesToLoad = null) {
-    if (isReactMainChatOwner()) {
-        const visibleWindow = getMainChatReactVisibleWindow(reactMainChatProjectionCleared ? [] : chat);
-        const configuredCount = Number(power_user?.chat_truncation);
-        const count = Number.isInteger(messagesToLoad) && messagesToLoad > 0
-            ? messagesToLoad
-            : Number.isInteger(configuredCount) && configuredCount > 0
-                ? configuredCount
-                : chat.length;
-        mainChatVisibleStartIndices.set(getCurrentChatId(), Math.max(
-            0,
-            (visibleWindow.visibleMessageIds.length > 0
-                ? Number(visibleWindow.visibleMessageIds[0])
-                : chat.length) - count,
-        ));
-        await eventSource.emit(event_types.MORE_MESSAGES_LOADED);
-        void mountReactMainChatMessageListPanel();
-        return;
-    }
-
-    const firstDisplayedMesId = chatElement.children('.mes').first().attr('mesid');
-    const firstDisplayedMessage = chatElement.children('.mes').first();
-    let messageId = Number(firstDisplayedMesId);
-    let count = messagesToLoad || power_user.chat_truncation || Number.MAX_SAFE_INTEGER;
-
-    // If there are no messages displayed, or the message somehow has no mesid, we default to one higher than last message id,
-    // so the first "new" message being shown will be the last available message
-    if (isNaN(messageId)) {
-        messageId = getLastMessageId() + 1;
-    }
-
-    console.debug('Inserting messages before', messageId, 'count', count, 'chat length', chat.length);
-    const prevHeight = chatElement.prop('scrollHeight');
-    const showMoreButton = $('#show_more_messages');
-    const isButtonInView = isElementInViewport(showMoreButton[0]);
-
-    const firstId = clamp(messageId - count, 0, Infinity);
-    const messageElements = [];
-    chat.slice(firstId, messageId).forEach((message, id) => {
-        messageElements.push(updateMessageElement(message, { messageId: firstId + id }));
-    });
-    const messageNodes = messageElements
-        .map(messageElement => messageElement?.[0] instanceof HTMLElement ? messageElement[0] : null)
-        .filter(Boolean);
-
-    // Insert older rows ahead of the current first message so load-more keeps
-    // chronological DOM order and scroll compensation remains stable.
-    if (firstDisplayedMessage[0] instanceof HTMLElement && messageNodes.length > 0) {
-        firstDisplayedMessage[0].before(...messageNodes);
-    } else if (showMoreButton[0]) {
-        showMoreButton[0].after(...messageNodes);
-    } else {
-        chatElement.prepend(messageNodes);
-    }
-    refreshSwipeButtons();
-
-    if (firstId === 0) {
-        showMoreButton.remove();
-    }
-
-    if (isButtonInView) {
-        const newHeight = chatElement.prop('scrollHeight');
-        chatElement.scrollTop(newHeight - prevHeight);
-    }
-
-    applyStylePins();
-    await eventSource.emit(event_types.MORE_MESSAGES_LOADED);
-    void mountReactMainChatMessageListPanel();
-}
 
 /**
  * Compatibility alias for callers that still name load-earlier as showMoreMessages.
@@ -5779,35 +5768,6 @@ function showGenerationFailureRecovery(messageId, isRecovering = false) {
     void mountReactMainChatMessageListPanel();
 }
 
-export async function printMessages() {
-    mainChatMessageUiState.clear();
-    if (isReactMainChatOwner()) {
-        reactMainChatProjectionCleared = false;
-        const shouldRestore = hasMainChatMessageListScrollRestore();
-        void mountReactMainChatMessageListPanel();
-        if (!shouldRestore) {
-            scrollChatToBottom({ waitForFrame: true });
-        }
-        return;
-    }
-
-    let startIndex = 0;
-    let count = power_user.chat_truncation || Number.MAX_SAFE_INTEGER;
-
-    if (chat.length > count) {
-        startIndex = chat.length - count;
-        chatElement.append('<div id="show_more_messages">Show more messages</div>');
-    }
-
-    await redisplayChat({ startIndex, fade: false });
-    const renderGeneration = ++mainChatMessageRenderGeneration;
-
-    if (!consumeMainChatMessageListScrollRestore()) {
-        scrollChatToBottom({ waitForFrame: true });
-        delay(debounce_timeout.short).then(() => scrollOnMediaLoad(renderGeneration));
-    }
-}
-
 /**
  * Visually updates all chat messages including and after index by removing them, then adding them.
  * @param {object} [options] Options
@@ -5909,42 +5869,6 @@ export function cancelDebouncedChatSave() {
     }
 }
 
-/**
- * Visually removes all chat message elements.
- * @param {object} [options] Options
- * @param {boolean} [options.clearData=false] Optionally clear the chat array's contents.
- */
-export async function clearChat({ clearData = false, preserveMainChatScrollSnapshot = true } = {}) {
-    cancelDebouncedChatSave();
-    cancelDebouncedMetadataSave();
-    closeMessageEditor();
-    if (preserveMainChatScrollSnapshot) {
-        persistMainChatMessageListScrollSnapshotBeforeClear();
-    }
-    extension_prompts = {};
-    if (is_delete_mode) {
-        $('#dialogue_del_mes_cancel').trigger('click');
-    }
-    // React owns #chat after the main-chat cutover; changing the store projection
-    // is enough to clear rows and avoids a second DOM writer.
-    if (!isReactMainChatOwner()) {
-        // This also removes non '.mes' elements, e.g. '#show_more_messages'.
-        chatElement.children().remove();
-    }
-    if ($('.zoomed_avatar[forChar]').length) {
-        console.debug('saw avatars to remove');
-        $('.zoomed_avatar[forChar]').remove();
-    } else { console.debug('saw no avatars'); }
-
-    await saveItemizedPrompts(getCurrentChatId());
-    itemizedPrompts.length = 0;
-
-    if (clearData) chat.length = 0;
-    if (isReactMainChatOwner()) {
-        reactMainChatProjectionCleared = true;
-        void mountReactMainChatMessageListPanel();
-    }
-}
 
 export async function deleteLastMessage() {
     const deletedMessageId = chat.length - 1;
@@ -7990,172 +7914,6 @@ export function setSendButtonState(value) {
 }
 
 
-async function renamePastChats(oldAvatar, newAvatar, newName) {
-    const pastChats = await getPastCharacterChats();
-
-    for (const { file_name } of pastChats) {
-        try {
-            const fileNameWithoutExtension = file_name.replace('.jsonl', '');
-            const getChatResponse = await fetch('/api/chats/get', {
-                method: 'POST',
-                headers: getRequestHeaders(),
-                body: JSON.stringify({
-                    ch_name: newName,
-                    file_name: fileNameWithoutExtension,
-                    avatar_url: newAvatar,
-                }),
-                cache: 'no-cache',
-            });
-
-            if (getChatResponse.ok) {
-                const currentChat = await getChatResponse.json();
-
-                for (const message of currentChat) {
-                    if (message.is_user || message.is_system || message.extra?.type == system_message_types.NARRATOR) {
-                        continue;
-                    }
-
-                    if (message.name !== undefined) {
-                        message.name = newName;
-                    }
-                }
-
-                await eventSource.emit(event_types.CHARACTER_RENAMED_IN_PAST_CHAT, currentChat, oldAvatar, newAvatar);
-
-                const saveChatRequest = await compressRequest({
-                    method: 'POST',
-                    headers: getRequestHeaders(),
-                    body: JSON.stringify({
-                        ch_name: newName,
-                        file_name: fileNameWithoutExtension,
-                        chat: currentChat,
-                        avatar_url: newAvatar,
-                    }),
-                    cache: 'no-cache',
-                });
-                const saveChatResponse = await fetch('/api/chats/save', saveChatRequest);
-
-                if (!saveChatResponse.ok) {
-                    throw new Error('Could not save chat');
-                }
-            }
-        } catch (error) {
-            toastr.error(t`Past chat could not be updated: ${file_name}`);
-            console.error(error);
-        }
-    }
-}
-
-export function saveChatDebounced() {
-    const chid = this_chid;
-
-    cancelDebouncedChatSave();
-
-    chatSaveTimeout = setTimeout(async () => {
-        if (chid !== this_chid) {
-            console.warn('Chat save timeout triggered, but chid changed. Aborting.');
-            return;
-        }
-
-        console.debug('Chat save timeout triggered');
-        await saveChatConditional();
-        console.debug('Chat saved');
-    }, DEFAULT_SAVE_EDIT_TIMEOUT);
-}
-
-/**
- * Saves the chat to the server.
- * @param {object} [options] - Additional options.
- * @param {string} [options.chatName] The name of the chat file to save to
- * @param {object} [options.withMetadata] Additional metadata to save with the chat
- * @param {number} [options.mesId] The message ID to save the chat up to
- * @param {boolean} [options.force] Force the saving despite the integrity check result
- * @param {ChatMessage[]} [options.chatData] Chat snapshot to save instead of the current in-memory chat
- *
- * @returns {Promise<void>}
- */
-export async function saveChat({ chatName, withMetadata, mesId, force = false, chatData = undefined } = {}) {
-    if (arguments.length > 0 && typeof arguments[0] !== 'object') {
-        console.trace('saveChat called with positional arguments. Please use an object instead.');
-        [chatName, withMetadata, mesId, force] = arguments;
-    }
-
-    const metadata = { ...chat_metadata, ...(withMetadata || {}) };
-    const fileName = chatName ?? characters[this_chid]?.chat;
-
-    if (!fileName && name2 === neutralCharacterName) {
-        // TODO: Do something for a temporary chat with no character.
-        return;
-    }
-
-    if (!fileName) {
-        console.warn('saveChat called without chat_name and no chat file found');
-        return;
-    }
-
-    characters[this_chid].date_last_chat = Date.now();
-
-    const trimmedChat = Array.isArray(chatData)
-        ? chatData
-        : (mesId !== undefined && mesId >= 0 && mesId < chat.length)
-            ? chat.slice(0, Number(mesId) + 1)
-            : chat.slice();
-
-    /** @type {ChatHeader} */
-    const chatHeader = {
-        chat_metadata: metadata,
-        user_name: 'unused',
-        character_name: 'unused',
-    };
-
-    try {
-        const saveChatRequest = await compressRequest({
-            method: 'POST',
-            cache: 'no-cache',
-            headers: getRequestHeaders(),
-            body: JSON.stringify({
-                ch_name: characters[this_chid].name,
-                file_name: fileName,
-                chat: [chatHeader, ...trimmedChat],
-                avatar_url: characters[this_chid].avatar,
-                force: force,
-            }),
-        });
-        const result = await fetch('/api/chats/save', saveChatRequest);
-
-        if (result.ok) {
-            return;
-        }
-
-        const errorData = await result.json();
-        const isIntegrityError = errorData?.error === 'integrity' && !force;
-        if (!isIntegrityError) {
-            throw new Error(result.statusText);
-        }
-
-        const popupResult = await Popup.show.input(
-            t`ERROR: Chat integrity check failed while saving the file.`,
-            t`<p>After you click OK, the page will be reloaded to prevent data corruption.</p>
-              <p>To confirm an overwrite (and potentially <b>LOSE YOUR DATA</b>), enter <code>OVERWRITE</code> (in all caps) in the box below before clicking OK.</p>`,
-            '',
-            { okButton: 'OK', cancelButton: false },
-        );
-
-        const forceSaveConfirmed = popupResult === 'OVERWRITE';
-
-        if (!forceSaveConfirmed) {
-            console.warn('Chat integrity check failed, and user did not confirm the overwrite. Reloading the page.');
-            window.location.reload();
-            return;
-        }
-
-        await saveChat({ chatName, withMetadata, mesId, force: true });
-    } catch (error) {
-        console.error(error);
-        toastr.error(t`Check the server connection and reload the page to prevent data loss.`, t`Chat could not be saved`);
-    }
-}
-
 /**
  * Processes the avatar image from the input element, allowing the user to crop it if necessary.
  * @param {HTMLInputElement} input - The input element containing the avatar file.
@@ -8298,58 +8056,6 @@ export async function unshallowCharacter(characterId) {
     await getOneCharacter(avatar);
 }
 
-export async function getChat() {
-    try {
-        await unshallowCharacter(this_chid);
-
-        const response = await fetch('/api/chats/get', {
-            method: 'POST',
-            headers: getRequestHeaders(),
-            cache: 'no-cache',
-            body: JSON.stringify({
-                ch_name: characters[this_chid].name,
-                file_name: characters[this_chid].chat,
-                avatar_url: characters[this_chid].avatar,
-            }),
-        });
-
-        if (!response.ok) {
-            throw new Error('Chat could not be loaded');
-        }
-
-        const data = await response.json();
-        if (Array.isArray(data) && data.length > 0) {
-            /** @type {ChatHeader} */
-            const chatHeader = data.shift();
-            chat_metadata = chatHeader?.chat_metadata ?? {};
-            chat.splice(0, chat.length, ...data);
-            chat.forEach(ensureMessageMediaIsArray);
-        } else {
-            // An empty/corrupted chat file
-            chat.splice(0, chat.length);
-            chat_metadata = {};
-        }
-        reactMainChatProjectionCleared = false;
-        if (!chat_metadata.integrity) {
-            chat_metadata.integrity = uuidv4();
-        }
-        queueMainChatMessageListScrollRestore(characters[this_chid].chat);
-        await getChatResult();
-        eventSource.emit(event_types.CHAT_LOADED, { detail: { id: this_chid, character: characters[this_chid] } });
-
-        // Focus on the textarea if not already focused on a visible text input
-        delay(debounce_timeout.short).then(() => {
-            if ($(document.activeElement).is('input:visible, textarea:visible')) {
-                return;
-            }
-            $('#send_textarea').trigger('click').trigger('focus');
-        });
-    } catch (error) {
-        await getChatResult();
-        console.log(error);
-    }
-}
-
 async function getChatResult() {
     name2 = characters[this_chid].name;
     let freshChat = false;
@@ -8408,23 +8114,6 @@ function getFirstMessage() {
     }
 
     return message;
-}
-
-export async function openCharacterChat(file_name) {
-    await waitUntilCondition(() => !isChatSaving, debounce_timeout.extended, 10);
-    const currentChatId = getCurrentChatId();
-    const isReopeningCurrentChat = typeof currentChatId === 'string' && currentChatId === file_name;
-    if (isReopeningCurrentChat) {
-        deleteMainChatMessageListScrollSnapshot(file_name);
-        mainChatVisibleStartIndices.delete(file_name);
-    }
-
-    await clearChat({ clearData: true, preserveMainChatScrollSnapshot: !isReopeningCurrentChat });
-    characters[this_chid].chat = file_name;
-    chat_metadata = {};
-    await getChat();
-    $('#selected_chat_pole').val(file_name);
-    await createOrEditCharacter(new CustomEvent('newChat'));
 }
 
 ////////// OPTIMZED MAIN API CHANGE FUNCTION ////////////
@@ -9461,39 +9150,6 @@ export async function getChatsFromFiles(data, isGroupChat) {
     return chatDict;
 }
 
-/**
- * Fetches the metadata of all past chats related to a specific character based on its avatar URL.
- * The function sends a POST request to the server to retrieve all chats for the character. It then
- * processes the received data, sorts it by the file name, and returns the sorted data.
- *
- * @param {null|number} [characterId=null] - When set, the function will use this character id instead of this_chid.
- *
- * @returns {Promise<Array>} - An array containing metadata of all past chats of the character, sorted
- * in descending order by file name. Returns an empty array if the fetch request is unsuccessful or the
- * response is an object with an `error` property set to `true`.
- */
-export async function getPastCharacterChats(characterId = null) {
-    characterId = characterId ?? parseInt(this_chid);
-    if (!characters[characterId]) return [];
-
-    const response = await fetch('/api/characters/chats', {
-        method: 'POST',
-        body: JSON.stringify({ avatar_url: characters[characterId].avatar }),
-        headers: getRequestHeaders(),
-    });
-
-    if (!response.ok) {
-        return [];
-    }
-
-    const data = await response.json();
-    if (typeof data === 'object' && data.error === true) {
-        return [];
-    }
-
-    const chats = Object.values(data);
-    return chats.sort((a, b) => a.file_name.localeCompare(b.file_name)).reverse();
-}
 
 /**
  * Helper for `displayPastChats`, to make the same info consistently available for other functions
@@ -9538,77 +9194,6 @@ export async function displayPastChats(hightlightNames = []) {
     }, 200);
 
     addChatBackupsBrowser();
-}
-
-async function displayChats(searchQuery, currentChat, displayName, avatarImg, highlightNames) {
-    try {
-        const response = await fetch('/api/chats/search', {
-            method: 'POST',
-            headers: getRequestHeaders(),
-            body: JSON.stringify({
-                query: searchQuery,
-                avatar_url: characters[this_chid].avatar,
-            }),
-        });
-
-        if (!response.ok) {
-            throw new Error('Search failed');
-        }
-
-        const filteredData = await response.json();
-        $('#select_chat_div').empty();
-
-        filteredData.sort((a, b) => sortMoments(timestampToMoment(a.last_mes), timestampToMoment(b.last_mes)));
-
-        if (filteredData.length === 0) {
-            const emptyState = $('<div>', {
-                id: 'select_chat_empty',
-                class: 'select_chat_empty',
-                role: 'status',
-            }).append($('<div>').text(searchQuery ? t`No chats match your search.` : t`No saved chats yet.`));
-
-            if (searchQuery) {
-                $('<button>', {
-                    type: 'button',
-                    class: 'menu_button',
-                    text: t`Clear search`,
-                }).on('click', () => {
-                    $('#select_chat_search').val('').trigger('input').trigger('focus');
-                }).appendTo(emptyState);
-            }
-
-            $('#select_chat_div').append(emptyState);
-            return;
-        }
-
-        for (const chat of filteredData) {
-            const isSelected = currentChat === chat.file_name;
-            const template = $('#past_chat_template .select_chat_block_wrapper').clone();
-            template.find('.select_chat_block').attr('file_name', chat.file_name);
-            template.find('.avatar img').attr('src', avatarImg);
-            template.find('.select_chat_block_filename').text(chat.file_name);
-            template.find('.chat_file_size').text(`(${chat.file_size},`);
-            template.find('.chat_messages_num').text(`${chat.message_count} 💬)`);
-            template.find('.select_chat_block_mes').text(chat.preview_message);
-            template.find('.PastChat_cross').attr('file_name', chat.file_name);
-            template.find('.chat_messages_date').text(timestampToMoment(chat.last_mes).format('lll'));
-
-            if (isSelected) {
-                template.find('.select_chat_block').attr('highlight', String(true));
-            }
-
-            $('#select_chat_div').append(template);
-
-            if (Array.isArray(highlightNames) && highlightNames.includes(chat.file_name)) {
-                const templateOffset = template.offset().top - template.parent().offset().top;
-                $('#select_chat_div').scrollTop(templateOffset);
-                flashHighlight(template, debounce_timeout.extended);
-            }
-        }
-    } catch (error) {
-        console.error('Error loading chats:', error);
-        toastr.error('Could not load chat data. Try reloading the page.');
-    }
 }
 
 export function selectRightMenuWithAnimation(selectedMenuId) {
@@ -9977,31 +9562,6 @@ export function callPopup(text, type, inputValue = '', { okButton, rows, wide, w
 
 export async function saveMetadata() {
     return await saveChatConditional();
-}
-
-export async function saveChatConditional() {
-    try {
-        await waitUntilCondition(() => !isChatSaving, DEFAULT_SAVE_EDIT_TIMEOUT, 100);
-    } catch {
-        console.warn('Timeout waiting for chat to save');
-        return;
-    }
-
-    try {
-        cancelDebouncedChatSave();
-
-        isChatSaving = true;
-
-        await saveChat();
-
-        // Save token and prompts cache to IndexedDB storage
-        saveTokenCache();
-        saveItemizedPrompts(getCurrentChatId());
-    } catch (error) {
-        console.error('Error saving chat', error);
-    } finally {
-        isChatSaving = false;
-    }
 }
 
 /**
@@ -10472,79 +10032,6 @@ export async function doNewChat({ deleteCurrentChat = false } = {}) {
     if (deleteCurrentChat) await delChat(chat_file_for_del + '.jsonl');
 }
 
-/**
- * Renames a character chat.
- * @param {object} param Parameters for renaming chat
- * @param {string} [param.characterId] Character ID to rename chat for
- * @param {string} param.oldFileName Old name of the chat (no JSONL extension)
- * @param {string} param.newFileName New name for the chat (no JSONL extension)
- * @param {boolean} [param.loader=true] Whether to show loader during the operation
- */
-export async function renameCharacterChat({ characterId, oldFileName, newFileName, loader: showLoader }) {
-    const currentChatId = getCurrentChatId();
-    const body = {
-        is_group: false,
-        avatar_url: characters[characterId]?.avatar,
-        original_file: `${oldFileName}.jsonl`,
-        renamed_file: `${newFileName.trim()}.jsonl`,
-    };
-
-    if (body.original_file === body.renamed_file) {
-        console.debug('Chat rename cancelled, old and new names are the same');
-        return;
-    }
-    if (equalsIgnoreCaseAndAccents(body.original_file, body.renamed_file)) {
-        toastr.warning(t`Name not accepted, as it is the same as before (ignoring case and accents).`, t`Rename Chat`);
-        return;
-    }
-
-    const loaderHandle = showLoader ? loader.show({
-        slug: 'chat-rename',
-        title: t`Rename Chat`,
-        message: t`Renaming chat…`,
-        toastMode: loader.ToastMode.STATIC,
-    }) : null;
-
-    try {
-        const response = await fetch('/api/chats/rename', {
-            method: 'POST',
-            body: JSON.stringify(body),
-            headers: getRequestHeaders(),
-        });
-
-        if (!response.ok) {
-            throw new Error('Unsuccessful request.');
-        }
-
-        const data = await response.json();
-
-        if (data.error) {
-            throw new Error('Server returned an error.');
-        }
-
-        if (data.sanitizedFileName) {
-            newFileName = data.sanitizedFileName;
-        }
-
-        if (characterId !== undefined && String(characterId) === String(this_chid) && characters[characterId]?.chat === oldFileName) {
-            characters[characterId].chat = newFileName;
-            $('#selected_chat_pole').val(characters[characterId].chat);
-            await createOrEditCharacter();
-        }
-
-        if (currentChatId) {
-            await reloadCurrentChat();
-        }
-
-        const eventData = { avatarId: body.avatar_url, oldFileName: body.original_file, newFileName: body.renamed_file };
-        await eventSource.emit(event_types.CHAT_RENAMED, eventData);
-    } catch {
-        await delay(500);
-        await callGenericPopup('An error has occurred. Chat was not renamed.', POPUP_TYPE.TEXT);
-    } finally {
-        await loaderHandle?.hide();
-    }
-}
 
 /**
  * Renames the currently selected chat.
@@ -10583,39 +10070,6 @@ export async function closeCurrentChat() {
         toastr.info(t`Please stop the message generation first.`);
         return false;
     }
-}
-
-async function closeCurrentChatForDelete() {
-    return await runDeleteCharacterClosePreflight({
-        isGenerationInProgress: () => is_send_press !== false,
-        onGenerationBlocked: () => {
-            toastr.info(t`Please stop the message generation first.`);
-        },
-        waitForPendingChatSave: async () => {
-            await waitUntilCondition(() => !isChatSaving, debounce_timeout.extended, 10);
-        },
-        clearCurrentChat: async () => {
-            await clearChat({ clearData: true });
-        },
-        resetSelectionState: () => {
-            setCharacterId(undefined);
-            setCharacterName('');
-            setActiveCharacter(null);
-            this_edit_mes_id = undefined;
-            chat_metadata = {};
-            selected_button = 'characters';
-        },
-        selectCharactersView: () => {
-            $('#rm_button_selected_ch').children('h2').text('');
-            select_rm_characters();
-        },
-        suppressWelcomeScreen: () => {
-            suppressNextChatChangedWelcomeScreen();
-        },
-        emitChatChanged: async () => {
-            await eventSource.emit(event_types.CHAT_CHANGED, getCurrentChatId());
-        },
-    });
 }
 
 /**

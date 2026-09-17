@@ -1045,13 +1045,14 @@ test('renders an Extensions Host workflow through React-owned controls and expli
 
     test('expands only the React window when loading earlier messages', () => {
         const scriptSource = read('public/script.js');
-        const loadEarlierBlock = scriptSource.match(
+        const chatOpsSource = read('public/scripts/chat-ops-service.js');
+        const loadEarlierBlock = chatOpsSource.match(
             /export async function loadEarlierChatMessages\([\s\S]*?if \(isReactMainChatOwner\(\)\) \{[\s\S]*?void mountReactMainChatMessageListPanel\(\);\n        return;\n    \}/,
         )?.[0] ?? '';
 
         expect(scriptSource).toContain('function getMainChatReactVisibleWindow(projectedChat)');
         expect(scriptSource).toContain('const mainChatVisibleStartIndices = new Map();');
-        expect(loadEarlierBlock).toContain('mainChatVisibleStartIndices.set(getCurrentChatId(), Math.max(');
+        expect(loadEarlierBlock).toContain('state.mainChatVisibleStartIndices.set(getCurrentChatId(), Math.max(');
         expect(loadEarlierBlock).toContain('await eventSource.emit(event_types.MORE_MESSAGES_LOADED);');
         expect(loadEarlierBlock).not.toContain('updateMessageElement(');
         expect(loadEarlierBlock).not.toContain('messageNodes');

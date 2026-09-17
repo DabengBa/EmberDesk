@@ -98,7 +98,7 @@ describe('React runtime boundary', () => {
         );
 
         const recoveryBlock = scriptSource.match(
-            /function clearGenerationAutoRecoveryStatus[\s\S]*?export async function printMessages/,
+            /function clearGenerationAutoRecoveryStatus[\s\S]*?export async function redisplayChat/,
         )?.[0] ?? '';
         expect(recoveryBlock).toContain('setMainChatMessageUiState');
         expect(recoveryBlock.indexOf('return;')).toBeLessThan(recoveryBlock.indexOf('const messageElement'));
