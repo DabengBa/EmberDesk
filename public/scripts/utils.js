@@ -17,6 +17,8 @@ import { SlashCommandClosure } from './slash-commands/SlashCommandClosure.js';
 import { getTagsList } from './tags.js';
 import { getCurrentLocale, t, translate } from './i18n.js';
 import { importWorldInfo } from './world-info.js';
+import { getOptionId } from './util/primitives.js';
+export { getStringHash, setValueByPath, getOptionId as getSelect2OptionId } from './util/primitives.js';
 
 export const shiftUpByOne = (e, i, a) => a[i] = e + 1;
 export const shiftDownByOne = (e, i, a) => a[i] = e - 1;
@@ -525,24 +527,6 @@ export async function parseJsonFile(file) {
  * @param {number} [seed=0] The seed to use for the hash.
  * @returns {number} The hash code.
  */
-export function getStringHash(str, seed = 0) {
-    if (typeof str !== 'string') {
-        return 0;
-    }
-
-    let h1 = 0xdeadbeef ^ seed,
-        h2 = 0x41c6ce57 ^ seed;
-    for (let i = 0, ch; i < str.length; i++) {
-        ch = str.charCodeAt(i);
-        h1 = Math.imul(h1 ^ ch, 2654435761);
-        h2 = Math.imul(h2 ^ ch, 1597334677);
-    }
-
-    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
-    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
-
-    return 4294967296 * (2097151 & h2) + (h1 >>> 0);
-}
 
 /**
  * Copy text to clipboard. Use navigator.clipboard.writeText if available, otherwise use document.execCommand.
@@ -2099,22 +2083,6 @@ export async function extractTextFromOffice(blob) {
  * @param {any} value Value to set
  * @returns {void}
  */
-export function setValueByPath(obj, path, value) {
-    const keyParts = path.split('.');
-    let currentObject = obj;
-
-    for (let i = 0; i < keyParts.length - 1; i++) {
-        const part = keyParts[i];
-
-        if (!Object.hasOwn(currentObject, part)) {
-            currentObject[part] = {};
-        }
-
-        currentObject = currentObject[part];
-    }
-
-    currentObject[keyParts[keyParts.length - 1]] = value;
-}
 
 /**
  * Deletes a value from a nested object at the given dot-separated path.
@@ -2255,9 +2223,6 @@ export function sortIgnoreCaseAndAccents(a, b) {
  * @param {string} option - The option
  * @returns {string} A hashed version of that option
  */
-export function getSelect2OptionId(option) {
-    return String(getStringHash(option));
-}
 
 /**
  * Modifies the select2 options by adding not existing one and optionally selecting them
@@ -2271,7 +2236,7 @@ export function getSelect2OptionId(option) {
 export function select2ModifyOptions(element, items, { select = false, changeEventArgs = null } = {}) {
     if (!items.length) return;
     /** @type {Select2Option[]} */
-    const dataItems = items.map(x => typeof x === 'string' ? { id: getSelect2OptionId(x), text: x } : x);
+    const dataItems = items.map(x => typeof x === 'string' ? { id: getOptionId(x), text: x } : x);
 
     const optionsToSelect = [];
     const newOptions = [];

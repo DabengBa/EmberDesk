@@ -1,7 +1,11 @@
 /**
- * Pure World Info domain helpers: entry projection, sort, and field defaults.
- * No DOM, browser document access, or workbench ownership.
+ * Pure World Info domain helpers: entry projection, sort, field defaults,
+ * keyword/regex parsing, and original-data bookkeeping.
+ * No DOM or browser document access; utils.js leaf imports only
+ * (no eval-time access, safe across the utils.js -> world-info.js edge).
  */
+
+import { getOptionId, setValueByPath } from './util/primitives.js';
 
 export const WORLD_INFO_LOGIC = {
     AND_ANY: 0,
@@ -355,4 +359,198 @@ export function buildWorldInfoEntryList(entriesMap, {
 
     entriesArray = sortWorldInfoEntries(entriesArray, { customSort, getSearchScore });
     return entriesArray;
+}
+
+// ---------------------------------------------------------------------------
+// Keyword / regex parsing and original-data bookkeeping.
+// Pure helpers shared by the legacy editor and generation-time scanning.
+// ---------------------------------------------------------------------------
+
+export const wi_anchor_position = {
+    before: 0,
+    after: 1,
+};
+
+/**
+ * Maps world info entry field names to their original-data entry paths.
+ */
+export const originalWIDataKeyMap = {
+    'displayIndex': 'extensions.display_index',
+    'excludeRecursion': 'extensions.exclude_recursion',
+    'preventRecursion': 'extensions.prevent_recursion',
+    'delayUntilRecursion': 'extensions.delay_until_recursion',
+    'selectiveLogic': 'selectiveLogic',
+    'comment': 'comment',
+    'constant': 'constant',
+    'order': 'insertion_order',
+    'depth': 'extensions.depth',
+    'probability': 'extensions.probability',
+    'position': 'extensions.position',
+    'role': 'extensions.role',
+    'content': 'content',
+    'enabled': 'enabled',
+    'key': 'keys',
+    'keysecondary': 'secondary_keys',
+    'selective': 'selective',
+    'matchWholeWords': 'extensions.match_whole_words',
+    'useGroupScoring': 'extensions.use_group_scoring',
+    'caseSensitive': 'extensions.case_sensitive',
+    'matchPersonaDescription': 'extensions.match_persona_description',
+    'matchCharacterDescription': 'extensions.match_character_description',
+    'matchCharacterPersonality': 'extensions.match_character_personality',
+    'matchCharacterDepthPrompt': 'extensions.match_character_depth_prompt',
+    'matchScenario': 'extensions.match_scenario',
+    'matchCreatorNotes': 'extensions.match_creator_notes',
+    'scanDepth': 'extensions.scan_depth',
+    'automationId': 'extensions.automation_id',
+    'vectorized': 'extensions.vectorized',
+    'groupOverride': 'extensions.group_override',
+    'groupWeight': 'extensions.group_weight',
+    'sticky': 'extensions.sticky',
+    'cooldown': 'extensions.cooldown',
+    'delay': 'extensions.delay',
+    'triggers': 'extensions.triggers',
+    'ignoreBudget': 'extensions.ignore_budget',
+};
+
+/**
+ * Sets the value of a specific key in the original data entry corresponding to the given uid.
+ * @param {object} data - The data object containing the original data entries.
+ * @param {number} uid - The unique identifier of the data entry.
+ * @param {string} key - The key of the value to be set.
+ * @param {any} value - The value to be set.
+ */
+export function setWIOriginalDataValue(data, uid, key, value) {
+    if (data.originalData && Array.isArray(data.originalData.entries)) {
+        const originalEntry = data.originalData.entries.find(x => x.uid === uid);
+
+        if (!originalEntry) {
+            return;
+        }
+
+        setValueByPath(originalEntry, key, value);
+    }
+}
+
+/**
+ * Deletes the original data entry corresponding to the given uid from the provided data object.
+ * Non-strict equality is used to allow for both string and number comparisons.
+ * @param {object} data - The data object containing the original data entries
+ * @param {number} uid - The unique identifier of the data entry to be deleted
+ */
+export function deleteWIOriginalDataValue(data, uid) {
+    if (data.originalData && Array.isArray(data.originalData.entries)) {
+        const originalIndex = data.originalData.entries.findIndex(x => x.uid == uid);
+
+        if (originalIndex >= 0) {
+            data.originalData.entries.splice(originalIndex, 1);
+        }
+    }
+}
+
+/**
+ * Gets a real regex object from a slash-delimited regex string.
+ * Delimiter is `/` and each occurrence inside the regex has to be escaped.
+ * Flags are optional and limited to JavaScript's `RegExp` flags (`g`, `i`, `m`, `s`, `u`, `y`).
+ * @param {string} input - A delimited regex string
+ * @returns {RegExp|null} The regex object, or null if not a valid regex
+ */
+export function parseRegexFromString(input) {
+    const match = input.match(/^\/([\w\W]+?)\/([gimsuy]*)$/);
+    if (!match) {
+        return null;
+    }
+
+    let [, pattern, flags] = match;
+
+    if (pattern.match(/(^|[^\\])\//)) {
+        return null;
+    }
+
+    pattern = pattern.replace('\\/', '/');
+
+    try {
+        return new RegExp(pattern, flags);
+    } catch (e) {
+        return null;
+    }
+}
+
+/**
+ * Validates if a string is a valid slash-delimited regex.
+ * @param {string} input - A delimited regex string
+ * @returns {boolean} Whether this would be a valid regex that can be parsed and executed
+ */
+export function isValidRegex(input) {
+    return parseRegexFromString(input) !== null;
+}
+
+/**
+ * Tokenizer parsing input and splitting it into keywords and regexes.
+ * @param {{_type: string, term: string}} input - The typed input
+ * @param {{options: object}} _selection - The selection event object
+ * @param {function({id: string, text: string}):void} callback - Callback for each parsed item
+ * @returns {{term: string}} - The remaining part that is untokenized in the textbox
+ */
+export function customTokenizer(input, _selection, callback) {
+    let current = input.term;
+
+    let insideRegex = false, regexClosed = false;
+
+    for (let i = 0; i < current.length; i++) {
+        const char = current[i];
+
+        if (char === '/' && (i === 0 || current[i - 1] !== '\\')) {
+            if (!insideRegex) insideRegex = true;
+            else if (!regexClosed) regexClosed = true;
+        }
+
+        if (char === ',') {
+            const token = current.slice(0, i).trim();
+
+            if (insideRegex && !regexClosed) {
+                continue;
+            }
+
+            if (token) {
+                const isRegex = isValidRegex(token);
+
+                if (token.startsWith('/') && !isRegex) {
+                    const tokens = token.split(',').map(x => x.trim());
+                    tokens.forEach(x => callback({ id: getOptionId(x), text: x }));
+                } else {
+                    callback({ id: getOptionId(token), text: token });
+                }
+            }
+
+            current = current.slice(i + 1);
+            insideRegex = false;
+            regexClosed = false;
+            i = 0;
+        }
+    }
+
+    return { term: current };
+}
+
+/**
+ * Splits a given input string that contains one or more keywords or regexes, separated by commas.
+ * @param {string} input - One or multiple keywords or regexes, separated by commas
+ * @returns {string[]} An array of keywords and regexes
+ */
+export function splitKeywordsAndRegexes(input) {
+    /** @type {string[]} */
+    const keywordsAndRegexes = [];
+
+    const addFindCallback = (item) => {
+        keywordsAndRegexes.push(item.text);
+    };
+
+    const { term } = customTokenizer({ _type: 'custom_call', term: input }, undefined, addFindCallback);
+    const finalTerm = term.trim();
+    if (finalTerm) {
+        addFindCallback({ id: getOptionId(finalTerm), text: finalTerm });
+    }
+
+    return keywordsAndRegexes;
 }

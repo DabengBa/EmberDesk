@@ -1,6 +1,6 @@
 import { Fuse } from '../lib.js';
 
-import { download, debounce, initScrollHeight, resetScrollHeight, parseJsonFile, extractDataFromPng, getFileBuffer, getCharaFilename, escapeRegex, PAGINATION_TEMPLATE, navigation_option, waitUntilCondition, isTrueBoolean, setValueByPath, flashHighlight, select2ModifyOptions, getSelect2OptionId, dynamicSelect2DataViaAjax, highlightRegex, select2ChoiceClickSubscribe, isFalseBoolean, getSanitizedFilename, checkOverwriteExistingData, getStringHash, parseStringArray, cancelDebounce, findChar, onlyUnique, equalsIgnoreCaseAndAccents, uuidv4, normalizeArray, getUniqueName, logSlashCommandWarn, addLongPressEvent, escapeHtml } from './utils.js';
+import { download, debounce, initScrollHeight, resetScrollHeight, parseJsonFile, extractDataFromPng, getFileBuffer, getCharaFilename, escapeRegex, PAGINATION_TEMPLATE, navigation_option, waitUntilCondition, isTrueBoolean, flashHighlight, select2ModifyOptions, getSelect2OptionId, dynamicSelect2DataViaAjax, highlightRegex, select2ChoiceClickSubscribe, isFalseBoolean, getSanitizedFilename, checkOverwriteExistingData, getStringHash, parseStringArray, cancelDebounce, findChar, onlyUnique, equalsIgnoreCaseAndAccents, uuidv4, normalizeArray, getUniqueName, logSlashCommandWarn, addLongPressEvent, escapeHtml } from './utils.js';
 import { extension_settings, getContext } from './extensions.js';
 import { NOTE_MODULE_NAME, metadata_keys, shouldWIAddPrompt } from './authors-note.js';
 import { isMobile } from './RossAscends-mods.js';
@@ -34,7 +34,25 @@ import {
     buildWorldInfoWorkbenchEntryDetail as domainBuildWorldInfoWorkbenchEntryDetail,
     addMissingWorldInfoFields as domainAddMissingWorldInfoFields,
     sortWorldInfoEntries as domainSortWorldInfoEntries,
+    WORLD_INFO_POSITION,
+    wi_anchor_position,
+    originalWIDataKeyMap,
+    setWIOriginalDataValue,
+    deleteWIOriginalDataValue,
+    splitKeywordsAndRegexes,
+    parseRegexFromString,
+    isValidRegex,
+    customTokenizer,
 } from './world-info-domain.js';
+
+export {
+    wi_anchor_position,
+    originalWIDataKeyMap,
+    setWIOriginalDataValue,
+    deleteWIOriginalDataValue,
+    splitKeywordsAndRegexes,
+    parseRegexFromString,
+};
 import { createWorldInfoWorkbenchSession } from './world-info-workbench-service.js';
 export { createWorldInfoWorkbenchSession };
 export {
@@ -1420,21 +1438,7 @@ export function updateWorldInfoSettings(settings, activeWorldInfo) {
     saveSettingsDebounced();
 }
 
-export const world_info_position = {
-    before: 0,
-    after: 1,
-    ANTop: 2,
-    ANBottom: 3,
-    atDepth: 4,
-    EMTop: 5,
-    EMBottom: 6,
-    outlet: 7,
-};
-
-export const wi_anchor_position = {
-    before: 0,
-    after: 1,
-};
+export const world_info_position = WORLD_INFO_POSITION;
 
 /**
  * The cache of all world info data that was loaded from the backend.
@@ -3734,45 +3738,6 @@ async function displayWorldEntries(name, data, navigation = navigation_option.no
     });
 }
 
-export const originalWIDataKeyMap = {
-    'displayIndex': 'extensions.display_index',
-    'excludeRecursion': 'extensions.exclude_recursion',
-    'preventRecursion': 'extensions.prevent_recursion',
-    'delayUntilRecursion': 'extensions.delay_until_recursion',
-    'selectiveLogic': 'selectiveLogic',
-    'comment': 'comment',
-    'constant': 'constant',
-    'order': 'insertion_order',
-    'depth': 'extensions.depth',
-    'probability': 'extensions.probability',
-    'position': 'extensions.position',
-    'role': 'extensions.role',
-    'content': 'content',
-    'enabled': 'enabled',
-    'key': 'keys',
-    'keysecondary': 'secondary_keys',
-    'selective': 'selective',
-    'matchWholeWords': 'extensions.match_whole_words',
-    'useGroupScoring': 'extensions.use_group_scoring',
-    'caseSensitive': 'extensions.case_sensitive',
-    'matchPersonaDescription': 'extensions.match_persona_description',
-    'matchCharacterDescription': 'extensions.match_character_description',
-    'matchCharacterPersonality': 'extensions.match_character_personality',
-    'matchCharacterDepthPrompt': 'extensions.match_character_depth_prompt',
-    'matchScenario': 'extensions.match_scenario',
-    'matchCreatorNotes': 'extensions.match_creator_notes',
-    'scanDepth': 'extensions.scan_depth',
-    'automationId': 'extensions.automation_id',
-    'vectorized': 'extensions.vectorized',
-    'groupOverride': 'extensions.group_override',
-    'groupWeight': 'extensions.group_weight',
-    'sticky': 'extensions.sticky',
-    'cooldown': 'extensions.cooldown',
-    'delay': 'extensions.delay',
-    'triggers': 'extensions.triggers',
-    'ignoreBudget': 'extensions.ignore_budget',
-};
-
 /** Checks the state of the current search, and adds/removes the search sorting option accordingly */
 function verifyWorldInfoSearchSortRule() {
     const searchTerm = getWorldInfoFilter().getFilterData(FILTER_TYPES.WORLD_INFO_SEARCH);
@@ -3793,187 +3758,7 @@ function verifyWorldInfoSearchSortRule() {
     }
 }
 
-/**
- * Sets the value of a specific key in the original data entry corresponding to the given uid
- * This needs to be called whenever you update JSON data fields.
- * Use `originalWIDataKeyMap` to find the correct value to be set.
- *
- * @param {object} data - The data object containing the original data entries.
- * @param {number} uid - The unique identifier of the data entry.
- * @param {string} key - The key of the value to be set.
- * @param {any} value - The value to be set.
- */
-export function setWIOriginalDataValue(data, uid, key, value) {
-    if (data.originalData && Array.isArray(data.originalData.entries)) {
-        let originalEntry = data.originalData.entries.find(x => x.uid === uid);
-
-        if (!originalEntry) {
-            return;
-        }
-
-        setValueByPath(originalEntry, key, value);
-    }
-}
-
-/**
- * Deletes the original data entry corresponding to the given uid from the provided data object
- *
- * @param {object} data - The data object containing the original data entries
- * @param {string} uid - The unique identifier of the data entry to be deleted
- */
-export function deleteWIOriginalDataValue(data, uid) {
-    if (data.originalData && Array.isArray(data.originalData.entries)) {
-        // Non-strict equality is used here to allow for both string and number comparisons
-        // @eslint-disable-next-line eqeqeq
-        const originalIndex = data.originalData.entries.findIndex(x => x.uid == uid);
-
-        if (originalIndex >= 0) {
-            data.originalData.entries.splice(originalIndex, 1);
-        }
-    }
-}
-
 /** @typedef {import('./utils.js').Select2Option} Select2Option */
-
-/**
- * Splits a given input string that contains one or more keywords or regexes, separated by commas.
- *
- * Each part can be a valid regex following the pattern `/myregex/flags` with optional flags. Commas inside the regex are allowed, slashes have to be escaped like this: `\/`
- * If a regex doesn't stand alone, it is not treated as a regex.
- *
- * @param {string} input - One or multiple keywords or regexes, separated by commas
- * @returns {string[]} An array of keywords and regexes
- */
-export function splitKeywordsAndRegexes(input) {
-    /** @type {string[]} */
-    let keywordsAndRegexes = [];
-
-    // We can make this easy. Instead of writing another function to find and parse regexes,
-    // we gonna utilize the custom tokenizer that also handles the input.
-    // No need for validation here
-    const addFindCallback = (/** @type {Select2Option} */ item) => {
-        keywordsAndRegexes.push(item.text);
-    };
-
-    const { term } = customTokenizer({ _type: 'custom_call', term: input }, undefined, addFindCallback);
-    const finalTerm = term.trim();
-    if (finalTerm) {
-        addFindCallback({ id: getSelect2OptionId(finalTerm), text: finalTerm });
-    }
-
-    return keywordsAndRegexes;
-}
-
-/**
- * Tokenizer parsing input and splitting it into keywords and regexes
- *
- * @param {{_type: string, term: string}} input - The typed input
- * @param {{options: object}} _selection - The selection even object (?)
- * @param {function(Select2Option):void} callback - The original callback function to call if an item should be inserted
- * @returns {{term: string}} - The remaining part that is untokenized in the textbox
- */
-function customTokenizer(input, _selection, callback) {
-    let current = input.term;
-
-    let insideRegex = false, regexClosed = false;
-
-    // Go over the input and check the current state, if we can get a token
-    for (let i = 0; i < current.length; i++) {
-        let char = current[i];
-
-        // If we find an unascaped slash, set the current regex state
-        if (char === '/' && (i === 0 || current[i - 1] !== '\\')) {
-            if (!insideRegex) insideRegex = true;
-            else if (!regexClosed) regexClosed = true;
-        }
-
-        // If a comma is typed, we tokenize the input.
-        // unless we are inside a possible regex, which would allow commas inside
-        if (char === ',') {
-            // We take everything up till now and consider this a token
-            const token = current.slice(0, i).trim();
-
-            // Now how we test if this is a regex? And not a finished one, but a half-finished one?
-            // We use the state remembered from above to check whether the delimiter was opened but not closed yet.
-            // We don't check validity here if we are inside a regex, because it might only get valid after its finished. (Closing brackets, etc)
-            // Validity will be finally checked when the next comma is typed.
-            if (insideRegex && !regexClosed) {
-                continue;
-            }
-
-            // So now the comma really means the token is done.
-            // We take the token up till now, and insert it. Empty will be skipped.
-            if (token) {
-                const isRegex = isValidRegex(token);
-
-                // Last chance to check for valid regex again. Because it might have been valid while typing, but now is not valid anymore and contains commas we need to split.
-                if (token.startsWith('/') && !isRegex) {
-                    const tokens = token.split(',').map(x => x.trim());
-                    tokens.forEach(x => callback({ id: getSelect2OptionId(x), text: x }));
-                } else {
-                    callback({ id: getSelect2OptionId(token), text: token });
-                }
-            }
-
-            // Now remove the token from the current input, and the comma too
-            current = current.slice(i + 1);
-            insideRegex = false;
-            regexClosed = false;
-            i = 0;
-        }
-    }
-
-    // At the end, just return the left-over input
-    return { term: current };
-}
-
-/**
- * Validates if a string is a valid slash-delimited regex, that can be parsed and executed
- *
- * This is a wrapper around `parseRegexFromString`
- *
- * @param {string} input - A delimited regex string
- * @returns {boolean} Whether this would be a valid regex that can be parsed and executed
- */
-function isValidRegex(input) {
-    return parseRegexFromString(input) !== null;
-}
-
-/**
- * Gets a real regex object from a slash-delimited regex string
- *
- * This function works with `/` as delimiter, and each occurance of it inside the regex has to be escaped.
- * Flags are optional, but can only be valid flags supported by JavaScript's `RegExp` (`g`, `i`, `m`, `s`, `u`, `y`).
- *
- * @param {string} input - A delimited regex string
- * @returns {RegExp|null} The regex object, or null if not a valid regex
- */
-export function parseRegexFromString(input) {
-    // Extracting the regex pattern and flags
-    let match = input.match(/^\/([\w\W]+?)\/([gimsuy]*)$/);
-    if (!match) {
-        return null; // Not a valid regex format
-    }
-
-    let [, pattern, flags] = match;
-
-    // If we find any unescaped slash delimiter, we also exit out.
-    // JS doesn't care about delimiters inside regex patterns, but for this to be a valid regex outside of our implementation,
-    // we have to make sure that our delimiter is correctly escaped. Or every other engine would fail.
-    if (pattern.match(/(^|[^\\])\//)) {
-        return null;
-    }
-
-    // Now we need to actually unescape the slash delimiters, because JS doesn't care about delimiters
-    pattern = pattern.replace('\\/', '/');
-
-    // Then we return the regex. If it fails, it was invalid syntax.
-    try {
-        return new RegExp(pattern, flags);
-    } catch (e) {
-        return null;
-    }
-}
 
 /**
  * Enables the input helper for keys in a World Info entry.
