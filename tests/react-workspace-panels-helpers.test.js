@@ -434,12 +434,13 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('saveCharacterAuthoring: payload => saveCharacterAuthoringFromPayload(payload)');
         expect(scriptSource).not.toContain('saveGroupAuthoring: payload => applyGroupAuthoringSaveModel(payload)');
         expect(scriptSource).toContain('function applyCharacterAuthoringSaveModel');
-        expect(scriptSource).toContain('async function saveCharacterAuthoringFromPayload');
-        expect(scriptSource).toContain('buildCharacterAuthoringFormData');
-        expect(scriptSource).toContain('getCharacterAuthoringWriteUrl');
+        const characterLifecycleSource = read('public/scripts/character-lifecycle-service.js');
+        expect(characterLifecycleSource).toContain('async function saveCharacterAuthoringFromPayload');
+        expect(characterLifecycleSource).toContain('buildCharacterAuthoringFormData');
+        expect(characterLifecycleSource).toContain('getCharacterAuthoringWriteUrl');
         expect(scriptSource).not.toContain('function waitForCharacterAuthoringSaveCompletion');
         expect(scriptSource).not.toContain('Timed out waiting for legacy character authoring save to complete');
-        const characterSaveSource = scriptSource.match(/async function saveCharacterAuthoringFromPayload\(saveModel = \{\}\) \{[\s\S]*?\n\}/)?.[0] ?? '';
+        const characterSaveSource = characterLifecycleSource.match(/async function saveCharacterAuthoringFromPayload\(saveModel = \{\}\) \{[\s\S]*?\n\}/)?.[0] ?? '';
         expect(characterSaveSource).not.toBe('');
         expect(characterSaveSource).toContain('buildCharacterAuthoringFormData');
         expect(characterSaveSource).toContain('getCharacterAuthoringWriteUrl');
@@ -448,7 +449,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).not.toContain('openWorkspaceShellGroupChats');
         expect(scriptSource).not.toContain('group-chat-feature-removed');
         expect(scriptSource).toContain('function queueReactCharacterAuthoringRemount()');
-        expect(scriptSource).toContain('queueReactCharacterAuthoringRemount();');
+        expect(characterLifecycleSource).toContain('queueReactCharacterAuthoringRemount();');
         expect(scriptSource).toContain('hideLegacyCharacterAuthoringEditor(true);');
         expect(scriptSource).toContain('data-react-authoring-build-error');
         expect(scriptSource).not.toContain('hideLegacyCharacterAuthoringEditor(Boolean(result?.mounted));');
