@@ -52,7 +52,6 @@ const getExtensionPromptRoleByName = (...args) => shell().getExtensionPromptRole
 const getGenerationLifecycleStatusLabels = (...args) => shell().getGenerationLifecycleStatusLabels(...args);
 const getMaxPromptTokens = (...args) => shell().getMaxPromptTokens(...args);
 const getNextMessageId = (...args) => shell().getNextMessageId(...args);
-const hideSwipeButtons = (...args) => shell().hideSwipeButtons(...args);
 const isAssistantRecoveryMessageId = (...args) => shell().isAssistantRecoveryMessageId(...args);
 const isStreamingEnabled = (...args) => shell().isStreamingEnabled(...args);
 const parseAndSaveLogprobs = (...args) => shell().parseAndSaveLogprobs(...args);
@@ -92,8 +91,6 @@ const messageFormatting = (...args) => shell().messageFormatting(...args);
 const mountReactMainChatMessageListPanel = (...args) => shell().mountReactMainChatMessageListPanel(...args);
 const processImageAttachment = (...args) => shell().processImageAttachment(...args);
 const scrollChatToBottom = (...args) => shell().scrollChatToBottom(...args);
-const syncMesToSwipe = (...args) => shell().syncMesToSwipe(...args);
-const updateSwipeCounter = (...args) => shell().updateSwipeCounter(...args);
 const appendFileContent = (...args) => shell().appendFileContent(...args);
 const extractReasoningFromData = (...args) => shell().extractReasoningFromData(...args);
 const extractReasoningSignatureFromData = (...args) => shell().extractReasoningSignatureFromData(...args);
@@ -130,16 +127,10 @@ const deleteItemizedPromptForMessage = (...args) => shell().deleteItemizedPrompt
 const addOneMessage = (...args) => shell().addOneMessage(...args);
 const cancelDebouncedChatSave = (...args) => shell().cancelDebouncedChatSave(...args);
 const closeMessageEditor = (...args) => shell().closeMessageEditor(...args);
-const ensureSwipes = (...args) => shell().ensureSwipes(...args);
-const getOverswipeBehavior = (...args) => shell().getOverswipeBehavior(...args);
 const isGenerating = (...args) => shell().isGenerating(...args);
-const isMessageSwipeable = (...args) => shell().isMessageSwipeable(...args);
-const isSwipingAllowed = (...args) => shell().isSwipingAllowed(...args);
 const redisplayChat = (...args) => shell().redisplayChat(...args);
 const reloadCurrentChat = (...args) => shell().reloadCurrentChat(...args);
 const saveChatDebounced = (...args) => shell().saveChatDebounced(...args);
-const showSwipeButtons = (...args) => shell().showSwipeButtons(...args);
-const syncSwipeToMes = (...args) => shell().syncSwipeToMes(...args);
 const clamp = (...args) => shell().clamp(...args);
 const createTimeout = (...args) => shell().createTimeout(...args);
 const shakeElement = (...args) => shell().shakeElement(...args);
@@ -2545,3 +2536,548 @@ export async function swipe(event, direction, {
         return;
     }
 }
+
+const setMainChatMessageUiFlag = (...args) => shell().setMainChatMessageUiFlag(...args);
+const canOpenSwipePickerForMessage = (...args) => shell().canOpenSwipePickerForMessage(...args);
+const canJumpToSwipeForMessage = (...args) => shell().canJumpToSwipeForMessage(...args);
+
+/**
+ * Creates a message's `swipes`, `swipe_id` and `swipe_info` if necessary.
+ * @param {ChatMessage} message
+ * @returns {boolean} true if the message was updated.
+ */
+export function ensureSwipes(message) {
+    let updated = false;
+
+    if (!message || typeof message !== 'object') {
+        console.trace(`[ensureSwipes] failed. '${message}' is not an object.`);
+        return updated;
+    }
+
+    //Small system messages and user messages should not have swipes.
+    if (message?.is_user || message?.extra?.isSmallSys) {
+        return updated;
+    }
+
+    if (!Array.isArray(message.swipes)) {
+        message.swipes = [message.mes ?? ''];
+        updated = true;
+    }
+
+    if (typeof message.swipe_id !== 'number') {
+        message.swipe_id = 0;
+        updated = true;
+    }
+
+    /** @type {() => SwipeInfo} */
+    const createSwipeInfo = () => ({
+        send_date: message.send_date,
+        gen_started: message.gen_started,
+        gen_finished: message.gen_finished,
+        extra: {},
+    });
+
+    if (!Array.isArray(message.swipe_info)) {
+        message.swipe_info = message.swipes.map(_ => createSwipeInfo());
+        updated = true;
+    }
+
+    for (let i = 0; i < message.swipes.length; i++) {
+        if (typeof message.swipes[i] !== 'string') {
+            updated = true;
+            console.warn('The message had a swipe that is not a string. It has has been set to \'\'.', message);
+            message.swipes[i] = '';
+        }
+        if (!message.swipe_info[i] || typeof message.swipe_info[i] !== 'object') {
+            updated = true;
+            console.warn('The message had missing or invalid swipe_info for a swipe. It has been backfilled.', message);
+            message.swipe_info[i] = createSwipeInfo();
+        }
+    }
+
+    return updated;
+}
+
+/**
+ * Syncs the current message and all its data into the swipe data at the given message ID (or the last message if no ID is given).
+ *
+ * If the swipe data is invalid in some way, this function will exit out without doing anything.
+ * @param {number?} [messageId=null] - The ID of the message to sync with the swipe data. If no ID is given, the last message is used.
+ * @returns {boolean} Whether the message was successfully synced
+ */
+export function syncMesToSwipe(messageId = null) {
+    if (!state.chat.length) {
+        return false;
+    }
+
+    const targetMessageId = messageId ?? state.chat.length - 1;
+    if (targetMessageId >= state.chat.length || targetMessageId < 0) {
+        console.warn(`[syncMesToSwipe] Invalid message ID: ${messageId}`);
+        return false;
+    }
+
+    const targetMessage = state.chat[targetMessageId];
+    if (!targetMessage) {
+        return false;
+    }
+
+    // No swipe data there yet, exit out
+    if (typeof targetMessage.swipe_id !== 'number') {
+        return false;
+    }
+    // If swipes structure is invalid, exit out (for now?)
+    if (!Array.isArray(targetMessage.swipe_info) || !Array.isArray(targetMessage.swipes)) {
+        return false;
+    }
+    // If the swipe is not present yet, exit out (will likely be copied later)
+    // "" is falsy. An empty string is a valid message.
+    if (typeof targetMessage.swipes[targetMessage.swipe_id] !== 'string' || !targetMessage.swipe_info[targetMessage.swipe_id]) {
+        return false;
+    }
+
+    const targetSwipeInfo = targetMessage.swipe_info[targetMessage.swipe_id];
+    if (typeof targetSwipeInfo !== 'object') {
+        return false;
+    }
+
+    // Only sync swipes if the chat is not pristine, so that macros in the greeting can resolve again on swipe
+    if (state.chat_metadata.tainted || state.chat.length > 1) {
+        targetMessage.swipes[targetMessage.swipe_id] = targetMessage.mes;
+    }
+
+    targetSwipeInfo.send_date = targetMessage.send_date;
+    targetSwipeInfo.gen_started = targetMessage.gen_started;
+    targetSwipeInfo.gen_finished = targetMessage.gen_finished;
+    targetSwipeInfo.extra = structuredClone(targetMessage.extra);
+
+    return true;
+}
+
+/**
+ * Syncs swipe data back to the message data at the given message ID (or the last message if no ID is given).
+ * If the swipe ID is not provided, the current swipe ID in the message object is used.
+ *
+ * If the swipe data is invalid in some way, this function will exit out without doing anything.
+ * @param {number?} [messageId=null] - The ID of the message to sync with the swipe data. If no ID is given, the last message is used.
+ * @param {number?} [swipeId=null] - The ID of the swipe to sync. If no ID is given, the current swipe ID in the message object is used.
+ * @param {ChatMessage?} [targetMessage=null] - The message object to sync instead of resolving one from `chat`.
+ * @returns {boolean} Whether the swipe data was successfully synced to the message
+ */
+export function syncSwipeToMes(messageId = null, swipeId = null, targetMessage = null) {
+    if (!targetMessage && !state.chat.length) {
+        return false;
+    }
+
+    if (!targetMessage) {
+        const targetMessageId = messageId ?? state.chat.length - 1;
+        if (targetMessageId >= state.chat.length || targetMessageId < 0) {
+            console.warn(`[syncSwipeToMes] Invalid message ID: ${messageId}`);
+            return false;
+        }
+
+        targetMessage = state.chat[targetMessageId];
+    }
+
+    if (!targetMessage) {
+        return false;
+    }
+
+    if (swipeId !== null) {
+        if (isNaN(swipeId) || swipeId < 0) {
+            console.warn(`[syncSwipeToMes] Invalid swipe ID: ${swipeId}`);
+            return false;
+        }
+        targetMessage.swipe_id = swipeId;
+    }
+
+    // No swipe data there yet, exit out
+    if (typeof targetMessage.swipe_id !== 'number') {
+        return false;
+    }
+    // If swipes structure is invalid, exit out
+    if (!Array.isArray(targetMessage.swipes)) {
+        return false;
+    }
+
+    // Backfill swipe_info if missing.
+    if (!Array.isArray(targetMessage.swipe_info)) {
+        targetMessage.swipe_info = targetMessage.swipes.map(_ => ({
+            send_date: targetMessage.send_date,
+            gen_started: void 0,
+            gen_finished: void 0,
+            extra: {},
+        }));
+    }
+
+    const targetSwipeId = targetMessage.swipe_id;
+    if (typeof targetMessage.swipes[targetSwipeId] !== 'string') {
+        console.warn(`[syncSwipeToMes] Invalid swipe ID: ${targetSwipeId}`);
+        return false;
+    }
+
+    const targetSwipeInfo = targetMessage?.swipe_info?.[targetSwipeId];
+    if (typeof targetSwipeInfo !== 'object') {
+        console.warn(`[syncSwipeToMes] Invalid swipe info: ${targetSwipeId}`);
+    }
+
+    targetMessage.mes = targetMessage.swipes[targetSwipeId];
+    targetMessage.send_date = targetSwipeInfo?.send_date;
+    targetMessage.gen_started = targetSwipeInfo?.gen_started;
+    targetMessage.gen_finished = targetSwipeInfo?.gen_finished;
+    targetMessage.extra = structuredClone(targetSwipeInfo?.extra) ?? {};
+
+    return true;
+}
+
+/**
+ * Update the swipe counter for mesId.
+ * By default, the swipe counter's opacity will appear greyed out. The opacity is changed with CSS.
+ * @param {Number} mesId
+ * @param {object} [options] Options
+ * @param {ChatMessage} [options.message=undefined] Swipe numbers from this message will be used instead of mesId.
+ * @param {JQuery<HTMLElement>} [options.messageElement=undefined] Target Element. Passing in the message's element will save a DOM query.
+ */
+export async function updateSwipeCounter(mesId, { message = undefined, messageElement = undefined } = {}) {
+    message ??= state.chat[mesId];
+
+    //If the message does not have swipes, create them.
+    if (ensureSwipes(message)) {
+        syncMesToSwipe(mesId);
+    }
+
+    if (isReactMainChatOwner()) {
+        scheduleMainChatMessageListPanelRefresh();
+        return;
+    }
+
+    messageElement ??= state.chatElement.children('.mes').filter(`[mesid="${mesId}"]`);
+
+    const swipeCounterText = formatSwipeCounter((message?.swipe_id + 1), message?.swipes?.length);
+    const swipeCounter = messageElement.find('.swipes-counter');
+    const swipePickerButton = messageElement.find('.mes_swipe_picker');
+    const canOpenSwipePicker = canOpenSwipePickerForMessage(mesId);
+    const canJumpToSwipe = canJumpToSwipeForMessage(mesId);
+
+    swipeCounter
+        .text(swipeCounterText)
+        .prop('hidden', false)
+        .toggleClass('swipe-picker-enabled', canOpenSwipePicker)
+        .toggleClass(state.INTERACTABLE_CONTROL_CLASS, canOpenSwipePicker)
+        .attr('role', canOpenSwipePicker ? 'button' : null)
+        .attr('title', canJumpToSwipe ? t`Click to jump to a swipe` : canOpenSwipePicker ? t`Click to view swipe history` : null);
+    swipePickerButton.toggle(canOpenSwipePicker);
+
+    if (!canOpenSwipePicker) {
+        swipeCounter.removeAttr('tabindex');
+    }
+}
+
+/**
+ * Returns true if messages are generally swipeable.
+ * @returns {boolean}
+ */
+export function isSwipingAllowed() {
+    return (
+        //Swipe cannot be called on an empty chat.
+        state.chat.length !== 0 &&
+        //The swipes setting must be enabled, and swipes can't be hidden.
+        state.swipes && !state.swipesHidden &&
+        //Cannot swipe while generating.
+        !isGenerating() &&
+        //If mid-swipe, the message cannot be swiped.
+        state.swipeState === SWIPE_STATE.NONE
+    );
+}
+
+/**
+ * Returns true if the message is swipeable.
+ * This does not check if messages are generally swipeable. See isSwipingAllowed().
+ * This does not check if the swipes exist or are valid.
+ * @param {number} messageId The message Id to check.
+ * @param {ChatMessage} [message=undefined] If undefined, then the message checks will be skipped.
+ * @returns {boolean}
+ */
+export function isMessageSwipeable(messageId, message = undefined) {
+    message ??= state.chat[messageId];
+
+    //If the message does not have swipes, create them.
+    if (ensureSwipes(message)) {
+        syncMesToSwipe(messageId);
+    }
+
+    if (
+        //Only messages below the currently edited message can be swiped, if it's not mid-swipe edit.
+        ((messageId > (state.this_edit_mes_id ?? -1)) && (state.swipeState != SWIPE_STATE.EDITING)) &&
+
+        //If the message is the last message, and it exists.
+        (messageId == state.chat.length - 1) &&
+        (message &&
+            //Small system messages cannot be swiped.
+            !(message?.extra?.isSmallSys) &&
+            //Some messages, like the welcome screen, are not swipeable.
+            !(message?.extra?.swipeable === false) &&
+            //User messages are not swipeable.
+            !message.is_user
+        )
+    ) {
+        // The message is swipeable.
+        return true;
+    } else {
+        // The message is not swipeable.
+        return false;
+    }
+}
+
+/**
+ * Returns the message's behavior when swiped past it's last branch.
+ * This does not check if the message can currently be swiped. See isMessageSwipeable().
+ * This does not check if messages are generally swipeable. See isSwipingAllowed().
+ * This does not check if the swipes exist or are valid.
+ * @param {number} messageId The message Id to check.
+ * @param {ChatMessage} [message=undefined] If defined, this will be used instead of chat[messageId].
+ * @returns {OVERSWIPE_BEHAVIOR}
+ */
+export function getOverswipeBehavior(messageId, message = undefined) {
+    message ??= state.chat[messageId];
+
+    const isPristine = !state.chat_metadata?.tainted;
+    const isGreeting = messageId === 0;
+
+    //Do not override explicitly set overswipe_behavior.
+    if (typeof message?.extra?.overswipe_behavior == 'string') return message.extra.overswipe_behavior;
+    //Some messages, like the welcome screen, are not swipeable.
+    else if (message?.extra?.swipeable === false) return OVERSWIPE_BEHAVIOR.NONE;
+    //Small System messages can't be swiped.
+    else if (message?.extra?.isSmallSys) return OVERSWIPE_BEHAVIOR.NONE;
+    //The first message in a priistine chat will loop. It's chevrons will always be visible https://github.com/SillyTavern/SillyTavern/pull/4712#issuecomment-3557893373
+    else if (isGreeting && isPristine) return OVERSWIPE_BEHAVIOR.PRISTINE_GREETING;
+    //Non-user and non-prompt hidden messages will regenerate.
+    else if (!message?.is_user && !message?.is_system) return OVERSWIPE_BEHAVIOR.REGENERATE;
+    //By default, all other messages will loop. Their swipe chevrons will only be shown if there is more than one swipe.
+    else { return OVERSWIPE_BEHAVIOR.LOOP; }
+}
+
+/**
+ * Refreshes all swipe buttons and updates their swipe counters.
+ * This has been optimized for bulk updates by minimizing DOM queries.
+ * @param {boolean} updateCounters When true, the swipe counters will also be updated. Typically redundant because addOneMessage updates the counters.
+ * @param {boolean} fade By default, the chevrons fade in and out.
+ * @returns
+ */
+export function refreshSwipeButtons(updateCounters = false, fade = true) {
+    //Never show swipe buttons on an empty chat.
+    if (state.chat?.length === 0) return false;
+
+    //If swipes are disabled or hidden, hide all swipe buttons.
+    if (!isSwipingAllowed()) {
+        $('body').addClass('hideAllSwipeButtons');
+        return;
+        //Don't hide all swipe buttons.
+    } else {
+        //CSS will hide all messages.
+        $('body').removeClass('hideAllSwipeButtons');
+    }
+
+    if (isReactMainChatOwner()) {
+        if (updateCounters) {
+            scheduleMainChatMessageListPanelRefresh();
+        }
+        return;
+    }
+
+    //Non-messages can appear in chat. '.mes' is required.
+    const messageElements = state.chatElement.children('.mes[mesid]');
+
+    const firstDisplayedMesId = Number(messageElements.first().attr('mesid'));
+
+    //Group each message.
+    messageElements.each((index, div) => {
+        //This assumes the messages are in order and their Id's are accurate.
+        const messageId = firstDisplayedMesId + index;
+        //Number($(div).attr('mesid')); Would not misscount due to a missing div, but is much slower.
+
+        const message = state.chat[messageId];
+
+        //Chevrons should not fade-in during printMessages. //https://github.com/SillyTavern/SillyTavern/pull/4712#issuecomment-3539315919
+        div.classList.toggle('fade', fade);
+
+        if (isMessageSwipeable(messageId, message)) {
+            //If a right swipe would trigger a generation or loop to the first swipe.
+            const isLastSwipe = (message?.swipes?.length ?? 1) - 1 <= (message?.swipe_id ?? 0);
+            const hasSwipes = (message?.swipes?.length > 1);
+            const overswipe = getOverswipeBehavior(messageId, message);
+            const swipePickerButton = $(div).find('.mes_swipe_picker');
+            const canOpenSwipePicker = canOpenSwipePickerForMessage(messageId);
+
+            // Chevrons should always be shown on pristine greetings: https://github.com/SillyTavern/SillyTavern/pull/4712#issuecomment-3557893373
+            const pristineGreeting = overswipe == OVERSWIPE_BEHAVIOR.PRISTINE_GREETING;
+
+            //The swipe button will be shown if an overswipe would trigger REGENERATE or EDIT_GENERATE.
+            const isOverswipeable = isLastSwipe &&
+                overswipe == OVERSWIPE_BEHAVIOR.REGENERATE ||
+                overswipe == OVERSWIPE_BEHAVIOR.EDIT_GENERATE;
+
+            div.classList.toggle('last_swipe', isOverswipeable);
+
+            //If there's only one swipe, the left arrow should not be shown.
+            div.classList.toggle('swipes_visible', hasSwipes || pristineGreeting);
+            swipePickerButton.toggle(canOpenSwipePicker);
+
+            //updateSwipeCounter does not need to be awaited, It can run a bit later.
+            if (updateCounters) updateSwipeCounter(messageId, { message, messageElement: $(div) });
+        } else {
+            //Hide all messages that are not swipeable.
+            div.classList.remove('swipes_visible', 'last_swipe');
+            $(div).find('.mes_swipe_picker').toggle(canOpenSwipePickerForMessage(messageId));
+        }
+    });
+}
+
+/**
+ * This function is misleadingly named. It allows generation then refreshes the swipe buttons and counters.
+ */
+export function showSwipeButtons() {
+    state.swipesHidden = false;
+    if (isReactMainChatOwner()) {
+        setMainChatMessageUiFlag('swipeCounterHidden', false);
+    }
+    refreshSwipeButtons();
+}
+
+/**
+ * This function is misleadingly named. It blocks generation then refreshes the swipe buttons and counters.
+ * @param {object} [options] Options
+ * @param {boolean} [options.hideCounters=false] Also hide the swipes counter.
+ */
+export function hideSwipeButtons({ hideCounters = false } = {}) {
+    state.swipesHidden = true;
+    if (isReactMainChatOwner()) {
+        if (hideCounters) {
+            setMainChatMessageUiFlag('swipeCounterHidden', true, state.chat.length - 1);
+        }
+        refreshSwipeButtons();
+        return;
+    }
+
+    refreshSwipeButtons();
+
+    if (hideCounters === true) {
+        state.chatElement.find('.last_mes .swipes-counter').prop('hidden', true);
+    }
+}
+
+/**
+ * Deletes a swipe from the chat.
+ *
+ * @param {number?} [swipeId = null] - The ID of the swipe to delete. If not provided, the current swipe will be deleted.
+ * @param {number?} [messageId = chat.length - 1] - The ID of the message to delete from. If not provided, the last message will be targeted.
+ * @returns {Promise<number>|undefined} - The ID of the new swipe after deletion.
+ */
+export async function deleteSwipe(swipeId = null, messageId = state.chat.length - 1) {
+    if (swipeId != null) {
+        swipeId = Number(swipeId);
+        if (!Number.isInteger(swipeId) || swipeId < 0) {
+            toastr.warning(t`Invalid swipe ID.`);
+            return;
+        }
+    }
+
+    const message = state.chat[messageId];
+    if (!message || !Array.isArray(message.swipes) || !message.swipes.length) {
+        toastr.warning(t`No messages to delete swipes from.`);
+        return;
+    }
+
+    if (message.swipes.length <= 1) {
+        toastr.warning(t`Can't delete the last swipe.`);
+        return;
+    }
+
+    swipeId = Number(swipeId ?? message.swipe_id);
+    const currentSwipeId = clamp(Number(message.swipe_id ?? 0), 0, message.swipes.length - 1);
+
+    if (swipeId < 0 || swipeId >= message.swipes.length) {
+        toastr.warning(t`Invalid swipe ID: ${swipeId + 1}`);
+        return;
+    }
+
+    message.swipes.splice(swipeId, 1);
+
+    if (Array.isArray(message.swipe_info) && message.swipe_info.length) {
+        message.swipe_info.splice(swipeId, 1);
+    }
+
+    let newSwipeId;
+    if (swipeId < currentSwipeId) {
+        newSwipeId = currentSwipeId - 1;
+    } else if (swipeId > currentSwipeId) {
+        newSwipeId = currentSwipeId;
+    } else {
+        // Select the next swipe, or the one before if it was the last one.
+        newSwipeId = Math.min(swipeId, message.swipes.length - 1);
+    }
+
+    state.chat_metadata.tainted = true;
+
+    messageId = Number(messageId);
+    swipeId = Number(swipeId);
+    message.swipe_id = newSwipeId;
+    await eventSource.emit(event_types.MESSAGE_SWIPE_DELETED, { messageId, swipeId, newSwipeId });
+
+    if (swipeId === currentSwipeId) {
+        const direction = (swipeId <= newSwipeId) ? SWIPE_DIRECTION.RIGHT : SWIPE_DIRECTION.LEFT;
+        // Animate swipe and swap displayed message when the currently visible swipe was deleted.
+        await swipe(null, direction, { source: SWIPE_SOURCE.DELETE, repeated: false, forceMesId: messageId, forceSwipeId: newSwipeId });
+    } else {
+        await updateSwipeCounter(messageId);
+        if (messageId !== state.chat.length - 1) {
+            await updateSwipeCounter(state.chat.length - 1);
+        }
+        refreshSwipeButtons();
+        saveChatDebounced();
+    }
+
+    await saveChatConditional();
+
+    return newSwipeId;
+}
+
+export function updateEditArrowClasses() {
+    if (!(state.this_edit_mes_id >= 0)) {
+        return;
+    }
+    if (isReactMainChatOwner()) {
+        return;
+    }
+
+    const message = state.chatElement.children('.mes').filter(`.mes[mesid="${state.this_edit_mes_id}"]`);
+
+    const downButton = message.find('.mes_edit_down');
+    const upButton = message.find('.mes_edit_up');
+    const copyButton = message.find('.mes_edit_copy');
+    const deleteButton = message.find('.mes_edit_delete');
+    const lastId = Number(state.chatElement.find('.mes').last().attr('mesid'));
+    const firstId = Number(state.chatElement.find('.mes').first().attr('mesid'));
+
+    copyButton.removeClass('disabled');
+    deleteButton.removeClass('disabled');
+
+    // The last message cannot be moved down.
+    downButton.toggleClass('disabled', lastId === Number(state.this_edit_mes_id));
+    // The first message cannot be moved up.
+    upButton.toggleClass('disabled', firstId === Number(state.this_edit_mes_id));
+}
+
+/**
+ * Formats a counter for a swipe view.
+ * @param {number} current The current number of items.
+ * @param {number} total The total number of items.
+ * @returns {string} The formatted counter.
+ */
+function formatSwipeCounter(current, total) {
+    if (isNaN(current) && isNaN(total)) {
+        return '';
+    }
+    return `${!isNaN(current) ? current : '?'}\u200b/\u200b${!isNaN(total) ? total : '?'}`;
+}
+

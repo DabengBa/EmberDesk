@@ -173,11 +173,15 @@ describe('React runtime boundary', () => {
             path.join(repoRoot, 'public', 'script.js'),
             'utf8',
         );
+        const generationServiceSource = fs.readFileSync(
+            path.join(repoRoot, 'public', 'scripts', 'generation-service.js'),
+            'utf8',
+        );
         const contextBlock = scriptSource.match(
             /function setInContextMessages\([\s\S]*?\n\}\n\n\/\*\*\n \* @typedef \{object\} AdditionalRequestOptions/,
         )?.[0] ?? '';
-        const refreshBlock = scriptSource.match(
-            /export function refreshSwipeButtons\([\s\S]*?\n\}\n\/\*\*\n \* This function is misleadingly named/,
+        const refreshBlock = generationServiceSource.match(
+            /export function refreshSwipeButtons\([\s\S]*?\n\}\n+\/\*\*\n \* This function is misleadingly named/,
         )?.[0] ?? '';
         const reactContextBranch = contextBlock.match(
             /if \(isReactMainChatOwner\(\)\) \{[\s\S]*?return;\n    \}/,
