@@ -50,8 +50,8 @@ describe('main chat message row i18n parity', () => {
     });
 
     test('legacy empty-reply regenerate path no longer hardcodes Chinese', () => {
-        const scriptSource = fs.readFileSync(path.join(repoRoot, 'public/script.js'), 'utf8');
-        expect(scriptSource).toContain(".attr('data-i18n', 'Regenerate').text(translate('Regenerate'))");
-        expect(scriptSource).not.toContain(".text('重新生成')");
+        const domHandlersSource = fs.readFileSync(path.join(repoRoot, 'public/scripts/dom-handlers.js'), 'utf8');
+        expect(domHandlersSource).toContain(".attr('data-i18n', 'Regenerate').text(translate('Regenerate'))");
+        expect(domHandlersSource).not.toContain(".text('重新生成')");
     });
 });
