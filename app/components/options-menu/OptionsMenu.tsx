@@ -1,8 +1,10 @@
 /**
  * Options popup markup (React-owned inside #options). The shell keeps
  * display:none and is positioned by the lazy optionsPopper; item clicks are
- * bound in script.js's ready callback. option_close_chat is intentionally
- * duplicated in the legacy markup — both elements are preserved.
+ * dispatched by a document-delegated handler in dom-handlers.js so jQuery
+ * .trigger('click', customData) compatibility is preserved for slash commands
+ * and extensions. option_close_chat is intentionally duplicated in the legacy
+ * markup — both elements are preserved.
  */
 export function OptionsMenu() {
     return (

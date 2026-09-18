@@ -690,7 +690,10 @@ export async function bindLegacyShellHandlers() {
     /* $('#set_chat_character_settings').on('click', setScenarioOverride); */
 
     ///////////// OPTIMIZED LISTENERS FOR LEFT SIDE OPTIONS POPUP MENU //////////////////////
-    $('#options [id]').on('click', async function (event, customData) {
+    // Delegated binding: the menu items are React-owned inside #options and can be
+    // remounted; a document-level handler keeps jQuery-trigger compatibility
+    // (slash commands/extensions pass customData through trigger()).
+    $(document).on('click', '#options [id]', async function (event, customData) {
         const fromSlashCommand = customData?.fromSlashCommand || false;
         var id = $(this).attr('id');
 
