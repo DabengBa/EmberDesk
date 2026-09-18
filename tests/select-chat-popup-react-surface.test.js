@@ -40,8 +40,10 @@ describe('select chat popup React surface', () => {
         expect(script).toContain('async function mountSelectChatPopup()');
         expect(script).toContain('module.mountSelectChatPopup(host)');
         const mountIdx = script.indexOf("measureStartupStage('mountSelectChatPopup'");
-        const bindIdx = script.indexOf("$('#select_chat_cross').on('click'");
+        const legacyBindIdx = script.indexOf('await bindLegacyShellHandlers()');
+        const domHandlersSource = readRepoFile('public/scripts/dom-handlers.js');
+        expect(domHandlersSource).toContain("$('#select_chat_cross').on('click'");
         expect(mountIdx).toBeGreaterThan(-1);
-        expect(mountIdx).toBeLessThan(bindIdx);
+        expect(mountIdx).toBeLessThan(legacyBindIdx);
     });
 });

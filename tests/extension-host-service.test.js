@@ -488,9 +488,8 @@ describe('extension compatibility slots', () => {
         expect(scriptSource).toContain('if (result?.mounted)');
         expect(scriptSource).toContain('hideLegacyExtensionsHostControls(false)');
         // Retry must re-run deferred load, not open Manage as a substitute.
-        expect(scriptSource).toContain("case 'retryDeferredExtensions'");
-        expect(scriptSource).toContain('return retryDeferredExtensionsHostLoad()');
-        expect(scriptSource).not.toMatch(/case 'retryDeferredExtensions':\s*return openExtensionsHostManager\(\)/);
+        expect(scriptSource).toContain('retryDeferredExtensions: () => retryDeferredExtensionsHostLoad()');
+        expect(scriptSource).not.toMatch(/retryDeferredExtensions[^=]*=>?\s*openExtensionsHostManager\(\)/);
 
         expect(extensionsSource).toContain('getExtensionCompatibilitySlotManager');
         expect(extensionsSource).toContain('ensureExtensionCompatibilitySlots');

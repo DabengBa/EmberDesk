@@ -51,19 +51,19 @@ function expectElementWithId(source, id) {
 describe('character list structure', () => {
     test('keeps the character library panel skeleton stable', () => {
         const indexHtml = read('public/index.html');
+        const rightNavSource = read('app/components/right-nav/RightNavPanel.tsx');
 
         [
             'id="rm_characters_block"',
-            'id="rightNavDrawerIcon"',
             'id="charListFixedTop"',
             'id="rm_button_characters"',
             'id="rm_button_bar"',
-            'class="character-list-tool-group character-list-create-group"',
-            'class="character-list-tool-group character-list-sort-group"',
-            'class="character-list-tool-group character-list-view-group"',
-            'class="character-list-tool-group character-list-bulk-actions"',
-            'class="character-list-sort-label"',
-            'class="character-list-action-label"',
+            'className="character-list-tool-group character-list-create-group"',
+            'className="character-list-tool-group character-list-sort-group"',
+            'className="character-list-tool-group character-list-view-group"',
+            'className="character-list-tool-group character-list-bulk-actions"',
+            'className="character-list-sort-label"',
+            'className="character-list-action-label"',
             'id="rm_button_create"',
             'id="character_import_button"',
             'id="external_import_button"',
@@ -77,18 +77,19 @@ describe('character list structure', () => {
             'id="bulkDeleteButton"',
             'id="form_character_search_form"',
             'id="character_search_bar"',
-            'class="tags rm_tag_filter"',
-            'class="tags rm_tag_bogus_drilldown"',
+            'rm_tag_filter',
+            'rm_tag_bogus_drilldown',
             'id="rm_print_characters_pagination"',
             'id="rm_print_characters_block"',
-        ].forEach(marker => expect(indexHtml).toContain(marker));
+        ].forEach(marker => expect(rightNavSource).toContain(marker));
 
+        expect(indexHtml).toContain('id="rightNavDrawerIcon"');
         expect(indexHtml).toMatch(/id="rightNavDrawerIcon"[^>]*\brole="button"/);
         expect(indexHtml).toMatch(/id="rightNavDrawerIcon"[^>]*\baria-label="Open Character Management"/);
         expect(indexHtml).toMatch(/id="rightNavDrawerIcon"[^>]*\btabindex="0"/);
-        expect(indexHtml).toMatch(/id="rm_button_characters"[^>]*\brole="button"/);
-        expect(indexHtml).toMatch(/id="rm_button_characters"[^>]*\baria-label="Characters"/);
-        expect(indexHtml).toMatch(/id="rm_button_characters"[^>]*\btabindex="0"/);
+        expect(rightNavSource).toMatch(/id="rm_button_characters"[^>]*\brole="button"/);
+        expect(rightNavSource).toMatch(/id="rm_button_characters"[^>]*\baria-label="Characters"/);
+        expect(rightNavSource).toMatch(/id="rm_button_characters"[^>]*\btabIndex=\{0\}/);
 
         [
             ['rm_button_create', 'Character Toolbar New', 'New', 'Create New Character'],
@@ -100,8 +101,8 @@ describe('character list structure', () => {
             ['bulkSelectAllButton', 'Character Toolbar All', 'All', 'Bulk select all characters'],
             ['bulkDeleteButton', 'Character Toolbar Delete', 'Del', 'Bulk delete characters'],
         ].forEach(([id, key, label, ariaLabel]) => {
-            expect(indexHtml).toMatch(new RegExp(`id="${id}"[\\s\\S]*?<span class="character-list-action-label" data-i18n="${key}">${label}<\\/span>`));
-            expect(indexHtml).toMatch(new RegExp(`id="${id}"[^>]*\\baria-label="${ariaLabel}"`));
+            expect(rightNavSource).toMatch(new RegExp(`id="${id}"[\\s\\S]*?<span className="character-list-action-label" data-i18n="${key}">${label}<\\/span>`));
+            expect(rightNavSource).toMatch(new RegExp(`id="${id}"[^>]*\\baria-label="${ariaLabel}"`));
         });
 
         [
@@ -113,9 +114,9 @@ describe('character list structure', () => {
             ['bulkSelectAllButton', 'Bulk select all characters'],
             ['bulkDeleteButton', 'Bulk delete characters'],
         ].forEach(([id, title]) => {
-            expect(indexHtml).toMatch(new RegExp(`id="${id}"[^>]*\\btitle="${title}"`));
+            expect(rightNavSource).toMatch(new RegExp(`id="${id}"[^>]*title="?\\{?"${title}`));
         });
-        expect(indexHtml).toMatch(/id="bulkEditButton"[^>]*\btitle="Bulk edit characters&#13;&#13;/);
+        expect(rightNavSource).toMatch(/id="bulkEditButton"[^>]*title=\{"Bulk edit characters\\r\\r/);
 
         [
             'rm_characters_block',
@@ -127,7 +128,7 @@ describe('character list structure', () => {
             'character_search_bar',
             'rm_print_characters_pagination',
             'rm_print_characters_block',
-        ].forEach(id => expectElementWithId(indexHtml, id));
+        ].forEach(id => expectElementWithId(rightNavSource, id));
     });
 
     test('keeps the character folder filter actionable', () => {
@@ -156,8 +157,9 @@ describe('character list structure', () => {
         // retired group row component
         expect(folderRowSource).toContain('className={className}');
         expect(folderRowSource).toContain('{...{ tagid: String(id) }}');
-        expect(scriptSource).toContain('$(\'#rm_print_characters_block .character_select\').removeClass(\'is_active\')');
-        expect(scriptSource).toContain('$(`#CharID${chid}`).addClass(\'is_active\')');
+        const lifecycleSource = read('public/scripts/character-lifecycle-service.js');
+        expect(lifecycleSource).toContain('$(\'#rm_print_characters_block .character_select\').removeClass(\'is_active\')');
+        expect(lifecycleSource).toContain('$(`#CharID${chid}`).addClass(\'is_active\')');
 
         const indexHtml = read('public/index.html');
         expect(indexHtml).not.toContain('group_type_badge');
@@ -340,10 +342,11 @@ describe('character list structure', () => {
         expect(printCharactersSource).toContain('allowDuringCharacterDelete = false');
         expect(printCharactersSource).toMatch(/if \(shouldSuppressCharacterDeleteListReprint\(deleteReconcileGenerationAtStart, \{ allowDuringDelete: allowDuringCharacterDelete \}\)\) \{\s+return;\s+\}/);
         expect(printCharactersSource).toMatch(/callback: async function \(\/\*\* @type \{Entity\[\]\} \*\/ data\) \{\s+if \(shouldSuppressCharacterDeleteListReprint\(deleteReconcileGenerationAtStart, \{ allowDuringDelete: allowDuringCharacterDelete \}\)\) \{\s+return;\s+\}/);
-        const deleteCharacterSource = extractFunctionSource(scriptSource, 'deleteCharacter');
+        const lifecycleSource = read('public/scripts/character-lifecycle-service.js');
+        const deleteCharacterSource = extractFunctionSource(lifecycleSource, 'deleteCharacter');
         expect(deleteCharacterSource).toContain('deleteContext = null');
-        expect(deleteCharacterSource.indexOf('isCharacterDeleteReconcileInProgress = true;')).toBeLessThan(deleteCharacterSource.indexOf('const closeChatResult = await closeCurrentChatForDelete();'));
-        expect(deleteCharacterSource.indexOf('isCharacterDeleteReconcileInProgress = false;')).toBeGreaterThan(deleteCharacterSource.indexOf('await removeCharacterFromUI(deletedAvatars, { deleteContext });'));
+        expect(deleteCharacterSource.indexOf('state.isCharacterDeleteReconcileInProgress = true;')).toBeLessThan(deleteCharacterSource.indexOf('const closeChatResult = await closeCurrentChatForDelete();'));
+        expect(deleteCharacterSource.indexOf('state.isCharacterDeleteReconcileInProgress = false;')).toBeGreaterThan(deleteCharacterSource.indexOf('await removeCharacterFromUI(deletedAvatars, { deleteContext });'));
         expect(removeCharacterFromUISource).toContain('const beforeDeleteSnapshot = createCharacterListEntitySnapshot(getEntitiesList({ doFilter: true }));');
         expect(removeCharacterFromUISource).toContain('cancelDebounce(printCharactersDebounced);');
         expect(removeCharacterFromUISource).toContain('const reconciled = await reconcileCharacterListAfterDelete({');
@@ -375,12 +378,15 @@ describe('character list structure', () => {
         const cascadeDialogSource = read('public/scripts/world-cascade-dialog.js');
         const zhCnLocale = read('public/locales/zh-cn.json');
         const zhTwLocale = read('public/locales/zh-tw.json');
-        const deleteCharacterSource = extractFunctionSource(scriptSource, 'deleteCharacter');
+        const lifecycleSource = read('public/scripts/character-lifecycle-service.js');
+        const domHandlersSource = read('public/scripts/dom-handlers.js');
+        const rightNavSource = read('app/components/right-nav/RightNavPanel.tsx');
+        const deleteCharacterSource = extractFunctionSource(lifecycleSource, 'deleteCharacter');
         const deleteDialogTitleSource = extractFunctionSource(scriptSource, 'getCharacterDeleteDialogTitle');
         const newAssistantChatSource = extractFunctionSource(scriptSource, 'newAssistantChat');
 
-        expect(indexHtml).toContain('id="temporary_chat_status"');
-        expect(indexHtml).toContain('data-i18n="Temporary chat"');
+        expect(rightNavSource).toContain('id="temporary_chat_status"');
+        expect(rightNavSource).toContain('data-i18n="Temporary chat"');
         expect(styleSource).toMatch(/#temporary_chat_status/);
         expect(scriptSource).toContain('function setTemporaryChatStatus');
         expect(scriptSource).toContain('$(\'#temporary_chat_status\')');
@@ -389,16 +395,16 @@ describe('character list structure', () => {
         expect(deleteCharacterSource).toContain('temporaryChatAcknowledged = false');
         expect(deleteCharacterSource).toContain('if (inTempChat && !temporaryChatAcknowledged)');
         expect(scriptSource).toContain('buildTemporaryChatDeleteWarningHtml');
-        expect(scriptSource).toContain('content += buildTemporaryChatDeleteWarningHtml();');
+        expect(domHandlersSource).toContain('content += buildTemporaryChatDeleteWarningHtml();');
         expect(deleteDialogTitleSource).toContain('escapeHtml(characterName');
         expect(deleteDialogTitleSource).toContain('t`Delete character "${safeCharacterName}"?`');
-        expect(scriptSource).toContain('const characterToDelete = characters[this_chid];');
-        expect(scriptSource).toContain('const deleteDialogTitle = getCharacterDeleteDialogTitle(characterToDelete.name);');
-        expect(scriptSource).toContain('showDeleteConfirmWithCascade(deleteDialogTitle, content)');
-        expect(scriptSource).toMatch(/Popup\.show\.confirm\(deleteDialogTitle,\s*content,\s*\{[\s\S]*defaultResult: POPUP_RESULT\.NEGATIVE/);
-        expect(scriptSource).toMatch(/deleteCharacter\(avatarToDelete,\s*\{[\s\S]*temporaryChatAcknowledged: inTempChat[\s\S]*deleteWorlds: dialogResult\.deleteWorlds/);
-        expect(scriptSource).toMatch(/deleteCharacter\(avatarToDelete,\s*\{[\s\S]*deleteChats,[\s\S]*temporaryChatAcknowledged: inTempChat[\s\S]*\}\)/);
-        expect(scriptSource).toMatch(/deleteCharacter\(avatarToDelete,\s*\{[\s\S]*deleteWorlds: \[\],[\s\S]*clearWorldReferences: false[\s\S]*\}\)/);
+        expect(domHandlersSource).toContain('const characterToDelete = state.characters[state.this_chid];');
+        expect(domHandlersSource).toContain('const deleteDialogTitle = getCharacterDeleteDialogTitle(characterToDelete.name);');
+        expect(domHandlersSource).toContain('showDeleteConfirmWithCascade(deleteDialogTitle, content)');
+        expect(domHandlersSource).toMatch(/Popup\.show\.confirm\(deleteDialogTitle,\s*content,\s*\{[\s\S]*defaultResult: (state\.)?POPUP_RESULT\.NEGATIVE/);
+        expect(domHandlersSource).toMatch(/deleteCharacter\(avatarToDelete,\s*\{[\s\S]*temporaryChatAcknowledged: inTempChat[\s\S]*deleteWorlds: dialogResult\.deleteWorlds/);
+        expect(domHandlersSource).toMatch(/deleteCharacter\(avatarToDelete,\s*\{[\s\S]*deleteChats,[\s\S]*temporaryChatAcknowledged: inTempChat[\s\S]*\}\)/);
+        expect(domHandlersSource).toMatch(/deleteCharacter\(avatarToDelete,\s*\{[\s\S]*deleteWorlds: \[\],[\s\S]*clearWorldReferences: false[\s\S]*\}\)/);
         expect(zhCnLocale).toContain('"Delete character \\"${0}\\"?": "删除角色「${0}」？"');
         expect(zhTwLocale).toContain('"Delete character \\"${0}\\"?": "刪除角色「${0}」？"');
 
@@ -426,20 +432,22 @@ describe('character list structure', () => {
 
     test('keeps selected-character navigation safe when the current character was deleted', () => {
         const scriptSource = read('public/script.js');
-        const selectSelectedCharacterSource = extractFunctionSource(scriptSource, 'select_selected_character');
+        const lifecycleSource = read('public/scripts/character-lifecycle-service.js');
+        const domHandlersSource = read('public/scripts/dom-handlers.js');
+        const selectSelectedCharacterSource = extractFunctionSource(lifecycleSource, 'select_selected_character');
 
-        expect(selectSelectedCharacterSource).toContain('const character = characters[chid];');
+        expect(selectSelectedCharacterSource).toContain('const character = state.characters[chid];');
         expect(selectSelectedCharacterSource).toMatch(/if \(!character\) \{\s+if \(switchMenu\) \{\s+select_rm_characters\(\);\s+\}\s+return false;\s+\}/);
         expect(selectSelectedCharacterSource).toContain('$(\'#rm_button_selected_ch\').children(\'h2\').text(character.name);');
         expect(selectSelectedCharacterSource).not.toContain('$(\'#rm_button_selected_ch\').children(\'h2\').text(characters[chid].name);');
-        expect(scriptSource).toMatch(/if \(this_chid !== undefined && characters\[this_chid\]\) \{\s+selected_button = 'character_edit';\s+select_selected_character\(this_chid\);\s+\} else \{\s+selected_button = 'characters';\s+select_rm_characters\(\);\s+\}/);
+        expect(domHandlersSource).toMatch(/if \(state\.this_chid !== undefined && state\.characters\[state\.this_chid\]\) \{\s+state\.selected_button = 'character_edit';\s+select_selected_character\(state\.this_chid\);\s+\} else \{\s+state\.selected_button = 'characters';\s+select_rm_characters\(\);\s+\}/);
     });
 
     test('keeps the selected-character delete action directly discoverable and keyboard reachable', () => {
-        const indexHtml = read('public/index.html');
+        const rightNavSource = read('app/components/right-nav/RightNavPanel.tsx');
 
-        expect(indexHtml).toMatch(/<button id="delete_button"[^>]*type="button"[^>]*class="[^"]*\bmenu_button\b[^"]*\bred_button\b[^"]*"[^>]*title="Delete Character"[^>]*aria-label="Delete Character"[^>]*data-i18n="\[title\]\[aria-label\]Delete Character"[^>]*><\/button>/);
-        expect(indexHtml).toContain('<option id="delete_from_dropdown" class="red_button character-detail-edit-action" data-i18n="Delete Character">');
+        expect(rightNavSource).toMatch(/<button id="delete_button"[^>]*type="button"[^>]*className="[^"]*\bmenu_button\b[^"]*\bred_button\b[^"]*"[^>]*title="Delete Character"[^>]*aria-label="Delete Character"[^>]*data-i18n="\[title\]\[aria-label\]Delete Character"[^>]*><\/button>/);
+        expect(rightNavSource).toContain('<option id="delete_from_dropdown" className="red_button character-detail-edit-action" data-i18n="Delete Character">');
     });
 
     test('keeps search feedback, grid labels, and bulk selection semantics wired', () => {
@@ -453,17 +461,18 @@ describe('character list structure', () => {
         const powerUserSource = read('public/scripts/power-user.js');
         const rowSource = read('app/components/character-library/CharacterLibraryCharacterRow.tsx');
 
-        expect(indexHtml).toContain('id="character_search_status"');
-        expect(indexHtml).toContain('data-i18n="Filtering characters…"');
-        expect(indexHtml).toContain('aria-live="polite"');
-        expect(indexHtml).toContain('id="bulkSelectionHint"');
-        expect(indexHtml).toContain('data-i18n="Click character cards to select"');
-        expect(indexHtml).toContain('data-i18n="Character Toolbar URL">URL</span>');
-        expect(indexHtml).toContain('data-i18n="Character Toolbar Bulk">Bulk</span>');
-        expect(indexHtml).toContain('data-i18n="Character Toolbar Sort">Sort</label>');
-        expect(indexHtml).toMatch(/id="bulkSelectedCount"[^>]*style="display: none;"[^>]*role="status"/);
-        expect(indexHtml).toContain('role="status"');
-        expect(indexHtml).toMatch(/id="bulkEditButton"[^>]*tabindex="0"/);
+        const rightNavSource = read('app/components/right-nav/RightNavPanel.tsx');
+        expect(rightNavSource).toContain('id="character_search_status"');
+        expect(rightNavSource).toContain('data-i18n="Filtering characters…"');
+        expect(rightNavSource).toContain('aria-live="polite"');
+        expect(rightNavSource).toContain('id="bulkSelectionHint"');
+        expect(rightNavSource).toContain('data-i18n="Click character cards to select"');
+        expect(rightNavSource).toContain('data-i18n="Character Toolbar URL">URL</span>');
+        expect(rightNavSource).toContain('data-i18n="Character Toolbar Bulk">Bulk</span>');
+        expect(rightNavSource).toContain('data-i18n="Character Toolbar Sort">Sort</label>');
+        expect(rightNavSource).toMatch(/id="bulkSelectedCount"[^>]*"display": "none"[^>]*role="status"/);
+        expect(rightNavSource).toContain('role="status"');
+        expect(rightNavSource).toMatch(/id="bulkEditButton"[^>]*tabIndex=\{0\}/);
         expect(scriptSource).toContain('setCharacterSearchBusy(true)');
         expect(scriptSource).toContain('setCharacterSearchBusy(false)');
         expect(scriptSource).toContain('updateCharListGridToggleLabel()');

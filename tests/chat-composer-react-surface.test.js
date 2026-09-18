@@ -58,8 +58,9 @@ describe('chat composer React surface', () => {
         expect(script).toContain('module.mountChatComposer(host)');
         // mount must be awaited at the top of the jQuery ready callback,
         // before the binding section that attaches send_but/send_textarea handlers.
-        const mountIdx = script.indexOf('await mountChatComposer();');
-        const bindIdx = script.indexOf("$('#send_textarea').on('focusin focus click'");
+        const domHandlersSource = readRepoFile('public/scripts/dom-handlers.js');
+        const mountIdx = domHandlersSource.indexOf('await mountChatComposer();');
+        const bindIdx = domHandlersSource.indexOf("$('#send_textarea').on('focusin focus click'");
         expect(mountIdx).toBeGreaterThan(-1);
         expect(bindIdx).toBeGreaterThan(-1);
         expect(mountIdx).toBeLessThan(bindIdx);

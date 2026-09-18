@@ -49,9 +49,11 @@ describe('Advanced Definitions popup React surface', () => {
         expect(script).toContain('module.mountCharacterPopup(host)');
         const mountIdx = script.indexOf("measureStartupStage('mountCharacterPopup'");
         const secretsIdx = script.indexOf("measureStartupStage('initSecrets'");
-        const crossBindIdx = script.indexOf("$('#character_cross').on('click'");
+        const legacyBindIdx = script.indexOf('await bindLegacyShellHandlers()');
+        const domHandlersSource = readRepoFile('public/scripts/dom-handlers.js');
+        expect(domHandlersSource).toContain("$('#character_cross').on('click'");
         expect(mountIdx).toBeGreaterThan(-1);
         expect(mountIdx).toBeLessThan(secretsIdx);
-        expect(mountIdx).toBeLessThan(crossBindIdx);
+        expect(mountIdx).toBeLessThan(legacyBindIdx);
     });
 });

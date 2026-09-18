@@ -12,8 +12,8 @@ function read(relativePath) {
     return fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
 }
 
-function getApiKeySectionMarkup(indexSource) {
-    const match = indexSource.match(/<div id="api_key_section">([\s\S]*?)<\/div>\s*<\/div>/);
+function getApiKeySectionMarkup(panelSource) {
+    const match = panelSource.match(/<div id="api_key_section">([\s\S]*?)<\/div>\s*<\/div>/);
     expect(match).not.toBeNull();
     return match[0];
 }
@@ -21,8 +21,8 @@ function getApiKeySectionMarkup(indexSource) {
 describe('Vertex AI API key setup', () => {
     test('Vertex Express keeps the unified API key input visible', () => {
         const styleSource = read('public/style.css');
-        const indexSource = read('public/index.html');
-        const apiKeySection = getApiKeySectionMarkup(indexSource);
+        const panelSource = read('app/components/api/ApiConnectionsPanel.tsx');
+        const apiKeySection = getApiKeySectionMarkup(panelSource);
 
         expect(apiKeySection).toContain('id="api_key_unified"');
         expect(styleSource).not.toMatch(/body\.vertexai-active\s+#api_key_section\s*\{[^}]*display\s*:\s*none\b/i);

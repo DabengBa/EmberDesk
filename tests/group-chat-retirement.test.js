@@ -146,6 +146,7 @@ describe('group chat retirement', () => {
     test('retires user-facing group UI, settings, bookmark conversion, and active runtime imports', () => {
         const indexSource = fs.readFileSync(path.join(repoRoot, 'public', 'index.html'), 'utf8');
         const scriptSource = fs.readFileSync(path.join(repoRoot, 'public', 'script.js'), 'utf8');
+        const domHandlersSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'dom-handlers.js'), 'utf8');
         const bookmarksSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'bookmarks.js'), 'utf8');
         const settingsSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'settings', 'SettingsSurface.tsx'), 'utf8');
         const settingsHelperSource = fs.readFileSync(path.join(repoRoot, 'app', 'lib', 'settings-helpers.js'), 'utf8');
@@ -164,7 +165,7 @@ describe('group chat retirement', () => {
         expect(indexSource).not.toContain('id="option_convert_to_group"');
         expect(scriptSource).not.toContain('from \'./scripts/group-chats.js\'');
         expect(scriptSource).not.toContain('GROUP_AUTHORING_REACT_HOST_ID');
-        expect(scriptSource).toContain('group memberships will be preserved');
+        expect(domHandlersSource).toContain('group memberships will be preserved');
         expect(scriptSource).not.toContain('switchWaifuMode');
         expect(bookmarksSource).not.toContain('convertSoloToGroupChat');
         expect(bookmarksSource).not.toContain('/api/chats/group/save');
@@ -313,8 +314,8 @@ describe('group chat retirement', () => {
         const dataMaidSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'data-maid', 'DataMaidDialog.tsx'), 'utf8');
         expect(dataMaidSource).toContain('Group Chats');
         expect(dataMaidSource).toContain('Chat files associated with deleted groups.');
-        const scriptSource = fs.readFileSync(path.join(repoRoot, 'public', 'script.js'), 'utf8');
-        expect(scriptSource).toContain('All chats, assets and group memberships will be preserved');
+        const domHandlersSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'dom-handlers.js'), 'utf8');
+        expect(domHandlersSource).toContain('All chats, assets and group memberships will be preserved');
     });
 
     test('removes unreachable group filesystem scans while retaining canonical historical owner support', () => {
