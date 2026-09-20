@@ -382,28 +382,6 @@ export function PowerUserPanel() {
                                 <input id="restore_user_input" type="checkbox" />
                                 <small data-i18n="Restore User Input">Restore User Input</small>
                             </label>
-                            <div className="flex-container alignItemsCenter">
-                                <label id="movingUIModeCheckBlock" htmlFor="movingUImode" className="checkbox_label" title="Allow repositioning certain UI elements by dragging them. PC only, no effect on mobile." data-i18n="[title]Allow repositioning certain UI elements by dragging them. PC only, no effect on mobile">
-                                    <input id="movingUImode" type="checkbox" />
-                                    <small>
-                                        <span data-i18n="Movable UI Panels">MovingUI</span>
-                                        <i className="fa-solid fa-desktop"  />
-                                    </small>
-                                </label>
-                                <ContractButton id="movingUIreset" className="menu_button margin0" label="Reset" labelKey="mui_reset" nativeTitle title="Reset MovingUI panel sizes/locations." icon={<i className=" fa-solid fa-recycle margin-r5" aria-hidden="true" />} />
-                            </div>
-                            <div id="MovingUI-presets-block" className="flex-container alignitemscenter">
-                                <div className="flex-container alignItemsFlexEnd">
-                                    <label htmlFor="movingUIPresets" title="MovingUI preset. Predefined/saved draggable positions." data-i18n="[title]MovingUI preset. Predefined/saved draggable positions">
-                                        <small data-i18n="MUI Preset">MovingUI Preset:</small>
-                                        <div className="flex-container flexnowrap">
-                                            <select id="movingUIPresets" className="widthNatural flex1 margin0">
-                                            </select>
-                                        </div>
-                                    </label>
-                                    <ContractIconButton id="movingui-preset-save-button" className="menu_button margin0" label="Save changes to a new MovingUI preset file." nativeTitle title="Save changes to a new MovingUI preset file." icon={<i className="fa-solid fa-save" aria-hidden="true" />} />
-                                </div>
-                            </div>
                             <div id="CustomCSS-block" className="flex-container flexFlowColumn">
                                 <h4 className="title_restorable" title="Apply a custom CSS style to all of the ST GUI." data-i18n="[title]Apply a custom CSS style to all of the ST GUI">
                                     <span data-i18n="Custom CSS">Custom CSS</span>

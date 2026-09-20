@@ -28,7 +28,7 @@
 | 构建 | Vite 8 | 已采用 | Vite 构建 `/lib.js`、共享 React app、character-library panel bundle，以及 workspace panel action-island bundle。 |
 | 样式 | Tailwind CSS v4 + 既有 CSS | 已采用 | Tailwind v4 接入 React app；主工作区 legacy CSS 仍是现有页面和扩展兼容面的 owner。 |
 | UI 组件 | 本地 React 组件 | 已采用 | 当前代码使用 `app/components/*` 本地组件；shadcn/ui、Ant Design 尚未进入 `package.json`，不能写成已采用依赖。 |
-| API | Express 5 | 当前保留 | Express 是唯一的 runtime 和 route owner；`POST /api/moving-ui/save` 使用直接的 Express router，见 [ADR-0013](../adr/0013-remove-obsolete-web-stack-experiments.md) 与 [ADR-0010](../adr/0010-express-runtime-owner-boundary.md)。 |
+| API | Express 5 | 当前保留 | Express 是唯一的 runtime 和 route owner；`/api/moving-ui` 现仅保留 410 退役 tombstone（movingUI 已随 B-cut-1 退役），见 [ADR-0013](../adr/0013-remove-obsolete-web-stack-experiments.md) 与 [ADR-0010](../adr/0010-express-runtime-owner-boundary.md)。 |
 | 数据获取 | TanStack Query | 已采用 | React login/setup/settings、character-library panel、workspace panel shell，以及 World Info / Extensions Host 的 guarded React state/action surfaces 已使用 TanStack Query；历史 Background Library island 记录已 superseded。 |
 | 表单 | TanStack Form + Zod | 已采用 | React login/setup/settings、character-library toolbar、World Info controls 和 Extensions Host Extras controls 的 React-owned 表单/呈现态使用 TanStack Form + Zod；历史 Background Library filter/sort surface 已 retired。 |
 | 列表性能 | TanStack Virtual | 已采用 | Character Library panel 在大页尺寸下用 `@tanstack/react-virtual` 限制同时挂载行数；main-chat `mainChatMessageList` island 现在也用它做 headless measurement / snapshot / restore controller，但仍不渲染第二套可见消息列表。 |
@@ -284,7 +284,7 @@ pnpm run perf:interaction
 - Phase 5 先回答“值不值得做”和“能不能少做”。当前不保留第二个路由框架；typed API 价值不等于引入新框架。
 - Drizzle 只能先接管 derived SQLite cache；file-backed user data 仍是正本。任何把 SQLite 升级为 canonical storage 的方案必须另起 ADR。
 - Express sunset 不是默认结果；若 route parity、rollback、plugin mounting 或 security middleware proof 不足，Phase 5 的有效结论可以是“保留 Express runtime owner，延期 sunset”。
-- `tests/express5-route-compatibility.test.js` 是 Express 宿主链保护门；`tests/moving-ui-express-route.test.js` 保护直接路由的登录墙、验证和写入行为。
+- `tests/express5-route-compatibility.test.js` 是 Express 宿主链保护门；`tests/moving-ui-express-route.test.js` 保护 `/api/moving-ui` 退役 tombstone 的登录墙与稳定 410 契约。
 
 **Phase 5 当前结论**：
 - EmberDesk 已删除 Hono route-island 实验和 Webpack fallback；现有需求由 Vite 与 Express 直接满足。

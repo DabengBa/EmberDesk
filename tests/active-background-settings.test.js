@@ -124,7 +124,7 @@ describe('active background settings', () => {
 
     test('restores ordinary spoiler initialization for saved true and false values', () => {
         const startupTail = powerUserSource.slice(powerUserSource.indexOf('await loadReasoningTemplates(data);'));
-        expect(startupTail).toMatch(/await loadReasoningTemplates\(data\);[\s\S]*?switchSpoilerMode\(\);[\s\S]*?loadMovingUIState\(\);/);
+        expect(startupTail).toMatch(/await loadReasoningTemplates\(data\);[\s\S]*?switchSpoilerMode\(\);[\s\S]*?loadCharListState\(\);/);
 
         const enabled = loadPowerUserFunction('switchSpoilerMode', { spoiler_free_mode: true });
         enabled.fn();

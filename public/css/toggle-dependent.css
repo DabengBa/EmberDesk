@@ -370,21 +370,6 @@ body.no-blur #send_form {
     background-color: var(--SmartThemeBlurTintColor) !important;
 }
 
-/* movingUI*/
-
-body.movingUI .drag-grabber {
-    display: inline;
-}
-
-body.movingUI #sheld,
-body.movingUI .drawer-content,
-body.movingUI .zoomed_avatar,
-body.movingUI .draggable,
-body.movingUI #floatingPrompt {
-    resize: both;
-}
-
-
 /*No Text Shadows Mode*/
 
 body.noShadows * {

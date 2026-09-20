@@ -47,7 +47,7 @@ Phase 5 已经被重新定义为 “Typed API 与 backend boundary evaluation”
 
 - **Delivery status:** delivered and archived on 2026-06-23
 - **Historical code path:** The former Hono route island and its focused parity test under `moving-ui` were removed by ADR-0013.
-- **Current replacement path:** `src/endpoints/moving-ui.js`, `tests/moving-ui-express-route.test.js`
+- **Current replacement path:** `src/endpoints/moving-ui.js`, `tests/moving-ui-express-route.test.js`（B-cut-1 退役后改为 410 tombstone 契约测试）
 - **Durable decision path:** `.docs/adr/0008-hono-route-island-under-express-host.md`（已被取代）、`.docs/adr/0013-remove-obsolete-web-stack-experiments.md`、`.docs/tech/react-modernization-roadmap.md`、`.docs/PROJECT_HISTORY.md`
 - **Commit / PR trace:** archived in the current Phase 5 wrap-up commit; durable history recorded in `.docs/PROJECT_HISTORY.md` dated 2026-06-23
 

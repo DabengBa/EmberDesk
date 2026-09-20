@@ -410,7 +410,7 @@ const saveUserInputDebounced = debounce(saveUserInput);
 // Make the DIV element draggable:
 
 /**
- * Make the given element draggable. This is used for Moving UI.
+ * Make the given element draggable (e.g. zoomed avatars, extension windows).
  * @param {JQuery} $elmnt - The element to make draggable.
  */
 export function dragElement($elmnt) {
@@ -418,27 +418,18 @@ export function dragElement($elmnt) {
     let isMouseDown = false;
 
     let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
-    let height, width, top, left, right, bottom,
+    let height, width, top, left,
         maxX, maxY, winHeight, winWidth;
 
     const elmntName = $elmnt.attr('id');
     const elmntNameEscaped = $.escapeSelector(elmntName);
     const $elmntHeader = $(`#${elmntNameEscaped}header`);
 
-    // Helper: Save position/size to state and emit events
-    function savePositionAndSize() {
-        if (!power_user.movingUIState[elmntName]) power_user.movingUIState[elmntName] = {};
-        power_user.movingUIState[elmntName].top = top;
-        power_user.movingUIState[elmntName].left = left;
-        power_user.movingUIState[elmntName].right = right;
-        power_user.movingUIState[elmntName].bottom = bottom;
-        power_user.movingUIState[elmntName].margin = 'unset';
+    // Helper: Notify listeners when a drag/resize interaction ends
+    function notifyResize() {
         if (actionType === 'resize') {
-            power_user.movingUIState[elmntName].width = width;
-            power_user.movingUIState[elmntName].height = height;
             eventSource.emit('resizeUI', elmntName);
         }
-        saveSettingsDebounced();
     }
 
     // Helper: Clamp element within viewport
@@ -457,7 +448,6 @@ export function dragElement($elmnt) {
             $target.hasClass('resizing') ||
             $target.height() < 50 ||
             $target.width() < 50 ||
-            power_user.movingUI === false ||
             isMobile() ||
             !isMouseDown
         ) {
@@ -471,15 +461,10 @@ export function dragElement($elmnt) {
         width = parseInt(style.width);
         top = parseInt(style.top);
         left = parseInt(style.left);
-        right = parseInt(style.right);
-        bottom = parseInt(style.bottom);
         maxX = width + left;
         maxY = height + top;
         winWidth = window.innerWidth;
         winHeight = window.innerHeight;
-
-        // Prepare state object if missing
-        if (!power_user.movingUIState[elmntName]) power_user.movingUIState[elmntName] = {};
 
         if (actionType === 'resize') {
             let containerAspectRatio = height / width;
@@ -509,19 +494,12 @@ export function dragElement($elmnt) {
             // }
             $elmnt.css({ left, top });
             $elmnt.off('mouseup').on('mouseup', () => {
-                if (
-                    power_user.movingUIState[elmntName].width === $elmnt.width() &&
-                    power_user.movingUIState[elmntName].height === $elmnt.height()
-                ) return;
-                savePositionAndSize();
+                notifyResize();
                 observer.disconnect();
             });
         } else if (actionType === 'drag') {
             clampToViewport();
         }
-
-        // Always update position in state
-        savePositionAndSize();
     });
 
     // Mouse event handlers
@@ -538,7 +516,6 @@ export function dragElement($elmnt) {
     }
 
     function elementDrag(e) {
-        if (!power_user.movingUIState[elmntName]) power_user.movingUIState[elmntName] = {};
         e.preventDefault();
         pos1 = pos3 - e.clientX;
         pos2 = pos4 - e.clientY;
@@ -559,7 +536,7 @@ export function dragElement($elmnt) {
         $(document).off('mousemove', elementDrag);
         $elmnt.attr('data-dragged', 'false');
         observer.disconnect();
-        savePositionAndSize();
+        notifyResize();
     }
 
     // Setup event listeners
@@ -591,19 +568,6 @@ export function dragElement($elmnt) {
         actionType = null;
         observer.disconnect();
     });
-}
-
-export async function initMovingUI() {
-    if (!isMobile() && power_user.movingUI === true) {
-        console.debug('START MOVING UI');
-        dragElement($('#sheld'));
-        dragElement($('#left-nav-panel'));
-        dragElement($('#right-nav-panel'));
-        dragElement($('#WorldInfo'));
-        dragElement($('#floatingPrompt'));
-        dragElement($('#logprobsViewer'));
-        dragElement($('#cfgConfig'));
-    }
 }
 
 /**@type {HTMLTextAreaElement} */

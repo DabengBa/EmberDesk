@@ -232,8 +232,6 @@ describe('settings React route flag', () => {
                     chat_width: 50,
                     font_scale: 1,
                     custom_css: '.chat { color: white; }',
-                    movingUI: true,
-                    movingUIPreset: 'Default',
                     fast_ui_mode: true,
                     reduced_motion: true,
                     noShadows: true,
@@ -419,8 +417,6 @@ describe('settings React route flag', () => {
                 chatWidth: 72,
                 fontScale: 1.15,
                 customCss: '.chat { color: gold; }',
-                movingUI: false,
-                movingUIPreset: 'Compact',
                 fastUiMode: false,
                 reducedMotion: false,
                 noShadows: false,
@@ -519,7 +515,6 @@ describe('settings React route flag', () => {
         expect(merged.oai_settings.use_vertexai).toBe(false);
         expect(merged.oai_settings.fallback_provider_enabled).toBe(false);
         expect(merged.power_user.custom_css).toBe('.chat { color: gold; }');
-        expect(merged.power_user.movingUI).toBe(false);
         expect(merged.power_user.toastr_position).toBe('toast-bottom-right');
         expect(merged.power_user.auto_swipe).toBe(false);
         expect(merged.power_user.auto_swipe_blacklist).toEqual(['skip', 'retry']);

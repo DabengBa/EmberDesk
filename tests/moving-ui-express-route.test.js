@@ -1,4 +1,4 @@
-import { afterEach, expect, jest, test } from '@jest/globals';
+import { expect, jest, test } from '@jest/globals';
 import express from 'express';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -7,32 +7,13 @@ import path from 'node:path';
 
 import { setConfigFilePath } from '../src/util.js';
 
-const invalidateDirectoryMock = jest.fn();
-
 const configTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-moving-ui-config-'));
 const configPath = path.join(configTmpDir, 'config.yaml');
 fs.writeFileSync(configPath, 'enableUserAccounts: false\n', 'utf8');
 setConfigFilePath(configPath);
 
-jest.unstable_mockModule('../src/endpoints/settings-cache.js', () => ({
-    invalidateDirectory: invalidateDirectoryMock,
-}));
-
 const { requireLoginMiddleware } = await import('../src/users.js');
-const { router } = await import('../src/endpoints/moving-ui.js');
-
-const tempRoots = [];
-
-function makeDirectories() {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-moving-ui-'));
-    tempRoots.push(root);
-    const directories = {
-        root,
-        movingUI: path.join(root, 'moving-ui'),
-    };
-    fs.mkdirSync(directories.movingUI, { recursive: true });
-    return directories;
-}
+const { router, getMovingUiRetiredBody } = await import('../src/endpoints/moving-ui.js');
 
 function listen(app) {
     const server = http.createServer(app);
@@ -57,13 +38,6 @@ async function usingApp(app, callback) {
     }
 }
 
-afterEach(() => {
-    invalidateDirectoryMock.mockReset();
-    for (const root of tempRoots.splice(0)) {
-        fs.rmSync(root, { recursive: true, force: true });
-    }
-});
-
 test('uses an Express router without a second route framework or bridge', () => {
     const source = fs.readFileSync(
         new URL('../src/endpoints/moving-ui.js', import.meta.url),
@@ -76,8 +50,7 @@ test('uses an Express router without a second route framework or bridge', () => 
     expect(source).not.toContain('movingUiRouteOwner');
 });
 
-test('keeps the moving-ui route behind the existing login wall under Express', async () => {
-    const directories = makeDirectories();
+test('returns the stable 410 retirement contract for every method and path', async () => {
     const app = express();
 
     app.use(express.json());
@@ -85,7 +58,7 @@ test('keeps the moving-ui route behind the existing login wall under Express', a
         if (request.get('x-test-user')) {
             request.user = {
                 profile: { handle: 'test-user' },
-                directories,
+                directories: { root: os.tmpdir() },
             };
         }
         next();
@@ -102,43 +75,22 @@ test('keeps the moving-ui route behind the existing login wall under Express', a
         });
         expect(blocked.status).toBe(403);
 
-        const missingName = await fetch(`${url}/api/moving-ui/save`, {
+        const retired = await fetch(`${url}/api/moving-ui/save`, {
             method: 'POST',
             headers: {
                 'content-type': 'application/json',
                 'x-test-user': '1',
             },
-            body: JSON.stringify({ theme: 'compact' }),
+            body: JSON.stringify({ name: 'safe-layout' }),
         });
-        expect(missingName.status).toBe(400);
-        expect(await missingName.text()).toBe('Bad Request');
-        expect(missingName.headers.get('content-type')).toBe('text/plain; charset=utf-8');
+        expect(retired.status).toBe(410);
+        expect(await retired.json()).toEqual(getMovingUiRetiredBody());
+        expect(retired.headers.get('content-type')).toContain('application/json');
 
-        const invalidName = await fetch(`${url}/api/moving-ui/save`, {
-            method: 'POST',
-            headers: {
-                'content-type': 'application/json',
-                'x-test-user': '1',
-            },
-            body: JSON.stringify({ name: 'CON' }),
+        const retiredGet = await fetch(`${url}/api/moving-ui/anything`, {
+            headers: { 'x-test-user': '1' },
         });
-        expect(invalidName.status).toBe(400);
-        expect(await invalidName.text()).toBe('Bad Request');
-
-        const saved = await fetch(`${url}/api/moving-ui/save`, {
-            method: 'POST',
-            headers: {
-                'content-type': 'application/json',
-                'x-test-user': '1',
-            },
-            body: JSON.stringify({ name: 'safe-layout', theme: 'wide' }),
-        });
-        expect(saved.status).toBe(200);
-        expect(await saved.text()).toBe('OK');
-        expect(saved.headers.get('content-type')).toBe('text/plain; charset=utf-8');
-        expect(
-            fs.readFileSync(path.join(directories.movingUI, 'safe-layout.json'), 'utf8'),
-        ).toBe(JSON.stringify({ name: 'safe-layout', theme: 'wide' }, null, 4));
-        expect(invalidateDirectoryMock).toHaveBeenCalledWith(directories.movingUI);
+        expect(retiredGet.status).toBe(410);
+        expect(await retiredGet.json()).toEqual(getMovingUiRetiredBody());
     });
 });

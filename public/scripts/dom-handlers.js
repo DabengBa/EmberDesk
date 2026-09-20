@@ -45,7 +45,6 @@ const doCharListDisplaySwitch = (...args) => shell().doCharListDisplaySwitch(...
 const doDrawerOpenClick = (...args) => shell().doDrawerOpenClick(...args);
 const doNewChat = (...args) => shell().doNewChat(...args);
 const download = (...args) => shell().download(...args);
-const dragElement = (...args) => shell().dragElement(...args);
 const duplicateCharacter = (...args) => shell().duplicateCharacter(...args);
 const formatCreatorNotes = (...args) => shell().formatCreatorNotes(...args);
 const getCharacterDeleteDialogTitle = (...args) => shell().getCharacterDeleteDialogTitle(...args);
@@ -67,7 +66,6 @@ const isDataURL = (...args) => shell().isDataURL(...args);
 const isReactMainChatOwner = (...args) => shell().isReactMainChatOwner(...args);
 const isValidUrl = (...args) => shell().isValidUrl(...args);
 const loadEarlierChatMessages = (...args) => shell().loadEarlierChatMessages(...args);
-const loadMovingUIState = (...args) => shell().loadMovingUIState(...args);
 const messageEdit = (...args) => shell().messageEdit(...args);
 const messageEditAuto = (...args) => shell().messageEditAuto(...args);
 const messageEditCancel = (...args) => shell().messageEditCancel(...args);
@@ -1269,16 +1267,14 @@ export async function bindLegacyShellHandlers() {
         const charname = targetAvatarImg.replace('.png', '');
         const isValidCharacter = state.characters.some(x => x.avatar === decodeURIComponent(targetAvatarImg));
 
-        // Remove existing zoomed avatars for characters that are not the clicked character when moving UI is not enabled
-        if (!state.power_user.movingUI) {
-            $('.zoomed_avatar').each(function () {
-                const currentForChar = $(this).attr('forChar');
-                if (currentForChar !== charname && typeof currentForChar !== 'undefined') {
-                    console.debug(`Removing zoomed avatar for character: ${currentForChar}`);
-                    $(this).remove();
-                }
-            });
-        }
+        // Remove existing zoomed avatars for characters that are not the clicked character
+        $('.zoomed_avatar').each(function () {
+            const currentForChar = $(this).attr('forChar');
+            if (currentForChar !== charname && typeof currentForChar !== 'undefined') {
+                console.debug(`Removing zoomed avatar for character: ${currentForChar}`);
+                $(this).remove();
+            }
+        });
 
         const avatarSrc = (isDataURL(thumbURL) || /^\/?img\/(?:.+)/.test(thumbURL)) ? thumbURL : charsPath + targetAvatarImg;
         if ($(`.zoomed_avatar[forChar="${charname}"]`).length) {
@@ -1292,8 +1288,6 @@ export async function bindLegacyShellHandlers() {
             const newElement = $(template);
             newElement.attr('forChar', charname);
             newElement.attr('id', `zoomFor_${charname}`);
-            newElement.addClass('draggable');
-            newElement.find('.drag-grabber').attr('id', `zoomFor_${charname}header`);
 
             $('body').append(newElement);
             newElement.fadeIn(state.animation_duration);
@@ -1313,9 +1307,7 @@ export async function bindLegacyShellHandlers() {
                 zoomedAvatarImgElement.attr('src', avatarSrc);
                 zoomedAvatarImgElement.attr('data-izoomify-url', avatarSrc);
             }
-            loadMovingUIState();
             $(`.zoomed_avatar[forChar="${charname}"]`).css('display', 'flex');
-            dragElement(newElement);
 
             if (state.power_user.zoomed_avatar_magnification) {
                 $('.zoomed_avatar_container').izoomify();

@@ -120,8 +120,6 @@ const settingsSchema = z.object({
         chatWidth: z.number().min(20, 'Chat Width 不能小于 20').max(100, 'Chat Width 不能大于 100'),
         fontScale: z.number().min(0.5, 'Font Scale 不能小于 0.5').max(2, 'Font Scale 不能大于 2'),
         customCss: z.string(),
-        movingUI: z.boolean(),
-        movingUIPreset: z.string(),
         fastUiMode: z.boolean(),
         reducedMotion: z.boolean(),
         noShadows: z.boolean(),
@@ -1658,27 +1656,9 @@ export function SettingsSurface({
                                     />
                                     <SettingField
                                         form={settingsForm}
-                                        name="userInterface.movingUIPreset"
-                                        label="MovingUI Preset"
-                                        description="当前激活的 MovingUI preset 名称。"
-                                        placeholder="Default"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
                                         name="userInterface.fastUiMode"
                                         label="Fast UI Mode"
                                         description="去除大部分 blur，换取更快渲染。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.movingUI"
-                                        label="MovingUI"
-                                        description="允许拖拽和重排部分桌面 UI。"
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}

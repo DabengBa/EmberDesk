@@ -1,44 +1,21 @@
-import path from 'node:path';
 import express from 'express';
-import sanitize from 'sanitize-filename';
-import { sync as writeFileAtomicSync } from 'write-file-atomic';
-import { z } from 'zod';
 
-import { invalidateDirectory } from './settings-cache.js';
-import { isPathUnderParent } from '../util.js';
+export const MOVING_UI_RETIRED_ERROR = 'moving_ui_feature_removed';
+export const MOVING_UI_RETIRED_MESSAGE = 'MovingUI functionality has been removed from EmberDesk.';
 
-const movingUiSaveSchema = z.object({
-    name: z.string().min(1),
-}).passthrough();
-
-function saveMovingUiPreset(directories, payload) {
-    const sanitizedName = sanitize(`${payload.name}.json`);
-    if (!sanitizedName) {
-        return false;
-    }
-
-    const filename = path.join(directories.movingUI, sanitizedName);
-    if (!isPathUnderParent(directories.movingUI, filename)) {
-        return false;
-    }
-
-    writeFileAtomicSync(filename, JSON.stringify(payload, null, 4), 'utf8');
-    invalidateDirectory(directories.movingUI);
-    return true;
+/**
+ * Stable JSON body for retired movingUI endpoints.
+ * @returns {{error: string, message: string}}
+ */
+export function getMovingUiRetiredBody() {
+    return {
+        error: MOVING_UI_RETIRED_ERROR,
+        message: MOVING_UI_RETIRED_MESSAGE,
+    };
 }
 
 export const router = express.Router();
 
-router.post('/save', (request, response) => {
-    const parsed = movingUiSaveSchema.safeParse(request.body);
-    const directories = request.user?.directories;
-    if (!parsed.success || !directories?.movingUI) {
-        return response.status(400).type('text/plain').send('Bad Request');
-    }
-
-    if (!saveMovingUiPreset(directories, parsed.data)) {
-        return response.status(400).type('text/plain').send('Bad Request');
-    }
-
-    return response.type('text/plain').send('OK');
+router.use((_request, response) => {
+    return response.status(410).json(getMovingUiRetiredBody());
 });
