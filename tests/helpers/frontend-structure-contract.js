@@ -43,6 +43,14 @@ export function getTagById(html, id, { contractName = `id ${id}` } = {}) {
 }
 
 export function expectButtonAffordance(tag, label, { contractName = label } = {}) {
+    // Astryx contract adapters render a native <button>: implicit role,
+    // native keyboard reachability, and label prop -> aria-label.
+    if (/\bContract(?:Icon)?Button\b/.test(tag)) {
+        if (!new RegExp(`\\blabel="${escapeRegExp(label)}"`).test(tag)) {
+            fail(contractName, `expected label="${label}"`);
+        }
+        return;
+    }
     if (!/\brole="button"/.test(tag)) {
         fail(contractName, 'expected role="button"');
     }

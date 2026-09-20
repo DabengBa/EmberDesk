@@ -47,8 +47,8 @@ describe('secrets input map', () => {
         expectContainsMarkers(apiPanel, [
             'id="api_key_unified_manage"',
             'className="menu_button menu_button_icon manage-api-keys"',
-            'aria-label="Manage API keys"',
-            'data-i18n="[title][aria-label]Manage API keys"',
+            'label="Manage API keys"',
+            'title="Manage API keys"',
         ], { contractName: 'unified provider key manager entry' });
         expectContainsMarkers(openaiSource, [
             'resolveProviderSecretKeyForSettings({',
