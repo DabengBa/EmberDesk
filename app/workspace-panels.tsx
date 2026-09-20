@@ -81,6 +81,7 @@ import { RightNavPanel } from './components/right-nav/RightNavPanel';
 import { SelectChatPopup } from './components/select-chat/SelectChatPopup';
 import { CharacterContextMenu } from './components/context-menu/CharacterContextMenu';
 import { OptionsMenu } from './components/options-menu/OptionsMenu';
+import { DialogueDelMesControls, DialoguePopupControls } from './components/dialogue-popups/DialoguePopups';
 import { ExportFormatPopup } from './components/export-format/ExportFormatPopup';
 import * as stylex from '@stylexjs/stylex';
 import { authoringStyles, workspacePanelStyles, workspaceShellStyles } from './styles/workspace-panels.styles.js';
@@ -2190,4 +2191,21 @@ export function mountOptionsMenu(container: HTMLElement) {
  */
 export function mountExportFormatPopup(container: HTMLElement) {
     mountSmallPanel(container, <ExportFormatPopup />);
+}
+
+/**
+ * Mounts the confirm-popup buttons into #dialogue_popup_controls. The popup
+ * shell (text/input/holder) stays legacy; dom-handlers.js binds the buttons
+ * by ID after mount.
+ */
+export function mountDialoguePopupControls(container: HTMLElement) {
+    mountSmallPanel(container, <DialoguePopupControls />);
+}
+
+/**
+ * Mounts the delete-messages confirm buttons into #dialogue_del_mes. The
+ * container stays legacy; dom-handlers.js binds the buttons by ID after mount.
+ */
+export function mountDialogueDelMesControls(container: HTMLElement) {
+    mountSmallPanel(container, <DialogueDelMesControls />);
 }

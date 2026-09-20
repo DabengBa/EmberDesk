@@ -1069,6 +1069,8 @@ registerDomHandlersShellContext({
     mountCharacterContextMenu: (...args) => mountCharacterContextMenu(...args),
     mountCharacterPopup: (...args) => mountCharacterPopup(...args),
     mountChatComposer: (...args) => mountChatComposer(...args),
+    mountDialogueDelMesControls: (...args) => mountDialogueDelMesControls(...args),
+    mountDialoguePopupControls: (...args) => mountDialoguePopupControls(...args),
     mountExportFormatPopup: (...args) => mountExportFormatPopup(...args),
     mountOptionsMenu: (...args) => mountOptionsMenu(...args),
     mountReactMainChatMessageListPanel: (...args) => mountReactMainChatMessageListPanel(...args),
@@ -4632,6 +4634,8 @@ async function bootstrapWorkspace() {
     await measureStartupStage('mountCharacterContextMenu', () => mountCharacterContextMenu());
     await measureStartupStage('mountOptionsMenu', () => mountOptionsMenu());
     await measureStartupStage('mountExportFormatPopup', () => mountExportFormatPopup());
+    await measureStartupStage('mountDialoguePopupControls', () => mountDialoguePopupControls());
+    await measureStartupStage('mountDialogueDelMesControls', () => mountDialogueDelMesControls());
     await measureStartupStage('initSecrets', () => initSecrets());
     await measureStartupStage('readSecretState', () => readSecretState());
     await measureStartupStage('initLocales', () => initLocales());
@@ -9539,7 +9543,14 @@ export function callPopup(text, type, inputValue = '', { okButton, rows, wide, w
         .toggleClass('vertical_scrolling_dialogue_popup', !!allowVerticalScrolling);
 
     $dialoguePopupCancel.css('display', 'inline-block');
-    $dialoguePopupOk.text(getOkButtonText());
+    // Write into the adapter label span so the React-rendered button keeps its
+    // children; fall back to the whole button when the mount is absent.
+    const $okLabel = $dialoguePopupOk.find('.dialogue-popup-btn-label').first();
+    if ($okLabel.length) {
+        $okLabel.text(getOkButtonText());
+    } else {
+        $dialoguePopupOk.text(getOkButtonText());
+    }
     $dialoguePopupInput.toggle(popup_type === 'input').val(inputValue).attr('rows', rows ?? 1);
     $dialoguePopupText.empty().append(text);
     $shadowPopup.css('display', 'block');
@@ -10704,6 +10715,60 @@ async function mountExportFormatPopup() {
         popup.dataset.reactExportFormatMounted = 'true';
     } catch (error) {
         console.error('Failed to mount export format popup:', error);
+    }
+}
+
+/**
+ * Mounts the confirm-popup buttons into #dialogue_popup_controls. The popup
+ * shell stays legacy markup; dom-handlers.js binds the buttons by ID.
+ */
+async function mountDialoguePopupControls() {
+    const controls = document.getElementById('dialogue_popup_controls');
+    if (!controls) {
+        console.warn('Dialogue popup controls not found');
+        return;
+    }
+    if (controls.dataset.reactDialoguePopupMounted === 'true') {
+        return;
+    }
+
+    const host = document.createElement('div');
+    host.id = 'emberdesk-react-dialogue-popup-host';
+    controls.replaceChildren(host);
+
+    try {
+        const module = await loadWorkspacePanelsModule();
+        module.mountDialoguePopupControls(host);
+        controls.dataset.reactDialoguePopupMounted = 'true';
+    } catch (error) {
+        console.error('Failed to mount dialogue popup controls:', error);
+    }
+}
+
+/**
+ * Mounts the delete-messages confirm buttons into #dialogue_del_mes. The
+ * container stays legacy; dom-handlers.js binds the buttons by ID.
+ */
+async function mountDialogueDelMesControls() {
+    const container = document.getElementById('dialogue_del_mes');
+    if (!container) {
+        console.warn('Dialogue delete-message controls not found');
+        return;
+    }
+    if (container.dataset.reactDialogueDelMesMounted === 'true') {
+        return;
+    }
+
+    const host = document.createElement('div');
+    host.id = 'emberdesk-react-dialogue-del-mes-host';
+    container.replaceChildren(host);
+
+    try {
+        const module = await loadWorkspacePanelsModule();
+        module.mountDialogueDelMesControls(host);
+        container.dataset.reactDialogueDelMesMounted = 'true';
+    } catch (error) {
+        console.error('Failed to mount dialogue delete-message controls:', error);
     }
 }
 
