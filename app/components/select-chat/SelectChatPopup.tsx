@@ -1,7 +1,12 @@
+import { ContractButton } from '../contract/ContractButton';
+import { ContractIconButton } from '../contract/ContractIconButton';
+
 /**
  * Past-chats popup inner markup (React-owned inside #select_chat_popup).
  * #shadow_select_chat_popup shell stays legacy (display/opacity toggles);
  * #select_chat_div is the dynamic list container filled by script.js.
+ * Action chrome is Astryx contract buttons; #select_chat_search stays a
+ * plain input because legacy code drives it via jQuery .val()/input events.
  */
 export function SelectChatPopup() {
     return (
@@ -19,16 +24,10 @@ export function SelectChatPopup() {
                     <span id="ChatHistoryCharName"></span><span data-i18n="Chat History">Chat History</span>
                     <a href="usage/core-concepts/chatfilemanagement/" className="notes-link" target="_blank"><span className="fa-solid fa-circle-question note-link-span"></span></a>
                 </div>
-                <div id="newChatFromManageScreenButton" className="menu_button menu_button_icon">
-                    <i className="fa-solid fa-plus" />
-                    <span data-i18n="New Chat">New Chat</span>
-                </div>
-                <div id="chat_import_button" className="menu_button menu_button_icon">
-                    <i className="fa-solid fa-file-import" />
-                    <span data-i18n="Import Chat">Import Chat</span>
-                </div>
+                <ContractButton id="newChatFromManageScreenButton" className="menu_button menu_button_icon" variant="ghost" label="New Chat" icon={<i className="fa-solid fa-plus" aria-hidden="true" />} />
+                <ContractButton id="chat_import_button" className="menu_button menu_button_icon" variant="ghost" label="Import Chat" icon={<i className="fa-solid fa-file-import" aria-hidden="true" />} />
                 <input type="search" id="select_chat_search" className="text_pole flex1" data-i18n="[placeholder]Search..." placeholder="Search..." autoComplete="off" />
-                <div id="select_chat_cross" className="opacity50p hoverglow fa-solid fa-circle-xmark fontsize120p" />
+                <ContractIconButton id="select_chat_cross" className="opacity50p hoverglow fontsize120p" label="Close" labelKey="Close" icon={<i className="fa-solid fa-circle-xmark" aria-hidden="true" />} />
             </div>
             <div id="select_chat_div"></div>
         </>

@@ -1165,7 +1165,7 @@ body .panelControlBar {
     padding: 1px;
 }
 
-    .options-content a,
+    .options-content :is(a, button),
     #extensionsMenu>.extension_container>div,
     #extensionsMenu>div:not(.extension_container),
     .list-group>div,
@@ -1190,19 +1190,19 @@ body .panelControlBar {
 
 #extensionsMenu>.extension_container>div,
 #extensionsMenu>div:not(.extension_container),
-.options-content a,
+.options-content :is(a, button),
 .list-group-item {
     opacity: 0.5;
 }
 
 #extensionsMenu>.extension_container>div:hover,
 #extensionsMenu>div:not(.extension_container):hover,
-.options-content a:hover,
+.options-content :is(a, button):hover,
 .list-group-item:hover {
     opacity: 1;
 }
 
-.options-content a div:first-child {
+.options-content :is(a, button) div:first-child {
     min-width: 20px;
 }
 

@@ -156,8 +156,10 @@ describe('chat workspace structure', () => {
             'option_impersonate',
             'option_continue',
         ].forEach((id) => {
-            expect(indexHtml).toMatch(new RegExp(`id="${id}"[^>]*\\brole="button"`));
-            expect(indexHtml).toMatch(new RegExp(`id="${id}"[^>]*\\btabIndex=\\{0\\}`));
+            // ContractButton renders a real <button> — implicitly
+            // keyboard-reachable; tabIndex is forwarded for parity.
+            expect(indexHtml).toMatch(new RegExp(`<ContractButton[\\s\\S]*?id="${id}"`));
+            expect(indexHtml).toMatch(new RegExp(`id="${id}"[\\s\\S]*?tabIndex=\\{0\\}`));
         });
     });
 

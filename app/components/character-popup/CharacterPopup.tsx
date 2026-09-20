@@ -1,3 +1,6 @@
+import { ContractButton } from '../contract/ContractButton';
+import { ContractIconButton } from '../contract/ContractIconButton';
+
 /**
  * Advanced Definitions popup markup (React-owned inside #character_popup).
  * The popup shell stays legacy-owned: script.js toggles display/opacity and
@@ -12,7 +15,7 @@ export function CharacterPopup() {
                     Definitions</span>
             </div>
             <hr className="margin-bot-10px" />
-            <div id="character_cross" className="fa-solid fa-circle-xmark"></div>
+            <ContractIconButton id="character_cross" label="Close" icon={<i className="fa-solid fa-circle-xmark" aria-hidden="true" />} />
             <div className="inline-drawer">
                 <div className="inline-drawer-toggle inline-drawer-header">
                     <h4>
@@ -26,7 +29,7 @@ export function CharacterPopup() {
                     <div>
                         <h4 className="flex-container alignItemsBaseline">
                             <span data-i18n="Main Prompt">Main Prompt</span>
-                            <i className="editor_maximize fa-solid fa-maximize right_menu_button" data-for="system_prompt_textarea" title="Expand the editor" data-i18n="[title]Expand the editor" />
+                            <ContractIconButton className="editor_maximize right_menu_button" data-for="system_prompt_textarea" label="Expand the editor" title="Expand the editor" icon={<i className="fa-solid fa-maximize" aria-hidden="true" />} />
                         </h4>
                         <textarea id="system_prompt_textarea" name="system_prompt" data-macros data-i18n="[placeholder]Any contents here will replace the default Main Prompt used for this character. (v2 spec: system_prompt)" placeholder={"Any contents here will replace the default Main Prompt used for this character.\n(v2 spec: system_prompt)"} form="form_create" className="text_pole" autoComplete="off" rows={3}></textarea>
                         <div className="extension_token_counter">
@@ -36,7 +39,7 @@ export function CharacterPopup() {
                     <div>
                         <h4 className="flex-container alignItemsBaseline">
                             <span data-i18n="Post-History Instructions">Post-History Instructions</span>
-                            <i className="editor_maximize fa-solid fa-maximize right_menu_button" data-for="post_history_instructions_textarea" title="Expand the editor" data-i18n="[title]Expand the editor" />
+                            <ContractIconButton className="editor_maximize right_menu_button" data-for="post_history_instructions_textarea" label="Expand the editor" title="Expand the editor" icon={<i className="fa-solid fa-maximize" aria-hidden="true" />} />
                         </h4>
                         <textarea id="post_history_instructions_textarea" name="post_history_instructions" data-macros data-i18n="[placeholder]Any contents here will replace the default Post-History Instructions used for this character. (v2 spec: post_history_instructions)" placeholder={"Any contents here will replace the default Post-History Instructions used for this character.\n(v2 spec: post_history_instructions)"} form="form_create" className="text_pole" autoComplete="off" rows={3}></textarea>
                         <div className="extension_token_counter">
@@ -70,14 +73,14 @@ export function CharacterPopup() {
                         <div className="flex1">
                             <h4 className="flex-container alignItemsBaseline">
                                 <span data-i18n="Creator's Notes">Creator's Notes</span>
-                                <i className="editor_maximize fa-solid fa-maximize" data-for="creator_notes_textarea" title="Expand the editor" data-i18n="[title]Expand the editor" />
+                                <ContractIconButton className="editor_maximize" data-for="creator_notes_textarea" label="Expand the editor" title="Expand the editor" icon={<i className="fa-solid fa-maximize" aria-hidden="true" />} />
                             </h4>
                             <textarea id="creator_notes_textarea" name="creator_notes" data-i18n="[placeholder](Describe the bot, give use tips, or list the chat models it has been tested on. This will be displayed in the character list.)" placeholder="(Describe the bot, give use tips, or list the chat models it has been tested on. This will be displayed in the character list.)" form="form_create" className="text_pole" autoComplete="off" rows={4}></textarea>
                         </div>
                         <div className="flex1">
                             <h4 className="flex-container alignItemsBaseline">
                                 <span data-i18n="Tags to Embed">Tags to Embed</span>
-                                <i className="editor_maximize fa-solid fa-maximize" data-for="tags_textarea" title="Expand the editor" data-i18n="[title]Expand the editor" />
+                                <ContractIconButton className="editor_maximize" data-for="tags_textarea" label="Expand the editor" title="Expand the editor" icon={<i className="fa-solid fa-maximize" aria-hidden="true" />} />
                             </h4>
                             <textarea id="tags_textarea" name="tags" data-i18n="[placeholder](Write a comma-separated list of tags)" placeholder="(Write a comma-separated list of tags)" form="form_create" className="text_pole" autoComplete="off" rows={4}></textarea>
                         </div>
@@ -88,7 +91,7 @@ export function CharacterPopup() {
             <div id="personality_div">
                 <h4 className="flex-container alignItemsBaseline">
                     <span data-i18n="Personality summary">Personality summary</span>
-                    <i className="editor_maximize fa-solid fa-maximize right_menu_button" data-for="personality_textarea" title="Expand the editor" data-i18n="[title]Expand the editor" />
+                    <ContractIconButton className="editor_maximize right_menu_button" data-for="personality_textarea" label="Expand the editor" title="Expand the editor" icon={<i className="fa-solid fa-maximize" aria-hidden="true" />} />
                     <a href="usage/core-concepts/characterdesign/#personality-summary" className="notes-link" target="_blank"><span className="fa-solid fa-circle-question note-link-span"></span></a>
                 </h4>
                 <textarea id="personality_textarea" name="personality" data-macros data-i18n="[placeholder](A brief description of the personality)" placeholder="(A brief description of the personality)" form="form_create" className="text_pole" autoComplete="off" rows={4}></textarea>
@@ -99,7 +102,7 @@ export function CharacterPopup() {
             <div id="scenario_div">
                 <h4 className="flex-container alignItemsBaseline">
                     <span data-i18n="Scenario">Scenario</span>
-                    <i className="editor_maximize fa-solid fa-maximize right_menu_button" data-for="scenario_pole" title="Expand the editor" data-i18n="[title]Expand the editor" />
+                    <ContractIconButton className="editor_maximize right_menu_button" data-for="scenario_pole" label="Expand the editor" title="Expand the editor" icon={<i className="fa-solid fa-maximize" aria-hidden="true" />} />
                     <a href="usage/core-concepts/characterdesign/#scenario" className="notes-link" target="_blank">
                         <span className="fa-solid fa-circle-question note-link-span"></span>
                     </a>
@@ -115,7 +118,7 @@ export function CharacterPopup() {
                         <span data-i18n="Character's Note">
                             Character's Note
                         </span>
-                        <i className="editor_maximize fa-solid fa-maximize right_menu_button" data-for="depth_prompt_prompt" title="Expand the editor" data-i18n="[title]Expand the editor" />
+                        <ContractIconButton className="editor_maximize right_menu_button" data-for="depth_prompt_prompt" label="Expand the editor" title="Expand the editor" icon={<i className="fa-solid fa-maximize" aria-hidden="true" />} />
                     </h4>
                     <textarea id="depth_prompt_prompt" name="depth_prompt_prompt" data-macros className="text_pole" rows={5} autoComplete="off" form="form_create" data-i18n="[placeholder](Text to be inserted in-chat @ designated depth and role)" placeholder="(Text to be inserted in-chat @ designated depth and role)"></textarea>
                 </div>
@@ -146,7 +149,7 @@ export function CharacterPopup() {
                 <div>
                     <h4 className="flex-container alignItemsBaseline">
                         <span data-i18n="Examples of dialogue" className="mdhotkey_location">Examples of dialogue</span>
-                        <i className="editor_maximize fa-solid fa-maximize right_menu_button" data-for="mes_example_textarea" title="Expand the editor" data-i18n="[title]Expand the editor" />
+                        <ContractIconButton className="editor_maximize right_menu_button" data-for="mes_example_textarea" label="Expand the editor" title="Expand the editor" icon={<i className="fa-solid fa-maximize" aria-hidden="true" />} />
                     </h4>
                     <h5>
                         <span data-i18n="Important to set the character's writing style.">Important to set the character's writing style.</span>
@@ -161,7 +164,7 @@ export function CharacterPopup() {
                 </div>
                 {/* TODO: Example chats handhold-editor concept: https://gist.github.com/Cohee1207/50da02a4001ac1adae9b440f9b8e1079 */}
             </div>
-            <div id="character_popup_ok" className="menu_button" data-i18n="Save">Save</div>
+            <ContractButton id="character_popup_ok" className="menu_button" label="Save" />
         </>
     );
 }
