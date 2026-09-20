@@ -24,6 +24,16 @@ export interface ContractButtonProps {
     label: string;
     /** i18n key for the label; defaults to `label` itself. */
     labelKey?: string;
+    /**
+     * Accessible name when it differs from the visible label (e.g. icon+short
+     * label toolbar buttons whose aria-label carries the full action name).
+     * Defaults to `label`.
+     */
+    ariaLabel?: string;
+    /** i18n key for `ariaLabel`; defaults to `ariaLabel` itself. */
+    ariaLabelKey?: string;
+    /** Class applied to the visible label span (legacy label hooks). */
+    labelClassName?: string;
     /** Tooltip text (English fallback). */
     title?: string;
     /** i18n key for the tooltip; defaults to `title` itself. */
@@ -60,6 +70,9 @@ export function ContractButton({
     className,
     label,
     labelKey,
+    ariaLabel,
+    ariaLabelKey,
+    labelClassName,
     title,
     titleKey,
     nativeTitle = false,
@@ -80,8 +93,9 @@ export function ContractButton({
     ...rest
 }: ContractButtonProps) {
     const resolvedLabel = useTranslated(label, labelKey ?? null);
+    const resolvedAriaLabel = useTranslated(ariaLabel ?? label, ariaLabelKey ?? null);
     const resolvedTitle = useTranslated(title ?? '', titleKey ?? null);
-    const ariaKey = labelKey ?? label;
+    const ariaKey = ariaLabelKey ?? ariaLabel ?? label;
     const nativeTitleRef = useCallback((el: HTMLButtonElement | null) => {
         if (el && resolvedTitle) {
             el.setAttribute('title', resolvedTitle);
@@ -100,7 +114,7 @@ export function ContractButton({
             width={width}
             icon={icon}
             isIconOnly={iconOnly}
-            label={resolvedLabel}
+            label={resolvedAriaLabel}
             tooltip={nativeTitle ? undefined : resolvedTitle || undefined}
             endContent={iconOnly ? undefined : endContent}
             style={style}
@@ -111,7 +125,7 @@ export function ContractButton({
             data-i18n={i18nSpec({ title: nativeTitle ? titleKey ?? title : undefined, ariaLabel: ariaKey })}
             {...rest}
         >
-            {iconOnly ? undefined : <span data-i18n={ariaKey}>{resolvedLabel}</span>}
+            {iconOnly ? undefined : <span className={labelClassName} data-i18n={labelKey ?? label}>{resolvedLabel}</span>}
         </Button>
     );
 }

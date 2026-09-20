@@ -42,7 +42,7 @@ export function ApiConnectionsPanel() {
                                     <div className="flex-container width100p">
                                         <input id="api_key_unified" type="text" className="text_pole flex1 api-key-masked" autoComplete="off" data-lpignore="true" data-1p-ignore data-bwignore data-i18n="[placeholder]API Key" placeholder="API Key" />
                                         <ContractIconButton id="api_key_unified_manage" className="menu_button menu_button_icon manage-api-keys" label="Manage API keys" title="Manage API keys" nativeTitle icon={<i className="fa-solid fa-key" aria-hidden="true" />} />
-                                        <ContractIconButton id="api_key_unified_show" className="menu_button fa-fw" label="Peek a password" title="Peek a password" icon={<i className="fa-solid fa-eye-slash" aria-hidden="true" />} />
+                                        <ContractIconButton id="api_key_unified_show" className="menu_button fa-fw" label="Peek a password" nativeTitle title="Peek a password" icon={<i className="fa-solid fa-eye-slash" aria-hidden="true" />} />
                                     </div>
                                 </div>
                             </div>
@@ -77,9 +77,9 @@ export function ApiConnectionsPanel() {
                                 </div>
                                 <div className="fallback-provider-key-row">
                                     <input id="fallback_provider_api_key" type="text" className="text_pole flex1 api-key-masked" autoComplete="off" data-lpignore="true" data-1p-ignore data-bwignore data-i18n="[placeholder]Fallback API Key" placeholder="Fallback API Key" />
-                                    <ContractIconButton id="fallback_provider_api_key_show" className="menu_button menu_button_icon fallback_provider_api_key_show fa-fw" label="Show fallback API key" title="Show fallback API key" icon={<i className="fa-solid fa-eye-slash" aria-hidden="true" />} tabIndex={0} />
-                                    <ContractIconButton id="fallback_provider_save_key" className="menu_button menu_button_icon fallback_provider_save_key fa-fw" label="Save fallback API key" title="Save fallback API key" icon={<i className="fa-solid fa-save" aria-hidden="true" />} tabIndex={0} />
-                                    <ContractIconButton id="fallback_provider_clear_key" className="menu_button menu_button_icon fallback_provider_clear_key fa-fw" label="Clear fallback API key" title="Clear fallback API key" icon={<i className="fa-solid fa-trash-can" aria-hidden="true" />} tabIndex={0} />
+                                    <ContractIconButton id="fallback_provider_api_key_show" className="menu_button menu_button_icon fallback_provider_api_key_show fa-fw" label="Show fallback API key" nativeTitle title="Show fallback API key" icon={<i className="fa-solid fa-eye-slash" aria-hidden="true" />} tabIndex={0} />
+                                    <ContractIconButton id="fallback_provider_save_key" className="menu_button menu_button_icon fallback_provider_save_key fa-fw" label="Save fallback API key" nativeTitle title="Save fallback API key" icon={<i className="fa-solid fa-save" aria-hidden="true" />} tabIndex={0} />
+                                    <ContractIconButton id="fallback_provider_clear_key" className="menu_button menu_button_icon fallback_provider_clear_key fa-fw" label="Clear fallback API key" nativeTitle title="Clear fallback API key" icon={<i className="fa-solid fa-trash-can" aria-hidden="true" />} tabIndex={0} />
                                 </div>
                                 <div id="fallback_provider_cost_warning" className="info-block warning fallback-provider-warning" role="note" data-i18n="Fallback provider may use a different billing account and model pricing.">
                                     Fallback provider may use a different billing account and model pricing.
@@ -113,7 +113,7 @@ export function ApiConnectionsPanel() {
                                     <label className="field-label" data-i18n="Service Account JSON">Service Account JSON</label>
                                     <div className="vertexai-sa-wrapper">
                                         <textarea id="vertexai_service_account_json" className="text_pole vertexai-sa-textarea sa-masked" rows={4} spellCheck={false}></textarea>
-                                        <ContractIconButton id="vertexai_sa_show" className="menu_button vertexai-sa-toggle fa-fw" label="Toggle visibility" title="Toggle visibility" icon={<i className="fa-solid fa-eye-slash" aria-hidden="true" />} />
+                                        <ContractIconButton id="vertexai_sa_show" className="menu_button vertexai-sa-toggle fa-fw" label="Toggle visibility" nativeTitle title="Toggle visibility" icon={<i className="fa-solid fa-eye-slash" aria-hidden="true" />} />
                                     </div>
                                 </div>
                             </div>
@@ -149,7 +149,7 @@ export function ApiConnectionsPanel() {
                             <ContractButton id="api_button_openai" className="api_button menu_button menu_button_icon" label="Connect" />
                             <ContractButton className="api_loading menu_button menu_button_icon" label="Cancel" style={{ opacity: '0.6' }} />
                             <ContractButton data-source="openai" id="customize_additional_parameters" className="menu_button menu_button_icon api-action-secondary" label="Parameters" labelKey="Additional Parameters" />
-                            <ContractButton id="test_api_button" className="api_button menu_button menu_button_icon" label="Test" title="Send a short test message to verify your connection." />
+                            <ContractButton id="test_api_button" className="api_button menu_button menu_button_icon" label="Test" nativeTitle title="Send a short test message to verify your connection." />
                         </div>
                         <div className="online_status">
                             <div className="online_status_indicator"></div>

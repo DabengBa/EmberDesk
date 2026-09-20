@@ -1,3 +1,5 @@
+import { ContractButton } from '../contract/ContractButton';
+import { ContractIconButton } from '../contract/ContractIconButton';
 /**
  * Quick Reply settings panel markup (React-owned shell). SettingsUi.js binds
  * to the preserved qr--* IDs after the synchronous mount.
@@ -27,7 +29,7 @@ export function QuickReplySettingsPanel() {
 				<div className="qr--head">
 					<div className="qr--title" data-i18n="Global Quick Reply Sets">Global Quick Reply Sets</div>
 					<div className="qr--actions">
-						<div className="qr--setListAdd menu_button menu_button_icon fa-solid fa-plus" id="qr--global-setListAdd" title="Add quick reply set"></div>
+						<ContractIconButton id="qr--global-setListAdd" className="qr--setListAdd menu_button menu_button_icon" label="Add quick reply set" nativeTitle title="Add quick reply set" icon={<i className="fa-solid fa-plus" aria-hidden="true" />} />
 					</div>
 				</div>
 				<div id="qr--global-setList" className="qr--setList"></div>
@@ -39,7 +41,7 @@ export function QuickReplySettingsPanel() {
 				<div className="qr--head">
 					<div className="qr--title" data-i18n="Chat Quick Reply Sets">Chat Quick Reply Sets</div>
 					<div className="qr--actions">
-						<div className="qr--setListAdd menu_button menu_button_icon fa-solid fa-plus" id="qr--chat-setListAdd" title="Add quick reply set"></div>
+						<ContractIconButton id="qr--chat-setListAdd" className="qr--setListAdd menu_button menu_button_icon" label="Add quick reply set" nativeTitle title="Add quick reply set" icon={<i className="fa-solid fa-plus" aria-hidden="true" />} />
 					</div>
 				</div>
 				<div id="qr--chat-setList" className="qr--setList"></div>
@@ -52,7 +54,7 @@ export function QuickReplySettingsPanel() {
 					<div className="qr--title" data-i18n="Character Quick Reply Sets">Character Quick Reply Sets</div>
 					<small data-i18n="(Private)">(Private)</small>
 					<div className="qr--actions">
-						<div className="qr--setListAdd menu_button menu_button_icon fa-solid fa-plus" id="qr--character-setListAdd" title="Add quick reply set"></div>
+						<ContractIconButton id="qr--character-setListAdd" className="qr--setListAdd menu_button menu_button_icon" label="Add quick reply set" nativeTitle title="Add quick reply set" icon={<i className="fa-solid fa-plus" aria-hidden="true" />} />
 					</div>
 				</div>
 				<div id="qr--character-setList" className="qr--setList"></div>
@@ -65,13 +67,13 @@ export function QuickReplySettingsPanel() {
 					<div className="qr--title" data-i18n="Edit Quick Replies">Edit Quick Replies</div>
 					<div className="qr--actions">
 						<select id="qr--set" className="text_pole"></select>
-						<div className="qr--add menu_button menu_button_icon fa-solid fa-pencil" id="qr--set-rename" title="Rename quick reply set"></div>
-						<div className="qr--add menu_button menu_button_icon fa-solid fa-plus" id="qr--set-new" title="Create new quick reply set"></div>
-						<div className="qr--add menu_button menu_button_icon fa-solid fa-file-import" id="qr--set-import" title="Import quick reply set"></div>
+						<ContractIconButton id="qr--set-rename" className="qr--add menu_button menu_button_icon" label="Rename quick reply set" nativeTitle title="Rename quick reply set" icon={<i className="fa-solid fa-pencil" aria-hidden="true" />} />
+						<ContractIconButton id="qr--set-new" className="qr--add menu_button menu_button_icon" label="Create new quick reply set" nativeTitle title="Create new quick reply set" icon={<i className="fa-solid fa-plus" aria-hidden="true" />} />
+						<ContractIconButton id="qr--set-import" className="qr--add menu_button menu_button_icon" label="Import quick reply set" nativeTitle title="Import quick reply set" icon={<i className="fa-solid fa-file-import" aria-hidden="true" />} />
 						<input type="file" id="qr--set-importFile" accept=".json" hidden />
-						<div className="qr--add menu_button menu_button_icon fa-solid fa-file-export" id="qr--set-export" title="Export quick reply set"></div>
-                        <div className="qr-add menu_button menu_button_icon fa-solid fa-paste" id="qr--set-duplicate" title="Duplicate quick reply set"></div>
-						<div className="qr--del menu_button menu_button_icon fa-solid fa-trash redWarningBG" id="qr--set-delete" title="Delete quick reply set"></div>
+						<ContractIconButton id="qr--set-export" className="qr--add menu_button menu_button_icon" label="Export quick reply set" nativeTitle title="Export quick reply set" icon={<i className="fa-solid fa-file-export" aria-hidden="true" />} />
+                        <ContractIconButton id="qr--set-duplicate" className="qr-add menu_button menu_button_icon" label="Duplicate quick reply set" nativeTitle title="Duplicate quick reply set" icon={<i className="fa-solid fa-paste" aria-hidden="true" />} />
+						<ContractIconButton id="qr--set-delete" className="qr--del menu_button menu_button_icon redWarningBG" label="Delete quick reply set" nativeTitle title="Delete quick reply set" icon={<i className="fa-solid fa-trash" aria-hidden="true" />} />
 					</div>
 				</div>
 				<div id="qr--set-settings">
@@ -86,7 +88,7 @@ export function QuickReplySettingsPanel() {
 					</label>
 					<div className="flex-container alignItemsCenter">
 						<toolcool-color-picker id="qr--color"></toolcool-color-picker>
-						<div className="menu_button" id="qr--colorClear">Clear</div>
+						<ContractButton id="qr--colorClear" className="menu_button" label="Clear" />
 						<span data-i18n="Color">Color</span>
 					</div>
 					<label className="flex-container" id="qr--onlyBorderColorContainer">
@@ -95,9 +97,9 @@ export function QuickReplySettingsPanel() {
 				</div>
 				<div id="qr--set-qrList" className="qr--qrList"></div>
 				<div className="qr--set-qrListActions">
-					<div className="qr--add menu_button menu_button_icon fa-solid fa-plus" id="qr--set-add" title="Add quick reply"></div>
-					<div className="qr--paste menu_button menu_button_icon fa-solid fa-paste" id="qr--set-paste" title="Paste quick reply from clipboard"></div>
-					<div className="qr--import menu_button menu_button_icon fa-solid fa-file-import" id="qr--set-importQr" title="Import quick reply from file"></div>
+					<ContractIconButton id="qr--set-add" className="qr--add menu_button menu_button_icon" label="Add quick reply" nativeTitle title="Add quick reply" icon={<i className="fa-solid fa-plus" aria-hidden="true" />} />
+					<ContractIconButton id="qr--set-paste" className="qr--paste menu_button menu_button_icon" label="Paste quick reply from clipboard" nativeTitle title="Paste quick reply from clipboard" icon={<i className="fa-solid fa-paste" aria-hidden="true" />} />
+					<ContractIconButton id="qr--set-importQr" className="qr--import menu_button menu_button_icon" label="Import quick reply from file" nativeTitle title="Import quick reply from file" icon={<i className="fa-solid fa-file-import" aria-hidden="true" />} />
 				</div>
 			</div>
 		</div>

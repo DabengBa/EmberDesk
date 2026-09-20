@@ -1,3 +1,5 @@
+import { ContractButton } from '../contract/ContractButton';
+import { ContractIconButton } from '../contract/ContractIconButton';
 /**
  * Right navigation panel markup (React-owned inside #right-nav-panel).
  * Contains the character create/edit form (#form_create), the import form,
@@ -9,8 +11,7 @@
 export function RightNavPanel() {
     return (
         <>
-                <div id="right-nav-panelheader" className="fa-solid fa-grip drag-grabber">
-                </div>
+                <ContractIconButton id="right-nav-panelheader" className="drag-grabber" label="Action" icon={<i className="fa-solid fa-grip" aria-hidden="true" />} />
                 <div id="CharListButtonAndHotSwaps" className="flex-container flexnowrap">
                     <div className="flexFlowColumn flex-container">
                         <div id="rm_button_panel_pin_div" className="alignitemsflexstart" title="Locked = Character Management panel will stay open" data-i18n="[title]Locked = Character Management panel will stay open">
@@ -20,7 +21,7 @@ export function RightNavPanel() {
                                 <div className="fa-solid checked fa-lock right_menu_button"></div>
                             </label>
                         </div>
-                        <div className="right_menu_button fa-solid fa-list-ul" id="rm_button_characters" title="Select/Create Characters" data-i18n="[title]Select/Create Characters;[aria-label]Characters" role="button" aria-label="Characters" tabIndex={0}></div>
+                        <ContractIconButton id="rm_button_characters" tabIndex={0} className="right_menu_button" label="Characters" nativeTitle title="Select/Create Characters" icon={<i className="fa-solid fa-list-ul" aria-hidden="true" />} />
                     </div>
                     <div id="HotSwapWrapper" className="alignitemscenter flex-container margin0auto wide100p">
                         <div className="hotswap avatars_inline scroll-reset-container expander" data-i18n="[no_favs]Favorite characters to add them to HotSwaps" no_favs="Favorite characters to add them to HotSwaps">
@@ -47,8 +48,8 @@ export function RightNavPanel() {
                                 </div>
                             </div>
                             <a id="chartokenwarning" className="right_menu_button fa-solid fa-triangle-exclamation" href="usage/core-concepts/characterdesign/#character-tokens" target="_blank" title="About Token 'Limits'" data-i18n="[title]About Token 'Limits'"></a>
-                            <i title="Click for stats!" data-i18n="[title]Click for stats!" className="fa-solid fa-ranking-star right_menu_button rm_stats_button" />
-                            <i title="Toggle character info panel" data-i18n="[title]Toggle character info panel" id="hideCharPanelAvatarButton" className="fa-solid fa-eye right_menu_button" />
+                            <ContractIconButton className="right_menu_button rm_stats_button" label="Click for stats!" title="Click for stats!" nativeTitle icon={<i className="fa-solid fa-ranking-star" aria-hidden="true" />} />
+                            <ContractIconButton id="hideCharPanelAvatarButton" className="right_menu_button" label="Toggle character info panel" nativeTitle title="Toggle character info panel" icon={<i className="fa-solid fa-eye" aria-hidden="true" />} />
                         </div>
                     </div>
                 </div>
@@ -72,11 +73,11 @@ export function RightNavPanel() {
                                         </label>
                                         <div className="flex-container" id="avatar_controls">
                                             <div className="form_create_bottom_buttons_block buttons_block character-detail-primary-actions">
-                                                <div id="rm_button_back" className="menu_button fa-solid fa-left-long "></div>
-                                                {/* <div id="renameCharButton" className="menu_button fa-solid fa-user-pen" title="Rename Character"></div> */}
+                                                <ContractIconButton id="rm_button_back" className="menu_button" label="Back" icon={<i className="fa-solid fa-left-long" aria-hidden="true" />} />
+                                                {/* <ContractIconButton id="renameCharButton" className="menu_button" label="Rename Character" nativeTitle title="Rename Character" icon={<i className="fa-solid fa-user-pen" aria-hidden="true" />} /> */}
                                                 <div className="character-detail-action-icons">
-                                                    <div id="favorite_button" className="menu_button fa-solid fa-star" title="Add to Favorites" data-i18n="[title]Add to Favorites"></div>
-                                                    <div id="world_button" className="menu_button fa-solid fa-globe" title={"Character Lore\n\nClick to load\nShift/Alt-click or long-press to open 'Link to World Info' popup"} data-i18n="[title]world_button_title"></div>
+                                                    <ContractIconButton id="favorite_button" className="menu_button" label="Add to Favorites" nativeTitle title="Add to Favorites" icon={<i className="fa-solid fa-star" aria-hidden="true" />} />
+                                                    <ContractIconButton id="world_button" className="menu_button" label="Character Lore" nativeTitle title={"Character Lore\n\nClick to load\nShift/Alt-click or long-press to open 'Link to World Info' popup"} titleKey="world_button_title" icon={<i className="fa-solid fa-globe" aria-hidden="true" />} />
                                                     <button id="delete_button" type="button" className="menu_button fa-solid fa-skull red_button" title="Delete Character" aria-label="Delete Character" data-i18n="[title][aria-label]Delete Character"></button>
                                                 </div>
                                                 <input type="hidden" id="fav_checkbox" name="fav" />
@@ -135,20 +136,20 @@ export function RightNavPanel() {
                                                 </label>
                                             </div>
                                             <div className="character-detail-hidden-actions" aria-hidden="true">
-                                                <div id="advanced_div" className="menu_button fa-solid fa-book " title="Advanced Definitions" data-i18n="[title]Advanced Definition"></div>
-                                                <div className="chat_lorebook_button menu_button fa-solid fa-passport" title={"Chat Lore\n\nClick to load\nShift/Alt-click or long-press to open 'Link to Chat Lorebook' popup"} data-i18n="[title]chat_lorebook_button_title"></div>
-                                                <div id="char_connections_button" className="menu_button fa-solid fa-face-smile" title="Connected Personas" data-i18n="[title]Connected Personas"></div>
-                                                <div id="export_button" className="menu_button fa-solid fa-file-export " title="Export and Download" data-i18n="[title]Export and Download"></div>
-                                                {/* <div id="set_chat_character_settings" className="menu_button fa-solid fa-scroll" title="Set a chat scenario override"></div> */}
-                                                {/* <div id="set_character_world" className="menu_button fa-solid fa-globe" title="Set a character World Info / Lorebook"></div> */}
-                                                <div id="dupe_button" className="menu_button fa-solid fa-clone " title="Duplicate Character" data-i18n="[title]Duplicate Character"></div>
+                                                <ContractIconButton id="advanced_div" className="menu_button" label="Advanced Definitions" nativeTitle title="Advanced Definitions" titleKey="Advanced Definition" icon={<i className="fa-solid fa-book" aria-hidden="true" />} />
+                                                <ContractIconButton className="chat_lorebook_button menu_button" label="Chat Lore" nativeTitle title={"Chat Lore\n\nClick to load\nShift/Alt-click or long-press to open 'Link to Chat Lorebook' popup"} titleKey="chat_lorebook_button_title" icon={<i className="fa-solid fa-passport" aria-hidden="true" />} />
+                                                <ContractIconButton id="char_connections_button" className="menu_button" label="Connected Personas" nativeTitle title="Connected Personas" icon={<i className="fa-solid fa-face-smile" aria-hidden="true" />} />
+                                                <ContractIconButton id="export_button" className="menu_button" label="Export and Download" nativeTitle title="Export and Download" icon={<i className="fa-solid fa-file-export" aria-hidden="true" />} />
+                                                {/* <ContractIconButton id="set_chat_character_settings" className="menu_button" label="Set a chat scenario override" nativeTitle title="Set a chat scenario override" icon={<i className="fa-solid fa-scroll" aria-hidden="true" />} /> */}
+                                                {/* <ContractIconButton id="set_character_world" className="menu_button" label="Set a character World Info / Lorebook" nativeTitle title="Set a character World Info / Lorebook" icon={<i className="fa-solid fa-globe" aria-hidden="true" />} /> */}
+                                                <ContractIconButton id="dupe_button" className="menu_button" label="Duplicate Character" nativeTitle title="Duplicate Character" icon={<i className="fa-solid fa-clone" aria-hidden="true" />} />
                                             </div>
                                         </div>
                                     </div>
                                     <div id="tags_div">
                                         <div className="tag_controls">
                                             <input id="tagInput" className="text_pole textarea_compact tag_input wide100p margin0" data-i18n="[placeholder]Search / Create Tags" placeholder="Search / Create tags" />
-                                            <div className="tags_view menu_button fa-solid fa-tags" title="View all tags" data-i18n="[title]View all tags"></div>
+                                            <ContractIconButton className="tags_view menu_button" label="View all tags" title="View all tags" nativeTitle icon={<i className="fa-solid fa-tags" aria-hidden="true" />} />
                                         </div>
                                         <div id="tagList" className="tags"></div>
                                     </div>
@@ -158,8 +159,8 @@ export function RightNavPanel() {
                                 <div className="inline-drawer-toggle inline-drawer-header padding0 gap5px standoutHeader">
                                     <div id="creators_notes_div" className="title_restorable flexGap5 wide100p character-detail-section-header">
                                         <span className="flex1" data-i18n="Creator's Notes">Creator's Notes</span>
-                                        <div id="creators_note_styles_button" className="margin0 menu_button fa-solid fa-palette fa-fw" title="Allow / Forbid the use of global styles for this character." data-i18n="[title]Allow / Forbid the use of global styles for this character."></div>
-                                        <div id="spoiler_free_desc_button" className="margin0 menu_button fa-solid fa-eye fa-fw" title="Show / Hide Description and First Message" data-i18n="[title]Show / Hide Description and First Message"></div>
+                                        <ContractIconButton id="creators_note_styles_button" className="margin0 menu_button" label="Allow / Forbid the use of global styles for this character." nativeTitle title="Allow / Forbid the use of global styles for this character." icon={<i className="fa-solid fa-palette fa-fw" aria-hidden="true" />} />
+                                        <ContractIconButton id="spoiler_free_desc_button" className="margin0 menu_button" label="Show / Hide Description and First Message" nativeTitle title="Show / Hide Description and First Message" icon={<i className="fa-solid fa-eye fa-fw" aria-hidden="true" />} />
                                     </div>
                                     <div className="flex-container widthFitContent">
                                         <div className="inline-drawer-icon fa-solid fa-circle-chevron-down down interactable"></div>
@@ -177,7 +178,7 @@ export function RightNavPanel() {
                                 <div id="description_div" className="title_restorable character-detail-section-header">
                                     <div className="flex-container alignitemscenter">
                                         <span data-i18n="Character Description" className="mdhotkey_location">Description</span>
-                                        <i className="editor_maximize fa-solid fa-maximize right_menu_button" data-for="description_textarea" title="Expand the editor" data-i18n="[title]Expand the editor" />
+                                        <ContractIconButton className="editor_maximize right_menu_button" data-for="description_textarea" label="Expand the editor" title="Expand the editor" nativeTitle icon={<i className="fa-solid fa-maximize" aria-hidden="true" />} />
                                         <a href="usage/core-concepts/characterdesign/#character-description" className="notes-link" target="_blank">
                                             <span className="fa-solid fa-circle-question note-link-span"></span>
                                         </a>
@@ -199,16 +200,12 @@ export function RightNavPanel() {
                                 <div id="first_message_div" className="title_restorable character-detail-section-header">
                                     <div className="flex-container alignitemscenter flex1">
                                         <span data-i18n="First message" className="mdhotkey_location">First message</span>
-                                        <i className="editor_maximize fa-solid fa-maximize right_menu_button" data-for="firstmessage_textarea" title="Expand the editor" data-i18n="[title]Expand the editor" />
+                                        <ContractIconButton className="editor_maximize right_menu_button" data-for="firstmessage_textarea" label="Expand the editor" title="Expand the editor" nativeTitle icon={<i className="fa-solid fa-maximize" aria-hidden="true" />} />
                                         <a href="usage/core-concepts/characterdesign/#first-message" className="notes-link" target="_blank">
                                             <span className="fa-solid fa-circle-question note-link-span"></span>
                                         </a>
                                     </div>
-                                    <div className="menu_button menu_button_icon open_alternate_greetings margin0 fa-solid fa-message" title="Click to set additional greeting messages" aria-label="Alternate greetings" data-i18n="[title]Click to set additional greeting messages">
-                                        <span data-i18n="Alt. Greetings">
-                                            Alt. Greetings
-                                        </span>
-                                    </div>
+                                    <ContractButton className="menu_button menu_button_icon open_alternate_greetings margin0" label="Alt. Greetings" ariaLabel="Alternate greetings" title="Click to set additional greeting messages" nativeTitle icon={<i className="fa-solid fa-message" aria-hidden="true" />} />
                                 </div>
                                 <textarea id="firstmessage_textarea" className="mdHotkeys" data-macros data-i18n="[placeholder]First message" placeholder="First message" name="first_mes"></textarea>
                                 <div className="extension_token_counter">
@@ -238,9 +235,9 @@ export function RightNavPanel() {
                         <div id="charListFixedTop">
                             <div id="rm_button_bar">
                                 <div className="character-list-tool-group character-list-create-group">
-                                    <div id="rm_button_create" title="Create New Character" data-i18n="[title]Create New Character" className="menu_button fa-solid fa-user-plus character-list-action" role="button" aria-label="Create New Character"><span className="character-list-action-label" data-i18n="Character Toolbar New">New</span></div>
-                                    <div id="character_import_button" title="Import Character from File" data-i18n="[title]Import Character from File" className="menu_button fa-solid fa-file-import character-list-action" role="button" aria-label="Import Character from File"><span className="character-list-action-label" data-i18n="Character Toolbar File">File</span></div>
-                                    <div id="external_import_button" title="Import content from external URL" data-i18n="[title]Import content from external URL" className="menu_button fa-solid fa-cloud-arrow-down character-list-action" role="button" aria-label="Import content from external URL"><span className="character-list-action-label" data-i18n="Character Toolbar URL">URL</span></div>
+                                    <ContractButton id="rm_button_create" className="menu_button character-list-action" label="New" labelKey="Character Toolbar New" labelClassName="character-list-action-label" ariaLabel="Create New Character" title="Create New Character" nativeTitle icon={<i className="fa-solid fa-user-plus" aria-hidden="true" />} />
+                                    <ContractButton id="character_import_button" className="menu_button character-list-action" label="File" labelKey="Character Toolbar File" labelClassName="character-list-action-label" ariaLabel="Import Character from File" title="Import Character from File" nativeTitle icon={<i className="fa-solid fa-file-import" aria-hidden="true" />} />
+                                    <ContractButton id="external_import_button" className="menu_button character-list-action" label="URL" labelKey="Character Toolbar URL" labelClassName="character-list-action-label" ariaLabel="Import content from external URL" title="Import content from external URL" nativeTitle icon={<i className="fa-solid fa-cloud-arrow-down" aria-hidden="true" />} />
                                     <div id="rm_buttons_container">
                                         {/* Container for additional buttons added by extensions */}
                                     </div>
@@ -263,15 +260,15 @@ export function RightNavPanel() {
                                     </select>
                                 </div>
                                 <div className="character-list-tool-group character-list-view-group">
-                                    <div id="rm_button_search" className="right_menu_button fa-fw fa-solid fa-search character-list-action" title="Toggle search bar" data-i18n="[title]Toggle search bar" role="button" aria-label="Toggle search bar"><span className="character-list-action-label" data-i18n="Character Toolbar Find">Find</span></div>
-                                    <i id="charListGridToggle" className="fa-solid fa-table-cells-large menu_button character-list-action" title="Toggle character grid view" data-i18n="[title]Toggle character grid view" role="button" aria-label="Toggle character grid view"><span className="character-list-action-label" data-i18n="Character Toolbar Grid">Grid</span></i>
-                                    <i id="bulkEditButton" className="fa-solid fa-edit menu_button bulkEditButton character-list-action" title={"Bulk edit characters\r\rClick to toggle characters\rShift + Click to select/deselect a range of characters\rRight-click for actions"} data-i18n="[title]Bulk_edit_characters" role="button" aria-label="Bulk edit characters" tabIndex={0}><span className="character-list-action-label" data-i18n="Character Toolbar Bulk">Bulk</span></i>
+                                    <ContractButton id="rm_button_search" className="right_menu_button character-list-action" label="Find" labelKey="Character Toolbar Find" labelClassName="character-list-action-label" ariaLabel="Toggle search bar" title="Toggle search bar" nativeTitle icon={<i className="fa-fw fa-solid fa-search" aria-hidden="true" />} />
+                                    <ContractButton id="charListGridToggle" className="menu_button character-list-action" label="Grid" labelKey="Character Toolbar Grid" labelClassName="character-list-action-label" ariaLabel="Toggle character grid view" title="Toggle character grid view" nativeTitle icon={<i className="fa-solid fa-table-cells-large" aria-hidden="true" />} />
+                                    <ContractButton id="bulkEditButton" className="menu_button bulkEditButton character-list-action" label="Bulk" labelKey="Character Toolbar Bulk" labelClassName="character-list-action-label" ariaLabel="Bulk edit characters" title={"Bulk edit characters\r\rClick to toggle characters\rShift + Click to select/deselect a range of characters\rRight-click for actions"} titleKey="Bulk_edit_characters" nativeTitle tabIndex={0} icon={<i className="fa-solid fa-edit" aria-hidden="true" />} />
                                 </div>
                                 <div className="character-list-tool-group character-list-bulk-actions" aria-live="polite">
                                     <span id="bulkSelectionHint" className="bulkEditOptionElement character-list-bulk-hint" data-i18n="Click character cards to select" style={{ "display": "none" }}>Click character cards to select</span>
                                     <div id="bulkSelectedCount" className="bulkEditOptionElement paginationjs-nav" style={{ "display": "none" }} role="status"></div>
-                                    <i id="bulkSelectAllButton" className="fa-solid fa-check-double menu_button bulkEditOptionElement bulkSelectAllButton character-list-action" title="Bulk select all characters" data-i18n="[title]Bulk select all characters" style={{ "display": "none" }} role="button" aria-label="Bulk select all characters"><span className="character-list-action-label" data-i18n="Character Toolbar All">All</span></i>
-                                    <i id="bulkDeleteButton" className="fa-solid fa-trash menu_button bulkEditOptionElement bulkDeleteButton character-list-action" title="Bulk delete characters" data-i18n="[title]Bulk delete characters" style={{ "display": "none" }} role="button" aria-label="Bulk delete characters"><span className="character-list-action-label" data-i18n="Character Toolbar Delete">Del</span></i>
+                                    <ContractButton id="bulkSelectAllButton" className="menu_button bulkEditOptionElement bulkSelectAllButton character-list-action" label="All" labelKey="Character Toolbar All" labelClassName="character-list-action-label" ariaLabel="Bulk select all characters" title="Bulk select all characters" nativeTitle style={{ "display": "none" }} icon={<i className="fa-solid fa-check-double" aria-hidden="true" />} />
+                                    <ContractButton id="bulkDeleteButton" className="menu_button bulkEditOptionElement bulkDeleteButton character-list-action" label="Del" labelKey="Character Toolbar Delete" labelClassName="character-list-action-label" ariaLabel="Bulk delete characters" title="Bulk delete characters" nativeTitle style={{ "display": "none" }} icon={<i className="fa-solid fa-trash" aria-hidden="true" />} />
                                 </div>
                             </div>
                             <div id="form_character_search_form">

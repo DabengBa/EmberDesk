@@ -1,3 +1,5 @@
+import { ContractIconButton } from '../contract/ContractIconButton';
+
 export function RegexDebugger() {
     return (
         <>
@@ -165,9 +167,7 @@ export function RegexDebugger() {
             <code className="rule-regex"></code>
             <small className="rule-scope"></small>
         </div>
-        <div className="menu_button menu_button_icon edit_rule" data-i18n="[title]Edit Rule" title="Edit Rule">
-            <i className="fa-solid fa-pencil" />
-        </div>
+        <ContractIconButton className="menu_button menu_button_icon edit_rule" label="Edit Rule" title="Edit Rule" nativeTitle icon={<i className="fa-solid fa-pencil" aria-hidden="true" />} />
     </li>
 </template>
 

@@ -1,3 +1,5 @@
+import { ContractIconButton } from '../contract/ContractIconButton';
+
 export function PromptManagerPopup() {
     return (
         <>
@@ -10,7 +12,7 @@ export function PromptManagerPopup() {
                                 <label htmlFor="completion_prompt_manager_popup_entry_form_prompt">
                                     <span>Prompt List</span>
                                 </label>
-                                <a id="completion_prompt_manager_popup_close_button" title="close" data-i18n="[title]close" className="fa-solid fa-close menu_button"></a>
+                                <ContractIconButton id="completion_prompt_manager_popup_close_button" className="menu_button" label="close" title="close" titleKey="close" nativeTitle icon={<i className="fa-solid fa-close" aria-hidden="true" />} />
                             </div>
                             <div className="text_muted">The list of prompts associated with this marker.</div>
                             <div id="completion_prompt_manager_popup_entry_form_inspect_list"></div>
@@ -107,9 +109,9 @@ export function PromptManagerPopup() {
                             <textarea id="completion_prompt_manager_popup_entry_form_prompt" className="text_pole" name="prompt" data-macros data-macros-autocomplete="always" data-macros-autocomplete-style="expanded" placeholder="The prompt to be sent." data-i18n="[placeholder]The prompt to be sent."></textarea>
                         </div>
                         <div className="completion_prompt_manager_popup_entry_form_footer">
-                            <a id="completion_prompt_manager_popup_entry_form_close" title="Close" data-i18n="[title]close" className="fa-solid fa-close menu_button"></a>
-                            <a id="completion_prompt_manager_popup_entry_form_reset" title="Reset" data-i18n="[title]reset" className="fa-solid fa-undo menu_button"></a>
-                            <a id="completion_prompt_manager_popup_entry_form_save" title="Save" data-i18n="[title]save" className="fa-solid fa-save menu_button" data-pm-prompt=""></a>
+                            <ContractIconButton id="completion_prompt_manager_popup_entry_form_close" className="menu_button" label="Close" title="Close" titleKey="close" nativeTitle icon={<i className="fa-solid fa-close" aria-hidden="true" />} />
+                            <ContractIconButton id="completion_prompt_manager_popup_entry_form_reset" className="menu_button" label="Reset" title="Reset" titleKey="reset" nativeTitle icon={<i className="fa-solid fa-undo" aria-hidden="true" />} />
+                            <ContractIconButton id="completion_prompt_manager_popup_entry_form_save" className="menu_button" label="Save" title="Save" titleKey="save" nativeTitle data-pm-prompt="" icon={<i className="fa-solid fa-save" aria-hidden="true" />} />
                         </div>
                     </form>
                 </div>

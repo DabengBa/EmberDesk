@@ -1,3 +1,4 @@
+import { ContractIconButton } from '../contract/ContractIconButton';
 export function LogprobsViewerPanel() {
     return (
         <>
@@ -15,7 +16,7 @@ export function LogprobsViewerPanel() {
                     <div id="logprovsViewerBlockToggle" className="logprobs_panel_control_button inline-drawer-toggle">
                         <i className="inline-drawer-icon fa-solid fa-circle-chevron-up up" />
                     </div>
-                    <div id="logprobsViewerClose" className="logprobs_panel_control_button inline-drawer-icon fa-solid fa-circle-xmark "></div>
+                    <ContractIconButton id="logprobsViewerClose" className="logprobs_panel_control_button inline-drawer-icon" label="Close logprobs viewer" icon={<i className="fa-solid fa-circle-xmark" aria-hidden="true" />} />
                 </div>
             </div>
             <div className="logprobs_panel_content inline-drawer-content flex-container flexFlowColumn">

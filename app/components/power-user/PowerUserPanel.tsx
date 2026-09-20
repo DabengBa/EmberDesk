@@ -1,3 +1,5 @@
+import { ContractButton } from '../contract/ContractButton';
+import { ContractIconButton } from '../contract/ContractIconButton';
 export function PowerUserPanel() {
     return (
         <>
@@ -25,18 +27,9 @@ export function PowerUserPanel() {
                     </div>
                     <div name="UserSettingsRowTwo" className="flex-container flexFlowRow">
                         <div id="account_controls" className="flex-container">
-                            <div id="account_button" className="margin0 menu_button_icon menu_button">
-                                <i className="fa-fw fa-solid fa-user-shield"  />
-                                <span data-i18n="Account">Account</span>
-                            </div>
-                            <div id="admin_button" className="margin0 menu_button_icon menu_button">
-                                <i className="fa-fw fa-solid fa-user-tie"  />
-                                <span data-i18n="Admin Panel">Admin Panel</span>
-                            </div>
-                            <div id="logout_button" className="margin0 menu_button_icon menu_button">
-                                <i className="fa-fw fa-solid fa-right-from-bracket"  />
-                                <span data-i18n="Logout">Logout</span>
-                            </div>
+                            <ContractButton id="account_button" className="margin0 menu_button_icon menu_button" label="Account" icon={<i className="fa-fw fa-solid fa-user-shield" aria-hidden="true" />} />
+                            <ContractButton id="admin_button" className="margin0 menu_button_icon menu_button" label="Admin Panel" icon={<i className="fa-fw fa-solid fa-user-tie" aria-hidden="true" />} />
+                            <ContractButton id="logout_button" className="margin0 menu_button_icon menu_button" label="Logout" icon={<i className="fa-fw fa-solid fa-right-from-bracket" aria-hidden="true" />} />
                         </div>
                         <textarea id="settingsSearch" className="textarea_compact flex1" rows={1} placeholder="Search Settings" data-i18n="[placeholder]Search Settings"></textarea>
                     </div>
@@ -47,27 +40,17 @@ export function PowerUserPanel() {
                             <h4 className="title_restorable">
                                 <span data-i18n="UI Theme">UI Theme</span>
                                 <div className="flex-container">
-                                    <div id="ui_preset_import_button" className="menu_button menu_button_icon margin0" title="Import a theme file" data-i18n="[title]Import a theme file">
-                                        <i className="fa-solid fa-file-import"  />
-                                    </div>
-                                    <div id="ui_preset_export_button" className="menu_button menu_button_icon margin0" title="Export a theme file" data-i18n="[title]Export a theme file">
-                                        <i className="fa-solid fa-file-export"  />
-                                    </div>
-                                    <div id="ui-preset-delete-button" className="menu_button menu_button_icon margin0" title="Delete a theme" data-i18n="[title]Delete a theme">
-                                        <i className="fa-solid fa-trash-can"  />
-                                    </div>
+                                    <ContractIconButton id="ui_preset_import_button" className="menu_button menu_button_icon margin0" label="Import a theme file" title="Import a theme file" nativeTitle icon={<i className="fa-solid fa-file-import" aria-hidden="true" />} />
+                                    <ContractIconButton id="ui_preset_export_button" className="menu_button menu_button_icon margin0" label="Export a theme file" title="Export a theme file" nativeTitle icon={<i className="fa-solid fa-file-export" aria-hidden="true" />} />
+                                    <ContractIconButton id="ui-preset-delete-button" className="menu_button menu_button_icon margin0" label="Delete a theme" title="Delete a theme" nativeTitle icon={<i className="fa-solid fa-trash-can" aria-hidden="true" />} />
                                 </div>
                                 <input type="file" id="ui_preset_import_file" accept=".json" hidden />
                             </h4>
                             <div className="flex-container flexnowrap alignitemscenter">
                                 <select id="themes" className="margin0">
                                 </select>
-                                <div id="ui-preset-update-button" title="Update a theme file" data-i18n="[title]Update a theme file" className="menu_button margin0">
-                                    <i className="fa-solid fa-save"  />
-                                </div>
-                                <div id="ui-preset-save-button" title="Save as a new theme" data-i18n="[title]Save as a new theme" className="menu_button margin0">
-                                    <i className="fa-solid fa-file-circle-plus"  />
-                                </div>
+                                <ContractIconButton id="ui-preset-update-button" className="menu_button margin0" label="Update a theme file" title="Update a theme file" nativeTitle icon={<i className="fa-solid fa-save" aria-hidden="true" />} />
+                                <ContractIconButton id="ui-preset-save-button" className="menu_button margin0" label="Save as a new theme" title="Save as a new theme" nativeTitle icon={<i className="fa-solid fa-file-circle-plus" aria-hidden="true" />} />
                             </div>
                         </div>
                         <div name="themeElements" className="flex-container flexFlowColumn flexNoGap">
@@ -268,12 +251,12 @@ export function PowerUserPanel() {
                                 <label htmlFor="zoomed_avatar_magnification" className="checkbox_label" title="Enable magnification for zoomed avatar display." data-i18n="[title]Enable magnification for zoomed avatar display.">
                                     <input id="zoomed_avatar_magnification" type="checkbox" />
                                     <small data-i18n="Avatar Hover Magnification">Avatar Hover Magnification</small>
-                                    <i title="Enables a magnification effect on hover when you display the zoomed avatar after clicking an avatar's image in chat." data-i18n="[title]Enables a magnification effect on hover when you display the zoomed avatar after clicking an avatar's image in chat." className="right_menu_button fa-solid fa-circle-exclamation"  />
+                                    <ContractIconButton className="right_menu_button" label="Enables a magnification effect on hover when you display the zoomed avatar after clicking an avatar's image in chat." nativeTitle title="Enables a magnification effect on hover when you display the zoomed avatar after clicking an avatar's image in chat." icon={<i className="fa-solid fa-circle-exclamation" aria-hidden="true" />} />
                                 </label>
                                 <label htmlFor="bogus_folders" className="checkbox_label" title="Show tagged character folders in the character list." data-i18n="[title]Show tagged character folders in the character list">
                                     <input id="bogus_folders" type="checkbox" />
                                     <small data-i18n="Tags as Folders">Tags as Folders</small>
-                                    <i title="Recent change: Tags must be marked as folders in the Tag Management menu to appear as such. Click here to bring it up." data-i18n="[title]Tags_as_Folders_desc" className="tags_view right_menu_button fa-solid fa-circle-exclamation"  />
+                                    <ContractIconButton className="tags_view right_menu_button" label="Recent change: Tags must be marked as folders in the Tag Management menu to appear as such. Click here to bring it up." nativeTitle title="Recent change: Tags must be marked as folders in the Tag Management menu to appear as such. Click here to bring it up." icon={<i className="fa-solid fa-circle-exclamation" aria-hidden="true" />} />
                                 </label>
                                 <label htmlFor="click_to_edit" className="checkbox_label" title="Click the message text in the chat log to edit it." data-i18n="[title]Click the message text in the chat log to edit it.">
                                     <input id="click_to_edit" type="checkbox" />
@@ -333,15 +316,9 @@ export function PowerUserPanel() {
                         <div name="MiscellaneousToggles">
                             <h4><span data-i18n="Miscellaneous">Miscellaneous</span></h4>
                             <div className="flex-container flexGap2">
-                                <div id="reload_chat" className="menu_button whitespacenowrap" data-i18n="[title]Reload and redraw the currently open chat" title="Reload and redraw the currently open chat.">
-                                    <small data-i18n="Reload Chat">Reload Chat</small>
-                                </div>
-                                <div id="debug_menu" className="menu_button whitespacenowrap">
-                                    <small data-i18n="Debug Menu">Debug Menu</small>
-                                </div>
-                                <div id="data_maid_button" className="menu_button whitespacenowrap" title="Find and delete backups, unused chats, files, images, etc." data-i18n="[title]Find and delete backups, unused chats, files, images, etc.">
-                                    <small data-i18n="Clean-Up">Clean-Up</small>
-                                </div>
+                                <ContractButton id="reload_chat" className="menu_button whitespacenowrap" label="Reload Chat" title="Reload and redraw the currently open chat." nativeTitle />
+                                <ContractButton id="debug_menu" className="menu_button whitespacenowrap" label="Debug Menu" />
+                                <ContractButton id="data_maid_button" className="menu_button whitespacenowrap" label="Clean-Up" title="Find and delete backups, unused chats, files, images, etc." nativeTitle />
                             </div>
                             <label id="smooth_streaming_control" className="checkbox_label" htmlFor="smooth_streaming">
                                 <input id="smooth_streaming" type="checkbox" />
@@ -413,10 +390,7 @@ export function PowerUserPanel() {
                                         <i className="fa-solid fa-desktop"  />
                                     </small>
                                 </label>
-                                <div id="movingUIreset" title="Reset MovingUI panel sizes/locations." className="menu_button margin0" data-i18n="[title]Reset MovingUI panel sizes/locations.">
-                                    <i className=" fa-solid fa-recycle margin-r5"  />
-                                    <span data-i18n="mui_reset">Reset</span>
-                                </div>
+                                <ContractButton id="movingUIreset" className="menu_button margin0" label="Reset" labelKey="mui_reset" nativeTitle title="Reset MovingUI panel sizes/locations." icon={<i className=" fa-solid fa-recycle margin-r5" aria-hidden="true" />} />
                             </div>
                             <div id="MovingUI-presets-block" className="flex-container alignitemscenter">
                                 <div className="flex-container alignItemsFlexEnd">
@@ -427,13 +401,13 @@ export function PowerUserPanel() {
                                             </select>
                                         </div>
                                     </label>
-                                    <div id="movingui-preset-save-button" title="Save changes to a new MovingUI preset file." data-i18n="[title]Save movingUI changes to a new file" className="menu_button margin0 fa-solid fa-save"></div>
+                                    <ContractIconButton id="movingui-preset-save-button" className="menu_button margin0" label="Save changes to a new MovingUI preset file." nativeTitle title="Save changes to a new MovingUI preset file." icon={<i className="fa-solid fa-save" aria-hidden="true" />} />
                                 </div>
                             </div>
                             <div id="CustomCSS-block" className="flex-container flexFlowColumn">
                                 <h4 className="title_restorable" title="Apply a custom CSS style to all of the ST GUI." data-i18n="[title]Apply a custom CSS style to all of the ST GUI">
                                     <span data-i18n="Custom CSS">Custom CSS</span>
-                                    <i className="editor_maximize fa-solid fa-maximize right_menu_button" data-for="customCSS" title="Expand the editor" data-i18n="[title]Expand the editor"  />
+                                    <ContractIconButton data-for="customCSS" className="editor_maximize right_menu_button" label="Expand the editor" title="Expand the editor" nativeTitle icon={<i className="fa-solid fa-maximize" aria-hidden="true" />} />
                                 </h4>
                                 <div id="CustomCSS-textAreaBlock" className="flex-container flexnowrap alignitemscenter">
                                     <textarea id="customCSS" className="text_pole margin0 margin-r5 textarea_compact monospace" rows={8}></textarea>

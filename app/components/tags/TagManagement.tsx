@@ -1,3 +1,4 @@
+import { ContractButton } from '../contract/ContractButton';
 type TagManagementProps = {
     bogusFolders: boolean;
 };
@@ -8,22 +9,10 @@ export function TagManagement({ bogusFolders }: TagManagementProps) {
             <div className="title_restorable alignItemsBaseline">
                 <h3 data-i18n="Tag Management">Tag Management</h3>
                 <div className="flex-container alignItemsBaseline">
-                    <div className="menu_button menu_button_icon tag_view_prune" data-i18n="[title]Remove unused tags" title="Remove unused tags">
-                        <i className="fa-solid fa-scissors" />
-                        <span data-i18n="Prune">Prune</span>
-                    </div>
-                    <div className="menu_button menu_button_icon tag_view_backup" data-i18n="[title]Save your tags to a file" title="Save your tags to a file">
-                        <i className="fa-solid fa-file-export" />
-                        <span data-i18n="Backup">Backup</span>
-                    </div>
-                    <div className="menu_button menu_button_icon tag_view_restore" data-i18n="[title]Restore tags from a file" title="Restore tags from a file">
-                        <i className="fa-solid fa-file-import" />
-                        <span data-i18n="Restore">Restore</span>
-                    </div>
-                    <div className="menu_button menu_button_icon tag_view_create" data-i18n="[title]Create a new tag" title="Create a new tag">
-                        <i className="fa-solid fa-plus" />
-                        <span data-i18n="Create">Create</span>
-                    </div>
+                    <ContractButton className="menu_button menu_button_icon tag_view_prune" label="Prune" nativeTitle title="Remove unused tags" icon={<i className="fa-solid fa-scissors" aria-hidden="true" />} />
+                    <ContractButton className="menu_button menu_button_icon tag_view_backup" label="Backup" nativeTitle title="Save your tags to a file" icon={<i className="fa-solid fa-file-export" aria-hidden="true" />} />
+                    <ContractButton className="menu_button menu_button_icon tag_view_restore" label="Restore" nativeTitle title="Restore tags from a file" icon={<i className="fa-solid fa-file-import" aria-hidden="true" />} />
+                    <ContractButton className="menu_button menu_button_icon tag_view_create" label="Create" nativeTitle title="Create a new tag" icon={<i className="fa-solid fa-plus" aria-hidden="true" />} />
                     <input type="file" id="tag_view_restore_input" hidden accept=".json" />
                 </div>
             </div>

@@ -1,3 +1,5 @@
+import { ContractButton } from '../contract/ContractButton';
+import { ContractIconButton } from '../contract/ContractIconButton';
 import * as stylex from '@stylexjs/stylex';
 import { personaPanelStyles as styles } from '../../styles/persona-panel.styles';
 
@@ -19,28 +21,16 @@ export function PersonaManagementPanel() {
                     </h3>
                 </div>
                 <div className="flex-container">
-                    <div className="menu_button menu_button_icon user_stats_button" data-i18n="[title]Click for stats!" title="Click for stats!">
-                        <i className="fa-solid fa-ranking-star" />
-                        <span data-i18n="Usage Stats">Usage Stats</span>
-                    </div>
-                    <div id="personas_backup" className="menu_button menu_button_icon" data-i18n="[title]Backup your personas to a file" title="Backup your personas to a file">
-                        <i className="fa-solid fa-file-export" />
-                        <span data-i18n="Backup">Backup</span>
-                    </div>
-                    <div id="personas_restore" className="menu_button menu_button_icon" data-i18n="[title]Restore your personas from a file" title="Restore your personas from a file">
-                        <i className="fa-solid fa-file-import" />
-                        <span data-i18n="Restore">Restore</span>
-                    </div>
+                    <ContractButton className="menu_button menu_button_icon user_stats_button" label="Usage Stats" nativeTitle title="Click for stats!" icon={<i className="fa-solid fa-ranking-star" aria-hidden="true" />} />
+                    <ContractButton id="personas_backup" className="menu_button menu_button_icon" label="Backup" nativeTitle title="Backup your personas to a file" icon={<i className="fa-solid fa-file-export" aria-hidden="true" />} />
+                    <ContractButton id="personas_restore" className="menu_button menu_button_icon" label="Restore" nativeTitle title="Restore your personas from a file" icon={<i className="fa-solid fa-file-import" aria-hidden="true" />} />
                     <input id="personas_restore_input" type="file" accept=".json" hidden />
                 </div>
             </div>
             <div id="persona-management-block" className="flex-container wide100p flexGap10">
                 <div className="persona_management_left_column flex1 overflowHidden wide100p">
                     <div className="flex-container marginBot10 alignitemscenter">
-                        <div id="create_dummy_persona" className="menu_button menu_button_icon" title="Create a dummy persona" data-i18n="[title]Create a dummy persona">
-                            <i className="fa-solid fa-person-circle-question fa-fw" />
-                            <div data-i18n="Create">Create</div>
-                        </div>
+                        <ContractButton id="create_dummy_persona" className="menu_button menu_button_icon" label="Create" title="Create a dummy persona" nativeTitle icon={<i className="fa-solid fa-person-circle-question fa-fw" aria-hidden="true" />} />
                         <input id="persona_search_bar" className="text_pole width100p flex1 margin0" type="search" data-i18n="[placeholder]Search..." placeholder="Search..." />
                         <select id="persona_sort_order" className="margin0" defaultValue="asc">
                             <option value="search" data-i18n="Search" hidden>Search</option>
@@ -48,7 +38,7 @@ export function PersonaManagementPanel() {
                             <option value="desc">Z-A</option>
                         </select>
                         <div id="persona_pagination_container" className="flex1" />
-                        <i id="persona_grid_toggle" className="fa-solid fa-table-cells-large menu_button" data-i18n="[title]Toggle grid view" title="Toggle grid view" />
+                        <ContractIconButton id="persona_grid_toggle" className="menu_button" label="Toggle grid view" nativeTitle title="Toggle grid view" icon={<i className="fa-solid fa-table-cells-large" aria-hidden="true" />} />
                     </div>
                     <div id="user_avatar_block" className={stylex.props(styles.avatarBlock).className ?? ''} data-i18n="[no_desc_text]No persona description" {...{ no_desc_text: '[No description]' } as Record<string, string>}>
                         <div className={`avatar_upload ${stylex.props(styles.avatarUpload).className ?? ''}`}>+</div>
@@ -65,12 +55,12 @@ export function PersonaManagementPanel() {
                         <div id="persona_controls" className="flex-container">
                             <h5 id="your_name" className={`persona_name ${stylex.props(styles.personaName).className ?? ''}`}>[Persona Name]</h5>
                             <div className="persona_controls_buttons_block buttons_block">
-                                <div id="persona_rename_button" className="menu_button fa-solid fa-pencil" title="Rename Persona" data-i18n="[title]Rename Persona" />
-                                <div id="sync_name_button" className="menu_button fa-solid fa-sync" title="Click to set user name for all messages" data-i18n="[title]Click to set user name for all messages" />
-                                <div id="persona_lore_button" className="menu_button fa-solid fa-globe" title="Persona Lore&#10;&#10;Click to load&#10;Shift/Alt-click or long-press to open 'Link to Persona Lorebook' popup" data-i18n="[title]persona_lore_button_title" />
-                                <div id="persona_set_image_button" className="menu_button fa-solid fa-image" title="Change Persona Image" data-i18n="[title]Change Persona Image" />
-                                <div id="persona_duplicate_button" className="menu_button fa-solid fa-clone" title="Duplicate Persona" data-i18n="[title]Duplicate Persona" />
-                                <div id="persona_delete_button" className="menu_button fa-solid fa-skull red_button" title="Delete Persona" data-i18n="[title]Delete Persona" />
+                                <ContractIconButton id="persona_rename_button" className="menu_button" label="Rename Persona" nativeTitle title="Rename Persona" icon={<i className="fa-solid fa-pencil" aria-hidden="true" />} />
+                                <ContractIconButton id="sync_name_button" className="menu_button" label="Click to set user name for all messages" nativeTitle title="Click to set user name for all messages" icon={<i className="fa-solid fa-sync" aria-hidden="true" />} />
+                                <ContractIconButton id="persona_lore_button" className="menu_button" label="Persona Lore&#10;&#10;Click to load&#10;Shift/Alt-click or long-press to open 'Link to Persona Lorebook' popup" nativeTitle title="Persona Lore&#10;&#10;Click to load&#10;Shift/Alt-click or long-press to open 'Link to Persona Lorebook' popup" icon={<i className="fa-solid fa-globe" aria-hidden="true" />} />
+                                <ContractIconButton id="persona_set_image_button" className="menu_button" label="Change Persona Image" nativeTitle title="Change Persona Image" icon={<i className="fa-solid fa-image" aria-hidden="true" />} />
+                                <ContractIconButton id="persona_duplicate_button" className="menu_button" label="Duplicate Persona" nativeTitle title="Duplicate Persona" icon={<i className="fa-solid fa-clone" aria-hidden="true" />} />
+                                <ContractIconButton id="persona_delete_button" className="menu_button red_button" label="Delete Persona" nativeTitle title="Delete Persona" icon={<i className="fa-solid fa-skull" aria-hidden="true" />} />
                             </div>
                             <label className="flex1 height100p" htmlFor="persona-management-dropdown">
                                 <select id="persona-management-dropdown" className="text_pole" defaultValue="default">
@@ -82,7 +72,7 @@ export function PersonaManagementPanel() {
 
                         <h4 className="flex-container alignItemsBaseline">
                             <span data-i18n="Persona Description">Persona Description</span>
-                            <i className="editor_maximize fa-solid fa-maximize right_menu_button" data-for="persona_description" title="Expand the editor" data-i18n="[title]Expand the editor" />
+                            <ContractIconButton data-for="persona_description" className="editor_maximize right_menu_button" label="Expand the editor" title="Expand the editor" nativeTitle icon={<i className="fa-solid fa-maximize" aria-hidden="true" />} />
                         </h4>
                         <textarea id="persona_description" name="persona_description" data-macros="" data-i18n="[placeholder]Example: [{{user}} is a 28-year-old Romanian cat girl.]" placeholder={'Example:\n[{{user}} is a 28-year-old Romanian cat girl.]'} className="text_pole textarea_compact" defaultValue="" autoComplete="off" rows={8} />
 
@@ -119,18 +109,9 @@ export function PersonaManagementPanel() {
 
                         <h4 data-i18n="Connections">Connections</h4>
                         <div id="persona_connections_buttons" className={`flex-container ${stylex.props(styles.connectionsButtons).className ?? ''}`}>
-                            <div id="lock_persona_default" className="menu_button menu_button_icon" title="Click to select this as default persona for the new chats. Click again to remove it." data-i18n="[title]Click to select this as default persona for the new chats. Click again to remove it.">
-                                <i className="icon fa-solid fa-crown fa-fw" />
-                                <div data-i18n="Default">Default</div>
-                            </div>
-                            <div id="lock_persona_to_char" className="menu_button menu_button_icon" title="Click to lock your selected persona to the current character. Click again to remove the lock." data-i18n="[title]Click to lock your selected persona to the current character. Click again to remove the lock.">
-                                <i className="icon fa-solid fa-unlock fa-fw" />
-                                <div data-i18n="Character">Character</div>
-                            </div>
-                            <div id="lock_user_name" className="menu_button menu_button_icon" title="Click to lock your selected persona to the current chat. Click again to remove the lock." data-i18n="[title]Click to lock your selected persona to the current chat. Click again to remove the lock.">
-                                <i className="icon fa-solid fa-unlock fa-fw" />
-                                <div data-i18n="Chat">Chat</div>
-                            </div>
+                            <ContractButton id="lock_persona_default" className="menu_button menu_button_icon" label="Default" title="Click to select this as default persona for the new chats. Click again to remove it." nativeTitle icon={<i className="icon fa-solid fa-crown fa-fw" aria-hidden="true" />} />
+                            <ContractButton id="lock_persona_to_char" className="menu_button menu_button_icon" label="Character" title="Click to lock your selected persona to the current character. Click again to remove the lock." nativeTitle icon={<i className="icon fa-solid fa-unlock fa-fw" aria-hidden="true" />} />
+                            <ContractButton id="lock_user_name" className="menu_button menu_button_icon" label="Chat" title="Click to lock your selected persona to the current chat. Click again to remove the lock." nativeTitle icon={<i className="icon fa-solid fa-unlock fa-fw" aria-hidden="true" />} />
                         </div>
                         <div id="persona_connections_info_block" />
                         <div id="persona_connections_list" className="text_muted m-b-1 avatars_inline avatars_multiline scroll-reset-container expander" />

@@ -1,3 +1,5 @@
+import { ContractButton } from '../contract/ContractButton';
+import { ContractIconButton } from '../contract/ContractIconButton';
 /**
  * Quick Reply modal editor markup (React-owned shell). QuickReply.js keeps
  * behavior ownership: it binds listeners to the preserved qr--* IDs after the
@@ -12,7 +14,7 @@ export function QuickReplyEditorPanel() {
 			<label className="qr--fit">
 				<span className="qr--labelText" data-i18n="Label">Icon</span>
 				<small className="qr--labelHint">{"\u00a0"}</small>
-				<div className="menu_button fa-fw" id="qr--modal-icon" title="Click to change icon"></div>
+				<ContractIconButton id="qr--modal-icon" className="menu_button" label="Click to change icon" nativeTitle title="Click to change icon" icon={<i className="fa-fw" aria-hidden="true" />} />
 			</label>
 			<div className="label">
 				<span className="qr--labelText" data-i18n="Label">Label</span>
@@ -23,7 +25,7 @@ export function QuickReplyEditorPanel() {
 						Show
 					</label>
 					<input type="text" className="text_pole" id="qr--modal-label" />
-					<div className="menu_button fa-fw fa-solid fa-chevron-down" id="qr--modal-switcher" title="Switch to another QR"></div>
+					<ContractIconButton id="qr--modal-switcher" className="menu_button" label="Switch to another QR" nativeTitle title="Switch to another QR" icon={<i className="fa-fw fa-solid fa-chevron-down" aria-hidden="true" />} />
 				</div>
 			</div>
 			<label>
@@ -80,12 +82,12 @@ export function QuickReplyEditorPanel() {
 						<span data-i18n="Chaining:">Chaining:</span>
 						<input type="checkbox" className="qr--isChained" />
 					</label>
-					<div className="qr--delete menu_button menu_button_icon fa-solid fa-trash-can" title="Remove entry"></div>
+					<ContractIconButton className="qr--delete menu_button menu_button_icon" label="Remove entry" title="Remove entry" nativeTitle icon={<i className="fa-solid fa-trash-can" aria-hidden="true" />} />
 				</div>
 			</template>
 		</div>
 		<div className="qr--ctxEditorActions">
-			<span id="qr--ctxAdd" className="menu_button menu_button_icon fa-solid fa-plus" title="Add quick reply set to context menu"></span>
+			<ContractIconButton id="qr--ctxAdd" className="menu_button menu_button_icon" label="Add quick reply set to context menu" title="Add quick reply set to context menu" nativeTitle icon={<i className="fa-solid fa-plus" aria-hidden="true" />} />
 		</div>
 
 
@@ -132,10 +134,7 @@ export function QuickReplyEditorPanel() {
 
 		<h3 data-i18n="Testing">Testing</h3>
 		<div id="qr--modal-executeButtons">
-			<div id="qr--modal-execute" className="qr--modal-executeButton menu_button" title="Execute the quick reply now">
-				<i className="fa-solid fa-play" />
-				<span data-i18n="Execute">Execute</span>
-			</div>
+			<ContractButton id="qr--modal-execute" className="qr--modal-executeButton menu_button" label="Execute" nativeTitle title="Execute the quick reply now" icon={<i className="fa-solid fa-play" aria-hidden="true" />} />
 			<div id="qr--modal-pause" className="qr--modal-executeButton menu_button" title="Pause / continue execution">
 				<span className="qr--modal-executeComboIcon">
 					<i className="fa-solid fa-play" />
@@ -155,8 +154,8 @@ export function QuickReplyEditorPanel() {
 			<div title="Step Over" id="qr--modal-step" className="qr--modal-debugButton menu_button"></div>
 			<div title="Step Into" id="qr--modal-stepInto" className="qr--modal-debugButton menu_button"></div>
 			<div title="Step Out" id="qr--modal-stepOut" className="qr--modal-debugButton menu_button"></div>
-			<div title="Minimize" id="qr--modal-minimize" className="qr--modal-debugButton menu_button fa-solid fa-minimize"></div>
-			<div title="Maximize" id="qr--modal-maximize" className="qr--modal-debugButton menu_button fa-solid fa-maximize"></div>
+			<ContractIconButton id="qr--modal-minimize" className="qr--modal-debugButton menu_button" label="Minimize" nativeTitle title="Minimize" icon={<i className="fa-solid fa-minimize" aria-hidden="true" />} />
+			<ContractIconButton id="qr--modal-maximize" className="qr--modal-debugButton menu_button" label="Maximize" nativeTitle title="Maximize" icon={<i className="fa-solid fa-maximize" aria-hidden="true" />} />
 		</div>
 		<textarea rows={1} id="qr--modal-send_textarea" placeholder="Chat input for use with {{input}}" title="Chat input for use with {{input}}"></textarea>
 		<div id="qr--modal-debugState"></div>

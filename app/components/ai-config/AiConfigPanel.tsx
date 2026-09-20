@@ -50,9 +50,9 @@ export function AiConfigPanel() {
                                         </select>
                                         <div className="flex-container marginLeft5 gap3px">
                                             <input id="openai_preset_import_file" type="file" accept=".json,.settings" hidden />
-                                            <ContractButton id="update_oai_preset" className="menu_button menu_button_icon preset-action-btn" variant="ghost" label="Save" title="Update current preset" icon={<i className="fa-fw fa-solid fa-save" aria-hidden="true" />} />
-                                            <ContractButton data-preset-manager-rename="openai" className="menu_button menu_button_icon preset-action-btn" variant="ghost" label="Rename" title="Rename current preset" icon={<i className="fa-fw fa-solid fa-pencil" aria-hidden="true" />} />
-                                            <ContractButton id="new_oai_preset" className="menu_button menu_button_icon preset-action-btn" variant="ghost" label="Save As" title="Save preset as" icon={<i className="fa-fw fa-solid fa-file-circle-plus" aria-hidden="true" />} />
+                                            <ContractButton id="update_oai_preset" className="menu_button menu_button_icon preset-action-btn" variant="ghost" label="Save" nativeTitle title="Update current preset" icon={<i className="fa-fw fa-solid fa-save" aria-hidden="true" />} />
+                                            <ContractButton data-preset-manager-rename="openai" className="menu_button menu_button_icon preset-action-btn" variant="ghost" label="Rename" nativeTitle title="Rename current preset" icon={<i className="fa-fw fa-solid fa-pencil" aria-hidden="true" />} />
+                                            <ContractButton id="new_oai_preset" className="menu_button menu_button_icon preset-action-btn" variant="ghost" label="Save As" nativeTitle title="Save preset as" icon={<i className="fa-fw fa-solid fa-file-circle-plus" aria-hidden="true" />} />
                                         </div>
                                     </div>
                                 </div>
@@ -309,10 +309,10 @@ export function AiConfigPanel() {
                             <div className="range-block-title" data-i18n="Logit Bias">Logit Bias</div>
                             <div className="openai_logit_bias_preset_form">
                                 <select id="openai_logit_bias_preset" className="text_pole"></select>
-                                <ContractIconButton id="openai_logit_bias_new_preset" className="menu_button" label="New preset" title="New preset" icon={<i className="fa-solid fa-plus" aria-hidden="true" />} />
-                                <ContractIconButton id="openai_logit_bias_import_preset" className="menu_button" label="Import preset" title="Import preset" icon={<i className="fa-solid fa-file-import" aria-hidden="true" />} />
-                                <ContractIconButton id="openai_logit_bias_export_preset" className="menu_button" label="Export preset" title="Export preset" icon={<i className="fa-solid fa-file-export" aria-hidden="true" />} />
-                                <ContractIconButton id="openai_logit_bias_delete_preset" className="menu_button" label="Delete preset" title="Delete preset" icon={<i className="fa-solid fa-trash-can" aria-hidden="true" />} />
+                                <ContractIconButton id="openai_logit_bias_new_preset" className="menu_button" label="New preset" nativeTitle title="New preset" icon={<i className="fa-solid fa-plus" aria-hidden="true" />} />
+                                <ContractIconButton id="openai_logit_bias_import_preset" className="menu_button" label="Import preset" nativeTitle title="Import preset" icon={<i className="fa-solid fa-file-import" aria-hidden="true" />} />
+                                <ContractIconButton id="openai_logit_bias_export_preset" className="menu_button" label="Export preset" nativeTitle title="Export preset" icon={<i className="fa-solid fa-file-export" aria-hidden="true" />} />
+                                <ContractIconButton id="openai_logit_bias_delete_preset" className="menu_button" label="Delete preset" nativeTitle title="Delete preset" icon={<i className="fa-solid fa-trash-can" aria-hidden="true" />} />
                                 <input id="openai_logit_bias_import_file" type="file" accept=".json" hidden />
                             </div>
                             <div className="inline-drawer wide100p">
@@ -330,7 +330,7 @@ export function AiConfigPanel() {
                         <div className="range-block">
                             <div className="range-block-title openai_restorable">
                                 <span data-i18n="Impersonation prompt">Impersonation</span>
-                                <ContractIconButton id="impersonation_prompt_restore" className="right_menu_button" label="Restore default prompt" title="Restore default prompt" icon={<i className="fa-solid fa-clock-rotate-left" aria-hidden="true" />} />
+                                <ContractIconButton id="impersonation_prompt_restore" className="right_menu_button" label="Restore default prompt" nativeTitle title="Restore default prompt" icon={<i className="fa-solid fa-clock-rotate-left" aria-hidden="true" />} />
                             </div>
                             <div className="wide100p">
                                 <textarea id="impersonation_prompt_textarea" className="text_pole textarea_compact autoSetHeight" name="impersonation_prompt" rows={3} placeholder={"2014"}></textarea>
@@ -339,7 +339,7 @@ export function AiConfigPanel() {
                         <div className="range-block">
                             <div className="range-block-title openai_restorable">
                                 <span data-i18n="World Info Format Template">World Info <code>{0}</code></span>
-                                <ContractIconButton id="wi_format_restore" className="right_menu_button" label="Restore default format" title="Restore default format" icon={<i className="fa-solid fa-clock-rotate-left" aria-hidden="true" />} />
+                                <ContractIconButton id="wi_format_restore" className="right_menu_button" label="Restore default format" nativeTitle title="Restore default format" icon={<i className="fa-solid fa-clock-rotate-left" aria-hidden="true" />} />
                             </div>
                             <div className="wide100p">
                                 <textarea id="wi_format_textarea" className="text_pole textarea_compact autoSetHeight" rows={3} placeholder={"2014"}></textarea>
@@ -348,7 +348,7 @@ export function AiConfigPanel() {
                         <div className="range-block">
                             <div className="range-block-title openai_restorable">
                                 <span data-i18n="Scenario Format Template">Scenario <code>{'{{'}scenario{'}}'}</code></span>
-                                <ContractIconButton id="scenario_format_restore" className="right_menu_button" label="Restore default format" title="Restore default format" icon={<i className="fa-solid fa-clock-rotate-left" aria-hidden="true" />} />
+                                <ContractIconButton id="scenario_format_restore" className="right_menu_button" label="Restore default format" nativeTitle title="Restore default format" icon={<i className="fa-solid fa-clock-rotate-left" aria-hidden="true" />} />
                             </div>
                             <div className="wide100p">
                                 <textarea id="scenario_format_textarea" className="text_pole textarea_compact autoSetHeight" rows={3} placeholder={"2014"}></textarea>
@@ -357,7 +357,7 @@ export function AiConfigPanel() {
                         <div className="range-block">
                             <div className="range-block-title openai_restorable">
                                 <span data-i18n="Personality Format Template">Personality <code>{'{{'}personality{'}}'}</code></span>
-                                <ContractIconButton id="personality_format_restore" className="right_menu_button" label="Restore default format" title="Restore default format" icon={<i className="fa-solid fa-clock-rotate-left" aria-hidden="true" />} />
+                                <ContractIconButton id="personality_format_restore" className="right_menu_button" label="Restore default format" nativeTitle title="Restore default format" icon={<i className="fa-solid fa-clock-rotate-left" aria-hidden="true" />} />
                             </div>
                             <div className="wide100p">
                                 <textarea id="personality_format_textarea" className="text_pole textarea_compact autoSetHeight" rows={3} placeholder={"2014"}></textarea>
@@ -366,7 +366,7 @@ export function AiConfigPanel() {
                         <div className="range-block">
                             <div className="range-block-title openai_restorable">
                                 <span data-i18n="New Chat">New Chat</span>
-                                <ContractIconButton id="newchat_prompt_restore" className="right_menu_button" label="Restore new chat prompt" title="Restore new chat prompt" icon={<i className="fa-solid fa-clock-rotate-left" aria-hidden="true" />} />
+                                <ContractIconButton id="newchat_prompt_restore" className="right_menu_button" label="Restore new chat prompt" nativeTitle title="Restore new chat prompt" icon={<i className="fa-solid fa-clock-rotate-left" aria-hidden="true" />} />
                             </div>
                             <div className="wide100p">
                                 <textarea id="newchat_prompt_textarea" className="text_pole textarea_compact autoSetHeight" name="new_chat" rows={3} placeholder={"2014"}></textarea>
@@ -375,7 +375,7 @@ export function AiConfigPanel() {
                         <div className="range-block">
                             <div className="range-block-title openai_restorable">
                                 <span data-i18n="New Example Chat">Example Chat</span>
-                                <ContractIconButton id="newexamplechat_prompt_restore" className="right_menu_button" label="Restore new example chat prompt" title="Restore new example chat prompt" icon={<i className="fa-solid fa-clock-rotate-left" aria-hidden="true" />} />
+                                <ContractIconButton id="newexamplechat_prompt_restore" className="right_menu_button" label="Restore new example chat prompt" nativeTitle title="Restore new example chat prompt" icon={<i className="fa-solid fa-clock-rotate-left" aria-hidden="true" />} />
                             </div>
                             <div className="wide100p">
                                 <textarea id="newexamplechat_prompt_textarea" className="text_pole textarea_compact autoSetHeight" name="new_example_chat" rows={3} placeholder={"2014"}></textarea>
@@ -384,7 +384,7 @@ export function AiConfigPanel() {
                         <div className="range-block">
                             <div className="range-block-title openai_restorable">
                                 <span data-i18n="Continue nudge">Continue Nudge</span>
-                                <ContractIconButton id="continue_nudge_prompt_restore" className="right_menu_button" label="Restore new chat prompt" title="Restore new chat prompt" icon={<i className="fa-solid fa-clock-rotate-left" aria-hidden="true" />} />
+                                <ContractIconButton id="continue_nudge_prompt_restore" className="right_menu_button" label="Restore new chat prompt" nativeTitle title="Restore new chat prompt" icon={<i className="fa-solid fa-clock-rotate-left" aria-hidden="true" />} />
                             </div>
                             <div className="wide100p">
                                 <textarea id="continue_nudge_prompt_textarea" className="text_pole textarea_compact autoSetHeight" name="continue_nudge" rows={3} placeholder={"2014"}></textarea>

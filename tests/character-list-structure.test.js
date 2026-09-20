@@ -63,7 +63,7 @@ describe('character list structure', () => {
             'className="character-list-tool-group character-list-view-group"',
             'className="character-list-tool-group character-list-bulk-actions"',
             'className="character-list-sort-label"',
-            'className="character-list-action-label"',
+            'labelClassName="character-list-action-label"',
             'id="rm_button_create"',
             'id="character_import_button"',
             'id="external_import_button"',
@@ -87,8 +87,7 @@ describe('character list structure', () => {
         expect(indexHtml).toMatch(/id="rightNavDrawerIcon"[^>]*\brole="button"/);
         expect(indexHtml).toMatch(/id="rightNavDrawerIcon"[^>]*\baria-label="Open Character Management"/);
         expect(indexHtml).toMatch(/id="rightNavDrawerIcon"[^>]*\btabindex="0"/);
-        expect(rightNavSource).toMatch(/id="rm_button_characters"[^>]*\brole="button"/);
-        expect(rightNavSource).toMatch(/id="rm_button_characters"[^>]*\baria-label="Characters"/);
+        expect(rightNavSource).toMatch(/id="rm_button_characters"[^>]*\blabel="Characters"/);
         expect(rightNavSource).toMatch(/id="rm_button_characters"[^>]*\btabIndex=\{0\}/);
 
         [
@@ -101,8 +100,10 @@ describe('character list structure', () => {
             ['bulkSelectAllButton', 'Character Toolbar All', 'All', 'Bulk select all characters'],
             ['bulkDeleteButton', 'Character Toolbar Delete', 'Del', 'Bulk delete characters'],
         ].forEach(([id, key, label, ariaLabel]) => {
-            expect(rightNavSource).toMatch(new RegExp(`id="${id}"[\\s\\S]*?<span className="character-list-action-label" data-i18n="${key}">${label}<\\/span>`));
-            expect(rightNavSource).toMatch(new RegExp(`id="${id}"[^>]*\\baria-label="${ariaLabel}"`));
+            expect(rightNavSource).toMatch(new RegExp(`id="${id}"[^>]*\\blabel="${label}"`));
+            expect(rightNavSource).toMatch(new RegExp(`id="${id}"[^>]*\\blabelKey="${key}"`));
+            expect(rightNavSource).toMatch(new RegExp(`id="${id}"[^>]*\\blabelClassName="character-list-action-label"`));
+            expect(rightNavSource).toMatch(new RegExp(`id="${id}"[^>]*\\bariaLabel="${ariaLabel}"`));
         });
 
         [
@@ -467,8 +468,10 @@ describe('character list structure', () => {
         expect(rightNavSource).toContain('aria-live="polite"');
         expect(rightNavSource).toContain('id="bulkSelectionHint"');
         expect(rightNavSource).toContain('data-i18n="Click character cards to select"');
-        expect(rightNavSource).toContain('data-i18n="Character Toolbar URL">URL</span>');
-        expect(rightNavSource).toContain('data-i18n="Character Toolbar Bulk">Bulk</span>');
+        expect(rightNavSource).toContain('labelKey="Character Toolbar URL"');
+        expect(rightNavSource).toContain('label="URL"');
+        expect(rightNavSource).toContain('labelKey="Character Toolbar Bulk"');
+        expect(rightNavSource).toContain('label="Bulk"');
         expect(rightNavSource).toContain('data-i18n="Character Toolbar Sort">Sort</label>');
         expect(rightNavSource).toMatch(/id="bulkSelectedCount"[^>]*"display": "none"[^>]*role="status"/);
         expect(rightNavSource).toContain('role="status"');

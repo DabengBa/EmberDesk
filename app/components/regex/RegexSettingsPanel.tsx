@@ -1,3 +1,5 @@
+import { ContractButton } from '../contract/ContractButton';
+import { ContractIconButton } from '../contract/ContractIconButton';
 export function RegexSettingsPanel() {
     return (
 <div className="regex_settings">
@@ -10,66 +12,28 @@ export function RegexSettingsPanel() {
         </div>
         <div className="inline-drawer-content">
             <div className="flex-container">
-                <div id="open_regex_editor" className="menu_button menu_button_icon" data-i18n="[title]ext_regex_new_global_script_desc" title="New global regex script">
-                    <i className="fa-solid fa-pen-to-square" />
-                    <small data-i18n="ext_regex_new_global_script">+ Global</small>
-                </div>
-                <div id="open_preset_editor" className="menu_button menu_button_icon" data-i18n="[title]ext_regex_new_preset_script_desc" title="New preset regex script">
-                    <i className="fa-solid fa-sliders" />
-                    <small data-i18n="ext_regex_new_preset_script">+ Preset</small>
-                </div>
-                <div id="open_scoped_editor" className="menu_button menu_button_icon" data-i18n="[title]ext_regex_new_scoped_script_desc" title="New scoped regex script">
-                    <i className="fa-solid fa-address-card" />
-                    <small data-i18n="ext_regex_new_scoped_script">+ Scoped</small>
-                </div>
-                <div id="import_regex" className="menu_button menu_button_icon">
-                    <i className="fa-solid fa-file-import" />
-                    <small data-i18n="ext_regex_import_script">Import</small>
-                </div>
+                <ContractButton id="open_regex_editor" className="menu_button menu_button_icon" label="+ Global" labelKey="ext_regex_new_global_script" nativeTitle title="New global regex script" icon={<i className="fa-solid fa-pen-to-square" aria-hidden="true" />} />
+                <ContractButton id="open_preset_editor" className="menu_button menu_button_icon" label="+ Preset" labelKey="ext_regex_new_preset_script" nativeTitle title="New preset regex script" icon={<i className="fa-solid fa-sliders" aria-hidden="true" />} />
+                <ContractButton id="open_scoped_editor" className="menu_button menu_button_icon" label="+ Scoped" labelKey="ext_regex_new_scoped_script" nativeTitle title="New scoped regex script" icon={<i className="fa-solid fa-address-card" aria-hidden="true" />} />
+                <ContractButton id="import_regex" className="menu_button menu_button_icon" label="Import" labelKey="ext_regex_import_script" icon={<i className="fa-solid fa-file-import" aria-hidden="true" />} />
                 <input type="file" id="import_regex_file" hidden accept="*.json" multiple />
                 <label htmlFor="regex_bulk_edit" className="menu_button menu_button_icon">
                     <input id="regex_bulk_edit" type="checkbox" className="displayNone" />
                     <i className="fa-solid fa-edit" />
                     <small data-i18n="ext_regex_bulk_edit">Bulk Edit</small>
                 </label>
-                <div id="open_regex_debugger" className="menu_button menu_button_icon" data-i18n="[title]ext_regex_debugger_desc" title="Advanced Regex Debugger">
-                    <i className="fa-solid fa-bug-slash" />
-                    <small data-i18n="ext_regex_debugger">Debugger</small>
-                </div>
+                <ContractButton id="open_regex_debugger" className="menu_button menu_button_icon" label="Debugger" labelKey="ext_regex_debugger" nativeTitle title="Advanced Regex Debugger" icon={<i className="fa-solid fa-bug-slash" aria-hidden="true" />} />
             </div>
             <hr className="regex_bulk_operations_hr" />
             <div className="regex_bulk_operations flex-container">
-                <div id="bulk_select_all_toggle" className="menu_button menu_button_icon" title="Toggle Select All">
-                    <i className="fa-solid fa-check-double" />
-                </div>
-                <div id="bulk_enable_regex" className="menu_button menu_button_icon">
-                    <i className="fa-solid fa-toggle-on" />
-                    <small data-i18n="Enable">Enable</small>
-                </div>
-                <div id="bulk_disable_regex" className="menu_button menu_button_icon">
-                    <i className="fa-solid fa-toggle-off" />
-                    <small data-i18n="Disable">Disable</small>
-                </div>
-                <div id="bulk_regex_move_to_global" className="menu_button menu_button_icon" hidden>
-                    <i className="fa-solid fa-globe" />
-                    <small data-i18n="ext_regex_move_to_global">Move to global scripts</small>
-                </div>
-                <div id="bulk_regex_move_to_preset" className="menu_button menu_button_icon" hidden>
-                    <i className="fa-solid fa-sliders" />
-                    <small data-i18n="ext_regex_move_to_preset">Move to preset scripts</small>
-                </div>
-                <div id="bulk_regex_move_to_scoped" className="menu_button menu_button_icon" hidden>
-                    <i className="fa-solid fa-address-card" />
-                    <small data-i18n="ext_regex_move_to_scoped">Move to scoped scripts</small>
-                </div>
-                <div id="bulk_export_regex" className="menu_button menu_button_icon">
-                    <i className="fa-solid fa-file-export" />
-                    <small data-i18n="Export">Export</small>
-                </div>
-                <div id="bulk_delete_regex" className="menu_button menu_button_icon">
-                    <i className="fa-solid fa-trash" />
-                    <small data-i18n="Delete">Delete</small>
-                </div>
+                <ContractIconButton id="bulk_select_all_toggle" className="menu_button menu_button_icon" label="Toggle Select All" title="Toggle Select All" nativeTitle icon={<i className="fa-solid fa-check-double" aria-hidden="true" />} />
+                <ContractButton id="bulk_enable_regex" className="menu_button menu_button_icon" label="Enable" icon={<i className="fa-solid fa-toggle-on" aria-hidden="true" />} />
+                <ContractButton id="bulk_disable_regex" className="menu_button menu_button_icon" label="Disable" icon={<i className="fa-solid fa-toggle-off" aria-hidden="true" />} />
+                <ContractButton id="bulk_regex_move_to_global" style={{ "display": "none" }} className="menu_button menu_button_icon" label="Move to global scripts" labelKey="ext_regex_move_to_global" icon={<i className="fa-solid fa-globe" aria-hidden="true" />} />
+                <ContractButton id="bulk_regex_move_to_preset" style={{ "display": "none" }} className="menu_button menu_button_icon" label="Move to preset scripts" labelKey="ext_regex_move_to_preset" icon={<i className="fa-solid fa-sliders" aria-hidden="true" />} />
+                <ContractButton id="bulk_regex_move_to_scoped" style={{ "display": "none" }} className="menu_button menu_button_icon" label="Move to scoped scripts" labelKey="ext_regex_move_to_scoped" icon={<i className="fa-solid fa-address-card" aria-hidden="true" />} />
+                <ContractButton id="bulk_export_regex" className="menu_button menu_button_icon" label="Export" icon={<i className="fa-solid fa-file-export" aria-hidden="true" />} />
+                <ContractButton id="bulk_delete_regex" className="menu_button menu_button_icon" label="Delete" icon={<i className="fa-solid fa-trash" aria-hidden="true" />} />
             </div>
             <hr />
             <div id="regex_presets_block">
@@ -81,10 +45,10 @@ export function RegexSettingsPanel() {
                 </small>
                 <div className="flex-container marginTop5">
                     <select id="regex_presets" className="text_pole flex1"></select>
-                    <div id="regex_preset_create" className="menu_button fa-solid fa-file-circle-plus" data-i18n="[title]ext_regex_preset_create" title="Create a new regex preset"></div>
-                    <div id="regex_preset_update" className="menu_button fa-solid fa-save" data-i18n="[title]ext_regex_preset_update" title="Update existing regex preset"></div>
-                    <div id="regex_preset_apply" className="menu_button fa-solid fa-recycle" data-i18n="[title]ext_regex_preset_apply" title="Re-apply current preset"></div>
-                    <div id="regex_preset_delete" className="menu_button fa-solid fa-trash" data-i18n="[title]ext_regex_preset_delete" title="Delete current preset"></div>
+                    <ContractIconButton id="regex_preset_create" className="menu_button" label="Create a new regex preset" nativeTitle title="Create a new regex preset" icon={<i className="fa-solid fa-file-circle-plus" aria-hidden="true" />} />
+                    <ContractIconButton id="regex_preset_update" className="menu_button" label="Update existing regex preset" nativeTitle title="Update existing regex preset" icon={<i className="fa-solid fa-save" aria-hidden="true" />} />
+                    <ContractIconButton id="regex_preset_apply" className="menu_button" label="Re-apply current preset" nativeTitle title="Re-apply current preset" icon={<i className="fa-solid fa-recycle" aria-hidden="true" />} />
+                    <ContractIconButton id="regex_preset_delete" className="menu_button" label="Delete current preset" nativeTitle title="Delete current preset" icon={<i className="fa-solid fa-trash" aria-hidden="true" />} />
                 </div>
             </div>
             <hr />

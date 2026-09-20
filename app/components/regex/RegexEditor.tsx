@@ -1,3 +1,4 @@
+import { ContractButton } from '../contract/ContractButton';
 export function RegexEditor() {
     return (
 <div id="regex_editor_template">
@@ -7,10 +8,7 @@ export function RegexEditor() {
             <a href="#" className="notes-link" target="_blank" rel="noopener noreferrer">
                 <span className="note-link-span">?</span>
             </a>
-            <div id="regex_test_mode_toggle" className="menu_button menu_button_icon">
-                <i className="fa-solid fa-bug fa-sm" />
-                <span className="menu_button_text" data-i18n="Test Mode">Test Mode</span>
-            </div>
+            <ContractButton id="regex_test_mode_toggle" className="menu_button menu_button_icon" label="Test Mode" icon={<i className="fa-solid fa-bug fa-sm" aria-hidden="true" />} />
         </h3>
 
         <small className="flex-container extensions_info" data-i18n="ext_regex_desc">
