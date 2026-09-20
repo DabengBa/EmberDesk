@@ -16,17 +16,24 @@ export interface I18nSpecParts {
     ariaLabel?: string;
     /** `[placeholder]key` spec. */
     placeholder?: string;
+    /**
+     * `[title]key` spec. Only emitted when the caller opted out of the
+     * Astryx tooltip surface (native title) — otherwise the legacy observer
+     * would write a real `title` attribute alongside the Astryx tooltip and
+     * produce a double tooltip.
+     */
+    title?: string;
 }
 
 /**
  * Builds a `data-i18n` attribute spec for the DOM attributes a migrated
- * element still owns. `title` is intentionally absent: Astryx tooltips are
- * rendered through the `tooltip` prop, not the `title` attribute — emitting
- * a `[title]` spec would make the legacy observer set a real `title`
- * attribute and produce a double tooltip.
+ * element still owns.
  */
 export function i18nSpec(parts: I18nSpecParts): string | undefined {
     const specs: string[] = [];
+    if (parts.title) {
+        specs.push(`[title]${parts.title}`);
+    }
     if (parts.ariaLabel) {
         specs.push(`[aria-label]${parts.ariaLabel}`);
     }

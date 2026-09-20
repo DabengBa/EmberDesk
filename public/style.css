@@ -959,8 +959,8 @@ body .panelControlBar {
     padding-right: 2px;
 }
 
-#rightSendForm>div:not(.mes_stop),
-#leftSendForm>div {
+#rightSendForm>:is(div, button):not(.mes_stop),
+#leftSendForm>:is(div, button) {
     width: var(--bottomFormBlockSize);
     height: var(--bottomFormBlockSize);
     margin: 0;
@@ -5105,7 +5105,7 @@ body:is([data-generating="true"], [data-swiping="true"]) :is(
     #mes_impersonate,
     #chat .last_mes .mes_buttons,
     #chat .last_mes .mes_reasoning_actions) {
-    display: none;
+    display: none !important;
 }
 
     #power-user-option-checkboxes {

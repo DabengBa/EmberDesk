@@ -43,6 +43,21 @@ describe('chat composer React surface', () => {
         }
     });
 
+    test('icon action controls migrate to ContractIconButton while stscript stays tag-qualified divs', () => {
+        // Astryx-migrated icon buttons keep their legacy ids/classes.
+        for (const id of ['send_but', 'mes_continue', 'mes_impersonate', 'mes_stop', 'options_button', 'file_form_reset']) {
+            expect(composer).toMatch(new RegExp(`<ContractIconButton[\\s\\S]*?id="${id}"`));
+        }
+        // stscript visibility is driven by `#rightSendForm>div.stscript_btn`
+        // (tag-qualified, nested under .isExecutingCommandsFromChatInput /
+        // .script_paused) — a <button> tag would break that chain.
+        for (const id of ['stscript_continue', 'stscript_pause', 'stscript_stop']) {
+            expect(composer).toMatch(new RegExp(`<div id="${id}"[\\s\\S]*?className="[^"]*stscript_btn`));
+        }
+        const styleCss = readRepoFile('public/style.css');
+        expect(styleCss).toContain('#rightSendForm>div:not(.mes_send).stscript_btn');
+    });
+
     test('send_textarea stays uncontrolled with legacy write contract intact', () => {
         // No value/onChange props — jQuery .val() + input events are the write path.
         const textarea = composer.match(/<textarea id="send_textarea"[^>]*>/)?.[0] ?? '';

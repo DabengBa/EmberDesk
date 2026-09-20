@@ -109,6 +109,8 @@ describe('chat workspace structure', () => {
         const scriptSource = readRepoFile('public/script.js');
         const keyboardSource = readRepoFile('public/scripts/keyboard.js');
 
+        // ContractIconButton renders a real <button> (implicit button role)
+        // whose `label` prop becomes aria-label — semantics preserved.
         [
             ['options_button', 'Chat options'],
             ['send_but', 'Send message'],
@@ -116,10 +118,14 @@ describe('chat workspace structure', () => {
             ['mes_continue', 'Continue last message'],
             ['mes_impersonate', 'Ask AI to write your message'],
         ].forEach(([id, label]) => {
-            expect(composerSource).toMatch(new RegExp(`id="${id}"[^>]*\\brole="button"`));
-            expect(composerSource).toMatch(new RegExp(`id="${id}"[^>]*\\baria-label="${label}"`));
-            expect(composerSource).toMatch(new RegExp(`id="${id}"[^>]*\\btabIndex=\\{0\\}`));
+            expect(composerSource).toMatch(new RegExp(`<ContractIconButton[\\s\\S]*?id="${id}"`));
+            expect(composerSource).toMatch(new RegExp(`id="${id}"[\\s\\S]*?label="${label}"`));
+            expect(composerSource).toMatch(new RegExp(`id="${id}"[\\s\\S]*?tabIndex=\\{0\\}`));
         });
+        // ContractIconButton renders real <button> elements and forwards label to aria-label.
+        const adapter = readRepoFile('app/components/contract/ContractIconButton.tsx');
+        expect(adapter).toContain('<IconButton');
+        expect(adapter).toContain('label={resolvedLabel}');
 
         expect(composerSource).toMatch(/id="send_textarea"[^>]*\baria-label="Chat message"/);
         expect(composerSource).toMatch(/id="send_textarea"[^>]*\baria-describedby="send_textarea_hint"/);

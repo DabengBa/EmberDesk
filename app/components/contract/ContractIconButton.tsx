@@ -1,5 +1,6 @@
 import { IconButton } from '@astryxdesign/core';
-import type { CSSProperties, MouseEventHandler, ReactNode } from 'react';
+import type { StyleXStyles } from '@stylexjs/stylex';
+import { useCallback, type CSSProperties, type MouseEventHandler, type ReactNode } from 'react';
 import { useTranslated } from '../../compat/i18n.js';
 import { i18nSpec } from './contract-i18n';
 
@@ -24,6 +25,14 @@ export interface ContractIconButtonProps {
     title?: string;
     /** i18n key for the tooltip; defaults to `title` itself. */
     titleKey?: string;
+    /**
+     * Emit a real `title` attribute instead of the Astryx tooltip layer.
+     * Use for contract elements inside dense legacy flex rows where an
+     * anchor-positioned tooltip element would extend past the viewport edge
+     * and widen document scrollWidth (e.g. the chat composer). The legacy
+     * i18n `[title]` spec keeps translating the attribute.
+     */
+    nativeTitle?: boolean;
     /** Icon node — typically `<i className="fa-solid fa-x" aria-hidden />`. */
     icon: ReactNode;
     variant?: 'primary' | 'secondary' | 'ghost' | 'destructive';
@@ -32,6 +41,13 @@ export interface ContractIconButtonProps {
     disabled?: boolean;
     onClick?: MouseEventHandler<HTMLButtonElement>;
     style?: CSSProperties;
+    /**
+     * StyleX overrides merged by Astryx `xstyle`. Note StyleX atomic classes
+     * carry boosted specificity (`:not(#\#)` ×3 ≈ 0-4-0), so they override
+     * ordinary legacy stylesheet rules — inline `.css()` writes still win,
+     * which is the escape hatch used by legacy visibility toggles.
+     */
+    xstyle?: StyleXStyles;
     tabIndex?: number;
     [key: `data-${string}`]: string | undefined;
 }
@@ -43,6 +59,7 @@ export function ContractIconButton({
     labelKey,
     title,
     titleKey,
+    nativeTitle = false,
     icon,
     variant = 'ghost',
     size,
@@ -50,11 +67,17 @@ export function ContractIconButton({
     disabled = false,
     onClick,
     style,
+    xstyle,
     tabIndex,
     ...rest
 }: ContractIconButtonProps) {
     const resolvedLabel = useTranslated(label, labelKey ?? null);
-    const tooltip = useTranslated(title ?? '', titleKey ?? null);
+    const resolvedTitle = useTranslated(title ?? '', titleKey ?? null);
+    const nativeTitleRef = useCallback((el: HTMLButtonElement | null) => {
+        if (el && resolvedTitle) {
+            el.setAttribute('title', resolvedTitle);
+        }
+    }, [resolvedTitle]);
     return (
         <IconButton
             id={id}
@@ -66,10 +89,12 @@ export function ContractIconButton({
             onClick={onClick}
             icon={icon}
             label={resolvedLabel}
-            tooltip={tooltip || undefined}
+            tooltip={nativeTitle ? undefined : resolvedTitle || undefined}
             style={style}
+            xstyle={xstyle}
             tabIndex={tabIndex}
-            data-i18n={i18nSpec({ ariaLabel: labelKey ?? label })}
+            ref={nativeTitle ? nativeTitleRef : undefined}
+            data-i18n={i18nSpec({ title: nativeTitle ? titleKey ?? title : undefined, ariaLabel: labelKey ?? label })}
             {...rest}
         />
     );

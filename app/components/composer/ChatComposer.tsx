@@ -1,3 +1,6 @@
+import { composerStyles } from '../../styles/composer.styles';
+import { ContractIconButton } from '../contract/ContractIconButton';
+
 /**
  * Chat composer markup (React-owned shell inside #send_form).
  * Behavior stays legacy: send_textarea is intentionally UNCONTROLLED because
@@ -5,6 +8,11 @@
  * all write it via jQuery .val() + dispatched input events. Button visibility
  * is toggled by legacy code (showSendButtons/showStopButtons) via CSS display;
  * this component renders once and never re-renders over those mutations.
+ *
+ * stscript_* controls stay plain divs: their visibility chain is driven by
+ * tag-qualified legacy CSS (`#rightSendForm>div.stscript_btn` under
+ * .isExecutingCommandsFromChatInput/.script_paused) which a <button> tag
+ * would break.
  */
 export function ChatComposer() {
     return (
@@ -16,14 +24,28 @@ export function ChatComposer() {
                         <i className="fa-solid fa-file-alt" />
                         <span className="file_name">File Name</span>
                         <span className="file_size">File Size</span>
-                        <button id="file_form_reset" type="reset" className="menu_button" title="Remove the file" data-i18n="[title]Remove the file">
-                            <i className="fa fa-times" />
-                        </button>
+                        <ContractIconButton
+                            id="file_form_reset"
+                            type="reset"
+                            className="menu_button"
+                            label="Remove the file"
+                            title="Remove the file"
+                            icon={<i className="fa fa-times" aria-hidden="true" />}
+                            nativeTitle
+                        />
                     </div>
                 </form>
                 <div id="nonQRFormItems">
                     <div id="leftSendForm" className="alignContentCenter">
-                        <div id="options_button" className="fa-solid fa-bars interactable" title="Chat options" data-i18n="[title]Chat options;[aria-label]Chat options" role="button" aria-label="Chat options" tabIndex={0}></div>
+                        <ContractIconButton
+                            id="options_button"
+                            className="interactable"
+                            label="Chat options"
+                            title="Chat options"
+                            icon={<i className="fa-solid fa-bars" aria-hidden="true" />}
+                            nativeTitle
+                            tabIndex={0}
+                        />
                     </div>
                     <div className="send_textarea_wrap">
                         <textarea id="send_textarea" name="text" className="mdHotkeys" data-i18n="[aria-label]Chat message;[no_connection_text]Not connected to API!;[connected_text]Type a message, or /? for help" aria-label="Chat message" aria-describedby="send_textarea_hint" placeholder="Not connected to API!" no_connection_text="Not connected to API!" connected_text="Type a message, or /? for help" autoComplete="off"></textarea>
@@ -39,12 +61,43 @@ export function ChatComposer() {
                         <div id="stscript_stop" title="Abort script execution" className="stscript_btn stscript_stop" data-i18n="[title]Abort script execution">
                             <i className="fa-solid fa-stop" />
                         </div>
-                        <div id="mes_stop" title="Abort request" className="mes_stop" data-i18n="[title]Abort request;[aria-label]Abort request" role="button" aria-label="Abort request" tabIndex={0}>
-                            <i className="fa-solid fa-circle-stop" />
-                        </div>
-                        <div id="mes_impersonate" className="fa-solid fa-user-secret interactable displayNone" title="Ask AI to write your message for you" data-i18n="[title]Ask AI to write your message for you;[aria-label]Ask AI to write your message" role="button" aria-label="Ask AI to write your message" tabIndex={0}></div>
-                        <div id="mes_continue" className="fa-fw fa-solid fa-arrow-right interactable displayNone" title="Continue the last message" data-i18n="[title]Continue the last message;[aria-label]Continue last message" role="button" aria-label="Continue last message" tabIndex={0}></div>
-                        <div id="send_but" className="fa-solid fa-paper-plane interactable displayNone" title="Send a message" data-i18n="[title]Send a message;[aria-label]Send message" role="button" aria-label="Send message" tabIndex={0}></div>
+                        <ContractIconButton
+                            id="mes_stop"
+                            className="mes_stop"
+                            label="Abort request"
+                            title="Abort request"
+                            icon={<i className="fa-solid fa-circle-stop" aria-hidden="true" />}
+                            xstyle={composerStyles.idleHidden}
+                            nativeTitle
+                            tabIndex={0}
+                        />
+                        <ContractIconButton
+                            id="mes_impersonate"
+                            className="interactable displayNone"
+                            label="Ask AI to write your message"
+                            title="Ask AI to write your message for you"
+                            icon={<i className="fa-solid fa-user-secret" aria-hidden="true" />}
+                            nativeTitle
+                            tabIndex={0}
+                        />
+                        <ContractIconButton
+                            id="mes_continue"
+                            className="interactable displayNone"
+                            label="Continue last message"
+                            title="Continue the last message"
+                            icon={<i className="fa-fw fa-solid fa-arrow-right" aria-hidden="true" />}
+                            nativeTitle
+                            tabIndex={0}
+                        />
+                        <ContractIconButton
+                            id="send_but"
+                            className="interactable displayNone"
+                            label="Send message"
+                            title="Send a message"
+                            icon={<i className="fa-solid fa-paper-plane" aria-hidden="true" />}
+                            nativeTitle
+                            tabIndex={0}
+                        />
                     </div>
                 </div>
         </>
