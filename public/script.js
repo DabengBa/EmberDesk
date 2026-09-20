@@ -181,7 +181,7 @@ import {
     tag_import_setting,
     applyCharacterTagsToMessageDivs,
 } from './scripts/tags.js';
-import { checkOpenRouterAuth, initSecrets, readSecretState, secret_state, SECRET_KEYS } from './scripts/secrets.js';
+import { initSecrets, readSecretState, secret_state, SECRET_KEYS } from './scripts/secrets.js';
 import {
     createQuietGenerationLifecycleContract,
     getGenerationRecoveryBaselineSwipeId,
@@ -4522,7 +4522,6 @@ async function bootstrapWorkspace() {
         mountWorldInfoPanel(),
     ]));
     await getSettings(initLoaderHandle);
-    await measureStartupStage('checkOpenRouterAuth', () => checkOpenRouterAuth());
     await measureStartupStage('bindPostSettingsUi', () => Promise.resolve().then(() => {
         initKeyboard();
         initDynamicStyles();

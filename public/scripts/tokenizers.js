@@ -1,7 +1,7 @@
 import { localforage } from '../lib.js';
 import { characters, main_api, this_chid } from '../script.js';
 import { power_user, registerDebugFunction } from './power-user.js';
-import { chat_completion_sources, model_list, oai_settings } from './openai.js';
+import { chat_completion_sources, oai_settings } from './openai.js';
 import { getStringHash } from './utils.js';
 export { BYTES_PER_TOKEN as CHARACTERS_PER_TOKEN_RATIO };
 
@@ -463,7 +463,6 @@ export function getTokenizerModel() {
     const turboTokenizer = 'gpt-3.5-turbo';
     const gpt4Tokenizer = 'gpt-4';
     const gpt4oTokenizer = 'gpt-4o';
-    const gpt2Tokenizer = 'gpt2';
     const claudeTokenizer = 'claude';
     const llamaTokenizer = 'llama';
     const llama3Tokenizer = 'llama3';
@@ -483,44 +482,6 @@ export function getTokenizerModel() {
 
     if (oai_settings.chat_completion_source == chat_completion_sources.DEEPSEEK) {
         return deepseekTokenizer;
-    }
-
-    // And for OpenRouter (if not a site model, then it's impossible to determine the tokenizer)
-    if (main_api == 'openai' && oai_settings.chat_completion_source == chat_completion_sources.OPENROUTER && oai_settings.openrouter_model) {
-        const model = model_list.find(x => x.id === oai_settings.openrouter_model);
-
-        if (model?.architecture?.tokenizer === 'Llama2') {
-            return llamaTokenizer;
-        } else if (model?.architecture?.tokenizer === 'Llama3') {
-            return llama3Tokenizer;
-        } else if (model?.architecture?.tokenizer === 'Mistral') {
-            return mistralTokenizer;
-        } else if (model?.architecture?.tokenizer === 'Yi') {
-            return yiTokenizer;
-        } else if (model?.architecture?.tokenizer === 'Gemini') {
-            return gemmaTokenizer;
-        } else if (model?.architecture?.tokenizer === 'Qwen') {
-            return qwen2Tokenizer;
-        } else if (model?.architecture?.tokenizer === 'Cohere') {
-            if (model?.id && model?.id.includes('command-a')) {
-                return commandATokenizer;
-            }
-            return commandRTokenizer;
-        } else if (oai_settings.openrouter_model.includes('gpt-4o')) {
-            return gpt4oTokenizer;
-        } else if (oai_settings.openrouter_model.includes('gpt-4')) {
-            return gpt4Tokenizer;
-        } else if (oai_settings.openrouter_model.includes('gpt-3.5-turbo')) {
-            return turboTokenizer;
-        } else if (oai_settings.openrouter_model.includes('claude')) {
-            return claudeTokenizer;
-        } else if (oai_settings.openrouter_model.includes('GPT-NeoXT')) {
-            return gpt2Tokenizer;
-        } else if (oai_settings.openrouter_model.includes('jamba')) {
-            return jambaTokenizer;
-        } else if (oai_settings.openrouter_model.includes('deepseek')) {
-            return deepseekTokenizer;
-        }
     }
 
     if (oai_settings.chat_completion_source == chat_completion_sources.ELECTRONHUB && oai_settings.electronhub_model) {

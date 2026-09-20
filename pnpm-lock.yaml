@@ -208,9 +208,6 @@ importers:
       '@tanstack/react-virtual':
         specifier: ^3.13.12
         version: 3.14.9(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@zeldafan0225/ai_horde':
-        specifier: ^5.2.0
-        version: 5.2.0
       agent-base:
         specifier: ^7.1.3
         version: 7.1.4
@@ -1478,9 +1475,6 @@ packages:
     resolution: {integrity: sha512-uhOeFyxLcU41HzvrxsGpiWdcMbScY1EDgbZ5K7DVRMYInbLYWAC0EA/kx9wXAoSM8q82bUG2hRl8+EAjE6XAbA==}
     engines: {node: '>=20.19'}
 
-  '@thunder04/supermap@3.0.5':
-    resolution: {integrity: sha512-dVlKfY/+Kiy3Vyy7zUj/X2ZB+6e+2QWsEqMOVAQc15FYNV1lmw4sHn3YE4VBsfmm0Iu/0MABUla8WZMGIdMYwg==}
-
   '@tokenizer/inflate@0.4.1':
     resolution: {integrity: sha512-2mAv+8pkG6GIZiF1kNg1jAjh27IDxEPKwdGul3snfztFerfPGI1LjDezZp3i7BElXompqEtPmoPx6c2wgtWsOA==}
     engines: {node: '>=18'}
@@ -1781,10 +1775,6 @@ packages:
         optional: true
       babel-plugin-react-compiler:
         optional: true
-
-  '@zeldafan0225/ai_horde@5.2.0':
-    resolution: {integrity: sha512-IkFFwt8nTW+F87Kndl1b5ZQfZVgnTm2qf5By4M82fEH+KyHXvnkSTzOl/rUaqW0tjAXIyD+DM0D35TpdolPj4g==}
-    engines: {node: '>=18.0.0'}
 
   abort-controller@3.0.0:
     resolution: {integrity: sha512-h8lQ8tacZYnR3vNQTgibj+tODHI5/+l06Au2Pcriv/Gmet0eaj4TwWH41sO9wnHDiQsEj19q0drzdWdeAHtweg==}
@@ -4990,8 +4980,6 @@ snapshots:
 
   '@tanstack/virtual-file-routes@1.162.0': {}
 
-  '@thunder04/supermap@3.0.5': {}
-
   '@tokenizer/inflate@0.4.1(supports-color@10.2.2)':
     dependencies:
       debug: 4.4.3(supports-color@10.2.2)
@@ -5243,10 +5231,6 @@ snapshots:
     dependencies:
       '@rolldown/pluginutils': 1.0.1
       vite: 8.2.1(@types/node@26.1.2)(jiti@2.7.0)(yaml@2.9.0)
-
-  '@zeldafan0225/ai_horde@5.2.0':
-    dependencies:
-      '@thunder04/supermap': 3.0.5
 
   abort-controller@3.0.0:
     dependencies:

@@ -5738,7 +5738,6 @@ function getModelOptions(quiet) {
     const modelSelectMap = [
         { id: 'model_openai_select', api: 'openai', type: chat_completion_sources.OPENAI },
         { id: 'model_claude_select', api: 'openai', type: chat_completion_sources.CLAUDE },
-        { id: 'model_openrouter_select', api: 'openai', type: chat_completion_sources.OPENROUTER },
         { id: 'model_ai21_select', api: 'openai', type: chat_completion_sources.AI21 },
         { id: 'model_google_select', api: 'openai', type: chat_completion_sources.MAKERSUITE },
         { id: 'model_vertexai_select', api: 'openai', type: chat_completion_sources.VERTEXAI },
@@ -5750,7 +5749,6 @@ function getModelOptions(quiet) {
         { id: 'model_siliconflow_select', api: 'openai', type: chat_completion_sources.SILICONFLOW },
         { id: 'model_minimax_select', api: 'openai', type: chat_completion_sources.MINIMAX },
         { id: 'model_electronhub_select', api: 'openai', type: chat_completion_sources.ELECTRONHUB },
-        { id: 'model_nanogpt_select', api: 'openai', type: chat_completion_sources.NANOGPT },
         { id: 'model_deepseek_select', api: 'openai', type: chat_completion_sources.DEEPSEEK },
         { id: 'model_aimlapi_select', api: 'openai', type: chat_completion_sources.AIMLAPI },
         { id: 'model_xai_select', api: 'openai', type: chat_completion_sources.XAI },
@@ -5760,8 +5758,6 @@ function getModelOptions(quiet) {
         { id: 'model_cometapi_select', api: 'openai', type: chat_completion_sources.COMETAPI },
         { id: 'model_zai_select', api: 'openai', type: chat_completion_sources.ZAI },
         { id: 'model_workers_ai_select', api: 'openai', type: chat_completion_sources.WORKERS_AI },
-        { id: 'model_novel_select', api: 'novel', type: null },
-        { id: 'horde_model', api: 'koboldhorde', type: null },
     ];
 
     function getSubType() {

@@ -1,5 +1,4 @@
-import { moment, sha256 } from '../lib.js';
-import { saveSettings } from '../script.js';
+import { moment } from '../lib.js';
 import { eventSource, event_types } from './events.js';
 import { getRequestHeaders } from './request-context.js';
 import { t } from './i18n.js';
@@ -13,25 +12,20 @@ import { SlashCommandExecutor } from './slash-commands/SlashCommandExecutor.js';
 import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
 import { SlashCommandScope } from './slash-commands/SlashCommandScope.js';
 import { renderTemplateAsync } from './templates.js';
-import { getCurrentUserHandle } from './user.js';
-import { copyText, isTrueBoolean, uuidv4 } from './utils.js';
-import { accountStorage } from './util/AccountStorage.js';
+import { copyText, isTrueBoolean } from './utils.js';
 
 export const SECRET_KEYS = {
-    HORDE: 'api_key_horde',
     MANCER: 'api_key_mancer',
     VLLM: 'api_key_vllm',
     APHRODITE: 'api_key_aphrodite',
     TABBY: 'api_key_tabby',
     OPENAI: 'api_key_openai',
     OPENAI_FALLBACK: 'api_key_openai_fallback',
-    NOVEL: 'api_key_novel',
     CLAUDE: 'api_key_claude',
     DEEPL: 'deepl',
     LIBRE: 'libre',
     LIBRE_URL: 'libre_url',
     LINGVA_URL: 'lingva_url',
-    OPENROUTER: 'api_key_openrouter',
     AI21: 'api_key_ai21',
     ONERING_URL: 'oneringtranslator_url',
     DEEPLX_URL: 'deeplx_url',
@@ -56,7 +50,6 @@ export const SECRET_KEYS = {
     STABILITY: 'api_key_stability',
     CHUTES: 'api_key_chutes',
     ELECTRONHUB: 'api_key_electronhub',
-    NANOGPT: 'api_key_nanogpt',
     TAVILY: 'api_key_tavily',
     BFL: 'api_key_bfl',
     COMFY_RUNPOD: 'api_key_comfy_runpod',
@@ -139,13 +132,10 @@ const FRIENDLY_NAMES = {
 };
 
 const INPUT_MAP = {
-    [SECRET_KEYS.HORDE]: '#horde_api_key',
     [SECRET_KEYS.MANCER]: '#api_key_mancer',
     [SECRET_KEYS.OPENAI]: '#api_key_openai',
     [SECRET_KEYS.OPENAI_FALLBACK]: '#fallback_provider_api_key',
-    [SECRET_KEYS.NOVEL]: '#api_key_novel',
     [SECRET_KEYS.CLAUDE]: '#api_key_claude',
-    [SECRET_KEYS.OPENROUTER]: '.api_key_openrouter',
     [SECRET_KEYS.AI21]: '#api_key_ai21',
     [SECRET_KEYS.MAKERSUITE]: '#api_key_makersuite',
     [SECRET_KEYS.VERTEXAI]: '#api_key_vertexai',
@@ -166,7 +156,6 @@ const INPUT_MAP = {
     [SECRET_KEYS.HUGGINGFACE]: '#api_key_huggingface',
     [SECRET_KEYS.CHUTES]: '#api_key_chutes',
     [SECRET_KEYS.ELECTRONHUB]: '#api_key_electronhub',
-    [SECRET_KEYS.NANOGPT]: '#api_key_nanogpt',
     [SECRET_KEYS.GENERIC]: '#api_key_generic',
     [SECRET_KEYS.DEEPSEEK]: '#api_key_deepseek',
     [SECRET_KEYS.AIMLAPI]: '#api_key_aimlapi',
@@ -191,14 +180,6 @@ const getLabel = () => moment().format('L LT');
 export function resolveSecretKey() {
     const { mainApi, chatCompletionSettings } = SillyTavern.getContext();
     const chatCompletionSource = chatCompletionSettings.chat_completion_source;
-
-    if (mainApi === 'koboldhorde') {
-        return SECRET_KEYS.HORDE;
-    }
-
-    if (mainApi === 'novel') {
-        return SECRET_KEYS.NOVEL;
-    }
 
     if (mainApi === 'openai') {
         const isVertexAI = chatCompletionSource === chat_completion_sources.VERTEXAI
@@ -455,111 +436,6 @@ export async function renameSecret(key, id, label) {
     } catch (error) {
         console.error(`Could not rename secret value: ${key}`, error);
     }
-}
-
-/**
- * Generates a storage key for the PKCE code verifier for a given source.
- * @param {string} source Source for which to generate the storage key (e.g. 'openrouter')
- * @returns {string} The storage key for the PKCE code verifier for a given source.
- */
-const getVerifierKey = (source) => `${getCurrentUserHandle()}_${source}_code_verifier`;
-
-/**
- * Generates a code challenge for PKCE authentication flows.
- * @param {string} input Input secret string to generate the code challenge from.
- * @returns {string} S256 code challenge generated from the input string, encoded in base64url format.
- */
-const generateChallenge = (input) => {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(input);
-    const hashBytes = sha256.array(data);
-    return btoa(String.fromCharCode(...hashBytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-};
-
-/**
- * Redirects the user to authorize OpenRouter.
- */
-async function authorizeOpenRouter() {
-    if (secret_state[SECRET_KEYS.OPENROUTER]) {
-        const confirmed = await Popup.show.confirm(t`OpenRouter API key already exists`, t`Do you really wish to create a new OpenRouter key? Your existing key will not be deleted.`);
-        if (!confirmed) {
-            return;
-        }
-    }
-
-    // Generate a PKCE code verifier and code challenge
-    const codeVerifier = uuidv4() + uuidv4();
-    const codeChallenge = generateChallenge(codeVerifier);
-    accountStorage.setItem(getVerifierKey('openrouter'), codeVerifier);
-    await saveSettings();
-
-    // Redirect to OpenRouter authorization URL with the code challenge and callback URL
-    const redirectUrl = new URL('/callback/openrouter', window.location.origin);
-    const openRouterUrl = `https://openrouter.ai/auth?callback_url=${encodeURIComponent(redirectUrl.toString())}&code_challenge=${codeChallenge}&code_challenge_method=S256`;
-    location.href = openRouterUrl;
-}
-
-/**
- * Checks if the OpenRouter authorization code is present in the URL, and if so, exchanges it for an API key.
- * @returns {Promise<void>}
- */
-export async function checkOpenRouterAuth() {
-    const params = new URLSearchParams(location.search);
-    const source = params.get('source');
-    if (source === 'openrouter') {
-        const query = new URLSearchParams(params.get('query'));
-        try {
-            const code = query.get('code');
-            if (!code) {
-                throw new Error('OpenRouter authorization code not found in URL');
-            }
-
-            const codeVerifier = accountStorage.getItem(getVerifierKey('openrouter'));
-            if (!codeVerifier) {
-                throw new Error('OpenRouter code verifier not found in accountStorage');
-            }
-
-            const response = await fetch('https://openrouter.ai/api/v1/auth/keys', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    code: code,
-                    code_verifier: codeVerifier,
-                    code_challenge_method: 'S256',
-                }),
-            });
-
-            if (!response.ok) {
-                throw new Error('OpenRouter exchange error');
-            }
-
-            const data = await response.json();
-            if (!data || !data.key) {
-                throw new Error('OpenRouter invalid response');
-            }
-
-            await writeSecret(SECRET_KEYS.OPENROUTER, data.key);
-
-            if (secret_state[SECRET_KEYS.OPENROUTER]) {
-                toastr.success('OpenRouter token saved');
-            } else {
-                throw new Error('OpenRouter token not saved');
-            }
-        } catch (err) {
-            toastr.error('Could not verify OpenRouter token. Please try again.');
-            console.error('OpenRouter OAuth error:', err);
-        } finally {
-            // Remove the code from the URL
-            const currentUrl = window.location.href;
-            const urlWithoutSearchParams = currentUrl.split('?')[0];
-            window.history.pushState({}, '', urlWithoutSearchParams);
-        }
-    }
-
-    // Clean-up any code verifiers that might be left in accountStorage from abandoned auth flows
-    accountStorage.removeItem(getVerifierKey('openrouter'));
 }
 
 /**
@@ -1124,128 +1000,6 @@ export async function initSecrets() {
 
         const warningElement = $(`[data-for="${id}"]`);
         warningElement.toggle(value.length > 0);
-    });
-    $('.openrouter_authorize').on('click', authorizeOpenRouter);
-    $(document).on('click', '.openrouter_view_credits', async function (event) {
-        event.preventDefault();
-        const display = $(this).siblings('.openrouter_credits_display').first();
-        display.text(t`Loading…`);
-        try {
-            const response = await fetch('/api/openrouter/credits', {
-                method: 'POST',
-                headers: getRequestHeaders(),
-            });
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-            const data = await response.json();
-            if (typeof data.remaining !== 'number') {
-                throw new Error('Invalid response');
-            }
-            display.text(`$${data.remaining.toFixed(2)}`);
-        } catch (error) {
-            console.error('Failed to fetch OpenRouter credits:', error);
-            display.text('');
-            toastr.error(t`Could not fetch OpenRouter credits. Please try again.`);
-        }
-    });
-
-    const formatNanoGptNumber = (num, decimals = null) => {
-        const number = Number(num);
-        if (!Number.isFinite(number)) return decimals === null ? '0' : (0).toFixed(decimals);
-        if (decimals !== null) return number.toFixed(decimals);
-        if (number >= 1000000) return (number / 1000000).toFixed(1) + 'M';
-        if (number >= 1000) return (number / 1000).toFixed(1) + 'K';
-        return number.toString();
-    };
-
-    const createNanoGptCreditsPopup = (credits) => {
-        const root = $('<div class="nanogpt-credits-popup"></div>');
-        root.append($('<h3></h3>').text(t`NanoGPT Credits & Usage`));
-
-        const rows = [
-            [t`USD`, `$${formatNanoGptNumber(credits.usdBalance, 2)}`],
-            [t`NANO`, formatNanoGptNumber(credits.nanoBalance, 3)],
-        ];
-
-        const addUsage = (label, usage, limit) => {
-            if (usage) {
-                rows.push([label, t`${formatNanoGptNumber(usage.used)} / ${formatNanoGptNumber(limit)} (${formatNanoGptNumber(usage.remaining)} left)`]);
-            }
-        };
-
-        if (credits.subscription?.active) {
-            const sub = credits.subscription;
-            const subEndDate = sub.period?.currentPeriodEnd ? moment(sub.period.currentPeriodEnd).format('LL') : t`Unknown`;
-            rows.push([t`Sub`, t`Active (until ${subEndDate})`]);
-            addUsage(t`Tokens/wk`, sub.weekly_tokens, sub.limits?.weeklyInputTokens);
-            addUsage(t`Tokens/day`, sub.daily_tokens, sub.limits?.dailyInputTokens);
-            addUsage(t`Images/day`, sub.daily_images, sub.limits?.dailyImages);
-        }
-
-        for (const [label, value] of rows) {
-            root.append($('<div></div>').text(label));
-            root.append($('<div></div>').text(value));
-        }
-
-        return root;
-    };
-
-    $(document).on('click', '.nanogpt_view_credits', async function (event) {
-        event.preventDefault();
-        const display = $(this).siblings('.nanogpt_credits_display').first();
-        display.empty().text(t`Loading…`);
-
-        try {
-            const response = await fetch('/api/nanogpt/credits', {
-                method: 'POST',
-                headers: getRequestHeaders(),
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-
-            const data = await response.json();
-
-            const usdBalance = Number(data.usd_balance);
-            const nanoBalance = Number(data.nano_balance);
-            if (!Number.isFinite(usdBalance) || !Number.isFinite(nanoBalance)) {
-                throw new Error('Invalid response');
-            }
-
-            let balances = [`$${formatNanoGptNumber(usdBalance, 2)}`];
-            if (nanoBalance > 0) {
-                balances.push(`${formatNanoGptNumber(nanoBalance, 3)} NANO`);
-            }
-            let shortInlineText = balances.join(' | ');
-
-            if (data.subscription?.active) {
-                shortInlineText += ` | ${t`Sub Active`}`;
-            }
-
-            display.empty().text(shortInlineText + ' ');
-
-            const infoBtn = $('<i class="fa-solid fa-circle-info cursor-pointer nanogpt_info_btn"></i>');
-            infoBtn.attr('title', t`View details`);
-            infoBtn.data('credits', {
-                usdBalance,
-                nanoBalance,
-                subscription: data.subscription,
-            });
-            display.append(infoBtn);
-        } catch (error) {
-            console.error('Failed to fetch NanoGPT credits:', error);
-            display.empty().text('');
-            toastr.error(t`Could not fetch NanoGPT credits. Please try again.`);
-        }
-    });
-
-    $(document).on('click', '.nanogpt_info_btn', async function () {
-        const credits = $(this).data('credits');
-        if (credits) {
-            await callGenericPopup(createNanoGptCreditsPopup(credits), POPUP_TYPE.TEXT);
-        }
     });
     registerSecretSlashCommands();
 }
