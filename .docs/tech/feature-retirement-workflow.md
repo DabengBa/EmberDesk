@@ -189,4 +189,4 @@ pnpm run build:react:workspace-panels  # app/ 或桥动过时
 - **测试翻转**：`chat-completions-google.test.js` 删 3 个 vertex 用例；`settings-react-route.test.js` 的 vertex round-trip 测试改写为"legacy vertexai → makersuite 归一化"语义；`provider-secret-field-state.test.js` vertex secret 解析断言改直通；`openai-provider-capabilities.test.js`/`api-connections-react-surface.test.js` 删 vertex 条目；删 `tests/vertexai-api-key-visibility.test.js`。
 - **文档**：`chat-completion-select`/`custom-base-url`/`api-configuration` 语义条目、`react_settings_payload_processing_flow` + sandbox proof、`processed_columns_lineage`、`react-modernization-roadmap` 同步翻转；proof 脚本实测通过。
 - **验证**：lint+tsc 净；聚焦 7 suites/56 tests 绿；unit 60 suites/625 tests、integration 97 suites/846 tests、compat 8 suites/107 tests 全绿；React + workspace-panels + character-library bundle 重建。
-- **Commit**: `842d63041`。
+- **Commit**: `887cc2780`（+ `cdbf3592a` vector-retirement e2e 翻转）。
