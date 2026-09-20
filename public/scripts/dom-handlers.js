@@ -126,7 +126,6 @@ const updateCharListGridToggleLabel = (...args) => shell().updateCharListGridTog
 const updateCharacterRow = (...args) => shell().updateCharacterRow(...args);
 const updateFavButtonState = (...args) => shell().updateFavButtonState(...args);
 const updateViewMessageIds = (...args) => shell().updateViewMessageIds(...args);
-const userStatsHandler = (...args) => shell().userStatsHandler(...args);
 const waitUntilCondition = (...args) => shell().waitUntilCondition(...args);
 
 export function initDomHandlers() {
@@ -1577,10 +1576,6 @@ export async function bindLegacyShellHandlers() {
             }
         }
         isManualInput = false;
-    });
-
-    $('.user_stats_button').on('click', function () {
-        userStatsHandler();
     });
 
     $(document).on('click', '.external_import_button, #external_import_button', async () => {

@@ -13,7 +13,6 @@ import {
 
 import { humanizedDateTime, favsToHotswap, getMessageTimeStamp, dragElement, isMobile, initRossMods } from './scripts/RossAscends-mods.js';
 import { applyResetChatState } from './scripts/chat-state-reset.js';
-import { userStatsHandler, statMesProcess, initStats } from './scripts/stats.js';
 
 import {
     getWorldInfoSettings,
@@ -944,7 +943,6 @@ registerMessageShellContext({
     saveBase64AsFile: (...args) => saveBase64AsFile(...args),
     saveImageToMessage: (...args) => saveImageToMessage(...args),
     scheduleMainChatMessageListPanelRefresh: (...args) => scheduleMainChatMessageListPanelRefresh(...args),
-    statMesProcess: (...args) => statMesProcess(...args),
     substituteParams: (...args) => substituteParams(...args),
     timestampToMoment: (...args) => timestampToMoment(...args),
     trimToEndSentence: (...args) => trimToEndSentence(...args),
@@ -1122,7 +1120,6 @@ registerDomHandlersShellContext({
     updateCharListGridToggleLabel: (...args) => updateCharListGridToggleLabel(...args),
     updateFavButtonState: (...args) => updateFavButtonState(...args),
     updateViewMessageIds: (...args) => updateViewMessageIds(...args),
-    userStatsHandler: (...args) => userStatsHandler(...args),
     waitUntilCondition: (...args) => waitUntilCondition(...args),
 });
 
@@ -4543,7 +4540,6 @@ async function bootstrapWorkspace() {
         registerPanelHook('world-info-body', _replayWorldInfoSettings);
         initWorldInfo();
         initRossMods();
-        initStats();
         initCfg();
         initLogprobs();
         initInputMarkdown();
@@ -5510,7 +5506,6 @@ async function replaceAssistantRecoveryMessage(messageId, { type, getMessage, ti
     }
 
     const message = chat[messageId];
-    const oldMessage = message.mes;
     const generationFinished = new Date();
     message.title = title;
     message.mes = getMessage;
@@ -5591,7 +5586,6 @@ async function replaceAssistantRecoveryMessage(messageId, { type, getMessage, ti
         message.swipe_info.push(...swipeInfoArray);
     }
 
-    statMesProcess(message, type, characters, this_chid, oldMessage);
     await eventSource.emit(event_types.MESSAGE_RECEIVED, messageId, type);
     await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, messageId, type);
     return { type, getMessage };
@@ -7206,7 +7200,6 @@ export async function sendMessageAsUser(messageText, messageBias, insertAt = nul
     }
 
     await populateFileAttachment(message);
-    statMesProcess(message, 'user', characters, this_chid, '');
 
     chat_metadata.tainted = true;
 

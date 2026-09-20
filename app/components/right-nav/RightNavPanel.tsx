@@ -48,7 +48,6 @@ export function RightNavPanel() {
                                 </div>
                             </div>
                             <a id="chartokenwarning" className="right_menu_button fa-solid fa-triangle-exclamation" href="usage/core-concepts/characterdesign/#character-tokens" target="_blank" title="About Token 'Limits'" data-i18n="[title]About Token 'Limits'"></a>
-                            <ContractIconButton className="right_menu_button rm_stats_button" label="Click for stats!" title="Click for stats!" nativeTitle icon={<i className="fa-solid fa-ranking-star" aria-hidden="true" />} />
                             <ContractIconButton id="hideCharPanelAvatarButton" className="right_menu_button" label="Toggle character info panel" nativeTitle title="Toggle character info panel" icon={<i className="fa-solid fa-eye" aria-hidden="true" />} />
                         </div>
                     </div>

@@ -21,7 +21,6 @@ export function PersonaManagementPanel() {
                     </h3>
                 </div>
                 <div className="flex-container">
-                    <ContractButton className="menu_button menu_button_icon user_stats_button" label="Usage Stats" nativeTitle title="Click for stats!" icon={<i className="fa-solid fa-ranking-star" aria-hidden="true" />} />
                     <ContractButton id="personas_backup" className="menu_button menu_button_icon" label="Backup" nativeTitle title="Backup your personas to a file" icon={<i className="fa-solid fa-file-export" aria-hidden="true" />} />
                     <ContractButton id="personas_restore" className="menu_button menu_button_icon" label="Restore" nativeTitle title="Restore your personas from a file" icon={<i className="fa-solid fa-file-import" aria-hidden="true" />} />
                     <input id="personas_restore_input" type="file" accept=".json" hidden />

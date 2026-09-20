@@ -46,7 +46,6 @@ const refreshSwipeButtons = (...args) => shell().refreshSwipeButtons(...args);
 const saveBase64AsFile = (...args) => shell().saveBase64AsFile(...args);
 const saveImageToMessage = (...args) => shell().saveImageToMessage(...args);
 const scheduleMainChatMessageListPanelRefresh = (...args) => shell().scheduleMainChatMessageListPanelRefresh(...args);
-const statMesProcess = (...args) => shell().statMesProcess(...args);
 const substituteParams = (...args) => shell().substituteParams(...args);
 const t = (...args) => shell().t(...args);
 const timestampToMoment = (...args) => shell().timestampToMoment(...args);
@@ -1312,10 +1311,8 @@ export async function saveReply({ type, getMessage, fromStreaming = false, title
         reasoning = '';
     }
 
-    let oldMessage = '';
     const generationFinished = new Date();
     if (type === 'swipe') {
-        oldMessage = lastMessage.mes;
         lastMessage.swipes.length++;
         if (lastMessage.swipe_id === lastMessage.swipes.length - 1) {
             lastMessage.title = title;
@@ -1342,7 +1339,6 @@ export async function saveReply({ type, getMessage, fromStreaming = false, title
         }
     } else if (type === 'append' || type === 'continue') {
         console.debug('Trying to append.');
-        oldMessage = lastMessage.mes;
         lastMessage.title = title;
         lastMessage.mes += getMessage;
         lastMessage.gen_started = state.generation_started;
@@ -1363,7 +1359,6 @@ export async function saveReply({ type, getMessage, fromStreaming = false, title
         addOneMessage(state.chat[chat_id], { type: 'swipe' });
         !fromStreaming && await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, chat_id, type);
     } else if (type === 'appendFinal') {
-        oldMessage = lastMessage.mes;
         console.debug('Trying to appendFinal.');
         lastMessage.title = title;
         lastMessage.mes = getMessage;
@@ -1460,7 +1455,6 @@ export async function saveReply({ type, getMessage, fromStreaming = false, title
         item.swipe_info.push(...swipeInfoArray);
     }
 
-    statMesProcess(item, type, state.characters, state.this_chid, oldMessage);
     return { type, getMessage };
 }
 

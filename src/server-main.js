@@ -80,7 +80,7 @@ import { REACT_LOGIN_BASE_PATH } from './react-login-feature.js';
 
 // Routers
 import { router as usersPublicRouter } from './endpoints/users-public.js';
-import { init as statsInit, onExit as statsOnExit } from './endpoints/stats.js';
+
 import { checkForNewContent } from './endpoints/content-manager.js';
 import { init as settingsInit } from './endpoints/settings.js';
 import { redirectDeprecatedEndpoints, ServerStartup, setupPrivateEndpoints, setupPublicEndpoints } from './server-startup.js';
@@ -296,7 +296,7 @@ async function registerMiddleware(app, cli) {
 /**
  * Phase 4a: Run migrations, content checks, and plugin loading.
  * Returns cleanup resources as soon as they are available.
- * @returns {Promise<{cleanupPlugins: Function|null, diskCache: object, statsOnExit: Function, consoleTitle: string}>}
+ * @returns {Promise<{cleanupPlugins: Function|null, diskCache: object, consoleTitle: string}>}
  */
 async function collectCleanupResources() {
     startupProfiler.mark('preSetupTasks:start');
@@ -324,13 +324,12 @@ async function collectCleanupResources() {
     await startupProfiler.measure('migrateAccessLog', () => Promise.resolve(migrateAccessLog()));
 
     await startupProfiler.measure('settingsInit', () => settingsInit());
-    await startupProfiler.measure('statsInit', () => statsInit());
 
     const pluginsDirectory = path.join(serverDirectory, 'plugins');
     const cleanupPlugins = await startupProfiler.measure('loadPlugins', () => loadPlugins(app, pluginsDirectory));
     const consoleTitle = process.title;
 
-    return { cleanupPlugins, diskCache, statsOnExit, consoleTitle };
+    return { cleanupPlugins, diskCache, consoleTitle };
 }
 
 /**
@@ -499,7 +498,7 @@ async function initDataPhase() {
 
 /**
  * Creates a one-shot cleanup handler for graceful shutdown.
- * @param {{cleanupPlugins: Function|null, diskCache: object, statsOnExit: Function, consoleTitle: string}} resources
+ * @param {{cleanupPlugins: Function|null, diskCache: object, consoleTitle: string}} resources
  * @returns {() => Promise<void>}
  */
 function createCleanupHandler(resources) {
@@ -507,7 +506,6 @@ function createCleanupHandler(resources) {
     return async function exitProcess() {
         if (isExiting) return;
         isExiting = true;
-        await resources.statsOnExit();
         if (typeof resources.cleanupPlugins === 'function') {
             await resources.cleanupPlugins();
         }
