@@ -243,6 +243,8 @@ export function applyLocale(root = document) {
     if (root !== document) {
         return $root.get(0).body.innerHTML;
     }
+
+    document.dispatchEvent(new CustomEvent('i18n:applied'));
 }
 
 function addLanguagesToDropdown() {

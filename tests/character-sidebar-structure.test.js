@@ -50,8 +50,11 @@ describe('character detail sidebar structure', () => {
         const exportFormatPopup = read('app/components/export-format/ExportFormatPopup.tsx');
         const accessibilitySource = read('public/scripts/a11y.js');
 
-        expect(exportFormatPopup).toMatch(/<button[^>]*className="export_format list-group-item"[^>]*data-format="png"[^>]*type="button"[^>]*>PNG<\/button>/);
-        expect(exportFormatPopup).toMatch(/<button[^>]*className="export_format list-group-item"[^>]*data-format="json"[^>]*type="button"[^>]*>JSON<\/button>/);
+        expect(exportFormatPopup).toMatch(/<ContractButton[^>]*className="export_format list-group-item"[^>]*data-format="png"[^>]*label="PNG"[^>]*\/>/);
+        expect(exportFormatPopup).toMatch(/<ContractButton[^>]*className="export_format list-group-item"[^>]*data-format="json"[^>]*label="JSON"[^>]*\/>/);
+        const contractButton = read('app/components/contract/ContractButton.tsx');
+        expect(contractButton).toContain("type = 'button'");
+        expect(contractButton).toContain('<Button');
         expect(accessibilitySource).toContain('function isNativeInteractiveElement(element)');
         expect(accessibilitySource).toMatch(/if \(isNativeInteractiveElement\(element\)\) \{\s+return;\s+\}\s+element\.setAttribute\('role', 'listitem'\);/);
     });

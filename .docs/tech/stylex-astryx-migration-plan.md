@@ -77,6 +77,42 @@
 5. **i18n**：`index.html` 1131 个 `data-i18n` 节点的 React 等价机制是隐藏大项，独立成任务。
 6. **pnpm allowBuilds 门槛**：`pnpm-workspace.yaml` 的 protobufjs 占位导致 `pnpm run`/`install` 受阻；新依赖安装需要解开此门槛或等效手段。
 
+## Phase 3 — Astryx 组件采纳 loop（2026-09-20 设计定稿）
+
+目标：React 面 markup 中仍挂的 legacy utility class（`menu_button`/`text_pole`/`interactable`/`fa-solid` 等，RightNavPanel 53 处、ApiConnectionsPanel 27 处）与 legacy 面存量，逐批迁到 Astryx 组件；`style.css`/`public/css/` 随最后消费者删除收敛。
+
+### 已批决策
+
+- **视觉正常化**：接受 Astryx 默认外观，只保 DOM 契约（id/className/data-*/事件），不追求像素级还原。
+- **范围含 legacy 面**：批次可将整个 legacy 面拉进 React+Astryx（React 化+Astryx 化同一批完成）。
+- **tooltip 走 Astryx `tooltip` prop**：`BaseProps` 省略 `title`；adapter 把 `title`/`data-i18n="[title]…"` 映射为组件 tooltip prop，翻译值经 `app/compat/i18n.js` 的 `translate()` 在 render 时取（tooltip 不再是 DOM `title` 属性，observer 不适用）。
+- **每批 e2e**：每批次必跑 focused jest + compat + tsc/lint + 该面相关 e2e + headless 冒烟。
+
+### Phase 0a — adapter 基建（一次性）
+
+- `app/components/contract/`：`ContractButton`/`ContractIconButton`/`ContractInput`/`ContractTextArea`/`ContractSelect`/`ContractCheckbox` 等薄包装——转发 `id`/`className`/`data-*`/aria/事件到 Astryx 组件（BaseProps 均支持透传），`title`→`tooltip` prop。
+- theme bridge 扩展：spacing/radius/typography/motion token 映射（未定者用 Astryx 默认）。
+- 契约分级清单（机械生成：grep tests/+public/ 得硬契约 = 委托事件/断言/扩展依赖的选择器；软契约 = 纯样式钩子，可删）。
+
+### 每批 loop
+
+1. **Inventory**：机械脚本列出该面全部元素的 contract attrs、命中 CSS 规则、绑定形态（委托/直接）、jQuery 变异点（innerHTML/val()/attr()）。
+2. **Map**：元素→Astryx 组件映射表。**规则：legacy jQuery 代码会直接变异的元素（innerHTML 重写、`.val()` 注入、attr 翻转）保持 plain DOM + StyleX，不进 Astryx**——controlled 组件与外部 DOM 变异会打架。
+3. **Migrate**：换 adapter 组件；残留样式进 `*.styles.ts`；跑 wave-6 死规则裁剪器删失去最后消费者的 CSS。
+4. **Guard**：源契约测试改指新 owner；为 contract attrs 在新组件上的落点补断言。
+5. **Verify**：focused jest + `test:compat` + lint/tsc + 该面 e2e + headless 冒烟（模块图零错误 + 真实交互路径）。
+6. **Commit + 台账**：一面一提交；本文档执行记录追批次/裁剪数/契约验证。
+
+### 批次排序（草案，开工时按依赖修正）
+
+- **B0 pilot**：`export_format_popup`（最小面，验证 loop 机制 + ContractButton）
+- **B1**：composer（`send_but`/`options_button`/stscript 组 → IconButton/TextArea；`send_textarea` 保持非受控 plain）
+- **B2**：options menu / select-chat / character-popup（menu、dialog 形态 → DropdownMenu/Dialog）
+- **B3**：api/ai-config 面板（TextInput/Selector/Switch 密集面）
+- **B4+**：right-nav、settings、world-info、其余面板按依赖序
+- **B-legacy**：剩余纯 legacy 面（React 化+Astryx 化同批）
+- **收尾**：`style.css`/`public/css/` 归零路径不变（Phase X）
+
 ## 执行记录
 
 - 2026-09-16：计划批准。Phase 0 启动。

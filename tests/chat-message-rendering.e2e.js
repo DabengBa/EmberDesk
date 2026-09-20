@@ -85,6 +85,10 @@ function getUnexpectedConsoleErrors(errors) {
         const url = error.location?.url ?? '';
         const isSeedPersonaThumbnail404 = error.text.includes('Failed to load resource')
             && url.includes('/thumbnail?type=persona&file=user-default.png');
+        // __transparent.png is a built-in background option whose asset only exists in
+        // production installs; seeded fixtures surface a 404, not an app error.
+        const isSeedTransparentBackground404 = error.text.includes('Failed to load resource')
+            && url.includes('/backgrounds/__transparent.png');
         // Third-party extensions fetch external CDNs (e.g. jsdelivr for Vue);
         // offline sandboxes surface those as resource/fetch failures, not app errors.
         const isExternalResourceFailure = error.text.includes('Failed to load resource')
@@ -92,7 +96,7 @@ function getUnexpectedConsoleErrors(errors) {
         const isThirdPartyExtensionNetworkFailure = url.includes('/scripts/extensions/third-party/')
             && (error.text.includes('Failed to fetch') || error.text === 'Event');
 
-        return !isSeedPersonaThumbnail404 && !isExternalResourceFailure && !isThirdPartyExtensionNetworkFailure;
+        return !isSeedPersonaThumbnail404 && !isSeedTransparentBackground404 && !isExternalResourceFailure && !isThirdPartyExtensionNetworkFailure;
     });
 }
 

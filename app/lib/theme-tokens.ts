@@ -50,5 +50,24 @@ export const emberDeskTheme = defineTheme({
         '--color-border-emphasized': smartThemeVar('--SmartThemeBorderColor', '#494D53'),
         '--color-shadow': smartThemeVar('--SmartThemeShadowColor', 'rgba(0, 0, 0, 0.3)'),
         '--color-background-muted': smartThemeVar('--SmartThemeChatTintColor', '#1111127F'),
+
+        // Status colors — legacy runtime vars (--error-color may be unset;
+        // --ember-red is the canonical red).
+        '--color-error': 'var(--error-color, var(--ember-red, #E5484D))',
+        '--color-success': 'var(--success-green, rgb(88, 182, 0))',
+        '--color-warning': 'var(--warning, var(--ember-red, #E5484D))',
+
+        // Typography — user font settings live in --mainFontFamily /
+        // --mainFontSize (power-user settings, runtime-mutable).
+        '--font-family-body': 'var(--mainFontFamily, "Noto Sans", sans-serif)',
+        '--font-family-heading': 'var(--mainFontFamily, "Noto Sans", sans-serif)',
+        '--font-family-code': 'var(--monoFontFamily, "Noto Sans Mono", "Courier New", Consolas, monospace)',
+        '--text-body-size': 'var(--mainFontSize, 15px)',
+        '--font-size-base': 'var(--mainFontSize, 15px)',
+
+        // Motion — user animation speed (--animation-duration, power-user).
+        '--duration-fast': 'var(--animation-duration, 125ms)',
+        '--duration-medium': 'calc(var(--animation-duration, 125ms) * 2)',
+        '--duration-slow': 'calc(var(--animation-duration, 125ms) * 4)',
     },
 });

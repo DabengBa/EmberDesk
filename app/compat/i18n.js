@@ -16,6 +16,8 @@
  * Locale switching reloads the page, so no subscription is needed.
  */
 
+import { useEffect, useReducer } from 'react';
+
 /** @type {{ t: Function, translate: Function, getCurrentLocale: Function } | null} */
 let cached = null;
 
@@ -65,6 +67,30 @@ export function t(strings, ...values) {
 export function getCurrentLocale() {
     const i18n = resolveI18n();
     return i18n ? i18n.getCurrentLocale() : String(globalThis.navigator?.language || 'en').toLowerCase();
+}
+
+/**
+ * Passive re-render on `i18n:applied` (fired by legacy applyLocale) for
+ * props that cannot carry `data-i18n` (Astryx `tooltip`, computed strings).
+ * Mounts run before initLocales, so a plain translate() call would lock in
+ * English; the effect-level subscription re-renders once locale data lands.
+ *
+ * Deliberately NOT useSyncExternalStore: an urgent sync store update fired
+ * from applyLocale (inside the jQuery ready startup chain) tears pending
+ * workspace-panel mounts on the shared React root — observed as the
+ * main-chat message-actions command bridge silently no-op'ing.
+ * @param {string} text
+ * @param {string?} [key]
+ * @returns {string}
+ */
+export function useTranslated(text, key = null) {
+    const [, bumpLocale] = useReducer(v => v + 1, 0);
+    useEffect(() => {
+        const handler = () => bumpLocale();
+        document.addEventListener('i18n:applied', handler);
+        return () => document.removeEventListener('i18n:applied', handler);
+    }, []);
+    return translate(text, key);
 }
 
 /** Test hook: drop the cached function refs. */
