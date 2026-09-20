@@ -195,12 +195,11 @@ import {
 } from './scripts/chat-generation-command-service.js';
 import { markdownExclusionExt } from './scripts/showdown-exclusion.js';
 import { markdownUnderscoreExt } from './scripts/showdown-underscore.js';
-import { NOTE_MODULE_NAME, initAuthorsNote, metadata_keys, mountFloatingPromptPanel, setFloatingPrompt, shouldWIAddPrompt } from './scripts/authors-note.js';
+
 import { registerPromptManagerMigration } from './scripts/PromptManager.js';
 import { getRegexedString, regex_placement } from './scripts/extensions/regex/engine.js';
 import { initLogprobs, mountLogprobsViewerPanel, saveLogprobsForActiveMessage } from './scripts/logprobs.js';
 import { FILTER_STATES, FILTER_TYPES, FilterHelper, isFilterState } from './scripts/filters.js';
-import { getCfgPrompt, getGuidanceScale, initCfg, mountCfgConfigPanel } from './scripts/cfg-scale.js';
 import {
     force_output_sequence,
     formatInstructModeChat,
@@ -430,6 +429,17 @@ import { getRequestHeaders, installAjaxCsrfPrefilter, loadCsrfToken } from './sc
 import { installPublicBrowserApi } from './scripts/public-api.js';
 import { createReactRuntimeProvider } from './scripts/react-runtime-provider.js';
 
+// Retired Author's Note slot key. The feature is gone, but the slot remains the
+// injection vehicle for World Info AN-position entries and persona TOP_AN/BOTTOM_AN.
+const NOTE_MODULE_NAME = '2_floating_prompt';
+const metadata_keys = {
+    prompt: 'note_prompt',
+    interval: 'note_interval',
+    depth: 'note_depth',
+    position: 'note_position',
+    role: 'note_role',
+};
+
 // API OBJECT FOR EXTERNAL WIRING
 installPublicBrowserApi({ libs, getContext });
 
@@ -538,7 +548,6 @@ registerWorldInfoShellContext({
     toastr,
     authorsNoteModuleName: NOTE_MODULE_NAME,
     authorsNoteMetadataKeys: metadata_keys,
-    shouldAddWorldInfoPrompt: () => shouldWIAddPrompt,
     showWarningToast: (message, title) => toastr.warning(message, title),
     openWorldInfoPanel: () => openWorkspaceShellWorldInfo(),
 });
@@ -669,15 +678,12 @@ registerGenerationShellContext({
     appendFileContent: (...args) => appendFileContent(...args),
     extractReasoningFromData: (...args) => extractReasoningFromData(...args),
     extractReasoningSignatureFromData: (...args) => extractReasoningSignatureFromData(...args),
-    getCfgPrompt: (...args) => getCfgPrompt(...args),
     getFriendlyTokenizerName: (...args) => getFriendlyTokenizerName(...args),
-    getGuidanceScale: (...args) => getGuidanceScale(...args),
     getPresetManager: (...args) => getPresetManager(...args),
     getRegexedString: (...args) => getRegexedString(...args),
     getTokenCountAsync: (...args) => getTokenCountAsync(...args),
     hasPendingFileAttachment: (...args) => hasPendingFileAttachment(...args),
     sendSystemMessage: (...args) => sendSystemMessage(...args),
-    setFloatingPrompt: (...args) => setFloatingPrompt(...args),
     collapseNewlines: (...args) => collapseNewlines(...args),
     formatInstructModeChat: (...args) => formatInstructModeChat(...args),
     formatInstructModeExamples: (...args) => formatInstructModeExamples(...args),
@@ -4510,8 +4516,6 @@ async function bootstrapWorkspace() {
     await measureStartupStage('mountPersonaManagement', () => mountPersonaManagementPanel());
     await measureStartupStage('mountPowerUserPanel', () => mountPowerUserPanel());
     await measureStartupStage('mountConfigDrawers', () => Promise.all([
-        mountFloatingPromptPanel(),
-        mountCfgConfigPanel(),
         mountLogprobsViewerPanel(),
         mountAdvancedFormattingPanel(),
         mountPromptManagerPopup(),
@@ -4529,7 +4533,6 @@ async function bootstrapWorkspace() {
     await measureStartupStage('getCharacters', () => getCharacters());
     await measureStartupStage('initTokenizers', () => initTokenizers());
     await measureStartupStage('hydrateFeatureModules', async () => {
-        initAuthorsNote();
         await initPersonas();
         await initSlashCommandAutoComplete();
         bindMainChatMessageListBridgeObservers();
@@ -4538,7 +4541,6 @@ async function bootstrapWorkspace() {
         registerPanelHook('world-info-body', _replayWorldInfoSettings);
         initWorldInfo();
         initRossMods();
-        initCfg();
         initLogprobs();
         initInputMarkdown();
         initServerHistory();
@@ -6234,13 +6236,13 @@ function addPersonaDescriptionExtensionPrompt() {
 
     const promptPositions = [persona_description_positions.BOTTOM_AN, persona_description_positions.TOP_AN];
 
-    if (promptPositions.includes(power_user.persona_description_position) && shouldWIAddPrompt) {
-        const originalAN = extension_prompts[NOTE_MODULE_NAME].value;
+    if (promptPositions.includes(power_user.persona_description_position)) {
+        const originalAN = extension_prompts[NOTE_MODULE_NAME]?.value ?? '';
         const ANWithDesc = power_user.persona_description_position === persona_description_positions.TOP_AN
             ? `${power_user.persona_description}\n${originalAN}`
             : `${originalAN}\n${power_user.persona_description}`;
 
-        setExtensionPrompt(NOTE_MODULE_NAME, ANWithDesc, chat_metadata[metadata_keys.position], chat_metadata[metadata_keys.depth], extension_settings.note.allowWIScan, chat_metadata[metadata_keys.role]);
+        setExtensionPrompt(NOTE_MODULE_NAME, ANWithDesc, chat_metadata[metadata_keys.position] ?? extension_prompt_types.IN_CHAT, chat_metadata[metadata_keys.depth] ?? 4, extension_settings.note?.allowWIScan ?? false, chat_metadata[metadata_keys.role] ?? extension_prompt_roles.SYSTEM);
     }
 
     if (power_user.persona_description_position === persona_description_positions.AT_DEPTH) {

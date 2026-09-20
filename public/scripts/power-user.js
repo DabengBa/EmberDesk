@@ -655,8 +655,7 @@ async function CreateZenSliders(elmnt) {
         sliderID == 'tfs' ||
         sliderID == 'top_p' ||
         sliderID == 'typical_p' ||
-        sliderID == 'temp' ||
-        sliderID == 'guidance_scale') {
+        sliderID == 'temp') {
         offVal = 1;
     }
     //customize amt gen steps

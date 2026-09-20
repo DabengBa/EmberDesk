@@ -1085,8 +1085,6 @@ export function initRossMods() {
                 .not('#WorldInfo')
                 .not('#left-nav-panel')
                 .not('#right-nav-panel')
-                .not('#floatingPrompt')
-                .not('#cfgConfig')
                 .not('#logprobsViewer')
                 .not('#movingDivs > div')
                 .is(':visible')) {
@@ -1094,8 +1092,6 @@ export function initRossMods() {
                     .not('#WorldInfo')
                     .not('#left-nav-panel')
                     .not('#right-nav-panel')
-                    .not('#floatingPrompt')
-                    .not('#cfgConfig')
                     .not('#logprobsViewer')
                     .not('#movingDivs > div');
                 visibleDrawerContent.each((_, element) => closeWorkspaceChildSlotHost(element.id));
@@ -1104,16 +1100,6 @@ export function initRossMods() {
 
             if ($('#logprobsViewer').is(':visible')) {
                 $('#logprobsViewerClose').trigger('click');
-                return;
-            }
-
-            if ($('#cfgConfig').is(':visible')) {
-                $('#CFGClose').trigger('click');
-                return;
-            }
-
-            if ($('#floatingPrompt').is(':visible')) {
-                $('#ANClose').trigger('click');
                 return;
             }
 

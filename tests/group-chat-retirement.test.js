@@ -361,8 +361,6 @@ describe('group chat retirement', () => {
         expect(filtersSource).not.toContain('groupFilter');
         expect(promptConverterSource).not.toMatch(/group_names|groupNames|startsWithGroupName|group chat/i);
         const retiredCoreSources = [
-            'public/scripts/authors-note.js',
-            'public/scripts/cfg-scale.js',
             'public/scripts/chats.js',
             'public/scripts/instruct-mode.js',
             'public/scripts/itemized-prompts.js',

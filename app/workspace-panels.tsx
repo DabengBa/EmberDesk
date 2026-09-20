@@ -59,8 +59,6 @@ import { ChatBackupsBrowser, type ChatBackupsCommands } from './components/chat-
 import { DataMaidDialog } from './components/data-maid/DataMaidDialog';
 import { PersonaManagementPanel } from './components/personas/PersonaManagementPanel';
 import { PowerUserPanel } from './components/power-user/PowerUserPanel';
-import { FloatingPromptPanel } from './components/panels/FloatingPromptPanel';
-import { CfgConfigPanel } from './components/panels/CfgConfigPanel';
 import { LogprobsViewerPanel } from './components/panels/LogprobsViewerPanel';
 import { AdvancedFormattingPanel } from './components/panels/AdvancedFormattingPanel';
 import { PromptManagerPopup } from './components/panels/PromptManagerPopup';
@@ -2012,22 +2010,6 @@ function mountSmallPanel(container: HTMLElement, element: ReactElement) {
             </Theme>
         </StrictMode>,
     ));
-}
-
-/**
- * Mounts the floating prompt (World Info / Authors Note) drawer content.
- * Presentation-only: power-user.js keeps behavior ownership via element IDs.
- */
-export function mountFloatingPromptPanel(container: HTMLElement) {
-    mountSmallPanel(container, <FloatingPromptPanel />);
-}
-
-/**
- * Mounts the CFG scale configuration drawer content. Presentation-only:
- * cfg-scale.js keeps behavior ownership via element IDs.
- */
-export function mountCfgConfigPanel(container: HTMLElement) {
-    mountSmallPanel(container, <CfgConfigPanel />);
 }
 
 /**

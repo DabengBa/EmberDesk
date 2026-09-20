@@ -3178,31 +3178,6 @@ input[type="file"] {
     display: contents;
 }
 
-#floatingPrompt,
-#cfgConfig {
-    overflow-y: auto;
-    max-width: 90dvw;
-    max-height: 90dvh;
-    min-width: 100px;
-    min-height: 100px;
-    border-radius: 10px;
-    border: 1px solid var(--SmartThemeBorderColor);
-    position: fixed;
-    padding: 10px;
-    padding-top: 25px;
-    display: none;
-    flex-direction: column;
-    box-shadow: 0 0 10px var(--black70a);
-    z-index: 4000;
-    left: 0;
-    top: 0;
-    margin: 0;
-    right: unset;
-    width: calc(((100dvw - var(--sheldWidth)) / 2) - 1px);
-    height: unset;
-
-}
-
 #movingDivs>div {
     z-index: 4000;
 }
@@ -3211,16 +3186,10 @@ input[type="file"] {
     z-index: 3000;
 }
 
-.floating_prompt_radio_group,
 .radio_group {
     display: flex;
     flex-direction: column;
     margin-top: 5px;
-}
-
-#extension_floating_counter {
-    font-weight: 600;
-    color: var(--SmartThemeQuoteColor);
 }
 
 .extension_token_counter {
@@ -3258,10 +3227,6 @@ input[type="file"] {
 .dragClose:hover {
     cursor: pointer;
     opacity: 1;
-}
-
-#floatingPrompt .drag-grabber {
-    position: unset;
 }
 
 /* ################################################################*/
@@ -6102,8 +6067,7 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
 /*to prevent draggables from being made too small to see*/
 .fillRight,
 .fillLeft,
-#WorldInfo,
-#floatingPrompt {
+#WorldInfo {
     min-width: 100px !important;
     min-height: 100px !important;
     position: fixed;

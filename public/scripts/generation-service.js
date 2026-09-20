@@ -94,15 +94,12 @@ const scrollChatToBottom = (...args) => shell().scrollChatToBottom(...args);
 const appendFileContent = (...args) => shell().appendFileContent(...args);
 const extractReasoningFromData = (...args) => shell().extractReasoningFromData(...args);
 const extractReasoningSignatureFromData = (...args) => shell().extractReasoningSignatureFromData(...args);
-const getCfgPrompt = (...args) => shell().getCfgPrompt(...args);
 const getFriendlyTokenizerName = (...args) => shell().getFriendlyTokenizerName(...args);
-const getGuidanceScale = (...args) => shell().getGuidanceScale(...args);
 const getPresetManager = (...args) => shell().getPresetManager(...args);
 const getRegexedString = (...args) => shell().getRegexedString(...args);
 const getTokenCountAsync = (...args) => shell().getTokenCountAsync(...args);
 const hasPendingFileAttachment = (...args) => shell().hasPendingFileAttachment(...args);
 const sendSystemMessage = (...args) => shell().sendSystemMessage(...args);
-const setFloatingPrompt = (...args) => shell().setFloatingPrompt(...args);
 const collapseNewlines = (...args) => shell().collapseNewlines(...args);
 const formatInstructModeChat = (...args) => shell().formatInstructModeChat(...args);
 const formatInstructModeExamples = (...args) => shell().formatInstructModeExamples(...args);
@@ -721,7 +718,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     const depthPromptText = charDepthPrompt || '';
     const depthPromptDepth = state.characters[state.this_chid]?.data?.extensions?.depth_prompt?.depth ?? state.depth_prompt_depth_default;
     const depthPromptRole = getExtensionPromptRoleByName(state.characters[state.this_chid]?.data?.extensions?.depth_prompt?.role ?? state.depth_prompt_role_default);
-    setExtensionPrompt(inject_ids.DEPTH_PROMPT, depthPromptText, state.extension_prompt_types.IN_CHAT, depthPromptDepth, state.extension_settings.note.allowWIScan, depthPromptRole);
+    setExtensionPrompt(inject_ids.DEPTH_PROMPT, depthPromptText, state.extension_prompt_types.IN_CHAT, depthPromptDepth, state.extension_settings.note?.allowWIScan, depthPromptRole);
 
     // First message in fresh 1-on-1 chat reacts to user/character settings changes
     if (state.chat.length) {
@@ -805,23 +802,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         console.debug('Skipping extension interceptors for dry run');
     }
 
-    // Fetches the combined prompt for both negative and positive prompts
-    const cfgGuidanceScale = getGuidanceScale();
-    const useCfgPrompt = cfgGuidanceScale && cfgGuidanceScale.value !== 1;
-
-    // Adjust max context based on CFG prompt to prevent overfitting
-    if (useCfgPrompt) {
-        const negativePrompt = getCfgPrompt(cfgGuidanceScale, true, true)?.value || '';
-        const positivePrompt = getCfgPrompt(cfgGuidanceScale, false, true)?.value || '';
-        if (negativePrompt || positivePrompt) {
-            const previousMaxContext = this_max_context;
-            const [negativePromptTokenCount, positivePromptTokenCount] = await Promise.all([getTokenCountAsync(negativePrompt), getTokenCountAsync(positivePrompt)]);
-            const decrement = Math.max(negativePromptTokenCount, positivePromptTokenCount);
-            this_max_context -= decrement;
-            console.log(`Max context reduced by ${decrement} tokens of CFG prompt (${previousMaxContext} -> ${this_max_context})`);
-        }
-    }
-
     console.log(`Core/all messages: ${coreChat.length}/${state.chat.length}`);
 
     if ((promptBias && !isUserPromptBias) || state.power_user.always_force_name2) {
@@ -833,9 +813,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     }
 
     let mesExamplesArray = parseMesExamples(mesExamples, isInstruct);
-
-    // Set non-WI AN
-    setFloatingPrompt();
 
     // Add WI to prompt (and also inject WI to AN value via hijack)
     // Make quiet prompt available for WIAN
@@ -1351,13 +1328,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     // For prompt bit itemization
     let mesSendString = '';
 
-    async function getCombinedPrompt(isNegative) {
-        // Only return if the guidance scale doesn't exist or the value is 1
-        // Also don't return if constructing the neutral prompt
-        if (isNegative && !useCfgPrompt) {
-            return;
-        }
-
+    async function getCombinedPrompt() {
         // OAI has its own prompt manager. No need to do anything here
         if (state.main_api === 'openai') {
             return '';
@@ -1365,29 +1336,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
 
         // Deep clone
         let finalMesSend = structuredClone(mesSend);
-
-        if (useCfgPrompt) {
-            const cfgPrompt = getCfgPrompt(cfgGuidanceScale, isNegative);
-            if (cfgPrompt.value) {
-                if (cfgPrompt.depth === 0) {
-                    finalMesSend[finalMesSend.length - 1].message +=
-                        /\s/.test(finalMesSend[finalMesSend.length - 1].message.slice(-1))
-                            ? cfgPrompt.value
-                            : ` ${cfgPrompt.value}`;
-                } else {
-                    // TODO: Make all extension prompts use an array/splice method
-                    const lengthDiff = mesSend.length - cfgPrompt.depth;
-                    const cfgDepth = lengthDiff >= 0 ? lengthDiff : 0;
-                    const cfgMessage = finalMesSend[cfgDepth];
-                    if (cfgMessage) {
-                        if (!Array.isArray(finalMesSend[cfgDepth].extensionPrompts)) {
-                            finalMesSend[cfgDepth].extensionPrompts = [];
-                        }
-                        finalMesSend[cfgDepth].extensionPrompts.push(`${cfgPrompt.value}\n`);
-                    }
-                }
-            }
-        }
 
         // Add prompt bias after everything else
         // Always run with continue
@@ -1456,7 +1404,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         return !data.combinedPrompt ? combine() : data.combinedPrompt;
     }
 
-    let finalPrompt = await getCombinedPrompt(false);
+    let finalPrompt = await getCombinedPrompt();
 
     const eventData = { prompt: finalPrompt, dryRun: dryRun };
     await eventSource.emit(event_types.GENERATE_AFTER_COMBINE_PROMPTS, eventData);

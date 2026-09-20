@@ -5,7 +5,6 @@ import {
 //import { BIAS_CACHE, displayLogitBias, getLogitBiasListResult } from './logit-bias.js';
 //import { getEventSourceStream } from './sse-stream.js';
 //import { getSortableDelay, onlyUnique } from './utils.js';
-//import { getCfgPrompt } from './cfg-scale.js';
 import { renderTemplateAsync } from './templates.js';
 import { Popup, POPUP_TYPE } from './popup.js';
 
@@ -60,12 +59,6 @@ function getRelatedDOMElement(samplerName) {
         relatedDOMElement = $('#grammar_block_ooba');
         targetDisplayType = 'block';
         displayname = 'Grammar Block';
-    }
-
-    if (samplerName === 'guidance_scale') {
-        relatedDOMElement = $('#cfg_block_ooba');
-        targetDisplayType = 'block';
-        displayname = 'CFG Block';
     }
 
     if (samplerName === 'mirostat_mode') {

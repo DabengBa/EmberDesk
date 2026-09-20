@@ -1655,10 +1655,14 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
     const worldInfoBefore = WIBeforeEntries.length ? WIBeforeEntries.join('\n') : '';
     const worldInfoAfter = WIAfterEntries.length ? WIAfterEntries.join('\n') : '';
 
-    if (getWorldInfoShell().shouldAddWorldInfoPrompt()) {
-        const originalAN = context.extensionPrompts[getWorldInfoShell().authorsNoteModuleName].value;
+    // The retired Author's Note slot ('2_floating_prompt') remains the injection
+    // vehicle for AN-position WI entries; stored per-chat note metadata is honored.
+    if (ANTopEntries.length || ANBottomEntries.length) {
+        const noteModule = getWorldInfoShell().authorsNoteModuleName;
+        const noteKeys = getWorldInfoShell().authorsNoteMetadataKeys;
+        const originalAN = context.extensionPrompts[noteModule]?.value ?? '';
         const ANWithWI = `${ANTopEntries.join('\n')}\n${originalAN}\n${ANBottomEntries.join('\n')}`.replace(/(^\n)|(\n$)/g, '');
-        context.setExtensionPrompt(getWorldInfoShell().authorsNoteModuleName, ANWithWI, chat_metadata[getWorldInfoShell().authorsNoteMetadataKeys.position], chat_metadata[getWorldInfoShell().authorsNoteMetadataKeys.depth], extension_settings.note.allowWIScan, chat_metadata[getWorldInfoShell().authorsNoteMetadataKeys.role]);
+        context.setExtensionPrompt(noteModule, ANWithWI, chat_metadata[noteKeys.position] ?? 1, chat_metadata[noteKeys.depth] ?? 4, extension_settings.note?.allowWIScan ?? false, chat_metadata[noteKeys.role] ?? extension_prompt_roles.SYSTEM);
     }
 
     timedEffects.setTimedEffects(Array.from(allActivatedEntries.values()));

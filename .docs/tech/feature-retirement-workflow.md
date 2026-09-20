@@ -136,4 +136,35 @@ pnpm run build:react:workspace-panels  # app/ 或桥动过时
 - **行为差异（有意）**：历史 `bookmark_link` 不再渲染旗帜/可点——数据惰化保留；options 菜单的 "Save checkpoint" 消失。
 - **文案更新**：chatRename/scenarioOverride/FloatingPromptPanel 的 "checkpoint" 措辞 → "branch"（分支聊天仍继承 `main_chat` 元数据与场景覆盖）。
 - **验证**：lint+tsc 净；聚焦 678 tests 绿；unit lane 59 文件全绿；e2e（chat-message-layout + chat-message-rendering）9/9 绿；headless 冒烟：checkpoint UI/命令全灭、`/branch-create` 实际创建分支聊天（`main_chat` 元数据磁盘证实、嵌套分支父链正确）、`.mes_create_branch`/`option_back_to_main`/swipe-picker 存活、零 console 错误；docs:build 通过。
+- **Commit**: `24c285e73`。
+
+### B-cut-4 + B-cut-5: authors-note + cfg-scale（耦合对，合并执行）
+
+**R0 裁决**：两个模块共享 `#movingDivs` 抽屉槽位与生成管线插入点，合并为单批。Author's Note 的活跃功能（floating prompt UI、per-chat/chara note、`/note*` 命令族、`authorsNote`/`charAuthorsNote`/`defaultAuthorsNote` 宏、insertion interval 状态机）退役；但 `2_floating_prompt` 注入槽**保留为中性载体**——WI 的 AN-position 条目（ANTop/ANBottom）与 persona TOP_AN/BOTTOM_AN 仍经它注入，存量 lorebook 与 persona 设置语义不变。CFG 的 generation-path 语义（`getGuidanceScale`/`getCfgPrompt`、context 缩减、正/负提示词注入）随 UI 一并退役。
+
+- **删**：`public/scripts/cfg-scale.js` 整文件；`authors-note.js` 活跃机器（`initAuthorsNote`/`setFloatingPrompt`/`onANMenuItemClick`/chara note 编辑/interval 计数器）；`FloatingPromptPanel.tsx` + `CfgConfigPanel.tsx`；`#floatingPrompt`/`#cfgConfig` drawer hosts（index.html）；`#option_toggle_AN`/`#option_toggle_CFG`（OptionsMenu.tsx）；`mountFloatingPromptPanel`/`mountCfgConfigPanel`（workspace-panels.tsx）；`/note*` slash 命令与三个宏；RossAscends 的两处 `.not()` 过滤与 Escape 分支；`guidance_scale` 的 samplerSelect DOM 映射与 power-user 滑条 offVal 条目；CSS 规则群（style.css 4 处 + mobile-styles 2 处）。
+- **保留（契约面）**：`public/scripts/authors-note.js` → 最小 stub，仅导出 `NOTE_MODULE_NAME`/`metadata_keys`/`shouldWIAddPrompt=false`（Tavern Helper `dataProcessor.ts` 经 `@sillytavern/scripts/authors-note` 导入——compat 测试实证）；`2_floating_prompt` 槽仍被 world-info-service ANTop/ANBottom 合并、`openai.js` 的 `authorsNote` 系统提示条目、itemized-prompts 的 `authorsNoteString`、persona TOP_AN/BOTTOM_AN 写入；`extension_settings.note` 存量桶与 `chat_metadata.note_*`/`chat_cfg*` 键不归一化（惰性历史数据）；character-lifecycle-service 的 `note.chara` 重命名同步保留（存量数据卫生）。
+- **行为差异（有意）**：WI ANTop/ANBottom 条目不再被 AN 的 insertion-interval 门控——有匹配条目即注入（原先 `shouldWIAddPrompt` 会随 AN 间隔跳过）；persona TOP_AN/BOTTOM_AN 去掉 `shouldWIAddPrompt` 前置门；CFG 负提示词通道整体消失（`getCombinedPrompt(isNegative)` 参数退役）；`samplerSelect` 对 preset 中残留 `guidance_scale` 键返回空 DOM 映射。
+- **验证**：lint+tsc 净；unit lane 59 文件/624 tests 绿；integration lane 98 文件/849 tests 绿（初轮 third-party-extension-compatibility 命中 JSR alias 导入面——经 stub 修复）；e2e（panel-navigation + world-info-workbench + chat-message-rendering）21/21 绿；workspace-panels bundle 重建。
 - **Commit**: 待提交。
+
+### B-cut-6 + B-cut-7: assets + memory（扩展目录级删）
+
+- **删**：`public/scripts/extensions/assets/`、`public/scripts/extensions/memory/` 整目录；`extension_settings.memory` 默认值；契约条目。readdir 驱动发现——目录删即下线。
+- **验证**：lint+tsc 净；契约测试绿；headless discovery 列表不再含两者。
+- **Commit**: `68c1f5192`。
+
+### B-cut-8: gallery（扩展目录级删）
+
+- **删**：`public/scripts/extensions/gallery/` 整目录 + 契约条目；`mes_gallery` 从 `MESSAGE_ACTION_TIERS.secondary` 移除（无 DOM 生产者的残留）。
+- **保留**：`MEDIA_DISPLAY.GALLERY`——消息媒体网格布局模式，核心功能非扩展。
+- **Commit**: `4d998e99f`。
+
+### B-cut-9: attachments + Data Bank
+
+**R0 裁决**：attachments 扩展实为 **Data Bank 管理器**（`/db*` 命令族 + `#manageAttachments` 面板）。边界：删 Data Bank 管理面，**保留消息级文件嵌入**（`mes_embed`/`embedMessageFile`/`populateFileAttachment`/`appendFileContent`/`hasPendingFileAttachment`/`/api/files/*`/`extra.files`——文件内容进 prompt 的核心路径）。
+
+- **删**：`public/scripts/extensions/attachments/` 整目录；chats.js 的 Data Bank 子树（~1153–1837：`openAttachmentManager`/attachment 编辑移动启停/银行列表渲染/targets/scraper 集成/attachment 校验/银行专用上传删除管理）；`/db*` 命令族；`#manageAttachments` 处理器；`extension_settings.attachments`/`character_attachments` 银行存储默认值；`Popper` import。
+- **保留**：`ScraperManager` 注册表 API（`st-context` 暴露的第三方扩展契约，`initScrapers` 内置注册变惰性）；`openFilePopup`（消息文件预览仍用）；canonical 备份/恢复的 attachment manifests（独立存储层）。
+- **验证**：lint+tsc 净（初轮 `Popper` unused 已修）；聚焦 unit 绿；headless discovery 仅剩 connection-manager/quick-reply/regex/token-counter/JS-Slash-Runner。
+- **Commit**: `3236ea33a`。

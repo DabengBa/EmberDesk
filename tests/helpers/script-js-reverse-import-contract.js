@@ -18,12 +18,10 @@ function contractEntry(file, specifier, names, kind = 'import') {
 // This is an exact snapshot of the legacy surface that has not migrated yet.
 export const FIRST_PARTY_SCRIPT_JS_IMPORT_CONTRACT = Object.freeze([
     contractEntry('action-loader.js', '../script.js', ['stopGeneration']),
-    contractEntry('authors-note.js', '../script.js', ['MAX_INJECTION_DEPTH', 'animation_duration', 'chat_metadata', 'extension_prompt_roles', 'extension_prompt_types', 'saveSettingsDebounced', 'this_chid']),
     contractEntry('autocomplete/MacroAutoCompleteHelper.js', '/script.js', ['chat_metadata']),
     contractEntry('chat-branch.js', '../script.js', ['characters', 'saveChat', 'syncSwipeToMes', 'this_chid', 'openCharacterChat', 'chat_metadata', 'chat', 'saveItemizedPrompts', 'getCurrentChatDetails']),
     contractEntry('bulk-edit.js', '../script.js', ['characterGroupOverlay', 'syncReactCharacterLibraryToolbarState']),
     contractEntry('BulkEditOverlay.js', '../script.js', ['characterGroupOverlay', 'characters', 'getCharacters', 'buildAvatarList', 'characterToEntity', 'printCharactersDebounced', 'deleteCharacter', 'stopGeneration', 'is_send_press', 'this_chid', 'name2', 'neutralCharacterName', 'syncReactCharacterLibraryToolbarState']),
-    contractEntry('cfg-scale.js', '../script.js', ['chat_metadata', 'substituteParams', 'this_chid', 'saveSettingsDebounced', 'animation_duration']),
     contractEntry('chat-backups.js', '/script.js', ['displayPastChats', 'importCharacterChat']),
     contractEntry('chats.js', '../script.js', ['addCopyToCodeBlocks', 'appendMediaToMessage', 'characters', 'chat', 'getCurrentChatId', 'name2', 'reloadCurrentChat', 'saveSettingsDebounced', 'this_chid', 'saveChatConditional', 'chat_metadata', 'neutralCharacterName', 'updateChatMetadata', 'system_message_types', 'converter', 'substituteParams', 'getSystemMessageByType', 'printMessages', 'clearChat', 'refreshSwipeButtons', 'getMediaIndex', 'getMediaDisplay', 'chatElement']),
     contractEntry('custom-request.js', '../script.js', ['extractJsonFromData', 'extractMessageFromData']),

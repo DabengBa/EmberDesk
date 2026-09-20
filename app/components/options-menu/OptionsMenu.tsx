@@ -18,8 +18,6 @@ export function OptionsMenu() {
         <div className="options-content">
             <ContractButton id="option_close_chat" className="displayNone" variant="ghost" label="Close chat" icon={<i className="fa-lg fa-solid fa-times" aria-hidden="true" />} />
 
-            <ContractButton id="option_toggle_AN" variant="ghost" label="Author's Note" icon={<i className="fa-lg fa-solid fa-note-sticky" aria-hidden="true" />} tabIndex={0} />
-            <ContractButton id="option_toggle_CFG" variant="ghost" label="CFG Scale" icon={<i className="fa-lg fa-solid fa-scale-balanced" aria-hidden="true" />} tabIndex={0} />
             <ContractButton id="option_toggle_logprobs" variant="ghost" label="Token Probabilities" icon={<i className="fa-lg fa-solid fa-pie-chart" aria-hidden="true" />} tabIndex={0} />
             <ContractButton id="option_back_to_main" variant="ghost" label="Back to parent chat" icon={<i className="fa-lg fa-solid fa-left-long" aria-hidden="true" />} />
             <hr />

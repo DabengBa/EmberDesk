@@ -147,8 +147,6 @@ describe('chat workspace structure', () => {
         const indexHtml = readRepoFile('app/components/options-menu/OptionsMenu.tsx');
 
         [
-            'option_toggle_AN',
-            'option_toggle_CFG',
             'option_toggle_logprobs',
             'option_start_new_chat',
             'option_select_chat',
