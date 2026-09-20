@@ -33,7 +33,6 @@ export interface MainChatMessageRecord {
     readonly avatarUrl: string;
     readonly title: string;
     readonly tokenCount: number | null;
-    readonly bookmarkLink: string;
     readonly reasoningOpen: boolean;
     readonly reasoningEditing: boolean;
     readonly reasoningEditText: string;
@@ -314,7 +313,6 @@ function normalizeMessages(value: unknown) {
             tokenCount: typeof message.tokenCount === 'number' && Number.isFinite(message.tokenCount)
                 ? message.tokenCount
                 : null,
-            bookmarkLink: normalizeString(message.bookmarkLink),
             reasoningOpen: message.reasoningOpen === true,
             reasoningEditing: message.reasoningEditing === true,
             reasoningEditText: normalizeString(message.reasoningEditText),

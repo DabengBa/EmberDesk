@@ -1,6 +1,6 @@
 export const MESSAGE_ACTION_TIERS = Object.freeze({
     highFrequency: ['extraMesButtonsHint', 'mes_copy', 'mes_edit'],
-    secondary: ['mes_bookmark', 'mes_swipe_picker', 'mes_reasoning_copy', 'mes_gallery', 'mes_translate', 'mes_narrate', 'mes_hide'],
+    secondary: ['mes_swipe_picker', 'mes_reasoning_copy', 'mes_gallery', 'mes_translate', 'mes_narrate', 'mes_hide'],
     danger: ['mes_edit_delete', 'mes_reasoning_delete'],
 });
 

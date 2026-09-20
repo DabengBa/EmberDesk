@@ -112,7 +112,6 @@ function MessageActionShell({
                 <div title="Toggle media display style" className="mes_button mes_media_list fa-solid fa-table-cells-large" data-i18n="[title]Toggle media display style;[aria-label]Toggle media display style" role="button" aria-label="Toggle media display style" tabIndex={0} />
                 <div title="Embed file or image" className="mes_button mes_embed fa-solid fa-paperclip" data-i18n="[title]Embed file or image;[aria-label]Embed file or image" role="button" aria-label="Embed file or image" tabIndex={0} />
                 <div title="Jump to swipe history" className="mes_button mes_swipe_picker fa-solid fa-bookmark" data-i18n="[title]Jump to swipe history;[aria-label]Jump to swipe history" role="button" aria-label="Jump to swipe history" tabIndex={0} style={{ display: 'none' }} />
-                <div title="Create checkpoint" className="mes_button mes_create_bookmark fa-regular fa-solid fa-flag-checkered" data-i18n="[title]Create checkpoint;[aria-label]Create checkpoint" role="button" aria-label="Create checkpoint" tabIndex={0} />
                 <div title="Create branch" className="mes_button mes_create_branch fa-regular fa-code-branch" data-i18n="[title]Create Branch;[aria-label]Create branch" role="button" aria-label="Create branch" tabIndex={0} />
                 <div
                     className="mes_button mes_copy fa-solid fa-copy"
@@ -155,14 +154,6 @@ function MessageActionShell({
                 />
             </div>
             <div
-                className="mes_button mes_bookmark fa-solid fa-flag"
-                data-tooltip={'Click to open checkpoint chat\nShift+Click to replace the existing checkpoint with a new one'}
-                data-i18n={'[data-tooltip]Open checkpoint chat\nShift+Click to replace the existing checkpoint with a new one;[aria-label]Open checkpoint chat'}
-                role="button"
-                aria-label="Open checkpoint chat"
-                tabIndex={0}
-            />
-            <div
                 className="mes_button mes_edit fa-solid fa-pencil"
                 title="Edit"
                 data-i18n="[title]Edit;[aria-label]Edit"
@@ -202,7 +193,6 @@ export function MainChatMessageRow({
         ch_name: message.name,
         is_user: message.role === 'user' ? 'true' : 'false',
         is_system: message.role === 'system' ? 'true' : 'false',
-        bookmark_link: message.bookmarkLink,
         title: message.title || undefined,
         type: message.extraType || undefined,
     };

@@ -504,7 +504,7 @@ test.describe('chat message rendering', () => {
             expanded: false,
             availableIncludes: ['extraMesButtonsHint', 'mes_copy', 'mes_edit', 'mes_edit_delete'],
             highFrequencyIncludes: ['extraMesButtonsHint', 'mes_copy', 'mes_edit'],
-            secondaryIncludes: ['mes_bookmark'],
+            secondaryIncludes: ['mes_swipe_picker'],
             dangerIncludes: ['mes_edit_delete'],
         });
 
@@ -515,7 +515,7 @@ test.describe('chat message rendering', () => {
             expanded: true,
             availableIncludes: ['extraMesButtonsHint', 'mes_copy', 'mes_edit', 'mes_edit_delete'],
             highFrequencyIncludes: ['extraMesButtonsHint', 'mes_copy', 'mes_edit'],
-            secondaryIncludes: ['mes_bookmark'],
+            secondaryIncludes: ['mes_swipe_picker'],
             dangerIncludes: ['mes_edit_delete'],
         });
 

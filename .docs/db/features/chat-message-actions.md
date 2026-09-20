@@ -9,7 +9,7 @@ related: [page.chat_workspace, feature.chat_message_rendering, feature.chat_gene
 
 ## ID 解释
 
-`feature.chat_message_actions` represents the visible controls attached to a rendered chat message in [Chat Workspace](page.chat_workspace). It covers discovering and triggering message-row actions such as copy, edit, checkpoint, swipe, reasoning actions, and media gallery navigation.
+`feature.chat_message_actions` represents the visible controls attached to a rendered chat message in [Chat Workspace](page.chat_workspace). It covers discovering and triggering message-row actions such as copy, edit, branch, swipe, reasoning actions, and media gallery navigation.
 
 It does not define how message text is generated, streamed, formatted, or stored.
 
@@ -21,7 +21,7 @@ Let users act on an already rendered chat message through discoverable row contr
 
 - Message text stays the primary content; actions must be discoverable by pointer, keyboard focus, touch/mobile paths, and accessible names without visually overwhelming the row.
 - High-frequency actions such as copy, edit, and opening the action menu remain quicker to reach than secondary or destructive actions.
-- Secondary actions such as checkpoint, swipe, reasoning controls, and media-gallery navigation appear only when valid for the current message state.
+- Secondary actions such as branch, swipe, reasoning controls, and media-gallery navigation appear only when valid for the current message state.
 - Danger actions keep clear accessible names and must not visually outrank normal copy/edit actions.
 - A failed generation row may expose a retry action only after [Chat Generation Auto Recovery](feature.chat_generation_auto_recovery) has exhausted automatic attempts; using it must not resubmit the already-rendered user message as a duplicate row.
 - React owns the visible message-action shell on message rows; user-facing controls, mobile reachability, and compatibility hooks remain the same while editing or live content is preserved on the same row.
@@ -38,7 +38,7 @@ Visible message actions dispatch commands only. The shared generation service ow
 - `feature.chat_message_actions.primary_menu`: the message actions affordance attached to a message row.
 - `feature.chat_message_actions.copy`: copying message text or action payload exposed by row controls.
 - `feature.chat_message_actions.edit`: entering or operating message edit mode.
-- `feature.chat_message_actions.checkpoint`: opening or creating checkpoint-related chat actions from the row.
+- `feature.chat_message_actions.branch`: creating a branch chat from the row.
 - `feature.chat_message_actions.swipe`: navigating message swipes when swipe controls are visible.
 - `feature.chat_message_actions.reasoning`: copying, editing, removing, or collapsing reasoning blocks when visible.
 - `feature.chat_message_actions.media_gallery`: navigating swipeable media attached to a message.
@@ -47,7 +47,7 @@ Visible message actions dispatch commands only. The shared generation service ow
 ## Acceptance Workflows
 
 - As a chat user who wants to copy or edit a message, from a rendered row in [Chat Workspace](page.chat_workspace) locate the row controls by visible icon, accessible name, or keyboard focus and trigger copy or edit; EmberDesk must perform the row action while leaving message text readable and row identity stable after refresh or re-render, and failure is hidden high-frequency controls, lost focus path, or action execution on the wrong row.
-- As a user operating secondary message state, from a row with swipes, reasoning, checkpoint, or media controls trigger the relevant action and then re-render or revisit the row; EmberDesk must show those controls only when valid and update the visible row state without hiding the message body, with failure signaled by inactive controls shown as usable or valid controls missing from the row.
+- As a user operating secondary message state, from a row with swipes, reasoning, branch, or media controls trigger the relevant action and then re-render or revisit the row; EmberDesk must show those controls only when valid and update the visible row state without hiding the message body, with failure signaled by inactive controls shown as usable or valid controls missing from the row.
 - As a user recovering from a failed generation after automatic recovery ends, from the failed assistant row press retry and wait for the retry to settle; EmberDesk must retry from the same row context without duplicating the already-rendered user message, keep the composer usable after success or failure, and failure is a new duplicate user row or a retry action before recovery has exhausted.
 - As a mobile or keyboard user on a React-owned row, from the same row action surface use common actions; EmberDesk must preserve role/name reachability when the row enters edit or live streaming state, and failure is a dual-owner menu, unreachable action, or missing compatibility hook.
 

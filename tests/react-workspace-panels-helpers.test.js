@@ -333,7 +333,7 @@ describe('React workspace panels bridge helpers', () => {
         const scriptSource = read('public/script.js');
         const groupChatsSource = read('public/scripts/group-chats.js');
         const tagsSource = read('public/scripts/tags.js');
-        const bookmarksSource = read('public/scripts/bookmarks.js');
+        const bookmarksSource = read('public/scripts/chat-branch.js');
         const settingsSurfaceSource = read('app/components/settings/SettingsSurface.tsx');
 
         expect(indexHtmlSource).not.toContain('id="rm_group_chats_block"');

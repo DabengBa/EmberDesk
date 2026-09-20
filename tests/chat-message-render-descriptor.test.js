@@ -25,7 +25,6 @@ describe('chat message render descriptor', () => {
             name: 'Ember',
             swipe_id: 2,
             extra: {
-                bookmark_link: 'checkpoint',
                 type: 'narrator',
                 token_count: 42,
             },
@@ -44,7 +43,6 @@ describe('chat message render descriptor', () => {
                 ch_name: 'Ember',
                 is_user: false,
                 is_system: false,
-                bookmark_link: 'checkpoint',
                 force_avatar: false,
                 timestamp: 'June 8, 2026 8:00 AM',
                 type: 'narrator',
@@ -52,7 +50,6 @@ describe('chat message render descriptor', () => {
             display: expect.objectContaining({
                 name: 'Ember',
                 tokenCount: 42,
-                bookmarkLink: 'checkpoint',
             }),
         }));
     });
@@ -181,7 +178,6 @@ describe('chat message render descriptor', () => {
                 api: 'openai',
                 model: 'gpt-4o-mini',
                 token_count: 17,
-                bookmark_link: 'checkpoint',
             },
         }), {
             messageId: 8,
@@ -209,7 +205,6 @@ describe('chat message render descriptor', () => {
                 value: '1.2s',
                 title: 'Generation queued',
             },
-            bookmarkLink: 'checkpoint',
             classes: descriptor.classes,
         });
         expect(JSON.stringify(population)).not.toContain('mes_text');

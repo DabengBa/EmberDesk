@@ -113,4 +113,27 @@ pnpm run build:react:workspace-panels  # app/ 或桥动过时
 - **数据策略**：`settings.json` 里的 `power_user.movingUI*` 旧键不主动归一化——schema 移除后自然被忽略，无害。存量 `movingUI/` preset 文件保留在磁盘。
 - **行为差异（有意）**：zoomed avatar 不再可拖（grabber 本来就是 movingUI-gated 隐藏态）；`.drawer-content.maximized` 规则现在无条件生效（原先 `body:not(.movingUI)` 门）；dragElement 的 corner-resize 观察器不再被 `movingUI===false` 断开。
 - **验证**：lint+tsc 净；jest 157 suites/1477 tests 全绿（含重写后的 `moving-ui-express-route.test.js` 410 契约测试）；e2e 576 过 + 3 个 MacroEngine beforeEach 超时（复跑 322/322 全绿，确认为 lane 尾部资源耗尽 flake）。
+- **Commit**: `ce772ff3f`。
+
+### B-cut-2: stats
+
+**删除形状**：UI + 行为 + 服务 + 端点（410 tombstone）+ 生命周期钩子。
+
+- **删**：`statMesProcess`（生成与用户消息两条调用链）；`initStats`；`userStatsHandler`/`characterStatsHandler`/`refreshStats`；`.rm_stats_button`/`.user_stats_button` 控件（RightNavPanel.tsx + PersonaManagementPanel.tsx）；`.rm_stat_block` CSS；`public/scripts/stats.js` 整文件；server-main 的 `statsInit`/`statsOnExit` 启动/退出钩子。
+- **保留（410 tombstone）**：`/api/stats/get|recreate|update` + 旧版 `/getstats`/`/recreatestats`/`/updatestats` 重定向 → 410 JSON（`stats_feature_removed`）。存量 `stats.json` 文件保留在磁盘；`user-migrations` 的 stats.json 迁移条目保留。
+- **数据策略**：存量 `stats.json` 不删不改——功能关闭后文件成为惰性历史数据。
+- **验证**：lint+tsc 净；jest 157 suites 全绿；e2e 579/579 全绿。
+- **Commit**: `efa7f7360`。
+
+### B-cut-3: bookmarks（checkpoint 部分）
+
+**R0 裁决**：checkpoint/bookmark 功能退役，但 **branch 机器必须存活**——`swipe-picker.js` import `branchChat`，`createBranch` 是 Timelines 扩展的标注契约（"Do not remove"）。因此删除形状为 **拆分式退役**：`bookmarks.js` → `chat-branch.js`（存活面）+ checkpoint 机器全删。
+
+- **删**：`createNewBookmark`/`getBookmarkName`/`saveBookmarkMenu`/`updateBookmarkDisplay`；`/checkpoint-create|go|exit|parent|get|list` 六个 slash 命令；`.mes_bookmark`/`.mes_create_bookmark` 消息控件（index.html 模板 + MainChatMessageRow.tsx）；`#option_new_bookmark`（OptionsMenu.tsx）；`bookmark_link` 消息属性 + descriptor/projection/store 的 `bookmarkLink` 字段管线；`.mes_bookmark`/`mes_create_bookmark` CSS 显示门；`templates/createCheckpoint.html`；`.mes_bookmark` 点击委托 + shift-click 替换 checkpoint 路径。
+- **迁移保留**：`.select_chat_block` 点击打开聊天委托 → dom-handlers.js（这是"过去聊天列表"的打开处理器，非 checkpoint 专属）。
+- **存活（chat-branch.js）**：`branchChat`/`createBranch`（swipe-picker + Timelines 契约）；`/branch-create`；`.mes_create_branch` 按钮；`#option_back_to_main` + `backToMainChat` + `showBranchChatButtons`（branch 聊天的父级导航）；`getMainChatName` 的 legacy `Checkpoint #` 令牌回退（存量 checkpoint 聊天仍可经 `chat_metadata.main_chat` 导航回父级）。
+- **数据策略**：`extra.bookmark_link` 与 `chat_metadata.main_chat` 历史字段保留在聊天文件内——无破坏性归一化。存量 checkpoint 聊天文件本身即普通聊天，仍可由聊天列表打开。
+- **行为差异（有意）**：历史 `bookmark_link` 不再渲染旗帜/可点——数据惰化保留；options 菜单的 "Save checkpoint" 消失。
+- **文案更新**：chatRename/scenarioOverride/FloatingPromptPanel 的 "checkpoint" 措辞 → "branch"（分支聊天仍继承 `main_chat` 元数据与场景覆盖）。
+- **验证**：lint+tsc 净；聚焦 678 tests 绿；unit lane 59 文件全绿；e2e（chat-message-layout + chat-message-rendering）9/9 绿；headless 冒烟：checkpoint UI/命令全灭、`/branch-create` 实际创建分支聊天（`main_chat` 元数据磁盘证实、嵌套分支父链正确）、`.mes_create_branch`/`option_back_to_main`/swipe-picker 存活、零 console 错误；docs:build 通过。
 - **Commit**: 待提交。

@@ -50,7 +50,6 @@ const substituteParams = (...args) => shell().substituteParams(...args);
 const t = (...args) => shell().t(...args);
 const timestampToMoment = (...args) => shell().timestampToMoment(...args);
 const trimToEndSentence = (...args) => shell().trimToEndSentence(...args);
-const updateBookmarkDisplay = (...args) => shell().updateBookmarkDisplay(...args);
 const updateEditArrowClasses = (...args) => shell().updateEditArrowClasses(...args);
 const updateReasoningUI = (...args) => shell().updateReasoningUI(...args);
 const updateSwipeCounter = (...args) => shell().updateSwipeCounter(...args);
@@ -945,7 +944,6 @@ export function updateMessageElement(mes, { messageId = state.chat.length - 1, m
     rowPopulation.tokenCountText && messageElement.find('.tokenCounterDisplay').text(rowPopulation.tokenCountText);
     rowPopulation.messageTitle && messageElement.attr('title', rowPopulation.messageTitle);
     rowPopulation.timer.value && messageElement.find('.mes_timer').attr('title', rowPopulation.timer.title).text(rowPopulation.timer.value);
-    rowPopulation.bookmarkLink && updateBookmarkDisplay(messageElement);
 
     if (richBody.biasHtml) {
         messageElement.find('.mes_bias').html(richBody.biasHtml);

@@ -17,7 +17,7 @@ export function FloatingPromptPanel() {
                     <div className="inline-drawer-content">
                         <small>
                             <b data-i18n="Unique to this chat">Unique to this chat</b>.<br />
-                            <span data-i18n="Checkpoints inherit the Note from their parent, and can be changed individually after that.">Checkpoints inherit the Note from their parent, and can be changed individually after that.</span><br />
+                            <span data-i18n="Branches inherit the Note from their parent, and can be changed individually after that.">Branches inherit the Note from their parent, and can be changed individually after that.</span><br />
                         </small>
                         <textarea id="extension_floating_prompt" data-macros className="text_pole textarea_compact" rows={8}></textarea>
                         <div className="extension_token_counter">

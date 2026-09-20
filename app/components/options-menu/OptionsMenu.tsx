@@ -22,7 +22,6 @@ export function OptionsMenu() {
             <ContractButton id="option_toggle_CFG" variant="ghost" label="CFG Scale" icon={<i className="fa-lg fa-solid fa-scale-balanced" aria-hidden="true" />} tabIndex={0} />
             <ContractButton id="option_toggle_logprobs" variant="ghost" label="Token Probabilities" icon={<i className="fa-lg fa-solid fa-pie-chart" aria-hidden="true" />} tabIndex={0} />
             <ContractButton id="option_back_to_main" variant="ghost" label="Back to parent chat" icon={<i className="fa-lg fa-solid fa-left-long" aria-hidden="true" />} />
-            <ContractButton id="option_new_bookmark" variant="ghost" label="Save checkpoint" icon={<i className="fa-lg fa-solid fa-flag" aria-hidden="true" />} />
             <hr />
             <ContractButton id="option_start_new_chat" variant="ghost" label="Start new chat" icon={<i className="fa-lg fa-solid fa-comments" aria-hidden="true" />} tabIndex={0} />
             <ContractButton id="option_close_chat" variant="ghost" label="Close chat" icon={<i className="fa-lg fa-solid fa-times" aria-hidden="true" />} />

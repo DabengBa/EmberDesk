@@ -113,7 +113,7 @@ const select_selected_character = (...args) => shell().select_selected_character
 const sendTextareaMessage = (...args) => shell().sendTextareaMessage(...args);
 const setCharacterSettingsOverrides = (...args) => shell().setCharacterSettingsOverrides(...args);
 const setMainChatMessageUiState = (...args) => shell().setMainChatMessageUiState(...args);
-const showBookmarksButtons = (...args) => shell().showBookmarksButtons(...args);
+const showBranchChatButtons = (...args) => shell().showBranchChatButtons(...args);
 const showDeleteConfirmWithCascade = (...args) => shell().showDeleteConfirmWithCascade(...args);
 const showSwipeButtons = (...args) => shell().showSwipeButtons(...args);
 const stopGeneration = (...args) => shell().stopGeneration(...args);
@@ -592,6 +592,29 @@ export async function bindLegacyShellHandlers() {
 
     /* $("#renameCharButton").on('click', renameCharacter); */
 
+    $(document).on('click', '.select_chat_block', async function () {
+        const fileName = $(this).attr('file_name');
+
+        if (!fileName) {
+            return;
+        }
+
+        const loaderHandle = state.loader.show({
+            slug: 'chat-load',
+            title: t`Chat History`,
+            message: t`Loading chat…`,
+            toastMode: state.loader.ToastMode.STATIC,
+        });
+
+        try {
+            await openCharacterChat(fileName);
+        } finally {
+            await loaderHandle.hide();
+        }
+
+        $('#shadow_select_chat_popup').css('display', 'none');
+    });
+
     $(document).on('click', '.renameChatButton', async function (e) {
         e.stopPropagation();
         const oldFileName = $(this).closest('.select_chat_block_wrapper').find('.select_chat_block_filename').text();
@@ -661,7 +684,7 @@ export async function bindLegacyShellHandlers() {
     let isOptionsMenuVisible = false;
 
     function showMenu() {
-        showBookmarksButtons();
+        showBranchChatButtons();
         menu.fadeIn(state.animation_duration);
         getOptionsPopper()?.update();
         isOptionsMenuVisible = true;

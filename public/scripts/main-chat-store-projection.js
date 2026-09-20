@@ -156,7 +156,6 @@ export function buildMainChatMessageRecord(message, {
         avatarUrl: normalizeString(avatarUrlForMessage(message, numericMessageId)),
         title: normalizeString(message?.title),
         tokenCount: typeof message?.extra?.token_count === 'number' ? message.extra.token_count : null,
-        bookmarkLink: normalizeString(message?.extra?.bookmark_link),
         reasoningOpen,
         reasoningEditing,
         reasoningEditText,

@@ -85,10 +85,9 @@ import {
 } from './scripts/openai.js';
 
 import {
-    initBookmarks,
-    showBookmarksButtons,
-    updateBookmarkDisplay,
-} from './scripts/bookmarks.js';
+    initBranchUI,
+    showBranchChatButtons,
+} from './scripts/chat-branch.js';
 
 import {
     debounce,
@@ -946,7 +945,6 @@ registerMessageShellContext({
     substituteParams: (...args) => substituteParams(...args),
     timestampToMoment: (...args) => timestampToMoment(...args),
     trimToEndSentence: (...args) => trimToEndSentence(...args),
-    updateBookmarkDisplay: (...args) => updateBookmarkDisplay(...args),
     updateEditArrowClasses: (...args) => updateEditArrowClasses(...args),
     updateReasoningUI: (...args) => updateReasoningUI(...args),
     updateSwipeCounter: (...args) => updateSwipeCounter(...args),
@@ -1107,7 +1105,7 @@ registerDomHandlersShellContext({
     sendTextareaMessage: (...args) => sendTextareaMessage(...args),
     setCharacterSettingsOverrides: (...args) => setCharacterSettingsOverrides(...args),
     setMainChatMessageUiState: (...args) => setMainChatMessageUiState(...args),
-    showBookmarksButtons: (...args) => showBookmarksButtons(...args),
+    showBranchChatButtons: (...args) => showBranchChatButtons(...args),
     showDeleteConfirmWithCascade: (...args) => showDeleteConfirmWithCascade(...args),
     showSwipeButtons: (...args) => showSwipeButtons(...args),
     stopGeneration: (...args) => stopGeneration(...args),
@@ -4525,7 +4523,7 @@ async function bootstrapWorkspace() {
         initKeyboard();
         initDynamicStyles();
         initTags();
-        initBookmarks();
+        initBranchUI();
     }));
     await measureStartupStage('getUserAvatars', () => getUserAvatars(true, user_avatar));
     await measureStartupStage('getCharacters', () => getCharacters());

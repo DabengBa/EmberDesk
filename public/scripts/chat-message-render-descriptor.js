@@ -16,7 +16,6 @@ export function buildChatMessageRenderDescriptor(message, { messageId, timestamp
     const isUser = Boolean(message?.is_user);
     const isSystem = Boolean(message?.is_system);
     const forcedAvatar = Boolean(message?.force_avatar);
-    const bookmarkLink = extra.bookmark_link;
     const tokenCount = extra.token_count;
 
     const flags = {
@@ -49,7 +48,6 @@ export function buildChatMessageRenderDescriptor(message, { messageId, timestamp
             ch_name: message?.name,
             is_user: isUser,
             is_system: isSystem,
-            bookmark_link: bookmarkLink,
             force_avatar: forcedAvatar,
             timestamp,
             type: extra.type ?? '',
@@ -57,7 +55,6 @@ export function buildChatMessageRenderDescriptor(message, { messageId, timestamp
         display: {
             name: message?.name,
             tokenCount,
-            bookmarkLink,
             timestamp,
         },
         classes: {
@@ -103,7 +100,6 @@ export function buildChatMessageRowPopulation(descriptor, {
             value: timerValue || '',
             title: timerTitle || '',
         },
-        bookmarkLink: descriptor.display.bookmarkLink,
         classes: descriptor.classes,
     };
 }

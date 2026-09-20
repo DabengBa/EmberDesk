@@ -1,4 +1,4 @@
-import { branchChat } from './bookmarks.js';
+import { branchChat } from './chat-branch.js';
 import { SWIPE_DIRECTION, SWIPE_SOURCE } from './constants.js';
 import { t } from './i18n.js';
 import { callGenericPopup, Popup, POPUP_RESULT, POPUP_TYPE } from './popup.js';

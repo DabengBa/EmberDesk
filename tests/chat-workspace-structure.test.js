@@ -173,7 +173,6 @@ describe('chat workspace structure', () => {
             'ch_name=""',
             'is_user=""',
             'is_system=""',
-            'bookmark_link=""',
         ].forEach(attribute => expect(messageRootTag).toContain(attribute));
 
         [
@@ -271,10 +270,8 @@ describe('chat workspace structure', () => {
             ['mes_media_list', 'Toggle media display style'],
             ['mes_embed', 'Embed file or image'],
             ['mes_swipe_picker', 'Jump to swipe history'],
-            ['mes_create_bookmark', 'Create checkpoint'],
             ['mes_create_branch', 'Create branch'],
             ['mes_copy', 'Copy'],
-            ['mes_bookmark', 'Open checkpoint chat'],
             ['mes_edit', 'Edit'],
             ['mes_edit_done', 'Confirm'],
             ['mes_edit_copy', 'Copy this message'],

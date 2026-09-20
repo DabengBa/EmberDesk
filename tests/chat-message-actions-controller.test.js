@@ -173,8 +173,8 @@ function createSnapshotMessageRow({ expanded = false } = {}) {
         action.setAttribute('role', 'button');
     }
 
-    const bookmark = buttons.appendChild(new FakeElement(['mes_button', 'mes_bookmark']));
-    bookmark.setAttribute('role', 'button');
+    const swipePicker = buttons.appendChild(new FakeElement(['mes_button', 'mes_swipe_picker']));
+    swipePicker.setAttribute('role', 'button');
     const edit = buttons.appendChild(new FakeElement(['mes_button', 'mes_edit']));
     edit.setAttribute('role', 'button');
     const swipeRight = row.appendChild(new FakeElement(['swipe_right']));
@@ -197,7 +197,6 @@ describe('chat message actions controller', () => {
             'mes_edit',
         ]));
         expect(MESSAGE_ACTION_TIERS.secondary).toEqual(expect.arrayContaining([
-            'mes_bookmark',
             'mes_swipe_picker',
             'mes_reasoning_copy',
             'mes_gallery',
@@ -228,12 +227,12 @@ describe('chat message actions controller', () => {
                 'mes_edit_delete',
                 'mes_reasoning_copy',
                 'generation_failure_retry',
-                'mes_bookmark',
+                'mes_swipe_picker',
                 'mes_edit',
                 'swipe_right',
             ]),
             highFrequencyActions: ['extraMesButtonsHint', 'mes_copy', 'mes_edit'],
-            secondaryActions: expect.arrayContaining(['mes_bookmark', 'mes_reasoning_copy', 'mes_translate']),
+            secondaryActions: expect.arrayContaining(['mes_swipe_picker', 'mes_reasoning_copy', 'mes_translate']),
             dangerActions: ['mes_edit_delete'],
         });
     });
