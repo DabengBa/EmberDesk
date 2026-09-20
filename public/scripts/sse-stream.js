@@ -148,7 +148,7 @@ async function* parseStreamData(json) {
         }
         return;
     } else if (Array.isArray(json.candidates)) {
-        // Google VertexAI / AI Studio
+        // Google AI Studio
         for (let i = 0; i < json.candidates.length; i++) {
             const isNotPrimary = json.candidates?.[0]?.index > 0;
             const hasToolCalls = json?.candidates?.[0]?.content?.parts?.some(p => p?.functionCall);

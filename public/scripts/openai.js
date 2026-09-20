@@ -192,7 +192,6 @@ export const chat_completion_sources = {
     OPENAI: 'openai',
     CLAUDE: 'claude',
     MAKERSUITE: 'makersuite',
-    VERTEXAI: 'vertexai',
 };
 
 const character_names_behavior = {
@@ -341,10 +340,6 @@ export const settingsToUpdate = {
     request_images: ['#openai_request_images', 'request_images', true, false],
     request_image_aspect_ratio: ['#request_image_aspect_ratio', 'request_image_aspect_ratio', false, false],
     request_image_resolution: ['#request_image_resolution', 'request_image_resolution', false, false],
-    use_vertexai: ['#use_vertexai', 'use_vertexai', true, false],
-    vertexai_auth_mode: ['#vertexai_auth_mode', 'vertexai_auth_mode', false, false],
-    vertexai_region: ['#vertexai_region', 'vertexai_region', false, true],
-    vertexai_express_project_id: ['#vertexai_express_project_id', 'vertexai_express_project_id', false, true],
     fallback_provider_enabled: ['#fallback_provider_enabled', 'fallback_provider_enabled', true, false],
     fallback_provider_base_url: ['#fallback_provider_base_url', 'fallback_provider_base_url', false, false],
     fallback_provider_model: ['#fallback_provider_model', 'fallback_provider_model', false, false],
@@ -404,10 +399,6 @@ const default_settings = {
     request_image_aspect_ratio: '',
     request_image_resolution: '',
     n: 1,
-    use_vertexai: false,
-    vertexai_auth_mode: 'express',
-    vertexai_region: 'us-central1',
-    vertexai_express_project_id: '',
     fallback_provider_enabled: false,
     fallback_provider_base_url: '',
     fallback_provider_model: '',
@@ -1592,7 +1583,7 @@ function saveModelList(data) {
         if (sel) { $('#model_openai_select').val(oai_settings.openai_model).trigger('change'); } else if (model_list.length > 0) { oai_settings.openai_model = model_list[0].id; $('#model_openai_select').val(model_list[0].id).trigger('change'); }
     }
 
-    if (oai_settings.chat_completion_source == chat_completion_sources.MAKERSUITE || oai_settings.chat_completion_source == chat_completion_sources.VERTEXAI) {
+    if (oai_settings.chat_completion_source == chat_completion_sources.MAKERSUITE) {
         const list = document.getElementById('model_google_list');
         if (list) { list.innerHTML = ''; model_list.forEach(m => { const o = document.createElement('option'); o.value = m.id; list.appendChild(o); }); }
         const sel = model_list.find(m => m.id === oai_settings.google_model);
@@ -1757,15 +1748,6 @@ export async function createGenerationParameters(settings, model, type, messages
         generate_data.top_k = Number(settings.top_k_openai);
         generate_data.use_sysprompt = true;
         generate_data.stop = getCustomStoppingStrings(stopStringsLimit).slice(0, stopStringsLimit).filter(x => x.length >= 1 && x.length <= 16);
-
-        if (settings.use_vertexai) {
-            generate_data.chat_completion_source = chat_completion_sources.VERTEXAI;
-            generate_data.vertexai_auth_mode = settings.vertexai_auth_mode;
-            generate_data.vertexai_region = settings.vertexai_region;
-            if (settings.vertexai_auth_mode === 'express') {
-                generate_data.vertexai_express_project_id = settings.vertexai_express_project_id;
-            }
-        }
     }
 
 
@@ -2947,6 +2929,7 @@ function migrateChatCompletionSettings(settings) {
         { oldKey: 'video_inlining', oldValue: true, newKey: 'media_inlining', newValue: true },
         { oldKey: 'audio_inlining', oldValue: true, newKey: 'media_inlining', newValue: true },
         { oldKey: 'chat_completion_source', oldValue: 'custom', newKey: 'chat_completion_source', newValue: 'openai' },
+        { oldKey: 'chat_completion_source', oldValue: 'vertexai', newKey: 'chat_completion_source', newValue: chat_completion_sources.MAKERSUITE },
     ];
 
     for (const migration of migrateMap) {
@@ -3072,15 +3055,6 @@ function loadOpenAISettings(data, settings) {
     syncSegmentedFromSelect('openai_verbosity');
     updateFallbackProviderStatus();
 
-    // Restore VertexAI config visibility
-    $('#vertexai_config').toggle(oai_settings.use_vertexai);
-    $('#vertexai_express_fields').toggle(oai_settings.vertexai_auth_mode === 'express');
-    $('#vertexai_full_fields').toggle(oai_settings.vertexai_auth_mode === 'full');
-    if (oai_settings.use_vertexai && oai_settings.vertexai_auth_mode === 'express'
-        && oai_settings.chat_completion_source === chat_completion_sources.MAKERSUITE) {
-        $('body').addClass('vertexai-active');
-    }
-
     $('#chat_completion_source').trigger('change');
 }
 
@@ -3138,21 +3112,10 @@ async function getStatusOpen() {
         chat_completion_source: oai_settings.chat_completion_source,
     };
 
-    if (oai_settings.chat_completion_source === chat_completion_sources.MAKERSUITE && oai_settings.use_vertexai) {
-        data.chat_completion_source = chat_completion_sources.VERTEXAI;
-        data.vertexai_auth_mode = oai_settings.vertexai_auth_mode;
-        data.vertexai_region = oai_settings.vertexai_region;
-        data.model = oai_settings.google_model;
-        if (oai_settings.vertexai_auth_mode === 'express') {
-            data.vertexai_express_project_id = oai_settings.vertexai_express_project_id;
-        }
-    }
-
     const validateProxySources = [
         chat_completion_sources.CLAUDE,
         chat_completion_sources.OPENAI,
         chat_completion_sources.MAKERSUITE,
-        chat_completion_sources.VERTEXAI,
     ];
     if (oai_settings.reverse_proxy && validateProxySources.includes(data.chat_completion_source)) {
         await validateReverseProxy();
@@ -3846,7 +3809,6 @@ function updateUnifiedKeyField() {
     });
     const canManageSecret = canUseDirectProviderSecret({ settings: oai_settings, secretKey });
 
-    $('body').toggleClass('vertexai-active', state.vertexAiActive);
     $field.attr('placeholder', state.placeholder);
     $field.val(state.value);
     $('#api_key_unified_manage')
@@ -3875,10 +3837,6 @@ function onReverseProxyInput() {
 }
 
 function getPendingProviderCredentialValue(secretKey = resolveSecretKey()) {
-    if (secretKey === SECRET_KEYS.VERTEXAI_SERVICE_ACCOUNT) {
-        return String($('#vertexai_service_account_json').val() || '').trim();
-    }
-
     return String($('#api_key_unified').val() || '').trim();
 }
 
@@ -3903,10 +3861,6 @@ async function onConnectButtonClick(e) {
     };
 
     const config = apiSourceConfig[oai_settings.chat_completion_source];
-    // Override secret key for VertexAI mode
-    if (config && oai_settings.chat_completion_source === chat_completion_sources.MAKERSUITE && oai_settings.use_vertexai) {
-        config.key = oai_settings.vertexai_auth_mode === 'full' ? SECRET_KEYS.VERTEXAI_SERVICE_ACCOUNT : SECRET_KEYS.VERTEXAI;
-    }
     if (config) {
         const apiKey = String($(config.selector).val()).trim();
         if (apiKey.length) {
@@ -4133,7 +4087,7 @@ function getEffectiveToolReasoningMode(settings = oai_settings) {
  * @returns {boolean} True if reasoning signatures should be included in the request
  */
 export function isReasoningSignatureSupported(settings = oai_settings) {
-    // If it's Vertex AI or Makersuite, that's OK - convertGooglePrompt() will handle it later
+    // If it's Makersuite, that's OK - convertGooglePrompt() will handle it later
     return settings.chat_completion_source === chat_completion_sources.MAKERSUITE;
 }
 
@@ -4369,31 +4323,6 @@ export function initOpenAI() {
         updateUnifiedKeyField();
     });
 
-    $('#use_vertexai').on('change', function () {
-        oai_settings.use_vertexai = !!$(this).prop('checked');
-        $('#vertexai_config').slideToggle(200);
-        updateUnifiedKeyField();
-        saveSettingsDebounced();
-    });
-
-    $('#vertexai_auth_mode').on('change', function () {
-        oai_settings.vertexai_auth_mode = String($(this).val());
-        $('#vertexai_express_fields').toggle(oai_settings.vertexai_auth_mode === 'express');
-        $('#vertexai_full_fields').toggle(oai_settings.vertexai_auth_mode === 'full');
-        updateUnifiedKeyField();
-        saveSettingsDebounced();
-    });
-
-    $('#vertexai_region').on('input', function () {
-        oai_settings.vertexai_region = String($(this).val());
-        saveSettingsDebounced();
-    });
-
-    $('#vertexai_express_project_id').on('input', function () {
-        oai_settings.vertexai_express_project_id = String($(this).val());
-        saveSettingsDebounced();
-    });
-
     $('#fallback_provider_enabled').on('change', function () {
         oai_settings.fallback_provider_enabled = !!$(this).prop('checked');
         updateFallbackProviderStatus();
@@ -4410,16 +4339,6 @@ export function initOpenAI() {
         oai_settings.fallback_provider_model = String($(this).val());
         updateFallbackProviderStatus();
         saveSettingsDebounced();
-    });
-
-    $('#vertexai_service_account_json').on('input', function () {
-        writeSecret(SECRET_KEYS.VERTEXAI_SERVICE_ACCOUNT, String($(this).val()));
-    });
-
-    $('#vertexai_sa_show').on('click', function () {
-        const $textarea = $('#vertexai_service_account_json');
-        $textarea.toggleClass('sa-masked');
-        $(this).toggleClass('fa-eye-slash fa-eye');
     });
 
     $('#api_key_unified').on('input', function () {

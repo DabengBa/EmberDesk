@@ -578,10 +578,6 @@ export function getTokenizerModel() {
         return gemmaTokenizer;
     }
 
-    if (oai_settings.chat_completion_source == chat_completion_sources.VERTEXAI) {
-        return gemmaTokenizer;
-    }
-
     if (oai_settings.chat_completion_source == chat_completion_sources.AI21) {
         return jambaTokenizer;
     }

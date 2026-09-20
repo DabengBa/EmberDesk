@@ -86,38 +86,6 @@ export function ApiConnectionsPanel() {
                                 </div>
                             </div>
                         </section>
-                        <div className="chat-completion-provider-options" data-source="makersuite">
-                            <label className="checkbox_label margin-top-5px">
-                                <input id="use_vertexai" type="checkbox" />
-                                <span data-i18n="Use Vertex AI">Use Vertex AI</span>
-                            </label>
-                            <div id="vertexai_config">
-                                <div className="vertexai-fields-row">
-                                    <div className="vertexai-field-col">
-                                        <label className="field-label" data-i18n="Auth Mode">Credential Type</label>
-                                        <select id="vertexai_auth_mode" className="text_pole">
-                                            <option value="express" data-i18n="API Key">API Key</option>
-                                            <option value="full" data-i18n="Service Account JSON">Service Account JSON</option>
-                                        </select>
-                                    </div>
-                                    <div className="vertexai-field-col">
-                                        <label className="field-label" data-i18n="Region">Region</label>
-                                        <input id="vertexai_region" type="text" className="text_pole" defaultValue="us-central1" />
-                                    </div>
-                                </div>
-                                <div id="vertexai_express_fields">
-                                    <label className="field-label" data-i18n="Project ID">Project ID</label>
-                                    <input id="vertexai_express_project_id" type="text" className="text_pole" placeholder="my-gcp-project" />
-                                </div>
-                                <div id="vertexai_full_fields">
-                                    <label className="field-label" data-i18n="Service Account JSON">Service Account JSON</label>
-                                    <div className="vertexai-sa-wrapper">
-                                        <textarea id="vertexai_service_account_json" className="text_pole vertexai-sa-textarea sa-masked" rows={4} spellCheck={false}></textarea>
-                                        <ContractIconButton id="vertexai_sa_show" className="menu_button vertexai-sa-toggle fa-fw" label="Toggle visibility" nativeTitle title="Toggle visibility" icon={<i className="fa-solid fa-eye-slash" aria-hidden="true" />} />
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
                         <div id="prompt_post_processing_form" className="inline-drawer wide100p">
                             <div className="inline-drawer-toggle inline-drawer-header">
                                 <b data-i18n="Prompt Post-Processing">Prompt Post-Processing</b>

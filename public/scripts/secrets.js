@@ -30,7 +30,6 @@ export const SECRET_KEYS = {
     ONERING_URL: 'oneringtranslator_url',
     DEEPLX_URL: 'deeplx_url',
     MAKERSUITE: 'api_key_makersuite',
-    VERTEXAI: 'api_key_vertexai',
     SERPAPI: 'api_key_serpapi',
     MISTRALAI: 'api_key_mistralai',
     TOGETHERAI: 'api_key_togetherai',
@@ -60,7 +59,6 @@ export const SECRET_KEYS = {
     FALAI: 'api_key_falai',
     XAI: 'api_key_xai',
     FIREWORKS: 'api_key_fireworks',
-    VERTEXAI_SERVICE_ACCOUNT: 'vertexai_service_account_json',
     MINIMAX: 'api_key_minimax',
     MINIMAX_GROUP_ID: 'minimax_group_id',
     MOONSHOT: 'api_key_moonshot',
@@ -81,7 +79,6 @@ const FRIENDLY_NAMES = {
     [SECRET_KEYS.OPENROUTER]: 'OpenRouter',
     [SECRET_KEYS.AI21]: 'AI21',
     [SECRET_KEYS.MAKERSUITE]: 'Google AI Studio',
-    [SECRET_KEYS.VERTEXAI]: 'Google Vertex AI (Express Mode)',
     [SECRET_KEYS.VLLM]: 'vLLM',
     [SECRET_KEYS.APHRODITE]: 'Aphrodite',
     [SECRET_KEYS.TABBY]: 'TabbyAPI',
@@ -104,7 +101,6 @@ const FRIENDLY_NAMES = {
     [SECRET_KEYS.GENERIC]: 'Generic (OpenAI-compatible)',
     [SECRET_KEYS.DEEPSEEK]: 'DeepSeek',
     [SECRET_KEYS.XAI]: 'xAI (Grok)',
-    [SECRET_KEYS.VERTEXAI_SERVICE_ACCOUNT]: 'Google Vertex AI (Service Account)',
     [SECRET_KEYS.STABILITY]: 'Stability AI',
     [SECRET_KEYS.TAVILY]: 'Tavily',
     [SECRET_KEYS.BFL]: 'Black Forest Labs',
@@ -138,7 +134,6 @@ const INPUT_MAP = {
     [SECRET_KEYS.CLAUDE]: '#api_key_claude',
     [SECRET_KEYS.AI21]: '#api_key_ai21',
     [SECRET_KEYS.MAKERSUITE]: '#api_key_makersuite',
-    [SECRET_KEYS.VERTEXAI]: '#api_key_vertexai',
     [SECRET_KEYS.VLLM]: '#api_key_vllm',
     [SECRET_KEYS.APHRODITE]: '#api_key_aphrodite',
     [SECRET_KEYS.TABBY]: '#api_key_tabby',
@@ -160,7 +155,6 @@ const INPUT_MAP = {
     [SECRET_KEYS.DEEPSEEK]: '#api_key_deepseek',
     [SECRET_KEYS.AIMLAPI]: '#api_key_aimlapi',
     [SECRET_KEYS.XAI]: '#api_key_xai',
-    [SECRET_KEYS.VERTEXAI_SERVICE_ACCOUNT]: '#vertexai_service_account_json',
     [SECRET_KEYS.MOONSHOT]: '#api_key_moonshot',
     [SECRET_KEYS.FIREWORKS]: '#api_key_fireworks',
     [SECRET_KEYS.COMETAPI]: '#api_key_cometapi',
@@ -182,17 +176,6 @@ export function resolveSecretKey() {
     const chatCompletionSource = chatCompletionSettings.chat_completion_source;
 
     if (mainApi === 'openai') {
-        const isVertexAI = chatCompletionSource === chat_completion_sources.VERTEXAI
-            || (chatCompletionSource === chat_completion_sources.MAKERSUITE && chatCompletionSettings.use_vertexai);
-        if (isVertexAI) {
-            switch (chatCompletionSettings.vertexai_auth_mode) {
-                case 'express':
-                    return SECRET_KEYS.VERTEXAI;
-                case 'full':
-                    return SECRET_KEYS.VERTEXAI_SERVICE_ACCOUNT;
-            }
-        }
-
         const [key] = Object.entries(chat_completion_sources).find(([, value]) => value === chatCompletionSource) ?? [null];
         if (key && SECRET_KEYS[key]) {
             return SECRET_KEYS[key];

@@ -2,7 +2,6 @@ export const CHAT_COMPLETION_SOURCES = {
     OPENAI: 'openai',
     CLAUDE: 'claude',
     MAKERSUITE: 'makersuite',
-    VERTEXAI: 'vertexai',
 };
 
 const REASONING_EFFORT_TYPES = {
@@ -94,7 +93,6 @@ export function getChatCompletionModelFromSettings(settings = {}) {
         case CHAT_COMPLETION_SOURCES.OPENAI:
             return settings.openai_model;
         case CHAT_COMPLETION_SOURCES.MAKERSUITE:
-        case CHAT_COMPLETION_SOURCES.VERTEXAI:
             return settings.google_model;
         default:
             return '';

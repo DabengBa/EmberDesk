@@ -90,7 +90,7 @@ No step may delete user capability, change a documented user workflow, or break 
 **当前执行状态**：
 - `Sprint 1 / Login`：React 页面已上线并默认开启，`/login.html` 保留 legacy 回退入口；React 登录流程已按路线图完成 TanStack Form / Zod / TanStack Query 收口。
 - `Sprint 2 / Setup`：React 页面已交付并由 `features.react.pages.setup` 控制，默认保持关闭；`/setup.html` 保留 legacy 回退入口；React setup 流程已按路线图完成 TanStack Form / Zod / TanStack Query 收口。
-- `Sprint 3 / Settings`：React `/settings` 已交付为 sole owner。product flag 与 workspace drawer fallback 已退休；build 存在时始终服务该页，缺 build 时 HTTP 503。页面覆盖 General / Providers / UI / Advanced，含 Vertex service-account secrets、connection-profile 选择、revision conflict 与完整 document round-trip。legacy `vertexai` source 会显示为 Google + Vertex AI 并在未关闭 Vertex AI 时保存回 `vertexai`；高级 reasoning effort 值 `min` / `max` / `none` / `minimal` / `xhigh` 保持可见和可保存。用户可见语义见 [`page.settings`](../db/pages/settings.md)，当前 payload 规则见 [React settings payload processing flow](../logic-description/react_settings_payload_processing_flow.md)。
+- `Sprint 3 / Settings`：React `/settings` 已交付为 sole owner。product flag 与 workspace drawer fallback 已退休；build 存在时始终服务该页，缺 build 时 HTTP 503。页面覆盖 General / Providers / UI / Advanced，含 Vertex service-account secrets、connection-profile 选择、revision conflict 与完整 document round-trip。legacy `vertexai` source 归一化为 Google AI Studio（Vertex AI 已于 B-cut-11b 退役）；高级 reasoning effort 值 `min` / `max` / `none` / `minimal` / `xhigh` 保持可见和可保存。用户可见语义见 [`page.settings`](../db/pages/settings.md)，当前 payload 规则见 [React settings payload processing flow](../logic-description/react_settings_payload_processing_flow.md)。
 
 **Sprint 列表**：
 - ✅ Sprint 1: Login 页面 React 重写（2 周，React 实现已上线并默认开启 feature flag；TanStack Form / Zod / Query 已完成收口）
@@ -558,7 +558,7 @@ pnpm run docs:check
 - [主聊天后继者范围](main-chat-successor-scope.md) - 主聊天 UX 北极星
 - [前端 jQuery 切片迁移](frontend-jquery-slice-migration.md) - 原 page controller 模式
 - [第三方扩展兼容性](third-party-extension-compatibility.md) - 兼容性保护表面
-- [React settings payload processing flow](../logic-description/react_settings_payload_processing_flow.md) - React `/settings` form defaults、save payload、legacy Vertex AI round-trip 与 advanced reasoning effort 兼容规则
+- [React settings payload processing flow](../logic-description/react_settings_payload_processing_flow.md) - React `/settings` form defaults、save payload、legacy Vertex AI 归一化与 advanced reasoning effort 兼容规则
 - [React character-library sync processing flow](../logic-description/react_character_library_sync_processing_flow.md) - React character-library island 与 legacy `characters` 状态同步规则
 - [React workspace shell child-slot processing flow](../logic-description/react_workspace_panel_flags_processing_flow.md) - always-on React shell、child-slot lifecycle 与 React-owned pin authority
 - [Workspace shell child-slot coordination](workspace-shell-panel-dock-coordination.md) - same-entry React shell 如何管理 registry、local recovery 与 child-host projection

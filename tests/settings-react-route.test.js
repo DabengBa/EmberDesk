@@ -213,7 +213,6 @@ describe('settings React route flag', () => {
         expect(helperModule.settingsCoverage.reactOwned.general).toContain('oai_settings.reasoning_effort');
         expect(helperModule.settingsCoverage.reactOwned.providers).toContain('oai_settings.chat_completion_source');
         expect(helperModule.settingsCoverage.reactOwned.providers).toContain('oai_settings.fallback_provider_enabled');
-        expect(helperModule.settingsCoverage.reactOwned.providers).toContain('oai_settings.use_vertexai');
         expect(helperModule.settingsCoverage.reactOwned.userInterface).toContain('power_user.custom_css');
         expect(helperModule.settingsCoverage.reactOwned.advanced).toContain('power_user.auto_swipe');
         expect(helperModule.settingsCoverage.reactOwned.advanced).toContain('power_user.stscript.autocomplete.state');
@@ -345,10 +344,6 @@ describe('settings React route flag', () => {
                     continue_postfix: '\n',
                     squash_system_messages: true,
                     custom_prompt_post_processing: 'merge_tools',
-                    use_vertexai: true,
-                    vertexai_auth_mode: 'express',
-                    vertexai_region: 'europe-west4',
-                    vertexai_express_project_id: 'my-project',
                     fallback_provider_enabled: true,
                     fallback_provider_base_url: 'https://fallback.example.com/v1',
                     fallback_provider_model: 'gpt-4.1-mini',
@@ -365,7 +360,6 @@ describe('settings React route flag', () => {
         expect(defaults.providers.claudeModel).toBe('claude-sonnet-4-5');
         expect(defaults.providers.googleModel).toBe('gemini-2.5-pro');
         expect(defaults.general.enableWebSearch).toBe(true);
-        expect(defaults.providers.useVertexAi).toBe(true);
         expect(defaults.providers.fallbackProviderEnabled).toBe(true);
         expect(defaults.providers.fallbackProviderModel).toBe('gpt-4.1-mini');
         expect(defaults.userInterface.customCss).toBe('.chat { color: white; }');
@@ -403,10 +397,6 @@ describe('settings React route flag', () => {
                 customIncludeBody: 'include',
                 customExcludeBody: 'exclude',
                 customIncludeHeaders: 'X-Test: 1',
-                useVertexAi: false,
-                vertexaiAuthMode: 'full',
-                vertexaiRegion: 'asia-east1',
-                vertexaiExpressProjectId: 'project-2',
                 fallbackProviderEnabled: false,
                 fallbackProviderBaseUrl: 'https://fallback2.example.com/v1',
                 fallbackProviderModel: 'gpt-4.1',
@@ -512,7 +502,6 @@ describe('settings React route flag', () => {
         expect(merged.oai_settings.enable_web_search).toBe(false);
         expect(merged.oai_settings.function_calling).toBe(false);
         expect(merged.oai_settings.reasoning_effort).toBe('high');
-        expect(merged.oai_settings.use_vertexai).toBe(false);
         expect(merged.oai_settings.fallback_provider_enabled).toBe(false);
         expect(merged.power_user.custom_css).toBe('.chat { color: gold; }');
         expect(merged.power_user.toastr_position).toBe('toast-bottom-right');
@@ -709,7 +698,7 @@ describe('settings React route flag', () => {
         expect(identity.power_user.main_text_color).toBe('rgba(1, 2, 3, 1)');
     });
 
-    test('keeps legacy Vertex AI and advanced reasoning effort values saveable through the React form', async () => {
+    test('downgrades legacy Vertex AI source to Google AI Studio and keeps advanced reasoning effort values saveable', async () => {
         const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'settings', 'SettingsSurface.tsx'), 'utf8');
         const pageRouteSource = fs.readFileSync(path.join(repoRoot, 'app', 'routes', 'settings.tsx'), 'utf8');
         const helperModule = await import(`../app/lib/settings-helpers.js?settingsCompat=${Date.now()}-${Math.random()}`);
@@ -719,9 +708,6 @@ describe('settings React route flag', () => {
                 oai_settings: {
                     chat_completion_source: 'vertexai',
                     google_model: 'gemini-2.5-pro',
-                    vertexai_auth_mode: 'express',
-                    vertexai_region: 'us-central1',
-                    vertexai_express_project_id: 'existing-project',
                     reasoning_effort: 'minimal',
                 },
             }),
@@ -729,32 +715,22 @@ describe('settings React route flag', () => {
 
         const defaults = helperModule.buildSettingsFormDefaults(parsed.settings);
         expect(defaults.providers.chatCompletionSource).toBe('makersuite');
-        expect(defaults.providers.useVertexAi).toBe(true);
         expect(defaults.general.reasoningEffort).toBe('minimal');
 
         const preserved = helperModule.buildSettingsSavePayload(parsed.settings, defaults);
         expect(preserved.untouched.keep).toBe(true);
-        expect(preserved.oai_settings.chat_completion_source).toBe('vertexai');
-        expect(preserved.oai_settings.use_vertexai).toBe(true);
+        expect(preserved.oai_settings.chat_completion_source).toBe('makersuite');
         expect(preserved.oai_settings.reasoning_effort).toBe('minimal');
-
-        const vertexDisabled = structuredClone(defaults);
-        vertexDisabled.providers.useVertexAi = false;
-        const downgradedToGoogle = helperModule.buildSettingsSavePayload(parsed.settings, vertexDisabled);
-        expect(downgradedToGoogle.oai_settings.chat_completion_source).toBe('makersuite');
-        expect(downgradedToGoogle.oai_settings.use_vertexai).toBe(false);
 
         expect(routeSource).toContain("reasoningEffort: z.enum(['auto', 'low', 'medium', 'high', 'min', 'max', 'none', 'minimal', 'xhigh']),");
     });
 
-    test('saves only changed fields from a minimal settings document and keeps missing Vertex AI false', async () => {
+    test('saves only changed fields from a minimal settings document', async () => {
         const helperModule = await import(`../app/lib/settings-helpers.js?settingsSparse=${Date.now()}-${Math.random()}`);
         const fixture = {
             untouched: { keep: true },
         };
         const baseline = helperModule.buildSettingsFormDefaults(fixture);
-        expect(baseline.providers.useVertexAi).toBe(false);
-
         const edited = structuredClone(baseline);
         edited.userInterface.theme = 'Sparse Theme';
         const saved = helperModule.buildSettingsSavePayload(fixture, edited, {
@@ -819,31 +795,27 @@ describe('settings React route flag', () => {
         expect(saved.power_user.instruct.system_same_as_user).toBe(true);
     });
 
-    test('wires Vertex service account and connection profile selection without putting secrets into settings JSON', async () => {
+    test('wires connection profile selection without putting secrets into settings JSON', async () => {
         const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'settings', 'SettingsSurface.tsx'), 'utf8');
         const pageRouteSource = fs.readFileSync(path.join(repoRoot, 'app', 'routes', 'settings.tsx'), 'utf8');
         const helperModule = await import(`../app/lib/settings-helpers.js?settingsSecrets=${Date.now()}-${Math.random()}`);
         const secretHelpers = await import(`../public/scripts/provider-secret-field-state.js?settingsSecrets=${Date.now()}-${Math.random()}`);
 
-        expect(routeSource).toContain('vertexai_service_account_json');
+        expect(routeSource).not.toContain('vertexai_service_account_json');
         expect(routeSource).toContain('providers.connectionProfileId');
         expect(routeSource).toContain("fetch('/api/secrets/write'");
-        expect(routeSource).not.toContain('Service account JSON remains in API Configuration.');
 
-        const fullKey = secretHelpers.resolveProviderSecretKeyForSettings({
-            settings: { reverse_proxy: '', use_vertexai: true, vertexai_auth_mode: 'full' },
+        const makersuiteKey = secretHelpers.resolveProviderSecretKeyForSettings({
+            settings: { reverse_proxy: '' },
             source: 'makersuite',
             secretKey: 'api_key_makersuite',
             chatCompletionSources: { OPENAI: 'openai', CLAUDE: 'claude', MAKERSUITE: 'makersuite' },
         });
-        expect(fullKey).toBe('vertexai_service_account_json');
+        expect(makersuiteKey).toBe('api_key_makersuite');
 
         const fixture = {
             oai_settings: {
                 chat_completion_source: 'makersuite',
-                use_vertexai: true,
-                vertexai_auth_mode: 'full',
-                vertexai_region: 'us-central1',
             },
             extension_settings: {
                 connectionManager: {
@@ -858,7 +830,6 @@ describe('settings React route flag', () => {
         };
         const defaults = helperModule.buildSettingsFormDefaults(fixture);
         expect(defaults.providers.connectionProfileId).toBe('profile-1');
-        expect(defaults.providers.vertexaiAuthMode).toBe('full');
 
         const next = structuredClone(defaults);
         next.providers.connectionProfileId = 'profile-2';

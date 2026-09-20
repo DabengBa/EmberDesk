@@ -21,19 +21,7 @@ export function resolveProviderSecretKeyForSettings({
         return null;
     }
 
-    const isVertexAi = source === chatCompletionSources.MAKERSUITE && settings?.use_vertexai;
-    if (!isVertexAi) {
-        return secretKey;
-    }
-
-    switch (settings?.vertexai_auth_mode) {
-        case 'express':
-            return 'api_key_vertexai';
-        case 'full':
-            return 'vertexai_service_account_json';
-        default:
-            return secretKey;
-    }
+    return secretKey;
 }
 
 export function canUseDirectProviderSecret({ settings, secretKey }) {
@@ -47,16 +35,10 @@ export function getUnifiedKeyFieldState({
     secretState,
     chatCompletionSources,
 }) {
-    const vertexAiActive = source === chatCompletionSources.MAKERSUITE
-        && settings?.use_vertexai
-        && settings?.vertexai_auth_mode === 'express';
-
     if (settings?.reverse_proxy) {
         return {
             placeholder: 'Proxy password',
             value: settings.proxy_password || '',
-            vertexAiActive,
-            isServiceAccount: false,
         };
     }
 
@@ -67,17 +49,6 @@ export function getUnifiedKeyFieldState({
         return {
             placeholder: label ? `Saved (${label})` : 'Saved',
             value: '',
-            vertexAiActive,
-            isServiceAccount: secretKey === 'vertexai_service_account_json',
-        };
-    }
-
-    if (secretKey === 'vertexai_service_account_json') {
-        return {
-            placeholder: 'Paste service account JSON',
-            value: '',
-            vertexAiActive,
-            isServiceAccount: true,
         };
     }
 
@@ -90,8 +61,6 @@ export function getUnifiedKeyFieldState({
     return {
         placeholder: placeholders[source] || 'Enter API key',
         value: '',
-        vertexAiActive,
-        isServiceAccount: false,
     };
 }
 

@@ -1133,7 +1133,7 @@ export function flattenSchema(schema, api) {
     }
 
     const schemaCopy = structuredClone(schema);
-    const isGoogleApi = [CHAT_COMPLETION_SOURCES.VERTEXAI, CHAT_COMPLETION_SOURCES.MAKERSUITE].includes(api);
+    const isGoogleApi = api === CHAT_COMPLETION_SOURCES.MAKERSUITE;
 
     const definitions = schemaCopy.$defs || {};
     delete schemaCopy.$defs;

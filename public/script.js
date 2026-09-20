@@ -7432,20 +7432,12 @@ function extractImagesFromData(data, { mainApi = null, chatCompletionSource = nu
     switch (mainApi ?? main_api) {
         case 'openai': {
             switch (chatCompletionSource ?? oai_settings.chat_completion_source) {
-                case chat_completion_sources.VERTEXAI:
                 case chat_completion_sources.MAKERSUITE: {
                     const inlineData = data?.responseContent?.parts?.filter(x => x.inlineData && !x.thought)?.map(x => x.inlineData);
                     if (Array.isArray(inlineData) && inlineData.length > 0) {
                         return inlineData.map(x => `data:${x.mimeType};base64,${x.data}`).filter(isDataURL);
                     }
                 } break;
-                case chat_completion_sources.OPENROUTER: {
-                    const imageUrl = data?.choices[0]?.message?.images?.filter(x => x.type === 'image_url')?.map(x => x?.image_url?.url);
-                    if (Array.isArray(imageUrl) && imageUrl.length > 0) {
-                        return imageUrl.filter(isDataURL);
-                    }
-                    // TODO: Handle remote URLs
-                }
             }
         } break;
     }
@@ -7527,7 +7519,6 @@ export function extractJsonFromData(data, { mainApi = null, chatCompletionSource
                         return text;
                     }
                     break;
-                case chat_completion_sources.VERTEXAI:
                 case chat_completion_sources.MAKERSUITE:
                 case chat_completion_sources.DEEPSEEK:
                 case chat_completion_sources.AI21:
@@ -7535,7 +7526,6 @@ export function extractJsonFromData(data, { mainApi = null, chatCompletionSource
                 case chat_completion_sources.POLLINATIONS:
                 case chat_completion_sources.AIMLAPI:
                 case chat_completion_sources.OPENAI:
-                case chat_completion_sources.OPENROUTER:
                 case chat_completion_sources.MISTRALAI:
                 case chat_completion_sources.CUSTOM:
                 case chat_completion_sources.COHERE:

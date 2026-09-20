@@ -146,7 +146,7 @@ pnpm run build:react:workspace-panels  # app/ 或桥动过时
 - **保留（契约面）**：`public/scripts/authors-note.js` → 最小 stub，仅导出 `NOTE_MODULE_NAME`/`metadata_keys`/`shouldWIAddPrompt=false`（Tavern Helper `dataProcessor.ts` 经 `@sillytavern/scripts/authors-note` 导入——compat 测试实证）；`2_floating_prompt` 槽仍被 world-info-service ANTop/ANBottom 合并、`openai.js` 的 `authorsNote` 系统提示条目、itemized-prompts 的 `authorsNoteString`、persona TOP_AN/BOTTOM_AN 写入；`extension_settings.note` 存量桶与 `chat_metadata.note_*`/`chat_cfg*` 键不归一化（惰性历史数据）；character-lifecycle-service 的 `note.chara` 重命名同步保留（存量数据卫生）。
 - **行为差异（有意）**：WI ANTop/ANBottom 条目不再被 AN 的 insertion-interval 门控——有匹配条目即注入（原先 `shouldWIAddPrompt` 会随 AN 间隔跳过）；persona TOP_AN/BOTTOM_AN 去掉 `shouldWIAddPrompt` 前置门；CFG 负提示词通道整体消失（`getCombinedPrompt(isNegative)` 参数退役）；`samplerSelect` 对 preset 中残留 `guidance_scale` 键返回空 DOM 映射。
 - **验证**：lint+tsc 净；unit lane 59 文件/624 tests 绿；integration lane 98 文件/849 tests 绿（初轮 third-party-extension-compatibility 命中 JSR alias 导入面——经 stub 修复）；e2e（panel-navigation + world-info-workbench + chat-message-rendering）21/21 绿；workspace-panels bundle 重建。
-- **Commit**: 待提交。
+- **Commit**: `1b22d26e8`。
 
 ### B-cut-6 + B-cut-7: assets + memory（扩展目录级删）
 
@@ -168,3 +168,25 @@ pnpm run build:react:workspace-panels  # app/ 或桥动过时
 - **保留**：`ScraperManager` 注册表 API（`st-context` 暴露的第三方扩展契约，`initScrapers` 内置注册变惰性）；`openFilePopup`（消息文件预览仍用）；canonical 备份/恢复的 attachment manifests（独立存储层）。
 - **验证**：lint+tsc 净（初轮 `Popper` unused 已修）；聚焦 unit 绿；headless discovery 仅剩 connection-manager/quick-reply/regex/token-counter/JS-Slash-Runner。
 - **Commit**: `3236ea33a`。
+
+### B-cut-11a: horde + novelai + nanogpt + openrouter
+
+**R0 裁决**：四 provider 前端早已死亡（`script.js:8151` 的 `main_api` 归一化把 `koboldhorde`/`novel` 折到 `openai`；无 DOM 控件存活）。删除形状=后端 router + secrets 机器 + 散点引用。
+
+- **删**：`src/endpoints/{horde,novelai,nanogpt,openrouter}.js` router 与挂载；`secrets.js` 的 provider 专属机器（key 标签、授权按钮绑定、OpenRouter OAuth `/callback/openrouter`、NanoGPT credits）；`slash-commands.js`/`tokenizers.js`/`RossAscends-mods.js` 的 provider 分支；`ai_horde` npm 依赖。
+- **保留（410 tombstone）**：`src/endpoints/provider-retirement.js`——退役 provider 路径统一 410（`provider_feature_removed`），经 `tests/provider-retirement-express-route.test.js` 钉契约。存量 `api_key_*` secrets 不删——secrets 存取按键存在性校验非枚举白名单，旧数据可读可删。
+- **验证**：lint+tsc 净；unit 158 suites/1475 tests 绿（含新增 provider-retirement 路由测试）；服务端实测 410。
+- **Commit**: `e5c0633c0`。
+
+### B-cut-11b: vertexai（Google Vertex AI）
+
+**R0 裁决**：Vertex AI 无独立端点——它是共享 `chat-completions` 后端的 `chat_completion_source` 值，故不需要 410 tombstone；未知 source 由现有 400 兜底覆盖。MakerSuite/Gemini 保留。
+
+- **删**：`chat_completion_sources.VERTEXAI`；`oai_settings` 的 `use_vertexai`/`vertexai_auth_mode`/`vertexai_region`/`vertexai_express_project_id` 默认值与 settings-helpers 全部映射（`vertexAuthModeOptions`、`mapUseVertexAiToFormValue`、`saveWhenFormPathsChanged`、form 默认值、schema 字段、coverage 声明）；SettingsSurface 四个 SettingField + service-account textarea 分支；ApiConnectionsPanel 的 `vertexai_config` 块与 `#use_vertexai`/`#vertexai_*` 控件族；`secrets.js` 的 `api_key_vertexai`/`vertexai_service_account_json` 键、标签、选择器映射与 `resolveSecretKey` 分支；`provider-secret-field-state.js` 的 service-account/express 分支（`resolveProviderSecretKeyForSettings` 退化为直通）；`src/endpoints/google.js` 重写为 makersuite-only（删 `getVertexAIAuth`/`generateJWTToken`/`getAccessToken`/`getProjectIdFromServiceAccount` 与 vertex URL 分支）；`chat-completions.js` 的 `isVertexAi` 分支（generate + status + switch case）；`constants.js` 的 `VERTEX_SAFETY`/`CHAT_COMPLETION_SOURCES.VERTEXAI`；`util.js` `flattenSchema` 的 vertex 项；reasoning/tool-calling/tokenizers/slash-commands/custom-request/extensions-shared/RossAscends/openai-provider-capabilities 的 vertex 分支；`body.vertexai-active`/`#vertexai_config`/`.vertexai-*` CSS；`/api` slash 帮助文案。
+- **归一化**：`migrateChatCompletionSettings` 新增 `vertexai → makersuite` 映射（沿用 palm→makersuite 先例）；React settings form `mapChatCompletionSourceToFormValue` 保留 vertexai→makersuite shim——存量 `vertexai` source 在载入时显示为 Google，保存后落 `makersuite`。
+- **数据策略**：`api_key_vertexai`/`vertexai_service_account_json` 存量 secrets 保留在磁盘（key-existence 校验仍可读删）；settings 里的 `use_vertexai`/`vertexai_*` 旧键不再被映射，保存时随 untouched 原样保留（惰性）。
+- **保留**：MakerSuite/Gemini 全路径（generate/status/`countTokens` 无关 vertex 部分、`GEMINI_SAFETY`、`convertGooglePrompt`、reasoning thought-signature、tokenizer 选择）。JS-Slash-Runner 源码里的 `vertexai` 引用不动（vendored 契约源——`chat_completion_sources.VERTEXAI` 解析为 `undefined` 后自然降级，`settings.vertexai_*` 为 `undefined` 时字段不写入 payload）。
+- **测试翻转**：`chat-completions-google.test.js` 删 3 个 vertex 用例；`settings-react-route.test.js` 的 vertex round-trip 测试改写为"legacy vertexai → makersuite 归一化"语义；`provider-secret-field-state.test.js` vertex secret 解析断言改直通；`openai-provider-capabilities.test.js`/`api-connections-react-surface.test.js` 删 vertex 条目；删 `tests/vertexai-api-key-visibility.test.js`。
+- **文档**：`chat-completion-select`/`custom-base-url`/`api-configuration` 语义条目、`react_settings_payload_processing_flow` + sandbox proof、`processed_columns_lineage`、`react-modernization-roadmap` 同步翻转；proof 脚本实测通过。
+- **验证**：lint+tsc 净；聚焦 7 suites/56 tests 绿；unit 60 suites/625 tests、integration 97 suites/846 tests、compat 8 suites/107 tests 全绿；React + workspace-panels + character-library bundle 重建。
+- **Commit**: `842d63041`。

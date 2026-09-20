@@ -7,7 +7,7 @@ export const settingsTabDefinitions = [
     {
         id: 'providers',
         label: 'Providers',
-        description: '主 provider 路由、fallback、Vertex AI 和连接级参数。',
+        description: '主 provider 路由、fallback 和连接级参数。',
     },
     {
         id: 'userInterface',
@@ -72,11 +72,6 @@ export const promptPostProcessingOptions = [
     { value: 'semi', label: 'Semi' },
     { value: 'strict', label: 'Strict' },
     { value: 'single', label: 'Single' },
-];
-
-export const vertexAuthModeOptions = [
-    { value: 'express', label: 'Express' },
-    { value: 'full', label: 'Service Account' },
 ];
 
 export const toastPositionOptions = [
@@ -196,10 +191,6 @@ export const defaultSettingsFormValues = {
         customIncludeBody: '',
         customExcludeBody: '',
         customIncludeHeaders: '',
-        useVertexAi: false,
-        vertexaiAuthMode: 'express',
-        vertexaiRegion: 'us-central1',
-        vertexaiExpressProjectId: '',
         fallbackProviderEnabled: false,
         fallbackProviderBaseUrl: '',
         fallbackProviderModel: '',
@@ -391,23 +382,8 @@ function mapChatCompletionSourceToFormValue(value) {
     return value === 'vertexai' ? 'makersuite' : value;
 }
 
-function mapChatCompletionSourceToSettingsValue(value, formValues, baseSettings) {
-    const baseSource = getValueAtPath(baseSettings, 'oai_settings.chat_completion_source');
-    const usesVertexAi = getValueAtPath(formValues, 'providers.useVertexAi') === true;
-
-    if (baseSource === 'vertexai' && value === 'makersuite' && usesVertexAi) {
-        return 'vertexai';
-    }
-
+function mapChatCompletionSourceToSettingsValue(value) {
     return value;
-}
-
-function mapUseVertexAiToFormValue(value, settings) {
-    if (getValueAtPath(settings, 'oai_settings.chat_completion_source') === 'vertexai') {
-        return true;
-    }
-
-    return value === true || value === 'true' || value === 1 || value === '1';
 }
 
 const fieldBindings = [
@@ -435,7 +411,6 @@ const fieldBindings = [
         settingsPath: 'oai_settings.chat_completion_source',
         toForm: mapChatCompletionSourceToFormValue,
         toSettings: mapChatCompletionSourceToSettingsValue,
-        saveWhenFormPathsChanged: ['providers.useVertexAi'],
     },
     { tab: 'providers', formPath: 'providers.openaiModel', settingsPath: 'oai_settings.openai_model' },
     { tab: 'providers', formPath: 'providers.claudeModel', settingsPath: 'oai_settings.claude_model' },
@@ -446,16 +421,6 @@ const fieldBindings = [
     { tab: 'providers', formPath: 'providers.customIncludeBody', settingsPath: 'oai_settings.custom_include_body' },
     { tab: 'providers', formPath: 'providers.customExcludeBody', settingsPath: 'oai_settings.custom_exclude_body' },
     { tab: 'providers', formPath: 'providers.customIncludeHeaders', settingsPath: 'oai_settings.custom_include_headers' },
-    {
-        tab: 'providers',
-        formPath: 'providers.useVertexAi',
-        settingsPath: 'oai_settings.use_vertexai',
-        toForm: mapUseVertexAiToFormValue,
-        toFormWhenMissing: true,
-    },
-    { tab: 'providers', formPath: 'providers.vertexaiAuthMode', settingsPath: 'oai_settings.vertexai_auth_mode' },
-    { tab: 'providers', formPath: 'providers.vertexaiRegion', settingsPath: 'oai_settings.vertexai_region' },
-    { tab: 'providers', formPath: 'providers.vertexaiExpressProjectId', settingsPath: 'oai_settings.vertexai_express_project_id' },
     { tab: 'providers', formPath: 'providers.fallbackProviderEnabled', settingsPath: 'oai_settings.fallback_provider_enabled' },
     { tab: 'providers', formPath: 'providers.fallbackProviderBaseUrl', settingsPath: 'oai_settings.fallback_provider_base_url' },
     { tab: 'providers', formPath: 'providers.fallbackProviderModel', settingsPath: 'oai_settings.fallback_provider_model' },

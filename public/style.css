@@ -6414,63 +6414,6 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
     opacity: 0.78;
 }
 
-/* Vertex AI config section */
-#vertexai_config {
-    display: none;
-    background-color: color-mix(in srgb, var(--SmartThemeBlurTintColor) 72%, transparent);
-    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 70%, transparent);
-    border-radius: 5px;
-    padding: 8px 10px;
-    margin-top: 0;
-}
-
-.vertexai-fields-row {
-    display: flex;
-    gap: 10px;
-}
-
-.vertexai-field-col {
-    flex: 1;
-    min-width: 0;
-}
-
-.vertexai-field-col .field-label {
-    margin-top: 0;
-}
-
-.vertexai-field-col .text_pole {
-    margin-top: 2px;
-}
-
-.vertexai-sa-wrapper {
-    position: relative;
-}
-
-.vertexai-sa-textarea {
-    font-family: var(--monoFontFamily);
-    resize: vertical;
-    min-height: 80px;
-    padding-right: 32px;
-}
-
-.vertexai-sa-textarea.sa-masked {
-    -webkit-text-security: disc;
-    color: transparent;
-    text-shadow: 0 0 6px var(--SmartThemeBodyColor);
-}
-
-.vertexai-sa-toggle {
-    position: absolute;
-    top: 8px;
-    right: 6px;
-    cursor: pointer;
-    opacity: 0.6;
-}
-
-.vertexai-sa-toggle:hover {
-    opacity: 1;
-}
-
 #api_key_unified,
 #openai_reverse_proxy,
 #fallback_provider_base_url,

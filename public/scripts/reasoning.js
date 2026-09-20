@@ -105,12 +105,7 @@ export function extractReasoningFromData(data, {
                     return data?.choices?.[0]?.message?.reasoning_content ?? '';
                 case chat_completion_sources.XAI:
                     return data?.choices?.[0]?.message?.reasoning_content ?? '';
-                case chat_completion_sources.OPENROUTER:
-                    return data?.choices?.[0]?.message?.reasoning
-                        ?? data?.choices?.[0]?.message?.reasoning_content
-                        ?? '';
                 case chat_completion_sources.MAKERSUITE:
-                case chat_completion_sources.VERTEXAI:
                     return data?.responseContent?.parts?.filter(part => part.thought)?.map(part => part.text)?.join('\n\n') ?? '';
                 case chat_completion_sources.CLAUDE:
                     return data?.content?.filter(part => part.type === 'thinking')?.map(part => part.thinking)?.join('\n\n') ?? '';
@@ -151,26 +146,16 @@ export function extractReasoningSignatureFromData(data, {
     mainApi = null,
     chatCompletionSource = null,
 } = {}) {
-    // Only Gemini models use thought signatures (via MakerSuite/VertexAI or OpenRouter)
+    // Only Gemini models use thought signatures (via MakerSuite)
     if ((mainApi ?? main_api) !== 'openai') {
         return null;
     }
 
     const source = chatCompletionSource ?? oai_settings.chat_completion_source;
-    const isGemini = source === chat_completion_sources.MAKERSUITE || source === chat_completion_sources.VERTEXAI;
-    const isOpenRouter = source === chat_completion_sources.OPENROUTER;
+    const isGemini = source === chat_completion_sources.MAKERSUITE;
 
-    if (!isGemini && !isOpenRouter) {
+    if (!isGemini) {
         return null;
-    }
-
-    // OpenRouter format: reasoning_details array with type "reasoning.encrypted" (exclude tool calls)
-    if (isOpenRouter && Array.isArray(data?.choices?.[0]?.message?.reasoning_details)) {
-        for (const detail of data.choices[0].message.reasoning_details) {
-            if (!/^tool_/.test(detail.id) && detail.type === 'reasoning.encrypted' && detail.data) {
-                return detail.data;
-            }
-        }
     }
 
     // Direct Gemini format: Extract from responseContent.parts if available (only text parts)

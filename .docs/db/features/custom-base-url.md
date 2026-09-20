@@ -9,7 +9,7 @@ related: [page.api_configuration, feature.connection_profile]
 
 ## ID 解释
 
-`feature.custom_base_url` represents the collapsible section in the API configuration drawer that contains the base URL input and the unified API key input. It covers the Custom Base URL drawer header, the URL input with its /v1 hint, the API key input with show/hide toggle, and the automatic credential routing between proxy mode and direct mode. It does not cover provider-specific authentication flows (e.g., Vertex AI service account) or connection profile management.
+`feature.custom_base_url` represents the collapsible section in the API configuration drawer that contains the base URL input and the unified API key input. It covers the Custom Base URL drawer header, the URL input with its /v1 hint, the API key input with show/hide toggle, and the automatic credential routing between proxy mode and direct mode. It does not cover provider-specific authentication flows or connection profile management.
 
 ## Purpose
 
@@ -21,7 +21,7 @@ Let a user point the chat-completion connection at an OpenAI-compatible base URL
 - When the base URL is filled, the drawer presents proxy/gateway mode: the key field represents the gateway password for the configured endpoint.
 - When the base URL is empty, the drawer presents direct-provider mode: the key field saves or reflects the selected provider's secret-backed API key.
 - Switching between proxy and direct mode clears the active key field value and updates placeholder text so the user does not accidentally send a provider key to a gateway or a gateway password to a provider.
-- Provider-specific credentials such as Vertex AI service-account JSON, MiniMax group ID, and Azure deployment fields remain outside this unified key path.
+- Provider-specific credentials such as MiniMax group ID and Azure deployment fields remain outside this unified key path.
 - The reveal/hide control affects only the visible key text, not the stored credential.
 
 ## Semantic Interaction IDs

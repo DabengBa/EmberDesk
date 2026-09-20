@@ -14,7 +14,6 @@ DEFAULT_FORM_VALUES = {
     },
     "providers": {
         "chatCompletionSource": "openai",
-        "useVertexAi": False,
     },
     "advanced": {
         "autoSwipeBlacklist": "",
@@ -31,12 +30,6 @@ FIELD_BINDINGS = [
         "settingsPath": "oai_settings.chat_completion_source",
         "toForm": "chat_completion_source",
         "toSettings": "chat_completion_source",
-    },
-    {
-        "formPath": "providers.useVertexAi",
-        "settingsPath": "oai_settings.use_vertexai",
-        "toForm": "use_vertex_ai",
-        "toFormWhenMissing": True,
     },
     {
         "formPath": "advanced.autoSwipeBlacklist",
@@ -105,10 +98,6 @@ def to_form_value(binding, current_value, settings):
     transform = binding.get("toForm")
     if transform == "chat_completion_source":
         return "makersuite" if current_value == "vertexai" else current_value
-    if transform == "use_vertex_ai":
-        if get_value_at_path(settings, "oai_settings.chat_completion_source") == "vertexai":
-            return True
-        return current_value
     if transform == "blacklist":
         return parse_blacklist_to_form_value(current_value)
     return current_value
@@ -116,12 +105,6 @@ def to_form_value(binding, current_value, settings):
 
 def to_settings_value(binding, form_value, form_values, base_settings):
     transform = binding.get("toSettings")
-    if transform == "chat_completion_source":
-        base_source = get_value_at_path(base_settings, "oai_settings.chat_completion_source")
-        uses_vertex_ai = get_value_at_path(form_values, "providers.useVertexAi") is True
-        if base_source == "vertexai" and form_value == "makersuite" and uses_vertex_ai:
-            return "vertexai"
-        return form_value
     if transform == "blacklist":
         return parse_blacklist_to_settings_value(form_value)
     return form_value
@@ -168,31 +151,27 @@ def main():
 
     defaults = build_settings_form_defaults(parsed["settings"])
     assert defaults["providers"]["chatCompletionSource"] == "makersuite"
-    assert defaults["providers"]["useVertexAi"] is True
     assert defaults["general"]["reasoningEffort"] == "minimal"
     assert defaults["general"]["reasoningEffort"] in REASONING_EFFORT_OPTIONS
     assert defaults["advanced"]["autoSwipeBlacklist"] == "skip, retry"
 
     preserved = build_settings_save_payload(parsed["settings"], defaults)
     assert preserved["untouched"]["keep"] is True
-    assert preserved["oai_settings"]["chat_completion_source"] == "vertexai"
-    assert preserved["oai_settings"]["use_vertexai"] is True
+    assert preserved["oai_settings"]["chat_completion_source"] == "makersuite"
     assert preserved["oai_settings"]["reasoning_effort"] == "minimal"
     assert preserved["power_user"]["auto_swipe_blacklist"] == ["skip", "retry"]
 
-    downgraded_form = copy.deepcopy(defaults)
-    downgraded_form["providers"]["useVertexAi"] = False
-    downgraded_form["advanced"]["autoSwipeBlacklist"] = "alpha, beta\n gamma"
-    downgraded = build_settings_save_payload(parsed["settings"], downgraded_form)
-    assert downgraded["oai_settings"]["chat_completion_source"] == "makersuite"
-    assert downgraded["oai_settings"]["use_vertexai"] is False
-    assert downgraded["power_user"]["auto_swipe_blacklist"] == ["alpha", "beta", "gamma"]
+    edited_form = copy.deepcopy(defaults)
+    edited_form["advanced"]["autoSwipeBlacklist"] = "alpha, beta\n gamma"
+    edited = build_settings_save_payload(parsed["settings"], edited_form)
+    assert edited["oai_settings"]["chat_completion_source"] == "makersuite"
+    assert edited["power_user"]["auto_swipe_blacklist"] == ["alpha", "beta", "gamma"]
 
     new_google = build_settings_save_payload(
         {"oai_settings": {"chat_completion_source": "openai"}},
         {
             "general": {"reasoningEffort": "xhigh"},
-            "providers": {"chatCompletionSource": "makersuite", "useVertexAi": True},
+            "providers": {"chatCompletionSource": "makersuite"},
             "advanced": {"autoSwipeBlacklist": ""},
         },
     )

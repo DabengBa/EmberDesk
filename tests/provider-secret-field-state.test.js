@@ -41,8 +41,6 @@ describe('provider secret field state', () => {
         })).toEqual({
             placeholder: 'Proxy password',
             value: 'proxy-password',
-            vertexAiActive: false,
-            isServiceAccount: false,
         });
 
         expect(getUnifiedKeyFieldState({
@@ -64,64 +62,36 @@ describe('provider secret field state', () => {
         expect(getUnifiedKeyFieldState({
             settings: {
                 chat_completion_source: 'makersuite',
-                use_vertexai: true,
-                vertexai_auth_mode: 'express',
             },
             source: 'makersuite',
             secretKey: 'api_key_makersuite',
             secretState: {},
             chatCompletionSources: { OPENAI: 'openai', CLAUDE: 'claude', MAKERSUITE: 'makersuite' },
-        })).toMatchObject({ placeholder: 'AIza...', value: '', vertexAiActive: true });
+        })).toMatchObject({ placeholder: 'AIza...', value: '' });
     });
 
-    test('resolves React settings provider secret keys for Vertex AI express and full modes', () => {
+    test('resolves React settings provider secret keys through the direct provider key', () => {
         const sources = { OPENAI: 'openai', CLAUDE: 'claude', MAKERSUITE: 'makersuite' };
 
-        const expressSecretKey = resolveProviderSecretKeyForSettings({
+        const makersuiteSecretKey = resolveProviderSecretKeyForSettings({
             settings: {
                 reverse_proxy: '',
-                use_vertexai: true,
-                vertexai_auth_mode: 'express',
             },
             source: 'makersuite',
             secretKey: 'api_key_makersuite',
             chatCompletionSources: sources,
         });
-        expect(expressSecretKey).toBe('api_key_vertexai');
+        expect(makersuiteSecretKey).toBe('api_key_makersuite');
         expect(canUseDirectProviderSecret({
             settings: {
                 reverse_proxy: '',
-                use_vertexai: true,
-                vertexai_auth_mode: 'express',
             },
-            secretKey: expressSecretKey,
-        })).toBe(true);
-
-        const fullSecretKey = resolveProviderSecretKeyForSettings({
-            settings: {
-                reverse_proxy: '',
-                use_vertexai: true,
-                vertexai_auth_mode: 'full',
-            },
-            source: 'makersuite',
-            secretKey: 'api_key_makersuite',
-            chatCompletionSources: sources,
-        });
-        expect(fullSecretKey).toBe('vertexai_service_account_json');
-        expect(canUseDirectProviderSecret({
-            settings: {
-                reverse_proxy: '',
-                use_vertexai: true,
-                vertexai_auth_mode: 'full',
-            },
-            secretKey: fullSecretKey,
+            secretKey: makersuiteSecretKey,
         })).toBe(true);
 
         const proxySecretKey = resolveProviderSecretKeyForSettings({
             settings: {
                 reverse_proxy: 'https://proxy.example',
-                use_vertexai: true,
-                vertexai_auth_mode: 'express',
             },
             source: 'openai',
             secretKey: 'api_key_openai',
@@ -131,8 +101,6 @@ describe('provider secret field state', () => {
         expect(canUseDirectProviderSecret({
             settings: {
                 reverse_proxy: 'https://proxy.example',
-                use_vertexai: true,
-                vertexai_auth_mode: 'express',
             },
             secretKey: proxySecretKey,
         })).toBe(false);

@@ -23,7 +23,6 @@ const SOURCES = {
     OPENAI: 'openai',
     CLAUDE: 'claude',
     MAKERSUITE: 'makersuite',
-    VERTEXAI: 'vertexai',
 };
 
 function settings(overrides = {}) {
@@ -141,7 +140,6 @@ describe('OpenAI provider capability helpers', () => {
         expect(getChatCompletionModelFromSettings(settings({ chat_completion_source: SOURCES.OPENAI }))).toBe('gpt-5.2');
         expect(getChatCompletionModelFromSettings(settings({ chat_completion_source: SOURCES.CLAUDE }))).toBe('claude-sonnet-4');
         expect(getChatCompletionModelFromSettings(settings({ chat_completion_source: SOURCES.MAKERSUITE }))).toBe('gemini-2.5-pro');
-        expect(getChatCompletionModelFromSettings(settings({ chat_completion_source: SOURCES.VERTEXAI }))).toBe('gemini-2.5-pro');
         expect(getChatCompletionModelFromSettings(settings({ chat_completion_source: 'unknown' }))).toBe('');
     });
 

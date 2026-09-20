@@ -48,7 +48,6 @@ import {
     toastPositionOptions,
     toolReasoningModeOptions,
     verbosityOptions,
-    vertexAuthModeOptions,
 } from '@/lib/settings-helpers.js';
 
 const SAVE_STATUS_TIMEOUT_MS = 4000;
@@ -105,10 +104,6 @@ const settingsSchema = z.object({
         customIncludeBody: z.string(),
         customExcludeBody: z.string(),
         customIncludeHeaders: z.string(),
-        useVertexAi: z.boolean(),
-        vertexaiAuthMode: z.enum(['express', 'full']),
-        vertexaiRegion: z.string(),
-        vertexaiExpressProjectId: z.string(),
         fallbackProviderEnabled: z.boolean(),
         fallbackProviderBaseUrl: z.string(),
         fallbackProviderModel: z.string(),
@@ -548,8 +543,6 @@ export function SettingsSurface({
     const currentSecretKey = resolveProviderSecretKeyForSettings({
         settings: {
             reverse_proxy: providerSettingsValues.reverseProxy,
-            use_vertexai: providerSettingsValues.useVertexAi,
-            vertexai_auth_mode: providerSettingsValues.vertexaiAuthMode,
         },
         source: providerSource,
         secretKey: providerSecretKey,
@@ -566,8 +559,6 @@ export function SettingsSurface({
             ...providerSettingsSnapshot,
             reverse_proxy: providerSettingsValues.reverseProxy,
             proxy_password: providerSettingsValues.proxyPassword,
-            use_vertexai: providerSettingsValues.useVertexAi,
-            vertexai_auth_mode: providerSettingsValues.vertexaiAuthMode,
         },
         source: providerSource,
         secretKey: currentSecretKey,
@@ -1225,7 +1216,7 @@ export function SettingsSurface({
                             <div>
                                 <SettingsSection
                                     title="Provider Routing"
-                                    description="主 provider 路由、fallback provider、Vertex AI 和自定义连接字段。"
+                                    description="主 provider 路由、fallback provider 和自定义连接字段。"
                                 >
                                     <SettingField
                                         form={settingsForm}
@@ -1302,43 +1293,6 @@ export function SettingsSurface({
                                     />
                                     <SettingField
                                         form={settingsForm}
-                                        name="providers.useVertexAi"
-                                        label="Use Vertex AI"
-                                        description="Google provider 使用 Vertex AI 模式。"
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="providers.vertexaiAuthMode"
-                                        label="Vertex Auth Mode"
-                                        description="Express key 或 service account。"
-                                        variant="select"
-                                        options={vertexAuthModeOptions}
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="providers.vertexaiRegion"
-                                        label="Vertex Region"
-                                        description="Vertex AI region。"
-                                        placeholder="us-central1"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="providers.vertexaiExpressProjectId"
-                                        label="Vertex Express Project"
-                                        description="Express 模式下的 project id。"
-                                        placeholder="my-gcp-project"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
                                         name="providers.bindPresetToConnection"
                                         label="Bind Preset To Connection"
                                         description="切换连接时自动绑定 preset。"
@@ -1388,23 +1342,6 @@ export function SettingsSurface({
 
                                         {directSecretMode ? (
                                             <div {...stylex.props(settingsStyles.inlineActions)}>
-                                                {unifiedKeyFieldState.isServiceAccount ? (
-                                                    <textarea
-                                                        id="provider-secret-input"
-                                                        name="provider-secret-input"
-                                                        aria-label="Vertex AI Service Account JSON"
-                                                        {...stylex.props(settingsStyles.input, settingsStyles.inlineActionsInput)}
-                                                        rows={6}
-                                                        placeholder={unifiedKeyFieldState.placeholder}
-                                                        value={providerSecretInput}
-                                                        disabled={providerSecretMutation.isPending}
-                                                        onChange={event => {
-                                                            setProviderSecretInput(event.target.value);
-                                                            setSaveStatus(null);
-                                                            setPageError('');
-                                                        }}
-                                                    />
-                                                ) : (
                                                 <input
                                                     type="password"
                                                     id="provider-secret-input"
@@ -1420,7 +1357,6 @@ export function SettingsSurface({
                                                         setPageError('');
                                                     }}
                                                 />
-                                                )}
                                                 <button
                                                     type="button"
                                                     {...stylex.props(settingsStyles.button, settingsStyles.buttonPrimary)}
@@ -1433,14 +1369,12 @@ export function SettingsSurface({
                                                             key: currentSecretKey,
                                                             mode: 'save',
                                                             value: providerSecretInput,
-                                                            successMessage: currentSecretKey === 'vertexai_service_account_json'
-                                                                ? 'Vertex service account 已保存。'
-                                                                : 'Provider API key 已保存。',
+                                                            successMessage: 'Provider API key 已保存。',
                                                             clearInput: () => setProviderSecretInput(''),
                                                         });
                                                     }}
                                                 >
-                                                    {currentSecretKey === 'vertexai_service_account_json' ? '保存 Service Account' : '保存 Key'}
+                                                    保存 Key
                                                 </button>
                                                 <button
                                                     type="button"
@@ -1454,21 +1388,17 @@ export function SettingsSurface({
                                                             key: currentSecretKey,
                                                             mode: 'clear',
                                                             value: '',
-                                                            successMessage: currentSecretKey === 'vertexai_service_account_json'
-                                                                ? 'Vertex service account 已清除。'
-                                                                : 'Provider API key 已清除。',
+                                                            successMessage: 'Provider API key 已清除。',
                                                             clearInput: () => setProviderSecretInput(''),
                                                         });
                                                     }}
                                                 >
-                                                    {currentSecretKey === 'vertexai_service_account_json' ? '清除 Service Account' : '清除 Key'}
+                                                    清除 Key
                                                 </button>
                                             </div>
                                         ) : (
                                             <p {...stylex.props(settingsStyles.mutedText, settingsStyles.sectionDescription)}>
-                                                {unifiedKeyFieldState.vertexAiActive
-                                                    ? 'Vertex Express key uses the secrets store.'
-                                                    : 'Reverse proxy mode uses Proxy Password instead of provider secrets.'}
+                                                Reverse proxy mode uses Proxy Password instead of provider secrets.
                                             </p>
                                         )}
                                     </div>

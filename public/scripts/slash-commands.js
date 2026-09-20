@@ -2899,7 +2899,6 @@ export function initDefaultSlashCommands() {
                 enumList: [
                     new SlashCommandEnumValue('custom', 'custom OpenAI-compatible', enumTypes.getBasedOnIndex(UNIQUE_APIS.findIndex(x => x === 'openai')), 'O'),
                     new SlashCommandEnumValue('zai', 'Z.AI', enumTypes.getBasedOnIndex(UNIQUE_APIS.findIndex(x => x === 'zai')), 'Z'),
-                    new SlashCommandEnumValue('vertexai', 'Google Vertex AI', enumTypes.getBasedOnIndex(UNIQUE_APIS.findIndex(x => x === 'vertexai')), 'V'),
                     new SlashCommandEnumValue('siliconflow', 'SiliconFlow', enumTypes.getBasedOnIndex(UNIQUE_APIS.findIndex(x => x === 'siliconflow')), 'S'),
                     new SlashCommandEnumValue('minimax', 'MiniMax', enumTypes.getBasedOnIndex(UNIQUE_APIS.findIndex(x => x === 'minimax')), 'M'),
                     new SlashCommandEnumValue('kobold', 'KoboldAI Classic', enumTypes.getBasedOnIndex(UNIQUE_APIS.findIndex(x => x === 'kobold')), 'K'),
@@ -2934,7 +2933,7 @@ export function initDefaultSlashCommands() {
                 ${t`If a manual API is provided to <b>set</b> the URL, make sure to set <code>connect=false</code>, as auto-connect only works for the currently selected API, or consider switching to it with <code>/api</code> first.`}
             </div>
             <div>
-                ${t`This slash command works for KoboldAI Classic, Custom OpenAI compatible, Z.AI, SiliconFlow, MiniMax, and Google Vertex AI. If unsure which APIs are supported, check the auto-completion of the optional <code>api</code> argument of this command.`}
+                ${t`This slash command works for KoboldAI Classic, Custom OpenAI compatible, Z.AI, SiliconFlow, and MiniMax. If unsure which APIs are supported, check the auto-completion of the optional <code>api</code> argument of this command.`}
             </div>
         `,
     }));
@@ -5740,7 +5739,6 @@ function getModelOptions(quiet) {
         { id: 'model_claude_select', api: 'openai', type: chat_completion_sources.CLAUDE },
         { id: 'model_ai21_select', api: 'openai', type: chat_completion_sources.AI21 },
         { id: 'model_google_select', api: 'openai', type: chat_completion_sources.MAKERSUITE },
-        { id: 'model_vertexai_select', api: 'openai', type: chat_completion_sources.VERTEXAI },
         { id: 'model_mistralai_select', api: 'openai', type: chat_completion_sources.MISTRALAI },
         { id: 'model_cohere_select', api: 'openai', type: chat_completion_sources.COHERE },
         { id: 'model_perplexity_select', api: 'openai', type: chat_completion_sources.PERPLEXITY },
@@ -6134,36 +6132,6 @@ async function setApiUrlCallback({ api = null, connect = 'true', quiet = 'false'
         }
 
         return oai_settings.minimax_endpoint || MINIMAX_ENDPOINT.GLOBAL;
-    }
-
-    const isCurrentlyVertexAI = main_api === 'openai' && oai_settings.chat_completion_source === chat_completion_sources.VERTEXAI;
-    if (api === chat_completion_sources.VERTEXAI || (!api && isCurrentlyVertexAI)) {
-        const defaultRegion = 'us-central1';
-        const permittedValues = Array
-            .from(document.querySelectorAll('#vertexai_region_suggestions option'))
-            .map(e => e instanceof HTMLOptionElement ? e.value : '')
-            .filter(x => x);
-
-        if (!url) {
-            return oai_settings.vertexai_region || defaultRegion;
-        }
-
-        if (!permittedValues.includes(url)) {
-            !isQuiet && toastr.info(t`Generation requests may fail.`, t`Unknown VertexAI region '${url}'`);
-        }
-
-        if (!isCurrentlyVertexAI && autoConnect) {
-            toastr.warning(t`VertexAI is not the currently selected API, so we cannot do an auto-connect. Consider switching to it via /api beforehand.`);
-            return '';
-        }
-
-        $('#vertexai_region').val(url).trigger('input');
-
-        if (autoConnect) {
-            $('#api_button_openai').trigger('click');
-        }
-
-        return oai_settings.vertexai_region || defaultRegion;
     }
 
     // The requested API is not supported for server URL configuration
