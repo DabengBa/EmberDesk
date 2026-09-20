@@ -82,6 +82,7 @@ import { SelectChatPopup } from './components/select-chat/SelectChatPopup';
 import { CharacterContextMenu } from './components/context-menu/CharacterContextMenu';
 import { OptionsMenu } from './components/options-menu/OptionsMenu';
 import { DialogueDelMesControls, DialoguePopupControls } from './components/dialogue-popups/DialoguePopups';
+import { OnboardingActions } from './components/onboarding/OnboardingActions';
 import { ExportFormatPopup } from './components/export-format/ExportFormatPopup';
 import * as stylex from '@stylexjs/stylex';
 import { authoringStyles, workspacePanelStyles, workspaceShellStyles } from './styles/workspace-panels.styles.js';
@@ -2208,4 +2209,13 @@ export function mountDialoguePopupControls(container: HTMLElement) {
  */
 export function mountDialogueDelMesControls(container: HTMLElement) {
     mountSmallPanel(container, <DialogueDelMesControls />);
+}
+
+/**
+ * Mounts one onboarding action button into its host span inside
+ * #onboarding_template's .onboarding markup. The markup is moved — not
+ * cloned — into the onboarding popup, carrying the mounted host along.
+ */
+export function mountOnboardingAction(container: HTMLElement, which: 'import' | 'library') {
+    mountSmallPanel(container, <OnboardingActions which={which} />);
 }

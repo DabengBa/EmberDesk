@@ -1071,6 +1071,7 @@ registerDomHandlersShellContext({
     mountChatComposer: (...args) => mountChatComposer(...args),
     mountDialogueDelMesControls: (...args) => mountDialogueDelMesControls(...args),
     mountDialoguePopupControls: (...args) => mountDialoguePopupControls(...args),
+    mountOnboardingActions: (...args) => mountOnboardingActions(...args),
     mountExportFormatPopup: (...args) => mountExportFormatPopup(...args),
     mountOptionsMenu: (...args) => mountOptionsMenu(...args),
     mountReactMainChatMessageListPanel: (...args) => mountReactMainChatMessageListPanel(...args),
@@ -4636,6 +4637,7 @@ async function bootstrapWorkspace() {
     await measureStartupStage('mountExportFormatPopup', () => mountExportFormatPopup());
     await measureStartupStage('mountDialoguePopupControls', () => mountDialoguePopupControls());
     await measureStartupStage('mountDialogueDelMesControls', () => mountDialogueDelMesControls());
+    await measureStartupStage('mountOnboardingActions', () => mountOnboardingActions());
     await measureStartupStage('initSecrets', () => initSecrets());
     await measureStartupStage('readSecretState', () => readSecretState());
     await measureStartupStage('initLocales', () => initLocales());
@@ -10769,6 +10771,42 @@ async function mountDialogueDelMesControls() {
         container.dataset.reactDialogueDelMesMounted = 'true';
     } catch (error) {
         console.error('Failed to mount dialogue delete-message controls:', error);
+    }
+}
+
+/**
+ * Mounts the onboarding action buttons into their host spans inside
+ * #onboarding_template. The .onboarding markup is moved — not cloned — into
+ * the onboarding popup on first run, carrying the mounted hosts along.
+ */
+async function mountOnboardingActions() {
+    const hosts = document.querySelectorAll('#onboarding_template [data-onboarding-host]');
+    if (!hosts.length) {
+        return;
+    }
+    let module = null;
+    for (const host of hosts) {
+        if (host.dataset.reactOnboardingMounted === 'true') {
+            continue;
+        }
+        if (!module) {
+            try {
+                module = await loadWorkspacePanelsModule();
+            } catch (error) {
+                console.error('Failed to load workspace panels module:', error);
+                return;
+            }
+        }
+        const which = host.dataset.onboardingHost;
+        if (which !== 'import' && which !== 'library') {
+            continue;
+        }
+        try {
+            module.mountOnboardingAction(host, which);
+            host.dataset.reactOnboardingMounted = 'true';
+        } catch (error) {
+            console.error(`Failed to mount onboarding action ${which}:`, error);
+        }
     }
 }
 

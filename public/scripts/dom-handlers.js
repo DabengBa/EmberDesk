@@ -81,6 +81,7 @@ const mountCharacterPopup = (...args) => shell().mountCharacterPopup(...args);
 const mountChatComposer = (...args) => shell().mountChatComposer(...args);
 const mountDialogueDelMesControls = (...args) => shell().mountDialogueDelMesControls(...args);
 const mountDialoguePopupControls = (...args) => shell().mountDialoguePopupControls(...args);
+const mountOnboardingActions = (...args) => shell().mountOnboardingActions(...args);
 const mountExportFormatPopup = (...args) => shell().mountExportFormatPopup(...args);
 const mountOptionsMenu = (...args) => shell().mountOptionsMenu(...args);
 const mountReactMainChatMessageListPanel = (...args) => shell().mountReactMainChatMessageListPanel(...args);
@@ -152,6 +153,7 @@ export async function bindLegacyShellHandlers() {
         mountExportFormatPopup(),
         mountDialoguePopupControls(),
         mountDialogueDelMesControls(),
+        mountOnboardingActions(),
     ]);
 
     $(document).on('click', '.api_loading', () => cancelStatusCheck('Canceled because connecting was manually canceled'));
