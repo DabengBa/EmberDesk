@@ -250,7 +250,6 @@ export const extension_settings = {
     autoConnect: false,
     notifyUpdates: false,
     disabledExtensions: [],
-    memory: {},
     note: {
         default: '',
         chara: [],
