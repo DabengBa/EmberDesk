@@ -26,14 +26,11 @@ test.describe('extensions host sole owner', () => {
             const settings = document.getElementById('extensions_settings');
             const settings2 = document.getElementById('extensions_settings2');
             const regex = document.getElementById('regex_container');
-            const manageLegacy = document.getElementById('extensions_details');
-            const installLegacy = document.getElementById('third_party_extension_button');
             const reactManage = document.querySelector('[data-extensions-host-react-action="manage"]');
             const reactInstall = document.querySelector('[data-extensions-host-react-action="install"]');
             const reactNotify = document.querySelector('[data-extensions-host-react-control="notify-updates"]');
             const reactExtrasUrl = document.querySelector('[data-extensions-host-react-control="extras-url"]');
             return {
-                owner: panel?.dataset.extensionsHostVisibleOwner || 'legacy',
                 reactMounted: Boolean(host && host.childElementCount > 0),
                 hostInsidePanel: Boolean(panel && host && panel.contains(host)),
                 settingsPresent: Boolean(settings),
@@ -43,19 +40,15 @@ test.describe('extensions host sole owner', () => {
                 reactInstallPresent: Boolean(reactInstall),
                 reactNotifyPresent: Boolean(reactNotify),
                 reactExtrasUrlPresent: Boolean(reactExtrasUrl),
-                legacyManageHidden: manageLegacy instanceof HTMLElement
-                    ? (manageLegacy.hidden || manageLegacy.dataset.legacyExtensionsHiddenByReact === 'true')
-                    : true,
-                legacyInstallHidden: installLegacy instanceof HTMLElement
-                    ? (installLegacy.hidden || installLegacy.dataset.legacyExtensionsHiddenByReact === 'true')
-                    : true,
+                // Legacy fallback chrome is deleted outright — absent, not hidden.
+                legacyManageAbsent: !document.getElementById('extensions_details'),
+                legacyInstallAbsent: !document.getElementById('third_party_extension_button'),
                 workflow: Boolean(document.querySelector('[data-extensions-host-react-workflow="host-actions"]')),
             };
         });
 
         expect(diagnostics.reactMounted).toBe(true);
         expect(diagnostics.hostInsidePanel).toBe(true);
-        expect(diagnostics.owner).toBe('react');
         expect(diagnostics.settingsPresent).toBe(true);
         expect(diagnostics.settings2Present).toBe(true);
         expect(diagnostics.regexPresent).toBe(true);
@@ -63,21 +56,20 @@ test.describe('extensions host sole owner', () => {
         expect(diagnostics.reactInstallPresent).toBe(true);
         expect(diagnostics.reactNotifyPresent).toBe(true);
         expect(diagnostics.reactExtrasUrlPresent).toBe(true);
-        expect(diagnostics.legacyManageHidden).toBe(true);
-        expect(diagnostics.legacyInstallHidden).toBe(true);
+        expect(diagnostics.legacyManageAbsent).toBe(true);
+        expect(diagnostics.legacyInstallAbsent).toBe(true);
         expect(diagnostics.workflow).toBe(true);
 
         await expect(page.locator('[data-extensions-host-react-workflow="host-actions"]')).toBeVisible();
         await expect(page.locator('#extensions_settings')).toBeAttached();
         await expect(page.locator('#regex_container')).toBeAttached();
-        await expect(page.locator('#extensions_details')).toBeHidden();
-        await expect(page.locator('#third_party_extension_button')).toBeHidden();
-        await expect(page.locator('#extensions_notify_updates')).toBeHidden();
-        await expect(page.locator('#extensions_autoconnect')).toBeHidden();
-        await expect(page.locator('#extensions_url')).toBeHidden();
-        await expect(page.locator('#extensions_api_key')).toBeHidden();
-        await expect(page.locator('#extensions_connect')).toBeHidden();
-        await expect(page.locator('#rm_extensions_block > .extensions_block > .alignitemscenter.flex-container.wide100p:has(#extensions_details)')).toBeHidden();
+        await expect(page.locator('#extensions_details')).toHaveCount(0);
+        await expect(page.locator('#third_party_extension_button')).toHaveCount(0);
+        await expect(page.locator('#extensions_notify_updates')).toHaveCount(0);
+        await expect(page.locator('#extensions_autoconnect')).toHaveCount(0);
+        await expect(page.locator('#extensions_url')).toHaveCount(0);
+        await expect(page.locator('#extensions_api_key')).toHaveCount(0);
+        await expect(page.locator('#extensions_connect')).toHaveCount(0);
     });
 
     test('manage action remains available through react host without removing protected mounts', async ({ page }) => {
@@ -114,8 +106,7 @@ test.describe('extensions host sole owner', () => {
         await expect(page.locator('[data-extensions-host-react-action="manage"]')).toBeVisible();
         await expect(page.locator('#extensions_settings')).toBeAttached();
         await expect(page.locator('#regex_container')).toBeAttached();
-
-        const owner = await page.evaluate(() => document.getElementById('rm_extensions_block')?.dataset.extensionsHostVisibleOwner);
-        expect(owner).toBe('react');
+        await expect(page.locator('#extensions_details')).toHaveCount(0);
+        await expect(page.locator('#third_party_extension_button')).toHaveCount(0);
     });
 });

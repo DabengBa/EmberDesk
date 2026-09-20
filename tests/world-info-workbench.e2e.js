@@ -2,12 +2,10 @@ import { expect, test } from '@playwright/test';
 import { testSetup } from './frontend/frontent-test-utils.js';
 
 async function openWorldInfo(page) {
+    // React shell nav is the only opener — the legacy #WIDrawerIcon is retired.
     const panelButton = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: 'World Info' });
-    if (await panelButton.count()) {
-        await panelButton.click({ timeout: 10_000 });
-    } else {
-        await page.locator('#WIDrawerIcon').click({ timeout: 10_000 });
-    }
+    await expect(panelButton).toHaveCount(1, { timeout: 15_000 });
+    await panelButton.click({ timeout: 10_000 });
     await expect(page.locator('#WorldInfo.openDrawer')).toBeVisible({ timeout: 15_000 });
 }
 

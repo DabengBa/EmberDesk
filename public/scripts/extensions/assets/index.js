@@ -302,8 +302,10 @@ async function downloadAssetsList(url) {
         await populateAssetsMenu(json);
     } catch (error) {
         // Info hint if the user maybe... likely accidentally was trying to install an extension and we wanna help guide them? uwu :3
-        const installButton = $('#third_party_extension_button');
-        flashHighlight(installButton, 10_000);
+        const installButton = $('[data-extensions-host-react-action="install"]');
+        if (installButton.length) {
+            flashHighlight(installButton, 10_000);
+        }
         toastr.info('Click the flashing button at the top right corner of the menu.', 'Trying to install a custom extension?', { timeOut: 10_000 });
 
         // Error logged after, to appear on top
@@ -546,8 +548,10 @@ export async function init() {
 
     const installHintButton = windowHtml.find('.assets-install-hint-link');
     installHintButton.on('click', async function () {
-        const installButton = $('#third_party_extension_button');
-        flashHighlight(installButton, 5000);
+        const installButton = $('[data-extensions-host-react-action="install"]');
+        if (installButton.length) {
+            flashHighlight(installButton, 5000);
+        }
         toastr.info(t`Click the flashing button to install extensions.`, t`How to install extensions?`);
     });
 

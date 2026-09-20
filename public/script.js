@@ -153,6 +153,8 @@ import {
     getExtensionHostSession,
     getDeferredExtensionLoaderState,
     ensureExtensionCompatibilitySlots,
+    getExtrasConnectionStatus,
+    hasExtensionLoadErrors,
 } from './scripts/extensions.js';
 import {
     EXTENSION_COMPATIBILITY_SLOTS,
@@ -540,6 +542,7 @@ registerWorldInfoShellContext({
     authorsNoteMetadataKeys: metadata_keys,
     shouldAddWorldInfoPrompt: () => shouldWIAddPrompt,
     showWarningToast: (message, title) => toastr.warning(message, title),
+    openWorldInfoPanel: () => openWorkspaceShellWorldInfo(),
 });
 
 registerGenerationShellContext({
@@ -1132,41 +1135,7 @@ export function isReactCharacterLibraryPanelEnabled() {
 const WORLD_INFO_REACT_HOST_ID = 'emberdesk-react-world-info-panel-host';
 const EXTENSIONS_HOST_REACT_HOST_ID = 'emberdesk-react-extensions-host-panel-host';
 const CHARACTER_AUTHORING_REACT_HOST_ID = 'emberdesk-react-character-authoring-panel-host';
-const LEGACY_SETTINGS_DRAWER_ROUTE_TARGETS = {
-    '#ai-config-button > .drawer-toggle': '/settings?tab=providers',
-    '#sys-settings-button > .drawer-toggle': '/settings?tab=providers',
-    '#advanced-formatting-button > .drawer-toggle': '/settings?tab=advanced',
-    '#user-settings-button > .drawer-toggle': '/settings',
-};
 const WORKSPACE_SHELL_CHROME_HOST_ID = 'emberdesk-react-workspace-shell-chrome-host';
-const WORKSPACE_SHELL_RETIRED_CHROME_SELECTOR = '#top-bar, #ai-config-button > .drawer-toggle, #advanced-formatting-button > .drawer-toggle, #user-settings-button > .drawer-toggle, .drawer-opener[data-target="rightNavHolder"], .drawer-opener[data-target="extensions-settings-button"]';
-
-document.addEventListener('click', event => {
-    const clickTarget = event.target;
-    if (!(clickTarget instanceof Element)) {
-        return;
-    }
-
-    const drawerToggle = clickTarget.closest('.drawer-toggle');
-    if (!drawerToggle) {
-        return;
-    }
-
-    for (const [selector, route] of Object.entries(LEGACY_SETTINGS_DRAWER_ROUTE_TARGETS)) {
-        if (!drawerToggle.matches(selector)) {
-            continue;
-        }
-
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        const tab = new URL(route, window.location.origin).searchParams.get('tab');
-        void openWorkspaceSettingsOverlay({
-            tab: tab || null,
-            panelKind: route.includes('advanced') ? 'advancedFormatting' : (route.includes('providers') ? 'aiConfig' : 'settings'),
-        });
-        return;
-    }
-}, true);
 const MAIN_CHAT_SCROLL_RESTORE_THRESHOLD_PX = 12;
 const STREAMING_TRANSPORT_TERMINAL_PHASES = new Set(['stopped', 'completed', 'error']);
 const REACT_CHARACTER_LIBRARY_PANEL_ASSET_PATH = '/react/login/assets/character-library-panel.js';
@@ -1244,19 +1213,13 @@ function getWorkspaceShellChromeState() {
     };
 }
 
-function hideLegacyWorkspaceChromeForReact() {
-    document.body.dataset.reactWorkspaceShellChrome = 'mounted';
-    document.querySelectorAll(WORKSPACE_SHELL_RETIRED_CHROME_SELECTOR).forEach((element) => {
-        if (!(element instanceof HTMLElement)) {
-            return;
-        }
-        element.dataset.legacyWorkspaceChromeHiddenByReact = 'true';
-        element.setAttribute('data-legacy-workspace-chrome-hidden-by-react', 'true');
-        element.hidden = true;
-    });
-}
+const WORKSPACE_DRAWER_OPENED_STORAGE_KEYS = {
+    'right-nav-panel': 'NavOpened',
+    'left-nav-panel': 'LNavOpened',
+    WorldInfo: 'WINavOpened',
+};
 
-async function openWorkspaceChildSlotHost(hostId) {
+export async function openWorkspaceChildSlotHost(hostId) {
     const drawer = document.getElementById(hostId);
     if (!(drawer instanceof HTMLElement)) {
         return;
@@ -1265,29 +1228,26 @@ async function openWorkspaceChildSlotHost(hostId) {
     openWorkspaceChildSlotHostImmediate(hostId);
 }
 
-function closeWorkspaceChildSlotHost(hostId, { force = false } = {}) {
+export function closeWorkspaceChildSlotHost(hostId, { force = false } = {}) {
     const drawer = document.getElementById(hostId);
-    const drawerRoot = drawer?.closest('.drawer');
-    const drawerIcon = drawerRoot?.querySelector('.drawer-icon');
     if (!(drawer instanceof HTMLElement) || (!force && drawer.classList.contains('pinnedOpen'))) {
         return false;
     }
 
     if (force) {
         drawer.classList.remove('pinnedOpen');
-        drawerIcon?.classList.remove('drawerPinnedOpen');
     }
     drawer.classList.remove('openDrawer');
     drawer.classList.add('closedDrawer');
-    drawerIcon?.classList.remove('openIcon');
-    drawerIcon?.classList.add('closedIcon');
+    const storageKey = WORKSPACE_DRAWER_OPENED_STORAGE_KEYS[hostId];
+    if (storageKey) {
+        accountStorage.setItem(storageKey, 'false');
+    }
     return true;
 }
 
 function openWorkspaceChildSlotHostImmediate(hostId) {
     const drawer = document.getElementById(hostId);
-    const drawerRoot = drawer?.closest('.drawer');
-    const drawerIcon = drawerRoot?.querySelector('.drawer-icon');
     if (!(drawer instanceof HTMLElement)) {
         return;
     }
@@ -1298,18 +1258,14 @@ function openWorkspaceChildSlotHostImmediate(hostId) {
             openDrawer.classList.add('closedDrawer');
         }
     });
-    document.querySelectorAll('.openIcon:not(.drawerPinnedOpen)').forEach(openIcon => {
-        if (openIcon !== drawerIcon) {
-            openIcon.classList.remove('openIcon');
-            openIcon.classList.add('closedIcon');
-        }
-    });
 
     drawer.classList.add('openDrawer');
     drawer.classList.remove('closedDrawer');
     drawer.style.opacity = '1';
-    drawerIcon?.classList.add('openIcon');
-    drawerIcon?.classList.remove('closedIcon');
+    const storageKey = WORKSPACE_DRAWER_OPENED_STORAGE_KEYS[hostId];
+    if (storageKey) {
+        accountStorage.setItem(storageKey, 'true');
+    }
 }
 
 function showWorkspaceChildSlotContent(selectedMenuId) {
@@ -1434,14 +1390,12 @@ function setWorkspaceShellSlotPinned(slotKey, pinned) {
     const kind = slotKey;
     const drawerId = getWorkspaceChildSlotHostId(slotKey);
     const drawer = drawerId ? document.getElementById(drawerId) : null;
-    const drawerIcon = drawer?.closest('.drawer')?.querySelector('.drawer-icon');
 
     if (!(drawer instanceof HTMLElement)) {
         throw new Error(`Workspace shell slot has no mount target: ${String(slotKey)}`);
     }
 
     drawer.classList.toggle('pinnedOpen', Boolean(pinned));
-    drawerIcon?.classList.toggle('drawerPinnedOpen', Boolean(pinned));
     return { kind, mounted: true, status: 'mounted' };
 }
 
@@ -1492,7 +1446,7 @@ async function closeWorkspaceSettingsOverlay(reservedGeneration = null) {
     });
 }
 
-async function openWorkspaceShellWorldInfo() {
+export async function openWorkspaceShellWorldInfo() {
     await waitForWorkspaceShellPanelOpenTask();
     // React sole-owner: open drawer and mount workbench; deferred body is hidden activation-rules DOM only.
     await openWorkspaceChildSlotHost('WorldInfo');
@@ -1543,7 +1497,6 @@ async function mountReactWorkspaceShellChromeHost() {
     const host = ensureWorkspaceShellChromeHost();
     host.dataset.reactWorkspaceShellChromeStatus = 'loading';
     host.setAttribute('data-react-workspace-shell-chrome-status', 'loading');
-    hideLegacyWorkspaceChromeForReact();
 
     const result = await mountReactWorkspaceShellChrome({
         container: host,
@@ -3303,7 +3256,6 @@ function ensureExtensionsHostReactHost() {
 
     let host = document.getElementById(EXTENSIONS_HOST_REACT_HOST_ID);
     if (host) {
-        // Do not hide legacy chrome until React content has mounted successfully.
         return host;
     }
 
@@ -3321,108 +3273,12 @@ function ensureExtensionsHostReactHost() {
     return host;
 }
 
-/**
- * Hide legacy visible notify/manage/install/Extras chrome when React owns the host surface.
- * Protected mount slots (#extensions_settings, #regex_container, wand menu) stay reachable.
- * @param {boolean} hidden
- */
-function hideLegacyExtensionsHostControls(hidden) {
-    const extensionsPanel = document.getElementById('rm_extensions_block');
-    const host = document.getElementById(EXTENSIONS_HOST_REACT_HOST_ID);
-    if (!(extensionsPanel instanceof HTMLElement)) {
-        return;
-    }
-
-    const protectedIds = new Set([
-        'extensions_settings',
-        'extensions_settings2',
-        'regex_container',
-        'extensionsMenuButton',
-        'extensionsMenu',
-        EXTENSIONS_HOST_REACT_HOST_ID,
-    ]);
-
-    const legacySelectors = [
-        '#extensions_notify_updates',
-        'label[for="extensions_notify_updates"]',
-        '#extensions_details',
-        '#third_party_extension_button',
-        '#extensions_status',
-        'label[for="extensions_autoconnect"]',
-        '#extensions_autoconnect',
-        '#extensions_url',
-        '#extensions_api_key',
-        '#extensions_connect',
-        '.extensions_url_block',
-    ];
-
-    const setLegacyChromeVisibility = (node) => {
-        node.hidden = hidden;
-        node.setAttribute('aria-hidden', hidden ? 'true' : 'false');
-        if (hidden) {
-            // Legacy layout utilities use display: flex !important, which overrides
-            // the browser's default [hidden] rule unless we hide with equal priority.
-            node.style.setProperty('display', 'none', 'important');
-            node.setAttribute('inert', '');
-        } else {
-            node.style.removeProperty('display');
-            node.removeAttribute('inert');
-        }
-        node.dataset.legacyExtensionsHiddenByReact = hidden ? 'true' : 'false';
-    };
-
-    for (const selector of legacySelectors) {
-        extensionsPanel.querySelectorAll(selector).forEach((node) => {
-            if (!(node instanceof HTMLElement) || node === host || host?.contains(node)) {
-                return;
-            }
-            if (protectedIds.has(node.id)) {
-                return;
-            }
-            // Keep inputs in DOM for service/bridge helpers, but hide them from the visible surface.
-            setLegacyChromeVisibility(node);
-        });
-    }
-
-    // Hide the legacy header chrome (duplicate "Extensions" h3 + control row) when React owns the surface.
-    // Prefer structural selectors over English heading text so translated UIs still hide correctly.
-    extensionsPanel.querySelectorAll(':scope > .extensions_block > .alignitemscenter.flex-container.wide100p').forEach((row) => {
-        if (!(row instanceof HTMLElement) || host?.contains(row)) {
-            return;
-        }
-        if (row.querySelector('#extensions_details, #third_party_extension_button, #extensions_notify_updates')) {
-            setLegacyChromeVisibility(row);
-        }
-    });
-
-    // Hide the deprecated Extras heading row chrome without removing status nodes used by bridge state.
-    extensionsPanel.querySelectorAll('h4').forEach((heading) => {
-        if (!(heading instanceof HTMLElement)) {
-            return;
-        }
-        // Match by i18n key or English fallback so translations still hide.
-        const isExtrasHeading = heading.querySelector('[data-i18n="Extras API:"], [data-i18n="(DEPRECATED)"]')
-            || /Extras API/i.test(heading.textContent || '');
-        if (isExtrasHeading) {
-            setLegacyChromeVisibility(heading);
-        }
-    });
-
-    extensionsPanel.classList.toggle('extensions-drawer-react-owned', hidden);
-    extensionsPanel.dataset.extensionsHostVisibleOwner = hidden ? 'react' : 'legacy';
-}
-
 function getExtensionsHostReactBridgeState(stateOverrides = {}) {
     const extensionsSettings = document.getElementById('extensions_settings');
     const extensionsSettings2 = document.getElementById('extensions_settings2');
     const regexContainer = document.getElementById('regex_container');
     const extensionsMenuButton = document.getElementById('extensionsMenuButton');
     const extensionsMenu = document.getElementById('extensionsMenu');
-    const extensionsStatus = document.getElementById('extensions_status');
-    const extensionsUrl = document.getElementById('extensions_url');
-    const extensionsApiKey = document.getElementById('extensions_api_key');
-    const extensionsConnect = document.getElementById('extensions_connect');
-    const extensionsAutoconnect = document.getElementById('extensions_autoconnect');
     const deferredPlaceholder = document.getElementById('extensions_startup_loading');
     const session = typeof getExtensionHostSession === 'function' ? getExtensionHostSession() : null;
     const sessionSnapshot = session && typeof session.getHostStateSnapshot === 'function'
@@ -3431,6 +3287,9 @@ function getExtensionsHostReactBridgeState(stateOverrides = {}) {
     const deferredState = stateOverrides.deferredState
         ?? sessionSnapshot?.deferredState
         ?? (typeof getDeferredExtensionLoaderState === 'function' ? getDeferredExtensionLoaderState() : 'idle');
+    const extrasStatus = typeof getExtrasConnectionStatus === 'function'
+        ? getExtrasConnectionStatus()
+        : { text: '', className: '' };
 
     return {
         extensionsSettingsPresent: Boolean(extensionsSettings),
@@ -3438,14 +3297,18 @@ function getExtensionsHostReactBridgeState(stateOverrides = {}) {
         regexContainerPresent: Boolean(regexContainer),
         extensionsMenuButtonPresent: Boolean(extensionsMenuButton),
         extensionsMenuPresent: Boolean(extensionsMenu),
-        extrasApiControlsPresent: Boolean(extensionsStatus && extensionsUrl && extensionsApiKey && extensionsConnect && extensionsAutoconnect),
-        manageButtonPresent: Boolean(document.getElementById('extensions_details')),
-        installButtonPresent: Boolean(document.getElementById('third_party_extension_button')),
-        notifyUpdatesEnabled: document.getElementById('extensions_notify_updates')?.checked === true,
-        extrasApiUrl: extensionsUrl?.value ?? '',
-        extrasApiKeySet: Boolean(extensionsApiKey?.value),
-        autoconnectEnabled: extensionsAutoconnect?.checked === true,
-        extrasStatusText: extensionsStatus?.textContent?.trim() ?? '',
+        // Extras controls are React-owned; the service layer is always reachable.
+        extrasApiControlsPresent: true,
+        manageButtonPresent: true,
+        installButtonPresent: true,
+        extensionsUiDisabled: extensionsHostControlsDisabled,
+        hasExtensionLoadErrors: hasExtensionLoadErrors(),
+        notifyUpdatesEnabled: extension_settings.notifyUpdates === true,
+        extrasApiUrl: extension_settings.apiUrl ?? '',
+        extrasApiKeySet: Boolean(extension_settings.apiKey),
+        autoconnectEnabled: extension_settings.autoConnect === true,
+        extrasStatusText: extrasStatus.text || '',
+        extrasStatusClassName: extrasStatus.className || '',
         mountPointStatuses: getExtensionsHostReactMountPointStatuses(),
         deferredState,
         deferredPlaceholderPresent: Boolean(deferredPlaceholder),
@@ -3487,7 +3350,7 @@ function getExtensionsHostReactCommands() {
             },
             connectExtrasApi: () => connectExtensionsHostApi(),
             toggleAutoconnect: enabled => setExtensionsHostAutoconnectEnabled(
-                enabled ?? !document.getElementById('extensions_autoconnect')?.checked,
+                enabled ?? !extension_settings.autoConnect,
             ),
             ensureExtensionCompatibilitySlots: owner => ensureExtensionCompatibilitySlots({ owner }),
             retryDeferredExtensions: () => retryDeferredExtensionsHostLoad(),
@@ -3514,11 +3377,7 @@ async function mountReactExtensionsHostPanel(stateOverrides = {}) {
         stateOverrides,
     });
     if (result?.mounted) {
-        hideLegacyExtensionsHostControls(true);
         ensureExtensionCompatibilitySlots({ owner: 'react-extensions-host' });
-    } else {
-        // Bundle/mount failure must not leave users with a blank host and no Manage/Install.
-        hideLegacyExtensionsHostControls(false);
     }
     return result;
 }
@@ -3532,8 +3391,6 @@ function initReactExtensionsHostBridge() {
         addEventTarget: document,
         eventName: 'emberdesk:extensions-host-state-change',
         stateChangeHandler: handleReactExtensionsHostStateChange,
-        drawerSelector: '#extensions-settings-button .drawer-toggle',
-        drawerNamespace: 'reactExtensionsHost',
         remount(stateOverrides) {
             void mountReactExtensionsHostPanel(stateOverrides);
         },
@@ -4740,7 +4597,7 @@ export function displayOnlineStatus() {
 
     if (online_status == 'no_connection') {
         $('.online_status_indicator').removeClass('success');
-        $('.online_status_text').text($('#API-status-top').attr('no_connection_text'));
+        $('.online_status_text').text(translate('No connection...', 'api_no_connection'));
         sendTextareaHint.text(t`Type /? for commands. Send requires an API connection.`);
     } else {
         $('.online_status_indicator').addClass('success');
@@ -8243,30 +8100,11 @@ async function fetchStartupSettings() {
     return response.json();
 }
 
+let extensionsHostControlsDisabled = false;
+
 function applyDeferredExtensionBootstrapState({ disableUi }) {
-    $('#extensions_url').val(extension_settings.apiUrl);
-    $('#extensions_api_key').val(extension_settings.apiKey);
-    $('#extensions_autoconnect').prop('checked', extension_settings.autoConnect);
-    $('#extensions_notify_updates').prop('checked', extension_settings.notifyUpdates);
-
-    if (disableUi) {
-        $('#third_party_extension_button').addClass('disabled');
-        $('#extensions_details').addClass('disabled');
-        $('#extensions_connect').addClass('disabled');
-        $('#extensions_notify_updates').attr('disabled', 'disabled');
-        $('#extensions_autoconnect').attr('disabled', 'disabled');
-        $('#extensions_url').attr('disabled', 'disabled');
-        $('#extensions_api_key').attr('disabled', 'disabled');
-        return;
-    }
-
-    $('#third_party_extension_button').removeClass('disabled');
-    $('#extensions_details').removeClass('disabled');
-    $('#extensions_connect').removeClass('disabled');
-    $('#extensions_notify_updates').removeAttr('disabled');
-    $('#extensions_autoconnect').removeAttr('disabled');
-    $('#extensions_url').removeAttr('disabled');
-    $('#extensions_api_key').removeAttr('disabled');
+    extensionsHostControlsDisabled = Boolean(disableUi);
+    document.dispatchEvent(new CustomEvent('emberdesk:extensions-host-state-change'));
 }
 
 async function applyStartupSettingsCore(data, initLoaderHandle = null) {
@@ -10225,11 +10063,14 @@ export async function newAssistantChat({ temporary = false } = {}) {
  */
 function doDrawerOpenClick() {
     const targetDrawerID = $(this).attr('data-target');
-    const drawer = $(`#${targetDrawerID}`);
-    const drawerToggle = drawer.find('.drawer-toggle');
-    const drawerWasOpenAlready = drawerToggle.parent().find('.drawer-content').hasClass('openDrawer');
-    if (drawerWasOpenAlready || drawer.hasClass('resizing')) { return; }
-    doNavbarIconClick.call(drawerToggle);
+    const drawer = document.getElementById(String(targetDrawerID ?? ''));
+    const drawerContent = drawer?.querySelector(':scope > .drawer-content');
+    if (!(drawerContent instanceof HTMLElement)
+        || drawerContent.classList.contains('openDrawer')
+        || drawer?.classList.contains('resizing')) {
+        return;
+    }
+    openWorkspaceChildSlotHostImmediate(drawerContent.id);
 }
 
 /**
@@ -10246,7 +10087,7 @@ export async function doNavbarIconClick() {
 
     if (!drawerWasOpenAlready) {
         const $worldInfoBlockingDrawers = $('#right-nav-panel.openDrawer:not(.pinnedOpen)').not(drawer);
-        const $worldInfoBlockingIcons = $('#rm_button_panel_pin_div .openIcon:not(.drawerPinnedOpen), #rightNavDrawerIcon.openIcon:not(.drawerPinnedOpen)');
+        const $worldInfoBlockingIcons = $('#rm_button_panel_pin_div .openIcon:not(.drawerPinnedOpen)');
         const $openDrawers = isOpeningWorldInfoDrawer
             ? $('.openDrawer').not(drawer).not($worldInfoBlockingDrawers).not('.pinnedOpen').add($worldInfoBlockingDrawers)
             : $('.openDrawer:not(.pinnedOpen)');

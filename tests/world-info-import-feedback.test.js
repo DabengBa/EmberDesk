@@ -130,7 +130,7 @@ describe('world info import feedback', () => {
         const importSource = extractBlock(
             source,
             'export async function importWorldInfo(file',
-            'export function openWorldInfoEditor(worldName)',
+            'export async function openWorldInfoEditor(worldName)',
         );
         const batchSource = extractBlock(
             source,
@@ -228,7 +228,7 @@ describe('world info import feedback', () => {
         const importSource = extractBlock(
             source,
             'export async function importWorldInfo(file',
-            'export function openWorldInfoEditor(worldName)',
+            'export async function openWorldInfoEditor(worldName)',
         );
 
         expect(source).toContain('const WORLD_INFO_IMPORT_LARGE_FILE_THRESHOLD_BYTES = 10 * 1024 * 1024;');
@@ -253,7 +253,7 @@ describe('world info import feedback', () => {
         const importSource = extractBlock(
             source,
             'export async function importWorldInfo(file',
-            'export function openWorldInfoEditor(worldName)',
+            'export async function openWorldInfoEditor(worldName)',
         );
 
         expect(importSource).toContain('return createWorldInfoImportResult(\'skipped\', file);');
@@ -270,7 +270,7 @@ describe('world info import feedback', () => {
         const importSource = extractBlock(
             worldInfoSource,
             'export async function importWorldInfo(file',
-            'export function openWorldInfoEditor(worldName)',
+            'export async function openWorldInfoEditor(worldName)',
         );
         const prepareOverwriteSource = extractBlock(
             worldInfoSource,
@@ -306,7 +306,7 @@ describe('world info import feedback', () => {
         const importSource = extractBlock(
             source,
             'export async function importWorldInfo(file',
-            'export function openWorldInfoEditor(worldName)',
+            'export async function openWorldInfoEditor(worldName)',
         );
         const parseJsonSource = extractBlock(
             utilsSource,
@@ -337,7 +337,7 @@ describe('world info import feedback', () => {
         const importSource = extractBlock(
             source,
             'export async function importWorldInfo(file',
-            'export function openWorldInfoEditor(worldName)',
+            'export async function openWorldInfoEditor(worldName)',
         );
 
         expect(importSource).toContain('buildWorldInfoImportSuccessMessage(data.name, metadata)');

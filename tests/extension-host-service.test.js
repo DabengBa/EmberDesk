@@ -484,9 +484,9 @@ describe('extension compatibility slots', () => {
 
         expect(scriptSource).toContain('getExtensionHostSession');
         expect(scriptSource).toContain('extension-compatibility-slots');
-        // Hide legacy chrome only after a successful React mount; restore on failure.
+        // React host is the sole owner — no legacy chrome fallback to restore.
         expect(scriptSource).toContain('if (result?.mounted)');
-        expect(scriptSource).toContain('hideLegacyExtensionsHostControls(false)');
+        expect(scriptSource).not.toContain('hideLegacyExtensionsHostControls');
         // Retry must re-run deferred load, not open Manage as a substitute.
         expect(scriptSource).toContain('retryDeferredExtensions: () => retryDeferredExtensionsHostLoad()');
         expect(scriptSource).not.toMatch(/retryDeferredExtensions[^=]*=>?\s*openExtensionsHostManager\(\)/);

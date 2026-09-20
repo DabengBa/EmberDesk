@@ -141,8 +141,7 @@
         flex-direction: column;
     }
 
-    #top-settings-holder,
-    #top-bar {
+    #top-settings-holder {
         position: fixed;
         width: 100vw;
         width: 100dvw;
@@ -385,10 +384,6 @@
 @supports (-webkit-touch-callout: none) {
     body {
         margin: 0 auto;
-    }
-
-    #top-bar {
-        width: 100vw;
     }
 
     #sheld {

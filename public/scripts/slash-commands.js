@@ -520,15 +520,6 @@ export function initDefaultSlashCommands() {
         helpString: t`Opens a temporary chat with Assistant.`,
     }));
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'panels',
-        callback: function () {
-            $('#option_settings').trigger('click');
-            return '';
-        },
-        aliases: ['togglepanels'],
-        helpString: t`Toggle UI panels on/off`,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'forcesave',
         callback: async function () {
             await saveSettings();

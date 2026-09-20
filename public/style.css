@@ -2768,16 +2768,6 @@ h3 {
     margin: 10px 0;
 }
 
-#top-bar h3 {
-    margin: 0;
-    padding: 10px 0;
-}
-
-#top-bar h4 {
-    margin: 0;
-    padding: 5px 0;
-}
-
 input[type="file"] {
     display: none;
 }
@@ -5980,15 +5970,6 @@ body:not(.caption) .mes_img_caption {
     pointer-events: none;
 }
 
-body[data-react-workspace-shell-chrome="mounted"] #top-bar,
-body[data-react-workspace-shell-chrome="mounted"] #top-settings-holder > .drawer > .drawer-toggle,
-body[data-react-workspace-shell-chrome="mounted"] .drawer-opener[data-target="rightNavHolder"],
-body[data-react-workspace-shell-chrome="mounted"] .drawer-opener[data-target="extensions-settings-button"] {
-    display: none !important;
-}
-
-
-
 .emberdesk-react-authoring-panel-host {
     flex: 1 1 100%;
     min-width: 0;
@@ -6035,26 +6016,6 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
     display: flex;
     flex-flow: row;
     width: 100%;
-}
-
-.drawer-icon {
-    display: inline-block;
-    cursor: pointer;
-    font-size: var(--topBarIconSize);
-    padding: 1px 3px;
-}
-
-.drawer-icon.openIcon {
-    transition: opacity var(--animation-duration-2x), filter var(--animation-duration-2x);
-}
-
-.drawer-icon.closedIcon {
-    opacity: 0.3;
-    transition: opacity var(--animation-duration-2x), filter var(--animation-duration-2x);
-}
-
-.drawer-icon.closedIcon:hover {
-    opacity: 1;
 }
 
 .code-copy {

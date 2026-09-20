@@ -15,14 +15,6 @@ export function WelcomePanel({ version }: { version: string }) {
                     <i className="fa-solid fa-plug" />
                     <span data-i18n="API Connections">API Connections</span>
                 </button>
-                <button type="button" className="menu_button menu_button_icon drawer-opener inline-flex" data-target="rightNavHolder">
-                    <i className="fa-solid fa-address-card" />
-                    <span data-i18n="Character Management">Character Management</span>
-                </button>
-                <button type="button" className="menu_button menu_button_icon drawer-opener inline-flex" data-target="extensions-settings-button">
-                    <i className="fa-solid fa-cubes" />
-                    <span data-i18n="Extensions">Extensions</span>
-                </button>
             </div>
         </>
     );

@@ -215,8 +215,8 @@ describe('world info card rendering', () => {
         expect(source).toContain('$(\'#right-nav-panel.openDrawer:not(.pinnedOpen)\').not(drawer)');
         expect(source).not.toContain('$(\'#right-nav-panel.openDrawer\').not(drawer)');
         expect(source).toContain('const $openIcons = isOpeningWorldInfoDrawer');
-        expect(source).toContain('$(\'#rm_button_panel_pin_div .openIcon:not(.drawerPinnedOpen), #rightNavDrawerIcon.openIcon:not(.drawerPinnedOpen)\')');
-        expect(source).not.toContain('$(\'#rm_button_panel_pin_div .openIcon, #rightNavDrawerIcon.openIcon\')');
+        expect(source).toContain('$(\'#rm_button_panel_pin_div .openIcon:not(.drawerPinnedOpen)\')');
+        expect(source).not.toContain('#rightNavDrawerIcon');
     });
 
     test('world book deletion confirmations default to cancel and mark destructive actions', () => {

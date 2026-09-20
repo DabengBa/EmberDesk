@@ -182,11 +182,14 @@ interface ExtensionsHostWorkspacePanelState {
     extrasApiControlsPresent?: boolean;
     manageButtonPresent?: boolean;
     installButtonPresent?: boolean;
+    hasExtensionLoadErrors?: boolean;
+    extensionsUiDisabled?: boolean;
     notifyUpdatesEnabled?: boolean;
     extrasApiUrl?: string;
     extrasApiKeySet?: boolean;
     autoconnectEnabled?: boolean;
     extrasStatusText?: string;
+    extrasStatusClassName?: string;
     mountPointStatuses?: ExtensionsHostReactMountPointStatus[];
     deferredState?: 'idle' | 'loading' | 'failed';
     deferredPlaceholderPresent?: boolean;
@@ -960,16 +963,17 @@ function ExtensionsHostWorkspacePanel({ state, commands }: { state?: unknown; co
                             type="checkbox"
                             data-extensions-host-react-control="notify-updates"
                             checked={Boolean(bridgeState.notifyUpdatesEnabled)}
+                            disabled={Boolean(bridgeState.extensionsUiDisabled)}
                             onChange={() => extensionsHostCommandMutation.mutate(() => commands?.toggleNotifyUpdates())}
                         />
                             Notify updates
                     </label>
                     <button
                         type="button"
-                        className="menu_button"
+                        className={bridgeState.hasExtensionLoadErrors ? 'menu_button warning' : 'menu_button'}
                         data-extensions-host-react-action="manage"
                         onClick={() => extensionsHostCommandMutation.mutate(() => commands?.openManageExtensions())}
-                        disabled={!bridgeState.manageButtonPresent}
+                        disabled={!bridgeState.manageButtonPresent || bridgeState.extensionsUiDisabled}
                     >
                             Manage
                     </button>
@@ -978,7 +982,7 @@ function ExtensionsHostWorkspacePanel({ state, commands }: { state?: unknown; co
                         className="menu_button"
                         data-extensions-host-react-action="install"
                         onClick={() => extensionsHostCommandMutation.mutate(() => commands?.openInstallExtension())}
-                        disabled={!bridgeState.installButtonPresent}
+                        disabled={!bridgeState.installButtonPresent || bridgeState.extensionsUiDisabled}
                     >
                             Install
                     </button>
@@ -991,6 +995,7 @@ function ExtensionsHostWorkspacePanel({ state, commands }: { state?: unknown; co
                                 type="url"
                                 data-extensions-host-react-control="extras-url"
                                 aria-label="Extras API URL"
+                                disabled={Boolean(bridgeState.extensionsUiDisabled)}
                                 value={field.state.value}
                                 onChange={event => {
                                     const url = event.target.value;
@@ -1007,6 +1012,7 @@ function ExtensionsHostWorkspacePanel({ state, commands }: { state?: unknown; co
                                 type="password"
                                 data-extensions-host-react-control="extras-api-key"
                                 aria-label="Extras API key"
+                                disabled={Boolean(bridgeState.extensionsUiDisabled)}
                                 placeholder={bridgeState.extrasApiKeySet ? 'Saved key' : 'Extras API key'}
                                 value={field.state.value}
                                 onChange={event => {
@@ -1025,7 +1031,7 @@ function ExtensionsHostWorkspacePanel({ state, commands }: { state?: unknown; co
                             data-extensions-host-react-control="autoconnect"
                             checked={Boolean(bridgeState.autoconnectEnabled)}
                             onChange={() => extensionsHostCommandMutation.mutate(() => commands?.toggleAutoconnect())}
-                            disabled={!bridgeState.extrasApiControlsPresent}
+                            disabled={!bridgeState.extrasApiControlsPresent || bridgeState.extensionsUiDisabled}
                         />
                             Auto-connect
                     </label>
@@ -1034,11 +1040,11 @@ function ExtensionsHostWorkspacePanel({ state, commands }: { state?: unknown; co
                         className="menu_button"
                         data-extensions-host-react-action="connect"
                         onClick={() => extensionsHostCommandMutation.mutate(() => commands?.connectExtrasApi())}
-                        disabled={!bridgeState.extrasApiControlsPresent}
+                        disabled={!bridgeState.extrasApiControlsPresent || bridgeState.extensionsUiDisabled}
                     >
                             Connect
                     </button>
-                    <output>{bridgeState.extrasStatusText || 'Not connected...'}</output>
+                    <output className={bridgeState.extrasStatusClassName || undefined}>{bridgeState.extrasStatusText || 'Not connected...'}</output>
                 </div>
                 {/* Protected mount IDs remain in established drawer DOM under React lifecycle
                     (ensureExtensionCompatibilitySlots). Do not render empty React placeholders

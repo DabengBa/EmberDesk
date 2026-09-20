@@ -59,7 +59,7 @@ export const FIRST_PARTY_SCRIPT_JS_IMPORT_CONTRACT = Object.freeze([
     contractEntry('preset-manager.js', '../script.js', ['amount_gen', 'characters', 'main_api', 'max_context', 'online_status', 'saveSettings', 'saveSettingsDebounced', 'this_chid']),
     contractEntry('PromptManager.js', '../script.js', ['is_send_press', 'main_api', 'substituteParams']),
     contractEntry('reasoning.js', '../script.js', ['chat', 'closeMessageEditor', 'main_api', 'messageFormatting', 'saveChatConditional', 'saveChatDebounced', 'saveSettingsDebounced', 'substituteParams', 'syncMesToSwipe', 'updateMessageBlock']),
-    contractEntry('RossAscends-mods.js', '../script.js', ['active_character', 'buildAvatarList', 'characters', 'doNavbarIconClick', 'getEntitiesList', 'isSwipingAllowed', 'is_send_press', 'main_api', 'max_context', 'menu_type', 'online_status', 'saveSettingsDebounced', 'selectCharacterById', 'sendTextareaMessage', 'setActiveCharacter', 'substituteParams']),
+    contractEntry('RossAscends-mods.js', '../script.js', ['active_character', 'buildAvatarList', 'characters', 'closeWorkspaceChildSlotHost', 'getEntitiesList', 'isSwipingAllowed', 'is_send_press', 'main_api', 'max_context', 'menu_type', 'online_status', 'openWorkspaceChildSlotHost', 'openWorkspaceShellWorldInfo', 'saveSettingsDebounced', 'selectCharacterById', 'sendTextareaMessage', 'setActiveCharacter', 'substituteParams']),
     contractEntry('samplerSelect.js', '../script.js', ['main_api', 'saveSettingsDebounced']),
     contractEntry('secrets.js', '../script.js', ['saveSettings']),
     contractEntry('server-history.js', '../script.js', ['saveSettingsDebounced']),

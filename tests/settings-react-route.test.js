@@ -915,11 +915,8 @@ describe('settings React route flag', () => {
         expect(routeSource).toContain('setHasRevisionConflict(true)');
         expect(routeSource).toContain('重新加载当前设置');
         expect(routeSource).toContain('disabled={isBusy || settingsQuery.isPending || isPristine || hasRevisionConflict}');
-        expect(scriptSource).toContain('LEGACY_SETTINGS_DRAWER_ROUTE_TARGETS');
-        expect(scriptSource).toContain("'#ai-config-button > .drawer-toggle': '/settings?tab=providers'");
-        expect(scriptSource).toContain("'#advanced-formatting-button > .drawer-toggle': '/settings?tab=advanced'");
-        expect(scriptSource).toContain("'#user-settings-button > .drawer-toggle': '/settings'");
-        expect(scriptSource).toContain('event.stopImmediatePropagation();');
+        // Legacy settings drawer toggles are deleted; no route-redirect listener remains.
+        expect(scriptSource).not.toContain('LEGACY_SETTINGS_DRAWER_ROUTE_TARGETS');
         expect(scriptSource).toContain('openWorkspaceSettingsOverlay');
         expect(scriptSource).not.toContain("window.location.assign('/settings");
     });

@@ -106,7 +106,7 @@ describe('React workspace panels bridge helpers', () => {
         const bridgeSource = read('public/scripts/workspace-panels-react-bridge.js');
 
         expect(scriptSource).toContain('async function mountReactWorkspaceShellChromeHost');
-        expect(scriptSource).toContain('hideLegacyWorkspaceChromeForReact();');
+        expect(scriptSource).not.toContain('hideLegacyWorkspaceChromeForReact');
         expect(scriptSource).not.toContain('workspace-shell-takeover-contract');
         expect(scriptSource).not.toContain('publishWorkspaceShellTakeoverDiagnostic');
         expect(bridgeSource).not.toContain('workspace-shell-takeover-contract');
@@ -123,7 +123,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('ensureWorkspaceShellChromeHost');
         expect(scriptSource).toContain('mountReactWorkspaceShellChrome');
         expect(scriptSource).toContain('data-react-workspace-shell-chrome-status');
-        expect(scriptSource).toContain('data-legacy-workspace-chrome-hidden-by-react');
+        expect(scriptSource).not.toContain('data-legacy-workspace-chrome-hidden-by-react');
         expect(scriptSource).toContain("? 'EmberDesk'");
         expect(scriptSource).not.toContain('workspace-next');
         expect(scriptSource).not.toContain('/workspace-next');
@@ -849,11 +849,15 @@ describe('React workspace panels bridge helpers', () => {
         expect(scriptSource).toContain('regexContainerPresent: Boolean(regexContainer)');
         expect(scriptSource).toContain('extensionsMenuButtonPresent: Boolean(extensionsMenuButton)');
         expect(scriptSource).toContain('extensionsMenuPresent: Boolean(extensionsMenu)');
-        expect(scriptSource).toContain('extrasApiControlsPresent: Boolean(extensionsStatus && extensionsUrl && extensionsApiKey && extensionsConnect && extensionsAutoconnect)');
+        // Legacy extensions controls are retired; the React host is the sole owner
+        // and reads Extras state from extension_settings/service state.
+        expect(scriptSource).toContain('extrasApiControlsPresent: true');
+        expect(scriptSource).toContain('extensionsUiDisabled: extensionsHostControlsDisabled');
+        expect(scriptSource).toContain('hasExtensionLoadErrors: hasExtensionLoadErrors()');
         expect(scriptSource).toContain('async function mountReactExtensionsHostPanel(');
-        expect(scriptSource).toContain('function hideLegacyExtensionsHostControls(');
-        expect(scriptSource).toContain("dataset.extensionsHostVisibleOwner = hidden ? 'react' : 'legacy'");
-        expect(scriptSource).toContain('hideLegacyExtensionsHostControls(true)');
+        expect(scriptSource).not.toContain('function hideLegacyExtensionsHostControls(');
+        expect(scriptSource).not.toContain('extensionsHostVisibleOwner');
+        expect(scriptSource).not.toContain('hideLegacyExtensionsHostControls(true)');
         expect(scriptSource).toContain('const result = await mountWorkspacePanelHost({');
         expect(scriptSource).toContain('kind: \'extensionsHost\'');
         expect(scriptSource).toContain('getState: overrides => getExtensionsHostReactBridgeState(overrides ?? stateOverrides)');
@@ -919,11 +923,11 @@ test('renders an Extensions Host workflow through React-owned controls and expli
         const workspacePanelSource = read('app/workspace-panels.tsx');
 
         expect(scriptSource).toContain('function getExtensionsHostReactCommands()');
-        expect(scriptSource).toContain('notifyUpdatesEnabled: document.getElementById(\'extensions_notify_updates\')?.checked === true');
-        expect(scriptSource).toContain('extrasApiUrl: extensionsUrl?.value ?? \'\'');
-        expect(scriptSource).toContain('extrasApiKeySet: Boolean(extensionsApiKey?.value)');
-        expect(scriptSource).toContain('autoconnectEnabled: extensionsAutoconnect?.checked === true');
-        expect(scriptSource).toContain('extrasStatusText: extensionsStatus?.textContent?.trim() ?? \'\'');
+        expect(scriptSource).toContain('notifyUpdatesEnabled: extension_settings.notifyUpdates === true');
+        expect(scriptSource).toContain('extrasApiUrl: extension_settings.apiUrl ?? \'\'');
+        expect(scriptSource).toContain('extrasApiKeySet: Boolean(extension_settings.apiKey)');
+        expect(scriptSource).toContain('autoconnectEnabled: extension_settings.autoConnect === true');
+        expect(scriptSource).toContain('extrasStatusText: extrasStatus.text || \'\'');
         expect(scriptSource).toContain('mountPointStatuses: getExtensionsHostReactMountPointStatuses()');
         expect(scriptSource).toContain('toggleExtensionsHostNotifyUpdates');
         expect(scriptSource).toContain('openExtensionsHostManager');

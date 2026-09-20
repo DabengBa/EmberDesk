@@ -4626,7 +4626,7 @@ export async function importEmbeddedWorldInfo(skipPopup = false) {
     const newIndex = world_names.indexOf(bookName);
     if (newIndex >= 0) {
         //show&draw the WI panel before..
-        $('#WIDrawerIcon').trigger('click');
+        await getWorldInfoShell().openWorldInfoPanel();
         //..auto-opening the new imported WI
         $('#world_editor_select').val(newIndex).trigger('change');
     }
@@ -4913,10 +4913,10 @@ export async function importWorldInfo(file, { overwriteMode = WORLD_INFO_IMPORT_
  * Forces the world info editor to open on a specific world.
  * @param {string} worldName The name of the world to open
  */
-export function openWorldInfoEditor(worldName) {
+export async function openWorldInfoEditor(worldName) {
     console.log(`Opening lorebook for ${worldName}`);
-    if (!$('#WorldInfo').is(':visible')) {
-        $('#WIDrawerIcon').trigger('click');
+    if (!$('#WorldInfo').hasClass('openDrawer')) {
+        await getWorldInfoShell().openWorldInfoPanel();
     }
     const index = world_names.indexOf(worldName);
     $('#world_editor_select').val(index).trigger('change');

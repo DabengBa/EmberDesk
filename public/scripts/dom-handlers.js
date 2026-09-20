@@ -43,7 +43,6 @@ const deleteMessage = (...args) => shell().deleteMessage(...args);
 const displayPastChats = (...args) => shell().displayPastChats(...args);
 const doCharListDisplaySwitch = (...args) => shell().doCharListDisplaySwitch(...args);
 const doDrawerOpenClick = (...args) => shell().doDrawerOpenClick(...args);
-const doNavbarIconClick = (...args) => shell().doNavbarIconClick(...args);
 const doNewChat = (...args) => shell().doNewChat(...args);
 const download = (...args) => shell().download(...args);
 const dragElement = (...args) => shell().dragElement(...args);
@@ -778,29 +777,6 @@ export async function bindLegacyShellHandlers() {
             setTimeout(() => openMessageDelete(fromSlashCommand), state.animation_duration);
         } else if (id == 'option_close_chat') {
             await closeCurrentChat();
-        } else if (id === 'option_settings') {
-            var topBar = document.getElementById('top-bar');
-            var topSettingsHolder = document.getElementById('top-settings-holder');
-            var divchat = document.getElementById('chat');
-
-            if (!topBar || !topSettingsHolder || !divchat) {
-                return;
-            }
-
-            if (topBar.style.display === 'none') {
-                topBar.style.display = ''; // or "inline-block" if that's the original display value
-                topSettingsHolder.style.display = ''; // or "inline-block" if that's the original display value
-
-                divchat.style.borderRadius = '';
-                divchat.style.backgroundColor = '';
-            } else {
-                divchat.style.borderRadius = '10px'; // Adjust the value to control the roundness of the corners
-                divchat.style.backgroundColor = ''; // Set the background color to your preference
-
-                topBar.style.display = 'none';
-                topSettingsHolder.style.display = 'none';
-            }
-            //}
         }
         hideMenu();
     });
@@ -1217,8 +1193,6 @@ export async function bindLegacyShellHandlers() {
 
     $(document).on('click', '.drawer-opener', doDrawerOpenClick);
 
-    $('.drawer-toggle').on('click', doNavbarIconClick);
-
     $('html').on('touchstart mousedown', async function (e) {
         const clickTarget = $(e.target);
 
@@ -1249,11 +1223,9 @@ export async function bindLegacyShellHandlers() {
 
         // This autocloses open drawers that are not pinned if a click happens inside the app which does not target them.
         const targetParentHasOpenDrawer = clickTarget.parents('.openDrawer').length;
-        if (!clickTarget.hasClass('drawer-icon') && !clickTarget.hasClass('openDrawer')) {
+        if (!clickTarget.hasClass('openDrawer')) {
             const $openDrawers = $('.openDrawer').not('.pinnedOpen');
             if ($openDrawers.length && targetParentHasOpenDrawer === 0) {
-                // Toggle icon and drawer classes
-                $('.openIcon').not('.drawerPinnedOpen').toggleClass('closedIcon openIcon');
                 $openDrawers.toggleClass('closedDrawer openDrawer');
             }
         }

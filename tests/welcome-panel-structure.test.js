@@ -18,10 +18,12 @@ describe('welcome panel structure', () => {
         expect(welcomePanel).toContain('welcomePanel');
         expect(welcomePanel).toContain('welcomeHeaderLogo');
         expect(welcomePanel).toContain('welcomeHeaderVersionDisplay');
+        // Only the API Connections opener remains; the shell-chrome-hidden
+        // rightNavHolder/extensions openers were removed with the retired chrome.
         expect(welcomePanel).toContain('drawer-opener');
         expect(welcomePanel).toContain('data-target="sys-settings-button"');
-        expect(welcomePanel).toContain('data-target="rightNavHolder"');
-        expect(welcomePanel).toContain('data-target="extensions-settings-button"');
+        expect(welcomePanel).not.toContain('data-target="rightNavHolder"');
+        expect(welcomePanel).not.toContain('data-target="extensions-settings-button"');
 
         expectNotContainsMarkers(welcomePanel, [
             'Docs',

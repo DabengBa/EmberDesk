@@ -83,10 +83,9 @@ describe('character list structure', () => {
             'id="rm_print_characters_block"',
         ].forEach(marker => expect(rightNavSource).toContain(marker));
 
-        expect(indexHtml).toContain('id="rightNavDrawerIcon"');
-        expect(indexHtml).toMatch(/id="rightNavDrawerIcon"[^>]*\brole="button"/);
-        expect(indexHtml).toMatch(/id="rightNavDrawerIcon"[^>]*\baria-label="Open Character Management"/);
-        expect(indexHtml).toMatch(/id="rightNavDrawerIcon"[^>]*\btabindex="0"/);
+        // Legacy drawer icon is retired; React shell chrome owns the Character Library nav entry.
+        expect(indexHtml).not.toContain('id="rightNavDrawerIcon"');
+        expect(indexHtml).toContain('id="rightNavHolder"');
         expect(rightNavSource).toMatch(/id="rm_button_characters"[^>]*\blabel="Characters"/);
         expect(rightNavSource).toMatch(/id="rm_button_characters"[^>]*\btabIndex=\{0\}/);
 

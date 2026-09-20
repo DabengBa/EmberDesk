@@ -71,8 +71,9 @@ describe('chat workspace structure', () => {
         expect(panelStyleSource).toContain('chrome:');
         expect(panelStyleSource).toContain('navButtonActive');
         expect(styleSource).not.toContain('.react-workspace-panel-dock-status');
-        expect(styleSource).toContain('body[data-react-workspace-shell-chrome="mounted"] .drawer-opener[data-target="rightNavHolder"]');
-        expect(styleSource).toContain('body[data-react-workspace-shell-chrome="mounted"] .drawer-opener[data-target="extensions-settings-button"]');
+        // Retired-chrome hiding rules are gone with the retired markup.
+        expect(styleSource).not.toContain('data-react-workspace-shell-chrome="mounted"');
+        expect(styleSource).not.toContain('.drawer-icon');
     });
 
     test('does not restore the legacy left AI config drawer on startup', () => {

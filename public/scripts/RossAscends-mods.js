@@ -15,8 +15,10 @@ import {
     menu_type,
     substituteParams,
     sendTextareaMessage,
-    doNavbarIconClick,
     isSwipingAllowed,
+    openWorkspaceChildSlotHost,
+    closeWorkspaceChildSlotHost,
+    openWorkspaceShellWorldInfo,
 } from '../script.js';
 
 import { eventSource } from './events.js';
@@ -45,11 +47,8 @@ var LPanelPin = null;
 var WIPanelPin = null;
 
 var RightNavPanel = null;
-var RightNavDrawerIcon = null;
 var LeftNavPanel = null;
-var LeftNavDrawerIcon = null;
 var WorldInfo = null;
-var WIDrawerIcon = null;
 
 var SelectedCharacterTab = null;
 
@@ -302,16 +301,12 @@ function RA_checkOnlineStatus() {
         $('#send_but').addClass('displayNone'); //send button is hidden when not connected;
         $('#mes_continue').addClass('displayNone'); //continue button is hidden when not connected;
         $('#mes_impersonate').addClass('displayNone'); //continue button is hidden when not connected;
-        $('#API-status-top').removeClass('fa-plug');
-        $('#API-status-top').addClass('fa-plug-circle-exclamation redOverlayGlow');
         connection_made = false;
     } else {
         if (online_status !== undefined && online_status !== 'no_connection') {
             const send_textarea = $('#send_textarea');
             send_textarea.attr('placeholder', send_textarea.attr('connected_text')); //on connect, placeholder tells user to type message
             $('#send_form').removeClass('no-connection');
-            $('#API-status-top').removeClass('fa-plug-circle-exclamation redOverlayGlow');
-            $('#API-status-top').addClass('fa-plug');
             connection_made = true;
             retry_delay = 100;
 
@@ -379,14 +374,14 @@ function OpenNavPanels() {
     if (!isMobile()) {
         //auto-open R nav if locked and previously open
         if (accountStorage.getItem('NavLockOn') == 'true' && accountStorage.getItem('NavOpened') == 'true') {
-            //console.log("RA -- clicking right nav to open");
-            $('#rightNavDrawerIcon').trigger('click');
+            //console.log("RA -- opening right nav");
+            void openWorkspaceChildSlotHost('right-nav-panel');
         }
 
         //auto-open WI if locked and previously open
         if (accountStorage.getItem('WINavLockOn') == 'true' && accountStorage.getItem('WINavOpened') == 'true') {
-            console.debug('RA -- clicking WI to open');
-            $('#WIDrawerIcon').trigger('click');
+            console.debug('RA -- opening WI panel');
+            void openWorkspaceShellWorldInfo();
         }
     }
 }
@@ -641,11 +636,8 @@ export function initRossMods() {
     LPanelPin = document.getElementById('lm_button_panel_pin');
     WIPanelPin = document.getElementById('WI_panel_pin');
     RightNavPanel = document.getElementById('right-nav-panel');
-    RightNavDrawerIcon = document.getElementById('rightNavDrawerIcon');
     LeftNavPanel = document.getElementById('left-nav-panel');
-    LeftNavDrawerIcon = document.getElementById('leftNavDrawerIcon');
     WorldInfo = document.getElementById('WorldInfo');
-    WIDrawerIcon = document.getElementById('WIDrawerIcon');
     SelectedCharacterTab = document.getElementById('rm_button_selected_ch');
 
     //when "+New Character" is clicked
@@ -676,15 +668,12 @@ export function initRossMods() {
         if ($(RPanelPin).prop('checked') == true) {
             //console.log('adding pin class to right nav');
             $(RightNavPanel).addClass('pinnedOpen');
-            $(RightNavDrawerIcon).addClass('drawerPinnedOpen');
         } else {
             //console.log('removing pin class from right nav');
             $(RightNavPanel).removeClass('pinnedOpen');
-            $(RightNavDrawerIcon).removeClass('drawerPinnedOpen');
 
             if ($(RightNavPanel).hasClass('openDrawer') && $('.openDrawer').length > 1) {
-                const toggle = $('#unimportantYes');
-                doNavbarIconClick.call(toggle);
+                closeWorkspaceChildSlotHost('right-nav-panel');
             }
         }
     });
@@ -693,15 +682,12 @@ export function initRossMods() {
         if ($(LPanelPin).prop('checked') == true) {
             //console.log('adding pin class to Left nav');
             $(LeftNavPanel).addClass('pinnedOpen');
-            $(LeftNavDrawerIcon).addClass('drawerPinnedOpen');
         } else {
             //console.log('removing pin class from Left nav');
             $(LeftNavPanel).removeClass('pinnedOpen');
-            $(LeftNavDrawerIcon).removeClass('drawerPinnedOpen');
 
             if ($(LeftNavPanel).hasClass('openDrawer') && $('.openDrawer').length > 1) {
-                const toggle = $('#ai-config-button>.drawer-toggle');
-                doNavbarIconClick.call(toggle);
+                closeWorkspaceChildSlotHost('left-nav-panel');
             }
         }
     });
@@ -711,16 +697,13 @@ export function initRossMods() {
         if ($(WIPanelPin).prop('checked') == true) {
             console.debug('adding pin class to WI');
             $(WorldInfo).addClass('pinnedOpen');
-            $(WIDrawerIcon).addClass('drawerPinnedOpen');
         } else {
             console.debug('removing pin class from WI');
             $(WorldInfo).removeClass('pinnedOpen');
-            $(WIDrawerIcon).removeClass('drawerPinnedOpen');
 
             if ($(WorldInfo).hasClass('openDrawer') && $('.openDrawer').length > 1) {
                 console.debug('closing WI after lock removal');
-                const toggle = $('#WI-SP-button>.drawer-toggle');
-                doNavbarIconClick.call(toggle);
+                closeWorkspaceChildSlotHost('WorldInfo');
             }
         }
     });
@@ -731,24 +714,20 @@ export function initRossMods() {
         if (accountStorage.getItem('NavLockOn') == 'true') {
             //console.log('setting pin class via local var');
             $(RightNavPanel).addClass('pinnedOpen');
-            $(RightNavDrawerIcon).addClass('drawerPinnedOpen');
         }
         if ($(RPanelPin).prop('checked')) {
             console.debug('setting pin class via checkbox state');
             $(RightNavPanel).addClass('pinnedOpen');
-            $(RightNavDrawerIcon).addClass('drawerPinnedOpen');
         }
         // read the state of left Nav Lock and apply to leftnav classlist
         $(LPanelPin).prop('checked', accountStorage.getItem('LNavLockOn') === 'true');
         if (accountStorage.getItem('LNavLockOn') == 'true') {
             //console.log('setting pin class via local var');
             $(LeftNavPanel).addClass('pinnedOpen');
-            $(LeftNavDrawerIcon).addClass('drawerPinnedOpen');
         }
         if ($(LPanelPin).prop('checked')) {
             console.debug('setting pin class via checkbox state');
             $(LeftNavPanel).addClass('pinnedOpen');
-            $(LeftNavDrawerIcon).addClass('drawerPinnedOpen');
         }
 
         // read the state of left Nav Lock and apply to leftnav classlist
@@ -756,37 +735,16 @@ export function initRossMods() {
         if (accountStorage.getItem('WINavLockOn') == 'true') {
             //console.log('setting pin class via local var');
             $(WorldInfo).addClass('pinnedOpen');
-            $(WIDrawerIcon).addClass('drawerPinnedOpen');
         }
 
         if ($(WIPanelPin).prop('checked')) {
             console.debug('setting pin class via checkbox state');
             $(WorldInfo).addClass('pinnedOpen');
-            $(WIDrawerIcon).addClass('drawerPinnedOpen');
         }
     }
 
-
-    //save state of Right nav being open or closed
-    $('#rightNavDrawerIcon').on('click', function () {
-        if (!$('#rightNavDrawerIcon').hasClass('openIcon')) {
-            accountStorage.setItem('NavOpened', 'true');
-        } else { accountStorage.setItem('NavOpened', 'false'); }
-    });
-
-    //save state of Left nav being open or closed
-    $('#leftNavDrawerIcon').on('click', function () {
-        if (!$('#leftNavDrawerIcon').hasClass('openIcon')) {
-            accountStorage.setItem('LNavOpened', 'true');
-        } else { accountStorage.setItem('LNavOpened', 'false'); }
-    });
-
-    //save state of Left nav being open or closed
-    $('#WorldInfo').on('click', function () {
-        if (!$('#WorldInfo').hasClass('openIcon')) {
-            accountStorage.setItem('WINavOpened', 'true');
-        } else { accountStorage.setItem('WINavOpened', 'false'); }
-    });
+    // Drawer open/closed persistence (NavOpened/LNavOpened/WINavOpened) is
+    // written by openWorkspaceChildSlotHost/closeWorkspaceChildSlotHost.
 
     var chatbarInFocus = false;
     $('#send_textarea').on('focus', function () {
@@ -1176,7 +1134,7 @@ export function initRossMods() {
                     .not('#cfgConfig')
                     .not('#logprobsViewer')
                     .not('#movingDivs > div');
-                $(visibleDrawerContent).parent().find('.drawer-icon').trigger('click');
+                visibleDrawerContent.each((_, element) => closeWorkspaceChildSlotHost(element.id));
                 return;
             }
 
@@ -1196,7 +1154,7 @@ export function initRossMods() {
             }
 
             if ($('#WorldInfo').is(':visible')) {
-                $('#WIDrawerIcon').trigger('click');
+                closeWorkspaceChildSlotHost('WorldInfo');
                 return;
             }
 
@@ -1210,13 +1168,13 @@ export function initRossMods() {
 
             if ($('#left-nav-panel').is(':visible') &&
                 $(LPanelPin).prop('checked') === false) {
-                $('#leftNavDrawerIcon').trigger('click');
+                closeWorkspaceChildSlotHost('left-nav-panel');
                 return;
             }
 
             if ($('#right-nav-panel').is(':visible') &&
                 $(RPanelPin).prop('checked') === false) {
-                $('#rightNavDrawerIcon').trigger('click');
+                closeWorkspaceChildSlotHost('right-nav-panel');
                 return;
             }
             if ($('.draggable').is(':visible')) {

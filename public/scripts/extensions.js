@@ -734,21 +734,25 @@ async function activateExtensions() {
     }
 
     await Promise.allSettled(promises);
-    $('#extensions_details').toggleClass('warning', extensionLoadErrors.size > 0);
+    syncExtensionsHostReactState({ hasExtensionLoadErrors: extensionLoadErrors.size > 0 });
+}
+
+/**
+ * Whether the last extension load produced errors (surfaced by the React host).
+ * @returns {boolean}
+ */
+export function hasExtensionLoadErrors() {
+    return extensionLoadErrors.size > 0;
 }
 
 async function connectClickHandler() {
-    const baseUrl = String($('#extensions_url').val());
-    extension_settings.apiUrl = baseUrl;
-    const testApiKey = $('#extensions_api_key').val();
-    extension_settings.apiKey = String(testApiKey);
+    const baseUrl = String(extension_settings.apiUrl ?? '');
     saveSettingsDebounced();
     await connectToApi(baseUrl);
     syncExtensionsHostReactState();
 }
 
-function autoConnectInputHandler() {
-    const value = $(this).prop('checked');
+function setAutoConnectEnabled(value) {
     extension_settings.autoConnect = !!value;
 
     if (value && !connectedToApi) {
@@ -796,8 +800,8 @@ async function addExtensionsButtonAndMenu() {
     });
 }
 
-function notifyUpdatesInputHandler() {
-    extension_settings.notifyUpdates = !!$('#extensions_notify_updates').prop('checked');
+function setNotifyUpdatesEnabled(value) {
+    extension_settings.notifyUpdates = !!value;
     saveSettingsDebounced();
 
     if (extension_settings.notifyUpdates) {
@@ -840,12 +844,22 @@ async function connectToApi(baseUrl) {
  * Updates the status of Extras API connection.
  * @param {boolean} success Whether the connection was successful
  */
+let extrasConnectionStatus = { text: '', className: '' };
+
+/**
+ * Last Extras API connection status, mirrored by the React extensions host.
+ * @returns {{ text: string, className: string }}
+ */
+export function getExtrasConnectionStatus() {
+    return extrasConnectionStatus;
+}
+
 function updateStatus(success) {
     connectedToApi = success;
-    const _text = success ? t`Connected to API` : t`Could not connect to API`;
-    const _class = success ? 'success' : 'failure';
-    $('#extensions_status').text(_text);
-    $('#extensions_status').attr('class', _class);
+    extrasConnectionStatus = {
+        text: success ? t`Connected to API` : t`Could not connect to API`,
+        className: success ? 'success' : 'failure',
+    };
     syncExtensionsHostReactState();
 }
 
@@ -2044,10 +2058,6 @@ export async function loadExtensionSettings(settings, versionChanged, enableAuto
         Object.assign(extension_settings, settings.extension_settings);
     }
 
-    $('#extensions_url').val(extension_settings.apiUrl);
-    $('#extensions_api_key').val(extension_settings.apiKey);
-    $('#extensions_autoconnect').prop('checked', extension_settings.autoConnect);
-    $('#extensions_notify_updates').prop('checked', extension_settings.notifyUpdates);
     syncExtensionsHostReactState();
 
     // Activate offline extensions
@@ -2070,13 +2080,7 @@ export async function loadExtensionSettings(settings, versionChanged, enableAuto
 }
 
 export function toggleExtensionsHostNotifyUpdates() {
-    const checkbox = document.getElementById('extensions_notify_updates');
-    if (!(checkbox instanceof HTMLInputElement)) {
-        return false;
-    }
-
-    checkbox.checked = !checkbox.checked;
-    notifyUpdatesInputHandler.call(checkbox);
+    setNotifyUpdatesEnabled(!extension_settings.notifyUpdates);
     return true;
 }
 
@@ -2124,22 +2128,14 @@ export async function openExtensionsHostInstaller() {
 }
 
 export function updateExtensionsHostApiUrl(url) {
-    const input = document.getElementById('extensions_url');
-    if (!(input instanceof HTMLInputElement)) {
-        return false;
-    }
-
-    input.value = String(url ?? '');
+    extension_settings.apiUrl = String(url ?? '');
+    syncExtensionsHostReactState();
     return true;
 }
 
 export function updateExtensionsHostApiKey(apiKey) {
-    const input = document.getElementById('extensions_api_key');
-    if (!(input instanceof HTMLInputElement)) {
-        return false;
-    }
-
-    input.value = String(apiKey ?? '');
+    extension_settings.apiKey = String(apiKey ?? '');
+    syncExtensionsHostReactState();
     return true;
 }
 
@@ -2149,13 +2145,7 @@ export async function connectExtensionsHostApi() {
 }
 
 export function setExtensionsHostAutoconnectEnabled(enabled) {
-    const checkbox = document.getElementById('extensions_autoconnect');
-    if (!(checkbox instanceof HTMLInputElement)) {
-        return false;
-    }
-
-    checkbox.checked = Boolean(enabled);
-    autoConnectInputHandler.call(checkbox);
+    setAutoConnectEnabled(enabled);
     return true;
 }
 
@@ -2629,14 +2619,6 @@ export async function initExtensions() {
     $('#extensionsMenuButton').css('display', 'flex');
     renderDeferredExtensionPlaceholder();
 
-    $('#extensions_connect').on('click', connectClickHandler);
-    $('#extensions_url').on('input', () => syncExtensionsHostReactState());
-    $('#extensions_api_key').on('input', () => syncExtensionsHostReactState());
-    $('#extensions_autoconnect').on('input', autoConnectInputHandler);
-    $('#extensions_details').on('click', () => {
-        void openExtensionsHostManager();
-    });
-    $('#extensions_notify_updates').on('input', notifyUpdatesInputHandler);
     $(document).on('click', '.extensions_info .extension_block .toggle_disable', onDisableExtensionClick);
     $(document).on('click', '.extensions_info .extension_block .toggle_enable', onEnableExtensionClick);
     $(document).on('click', '.extensions_info .extension_block .btn_update', onUpdateClick);
@@ -2644,13 +2626,4 @@ export async function initExtensions() {
     $(document).on('click', '.extensions_info .extension_block .btn_clean', onCleanClick);
     $(document).on('click', '.extensions_info .extension_block .btn_move', onMoveClick);
     $(document).on('click', '.extensions_info .extension_block .btn_branch', onBranchClick);
-
-    /**
-     * Handles the click event for the third-party extension import button.
-     *
-     * @listens #third_party_extension_button#click - The click event of the '#third_party_extension_button' element.
-     */
-    $('#third_party_extension_button').on('click', () => {
-        void openExtensionsHostInstaller();
-    });
 }

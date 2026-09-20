@@ -4,7 +4,6 @@ const interactableSelectors = [
     '.custom_interactable', // Manually made interactable controls via code (see 'makeKeyboardInteractable()')
     '.menu_button', // General menu button in ST
     '.right_menu_button', // Button-likes in many menus
-    '.drawer-icon', // Main "menu bar" icons
     '.inline-drawer-icon', // Buttons/icons inside the drawer menus
     '.paginationjs-pages li a', // Pagination buttons
     '.character_select, .bogus_folder_select', // Cards to select characters or folders in the character list

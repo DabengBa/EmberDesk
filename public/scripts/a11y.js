@@ -7,7 +7,6 @@ const buttonSelectors = [
     '.menu_button',
     '.right_menu_button',
     '.mes_button',
-    '.drawer-icon',
     '.inline-drawer-icon',
     '.swipe_left',
     '.swipe_right',
