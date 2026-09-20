@@ -199,7 +199,7 @@ describe('chat message actions controller', () => {
         expect(MESSAGE_ACTION_TIERS.secondary).toEqual(expect.arrayContaining([
             'mes_swipe_picker',
             'mes_reasoning_copy',
-            'mes_gallery',
+            'mes_translate',
         ]));
         expect(MESSAGE_ACTION_TIERS.danger).toEqual(expect.arrayContaining([
             'mes_edit_delete',

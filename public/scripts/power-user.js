@@ -3615,7 +3615,6 @@ jQuery(() => {
             const targetSelector = {
                 chat: '#chat',
                 background: '#bg1',
-                gallery: '#gallery',
                 zoomedAvatar: 'div.zoomed_avatar',
             }[args.to || 'chat'];
 
@@ -3660,7 +3659,6 @@ jQuery(() => {
                     new SlashCommandEnumValue('chat', null, enumTypes.enum, enumIcons.message),
                     new SlashCommandEnumValue('background', null, enumTypes.enum, enumIcons.image),
                     new SlashCommandEnumValue('zoomedAvatar', null, enumTypes.enum, enumIcons.character),
-                    new SlashCommandEnumValue('gallery', null, enumTypes.enum, enumIcons.image),
                 ],
                 defaultValue: 'chat',
             }),
