@@ -292,18 +292,6 @@ export const extension_settings = {
     variables: {
         global: {},
     },
-    /**
-     * @type {import('./chats.js').FileAttachment[]}
-     */
-    attachments: [],
-    /**
-     * @type {Record<string, import('./chats.js').FileAttachment[]>}
-     */
-    character_attachments: {},
-    /**
-     * @type {string[]}
-     */
-    disabled_attachments: [],
 };
 
 function showHideExtensionsMenu() {

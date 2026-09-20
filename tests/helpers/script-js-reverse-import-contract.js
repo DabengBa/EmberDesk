@@ -28,7 +28,6 @@ export const FIRST_PARTY_SCRIPT_JS_IMPORT_CONTRACT = Object.freeze([
     contractEntry('chats.js', '../script.js', ['addCopyToCodeBlocks', 'appendMediaToMessage', 'characters', 'chat', 'getCurrentChatId', 'name2', 'reloadCurrentChat', 'saveSettingsDebounced', 'this_chid', 'saveChatConditional', 'chat_metadata', 'neutralCharacterName', 'updateChatMetadata', 'system_message_types', 'converter', 'substituteParams', 'getSystemMessageByType', 'printMessages', 'clearChat', 'refreshSwipeButtons', 'getMediaIndex', 'getMediaDisplay', 'chatElement']),
     contractEntry('custom-request.js', '../script.js', ['extractJsonFromData', 'extractMessageFromData']),
     contractEntry('extensions.js', '../script.js', ['saveSettings', 'saveSettingsDebounced', 'animation_duration', 'CLIENT_VERSION']),
-    contractEntry('extensions/attachments/index.js', '../../../script.js', ['saveSettingsDebounced']),
     contractEntry('extensions/connection-manager/index.js', '../../../script.js', ['activateSendButtons', 'deactivateSendButtons', 'main_api', 'online_status', 'saveSettingsDebounced']),
     contractEntry('extensions/quick-reply/index.js', '../../../script.js', ['chat', 'chat_metadata', 'this_chid', 'characters']),
     contractEntry('extensions/quick-reply/src/QuickReplySet.js', '../../../../script.js', ['substituteParams']),
