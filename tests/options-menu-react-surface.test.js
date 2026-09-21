@@ -25,7 +25,7 @@ describe('options menu + character context menu React surfaces', () => {
 
     test('options component preserves item IDs and the duplicate close-chat ID', () => {
         const ids = [
-            'option_toggle_logprobs', 'option_back_to_main',
+            'option_back_to_main',
             'option_start_new_chat', 'option_select_chat', 'option_delete_mes',
             'option_regenerate', 'option_impersonate', 'option_continue',
         ];

@@ -199,7 +199,6 @@ import { markdownUnderscoreExt } from './scripts/showdown-underscore.js';
 
 import { registerPromptManagerMigration } from './scripts/PromptManager.js';
 import { getRegexedString, regex_placement } from './scripts/extensions/regex/engine.js';
-import { initLogprobs, mountLogprobsViewerPanel, saveLogprobsForActiveMessage } from './scripts/logprobs.js';
 import { FILTER_STATES, FILTER_TYPES, FilterHelper, isFilterState } from './scripts/filters.js';
 import { initLocales, t, translate } from './scripts/i18n.js';
 import { getFriendlyTokenizerName, getTokenCount, getTokenCountAsync, initTokenizers, saveTokenCache } from './scripts/tokenizers.js';
@@ -259,7 +258,7 @@ import { extractReasoningFromData, extractReasoningSignatureFromData, initReason
 import { accountStorage } from './scripts/util/AccountStorage.js';
 import { initWelcomeScreen, openPermanentAssistantChat, openPermanentAssistantCard, getPermanentAssistantAvatar, getWelcomePanelVisible, suppressNextChatChangedWelcomeScreen } from './scripts/welcome-screen.js';
 import { initDataMaid } from './scripts/data-maid.js';
-import { clearItemizedPrompts, deleteItemizedPromptForMessage, deleteItemizedPrompts, findItemizedPromptSet, initItemizedPrompts, itemizedParams, itemizedPrompts, loadItemizedPrompts, promptItemize, replaceItemizedPromptText, saveItemizedPrompts, swapItemizedPrompts } from './scripts/itemized-prompts.js';
+
 import { getSystemMessageByType, initSystemMessages, SAFETY_CHAT, sendSystemMessage, system_message_types, system_messages } from './scripts/system-messages.js';
 import { event_types, eventSource } from './scripts/events.js';
 import { initAccessibility } from './scripts/a11y.js';
@@ -627,9 +626,7 @@ registerGenerationShellContext({
     hideSwipeButtons: (...args) => hideSwipeButtons(...args),
     isAssistantRecoveryMessageId: (...args) => isAssistantRecoveryMessageId(...args),
     isStreamingEnabled: (...args) => isStreamingEnabled(...args),
-    parseAndSaveLogprobs: (...args) => parseAndSaveLogprobs(...args),
     parseMesExamples: (...args) => parseMesExamples(...args),
-    parseTokenCounts: (...args) => parseTokenCounts(...args),
     pingServer: (...args) => pingServer(...args),
     prepareGenerationRetrySwipe: (...args) => prepareGenerationRetrySwipe(...args),
     processCommands: (...args) => processCommands(...args),
@@ -686,12 +683,10 @@ registerGenerationShellContext({
     shiftDownByOne: (...args) => shiftDownByOne(...args),
     shiftUpByOne: (...args) => shiftUpByOne(...args),
     parseReasoningInSwipes: (...args) => parseReasoningInSwipes(...args),
-    saveLogprobsForActiveMessage: (...args) => saveLogprobsForActiveMessage(...args),
     applyStreamFadeIn: (...args) => applyStreamFadeIn(...args),
     countOccurrences: (...args) => countOccurrences(...args),
     isOdd: (...args) => isOdd(...args),
     delay: (...args) => delay(...args),
-    deleteItemizedPromptForMessage: (...args) => deleteItemizedPromptForMessage(...args),
     Generate: (...args) => Generate(...args),
     addOneMessage: (...args) => addOneMessage(...args),
     cancelDebouncedChatSave: (...args) => cancelDebouncedChatSave(...args),
@@ -773,7 +768,6 @@ registerChatOpsShellContext({
     persistMainChatMessageListScrollSnapshotBeforeClear: (...args) => persistMainChatMessageListScrollSnapshotBeforeClear(...args),
     queueMainChatMessageListScrollRestore: (...args) => queueMainChatMessageListScrollRestore(...args),
     redisplayChat: (...args) => redisplayChat(...args),
-    saveItemizedPrompts: (...args) => saveItemizedPrompts(...args),
     saveTokenCache: (...args) => saveTokenCache(...args),
     scrollOnMediaLoad: (...args) => scrollOnMediaLoad(...args),
     select_rm_characters: (...args) => select_rm_characters(...args),
@@ -1019,7 +1013,6 @@ registerDomHandlersShellContext({
     delay: (...args) => delay(...args),
     delChat: (...args) => delChat(...args),
     deleteCharacter: (...args) => deleteCharacter(...args),
-    deleteItemizedPromptForMessage: (...args) => deleteItemizedPromptForMessage(...args),
     deleteMessage: (...args) => deleteMessage(...args),
     displayPastChats: (...args) => displayPastChats(...args),
     doCharListDisplaySwitch: (...args) => doCharListDisplaySwitch(...args),
@@ -3877,15 +3870,7 @@ export {
     isOdd,
     countOccurrences,
     renderTemplate,
-    promptItemize,
     itemizedPrompts,
-    saveItemizedPrompts,
-    loadItemizedPrompts,
-    itemizedParams,
-    clearItemizedPrompts,
-    replaceItemizedPromptText,
-    deleteItemizedPrompts,
-    findItemizedPromptSet,
     UNIQUE_APIS,
     CONNECT_API_MAP,
     system_messages,
@@ -4099,6 +4084,9 @@ export const chatElement = $('#chat');
 let dialogueResolve = null;
 let dialogueCloseStop = false;
 /** @type {ChatMetadata} */
+// Retired: prompt itemization storage kept as an inert array for the extension-facing shell contract.
+const itemizedPrompts = [];
+
 export let chat_metadata = {};
 
 // Chat metadata is deliberately retained as-is; only the active visual override is read here.
@@ -4518,7 +4506,6 @@ async function bootstrapWorkspace() {
     await measureStartupStage('mountPersonaManagement', () => mountPersonaManagementPanel());
     await measureStartupStage('mountPowerUserPanel', () => mountPowerUserPanel());
     await measureStartupStage('mountConfigDrawers', () => Promise.all([
-        mountLogprobsViewerPanel(),
         mountAdvancedFormattingPanel(),
         mountPromptManagerPopup(),
         mountWorldInfoPanel(),
@@ -4542,7 +4529,6 @@ async function bootstrapWorkspace() {
         registerPanelHook('world-info-body', _replayWorldInfoSettings);
         initWorldInfo();
         initRossMods();
-        initLogprobs();
         initInputMarkdown();
         initServerHistory();
         initSettingsSearch();
@@ -4554,7 +4540,6 @@ async function bootstrapWorkspace() {
     await measureStartupStage('lateFeatureInit', () => Promise.resolve().then(() => {
         initCustomSelectedSamplers();
         initDataMaid();
-        initItemizedPrompts();
         initAccessibility();
         initSwipePicker();
         addDebugFunctions();
@@ -5730,7 +5715,6 @@ export function cancelDebouncedChatSave() {
 
 export async function deleteLastMessage() {
     const deletedMessageId = chat.length - 1;
-    deleteItemizedPromptForMessage(deletedMessageId);
     chat.length = chat.length - 1;
     if (isReactMainChatOwner()) {
         clearMainChatMessageUiState(deletedMessageId);
@@ -5789,7 +5773,6 @@ export async function deleteMessage(id, swipeDeletionIndex = undefined, askConfi
         chat.splice(id, 1);
         shiftMainChatMessageUiStateAfterSplice(id, -1);
         chat_metadata.tainted = true;
-        deleteItemizedPromptForMessage(id);
         if (this_edit_mes_id === id) {
             this_edit_mes_id = undefined;
         }
@@ -5812,7 +5795,6 @@ export async function deleteMessage(id, swipeDeletionIndex = undefined, askConfi
     chat_metadata.tainted = true;
 
     const startIndex = [0, minId].includes(id) ? id : null;
-    deleteItemizedPromptForMessage(id);
     updateViewMessageIds(startIndex);
     saveChatDebounced();
 
@@ -7194,29 +7176,6 @@ export function getMaxPromptTokens(overrideResponseLength = null) {
     return getMaxContextTokens() - (overrideResponseLength || getMaxResponseTokens());
 }
 
-function parseTokenCounts(counts, thisPromptBits) {
-    /**
-     * @param {any[]} numbers
-     */
-    function getSum(...numbers) {
-        return numbers.map(x => Number(x)).filter(x => !Number.isNaN(x)).reduce((acc, val) => acc + val, 0);
-    }
-    const total = getSum(Object.values(counts));
-
-    thisPromptBits.push({
-        oaiStartTokens: (counts?.start + counts?.controlPrompts) || 0,
-        oaiPromptTokens: getSum(counts?.prompt, counts?.charDescription, counts?.charPersonality, counts?.scenario) || 0,
-        oaiBiasTokens: counts?.bias || 0,
-        oaiNudgeTokens: counts?.nudge || 0,
-        oaiJailbreakTokens: counts?.jailbreak || 0,
-        oaiImpersonateTokens: counts?.impersonate || 0,
-        oaiExamplesTokens: (counts?.dialogueExamples + counts?.examples) || 0,
-        oaiConversationTokens: (counts?.conversation + counts?.chatHistory) || 0,
-        oaiNsfwTokens: counts?.nsfw || 0,
-        oaiMainTokens: counts?.main || 0,
-        oaiTotalTokens: total,
-    });
-}
 
 function addChatsSeparator(mesSendString) {
     if (power_user.context.chat_start) {
@@ -7380,20 +7339,6 @@ function extractImagesFromData(data, { mainApi = null, chatCompletionSource = nu
     }
 
     return [];
-}
-
-/**
- * parseAndSaveLogprobs receives the full data response for a non-streaming
- * generation, parses logprobs for all tokens in the message, and saves them
- * to the currently active message.
- * @param {object} data - response data containing all tokens/logprobs
- * @param {string} continueFrom - for 'continue' generations, the prompt
- *  */
-function parseAndSaveLogprobs(data, continueFrom) {
-    // OAI and other chat completion APIs handle logprobs earlier in
-    // `sendOpenAIRequest`. `data` for these APIs is just a string with
-    // the text of the generated message, logprobs are not included.
-    return;
 }
 
 /**
@@ -7846,7 +7791,6 @@ async function getChatResult() {
         // Make sure the chat appears on the server
         await saveChatConditional();
     }
-    await loadItemizedPrompts(getCurrentChatId());
     await printMessages();
     select_selected_character(this_chid);
 
@@ -8786,7 +8730,6 @@ async function messageEditMove(sourceId, targetId) {
             this_edit_mes_id = targetId;
         }
 
-        swapItemizedPrompts(sourceId, targetId);
         await saveChatConditional();
         void mountReactMainChatMessageListPanel();
         return true;
@@ -8818,7 +8761,6 @@ async function messageEditMove(sourceId, targetId) {
         this_edit_mes_id = targetId;
     }
 
-    swapItemizedPrompts(sourceId, targetId);
     updateViewMessageIds();
     refreshSwipeButtons();
     await saveChatConditional();

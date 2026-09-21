@@ -210,7 +210,6 @@ describe('React runtime boundary', () => {
         )?.[0] ?? '';
 
         expect(reactMoveBranch).toContain('chat[sourceId], chat[targetId]');
-        expect(reactMoveBranch).toContain('swapItemizedPrompts(sourceId, targetId);');
         expect(reactMoveBranch).toContain('await saveChatConditional();');
         expect(reactMoveBranch).toContain('void mountReactMainChatMessageListPanel();');
         expect(reactMoveBranch).not.toContain('chatElement');

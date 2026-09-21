@@ -147,7 +147,6 @@ describe('chat workspace structure', () => {
         const indexHtml = readRepoFile('app/components/options-menu/OptionsMenu.tsx');
 
         [
-            'option_toggle_logprobs',
             'option_start_new_chat',
             'option_select_chat',
             'option_delete_mes',
@@ -261,7 +260,6 @@ describe('chat workspace structure', () => {
             ['mes_translate', 'Translate message'],
             ['sd_message_gen', 'Generate Image'],
             ['mes_narrate', 'Narrate'],
-            ['mes_prompt', 'Prompt'],
             ['mes_hide', 'Exclude message from prompts'],
             ['mes_unhide', 'Include message in prompts'],
             ['mes_media_gallery', 'Toggle media display style'],

@@ -86,8 +86,6 @@ describe('built-in vector retirement', () => {
         const workspaceHtml = fs.readFileSync(path.join(repoRoot, 'public', 'index.html'), 'utf8');
         expect(workspaceHtml).not.toContain('vectors_container');
         expect(workspaceHtml).not.toContain('value="vectorized"');
-        expect(fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'templates', 'itemizationChat.html'), 'utf8')).not.toContain('Vector Storage');
-        expect(fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'templates', 'itemizationText.html'), 'utf8')).not.toContain('Vector Storage');
     });
 });
 

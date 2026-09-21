@@ -767,23 +767,6 @@ export function addCopyToCodeBlocks(messageElement) {
 }
 
 /**
- * Shows or hides the Prompt display button.
- * @param {ChatMessage} message Message object
- * @param {object} options Options
- * @param {number} [options.messageId] Message ID
- * @param {JQuery<HTMLElement>} [options.messageElement] Message element
- * @returns {void}
- */
-function updateMessageItemizedPromptButton(message, { messageId = state.chat.indexOf(message), messageElement = state.chatElement.find(`.mes[mesid="${messageId}"]`) }) {
-    if (!message.is_user && Array.isArray(state.itemizedPrompts) && state.itemizedPrompts.length > 0) {
-        const itemizedPrompt = state.itemizedPrompts.find(x => Number(x.mesId) === Number(messageId));
-        if (itemizedPrompt) {
-            messageElement.find('.mes_prompt').show();
-        }
-    }
-}
-
-/**
  * Gets messageFormatting for a ChatMessage object.
  * @param {ChatMessage} message
  * @param {object} options Options
@@ -962,8 +945,6 @@ export function updateMessageElement(mes, { messageId = state.chat.length - 1, m
     if (rowPopulation.classes.toolCall) {
         messageElement.addClass('toolCall');
     }
-
-    updateMessageItemizedPromptButton(mes, { messageId, messageElement });
 
     messageElement.find('.avatar img').on('error', function () {
         $(this).hide();

@@ -6,7 +6,6 @@
 @import url(css/loader.css);
 @import url(css/character-group-overlay.css);
 @import url(css/file-form.css);
-@import url(css/logprobs.css);
 @import url(css/accounts.css);
 @import url(css/tags.css);
 @import url(css/scrollable-button.css);
@@ -335,15 +334,6 @@ input[type='checkbox']:focus-visible {
 
 .dragover.no_animation {
     animation: none;
-}
-
-.tokenItemizingSubclass {
-    font-size: calc(var(--mainFontSize) * 0.8);
-    color: var(--SmartThemeEmColor);
-}
-
-.tokenItemizingMaintext {
-    font-size: calc(var(--mainFontSize) * 0.8);
 }
 
 .tokenGraph {
@@ -3176,10 +3166,6 @@ input[type="file"] {
 
 #rm_buttons_container {
     display: contents;
-}
-
-#movingDivs>div {
-    z-index: 4000;
 }
 
 #left-nav-panel {
@@ -6035,10 +6021,6 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
     transition-behavior: allow-discrete;
 }
 
-#movingDivs>.drawer-content {
-    height: unset;
-}
-
 .drawer-content.openDrawer {
     display: block;
     opacity: 1;
@@ -6190,92 +6172,6 @@ body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDra
 
 .template_element {
     display: none !important;
-}
-
-.openai_logit_bias_text,
-.openai_logit_bias_value {
-    flex: 1;
-}
-
-.openai_logit_bias_form {
-    display: flex;
-    flex-direction: row;
-    column-gap: 10px;
-    align-items: center;
-}
-
-.openai_logit_bias_list {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.openai_logit_bias_list:empty {
-    width: 100%;
-    height: 100%;
-}
-
-.logit_bias_form {
-    display: flex;
-    flex-direction: row;
-    column-gap: 10px;
-    align-items: center;
-}
-
-.logit_bias_text,
-.logit_bias_value {
-    flex: 1;
-}
-
-.logit_bias_list {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.logit_bias_list:empty {
-    width: 100%;
-    height: 100%;
-}
-
-.logit_bias_list:empty::before {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    content: "No items";
-    font-weight: bolder;
-    width: 100%;
-    height: 100%;
-    opacity: 0.8;
-    min-height: 2.5em;
-}
-
-.openai_logit_bias_preset_form {
-    display: flex;
-    flex-direction: row;
-    width: 100%;
-    gap: 5px;
-    align-items: baseline;
-}
-
-#openai_logit_bias_new_entry {
-    margin-top: 0.5rem;
-}
-
-.openai_logit_bias_preset_form select {
-    flex: 1;
-}
-
-.openai_logit_bias_list:empty::before {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    content: "No items";
-    font-weight: bolder;
-    width: 100%;
-    height: 100%;
-    opacity: 0.8;
-    min-height: 2.5em;
 }
 
 .openai_restorable,

@@ -47,7 +47,6 @@ const persistMainChatMessageListScrollSnapshotBeforeClear = (...args) => shell()
 const queueMainChatMessageListScrollRestore = (...args) => shell().queueMainChatMessageListScrollRestore(...args);
 const redisplayChat = (...args) => shell().redisplayChat(...args);
 const reloadCurrentChat = (...args) => shell().reloadCurrentChat(...args);
-const saveItemizedPrompts = (...args) => shell().saveItemizedPrompts(...args);
 const saveTokenCache = (...args) => shell().saveTokenCache(...args);
 const scrollOnMediaLoad = (...args) => shell().scrollOnMediaLoad(...args);
 const select_rm_characters = (...args) => shell().select_rm_characters(...args);
@@ -248,9 +247,6 @@ export async function clearChat({ clearData = false, preserveMainChatScrollSnaps
         console.debug('saw avatars to remove');
         $('.zoomed_avatar[forChar]').remove();
     } else { console.debug('saw no avatars'); }
-
-    await saveItemizedPrompts(getCurrentChatId());
-    state.itemizedPrompts.length = 0;
 
     if (clearData) state.chat.length = 0;
     if (isReactMainChatOwner()) {
@@ -622,9 +618,8 @@ export async function saveChatConditional() {
 
         await saveChat();
 
-        // Save token and prompts cache to IndexedDB storage
+        // Save token cache to IndexedDB storage
         saveTokenCache();
-        saveItemizedPrompts(getCurrentChatId());
     } catch (error) {
         console.error('Error saving chat', error);
     } finally {

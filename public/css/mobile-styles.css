@@ -225,9 +225,7 @@
     }
 
     #right-nav-panel,
-    #left-nav-panel,
-    #logprobsViewer,
-    #movingDivs>div {
+    #left-nav-panel {
         /* 100vh are fallback units for browsers that don't support dvh */
         height: calc(100vh - 45px);
         height: calc(100dvh - 45px);
@@ -258,11 +256,6 @@
         padding-right: 15px;
     }
     */
-
-    #logprobsViewer,
-    #movingDivs>div {
-        height: min-content;
-    }
 
     #right-nav-panel h4 {
         margin: 5px auto;

@@ -6,7 +6,6 @@ import {
     openCharacterChat,
     chat_metadata,
     chat,
-    saveItemizedPrompts,
     getCurrentChatDetails,
 } from '../script.js';
 import { getRequestHeaders } from './request-context.js';
@@ -180,8 +179,6 @@ export async function branchChat(mesId, { swipeId = null } = {}) {
     if (!fileName) {
         return null;
     }
-
-    await saveItemizedPrompts(fileName);
 
     await openCharacterChat(fileName);
 

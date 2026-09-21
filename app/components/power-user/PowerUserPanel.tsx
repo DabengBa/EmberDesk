@@ -529,10 +529,6 @@ The new engine is designed to cleanly replace the old regex-based macro system.`
                                     <input id="console_log_prompts" type="checkbox" />
                                     <small data-i18n="Log prompts to console">Log prompts to console</small>
                                 </label>
-                                <label className="checkbox_label" htmlFor="request_token_probabilities" title="Requests logprobs from the API for the Token Probabilities feature." data-i18n="[title]Requests logprobs from the API for the Token Probabilities feature">
-                                    <input id="request_token_probabilities" type="checkbox" />
-                                    <small data-i18n="Request token probabilities">Request token probabilities</small>
-                                </label>
                                 <label className="checkbox_label" htmlFor="pin_styles" title="Always render style tags from greetings, even if the message is unloaded due to lazy loading." data-i18n="[title]Always render style tags from greetings, even if the message is unloaded due to lazy loading.">
                                     <input id="pin_styles" type="checkbox" />
                                     <small data-i18n="Pin greeting message styles">Pin greeting message styles</small>

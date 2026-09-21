@@ -249,27 +249,6 @@ export function AiConfigPanel() {
                                 <span data-i18n="Squash system messages">Squash system messages</span>
                             </label>
                         </div>
-                        <div className="range-block" data-source="openai">
-                            <div className="range-block-title" data-i18n="Logit Bias">Logit Bias</div>
-                            <div className="openai_logit_bias_preset_form">
-                                <select id="openai_logit_bias_preset" className="text_pole"></select>
-                                <ContractIconButton id="openai_logit_bias_new_preset" className="menu_button" label="New preset" nativeTitle title="New preset" icon={<i className="fa-solid fa-plus" aria-hidden="true" />} />
-                                <ContractIconButton id="openai_logit_bias_import_preset" className="menu_button" label="Import preset" nativeTitle title="Import preset" icon={<i className="fa-solid fa-file-import" aria-hidden="true" />} />
-                                <ContractIconButton id="openai_logit_bias_export_preset" className="menu_button" label="Export preset" nativeTitle title="Export preset" icon={<i className="fa-solid fa-file-export" aria-hidden="true" />} />
-                                <ContractIconButton id="openai_logit_bias_delete_preset" className="menu_button" label="Delete preset" nativeTitle title="Delete preset" icon={<i className="fa-solid fa-trash-can" aria-hidden="true" />} />
-                                <input id="openai_logit_bias_import_file" type="file" accept=".json" hidden />
-                            </div>
-                            <div className="inline-drawer wide100p">
-                                <div className="inline-drawer-toggle inline-drawer-header">
-                                    <b data-i18n="View / Edit bias preset">View / Edit</b>
-                                    <div className="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
-                                </div>
-                                <div className="inline-drawer-content">
-                                    <ContractButton id="openai_logit_bias_new_entry" className="menu_button wide100p flex-container justifyCenter" label="Add entry" />
-                                    <div className="openai_logit_bias_list" no_items_text="No items" data-i18n="[no_items_text]openai_logit_bias_no_items"></div>
-                                </div>
-                            </div>
-                        </div>
                         <div className="config-section-header"><span data-i18n="Templates">模板</span></div>
                         <div className="range-block">
                             <div className="range-block-title openai_restorable">

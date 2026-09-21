@@ -681,22 +681,6 @@
                 <i class="fa-solid fa-circle-xmark tag_remove"></i>
             </span>
         </div>
-        <div id="openai_logit_bias_template" class="template_element">
-            <div class="openai_logit_bias_form">
-                <span class="drag-handle">☰</span>
-                <input class="openai_logit_bias_text text_pole" data-i18n="[placeholder]Text or token ids" placeholder="Text or [token ids]" />
-                <input class="openai_logit_bias_value text_pole" type="number" min="-100" value="0" max="100" />
-                <i class="menu_button fa-solid fa-xmark openai_logit_bias_remove"></i>
-            </div>
-        </div>
-        <div id="logit_bias_template" class="template_element">
-            <div class="logit_bias_form">
-                <span class="drag-handle">☰</span>
-                <input class="logit_bias_text text_pole" data-i18n="[placeholder]Type here..." placeholder="type here..." />
-                <input class="logit_bias_value text_pole" type="number" min="-100" value="0" max="100" step="0.01" />
-                <i class="menu_button fa-solid fa-xmark logit_bias_remove"></i>
-            </div>
-        </div>
         <div id="completion_prompt_manager_popup" class="drawer-content" style="display:none;">
         </div>
         <div id="message_template" class="template_element">
@@ -726,7 +710,6 @@
                                 <div title="Translate message" class="mes_button mes_translate fa-solid fa-language" data-i18n="[title]Translate message;[aria-label]Translate message" role="button" aria-label="Translate message" tabindex="0"></div>
                                 <div title="Generate Image" class="mes_button sd_message_gen fa-solid fa-paintbrush" data-i18n="[title]Generate Image;[aria-label]Generate Image" role="button" aria-label="Generate Image" tabindex="0"></div>
                                 <div title="Narrate" class="mes_button mes_narrate fa-solid fa-bullhorn" data-i18n="[title]Narrate;[aria-label]Narrate" role="button" aria-label="Narrate" tabindex="0"></div>
-                                <div title="Prompt" class="mes_button mes_prompt fa-solid fa-square-poll-horizontal " data-i18n="[title]Prompt;[aria-label]Prompt" role="button" aria-label="Prompt" tabindex="0" style="display: none;"></div>
                                 <div title="Exclude message from prompts" class="mes_button mes_hide fa-solid fa-eye" data-i18n="[title]Exclude message from prompts;[aria-label]Exclude message from prompts" role="button" aria-label="Exclude message from prompts" tabindex="0"></div>
                                 <div title="Include message in prompts" class="mes_button mes_unhide fa-solid fa-eye-slash" data-i18n="[title]Include message in prompts;[aria-label]Include message in prompts" role="button" aria-label="Include message in prompts" tabindex="0"></div>
                                 <div title="Toggle media display style" class="mes_button mes_media_gallery fa-solid fa-photo-film" data-i18n="[title]Toggle media display style;[aria-label]Toggle media display style" role="button" aria-label="Toggle media display style" tabindex="0"></div>
@@ -967,11 +950,6 @@
                 </div>
             </div>
         </div>
-    </div>
-    <div id="movingDivs">
-        <div id="logprobsViewer" class="drawer-content inline-drawer flexGap5">
-        </div>
-
     </div>
     <div id="sheld">
         <div id="chat">

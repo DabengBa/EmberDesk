@@ -59,7 +59,6 @@ import { ChatBackupsBrowser, type ChatBackupsCommands } from './components/chat-
 import { DataMaidDialog } from './components/data-maid/DataMaidDialog';
 import { PersonaManagementPanel } from './components/personas/PersonaManagementPanel';
 import { PowerUserPanel } from './components/power-user/PowerUserPanel';
-import { LogprobsViewerPanel } from './components/panels/LogprobsViewerPanel';
 import { AdvancedFormattingPanel } from './components/panels/AdvancedFormattingPanel';
 import { PromptManagerPopup } from './components/panels/PromptManagerPopup';
 import { TagManagement } from './components/tags/TagManagement';
@@ -2010,14 +2009,6 @@ function mountSmallPanel(container: HTMLElement, element: ReactElement) {
             </Theme>
         </StrictMode>,
     ));
-}
-
-/**
- * Mounts the logprobs viewer drawer content. Presentation-only:
- * logprobs.js keeps behavior ownership via element IDs and marker classes.
- */
-export function mountLogprobsViewerPanel(container: HTMLElement) {
-    mountSmallPanel(container, <LogprobsViewerPanel />);
 }
 
 /**

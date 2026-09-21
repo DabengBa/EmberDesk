@@ -44,19 +44,15 @@ const extractMultiSwipes = (...args) => shell().extractMultiSwipes(...args);
 const extractTitleFromData = (...args) => shell().extractTitleFromData(...args);
 const flushWIInjections = (...args) => shell().flushWIInjections(...args);
 const formatMessageHistoryItem = (...args) => shell().formatMessageHistoryItem(...args);
-const getAllExtensionPrompts = (...args) => shell().getAllExtensionPrompts(...args);
 const getBiasStrings = (...args) => shell().getBiasStrings(...args);
 const getCharacterCardFields = (...args) => shell().getCharacterCardFields(...args);
 const getExtensionPrompt = (...args) => shell().getExtensionPrompt(...args);
 const getExtensionPromptRoleByName = (...args) => shell().getExtensionPromptRoleByName(...args);
 const getGenerationLifecycleStatusLabels = (...args) => shell().getGenerationLifecycleStatusLabels(...args);
 const getMaxPromptTokens = (...args) => shell().getMaxPromptTokens(...args);
-const getNextMessageId = (...args) => shell().getNextMessageId(...args);
 const isAssistantRecoveryMessageId = (...args) => shell().isAssistantRecoveryMessageId(...args);
 const isStreamingEnabled = (...args) => shell().isStreamingEnabled(...args);
-const parseAndSaveLogprobs = (...args) => shell().parseAndSaveLogprobs(...args);
 const parseMesExamples = (...args) => shell().parseMesExamples(...args);
-const parseTokenCounts = (...args) => shell().parseTokenCounts(...args);
 const pingServer = (...args) => shell().pingServer(...args);
 const prepareGenerationRetrySwipe = (...args) => shell().prepareGenerationRetrySwipe(...args);
 const processCommands = (...args) => shell().processCommands(...args);
@@ -94,8 +90,6 @@ const scrollChatToBottom = (...args) => shell().scrollChatToBottom(...args);
 const appendFileContent = (...args) => shell().appendFileContent(...args);
 const extractReasoningFromData = (...args) => shell().extractReasoningFromData(...args);
 const extractReasoningSignatureFromData = (...args) => shell().extractReasoningSignatureFromData(...args);
-const getFriendlyTokenizerName = (...args) => shell().getFriendlyTokenizerName(...args);
-const getPresetManager = (...args) => shell().getPresetManager(...args);
 const getRegexedString = (...args) => shell().getRegexedString(...args);
 const getTokenCountAsync = (...args) => shell().getTokenCountAsync(...args);
 const hasPendingFileAttachment = (...args) => shell().hasPendingFileAttachment(...args);
@@ -111,12 +105,10 @@ const setOpenAIMessages = (...args) => shell().setOpenAIMessages(...args);
 const shiftDownByOne = (...args) => shell().shiftDownByOne(...args);
 const shiftUpByOne = (...args) => shell().shiftUpByOne(...args);
 const parseReasoningInSwipes = (...args) => shell().parseReasoningInSwipes(...args);
-const saveLogprobsForActiveMessage = (...args) => shell().saveLogprobsForActiveMessage(...args);
 const applyStreamFadeIn = (...args) => shell().applyStreamFadeIn(...args);
 const countOccurrences = (...args) => shell().countOccurrences(...args);
 const isOdd = (...args) => shell().isOdd(...args);
 const delay = (...args) => shell().delay(...args);
-const deleteItemizedPromptForMessage = (...args) => shell().deleteItemizedPromptForMessage(...args);
 const addOneMessage = (...args) => shell().addOneMessage(...args);
 const cancelDebouncedChatSave = (...args) => shell().cancelDebouncedChatSave(...args);
 const closeMessageEditor = (...args) => shell().closeMessageEditor(...args);
@@ -165,8 +157,6 @@ export class GenerationStreamSession {
         this.createdAt = new Date();
         this.continueMessage = type === 'continue' ? continueMessage : '';
         this.swipes = [];
-        /** @type {import('./logprobs.js').TokenLogprobs[]} */
-        this.messageLogprobs = [];
         this.toolCalls = [];
         // Initialize reasoning in its own handler
         this.reasoningHandler = new state.ReasoningHandler(timeStarted);
@@ -396,7 +386,6 @@ export class GenerationStreamSession {
         }
 
         syncMesToSwipe(messageId);
-        saveLogprobsForActiveMessage(this.messageLogprobs.filter(Boolean), this.continueMessage);
 
         if (Array.isArray(this.images) && this.images.length > 0) {
             await processImageAttachment(message, { imageUrls: this.images });
@@ -487,7 +476,7 @@ export class GenerationStreamSession {
     }
 
     /**
-     * @returns {AsyncGenerator<{ text: string, swipes: string[], logprobs: import('./logprobs.js').TokenLogprobs, toolCalls: any[], state: any }, void, void>}
+     * @returns {AsyncGenerator<{ text: string, swipes: string[], toolCalls: any[], state: any }, void, void>}
      */
     async* nullStreamingGeneration() {
         throw new Error('Generation function for streaming is not hooked up');
@@ -509,7 +498,7 @@ export class GenerationStreamSession {
         try {
             const sw = new state.Stopwatch(1000 / state.power_user.streaming_fps);
             const timestamps = [];
-            for await (const { text, swipes, logprobs, toolCalls, state } of this.generator()) {
+            for await (const { text, swipes, toolCalls, state } of this.generator()) {
                 const now = Date.now();
                 timestamps.push(now);
                 if (!this.timeToFirstToken) {
@@ -525,9 +514,6 @@ export class GenerationStreamSession {
                 this.observedTokenCount += 1;
                 this.observedChunkCount += 1;
                 scheduleMainChatMessageListPanelRefresh();
-                if (logprobs) {
-                    this.messageLogprobs.push(...(Array.isArray(logprobs) ? logprobs : [logprobs]));
-                }
                 // Get the updated reasoning string into the handler
                 this.reasoningHandler.updateReasoning(this.messageId, state?.reasoning);
                 this.images = state?.images ?? [];
@@ -643,7 +629,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         if (state.chat.length && lastMessage.is_user) {
             //do nothing? why does this check exist?
         } else if (type !== 'quiet' && type !== 'swipe' && !isImpersonate && !dryRun && !depth && state.chat.length) {
-            deleteItemizedPromptForMessage(state.chat.length - 1);
             state.chat.length = state.chat.length - 1;
             await removeLastMessage();
             await eventSource.emit(event_types.MESSAGE_DELETED, state.chat.length);
@@ -822,7 +807,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         creatorNotes: creatorNotes,
         trigger: GENERATION_TYPE_TRIGGERS.includes(type) ? type : 'normal',
     };
-    const { worldInfoString, worldInfoBefore, worldInfoAfter, worldInfoExamples, worldInfoDepth, outletEntries } = await getWorldInfoPrompt(chatForWI, this_max_context, dryRun, globalScanData);
+    const { worldInfoBefore, worldInfoAfter, worldInfoExamples, worldInfoDepth, outletEntries } = await getWorldInfoPrompt(chatForWI, this_max_context, dryRun, globalScanData);
     setExtensionPrompt(inject_ids.QUIET_PROMPT, '', state.extension_prompt_types.IN_PROMPT, 0, true);
 
     // Add message example WI
@@ -1237,7 +1222,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         setPromptString();
     }
 
-    // For prompt bit itemization
     let mesSendString = '';
 
     async function getCombinedPrompt() {
@@ -1322,12 +1306,10 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     await eventSource.emit(event_types.GENERATE_AFTER_COMBINE_PROMPTS, eventData);
     finalPrompt = eventData.prompt;
 
-    let thisPromptBits = [];
-
     let generate_data;
     switch (state.main_api) {
         case 'openai': {
-            let [prompt, counts] = await prepareOpenAIMessages({
+            let [prompt] = await prepareOpenAIMessages({
                 name2: state.name2,
                 charDescription: description,
                 charPersonality: personality,
@@ -1347,12 +1329,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
             }, dryRun);
             generate_data = { prompt: prompt };
 
-            // TODO: move these side-effects somewhere else, so this switch-case solely sets generate_data
-            // counts will return false if the user has not enabled the token breakdown feature
-            if (counts) {
-                parseTokenCounts(counts, thisPromptBits);
-            }
-
             if (!dryRun) {
                 setInContextMessages(state.openai_messages_count, type);
             }
@@ -1367,7 +1343,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     }
 
     /**
-     * Saves itemized prompt bits and calls streaming or non-streaming generation API.
+     * Calls the streaming or non-streaming generation API.
      * @returns {Promise<void|*|Awaited<*>|String|{fromStream}|string|undefined|Object>}
      * @throws {Error|object} Error with message text, or Error with response JSON
      */
@@ -1381,53 +1357,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
         console.debug('rungenerate calling API');
 
         showStopButton();
-
-        //set array object for prompt token itemization of this message
-        let currentArrayEntry = Number(thisPromptBits.length - 1);
-        let additionalPromptStuff = {
-            ...thisPromptBits[currentArrayEntry],
-            rawPrompt: generate_data.prompt || generate_data.input,
-            mesId: getNextMessageId(type),
-            allAnchors: await getAllExtensionPrompts(),
-            chatInjects: injectedIndices?.map(index => arrMes[arrMes.length - index - 1])?.join('') || '',
-            summarizeString: (state.extension_prompts['1_memory']?.value || ''),
-            authorsNoteString: (state.extension_prompts['2_floating_prompt']?.value || ''),
-            smartContextString: (state.extension_prompts.chromadb?.value || ''),
-            chatVectorsString: (state.extension_prompts['3_vectors']?.value || ''),
-            dataBankVectorsString: (state.extension_prompts['4_vectors_data_bank']?.value || ''),
-            worldInfoString: worldInfoString,
-            storyString: storyString,
-            beforeScenarioAnchor: beforeScenarioAnchor,
-            afterScenarioAnchor: afterScenarioAnchor,
-            examplesString: examplesString,
-            mesSendString: mesSendString,
-            generatedPromptCache: generatedPromptCache,
-            promptBias: promptBias,
-            finalPrompt: finalPrompt,
-            charDescription: description,
-            charPersonality: personality,
-            scenarioText: scenario,
-            this_max_context: this_max_context,
-            padding: state.power_user.token_padding,
-            main_api: state.main_api,
-            instruction: state.main_api !== 'openai' && state.power_user.sysprompt.enabled ? substituteParams(state.power_user.prefer_character_prompt && system ? system : state.power_user.sysprompt.content) : '',
-            userPersona: (state.power_user.persona_description_position == state.persona_description_positions.IN_PROMPT ? (persona || '') : ''),
-            tokenizer: getFriendlyTokenizerName(state.main_api).tokenizerName || '',
-            presetName: getPresetManager()?.getSelectedPresetName() || '',
-            messagesCount: state.main_api !== 'openai' ? mesSend.length : oaiMessages.length,
-            examplesCount: state.main_api !== 'openai' ? (pinExmString ? mesExamplesArray.length : count_exm_add) : oaiMessageExamples.length,
-        };
-
-        //console.log(additionalPromptStuff);
-        const itemizedIndex = state.itemizedPrompts.findIndex((item) => item.mesId === additionalPromptStuff.mesId);
-
-        if (itemizedIndex !== -1) {
-            state.itemizedPrompts[itemizedIndex] = additionalPromptStuff;
-        } else {
-            state.itemizedPrompts.push(additionalPromptStuff);
-        }
-
-        console.debug(`pushed prompt bits to itemizedPrompts array. Length is now: ${state.itemizedPrompts.length}`);
 
         const lifecyclePlan = createGenerationCommandPlan(generationEnvelope.command, {
             fallbackReady: hasFallbackProviderForGeneration({
@@ -1747,9 +1676,6 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
             } else {
                 ({ type, getMessage } = await saveReply({ type: finalization.type, getMessage, title, swipes, reasoning, imageUrls, reasoningSignature }));
             }
-
-            // This relies on `saveReply` having been called to add the message to the chat, so it must be last.
-            parseAndSaveLogprobs(data, continue_mag);
         }
 
         if (canPerformToolCalls) {

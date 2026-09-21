@@ -27,15 +27,6 @@ import {
 } from '../../prompt-converters.js';
 
 import { readSecret, SECRET_KEYS } from '../secrets.js';
-import {
-    getTokenizerModel,
-    getSentencepiceTokenizer,
-    getTiktokenTokenizer,
-    sentencepieceTokenizers,
-    webTokenizers,
-    getWebTokenizer,
-} from '../tokenizers.js';
-
 const API_OPENAI = 'https://api.openai.com/v1';
 const OPENAI_FALLBACK_SECRET_MARKER = 'openai_fallback_provider';
 
@@ -117,90 +108,6 @@ router.post('/status', async function (request, statusResponse) {
     }
 });
 
-router.post('/bias', async function (request, response) {
-    if (!request.body || !Array.isArray(request.body))
-        return response.sendStatus(400);
-
-    try {
-        const result = {};
-        const model = getTokenizerModel(String(request.query.model || ''));
-
-        // no bias for claude
-        if (model == 'claude') {
-            return response.send(result);
-        }
-
-        let encodeFunction;
-
-        if (sentencepieceTokenizers.includes(model)) {
-            const tokenizer = getSentencepiceTokenizer(model);
-            const instance = await tokenizer?.get();
-            if (!instance) {
-                console.error('Tokenizer not initialized:', model);
-                return response.send({});
-            }
-            encodeFunction = (text) => new Uint32Array(instance.encodeIds(text));
-        } else if (webTokenizers.includes(model)) {
-            const tokenizer = getWebTokenizer(model);
-            const instance = await tokenizer?.get();
-            if (!instance) {
-                console.warn('Tokenizer not initialized:', model);
-                return response.send({});
-            }
-            encodeFunction = (text) => new Uint32Array(instance.encode(text));
-        } else {
-            const tokenizer = getTiktokenTokenizer(model);
-            encodeFunction = (tokenizer.encode.bind(tokenizer));
-        }
-
-        for (const entry of request.body) {
-            if (!entry || !entry.text) {
-                continue;
-            }
-
-            try {
-                const tokens = getEntryTokens(entry.text, encodeFunction);
-
-                for (const token of tokens) {
-                    result[token] = entry.value;
-                }
-            } catch {
-                console.warn('Tokenizer failed to encode:', entry.text);
-            }
-        }
-
-        // not needed for cached tokenizers
-        //tokenizer.free();
-        return response.send(result);
-
-        /**
-         * Gets tokenids for a given entry
-         * @param {string} text Entry text
-         * @param {(string) => Uint32Array} encode Function to encode text to token ids
-         * @returns {Uint32Array} Array of token ids
-         */
-        function getEntryTokens(text, encode) {
-            // Get raw token ids from JSON array
-            if (text.trim().startsWith('[') && text.trim().endsWith(']')) {
-                try {
-                    const json = JSON.parse(text);
-                    if (Array.isArray(json) && json.every(x => typeof x === 'number')) {
-                        return new Uint32Array(json);
-                    }
-                } catch {
-                    // ignore
-                }
-            }
-
-            // Otherwise, get token ids from tokenizer
-            return encode(text);
-        }
-    } catch (error) {
-        console.error(error);
-        return response.send({});
-    }
-});
-
 router.post('/generate', async function (request, response) {
     try {
         if (!request.body) return response.status(400).send({ error: true });
@@ -232,16 +139,7 @@ router.post('/generate', async function (request, response) {
             }
             apiKey = request.body.reverse_proxy ? request.body.proxy_password : readSecret(request.user.directories, secretKey, request.body.secret_id);
             headers = {};
-            bodyParams = {
-                logprobs: request.body.logprobs,
-                top_logprobs: undefined,
-            };
-
-            // Adjust logprobs params for Chat Completions API, which expects { top_logprobs: number; logprobs: boolean; }
-            if (bodyParams.logprobs > 0) {
-                bodyParams.top_logprobs = bodyParams.logprobs;
-                bodyParams.logprobs = true;
-            }
+            bodyParams = {};
 
             if (getConfigValue('openai.randomizeUserId', false, 'boolean')) {
                 bodyParams['user'] = uuidv4();
@@ -328,7 +226,6 @@ router.post('/generate', async function (request, response) {
             'top_p': request.body.top_p,
             'top_k': request.body.top_k,
             'stop': request.body.stop,
-            'logit_bias': request.body.logit_bias,
             'seed': request.body.seed,
             'n': request.body.n,
             ...bodyParams,

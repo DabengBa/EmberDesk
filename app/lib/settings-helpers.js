@@ -157,7 +157,6 @@ export const defaultSettingsFormValues = {
         scenarioFormat: '',
         personalityFormat: '',
         namesBehavior: 0,
-        biasPresetSelected: 'Default (none)',
     },
     providers: {
         chatCompletionSource: 'openai',
@@ -236,7 +235,6 @@ export const defaultSettingsFormValues = {
         allowName2Display: true,
         encodeTags: false,
         consoleLogPrompts: false,
-        requestTokenProbabilities: false,
         pinStyles: true,
         fuzzySearch: false,
         preferCharacterPrompt: true,
@@ -459,7 +457,6 @@ const fieldBindings = [
     { tab: 'general', formPath: 'general.scenarioFormat', settingsPath: 'oai_settings.scenario_format' },
     { tab: 'general', formPath: 'general.personalityFormat', settingsPath: 'oai_settings.personality_format' },
     { tab: 'general', formPath: 'general.namesBehavior', settingsPath: 'oai_settings.names_behavior' },
-    { tab: 'general', formPath: 'general.biasPresetSelected', settingsPath: 'oai_settings.bias_preset_selected' },
     { tab: 'userInterface', formPath: 'userInterface.expandMessageActions', settingsPath: 'power_user.expand_message_actions' },
 
     { tab: 'userInterface', formPath: 'userInterface.enableZenSliders', settingsPath: 'power_user.enableZenSliders' },
@@ -505,7 +502,6 @@ const fieldBindings = [
     { tab: 'userInterface', formPath: 'userInterface.allowName2Display', settingsPath: 'power_user.allow_name2_display' },
     { tab: 'userInterface', formPath: 'userInterface.encodeTags', settingsPath: 'power_user.encode_tags' },
     { tab: 'userInterface', formPath: 'userInterface.consoleLogPrompts', settingsPath: 'power_user.console_log_prompts' },
-    { tab: 'userInterface', formPath: 'userInterface.requestTokenProbabilities', settingsPath: 'power_user.request_token_probabilities' },
     { tab: 'userInterface', formPath: 'userInterface.pinStyles', settingsPath: 'power_user.pin_styles' },
     { tab: 'userInterface', formPath: 'userInterface.fuzzySearch', settingsPath: 'power_user.fuzzy_search' },
     { tab: 'userInterface', formPath: 'userInterface.preferCharacterPrompt', settingsPath: 'power_user.prefer_character_prompt' },
@@ -550,7 +546,6 @@ export const settingsOwnerInventory = {
         'tag_map',
     ],
     complexManagers: [
-        'oai_settings.bias_presets',
         'oai_settings.prompts',
         'oai_settings.prompt_order',
         'oai_settings.extensions',
@@ -582,7 +577,6 @@ export const settingsCoverage = {
         'world_info_settings',
         'extension_settings',
         // Complex managers / runtime-only / persona surfaces
-        'oai_settings.bias_presets',
         'oai_settings.prompts',
         'oai_settings.prompt_order',
         'oai_settings.extensions',

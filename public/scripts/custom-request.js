@@ -212,7 +212,6 @@ export class ChatCompletionService {
         preset = { ...preset, ...overridePreset };
 
         // Fix any fields before converting to settings
-        preset.bias_preset_selected = preset.bias_presets !== undefined ? preset.bias_preset_selected : undefined;  // presets might have bias_preset_selected but not bias_presets, but settings need both or neither.
 
         // Convert from preset to ChatCompletionSettings
         const settings = structuredClone(oai_settings);

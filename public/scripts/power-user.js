@@ -33,7 +33,6 @@ import { favsToHotswap } from './RossAscends-mods.js';
 
 import { getTagsList, tag_import_setting, tag_map, tag_sort_mode, tags } from './tags.js';
 import { tokenizers } from './tokenizers.js';
-import { BIAS_CACHE } from './logit-bias.js';
 import { renderTemplateAsync } from './templates.js';
 
 import { countOccurrences, debounce, delay, download, getFileText, getSanitizedFilename, getStringHash, isOdd, isTrueBoolean, shuffle, sortMoments, stringToRange, timestampToMoment } from './utils.js';
@@ -164,7 +163,6 @@ export const power_user = {
     auto_fix_generated_markdown: true,
     send_on_enter: send_on_enter_options.AUTO,
     console_log_prompts: false,
-    request_token_probabilities: false,
     allow_name1_display: false,
     allow_name2_display: false,
     hotswap_enabled: true,
@@ -1425,7 +1423,6 @@ export async function loadPowerUserSettings(settings, data) {
     $(`#example_messages_behavior option[value="${getExampleMessagesBehavior()}"]`).prop('selected', true);
 
     $('#console_log_prompts').prop('checked', power_user.console_log_prompts);
-    $('#request_token_probabilities').prop('checked', power_user.request_token_probabilities);
     $('#auto_fix_generated_markdown').prop('checked', power_user.auto_fix_generated_markdown);
     $('#auto_scroll_chat_to_bottom').prop('checked', power_user.auto_scroll_chat_to_bottom);
     $('#bogus_folders').prop('checked', power_user.bogus_folders);
@@ -2767,11 +2764,6 @@ jQuery(() => {
         saveSettingsDebounced();
     });
 
-    $('#request_token_probabilities').on('input', function () {
-        power_user.request_token_probabilities = !!$(this).prop('checked');
-        saveSettingsDebounced();
-    });
-
     $('#auto_scroll_chat_to_bottom').on('input', function () {
         power_user.auto_scroll_chat_to_bottom = !!$(this).prop('checked');
         saveSettingsDebounced();
@@ -2780,7 +2772,6 @@ jQuery(() => {
     $('#tokenizer').on('change', function () {
         const value = $(this).find(':selected').val();
         power_user.tokenizer = Number(value);
-        BIAS_CACHE.clear();
         saveSettingsDebounced();
 
         // Trigger character editor re-tokenize

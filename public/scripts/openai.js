@@ -57,14 +57,11 @@ import {
     getVideoDurationFromDataURL,
     isDataURL,
     isValidUrl,
-    parseJsonFile,
     resetScrollHeight,
     stringFormat,
-    uuidv4,
 } from './utils.js';
-import { countTokensOpenAIAsync, getTokenizerModel } from './tokenizers.js';
+import { countTokensOpenAIAsync } from './tokenizers.js';
 import { isMobile } from './RossAscends-mods.js';
-import { saveLogprobsForActiveMessage } from './logprobs.js';
 import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
 import { SlashCommand } from './slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandArgument } from './slash-commands/SlashCommandArgument.js';
@@ -133,52 +130,14 @@ const default_wi_format = '{0}';
 const default_new_chat_prompt = '[Start a new Chat]';
 const default_new_example_chat_prompt = '[Example Chat]';
 const default_continue_nudge_prompt = '[Continue your last message without repeating its original content.]';
-const default_bias = 'Default (none)';
 const API_TEST_REQUEST_TIMEOUT_MS = 15000;
 const default_personality_format = '{{personality}}';
 const default_scenario_format = '{{scenario}}';
-const default_bias_presets = {
-    [default_bias]: [],
-    'Anti-bond': [
-        { id: '22154f79-dd98-41bc-8e34-87015d6a0eaf', text: ' bond', value: -50 },
-        { id: '8ad2d5c4-d8ef-49e4-bc5e-13e7f4690e0f', text: ' future', value: -50 },
-        { id: '52a4b280-0956-4940-ac52-4111f83e4046', text: ' bonding', value: -50 },
-        { id: 'e63037c7-c9d1-4724-ab2d-7756008b433b', text: ' connection', value: -25 },
-    ],
-};
 
 const max_64k = 65535;
 const openai_max_stop_strings = 4;
 
-const textCompletionModels = [
-    'gpt-3.5-turbo-instruct',
-    'gpt-3.5-turbo-instruct-0914',
-    'text-davinci-003',
-    'text-davinci-002',
-    'text-davinci-001',
-    'text-curie-001',
-    'text-babbage-001',
-    'text-ada-001',
-    'code-davinci-002',
-    'code-davinci-001',
-    'code-cushman-002',
-    'code-cushman-001',
-    'text-davinci-edit-001',
-    'code-davinci-edit-001',
-    'text-embedding-ada-002',
-    'text-similarity-davinci-001',
-    'text-similarity-curie-001',
-    'text-similarity-babbage-001',
-    'text-similarity-ada-001',
-    'text-search-davinci-doc-001',
-    'text-search-curie-doc-001',
-    'text-search-babbage-doc-001',
-    'text-search-ada-doc-001',
-    'code-search-babbage-code-001',
-    'code-search-ada-code-001',
-];
 
-let biasCache = undefined;
 export let model_list = [];
 
 export const chat_completion_sources = {
@@ -302,7 +261,6 @@ export const settingsToUpdate = {
     new_chat_prompt: ['#newchat_prompt_textarea', 'new_chat_prompt', false, false],
     new_example_chat_prompt: ['#newexamplechat_prompt_textarea', 'new_example_chat_prompt', false, false],
     continue_nudge_prompt: ['#continue_nudge_prompt_textarea', 'continue_nudge_prompt', false, false],
-    bias_preset_selected: ['#openai_logit_bias_preset', 'bias_preset_selected', false, false],
     reverse_proxy: ['#openai_reverse_proxy', 'reverse_proxy', false, true],
     wi_format: ['#wi_format_textarea', 'wi_format', false, false],
     scenario_format: ['#scenario_format_textarea', 'scenario_format', false, false],
@@ -344,8 +302,6 @@ const default_settings = {
     new_chat_prompt: default_new_chat_prompt,
     new_example_chat_prompt: default_new_example_chat_prompt,
     continue_nudge_prompt: default_continue_nudge_prompt,
-    bias_preset_selected: default_bias,
-    bias_presets: default_bias_presets,
     wi_format: default_wi_format,
     scenario_format: default_scenario_format,
     personality_format: default_personality_format,
@@ -1589,16 +1545,6 @@ export async function createGenerationParameters(settings, model, type, messages
         chat_completion_sources.OPENAI,
     ];
 
-    // Sources that support logprobs
-    const logprobsSupportedSources = [
-        chat_completion_sources.OPENAI,
-    ];
-
-    // Sources that support logit bias
-    const logitBiasSources = [
-        chat_completion_sources.OPENAI,
-    ];
-
     // Sources that support "n" parameter for multi-swipe
     const multiswipeSources = [
         chat_completion_sources.OPENAI,
@@ -1611,19 +1557,6 @@ export async function createGenerationParameters(settings, model, type, messages
     const noMultiSwipeTypes = ['quiet', 'impersonate', 'continue'];
     const canMultiSwipe = settings.n > 1 && !noMultiSwipeTypes.includes(type) && multiswipeSources.includes(settings.chat_completion_source);
 
-    let logit_bias = {};
-    if (settings.bias_preset_selected
-        && logitBiasSources.includes(settings.chat_completion_source)
-        && Array.isArray(settings.bias_presets[settings.bias_preset_selected])
-        && settings.bias_presets[settings.bias_preset_selected].length) {
-        logit_bias = biasCache || await calculateLogitBias();
-        biasCache = logit_bias;
-    }
-
-    if (Object.keys(logit_bias).length === 0) {
-        logit_bias = undefined;
-    }
-
     const generate_data = {
         'type': type,
         'messages': messages,
@@ -1634,7 +1567,6 @@ export async function createGenerationParameters(settings, model, type, messages
         'top_p': Number(settings.top_p_openai),
         'max_tokens': settings.openai_max_tokens,
         'stream': stream,
-        'logit_bias': logit_bias,
         'stop': getCustomStoppingStrings(openai_max_stop_strings),
         'chat_completion_source': settings.chat_completion_source,
         'n': canMultiSwipe ? settings.n : undefined,
@@ -1662,21 +1594,10 @@ export async function createGenerationParameters(settings, model, type, messages
         generate_data.proxy_password = settings.proxy_password;
     }
 
-    // Add logprobs request (max 5 per OpenAI docs)
-    const useLogprobs = !!power_user.request_token_probabilities;
-    if (useLogprobs && logprobsSupportedSources.includes(settings.chat_completion_source)) {
-        generate_data.logprobs = 5;
-    }
-
-    // Remove logit bias/logprobs/stop-strings if not supported by the model
+    // Remove stop-strings if not supported by the model
     const isVision = (m) => ['gpt', 'vision'].every(x => typeof m === 'string' && m.includes(x));
     if (gptSources.includes(settings.chat_completion_source) && isVision(model)) {
-        delete generate_data.logit_bias;
         delete generate_data.stop;
-        delete generate_data.logprobs;
-    }
-    if (gptSources.includes(settings.chat_completion_source) && /gpt-4.5/.test(model)) {
-        delete generate_data.logprobs;
     }
 
     if (settings.chat_completion_source === chat_completion_sources.OPENAI) {
@@ -1705,10 +1626,7 @@ export async function createGenerationParameters(settings, model, type, messages
     if (settings.chat_completion_source === chat_completion_sources.OPENAI && /^(o1|o3|o4)/.test(model)) {
         generate_data.max_completion_tokens = generate_data.max_tokens;
         delete generate_data.max_tokens;
-        delete generate_data.logprobs;
-        delete generate_data.top_logprobs;
         delete generate_data.stop;
-        delete generate_data.logit_bias;
         delete generate_data.temperature;
         delete generate_data.top_p;
         delete generate_data.frequency_penalty;
@@ -1728,22 +1646,18 @@ export async function createGenerationParameters(settings, model, type, messages
     if (gptSources.includes(settings.chat_completion_source) && /gpt-5/.test(model)) {
         generate_data.max_completion_tokens = generate_data.max_tokens;
         delete generate_data.max_tokens;
-        delete generate_data.logprobs;
-        delete generate_data.top_logprobs;
         if (/gpt-5-chat-latest/.test(model)) {
             delete generate_data.tools;
             delete generate_data.tool_choice;
         } else if (/gpt-5\.(1|2|3|4)/.test(model) && !/chat-latest/.test(model) && !generate_data.reasoning_effort) {
             delete generate_data.frequency_penalty;
             delete generate_data.presence_penalty;
-            delete generate_data.logit_bias;
             delete generate_data.stop;
         } else {
             delete generate_data.temperature;
             delete generate_data.top_p;
             delete generate_data.frequency_penalty;
             delete generate_data.presence_penalty;
-            delete generate_data.logit_bias;
             delete generate_data.stop;
         }
     }
@@ -1827,7 +1741,7 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null, fa
 
                 ToolManager.parseToolCalls(toolCalls, parsed, state.toolSignatures);
 
-                yield { text, swipes: swipes, logprobs: parseChatCompletionLogprobs(parsed), toolCalls: toolCalls, state: state };
+                yield { text, swipes: swipes, toolCalls: toolCalls, state: state };
             }
         };
     } else {
@@ -1840,13 +1754,6 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null, fa
             const message = data.error.message || response.statusText || t`Unknown error`;
             toastr.error(message, t`API returned an error`);
             throw new Error(message);
-        }
-
-        if (type !== 'quiet') {
-            const logprobs = parseChatCompletionLogprobs(data);
-            // Delay is required to allow the active message to be updated to
-            // the one we are generating (happens right after sendOpenAIRequest)
-            delay(1).then(() => saveLogprobsForActiveMessage(logprobs, null));
         }
 
         return data;
@@ -1864,108 +1771,6 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null, fa
  */
 export function getStreamingReply(data, state, { chatCompletionSource = null, overrideShowThoughts = null } = {}) {
     return data.choices?.[0]?.delta?.content ?? data.choices?.[0]?.message?.content ?? data.choices?.[0]?.text ?? '';
-}
-
-/**
- * parseChatCompletionLogprobs converts the response data returned from a chat
- * completions-like source into an array of TokenLogprobs found in the response.
- * @param {Object} data - response data from a chat completions-like source
- * @returns {import('./logprobs.js').TokenLogprobs[] | null} converted logprobs
- */
-function parseChatCompletionLogprobs(data) {
-    if (!data) {
-        return null;
-    }
-
-    switch (oai_settings.chat_completion_source) {
-        case chat_completion_sources.OPENAI:
-            if (!data.choices?.length) {
-                return null;
-            }
-            // OpenAI Text Completion API is treated as a chat completion source
-            // by SillyTavern, hence its presence in this function.
-            return textCompletionModels.includes(getChatCompletionModel())
-                ? parseOpenAITextLogprobs(data.choices[0]?.logprobs)
-                : parseOpenAIChatLogprobs(data.choices[0]?.logprobs);
-        default:
-        // implement other chat completion sources here
-    }
-    return null;
-}
-
-/**
- * parseOpenAIChatLogprobs receives a `logprobs` response from OpenAI's chat
- * completion API and converts into the structure used by the Token Probabilities
- * view.
- * @param {{content: { token: string, logprob: number, top_logprobs: { token: string, logprob: number }[] }[]}} logprobs
- * @returns {import('./logprobs.js').TokenLogprobs[] | null} converted logprobs
- */
-function parseOpenAIChatLogprobs(logprobs) {
-    const { content } = logprobs ?? {};
-
-    if (!Array.isArray(content)) {
-        return null;
-    }
-
-    /** @type {(x: { token: string, logprob: number }) => [string, number]} */
-    const toTuple = (x) => [x.token, x.logprob];
-
-    return content.map(({ token, logprob, top_logprobs = [] }) => {
-        // Add the chosen token to top_logprobs if it's not already there, then
-        // convert to a list of [token, logprob] pairs
-        const chosenTopToken = top_logprobs.some((top) => token === top.token);
-        /** @type {import('./logprobs.js').Candidate[]} */
-        const topLogprobs = chosenTopToken
-            ? top_logprobs.map(toTuple)
-            : [...top_logprobs.map(toTuple), [token, logprob]];
-        return { token, topLogprobs };
-    });
-}
-
-/**
- * parseOpenAITextLogprobs receives a `logprobs` response from OpenAI's text
- * completion API and converts into the structure used by the Token Probabilities
- * view.
- * @param {{tokens: string[], token_logprobs: number[], top_logprobs: { token: string, logprob: number }[][]}} logprobs
- * @returns {import('./logprobs.js').TokenLogprobs[] | null} converted logprobs
- */
-function parseOpenAITextLogprobs(logprobs) {
-    const { tokens, token_logprobs, top_logprobs } = logprobs ?? {};
-
-    if (!Array.isArray(tokens)) {
-        return null;
-    }
-
-    return tokens.map((token, i) => {
-        // Add the chosen token to top_logprobs if it's not already there, then
-        // convert to a list of [token, logprob] pairs
-        /** @type {any[]} */
-        const topLogprobs = top_logprobs[i] ? Object.entries(top_logprobs[i]) : [];
-        const chosenTopToken = topLogprobs.some(([topToken]) => token === topToken);
-        if (!chosenTopToken) {
-            topLogprobs.push([token, token_logprobs[i]]);
-        }
-        return { token, topLogprobs };
-    });
-}
-
-async function calculateLogitBias() {
-    const body = JSON.stringify(oai_settings.bias_presets[oai_settings.bias_preset_selected]);
-    let result = {};
-
-    try {
-        const reply = await fetch(`/api/backends/chat-completions/bias?model=${getTokenizerModel()}`, {
-            method: 'POST',
-            headers: getRequestHeaders(),
-            body,
-        });
-
-        result = await reply.json();
-    } catch (err) {
-        result = {};
-        console.error(err);
-    }
-    return result;
 }
 
 class TokenHandler {
@@ -2924,24 +2729,6 @@ function loadOpenAISettings(data, settings) {
         }
     });
 
-    $('#openai_logit_bias_preset').empty();
-    for (const preset of Object.keys(oai_settings.bias_presets)) {
-        // Backfill missing IDs
-        if (Array.isArray(oai_settings.bias_presets[preset])) {
-            oai_settings.bias_presets[preset].forEach((bias) => {
-                if (bias && !bias.id) {
-                    bias.id = uuidv4();
-                }
-            });
-        }
-        const option = document.createElement('option');
-        option.innerText = preset;
-        option.value = preset;
-        option.selected = preset === oai_settings.bias_preset_selected;
-        $('#openai_logit_bias_preset').append(option);
-    }
-    $('#openai_logit_bias_preset').trigger('change');
-
     setNamesBehaviorControls();
     setContinuePostfixControls();
     setToolReasoningControls();
@@ -3097,136 +2884,8 @@ async function saveOpenAIPreset(name, settings, triggerUi = true) {
     }
 }
 
-function onLogitBiasPresetChange() {
-    const value = String($('#openai_logit_bias_preset').find(':selected').val());
-    const preset = oai_settings.bias_presets[value];
-
-    if (!Array.isArray(preset)) {
-        console.error('Preset not found');
-        return;
-    }
-
-    oai_settings.bias_preset_selected = value;
-    const list = $('.openai_logit_bias_list');
-    list.empty();
-
-    for (const entry of preset) {
-        if (entry) {
-            createLogitBiasListItem(entry);
-        }
-    }
-
-    // Check if a sortable instance exists
-    if (list.sortable('instance') !== undefined) {
-        // Destroy the instance
-        list.sortable('destroy');
-    }
-
-    // Make the list sortable
-    list.sortable({
-        delay: getSortableDelay(),
-        handle: '.drag-handle',
-        stop: function () {
-            const order = [];
-            list.children().each(function () {
-                order.unshift($(this).data('id'));
-            });
-            preset.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
-            console.log('Logit bias reordered:', preset);
-            saveSettingsDebounced();
-        },
-    });
-
-    biasCache = undefined;
-    saveSettingsDebounced();
-}
-
-function createNewLogitBiasEntry() {
-    const entry = { id: uuidv4(), text: '', value: 0 };
-    oai_settings.bias_presets[oai_settings.bias_preset_selected].push(entry);
-    biasCache = undefined;
-    createLogitBiasListItem(entry);
-    saveSettingsDebounced();
-}
-
-function createLogitBiasListItem(entry) {
-    if (!entry.id) {
-        entry.id = uuidv4();
-    }
-    const id = entry.id;
-    const template = $('#openai_logit_bias_template .openai_logit_bias_form').clone();
-    template.data('id', id);
-    template.find('.openai_logit_bias_text').val(entry.text).on('input', function () {
-        entry.text = String($(this).val());
-        biasCache = undefined;
-        saveSettingsDebounced();
-    });
-    template.find('.openai_logit_bias_value').val(entry.value).on('input', function () {
-        const min = Number($(this).attr('min'));
-        const max = Number($(this).attr('max'));
-        let value = Number($(this).val());
-
-        if (value < min) {
-            $(this).val(min);
-            value = min;
-        }
-
-        if (value > max) {
-            $(this).val(max);
-            value = max;
-        }
-
-        entry.value = value;
-        biasCache = undefined;
-        saveSettingsDebounced();
-    });
-    template.find('.openai_logit_bias_remove').on('click', function () {
-        $(this).closest('.openai_logit_bias_form').remove();
-        const preset = oai_settings.bias_presets[oai_settings.bias_preset_selected];
-        const index = preset.findIndex(item => item.id === id);
-        if (index >= 0) {
-            preset.splice(index, 1);
-        }
-        onLogitBiasPresetChange();
-    });
-    $('.openai_logit_bias_list').prepend(template);
-}
-
-async function createNewLogitBiasPreset() {
-    const name = await Popup.show.input(t`Preset name:`, null);
-
-    if (!name) {
-        return;
-    }
-
-    if (name in oai_settings.bias_presets) {
-        toastr.error(t`Preset name should be unique.`);
-        return;
-    }
-
-    oai_settings.bias_preset_selected = name;
-    oai_settings.bias_presets[name] = [];
-
-    addLogitBiasPresetOption(name);
-    saveSettingsDebounced();
-}
-
-function addLogitBiasPresetOption(name) {
-    const option = document.createElement('option');
-    option.innerText = name;
-    option.value = name;
-    option.selected = true;
-
-    $('#openai_logit_bias_preset').append(option);
-    $('#openai_logit_bias_preset').trigger('change');
-}
-
 function onImportPresetClick() {
     $('#openai_preset_import_file').trigger('click');
-}
-
-function onLogitBiasPresetImportClick() {
-    $('#openai_logit_bias_import_file').trigger('click');
 }
 
 async function onPresetImportFileChange(e) {
@@ -3357,58 +3016,6 @@ async function onExportPresetClick() {
     download(presetJsonString, presetFileName, 'application/json');
 }
 
-async function onLogitBiasPresetImportFileChange(e) {
-    const file = e.target.files[0];
-
-    if (!file || file.type !== 'application/json') {
-        return;
-    }
-
-    const name = file.name.replace(/\.[^/.]+$/, '');
-    const importedFile = await parseJsonFile(file);
-    e.target.value = '';
-
-    if (name in oai_settings.bias_presets) {
-        toastr.error(t`Preset name should be unique.`);
-        return;
-    }
-
-    if (!Array.isArray(importedFile)) {
-        toastr.error(t`Invalid logit bias preset file.`);
-        return;
-    }
-
-    const validEntries = [];
-
-    for (const entry of importedFile) {
-        if (typeof entry == 'object' && entry !== null) {
-            if (Object.hasOwn(entry, 'text') &&
-                Object.hasOwn(entry, 'value')) {
-                if (!entry.id) {
-                    entry.id = uuidv4();
-                }
-                validEntries.push(entry);
-            }
-        }
-    }
-
-    oai_settings.bias_presets[name] = validEntries;
-    oai_settings.bias_preset_selected = name;
-
-    addLogitBiasPresetOption(name);
-    saveSettingsDebounced();
-}
-
-function onLogitBiasPresetExportClick() {
-    if (!oai_settings.bias_preset_selected || Object.keys(oai_settings.bias_presets).length === 0) {
-        return;
-    }
-
-    const presetJsonString = JSON.stringify(oai_settings.bias_presets[oai_settings.bias_preset_selected], null, 4);
-    const presetFileName = `${oai_settings.bias_preset_selected}.json`;
-    download(presetJsonString, presetFileName, 'application/json');
-}
-
 async function onDeletePresetClick() {
     const confirm = await callGenericPopup(t`Delete the preset? This action is irreversible and your current settings will be overwritten.`, POPUP_TYPE.CONFIRM);
 
@@ -3442,27 +3049,6 @@ async function onDeletePresetClick() {
         await eventSource.emit(event_types.PRESET_DELETED, { apiId: 'openai', name: nameToDelete });
     }
 
-    saveSettingsDebounced();
-}
-
-async function onLogitBiasPresetDeleteClick() {
-    const value = await callGenericPopup(t`Delete the preset?`, POPUP_TYPE.CONFIRM);
-
-    if (!value) {
-        return;
-    }
-
-    $(`#openai_logit_bias_preset option[value="${oai_settings.bias_preset_selected}"]`).remove();
-    delete oai_settings.bias_presets[oai_settings.bias_preset_selected];
-    oai_settings.bias_preset_selected = null;
-
-    if (Object.keys(oai_settings.bias_presets).length) {
-        oai_settings.bias_preset_selected = Object.keys(oai_settings.bias_presets)[0];
-        $(`#openai_logit_bias_preset option[value="${oai_settings.bias_preset_selected}"]`).prop('selected', true);
-        $('#openai_logit_bias_preset').trigger('change');
-    }
-
-    biasCache = undefined;
     saveSettingsDebounced();
 }
 
@@ -3519,8 +3105,6 @@ function onSettingsPresetChange() {
             $('#chat_completion_source').trigger('change');
         }
 
-        $('#openai_logit_bias_preset').trigger('change');
-
         // Protect openai_max_context from being overridden by extensions
         _presetChangeGuard = true;
         await eventSource.emit(event_types.OAI_PRESET_CHANGED_AFTER);
@@ -3538,7 +3122,6 @@ function onSettingsPresetChange() {
  * @returns {number} Maximum context size in tokens
  */
 async function onModelChange() {
-    biasCache = undefined;
     let value = String($(this).val() || '');
 
     if ($(this).is('#model_openai_select')) {
@@ -4243,15 +3826,8 @@ export function initOpenAI() {
     $('#settings_preset_openai').on('change', onSettingsPresetChange);
     $('#new_oai_preset').on('click', onNewPresetClick);
     $('#delete_oai_preset').on('click', onDeletePresetClick);
-    $('#openai_logit_bias_preset').on('change', onLogitBiasPresetChange);
-    $('#openai_logit_bias_new_preset').on('click', createNewLogitBiasPreset);
-    $('#openai_logit_bias_new_entry').on('click', createNewLogitBiasEntry);
-    $('#openai_logit_bias_import_file').on('input', onLogitBiasPresetImportFileChange);
     $('#openai_preset_import_file').on('input', onPresetImportFileChange);
     $('#export_oai_preset').on('click', onExportPresetClick);
-    $('#openai_logit_bias_import_preset').on('click', onLogitBiasPresetImportClick);
-    $('#openai_logit_bias_export_preset').on('click', onLogitBiasPresetExportClick);
-    $('#openai_logit_bias_delete_preset').on('click', onLogitBiasPresetDeleteClick);
     $('#import_oai_preset').on('click', onImportPresetClick);
 
     // Preset overflow popup menu

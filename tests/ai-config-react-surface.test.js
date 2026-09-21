@@ -32,10 +32,6 @@ describe('AI Response Configuration drawer React surface', () => {
             'new_oai_preset', 'bind_preset_to_connection', 'temp_openai',
             'top_p_openai', 'freq_pen_openai', 'pres_pen_openai',
             'n_openai', 'openai_function_calling',
-            'openai_logit_bias_preset', 'openai_logit_bias_new_preset',
-            'openai_logit_bias_import_preset', 'openai_logit_bias_export_preset',
-            'openai_logit_bias_delete_preset', 'openai_logit_bias_import_file',
-            'openai_logit_bias_new_entry',
             'impersonation_prompt_textarea', 'newchat_prompt_textarea',
             'newexamplechat_prompt_textarea', 'continue_nudge_prompt_textarea',
             'continue_postfix', 'continue_prefill', 'names_behavior',
@@ -49,8 +45,6 @@ describe('AI Response Configuration drawer React surface', () => {
         // data-for counters and preset-manager wiring are live legacy contracts.
         expect(panel).toContain('data-preset-manager-for="openai"');
         expect(panel).toContain('data-for="temp_openai"');
-        expect(panel).toContain('no_items_text="No items"');
-        expect(panel).toContain('className="openai_logit_bias_list"');
     });
 
     test('mount runs before initSecrets and initPresetManager', () => {

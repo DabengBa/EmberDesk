@@ -84,7 +84,6 @@ const settingsSchema = z.object({
         scenarioFormat: z.string(),
         personalityFormat: z.string(),
         namesBehavior: z.coerce.number(),
-        biasPresetSelected: z.string(),
     }),
     providers: z.object({
         chatCompletionSource: z.enum(['openai']),
@@ -163,7 +162,6 @@ const settingsSchema = z.object({
         allowName2Display: z.boolean(),
         encodeTags: z.boolean(),
         consoleLogPrompts: z.boolean(),
-        requestTokenProbabilities: z.boolean(),
         pinStyles: z.boolean(),
         fuzzySearch: z.boolean(),
         preferCharacterPrompt: z.boolean(),
@@ -1084,15 +1082,6 @@ export function SettingsSurface({
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.biasPresetSelected"
-                                        label="Bias Preset Selected"
-                                        description="Settings path binding for general.biasPresetSelected."
-                                        variant="textarea"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
 </SettingsSection>
                             </div>
                             ) : null}
@@ -1919,15 +1908,6 @@ export function SettingsSurface({
                                         name="userInterface.consoleLogPrompts"
                                         label="Console Log Prompts"
                                         description="Settings path binding for userInterface.consoleLogPrompts."
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="userInterface.requestTokenProbabilities"
-                                        label="Request Token Probabilities"
-                                        description="Settings path binding for userInterface.requestTokenProbabilities."
                                         variant="toggle"
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}

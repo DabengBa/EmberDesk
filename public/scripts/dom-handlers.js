@@ -38,7 +38,6 @@ const debounce = (...args) => shell().debounce(...args);
 const delChat = (...args) => shell().delChat(...args);
 const delay = (...args) => shell().delay(...args);
 const deleteCharacter = (...args) => shell().deleteCharacter(...args);
-const deleteItemizedPromptForMessage = (...args) => shell().deleteItemizedPromptForMessage(...args);
 const deleteMessage = (...args) => shell().deleteMessage(...args);
 const displayPastChats = (...args) => shell().displayPastChats(...args);
 const doCharListDisplaySwitch = (...args) => shell().doCharListDisplaySwitch(...args);
@@ -839,9 +838,6 @@ export async function bindLegacyShellHandlers() {
         });
 
         if (state.this_del_mes >= 0) {
-            for (let i = (state.chat.length - 1); i >= state.this_del_mes; i--) {
-                deleteItemizedPromptForMessage(i);
-            }
             state.chatElement.find(`.mes[mesid="${state.this_del_mes}"]`).nextAll('div').remove();
             state.chatElement.find(`.mes[mesid="${state.this_del_mes}"]`).remove();
             state.chat.length = state.this_del_mes;

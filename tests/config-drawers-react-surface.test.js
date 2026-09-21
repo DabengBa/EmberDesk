@@ -2,24 +2,7 @@ import { describe, expect, test } from '@jest/globals';
 import { readRepoFile } from './helpers/frontend-compatibility-contract.js';
 
 describe('small configuration drawers React surface (Wave A)', () => {
-    const cases = [
-        {
-            name: 'logprobs viewer',
-            shellId: 'logprobsViewer',
-            component: 'app/components/panels/LogprobsViewerPanel.tsx',
-            adapter: 'public/scripts/logprobs.js',
-            mountFn: 'mountLogprobsViewerPanel',
-            ids: [
-                'logprobsViewerheader',
-                'logprobsMaximizeToggle',
-                'logprovsViewerBlockToggle',
-                'logprobsViewerClose',
-                'logprobsReroll',
-                'logprobs_generation_output',
-                'logprobs_selected_top_logprobs',
-            ],
-        },
-    ];
+    const cases = [];
 
     const advancedFormatting = {
         name: 'Advanced Formatting (sysprompt/reasoning)',
@@ -53,13 +36,6 @@ describe('small configuration drawers React surface (Wave A)', () => {
             expect(workspacePanels).toContain(`export function ${c.mountFn}(`);
         });
     }
-
-    test('logprobs dynamic output containers stay legacy-writable', () => {
-        const component = readRepoFile('app/components/panels/LogprobsViewerPanel.tsx');
-        // logprobs.js empties/appends into these containers at runtime.
-        expect(component).toContain('id="logprobs_generation_output"');
-        expect(component).toContain('logprobs_candidate_list');
-    });
 
     test('all three mounts run before getSettings', () => {
         const script = readRepoFile('public/script.js');

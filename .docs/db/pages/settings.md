@@ -53,7 +53,8 @@ Authenticated users complete supported settings work on `/settings` instead of w
 - **Secret state**: provider and fallback values use SecretManager endpoints only and never enter settings JSON.
 - **Retired provider state**: legacy `vertexai`/`makersuite`/`palm`/`claude` sources load as OpenAI and save back as `openai`; retired provider model keys remain stored but inert.
 - **Retired template state**: instruct-mode and context-template presets are retired; `/api/settings/get` no longer returns `instruct`/`context` preset lists and `/api/presets/*` no longer accepts `instruct`/`context` API IDs. Stored `power_user.instruct`/`power_user.context` keys and per-user preset directories are preserved as inert historical data.
-- **Specialized surfaces**: World Info, Extensions, Personas, tags, and complex managers such as bias preset tables remain outside this page even if related values appear in the settings document.
+- **Retired sampler state**: logit-bias presets and token-probability (logprobs) requests are retired; `oai_settings.bias_presets`/`bias_preset_selected` and `power_user.request_token_probabilities` remain stored but inert, and `/api/backends/chat-completions/bias` is removed.
+- **Specialized surfaces**: World Info, Extensions, Personas, tags, and complex managers remain outside this page even if related values appear in the settings document.
 
 ## Navigation
 

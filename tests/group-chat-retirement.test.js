@@ -362,7 +362,6 @@ describe('group chat retirement', () => {
         expect(promptConverterSource).not.toMatch(/group_names|groupNames|startsWithGroupName|group chat/i);
         const retiredCoreSources = [
             'public/scripts/chats.js',
-            'public/scripts/itemized-prompts.js',
             'public/scripts/macros/engine/MacroEnvBuilder.js',
             'public/scripts/preset-manager.js',
             'public/scripts/PromptManager.js',

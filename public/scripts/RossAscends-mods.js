@@ -1080,21 +1080,12 @@ export function initRossMods() {
                 .not('#WorldInfo')
                 .not('#left-nav-panel')
                 .not('#right-nav-panel')
-                .not('#logprobsViewer')
-                .not('#movingDivs > div')
                 .is(':visible')) {
                 let visibleDrawerContent = $('.drawer-content:visible')
                     .not('#WorldInfo')
                     .not('#left-nav-panel')
-                    .not('#right-nav-panel')
-                    .not('#logprobsViewer')
-                    .not('#movingDivs > div');
+                    .not('#right-nav-panel');
                 visibleDrawerContent.each((_, element) => closeWorkspaceChildSlotHost(element.id));
-                return;
-            }
-
-            if ($('#logprobsViewer').is(':visible')) {
-                $('#logprobsViewerClose').trigger('click');
                 return;
             }
 
