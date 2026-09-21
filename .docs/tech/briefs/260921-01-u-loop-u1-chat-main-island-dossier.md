@@ -105,4 +105,4 @@ welcome 可见 / 空会话（仅首条问候）/ 常规列表 / 窗口化（show
 
 - **新形态**：`.extraMesButtons` 由行内平铺 → `⋯` 触发的浮层分组菜单；Tier1 常驻 `⋯+✎` 不变；hover 渐显不变。
 - **契约保留声明**：`.mes`/`.mes_block`/`.mes_buttons`/`.extraMesButtons*`/全部 `mes_*` 按钮类/`role=button`/`aria-label`/`title`/`data-i18n`/jQuery 委托链/`expandMessageActions` 平铺兼容/`#message_template` 克隆路径均保留；`.docs/db` 语义契约（`feature.chat_message_actions`）不变，无需更新。
-- commit：见下条 docs 提交记录。
+- commit：`b9e2e44c9 feat(ui): U-1 main-chat message actions as floating grouped menu`
