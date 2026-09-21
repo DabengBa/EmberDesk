@@ -1,7 +1,6 @@
 import libs from './lib';
 import getContext from './scripts/st-context';
 import { power_user, getThemeObject } from './scripts/power-user';
-import { QuickReplyApi } from './scripts/extensions/quick-reply/api/QuickReplyApi';
 import { oai_settings } from './scripts/openai';
 import { FileAttachment } from './scripts/chats';
 import { ReasoningMessageExtra } from './scripts/reasoning';
@@ -167,7 +166,7 @@ declare global {
         ai: any;
     }
 
-    var quickReplyApi: QuickReplyApi;
+    var quickReplyApi: typeof import('./scripts/extensions/quick-reply/index.js').quickReplyApi;
 
     var SillyTavern: {
         getContext(): ReturnType<typeof getContext>;

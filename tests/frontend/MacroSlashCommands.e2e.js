@@ -150,10 +150,12 @@ test.describe('MacroSlashCommands', () => {
 
 async function executeQuickReplySlashCommands(page, command) {
     return page.evaluate(async (command) => {
+        // /qr-arg stays registered by the quick-reply retirement stub; deferred
+        // extension activation may not have settled yet, so init the stub lazily.
         const { SlashCommandParser } = await import('/scripts/slash-commands/SlashCommandParser.js');
         if (!SlashCommandParser.commands['qr-arg']) {
-            const { SlashCommandHandler } = await import('/scripts/extensions/quick-reply/src/SlashCommandHandler.js');
-            new SlashCommandHandler({ settings: { config: { setList: [] } } }).init();
+            const { init } = await import('/scripts/extensions/quick-reply/index.js');
+            await init();
         }
 
         const { executeSlashCommandsWithOptions } = await import('/scripts/slash-commands.js');
