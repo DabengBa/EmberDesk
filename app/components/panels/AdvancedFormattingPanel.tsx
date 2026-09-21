@@ -1,5 +1,6 @@
 import { ContractButton } from '../contract/ContractButton';
 import { ContractIconButton } from '../contract/ContractIconButton';
+import { PresetManagerActionsMenu } from '../preset-manager/PresetManagerActionsMenu';
 export function AdvancedFormattingPanel() {
     return (
         <>
@@ -76,13 +77,7 @@ export function AdvancedFormattingPanel() {
                                 <select id="sysprompt_select" data-preset-manager-htmlFor="sysprompt" className="flex1 text_pole"></select>
                                 <div className="flex-container margin0 justifyCenter gap3px">
                                     <input type="file" hidden data-preset-manager-file="sysprompt" accept=".json, .settings" />
-                                    <ContractIconButton data-preset-manager-update="sysprompt" className="menu_button" label="Update current prompt" title="Update current prompt" nativeTitle icon={<i className="fa-solid fa-save" aria-hidden="true" />} />
-                                    <ContractIconButton data-preset-manager-rename="sysprompt" className="menu_button" label="Rename current prompt" title="Rename current prompt" nativeTitle icon={<i className="fa-pencil fa-solid" aria-hidden="true" />} />
-                                    <ContractIconButton data-preset-manager-new="sysprompt" className="menu_button" label="Save prompt as" title="Save prompt as" nativeTitle icon={<i className="fa-solid fa-file-circle-plus" aria-hidden="true" />} />
-                                    <ContractIconButton data-preset-manager-import="sysprompt" className="displayNone menu_button" label="Import template" title="Import template" nativeTitle icon={<i className="fa-solid fa-file-import" aria-hidden="true" />} />
-                                    <ContractIconButton data-preset-manager-export="sysprompt" className="displayNone menu_button" label="Export template" title="Export template" nativeTitle icon={<i className="fa-solid fa-file-export" aria-hidden="true" />} />
-                                    <ContractIconButton data-preset-manager-restore="sysprompt" className="menu_button" label="Restore current prompt" title="Restore current prompt" nativeTitle icon={<i className="fa-solid fa-recycle" aria-hidden="true" />} />
-                                    <ContractIconButton data-preset-manager-delete="sysprompt" className="menu_button" label="Delete prompt" title="Delete prompt" nativeTitle icon={<i className="fa-solid fa-trash-can" aria-hidden="true" />} />
+                                    <PresetManagerActionsMenu apiId="sysprompt" noun="prompt" />
                                 </div>
                             </div>
 
@@ -212,13 +207,7 @@ export function AdvancedFormattingPanel() {
                                         <select id="reasoning_select" data-preset-manager-htmlFor="reasoning" className="flex1 text_pole"></select>
                                         <div className="flex-container margin0 justifyCenter gap3px">
                                             <input type="file" hidden data-preset-manager-file="reasoning" accept=".json, .settings" />
-                                            <ContractIconButton data-preset-manager-update="reasoning" className="menu_button" label="Update current template" title="Update current template" nativeTitle icon={<i className="fa-solid fa-save" aria-hidden="true" />} />
-                                            <ContractIconButton data-preset-manager-rename="reasoning" className="menu_button" label="Rename current template" title="Rename current template" nativeTitle icon={<i className="fa-pencil fa-solid" aria-hidden="true" />} />
-                                            <ContractIconButton data-preset-manager-new="reasoning" className="menu_button" label="Save template as" title="Save template as" nativeTitle icon={<i className="fa-solid fa-file-circle-plus" aria-hidden="true" />} />
-                                            <ContractIconButton data-preset-manager-import="reasoning" className="displayNone menu_button" label="Import template" title="Import template" nativeTitle icon={<i className="fa-solid fa-file-import" aria-hidden="true" />} />
-                                            <ContractIconButton data-preset-manager-export="reasoning" className="displayNone menu_button" label="Export template" title="Export template" nativeTitle icon={<i className="fa-solid fa-file-export" aria-hidden="true" />} />
-                                            <ContractIconButton data-preset-manager-restore="reasoning" className="menu_button" label="Restore current template" title="Restore current template" nativeTitle icon={<i className="fa-solid fa-recycle" aria-hidden="true" />} />
-                                            <ContractIconButton data-preset-manager-delete="reasoning" className="menu_button" label="Delete template" title="Delete template" nativeTitle icon={<i className="fa-solid fa-trash-can" aria-hidden="true" />} />
+                                            <PresetManagerActionsMenu apiId="reasoning" noun="template" />
                                         </div>
                                     </div>
                                     <div className="flex-container">

@@ -37,6 +37,27 @@ describe('small configuration drawers React surface (Wave A)', () => {
         });
     }
 
+    test('preset-manager action rows collapse into ⋮ floating menus', () => {
+        const component = readRepoFile('app/components/panels/AdvancedFormattingPanel.tsx');
+        const menu = readRepoFile('app/components/preset-manager/PresetManagerActionsMenu.tsx');
+        // Rows keep only the select + hidden file input + menu trigger.
+        expect(component).toContain('PresetManagerActionsMenu apiId="sysprompt"');
+        expect(component).toContain('PresetManagerActionsMenu apiId="reasoning"');
+        expect(component).toContain('data-preset-manager-file="sysprompt"');
+        expect(component).toContain('data-preset-manager-file="reasoning"');
+        expect(component).not.toContain('data-preset-manager-update=');
+        // Menu emits the delegated data-preset-manager-* contract attrs.
+        for (const action of ['update', 'new', 'rename', 'import', 'export', 'restore', 'delete']) {
+            expect(menu).toContain(`data-preset-manager-${action}`);
+        }
+        expect(menu).toContain('preset-menu-danger');
+        expect(menu).toContain('aria-haspopup="menu"');
+        expect(menu).toContain('event.key === \'Escape\'');
+        // preset-manager.js keeps the document-delegated handlers.
+        const presetManager = readRepoFile('public/scripts/preset-manager.js');
+        expect(presetManager).toContain('$(document).on(\'click\', \'[data-preset-manager-delete]\'');
+    });
+
     test('all three mounts run before getSettings', () => {
         const script = readRepoFile('public/script.js');
         const stageIndex = script.indexOf("measureStartupStage('mountConfigDrawers'");
