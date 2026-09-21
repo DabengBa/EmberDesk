@@ -11,20 +11,24 @@ import { ContractButton } from '../contract/ContractButton';
  * Items are Astryx ghost buttons: real <button> semantics (implicit role,
  * native Enter/Space) while keeping ids/classes for the delegated binding.
  * `.options-content` row styling is tag-agnostic (:is(a,button)).
+ *
+ * `showBackToMain` projects branch-chat state (was jQuery .show()/.hide() from
+ * showBranchChatButtons). The item stays mounted when hidden so delegated
+ * trigger('click') paths keep working.
  */
-export function OptionsMenu() {
+export function OptionsMenu({ showBackToMain = false }: { showBackToMain?: boolean }) {
     return (
         <>
         <div className="options-content">
             <ContractButton id="option_close_chat" className="displayNone" variant="ghost" label="Close chat" icon={<i className="fa-lg fa-solid fa-times" aria-hidden="true" />} />
 
-            <ContractButton id="option_back_to_main" variant="ghost" label="Back to parent chat" icon={<i className="fa-lg fa-solid fa-left-long" aria-hidden="true" />} />
+            <ContractButton id="option_back_to_main" variant="ghost" label="Back to parent chat" icon={<i className="fa-lg fa-solid fa-left-long" aria-hidden="true" />} style={showBackToMain ? undefined : { display: 'none' }} />
             <hr />
             <ContractButton id="option_start_new_chat" variant="ghost" label="Start new chat" icon={<i className="fa-lg fa-solid fa-comments" aria-hidden="true" />} tabIndex={0} />
             <ContractButton id="option_close_chat" variant="ghost" label="Close chat" icon={<i className="fa-lg fa-solid fa-times" aria-hidden="true" />} />
             <ContractButton id="option_select_chat" variant="ghost" label="Manage chat files" icon={<i className="fa-lg fa-solid fa-address-book" aria-hidden="true" />} tabIndex={0} />
             <hr />
-            <ContractButton id="option_delete_mes" variant="ghost" label="Delete messages" icon={<i className="fa-lg fa-solid fa-trash-can" aria-hidden="true" />} tabIndex={0} />
+            <ContractButton id="option_delete_mes" variant="ghost" label="Delete messages" icon={<i className="fa-lg fa-solid fa-trash-can" aria-hidden="true" />} tabIndex={0} className="options-menu-danger" />
             <ContractButton id="option_regenerate" variant="ghost" label="Regenerate" icon={<i className="fa-lg fa-solid fa-repeat" aria-hidden="true" />} tabIndex={0} />
             <ContractButton id="option_impersonate" variant="ghost" label="Impersonate" title="Ask AI to write your message for you" nativeTitle icon={<i className="fa-lg fa-solid fa-user-secret" aria-hidden="true" />} tabIndex={0} />
             <ContractButton id="option_continue" variant="ghost" label="Continue" title="Continue the last message" nativeTitle icon={<i className="fa-lg fa-solid fa-arrow-right" aria-hidden="true" />} tabIndex={0} />

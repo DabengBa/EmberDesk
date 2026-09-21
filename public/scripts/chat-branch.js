@@ -7,6 +7,7 @@ import {
     chat_metadata,
     chat,
     getCurrentChatDetails,
+    setOptionsMenuBranchVisibility,
 } from '../script.js';
 import { getRequestHeaders } from './request-context.js';
 import { getLastMessageId } from './macros.js';
@@ -65,7 +66,13 @@ function getMainChatName() {
  */
 export function showBranchChatButtons() {
     try {
-        if (chat_metadata.main_chat) {
+        const show = Boolean(chat_metadata.main_chat);
+        // React projects the state; keep the jQuery write as a fallback for
+        // environments where the React menu is not mounted.
+        if (setOptionsMenuBranchVisibility(show)) {
+            return;
+        }
+        if (show) {
             $('#option_back_to_main').show();
         } else {
             $('#option_back_to_main').hide();

@@ -709,6 +709,12 @@ export async function bindLegacyShellHandlers() {
         if (!isOptionsMenuVisible) return;
         if (!isMouseOverButtonOrMenu()) { hideMenu(); }
     });
+    $(document).on('keydown', function (e) {
+        if (e.key === 'Escape' && isOptionsMenuVisible && !e.originalEvent.isComposing) {
+            hideMenu();
+            button.trigger('focus');
+        }
+    });
 
     /* $('#set_chat_character_settings').on('click', setScenarioOverride); */
 

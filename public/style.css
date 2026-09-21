@@ -1189,6 +1189,15 @@ body .panelControlBar {
     opacity: 1;
 }
 
+.options-content :is(a, button).options-menu-danger {
+    color: var(--warning);
+}
+
+.options-content :is(a, button).options-menu-danger:hover,
+.options-content :is(a, button).options-menu-danger:focus-visible {
+    background-color: color-mix(in srgb, var(--warning) 14%, transparent);
+}
+
 .options-content :is(a, button) div:first-child {
     min-width: 20px;
 }

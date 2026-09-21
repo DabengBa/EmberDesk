@@ -49,10 +49,26 @@ describe('options menu + character context menu React surfaces', () => {
         }
     });
 
+    test('branch-chat visibility is a React state projection, not jQuery writes', () => {
+        const chatBranch = readRepoFile('public/scripts/chat-branch.js');
+        expect(chatBranch).toContain('setOptionsMenuBranchVisibility');
+        expect(script).toContain('export function setOptionsMenuBranchVisibility');
+        expect(script).toContain('updateOptionsMenuState');
+        // Menu keeps the item mounted and toggles via React-driven style.
+        expect(options).toContain('showBackToMain');
+        expect(options).toContain('display: \'none\'');
+    });
+
+    test('destructive action is marked and Escape closes the menu', () => {
+        expect(options).toContain('options-menu-danger');
+        const domHandlers = readRepoFile('public/scripts/dom-handlers.js');
+        expect(domHandlers).toContain('e.key === \'Escape\' && isOptionsMenuVisible');
+    });
+
     test('both mounts run before registerCoreModules', () => {
-        const coreIdx = script.indexOf("measureStartupStage('registerCoreModules'");
-        const optIdx = script.indexOf("measureStartupStage('mountOptionsMenu'");
-        const ctxIdx = script.indexOf("measureStartupStage('mountCharacterContextMenu'");
+        const coreIdx = script.indexOf('measureStartupStage(\'registerCoreModules\'');
+        const optIdx = script.indexOf('measureStartupStage(\'mountOptionsMenu\'');
+        const ctxIdx = script.indexOf('measureStartupStage(\'mountCharacterContextMenu\'');
         expect(optIdx).toBeGreaterThan(-1);
         expect(ctxIdx).toBeGreaterThan(-1);
         expect(optIdx).toBeLessThan(coreIdx);

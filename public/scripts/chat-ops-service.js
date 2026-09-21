@@ -47,6 +47,10 @@ const persistMainChatMessageListScrollSnapshotBeforeClear = (...args) => shell()
 const queueMainChatMessageListScrollRestore = (...args) => shell().queueMainChatMessageListScrollRestore(...args);
 const redisplayChat = (...args) => shell().redisplayChat(...args);
 const reloadCurrentChat = (...args) => shell().reloadCurrentChat(...args);
+const renderSelectChatListReact = (...args) => shell().renderSelectChatListReact(...args);
+
+// Guards against out-of-order chat-search responses overwriting newer results.
+let selectChatListGeneration = 0;
 const saveTokenCache = (...args) => shell().saveTokenCache(...args);
 const scrollOnMediaLoad = (...args) => shell().scrollOnMediaLoad(...args);
 const select_rm_characters = (...args) => shell().select_rm_characters(...args);
@@ -531,6 +535,7 @@ export async function getPastCharacterChats(characterId = null) {
 
 
 export async function displayChats(searchQuery, currentChat, displayName, avatarImg, highlightNames) {
+    const generation = ++selectChatListGeneration;
     try {
         const response = await fetch('/api/chats/search', {
             method: 'POST',
@@ -546,53 +551,40 @@ export async function displayChats(searchQuery, currentChat, displayName, avatar
         }
 
         const filteredData = await response.json();
-        $('#select_chat_div').empty();
-
+        if (generation !== selectChatListGeneration) {
+            return;
+        }
         filteredData.sort((a, b) => sortMoments(timestampToMoment(a.last_mes), timestampToMoment(b.last_mes)));
 
-        if (filteredData.length === 0) {
-            const emptyState = $('<div>', {
-                id: 'select_chat_empty',
-                class: 'select_chat_empty',
-                role: 'status',
-            }).append($('<div>').text(searchQuery ? t`No chats match your search.` : t`No saved chats yet.`));
-
-            if (searchQuery) {
-                $('<button>', {
-                    type: 'button',
-                    class: 'menu_button',
-                    text: t`Clear search`,
-                }).on('click', () => {
-                    $('#select_chat_search').val('').trigger('input').trigger('focus');
-                }).appendTo(emptyState);
-            }
-
-            $('#select_chat_div').append(emptyState);
+        // React owns the list DOM inside #select_chat_div; this function is now
+        // fetch/sort/project only. Delegated click handlers keep working because
+        // the rendered rows replicate the #past_chat_template contract exactly.
+        const rendered = await renderSelectChatListReact({
+            searchQuery: String(searchQuery ?? ''),
+            currentChat: String(currentChat ?? ''),
+            avatarImg: String(avatarImg ?? ''),
+            items: filteredData.map(chat => ({
+                fileName: String(chat.file_name ?? ''),
+                fileSize: String(chat.file_size ?? ''),
+                messageCount: Number(chat.message_count) || 0,
+                preview: String(chat.preview_message ?? ''),
+                dateLabel: timestampToMoment(chat.last_mes).format('lll'),
+            })),
+        });
+        if (!rendered) {
             return;
         }
 
-        for (const chat of filteredData) {
-            const isSelected = currentChat === chat.file_name;
-            const template = $('#past_chat_template .select_chat_block_wrapper').clone();
-            template.find('.select_chat_block').attr('file_name', chat.file_name);
-            template.find('.avatar img').attr('src', avatarImg);
-            template.find('.select_chat_block_filename').text(chat.file_name);
-            template.find('.chat_file_size').text(`(${chat.file_size},`);
-            template.find('.chat_messages_num').text(`${chat.message_count} 💬)`);
-            template.find('.select_chat_block_mes').text(chat.preview_message);
-            template.find('.PastChat_cross').attr('file_name', chat.file_name);
-            template.find('.chat_messages_date').text(timestampToMoment(chat.last_mes).format('lll'));
-
-            if (isSelected) {
-                template.find('.select_chat_block').attr('highlight', String(true));
-            }
-
-            $('#select_chat_div').append(template);
-
-            if (Array.isArray(highlightNames) && highlightNames.includes(chat.file_name)) {
-                const templateOffset = template.offset().top - template.parent().offset().top;
-                $('#select_chat_div').scrollTop(templateOffset);
-                flashHighlight(template, debounce_timeout.extended);
+        if (Array.isArray(highlightNames) && highlightNames.length) {
+            for (const fileName of highlightNames) {
+                const template = $('#select_chat_div .select_chat_block_wrapper')
+                    .filter((_, el) => $(el).find('.select_chat_block').attr('file_name') === fileName)
+                    .first();
+                if (template.length) {
+                    const templateOffset = template.offset().top - template.parent().offset().top;
+                    $('#select_chat_div').scrollTop(templateOffset);
+                    flashHighlight(template, debounce_timeout.extended);
+                }
             }
         }
     } catch (error) {

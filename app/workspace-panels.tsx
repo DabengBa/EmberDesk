@@ -73,6 +73,11 @@ import { AiConfigPanel } from './components/ai-config/AiConfigPanel';
 import { CharacterPopup } from './components/character-popup/CharacterPopup';
 import { RightNavPanel } from './components/right-nav/RightNavPanel';
 import { SelectChatPopup } from './components/select-chat/SelectChatPopup';
+import {
+    SelectChatList,
+    type SelectChatListBridge,
+    type SelectChatListState,
+} from './components/select-chat/SelectChatList';
 import { CharacterContextMenu } from './components/context-menu/CharacterContextMenu';
 import { OptionsMenu } from './components/options-menu/OptionsMenu';
 import { DialogueDelMesControls, DialoguePopupControls } from './components/dialogue-popups/DialoguePopups';
@@ -2261,10 +2266,64 @@ export function mountRightNavPanel(container: HTMLElement) {
 
 /**
  * Mounts the past-chats popup header/list shell into #select_chat_popup.
- * #select_chat_div stays a dynamic container filled by script.js.
+ * The list rows inside #select_chat_div are React-owned via mountSelectChatList.
  */
 export function mountSelectChatPopup(container: HTMLElement) {
     mountSmallPanel(container, <SelectChatPopup />);
+}
+
+let selectChatListRoot: Root | null = null;
+let selectChatListContainer: HTMLElement | null = null;
+let selectChatListBridge: SelectChatListBridge | null = null;
+let selectChatListState: SelectChatListState | null = null;
+
+function renderSelectChatList() {
+    if (!selectChatListContainer || !selectChatListBridge || !selectChatListState) {
+        return;
+    }
+    if (!selectChatListContainer.isConnected) {
+        // Popup shell replaces children on remount; drop the stale root.
+        selectChatListRoot = null;
+        selectChatListContainer = null;
+        return;
+    }
+    selectChatListRoot ??= createRoot(selectChatListContainer);
+    // Synchronous commit: delegated handlers and post-render measurements
+    // (highlight scroll/flash) run immediately after this returns.
+    flushSync(() => selectChatListRoot?.render(
+        <StrictMode>
+            <Theme theme={emberDeskTheme} mode="dark">
+                <SelectChatList state={selectChatListState as SelectChatListState} bridge={selectChatListBridge as SelectChatListBridge} />
+            </Theme>
+        </StrictMode>,
+    ));
+}
+
+/**
+ * Mounts or updates the React-owned chat list inside #select_chat_div.
+ * displayChats (chat-ops-service) stays the fetch/sort orchestration and calls
+ * this with projected row data. Returns false when the container is absent so
+ * the caller can fail closed.
+ */
+export function mountSelectChatList(container: HTMLElement, bridge: SelectChatListBridge, state: SelectChatListState): boolean {
+    if (!(container instanceof HTMLElement)) {
+        return false;
+    }
+    attachGlobalCompatibilityBridge();
+    selectChatListContainer = container;
+    selectChatListBridge = bridge;
+    selectChatListState = state;
+    renderSelectChatList();
+    return true;
+}
+
+export function updateSelectChatList(state: SelectChatListState): boolean {
+    if (!selectChatListContainer?.isConnected) {
+        return false;
+    }
+    selectChatListState = state;
+    renderSelectChatList();
+    return true;
 }
 
 /**
@@ -2275,12 +2334,44 @@ export function mountCharacterContextMenu(container: HTMLElement) {
     mountSmallPanel(container, <CharacterContextMenu />);
 }
 
+let optionsMenuRoot: Root | null = null;
+let optionsMenuContainer: HTMLElement | null = null;
+let optionsMenuState: { showBackToMain: boolean } = { showBackToMain: false };
+
+function renderOptionsMenu() {
+    if (!optionsMenuContainer?.isConnected) {
+        return;
+    }
+    optionsMenuRoot ??= createRoot(optionsMenuContainer);
+    flushSync(() => optionsMenuRoot?.render(
+        <StrictMode>
+            <Theme theme={emberDeskTheme} mode="dark">
+                <OptionsMenu showBackToMain={optionsMenuState.showBackToMain} />
+            </Theme>
+        </StrictMode>,
+    ));
+}
+
 /**
  * Mounts the options popup items into #options. The shell keeps its
  * display:none + Popper positioning; item click bindings land after mount.
+ * Item visibility (e.g. branch "Back to parent") is state-driven via
+ * updateOptionsMenuState so legacy jQuery .show()/.hide() calls are retired.
  */
-export function mountOptionsMenu(container: HTMLElement) {
-    mountSmallPanel(container, <OptionsMenu />);
+export function mountOptionsMenu(container: HTMLElement, state?: { showBackToMain?: boolean }) {
+    attachGlobalCompatibilityBridge();
+    optionsMenuContainer = container;
+    optionsMenuState = { ...optionsMenuState, ...state };
+    renderOptionsMenu();
+}
+
+export function updateOptionsMenuState(patch: Partial<typeof optionsMenuState>): boolean {
+    if (!optionsMenuContainer?.isConnected) {
+        return false;
+    }
+    optionsMenuState = { ...optionsMenuState, ...patch };
+    renderOptionsMenu();
+    return true;
 }
 
 /**

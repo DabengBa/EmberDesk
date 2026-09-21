@@ -768,6 +768,7 @@ registerChatOpsShellContext({
     persistMainChatMessageListScrollSnapshotBeforeClear: (...args) => persistMainChatMessageListScrollSnapshotBeforeClear(...args),
     queueMainChatMessageListScrollRestore: (...args) => queueMainChatMessageListScrollRestore(...args),
     redisplayChat: (...args) => redisplayChat(...args),
+    renderSelectChatListReact: (...args) => renderSelectChatListReact(...args),
     saveTokenCache: (...args) => saveTokenCache(...args),
     scrollOnMediaLoad: (...args) => scrollOnMediaLoad(...args),
     select_rm_characters: (...args) => select_rm_characters(...args),
@@ -8901,7 +8902,7 @@ export function getCurrentChatDetails() {
 }
 
 export async function displayPastChats(hightlightNames = []) {
-    $('#select_chat_div').empty();
+    // React owns #select_chat_div contents; re-render replaces rows, no manual empty().
     $('#select_chat_search').val('').off('input');
 
     const chatDetails = getCurrentChatDetails();
@@ -10335,6 +10336,41 @@ async function mountRightNavPanel() {
 }
 
 /**
+ * Renders the React-owned chat rows inside #select_chat_div. Called by
+ * displayChats (chat-ops-service) with projected row data; rows replicate the
+ * #past_chat_template contract so delegated handlers keep working.
+ * @param {{searchQuery: string, currentChat: string, avatarImg: string, items: object[]}} state
+ * @returns {Promise<boolean>} Whether the list rendered
+ */
+async function renderSelectChatListReact(state) {
+    const container = document.getElementById('select_chat_div');
+    if (!(container instanceof HTMLElement)) {
+        return false;
+    }
+    try {
+        const module = await loadWorkspacePanelsModule();
+        const bridge = getReactSelectChatListBridge();
+        const mounted = module.mountSelectChatList(container, bridge, state);
+        if (!mounted) {
+            return false;
+        }
+        container.dataset.reactSelectChatListOwner = 'react';
+        return true;
+    } catch (error) {
+        console.error('Failed to render React select-chat list:', error);
+        return false;
+    }
+}
+
+function getReactSelectChatListBridge() {
+    return globalThis.__emberDeskSelectChatListBridge ??= {
+        clearSearch() {
+            $('#select_chat_search').val('').trigger('input').trigger('focus');
+        },
+    };
+}
+
+/**
  * Mounts the React-owned past-chats popup markup into #select_chat_popup.
  * #shadow_select_chat_popup stays the display-toggled shell; the inner header
  * buttons (chat_import_button/newChatFromManageScreenButton/select_chat_cross)
@@ -10413,11 +10449,23 @@ async function mountOptionsMenu() {
 
     try {
         const module = await loadWorkspacePanelsModule();
-        module.mountOptionsMenu(host);
+        optionsMenuModuleRef = module;
+        module.mountOptionsMenu(host, { showBackToMain: Boolean(chat_metadata?.main_chat) });
         popup.dataset.reactOptionsMenuMounted = 'true';
     } catch (error) {
         console.error('Failed to mount options menu:', error);
     }
+}
+
+let optionsMenuModuleRef = null;
+
+/**
+ * Projects branch-chat visibility into the React options menu. Returns false
+ * when the React menu is not mounted so callers can keep the jQuery fallback.
+ * @param {boolean} show - Whether "Back to parent chat" should be visible
+ */
+export function setOptionsMenuBranchVisibility(show) {
+    return Boolean(optionsMenuModuleRef?.updateOptionsMenuState?.({ showBackToMain: Boolean(show) }));
 }
 
 /**
