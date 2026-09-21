@@ -94,9 +94,9 @@ test.describe('React settings sole-owner page', () => {
         await expect(page.getByRole('heading', { name: /Prompt|Templates|Power-User/i })).toBeVisible({ timeout: 15_000 });
 
         await selectTab(page, 'User Interface');
-        const themeField = page.getByRole('textbox', { name: /Theme/ });
-        await expect(themeField).toBeVisible({ timeout: 30_000 });
-        await themeField.fill('E2E Theme');
+        const cssField = page.getByRole('textbox', { name: /Custom CSS/ });
+        await expect(cssField).toBeVisible({ timeout: 30_000 });
+        await cssField.fill('.e2e { color: red; }');
 
         const saveButton = page.locator('button[type="submit"]');
         await expect(saveButton).toBeEnabled({ timeout: 30_000 });
@@ -104,12 +104,16 @@ test.describe('React settings sole-owner page', () => {
         await expect(page.locator('.settings-status--success')).toContainText('Saved', { timeout: 30_000 });
 
         const after = await getSettingsPayload(page);
-        expect(after.settings?.power_user?.theme).toBe('E2E Theme');
+        expect(after.settings?.power_user?.custom_css).toBe('.e2e { color: red; }');
         expect(JSON.stringify(after.settings)).not.toMatch(/BEGIN PRIVATE KEY/);
         await page.reload();
         await openSettings(page);
         await selectTab(page, 'User Interface');
-        await expect(page.getByRole('textbox', { name: /Theme/ })).toHaveValue('E2E Theme', { timeout: 30_000 });
+        // fullyParallel shares one settings document across tests, so compare the
+        // hydrated field against the live persisted value instead of a literal.
+        const persisted = await getSettingsPayload(page);
+        const persistedCss = String(persisted.settings?.power_user?.custom_css ?? '');
+        await expect(page.getByRole('textbox', { name: /Custom CSS/ })).toHaveValue(persistedCss, { timeout: 30_000 });
     });
 
     test('surfaces revision conflicts without fake success', async ({ page }) => {
@@ -117,15 +121,15 @@ test.describe('React settings sole-owner page', () => {
         await openSettings(page);
 
         await selectTab(page, 'User Interface');
-        const themeField = page.getByRole('textbox', { name: /Theme/ });
-        const draftTheme = `Local draft ${Date.now()}`;
-        await themeField.fill(draftTheme);
+        const cssField = page.getByRole('textbox', { name: /Custom CSS/ });
+        const draftCss = `/* Local draft ${Date.now()} */`;
+        await cssField.fill(draftCss);
 
         const initial = await getSettingsPayload(page);
         const concurrentSettings = structuredClone(initial.settings);
         concurrentSettings.power_user = {
             ...(concurrentSettings.power_user || {}),
-            theme: `Concurrent-${Date.now()}`,
+            custom_css: `/* Concurrent-${Date.now()} */`,
         };
         const concurrent = await saveSettingsDocument(page, concurrentSettings, initial.settingsRevision);
         expect(concurrent.status).toBeLessThan(400);
@@ -136,7 +140,7 @@ test.describe('React settings sole-owner page', () => {
         if (currentRevision == null) {
             // File-authority / compat LWW path: server may not enforce revision yet.
             // Still prove the React page remains usable and does not show fake success banners.
-            await expect(themeField).toHaveValue(draftTheme);
+            await expect(cssField).toHaveValue(draftCss);
             await expect(page.locator('.settings-status--success')).toHaveCount(0);
             return;
         }
@@ -146,7 +150,7 @@ test.describe('React settings sole-owner page', () => {
         await saveButton.click();
 
         await expect(page.getByText(/本地草稿仍保留/)).toBeVisible({ timeout: 30_000 });
-        await expect(themeField).toHaveValue(draftTheme);
+        await expect(cssField).toHaveValue(draftCss);
         await expect(page.getByRole('button', { name: '重新加载当前设置', exact: true })).toBeVisible();
         await expect(saveButton).toBeDisabled();
     });
