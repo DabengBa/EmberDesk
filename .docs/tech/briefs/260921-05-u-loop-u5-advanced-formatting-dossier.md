@@ -53,3 +53,5 @@
 **U3 验收**：用户"请继续"。
 
 **U5 语义文档**：契约面零变化（ID/data-*/委托语义全保；Import/Export 可见性是显式拍板的表面调整），`.docs/db` 无需更新；本档案即台账。
+
+**提交**：`cb36bf5df` — `feat(ui): U-5 advanced-formatting preset rows as floating menus`
