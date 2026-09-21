@@ -88,15 +88,12 @@ const settingsSchema = z.object({
         wiFormat: z.string(),
         scenarioFormat: z.string(),
         personalityFormat: z.string(),
-        assistantPrefill: z.string(),
-        assistantImpersonation: z.string(),
         namesBehavior: z.coerce.number(),
         biasPresetSelected: z.string(),
     }),
     providers: z.object({
-        chatCompletionSource: z.enum(['openai', 'claude', 'makersuite']),
+        chatCompletionSource: z.enum(['openai', 'makersuite']),
         openaiModel: z.string(),
-        claudeModel: z.string(),
         googleModel: z.string(),
         reverseProxy: z.string(),
         proxyPassword: z.string(),
@@ -548,7 +545,6 @@ export function SettingsSurface({
         secretKey: providerSecretKey,
         chatCompletionSources: {
             OPENAI: 'openai',
-            CLAUDE: 'claude',
             MAKERSUITE: 'makersuite',
         },
     });
@@ -565,7 +561,6 @@ export function SettingsSurface({
         secretState: secretsData,
         chatCompletionSources: {
             OPENAI: 'openai',
-            CLAUDE: 'claude',
             MAKERSUITE: 'makersuite',
         },
     });
@@ -1172,24 +1167,6 @@ export function SettingsSurface({
                                     />
                                     <SettingField
                                         form={settingsForm}
-                                        name="general.assistantPrefill"
-                                        label="Assistant Prefill"
-                                        description="Settings path binding for general.assistantPrefill."
-                                        variant="textarea"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="general.assistantImpersonation"
-                                        label="Assistant Impersonation"
-                                        description="Settings path binding for general.assistantImpersonation."
-                                        variant="textarea"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
                                         name="general.namesBehavior"
                                         label="Names Behavior"
                                         description="Settings path binding for general.namesBehavior."
@@ -1470,14 +1447,6 @@ export function SettingsSurface({
                                         name="providers.openaiModel"
                                         label="Openai Model"
                                         description="Settings path binding for providers.openaiModel."
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="providers.claudeModel"
-                                        label="Claude Model"
-                                        description="Settings path binding for providers.claudeModel."
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />

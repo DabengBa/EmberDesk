@@ -18,7 +18,7 @@ This page exists so a user can configure how EmberDesk connects to an LLM API pr
 
 ## Page Structure (UI Layout)
 
-1. **Primary connection path**: Chat Completion provider selector (`OpenAI`, `Claude`, `Google`), matching provider-specific model input backed by a datalist, unified masked API key input with a direct-mode credential-history manager, and optional Base URL input grouped as the first visible task path.
+1. **Primary connection path**: Chat Completion provider selector (`OpenAI`, `Google`), matching provider-specific model input backed by a datalist, unified masked API key input with a direct-mode credential-history manager, and optional Base URL input grouped as the first visible task path.
 2. **Fallback provider section**: optional OpenAI-compatible fallback toggle and status chip are visible by default; fallback base URL, model, secret-backed API key controls, and cost warning stay inside the same drawer but are only visually expanded when fallback is enabled.
 3. **Prompt post-processing section**: collapsible selector for prompt post-processing behavior.
 4. **Connection actions**: Connect remains the primary action; Cancel, parameters, Test, and connection-status feedback remain nearby but visually secondary.
@@ -52,7 +52,7 @@ This page exists so a user can configure how EmberDesk connects to an LLM API pr
 - **Fallback provider state**: the optional fallback provider lives in the same drawer, persists as ordinary settings plus a dedicated server-side secret, preserves the entered fallback key when save fails, stays independent from connection profile capture/apply behavior, and keeps its advanced fields visually collapsed until the fallback toggle is enabled.
 - **React settings overlap**: users edit the React-owned provider slice through the same [Settings](page.settings) owner, mounted as a workspace overlay or at `/settings`; this drawer still owns connection-profile capture/apply behavior, deeper provider profile details, and any provider fields not listed in the React settings coverage ledger.
 - **Workspace shell entry state**: when the React workspace chrome is mounted, its AI Config entry opens and closes the shared Settings overlay on Providers. The shell does not take ownership of provider secrets, custom base URL fields, connection profiles, API key placeholders, or unsaved values inside that owner.
-- **Legacy provider compatibility**: Google Vertex AI is retired; stored `vertexai` sources normalize to Google AI Studio (`makersuite`) during settings load and save.
+- **Legacy provider compatibility**: Google Vertex AI and Anthropic Claude are retired; stored `vertexai` sources normalize to Google AI Studio (`makersuite`) and stored `claude` sources normalize to OpenAI (`openai`) during settings load and save, while stored `api_key_claude` secrets remain readable and deletable through the existing secret store without appearing as a named provider credential.
 
 ## Navigation
 

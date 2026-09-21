@@ -351,7 +351,7 @@ describe('chat workspace structure', () => {
         expect(indexHtml).not.toMatch(/<select id="chat_completion_source"[^>]*data-source/);
         expect(scriptSource).not.toContain("$(this).attr('data-source', oai_settings.chat_completion_source);");
         expect(scriptSource).toContain("$('[data-source]').each(function () {");
-        expect(indexHtml).toMatch(/<div className="base-url-field wide100p"[^>]*data-source="openai,claude,makersuite">[\s\S]*<label className="chat-completion-field wide100p"[^>]*htmlFor="openai_reverse_proxy"/);
+        expect(indexHtml).toMatch(/<div className="base-url-field wide100p"[^>]*data-source="openai,makersuite">[\s\S]*<label className="chat-completion-field wide100p"[^>]*htmlFor="openai_reverse_proxy"/);
         expect(indexHtml).toMatch(/id="openai_reverse_proxy"[^>]*\baria-describedby="base_url_status"/);
         expect(indexHtml).toMatch(/id="base_url_status"[^>]*\brole="status"[^>]*\baria-live="polite"[^>]*\bdata-mode="direct"/);
         expect(scriptSource).toContain('function updateBaseUrlStatus()');

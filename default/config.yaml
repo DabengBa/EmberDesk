@@ -363,31 +363,6 @@ ollama:
   # * -1: Use the default value of the model
   # * N (positive number): Use the specified value. Must be a power of 2, e.g. 128, 256, 512, etc.
   batchSize: -1
-# -- ANTHROPIC CLAUDE API CONFIGURATION --
-claude:
-  # Enables caching of the system prompt (if supported).
-  # https://platform.claude.com/docs/en/build-with-claude/prompt-caching
-  # -- IMPORTANT! --
-  # Use only when the prompt before the chat history is static and doesn't change between requests
-  # (e.g {{random}} macro or lorebooks not as in-chat injections).
-  # Otherwise, you'll just waste money on cache misses.
-  enableSystemPromptCache: false
-  # Enables caching of the message history at depth (if supported).
-  # https://platform.claude.com/docs/en/build-with-claude/prompt-caching
-  # -- IMPORTANT! --
-  # Use with caution. Behavior may be unpredictable and no guarantees can or will be made.
-  # Set to an integer to specify the desired depth. 0 (which does NOT include the prefill)
-  # should be ideal for most use cases.
-  # Any value other than a non-negative integer will be ignored and caching at depth will not be enabled.
-  cachingAtDepth: -1
-  # Use 1h TTL instead of the default 5m.
-  ## 5m: base price x 1.25
-  ## 1h: base price x 2
-  extendedTTL: false
-  # Enables adaptive thinking for supported models (Opus 4.6+).
-  # Disable to enforce legacy thinking mode (with thinking budget).
-  # https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking
-  enableAdaptiveThinking: false
 # -- GOOGLE GEMINI API CONFIGURATION --
 gemini:
   # API endpoint version ("v1beta" or "v1alpha")

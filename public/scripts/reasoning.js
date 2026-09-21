@@ -107,8 +107,6 @@ export function extractReasoningFromData(data, {
                     return data?.choices?.[0]?.message?.reasoning_content ?? '';
                 case chat_completion_sources.MAKERSUITE:
                     return data?.responseContent?.parts?.filter(part => part.thought)?.map(part => part.text)?.join('\n\n') ?? '';
-                case chat_completion_sources.CLAUDE:
-                    return data?.content?.filter(part => part.type === 'thinking')?.map(part => part.thinking)?.join('\n\n') ?? '';
                 case chat_completion_sources.MISTRALAI:
                     return data?.choices?.[0]?.message?.content?.[0]?.thinking?.map(part => part.text)?.filter(x => x)?.join('\n\n') ?? '';
                 case chat_completion_sources.AIMLAPI:

@@ -23,13 +23,11 @@ export const settingsTabDefinitions = [
 
 export const providerOptions = [
     { value: 'openai', label: 'OpenAI' },
-    { value: 'claude', label: 'Claude' },
     { value: 'makersuite', label: 'Google' },
 ];
 
 export const providerSecretKeyBySource = {
     openai: 'api_key_openai',
-    claude: 'api_key_claude',
     makersuite: 'api_key_makersuite',
 };
 
@@ -38,11 +36,6 @@ export const providerModelFieldBySource = {
         name: 'providers.openaiModel',
         placeholder: 'gpt-5.2',
         description: 'OpenAI primary path 当前使用的模型名称。',
-    },
-    claude: {
-        name: 'providers.claudeModel',
-        placeholder: 'claude-sonnet-4-5',
-        description: 'Claude primary path 当前使用的模型名称。',
     },
     makersuite: {
         name: 'providers.googleModel',
@@ -175,15 +168,12 @@ export const defaultSettingsFormValues = {
         wiFormat: '',
         scenarioFormat: '',
         personalityFormat: '',
-        assistantPrefill: '',
-        assistantImpersonation: '',
         namesBehavior: 0,
         biasPresetSelected: 'Default (none)',
     },
     providers: {
         chatCompletionSource: 'openai',
         openaiModel: '',
-        claudeModel: '',
         googleModel: '',
         reverseProxy: '',
         proxyPassword: '',
@@ -379,7 +369,13 @@ function parseBlacklistToSettingsValue(value) {
 }
 
 function mapChatCompletionSourceToFormValue(value) {
-    return value === 'vertexai' ? 'makersuite' : value;
+    if (value === 'vertexai') {
+        return 'makersuite';
+    }
+    if (value === 'claude') {
+        return 'openai';
+    }
+    return value;
 }
 
 function mapChatCompletionSourceToSettingsValue(value) {
@@ -413,7 +409,6 @@ const fieldBindings = [
         toSettings: mapChatCompletionSourceToSettingsValue,
     },
     { tab: 'providers', formPath: 'providers.openaiModel', settingsPath: 'oai_settings.openai_model' },
-    { tab: 'providers', formPath: 'providers.claudeModel', settingsPath: 'oai_settings.claude_model' },
     { tab: 'providers', formPath: 'providers.googleModel', settingsPath: 'oai_settings.google_model' },
     { tab: 'providers', formPath: 'providers.reverseProxy', settingsPath: 'oai_settings.reverse_proxy' },
     { tab: 'providers', formPath: 'providers.proxyPassword', settingsPath: 'oai_settings.proxy_password' },
@@ -537,8 +532,6 @@ const fieldBindings = [
     { tab: 'general', formPath: 'general.wiFormat', settingsPath: 'oai_settings.wi_format' },
     { tab: 'general', formPath: 'general.scenarioFormat', settingsPath: 'oai_settings.scenario_format' },
     { tab: 'general', formPath: 'general.personalityFormat', settingsPath: 'oai_settings.personality_format' },
-    { tab: 'general', formPath: 'general.assistantPrefill', settingsPath: 'oai_settings.assistant_prefill' },
-    { tab: 'general', formPath: 'general.assistantImpersonation', settingsPath: 'oai_settings.assistant_impersonation' },
     { tab: 'general', formPath: 'general.namesBehavior', settingsPath: 'oai_settings.names_behavior' },
     { tab: 'general', formPath: 'general.biasPresetSelected', settingsPath: 'oai_settings.bias_preset_selected' },
     { tab: 'userInterface', formPath: 'userInterface.expandMessageActions', settingsPath: 'power_user.expand_message_actions' },

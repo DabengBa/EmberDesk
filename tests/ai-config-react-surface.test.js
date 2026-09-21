@@ -41,8 +41,7 @@ describe('AI Response Configuration drawer React surface', () => {
             'continue_postfix', 'continue_prefill', 'names_behavior',
             'character_names_display', 'send_if_empty_textarea',
             'wi_format_textarea', 'scenario_format_textarea',
-            'personality_format_textarea', 'claude_assistant_prefill',
-            'claude_assistant_impersonation',
+            'personality_format_textarea',
         ];
         for (const id of ids) {
             expect(panel).toContain(`id="${id}"`);

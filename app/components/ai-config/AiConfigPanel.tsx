@@ -80,7 +80,7 @@ export function AiConfigPanel() {
                                         <input id="stream_toggle" type="checkbox" /><span data-i18n="Streaming">Streaming</span>
                                     </label>
                                 </div>
-                                <div className="range-block" data-source="claude,makersuite">
+                                <div className="range-block" data-source="makersuite">
                                     <div className="range-block-title" data-i18n="Top K">Top K</div>
                                     <div className="wide100p">
                                         <input className="neo-range-slider" type="range" id="top_k_openai" min="0" max="500" step="1" />
@@ -93,13 +93,13 @@ export function AiConfigPanel() {
                             <div id="openai_settings">
                                 <div className="config-section-header"><span data-i18n="Features">Features</span></div>
                                 <div className="features-grid">
-                                    <div className="range-block" data-source="makersuite,claude">
+                                    <div className="range-block" data-source="makersuite">
                                         <label htmlFor="openai_enable_web_search" className="checkbox_label widthFreeExpand">
                                             <input id="openai_enable_web_search" type="checkbox" />
                                             <span data-i18n="Enable web search">Web Search</span>
                                         </label>
                                     </div>
-                                    <div className="range-block" data-source="openai,claude,makersuite">
+                                    <div className="range-block" data-source="openai,makersuite">
                                         <label htmlFor="openai_function_calling" className="checkbox_label widthFreeExpand">
                                             <input id="openai_function_calling" type="checkbox" />
                                             <span data-i18n="Enable function calling">Function Calling</span>
@@ -111,19 +111,19 @@ export function AiConfigPanel() {
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="range-block" data-source="openai,makersuite,claude">
+                                    <div className="range-block" data-source="openai,makersuite">
                                         <label htmlFor="openai_media_inlining" className="checkbox_label widthFreeExpand">
                                             <input id="openai_media_inlining" type="checkbox" />
                                             <span data-i18n="Send inline media">Inline Media</span>
                                         </label>
                                     </div>
-                                    <div className="range-block" data-source="claude,makersuite">
+                                    <div className="range-block" data-source="makersuite">
                                         <label htmlFor="openai_show_thoughts" className="checkbox_label widthFreeExpand">
                                             <input id="openai_show_thoughts" type="checkbox" />
                                             <span data-i18n="Request model reasoning">Model Reasoning</span>
                                         </label>
                                     </div>
-                                    <div className="range-block full-width" data-source="openai,claude,makersuite">
+                                    <div className="range-block full-width" data-source="openai,makersuite">
                                         <div className="range-block-title" data-i18n="Reasoning Effort">Reasoning Effort</div>
                                         <div className="wide100p">
                                             <div className="segmented-control" data-sync-select="openai_reasoning_effort">
@@ -141,16 +141,6 @@ export function AiConfigPanel() {
                                         </div>
                                     </div>
                                 </div>
-                                <div className="range-block" data-source="claude">
-                                    <div className="range-block-title" data-i18n="Assistant Prefill">Assistant Prefill</div>
-                                    <div className="wide100p">
-                                        <textarea id="claude_assistant_prefill" className="text_pole textarea_compact autoSetHeight" name="assistant_prefill" rows={2} data-i18n="[placeholder]Start Claude's answer with..." placeholder="Start Claude's answer with..."></textarea>
-                                    </div>
-                                    <div className="range-block-title" style={{ "marginTop": "5px" }}><small data-i18n="Assistant Impersonation Prefill">Impersonation Prefill</small></div>
-                                    <div className="wide100p">
-                                        <textarea id="claude_assistant_impersonation" className="text_pole textarea_compact autoSetHeight" name="assistant_impersonation" rows={2} data-i18n="[placeholder]Start Claude's answer with..." placeholder="Start Claude's answer with..."></textarea>
-                                    </div>
-                                </div>
                                 <div className="config-section-header"><span data-i18n="Prompt Manager">Prompt Manager</span></div>
                                 <div className="range-block m-b-1">
                                     <div id="completion_prompt_manager"></div>
@@ -164,7 +154,7 @@ export function AiConfigPanel() {
                             </div>
                             <div className="inline-drawer-content">
                         <div className="config-section-header"><span data-i18n="Advanced Sampling">高级采样</span></div>
-                        <div className="range-block-pair" data-source="openai,claude,makersuite">
+                        <div className="range-block-pair" data-source="openai,makersuite">
                             <div className="range-block">
                                 <div className="range-block-title" data-i18n="Temperature">Temperature</div>
                                 <div className="wide100p">
@@ -200,7 +190,7 @@ export function AiConfigPanel() {
                                 <input type="number" id="n_openai" className="text_pole" min="1" defaultValue="1" />
                             </div>
                         </div>
-                        <div className="range-block full-width" data-source="openai,claude">
+                        <div className="range-block full-width" data-source="openai">
                             <div className="range-block-title" data-i18n="Verbosity">Verbosity</div>
                             <div className="wide100p">
                                 <div className="segmented-control" data-sync-select="openai_verbosity">

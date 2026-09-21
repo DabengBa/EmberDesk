@@ -67,7 +67,6 @@ describe('Google chat completions backend', () => {
             SECRET_KEYS: {
                 MAKERSUITE: 'api_key_makersuite',
                 OPENAI: 'api_key_openai',
-                CLAUDE: 'api_key_claude',
             },
             readSecret: jest.fn((_directories, key, id) => {
                 if (key === 'api_key_makersuite') return 'studio-key';

@@ -28,7 +28,6 @@ describe('API connections drawer React surface', () => {
         const ids = [
             'title_api', 'api_connection_form', 'chat_completion_source',
             'openai_form', 'model_openai_select', 'model_openai_list',
-            'claude_form', 'model_claude_select', 'model_claude_list',
             'makersuite_form', 'model_google_select', 'model_google_list',
             'api_key_section', 'api_key_unified', 'api_key_unified_show',
             'api_key_unified_manage', 'openai_reverse_proxy', 'base_url_status',

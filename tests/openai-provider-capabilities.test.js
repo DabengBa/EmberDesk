@@ -21,7 +21,6 @@ const repoRoot = path.resolve(__dirname, '..');
 
 const SOURCES = {
     OPENAI: 'openai',
-    CLAUDE: 'claude',
     MAKERSUITE: 'makersuite',
 };
 
@@ -29,7 +28,6 @@ function settings(overrides = {}) {
     return {
         chat_completion_source: SOURCES.OPENAI,
         openai_model: 'gpt-5.2',
-        claude_model: 'claude-sonnet-4',
         google_model: 'gemini-2.5-pro',
         reasoning_effort: 'high',
         verbosity: 'auto',
@@ -138,7 +136,6 @@ describe('OpenAI provider capability helpers', () => {
 
     test('keeps provider-specific model selection compatible with current settings', () => {
         expect(getChatCompletionModelFromSettings(settings({ chat_completion_source: SOURCES.OPENAI }))).toBe('gpt-5.2');
-        expect(getChatCompletionModelFromSettings(settings({ chat_completion_source: SOURCES.CLAUDE }))).toBe('claude-sonnet-4');
         expect(getChatCompletionModelFromSettings(settings({ chat_completion_source: SOURCES.MAKERSUITE }))).toBe('gemini-2.5-pro');
         expect(getChatCompletionModelFromSettings(settings({ chat_completion_source: 'unknown' }))).toBe('');
     });
@@ -156,7 +153,7 @@ describe('OpenAI provider capability helpers', () => {
 
     test('passes through non-OpenAI reasoning effort behavior', () => {
         expect(resolveReasoningEffort(settings({
-            chat_completion_source: SOURCES.CLAUDE,
+            chat_completion_source: SOURCES.MAKERSUITE,
             reasoning_effort: 'medium',
         }))).toBe('medium');
     });

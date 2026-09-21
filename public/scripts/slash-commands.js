@@ -5736,7 +5736,6 @@ function getModelOptions(quiet) {
     const nullResult = { control: null, options: null };
     const modelSelectMap = [
         { id: 'model_openai_select', api: 'openai', type: chat_completion_sources.OPENAI },
-        { id: 'model_claude_select', api: 'openai', type: chat_completion_sources.CLAUDE },
         { id: 'model_ai21_select', api: 'openai', type: chat_completion_sources.AI21 },
         { id: 'model_google_select', api: 'openai', type: chat_completion_sources.MAKERSUITE },
         { id: 'model_mistralai_select', api: 'openai', type: chat_completion_sources.MISTRALAI },

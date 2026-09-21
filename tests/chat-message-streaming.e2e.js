@@ -210,7 +210,7 @@ async function enableOpenAiStreaming(page, { chatCompletionSource = 'openai', st
         context.powerUserSettings.streaming_fps = 60;
         context.chatCompletionSettings.chat_completion_source = source;
         context.chatCompletionSettings.openai_model = 'gpt-4o-mini';
-        context.chatCompletionSettings.claude_model = 'claude-sonnet-4-5';
+        context.chatCompletionSettings.google_model = 'gemini-2.5-pro';
         context.chatCompletionSettings.stream_openai = streamEnabled;
         context.chatCompletionSettings.n = 1;
         context.chatCompletionSettings.send_if_empty = '';
@@ -1342,7 +1342,7 @@ test.describe('chat message streaming', () => {
     test('parses fallback stream with fallback source when primary source has a different stream shape', async ({ page }) => {
         await testSetup.awaitST({ page });
         await selectCharacterInFreshChat(page, characterName);
-        await enableOpenAiStreaming(page, { chatCompletionSource: 'claude' });
+        await enableOpenAiStreaming(page, { chatCompletionSource: 'makersuite' });
         await enableFallbackProvider(page);
         await installStreamingFetchSequenceStub(page, {
             responses: [
@@ -1361,8 +1361,8 @@ test.describe('chat message streaming', () => {
 
         const requests = await page.evaluate(() => window.__emberdeskStreamingRequests);
         expect(requests).toHaveLength(3);
-        expect(requests[0].chat_completion_source).toBe('claude');
-        expect(requests[1].chat_completion_source).toBe('claude');
+        expect(requests[0].chat_completion_source).toBe('makersuite');
+        expect(requests[1].chat_completion_source).toBe('makersuite');
         expect(requests[2].chat_completion_source).toBe('openai');
         expect(requests[2].openai_secret_marker).toBe('openai_fallback_provider');
     });

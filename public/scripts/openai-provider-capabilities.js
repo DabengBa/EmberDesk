@@ -1,6 +1,5 @@
 export const CHAT_COMPLETION_SOURCES = {
     OPENAI: 'openai',
-    CLAUDE: 'claude',
     MAKERSUITE: 'makersuite',
 };
 
@@ -88,8 +87,6 @@ export function getChatCompletionModelFromSettings(settings = {}) {
     const source = settings.chat_completion_source;
 
     switch (source) {
-        case CHAT_COMPLETION_SOURCES.CLAUDE:
-            return settings.claude_model;
         case CHAT_COMPLETION_SOURCES.OPENAI:
             return settings.openai_model;
         case CHAT_COMPLETION_SOURCES.MAKERSUITE:
@@ -150,8 +147,6 @@ function isImageModelSupportedForSettings(settings = {}, { mainApi = 'openai' } 
             return openAiVisionModelMatchesCurrentRule(settings.openai_model);
         case CHAT_COMPLETION_SOURCES.MAKERSUITE:
             return includesAnyModel(settings.google_model, visionSupportedModels);
-        case CHAT_COMPLETION_SOURCES.CLAUDE:
-            return includesAnyModel(settings.claude_model, visionSupportedModels);
         default:
             return false;
     }

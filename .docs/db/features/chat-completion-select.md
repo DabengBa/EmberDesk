@@ -9,7 +9,7 @@ related: [page.api_configuration, feature.custom_base_url]
 
 ## ID 解释
 
-`feature.chat_completion_select` represents the provider dropdown (`#chat_completion_source`) and the per-provider model inputs in the API configuration drawer. It covers switching between the current chat-completion sources (OpenAI, Claude, and Google AI Studio), loading model lists into datalists, and selecting or typing a target model. It does not cover API key management, base URL configuration, or connection profile switching.
+`feature.chat_completion_select` represents the provider dropdown (`#chat_completion_source`) and the per-provider model inputs in the API configuration drawer. It covers switching between the current chat-completion sources (OpenAI and Google AI Studio), loading model lists into datalists, and selecting or typing a target model. It does not cover API key management, base URL configuration, or connection profile switching.
 
 ## Purpose
 
@@ -17,11 +17,12 @@ Let a user choose the chat-completion provider and model that visible chat reque
 
 ## User-Visible Contract
 
-- The provider dropdown in [API Configuration](page.api_configuration) switches the visible provider controls for OpenAI-compatible, Claude, and Google AI Studio.
+- The provider dropdown in [API Configuration](page.api_configuration) switches the visible provider controls for OpenAI-compatible and Google AI Studio.
 - The active provider's model input accepts either a model chosen from a refreshed list or a typed model id when no list is available.
 - Changing provider clears stale model-list UI so users do not mistake a previous provider's model list for the current provider.
 - New installations default to OpenAI chat completion; legacy API types are visibly normalized to the current chat-completion path on load.
 - Google Vertex AI is retired as a provider. A stored legacy `vertexai` source is normalized to Google AI Studio (`makersuite`) on settings load and stays Google AI Studio after save.
+- Anthropic Claude is retired as a provider. A stored legacy `claude` source is normalized to OpenAI (`openai`) on settings load, legacy `claude_model`/`assistant_prefill`/`assistant_impersonation` keys stay stored but inert, and a stored `api_key_claude` secret remains readable and deletable but is no longer shown as a named provider credential.
 
 ## Semantic Interaction IDs
 
@@ -39,13 +40,14 @@ Let a user choose the chat-completion provider and model that visible chat reque
 
 - Visible provider sections, model input value, refreshed model options, and persisted reopen state are primary evidence.
 - Network model-list responses and provider setting fields are supporting evidence only after the UI reflects the correct provider.
-- React settings compatibility proof should confirm a legacy `vertexai` source loads as Google and saves back as `makersuite`.
+- React settings compatibility proof should confirm a legacy `vertexai` source loads as Google and saves back as `makersuite`, and that a legacy `claude` source loads as OpenAI and saves back as `openai`.
 
 ## Failure Signals
 
 - Provider switch leaves controls or model options from the previous provider visible as current.
 - Empty or failed model listing prevents manual model id entry.
 - Legacy Vertex AI settings keep targeting the retired provider after save instead of normalizing to Google AI Studio.
+- Legacy Claude settings keep targeting the retired provider after save instead of normalizing to OpenAI.
 - The UI shows one provider while the next visible chat request uses another.
 
 ## Boundaries

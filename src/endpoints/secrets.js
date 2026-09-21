@@ -30,7 +30,6 @@ export const SECRET_KEYS = {
     TABBY: 'api_key_tabby',
     OPENAI: 'api_key_openai',
     OPENAI_FALLBACK: 'api_key_openai_fallback',
-    CLAUDE: 'api_key_claude',
     DEEPL: 'deepl',
     LIBRE: 'libre',
     LIBRE_URL: 'libre_url',

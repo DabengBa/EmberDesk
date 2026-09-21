@@ -646,7 +646,6 @@ export class ToolManager {
         const supportedSources = [
             chat_completion_sources.OPENAI,
             chat_completion_sources.MISTRALAI,
-            chat_completion_sources.CLAUDE,
             chat_completion_sources.AIMLAPI,
             chat_completion_sources.GROQ,
             chat_completion_sources.COHERE,
@@ -692,17 +691,11 @@ export class ToolManager {
      */
     static #getToolCallsFromData(data) {
         const getRandomId = () => Math.random().toString(36).substring(2);
-        const isClaudeToolCall = c => Array.isArray(c) ? c.filter(x => x).every(isClaudeToolCall) : c?.input && c?.name && c?.id;
         const isGoogleToolCall = c => Array.isArray(c) ? c.filter(x => x).every(isGoogleToolCall) : c?.name && c?.args;
-        const convertClaudeToolCall = c => ({ id: c.id, function: { name: c.name, arguments: c.input } });
         const convertGoogleToolCall = (c, signature = null) => ({ id: getRandomId(), function: { name: c.name, arguments: c.args }, signature });
 
         // Parsed tool calls from streaming data
         if (Array.isArray(data) && data.length > 0 && Array.isArray(data[0])) {
-            if (isClaudeToolCall(data[0])) {
-                return data[0].filter(x => x).map(convertClaudeToolCall);
-            }
-
             if (isGoogleToolCall(data[0])) {
                 return data[0].filter(x => x).map((c) => convertGoogleToolCall(c, c.thoughtSignature));
             }
@@ -736,15 +729,6 @@ export class ToolManager {
                 }
 
                 return choice.message.tool_calls;
-            }
-        }
-
-        // Claude tool calls to OpenAI tool calls
-        if (Array.isArray(data?.content)) {
-            const content = data.content.filter(c => c.type === 'tool_use').map(convertClaudeToolCall);
-
-            if (content) {
-                return content;
             }
         }
 

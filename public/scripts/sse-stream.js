@@ -122,31 +122,6 @@ async function* parseStreamData(json) {
             };
         }
         return;
-    } else if (typeof json.delta === 'object' && typeof json.delta.text === 'string') {
-        // Claude
-        if (json.delta.text.length > 0) {
-            for (let i = 0; i < json.delta.text.length; i++) {
-                const str = json.delta.text[i];
-                yield {
-                    data: { ...json, delta: { text: str } },
-                    chunk: str,
-                };
-            }
-        }
-        return;
-    } else if (typeof json.delta === 'object' && typeof json.delta.thinking === 'string') {
-        // Claude (reasoning content)
-        if (json.delta.thinking.length > 0) {
-            for (let i = 0; i < json.delta.thinking.length; i++) {
-                const str = json.delta.thinking[i];
-                yield {
-                    data: { ...json, delta: { thinking: str } },
-                    chunk: str,
-                    reasoning: true,
-                };
-            }
-        }
-        return;
     } else if (Array.isArray(json.candidates)) {
         // Google AI Studio
         for (let i = 0; i < json.candidates.length; i++) {

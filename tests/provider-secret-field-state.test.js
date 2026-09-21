@@ -37,7 +37,7 @@ describe('provider secret field state', () => {
             source: 'openai',
             secretKey: 'api_key_openai',
             secretState: {},
-            chatCompletionSources: { OPENAI: 'openai', CLAUDE: 'claude', MAKERSUITE: 'makersuite' },
+            chatCompletionSources: { OPENAI: 'openai', MAKERSUITE: 'makersuite' },
         })).toEqual({
             placeholder: 'Proxy password',
             value: 'proxy-password',
@@ -48,16 +48,8 @@ describe('provider secret field state', () => {
             source: 'openai',
             secretKey: 'api_key_openai',
             secretState: { api_key_openai: [{ label: 'main-key', active: true }] },
-            chatCompletionSources: { OPENAI: 'openai', CLAUDE: 'claude', MAKERSUITE: 'makersuite' },
+            chatCompletionSources: { OPENAI: 'openai', MAKERSUITE: 'makersuite' },
         })).toMatchObject({ placeholder: 'Saved (main-key)', value: '' });
-
-        expect(getUnifiedKeyFieldState({
-            settings: { chat_completion_source: 'claude' },
-            source: 'claude',
-            secretKey: 'api_key_claude',
-            secretState: {},
-            chatCompletionSources: { OPENAI: 'openai', CLAUDE: 'claude', MAKERSUITE: 'makersuite' },
-        })).toMatchObject({ placeholder: 'sk-ant-...', value: '' });
 
         expect(getUnifiedKeyFieldState({
             settings: {
@@ -66,12 +58,12 @@ describe('provider secret field state', () => {
             source: 'makersuite',
             secretKey: 'api_key_makersuite',
             secretState: {},
-            chatCompletionSources: { OPENAI: 'openai', CLAUDE: 'claude', MAKERSUITE: 'makersuite' },
+            chatCompletionSources: { OPENAI: 'openai', MAKERSUITE: 'makersuite' },
         })).toMatchObject({ placeholder: 'AIza...', value: '' });
     });
 
     test('resolves React settings provider secret keys through the direct provider key', () => {
-        const sources = { OPENAI: 'openai', CLAUDE: 'claude', MAKERSUITE: 'makersuite' };
+        const sources = { OPENAI: 'openai', MAKERSUITE: 'makersuite' };
 
         const makersuiteSecretKey = resolveProviderSecretKeyForSettings({
             settings: {

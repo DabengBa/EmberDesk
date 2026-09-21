@@ -582,10 +582,6 @@ export function getTokenizerModel() {
         return jambaTokenizer;
     }
 
-    if (oai_settings.chat_completion_source == chat_completion_sources.CLAUDE) {
-        return claudeTokenizer;
-    }
-
     if (oai_settings.chat_completion_source == chat_completion_sources.MISTRALAI) {
         if (oai_settings.mistralai_model.includes('nemo') || oai_settings.mistralai_model.includes('pixtral')) {
             return nemoTokenizer;

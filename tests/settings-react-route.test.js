@@ -143,9 +143,9 @@ describe('settings React route flag', () => {
         expect(routeSource).not.toContain("{activeTab === 'providers' && (");
         expect(routeSource).not.toContain("{activeTab === 'userInterface' && (");
         expect(routeSource).not.toContain("{activeTab === 'advanced' && (");
-        expect(routeSource).toContain("chatCompletionSource: z.enum(['openai', 'claude', 'makersuite']),");
+        expect(routeSource).toContain("chatCompletionSource: z.enum(['openai', 'makersuite']),");
         expect(routeSource).toContain('openaiModel: z.string(),');
-        expect(routeSource).toContain('claudeModel: z.string(),');
+        expect(routeSource).not.toContain('claudeModel');
         expect(routeSource).toContain('googleModel: z.string(),');
         expect(routeSource).toContain('theme: z.string(),');
         expect(routeSource).toContain('systemPromptName: z.string(),');
@@ -193,9 +193,9 @@ describe('settings React route flag', () => {
         expect(helperModule.settingsTabDefinitions).toHaveLength(4);
         expect(helperModule.providerOptions).toEqual([
             { value: 'openai', label: 'OpenAI' },
-            { value: 'claude', label: 'Claude' },
             { value: 'makersuite', label: 'Google' },
         ]);
+        expect(helperModule.providerSecretKeyBySource.claude).toBeUndefined();
         expect(helperModule.providerSecretKeyBySource.makersuite).toBe('api_key_makersuite');
         expect(helperModule.reasoningEffortOptions.map(option => option.value)).toEqual([
             'auto',
@@ -357,7 +357,7 @@ describe('settings React route flag', () => {
         const defaults = helperModule.buildSettingsFormDefaults(parsed.settings);
         expect(defaults.general.presetSettings).toBe('RecoveredRuins');
         expect(defaults.providers.openaiModel).toBe('gpt-4-turbo');
-        expect(defaults.providers.claudeModel).toBe('claude-sonnet-4-5');
+        expect(defaults.providers.claudeModel).toBeUndefined();
         expect(defaults.providers.googleModel).toBe('gemini-2.5-pro');
         expect(defaults.general.enableWebSearch).toBe(true);
         expect(defaults.providers.fallbackProviderEnabled).toBe(true);
@@ -387,9 +387,8 @@ describe('settings React route flag', () => {
                 customPromptPostProcessing: 'strict_tools',
             },
             providers: {
-                chatCompletionSource: 'claude',
+                chatCompletionSource: 'makersuite',
                 openaiModel: 'gpt-5.2',
-                claudeModel: 'claude-sonnet-4-5',
                 googleModel: 'gemini-2.5-flash',
                 reverseProxy: 'https://proxy.example.com',
                 proxyPassword: 'secret',
@@ -491,7 +490,7 @@ describe('settings React route flag', () => {
         expect(merged.power_user.sysprompt.content).toBe('Updated prompt');
         expect(merged.power_user.context.preset).toBe('Story Rich');
         expect(merged.oai_settings.preset_settings_openai).toBe('RecoveredRuins');
-        expect(merged.oai_settings.chat_completion_source).toBe('claude');
+        expect(merged.oai_settings.chat_completion_source).toBe('makersuite');
         expect(merged.oai_settings.openai_model).toBe('gpt-5.2');
         expect(merged.oai_settings.claude_model).toBe('claude-sonnet-4-5');
         expect(merged.oai_settings.google_model).toBe('gemini-2.5-flash');
@@ -591,7 +590,6 @@ describe('settings React route flag', () => {
         const reactPaths = Object.values(helperModule.settingsCoverage.reactOwned).flat();
         for (const path of [
             'oai_settings.tool_reasoning_mode',
-            'oai_settings.assistant_prefill',
             'oai_settings.names_behavior',
             'oai_settings.request_images',
             'oai_settings.verbosity',
@@ -661,7 +659,7 @@ describe('settings React route flag', () => {
         expect(defaults.general.toolReasoningMode).toBe('active_chain');
         expect(defaults.general.namesBehavior).toBe(2);
         expect(defaults.general.verbosity).toBe('low');
-        expect(defaults.general.assistantPrefill).toBe('legacy-prefill');
+        expect(defaults.general.assistantPrefill).toBeUndefined();
         expect(defaults.userInterface.mainTextColor).toBe('rgba(1, 2, 3, 1)');
         expect(defaults.userInterface.sendOnEnter).toBe(-1);
         expect(defaults.advanced.collapseNewlines).toBe(true);
@@ -723,6 +721,27 @@ describe('settings React route flag', () => {
         expect(preserved.oai_settings.reasoning_effort).toBe('minimal');
 
         expect(routeSource).toContain("reasoningEffort: z.enum(['auto', 'low', 'medium', 'high', 'min', 'max', 'none', 'minimal', 'xhigh']),");
+    });
+
+    test('normalizes retired Claude source to OpenAI and preserves legacy keys', async () => {
+        const helperModule = await import(`../app/lib/settings-helpers.js?settingsClaude=${Date.now()}-${Math.random()}`);
+        const parsed = helperModule.parseSettingsPayload({
+            settings: JSON.stringify({
+                untouched: { keep: true },
+                oai_settings: {
+                    chat_completion_source: 'claude',
+                    claude_model: 'claude-sonnet-4-5',
+                },
+            }),
+        });
+
+        const defaults = helperModule.buildSettingsFormDefaults(parsed.settings);
+        expect(defaults.providers.chatCompletionSource).toBe('openai');
+
+        const preserved = helperModule.buildSettingsSavePayload(parsed.settings, defaults);
+        expect(preserved.untouched.keep).toBe(true);
+        expect(preserved.oai_settings.chat_completion_source).toBe('openai');
+        expect(preserved.oai_settings.claude_model).toBe('claude-sonnet-4-5');
     });
 
     test('saves only changed fields from a minimal settings document', async () => {
@@ -809,7 +828,7 @@ describe('settings React route flag', () => {
             settings: { reverse_proxy: '' },
             source: 'makersuite',
             secretKey: 'api_key_makersuite',
-            chatCompletionSources: { OPENAI: 'openai', CLAUDE: 'claude', MAKERSUITE: 'makersuite' },
+            chatCompletionSources: { OPENAI: 'openai', MAKERSUITE: 'makersuite' },
         });
         expect(makersuiteKey).toBe('api_key_makersuite');
 
